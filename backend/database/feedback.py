@@ -411,10 +411,12 @@ def list_negative_events(
 def save_report(report: FeedbackReport) -> None:
     if not isinstance(report, FeedbackReport):
         raise ValueError('report must be an instance of FeedbackReport')
-    if not report.date or not str(report.date).strip():
+    date_str = str(report.date or '').strip()
+    if not date_str:
         raise ValueError('report.date must be a non-empty date string')
     payload = report.model_dump(mode='json')
-    get_firestore_client().collection(FEEDBACK_REPORTS_COLLECTION).document(str(report.date).strip()).set(payload)
+    payload['date'] = date_str
+    get_firestore_client().collection(FEEDBACK_REPORTS_COLLECTION).document(date_str).set(payload)
 
 
 def get_report(date: str) -> Optional[FeedbackReport]:

@@ -252,6 +252,27 @@ def test_save_report_persists_valid_report():
     doc_ref.set.assert_called_once()
 
 
+def test_save_report_strips_date_consistently_in_doc_and_payload():
+    fake_client = MagicMock()
+    doc_ref = MagicMock()
+    fake_client.collection.return_value.document.return_value = doc_ref
+
+    report = FeedbackReport(
+        date="  2026-09-01  ",
+        total_negative=0,
+        entries=[],
+        truncated=False,
+        generated_at=datetime.now(timezone.utc),
+    )
+
+    with patch.object(feedback_db, "get_firestore_client", return_value=fake_client):
+        feedback_db.save_report(report)
+
+    fake_client.collection.return_value.document.assert_called_with("2026-09-01")
+    saved_payload = doc_ref.set.call_args.args[0]
+    assert saved_payload["date"] == "2026-09-01"
+
+
 # ---------------------------------------------------------------------------
 # list_negative_events & list_report_dates validation
 # ---------------------------------------------------------------------------
