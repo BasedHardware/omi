@@ -18,6 +18,31 @@ class WrappedStatus:
     ERROR = 'error'
 
 
+VALID_WRAPPED_STATUSES = {
+    WrappedStatus.NOT_GENERATED,
+    WrappedStatus.PROCESSING,
+    WrappedStatus.DONE,
+    WrappedStatus.ERROR,
+}
+
+
+def _validate_identifier(name: str, val: Any) -> str:
+    if not isinstance(val, str) or not val.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    cleaned = val.strip()
+    if '/' in cleaned:
+        raise ValueError(f"Invalid character '/' in identifier {name}")
+    return cleaned
+
+
+def _validate_year(year: Any) -> int:
+    if isinstance(year, bool) or not isinstance(year, int):
+        raise ValueError("year must be an integer")
+    if not (2000 <= year <= 2100):
+        raise ValueError(f"year must be within 2000-2100, got {year}")
+    return year
+
+
 def _typed_doc(doc: Any) -> Dict[str, Any]:
     raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
@@ -44,8 +69,14 @@ def get_wrapped(uid: str, year: int) -> Optional[Dict[str, Any]]:
     Returns:
         Wrapped document data or None if not found
     """
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    try:
+        clean_uid = _validate_identifier('uid', uid)
+        clean_year = _validate_year(year)
+    except ValueError:
+        return None
+
+    user_ref = db.collection('users').document(clean_uid)
+    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(clean_year))
     doc = wrapped_ref.get()
 
     if not getattr(doc, "exists", False):
@@ -74,9 +105,12 @@ def create_wrapped(uid: str, year: int) -> Dict[str, Any]:
     Returns:
         The created wrapped document data
     """
+    clean_uid = _validate_identifier('uid', uid)
+    clean_year = _validate_year(year)
+
     now = datetime.now(timezone.utc)
     wrapped_data: Dict[str, Any] = {
-        'year': year,
+        'year': clean_year,
         'status': WrappedStatus.PROCESSING,
         'started_at': now,
         'updated_at': now,
@@ -86,8 +120,8 @@ def create_wrapped(uid: str, year: int) -> Dict[str, Any]:
         'schema_version': 1,
     }
 
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    user_ref = db.collection('users').document(clean_uid)
+    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(clean_year))
     wrapped_ref.set(wrapped_data)
 
     return wrapped_data
@@ -113,8 +147,17 @@ def update_wrapped_status(
     Returns:
         True if updated successfully
     """
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    try:
+        clean_uid = _validate_identifier('uid', uid)
+        clean_year = _validate_year(year)
+    except ValueError:
+        return False
+
+    if status not in VALID_WRAPPED_STATUSES:
+        return False
+
+    user_ref = db.collection('users').document(clean_uid)
+    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(clean_year))
 
     if not getattr(wrapped_ref.get(), "exists", False):
         return False
@@ -127,10 +170,10 @@ def update_wrapped_status(
 
     if status == WrappedStatus.DONE:
         update_data['completed_at'] = now
-        update_data['result'] = result
+        update_data['result'] = result if isinstance(result, dict) else {}
         update_data['error'] = None
     elif status == WrappedStatus.ERROR:
-        update_data['error'] = error
+        update_data['error'] = str(error) if error is not None else None
         update_data['result'] = None
 
     wrapped_ref.update(update_data)
@@ -149,8 +192,17 @@ def update_wrapped_progress(uid: str, year: int, progress: Dict[str, Any]) -> bo
     Returns:
         True if updated successfully
     """
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    try:
+        clean_uid = _validate_identifier('uid', uid)
+        clean_year = _validate_year(year)
+    except ValueError:
+        return False
+
+    if not isinstance(progress, dict):
+        return False
+
+    user_ref = db.collection('users').document(clean_uid)
+    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(clean_year))
 
     if not getattr(wrapped_ref.get(), "exists", False):
         return False
@@ -175,9 +227,12 @@ def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
     Returns:
         The updated wrapped document data
     """
+    clean_uid = _validate_identifier('uid', uid)
+    clean_year = _validate_year(year)
+
     now = datetime.now(timezone.utc)
     wrapped_data: Dict[str, Any] = {
-        'year': year,
+        'year': clean_year,
         'status': WrappedStatus.PROCESSING,
         'started_at': now,
         'updated_at': now,
@@ -188,8 +243,8 @@ def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
         'schema_version': 1,
     }
 
-    user_ref = db.collection('users').document(uid)
-    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
+    user_ref = db.collection('users').document(clean_uid)
+    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(clean_year))
     wrapped_ref.set(wrapped_data)
 
     return wrapped_data
@@ -206,6 +261,9 @@ def is_wrapped_stuck(wrapped_data: Dict[str, Any], stale_minutes: int = 15) -> b
     Returns:
         True if the job appears stuck
     """
+    if not isinstance(wrapped_data, dict):
+        return False
+
     if wrapped_data.get('status') != WrappedStatus.PROCESSING:
         return False
 
@@ -217,7 +275,8 @@ def is_wrapped_stuck(wrapped_data: Dict[str, Any], stale_minutes: int = 15) -> b
     if updated_at is None:
         return True
 
+    safe_stale_minutes = stale_minutes if isinstance(stale_minutes, (int, float)) and stale_minutes > 0 else 15
     now = datetime.now(timezone.utc)
     elapsed = (now - updated_at).total_seconds() / 60
 
-    return elapsed > stale_minutes
+    return elapsed > safe_stale_minutes
