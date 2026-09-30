@@ -75,7 +75,7 @@ def test_task_integration_crud_default_and_todoist_task_creation(client, auth_he
     assert created.json() == {"success": True, "external_task_id": "todo-123", "error": None}
     assert len(requests) == 1
     request = requests[0]
-    assert str(request.url) == "https://api.todoist.com/rest/v2/tasks"
+    assert str(request.url) == "https://api.todoist.com/api/v1/tasks"
     assert request.headers["authorization"] == "Bearer todoist-token"
     payload = json.loads(request.content)
     assert payload["content"] == "E2E task"
@@ -172,7 +172,9 @@ def test_todoist_provider_401_marks_integration_disconnected(client, auth_header
     assert response.json()["error"] == "Todoist API error: 401"
     stored = _get_todoist_integration(client, auth_headers)
     assert stored["connected"] is False
-    assert stored["access_token"] == "expired-todoist-token"
+    # The typed status projection is non-secret: the token value must never
+    # round-trip through the status API, even after a provider auth failure.
+    assert "access_token" not in stored
 
 
 def test_todoist_timeout_returns_failure_without_real_network(client, auth_headers, monkeypatch):

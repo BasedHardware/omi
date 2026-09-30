@@ -4,21 +4,19 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:uuid/uuid.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/chat_scroll_policy.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
@@ -30,27 +28,38 @@ import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/pages/chat/widgets/chat_starters.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/dialog.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/pages/apps/widgets/app_actions.dart';
+import 'package:omi/pages/chat/widgets/chat_apps_drawer.dart';
+import 'package:omi/pages/chat/widgets/chat_composer_parts.dart';
+import 'package:omi/pages/chat/widgets/chat_chrome.dart';
+import 'package:omi/pages/chat/widgets/chat_entrance.dart';
+import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
+import 'package:omi/pages/chat/past_chats_page.dart';
+import 'package:omi/ui/ui.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
+  final bool startFresh;
   final String? autoMessage;
+  final String? initialDraft;
   final bool autoStartVoice;
   final ChatPageContext? initialChatContext;
 
   const ChatPage({
     super.key,
     this.isPivotBottom = false,
+    this.startFresh = false,
     this.autoMessage,
+    this.initialDraft,
     this.autoStartVoice = false,
     this.initialChatContext,
   });
@@ -64,13 +73,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
 
+  int _introRevision = 0;
   bool _isInitialLoad = true;
   bool _hasInitialScrolled = false;
   double _lastBottomInset = 0;
   MessageProvider? _messageProvider;
 
   ChatScrollMode _chatScrollMode = ChatScrollMode.followingBottom;
+  bool _showLatestJump = false;
+  Timer? _latestJumpIdleTimer;
   final List<Timer> _pendingScrollTimers = [];
+  final List<Timer> _ownedLifecycleTimers = [];
   bool _isProgrammaticScroll = false;
   int _lastObservedMessageCount = 0;
   String? _lastObservedMessageId;
@@ -82,8 +95,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Track which app is pending deletion confirmation
-  String? _pendingDeleteAppId;
   String? _selectedContext;
   bool _quotaSheetShown = false;
   ChatPageContext? _chatScope;
@@ -94,6 +105,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   @override
   void initState() {
     WidgetsBinding.instance.addObserver(this);
+    if (widget.initialDraft != null) textController.text = widget.initialDraft!;
     apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
@@ -113,7 +125,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       _messageProvider = provider;
       // Listen for quota exceeded from any send path (text or voice)
       provider.addListener(_onMessageProviderChanged);
-      if (provider.messages.isEmpty) {
+      if (widget.startFresh && !context.read<VoiceRecorderProvider>().isActive) {
+        provider.startFreshChat();
+      } else if (provider.messages.isEmpty && !provider.isFreshChat) {
         provider.refreshMessages();
       }
       // Fetch enabled chat apps
@@ -125,15 +139,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       _syncAppleHealthIfConnected();
       // Auto-start voice recording if requested (e.g., from home chat bar mic button)
       if (widget.autoStartVoice && _isInitialLoad) {
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            context.read<VoiceRecorderProvider>().startRecording();
-          }
+        _runLater(const Duration(milliseconds: 300), () {
+          context.read<VoiceRecorderProvider>().startRecording();
         });
-      } else if (_isInitialLoad) {
+      } else if (_isInitialLoad && widget.initialDraft != null) {
         // Auto-focus the text field only on initial load, not on app switches
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (!mounted) return;
+        _runLater(const Duration(milliseconds: 300), () {
           final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
           if (!voiceRecorderProvider.isActive && _isInitialLoad) {
             textFieldFocusNode.requestFocus();
@@ -144,25 +155,23 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       // This sends a message FROM Omi AI, not from the user
       if (widget.autoMessage != null && widget.autoMessage!.isNotEmpty && mounted) {
         // Wait for messages to load first, then add auto-message
-        Future.delayed(const Duration(milliseconds: 800), () {
-          if (mounted) {
-            final aiMessage = ServerMessage(
-              const Uuid().v4(),
-              DateTime.now(),
-              widget.autoMessage!,
-              MessageSender.ai,
-              MessageType.text,
-              null,
-              false,
-              [],
-              [],
-              [],
-              askForNps: false,
-            );
-            context.read<MessageProvider>().addMessage(aiMessage);
-            // Scroll after the message is added and rendered only while following.
-            _scheduleModeAwareScroll(delayMs: 100);
-          }
+        _runLater(const Duration(milliseconds: 800), () {
+          final aiMessage = ServerMessage(
+            const Uuid().v4(),
+            DateTime.now(),
+            widget.autoMessage!,
+            MessageSender.ai,
+            MessageType.text,
+            null,
+            false,
+            [],
+            [],
+            [],
+            askForNps: false,
+          );
+          context.read<MessageProvider>().addMessage(aiMessage);
+          // Scroll after the message is added and rendered only while following.
+          _scheduleModeAwareScroll(delayMs: 100);
         });
       }
     });
@@ -198,11 +207,30 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _messageProvider?.removeListener(_onMessageProviderChanged);
+    _cancelOwnedLifecycleTimers();
+    _latestJumpIdleTimer?.cancel();
     _cancelPendingScrolls();
     textController.dispose();
     scrollController.dispose();
     textFieldFocusNode.dispose();
     super.dispose();
+  }
+
+  void _runLater(Duration delay, VoidCallback callback) {
+    late final Timer timer;
+    timer = Timer(delay, () {
+      _ownedLifecycleTimers.remove(timer);
+      if (!mounted) return;
+      callback();
+    });
+    _ownedLifecycleTimers.add(timer);
+  }
+
+  void _cancelOwnedLifecycleTimers() {
+    for (final timer in _ownedLifecycleTimers) {
+      timer.cancel();
+    }
+    _ownedLifecycleTimers.clear();
   }
 
   void _syncAppleHealthIfConnected() async {
@@ -212,7 +240,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       await integrationProvider.ensureLoaded();
       if (!mounted) return;
       if (integrationProvider.isAppConnected(IntegrationApp.appleHealth)) {
-        debugPrint('🍎 [Apple Health] Starting auto-sync on chat open...');
+        debugPrint('🍎 [Apple Health] Starting auto-sync on chat open…');
         final success = await appleHealthService.syncHealthDataToBackend(days: 7);
         debugPrint('🍎 [Apple Health] Auto-sync ${success ? "completed" : "failed"}');
       }
@@ -223,739 +251,488 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer2<MessageProvider, ConnectivityProvider>(
-      builder: (context, provider, connectivityProvider, child) {
-        _observeMessagesForAutoScroll(provider);
-
-        return Scaffold(
-          key: scaffoldKey,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: _buildAppBar(context, provider),
-          endDrawer: _buildChatAppsEndDrawer(context),
-          onEndDrawerChanged: (isOpened) {
-            if (isOpened) {
-              // Unfocus text field when drawer opens
-              textFieldFocusNode.unfocus();
-            }
-          },
-          body: GestureDetector(
-            onTap: () {
-              // Hide keyboard when tapping outside textfield
-              FocusScope.of(context).unfocus();
-            },
-            child: Column(
-              children: [
-                // Messages area - takes up remaining space
-                Expanded(
-                  child: provider.isLoadingMessages && !provider.hasCachedMessages
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                            const SizedBox(height: 16),
-                            Text(provider.firstTimeLoadingText, style: const TextStyle(color: Colors.white)),
-                          ],
-                        )
-                      : provider.isClearingChat
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                                const SizedBox(height: 16),
-                                Text(context.l10n.deletingMessages, style: const TextStyle(color: Colors.white)),
-                              ],
-                            )
-                          : (provider.messages.isEmpty)
-                              ? Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 100.0),
-                                    child: Text(
-                                      connectivityProvider.isConnected
-                                          ? context.l10n.noMessagesYet
-                                          : context.l10n.noInternetConnection,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(color: Colors.white),
-                                    ),
-                                  ),
-                                )
-                              : LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    return Theme(
-                                      data: Theme.of(context).copyWith(
-                                        textSelectionTheme: TextSelectionThemeData(
-                                          selectionColor: Colors.white.withValues(alpha: 0.3),
-                                          selectionHandleColor: Colors.blue,
-                                        ),
-                                      ),
-                                      // Tight width: under the Column's loose constraints this Stack
-                                      // otherwise shrink-wraps to its only non-positioned child (the
-                                      // jump-to-latest chip, ~100pt), and every message collapses to a
-                                      // character-wide column whenever that chip is visible.
-                                      child: SizedBox(
-                                        width: constraints.maxWidth,
-                                        child: Stack(
-                                          alignment: Alignment.bottomCenter,
-                                          children: [
-                                            Positioned.fill(
-                                              child: NotificationListener<ScrollNotification>(
-                                                onNotification: _handleScrollNotification,
-                                                child: ListView.builder(
-                                                  shrinkWrap: false,
-                                                  reverse: false,
-                                                  controller: scrollController,
-                                                  padding: const EdgeInsets.fromLTRB(
-                                                    18,
-                                                    16,
-                                                    18,
-                                                    ChatScrollPolicy.transcriptBottomPadding,
-                                                  ),
-                                                  itemCount: provider.messages.length,
-                                                  itemBuilder: (context, chatIndex) {
-                                                    if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                                                      _hasInitialScrolled = true;
-                                                      _schedulePostFrameModeAwareScroll();
-                                                    }
-
-                                                    final message = provider.messages[chatIndex];
-                                                    double topPadding =
-                                                        chatIndex == provider.messages.length - 1 ? 8 : 16;
-                                                    double bottomPadding = chatIndex == 0 ? 16 : 0;
-
-                                                    return Padding(
-                                                      key: ValueKey(message.id),
-                                                      padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                                      child: message.sender == MessageSender.ai
-                                                          ? AIMessage(
-                                                              showTypingIndicator: provider.showTypingIndicator &&
-                                                                  chatIndex == provider.messages.length - 1,
-                                                              showThinkingAfterText: provider.agentThinkingAfterText,
-                                                              message: message,
-                                                              sendMessage: _sendMessageUtil,
-                                                              onAskOmi: (text) {
-                                                                setState(() {
-                                                                  _selectedContext = text;
-                                                                });
-                                                                textFieldFocusNode.requestFocus();
-                                                              },
-                                                              displayOptions: provider.messages.length <= 1,
-                                                              appSender: provider.messageSenderApp(message.appId),
-                                                              updateConversation: (ServerConversation conversation) {
-                                                                context.read<ConversationProvider>().updateConversation(
-                                                                      conversation,
-                                                                    );
-                                                              },
-                                                              setMessageNps: (int value, {String? reason}) {
-                                                                provider.setMessageNps(message, value, reason: reason);
-                                                              },
-                                                            )
-                                                          : HumanMessage(
-                                                              message: message,
-                                                              onAskOmi: (text) {
-                                                                setState(() {
-                                                                  _selectedContext = text;
-                                                                });
-                                                                textFieldFocusNode.requestFocus();
-                                                              },
-                                                            ),
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                            if (_chatScrollMode == ChatScrollMode.freeScrolling)
-                                              _buildJumpToLatestButton(),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                ),
-                // Send message area
-                Container(
-                  margin: const EdgeInsets.only(top: 10),
-                  decoration: const BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.only(topLeft: Radius.circular(22), topRight: Radius.circular(22)),
-                  ),
-                  child: Consumer2<HomeProvider, VoiceRecorderProvider>(
-                    builder: (context, home, voiceRecorderProvider, child) {
-                      bool shouldShowSendButton(MessageProvider p) {
-                        return !p.sendingMessage && !voiceRecorderProvider.isActive;
-                      }
-
-                      bool shouldShowVoiceRecorderButton() {
-                        return !voiceRecorderProvider.isActive;
-                      }
-
-                      bool shouldShowMenuButton() {
-                        return !voiceRecorderProvider.isActive;
-                      }
-
-                      return Column(
-                        children: [
-                          // Selected images display above the send bar
-                          Consumer<MessageProvider>(
-                            builder: (context, provider, child) {
-                              if (provider.selectedFiles.isNotEmpty) {
-                                return Container(
-                                  margin: const EdgeInsets.only(top: 16, bottom: 8),
-                                  // Align with chat bar's left edge: outer Padding(8) + plus button (48) + gap (8).
-                                  padding: const EdgeInsets.only(left: 64, right: 8),
-                                  height: 70,
-                                  child: ListView.builder(
-                                    scrollDirection: Axis.horizontal,
-                                    itemCount: provider.selectedFiles.length,
-                                    itemBuilder: (ctx, idx) {
-                                      return Container(
-                                        margin: const EdgeInsets.only(right: 8),
-                                        width: 60,
-                                        height: 60,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[800],
-                                          borderRadius: BorderRadius.circular(16),
-                                          image: provider.selectedFileTypes[idx] == 'image'
-                                              ? DecorationImage(
-                                                  image: FileImage(provider.selectedFiles[idx]),
-                                                  fit: BoxFit.cover,
-                                                )
-                                              : null,
-                                        ),
-                                        child: Stack(
-                                          children: [
-                                            // File icon for non-images
-                                            if (provider.selectedFileTypes[idx] != 'image')
-                                              const Center(
-                                                child: Icon(Icons.insert_drive_file, color: Colors.white, size: 24),
-                                              ),
-                                            // Loading indicator
-                                            if (provider.isFileUploading(provider.selectedFiles[idx].path))
-                                              Container(
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black.withValues(alpha: 0.5),
-                                                  borderRadius: BorderRadius.circular(16),
-                                                ),
-                                                child: const Center(
-                                                  child: SizedBox(
-                                                    width: 16,
-                                                    height: 16,
-                                                    child: CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            // Close button
-                                            Positioned(
-                                              top: 4,
-                                              right: 4,
-                                              child: GestureDetector(
-                                                onTap: () {
-                                                  provider.clearSelectedFile(idx);
-                                                },
-                                                child: Container(
-                                                  width: 16,
-                                                  height: 16,
-                                                  alignment: Alignment.center,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white,
-                                                    borderRadius: BorderRadius.circular(10),
-                                                  ),
-                                                  child: const FaIcon(
-                                                    FontAwesomeIcons.xmark,
-                                                    size: 10,
-                                                    color: Colors.black,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              } else {
-                                return const SizedBox.shrink();
-                              }
-                            },
-                          ),
-                          // Scope chip (#4515) — clears an active conversation scope (Ask about this)
-                          Builder(
-                            builder: (context) {
-                              final scope = _chatScope;
-                              final hasConversation = scope?.type == 'conversation' && (scope?.id?.isNotEmpty ?? false);
-                              if (!hasConversation) return const SizedBox.shrink();
-                              final l10n = context.l10n;
-                              return Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: Row(
-                                    children: [
-                                      _scopeChip(
-                                        label: l10n.chatScopeAbout(scope!.title ?? l10n.conversationTab),
-                                        selected: true,
-                                        onTap: () => setState(() => _chatScope = null),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          // Send bar
-                          SafeArea(
-                            bottom: false,
-                            maintainBottomViewPadding: false,
-                            child: Padding(
-                              padding: EdgeInsets.only(
-                                left: 8,
-                                right: 8,
-                                top: provider.selectedFiles.isNotEmpty ? 0 : 8,
-                                bottom: widget.isPivotBottom
-                                    ? 6
-                                    : (textFieldFocusNode.hasFocus &&
-                                            (textController.text.length > 40 || textController.text.contains('\n'))
-                                        ? 4
-                                        : 10),
-                              ),
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      // Placeholder for the floating LEFT button so the pill
-                                      // sits at the right x-position. The actual button is
-                                      // rendered as a Positioned overlay below so the pill's
-                                      // shadow can't bleed onto it.
-                                      if ((voiceRecorderProvider.isActive &&
-                                              voiceRecorderProvider.state == VoiceRecorderState.recording) ||
-                                          (!voiceRecorderProvider.isActive && shouldShowMenuButton()))
-                                        const SizedBox(width: 56),
-                                      // CENTER pill — text field/waveform + right-side button stays inside.
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.only(left: 14, right: 8, top: 7, bottom: 7),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF1F1F25),
-                                            borderRadius: BorderRadius.circular(32),
-                                            border: Border.all(color: const Color(0xFF35343B), width: 1),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withValues(alpha: 0.65),
-                                                blurRadius: 60,
-                                                spreadRadius: 14,
-                                                offset: const Offset(0, -16),
-                                              ),
-                                              BoxShadow(
-                                                color: Colors.black.withValues(alpha: 0.45),
-                                                blurRadius: 32,
-                                                spreadRadius: 6,
-                                                offset: const Offset(0, -8),
-                                              ),
-                                              BoxShadow(
-                                                color: Colors.black.withValues(alpha: 0.25),
-                                                blurRadius: 10,
-                                                offset: const Offset(0, 2),
-                                              ),
-                                            ],
-                                          ),
-                                          child: Row(
-                                            crossAxisAlignment: CrossAxisAlignment.center,
-                                            children: [
-                                              Expanded(
-                                                child: Column(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    if (_selectedContext != null && !voiceRecorderProvider.isActive)
-                                                      Padding(
-                                                        padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
-                                                        child: Container(
-                                                          decoration: BoxDecoration(
-                                                            color: const Color(0xFF1f1f25),
-                                                            borderRadius: BorderRadius.circular(16),
-                                                          ),
-                                                          padding: const EdgeInsets.symmetric(
-                                                            horizontal: 12,
-                                                            vertical: 8,
-                                                          ),
-                                                          child: Row(
-                                                            mainAxisSize: MainAxisSize.min,
-                                                            children: [
-                                                              const Padding(
-                                                                padding: EdgeInsets.only(top: 1),
-                                                                child: Icon(
-                                                                  Icons.subdirectory_arrow_right,
-                                                                  size: 14,
-                                                                  color: Colors.blue,
-                                                                ),
-                                                              ),
-                                                              const SizedBox(width: 8),
-                                                              Flexible(
-                                                                child: Text(
-                                                                  _selectedContext!.length > 25
-                                                                      ? '${_selectedContext!.substring(0, 25)}...'
-                                                                      : _selectedContext!,
-                                                                  style: const TextStyle(
-                                                                    color: Colors.blue,
-                                                                    fontSize: 14,
-                                                                    fontWeight: FontWeight.w500,
-                                                                  ),
-                                                                  maxLines: 1,
-                                                                  overflow: TextOverflow.ellipsis,
-                                                                ),
-                                                              ),
-                                                              const SizedBox(width: 8),
-                                                              GestureDetector(
-                                                                onTap: () {
-                                                                  setState(() {
-                                                                    _selectedContext = null;
-                                                                  });
-                                                                },
-                                                                child: const Icon(
-                                                                  Icons.close,
-                                                                  size: 14,
-                                                                  color: Colors.blue,
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    voiceRecorderProvider.isActive
-                                                        ? VoiceRecorderWidget(
-                                                            onTranscriptReady: (transcript, autoSend) {
-                                                              textController.text = transcript;
-                                                              voiceRecorderProvider.close();
-                                                              context
-                                                                  .read<MessageProvider>()
-                                                                  .setNextMessageOriginIsVoice(true);
-                                                              if (autoSend && transcript.trim().isNotEmpty) {
-                                                                _sendMessageUtil(transcript.trim());
-                                                              }
-                                                            },
-                                                            onClose: () {
-                                                              voiceRecorderProvider.close();
-                                                            },
-                                                          )
-                                                        : Theme(
-                                                            data: Theme.of(context).copyWith(
-                                                              textSelectionTheme: TextSelectionThemeData(
-                                                                selectionColor: Colors.grey.withValues(alpha: 0.4),
-                                                                selectionHandleColor: Colors.white,
-                                                              ),
-                                                            ),
-                                                            child: TextField(
-                                                              enabled: true,
-                                                              controller: textController,
-                                                              focusNode: textFieldFocusNode,
-                                                              obscureText: false,
-                                                              textAlign: TextAlign.start,
-                                                              // y: -0.35 nudges glyphs up. Font line metrics
-                                                              // place the visual baseline below the line box
-                                                              // center, so plain `.center` reads slightly low.
-                                                              textAlignVertical: const TextAlignVertical(y: -0.35),
-                                                              decoration: InputDecoration(
-                                                                hintText: context.l10n.askAnything,
-                                                                hintStyle: const TextStyle(
-                                                                  fontSize: 16.0,
-                                                                  color: Colors.grey,
-                                                                ),
-                                                                focusedBorder: InputBorder.none,
-                                                                enabledBorder: InputBorder.none,
-                                                                contentPadding: const EdgeInsets.symmetric(
-                                                                  horizontal: 4,
-                                                                  vertical: 10,
-                                                                ),
-                                                                isDense: true,
-                                                              ),
-                                                              minLines: 1,
-                                                              maxLines: 10,
-                                                              keyboardType: TextInputType.multiline,
-                                                              textCapitalization: TextCapitalization.sentences,
-                                                              style: const TextStyle(
-                                                                fontSize: 16.0,
-                                                                color: Colors.white,
-                                                                height: 1.2,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                  ],
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              // Right-side button — stays INSIDE the pill.
-                                              // Send button while recording — transcribes and sends in one tap.
-                                              if (voiceRecorderProvider.isActive)
-                                                GestureDetector(
-                                                  onTap: voiceRecorderProvider.state == VoiceRecorderState.recording
-                                                      ? () {
-                                                          HapticFeedback.mediumImpact();
-                                                          voiceRecorderProvider.requestAutoSendOnNextTranscript();
-                                                          voiceRecorderProvider.processRecording();
-                                                        }
-                                                      : null,
-                                                  child: Container(
-                                                    height: 38,
-                                                    width: 38,
-                                                    decoration: BoxDecoration(
-                                                      color: voiceRecorderProvider.state == VoiceRecorderState.recording
-                                                          ? Colors.white
-                                                          : const Color(0xFF4A4A4F),
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                    child: Center(
-                                                      child: FaIcon(
-                                                        FontAwesomeIcons.arrowUp,
-                                                        color:
-                                                            voiceRecorderProvider.state == VoiceRecorderState.recording
-                                                                ? const Color(0xFF1f1f25)
-                                                                : Colors.grey.shade400,
-                                                        size: 16,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              // Microphone button — round white pill matching the send button.
-                                              if (!voiceRecorderProvider.isActive &&
-                                                  shouldShowVoiceRecorderButton() &&
-                                                  textController.text.isEmpty)
-                                                GestureDetector(
-                                                  onTap: () {
-                                                    HapticFeedback.lightImpact();
-                                                    FocusScope.of(context).unfocus();
-                                                    voiceRecorderProvider.startRecording();
-                                                  },
-                                                  child: Container(
-                                                    height: 38,
-                                                    width: 38,
-                                                    decoration: const BoxDecoration(
-                                                      color: Colors.white,
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                    child: const Center(
-                                                      child: FaIcon(
-                                                        FontAwesomeIcons.microphone,
-                                                        color: Color(0xFF1f1f25),
-                                                        size: 16,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              // Send button — only when there's text and not in voice mode
-                                              if (!voiceRecorderProvider.isActive && shouldShowSendButton(provider))
-                                                ValueListenableBuilder<TextEditingValue>(
-                                                  valueListenable: textController,
-                                                  builder: (context, value, child) {
-                                                    bool hasText = value.text.trim().isNotEmpty;
-                                                    if (!hasText) return const SizedBox.shrink();
-
-                                                    bool canSend = hasText &&
-                                                        !provider.sendingMessage &&
-                                                        !provider.isUploadingFiles &&
-                                                        connectivityProvider.isConnected;
-
-                                                    return GestureDetector(
-                                                      onTap: canSend
-                                                          ? () {
-                                                              HapticFeedback.mediumImpact();
-                                                              String message = textController.text.trim();
-                                                              if (message.isEmpty) return;
-                                                              _sendMessageUtil(message);
-                                                            }
-                                                          : null,
-                                                      child: Container(
-                                                        height: 38,
-                                                        width: 38,
-                                                        decoration: const BoxDecoration(
-                                                          color: Colors.white,
-                                                          shape: BoxShape.circle,
-                                                        ),
-                                                        child: const Center(
-                                                          child: FaIcon(
-                                                            FontAwesomeIcons.arrowUp,
-                                                            color: Color(0xFF1f1f25),
-                                                            size: 16,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    );
-                                                  },
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  // LEFT button — Stop (recording) or Plus (idle). Rendered AFTER
-                                  // the inner Row so it sits on top of the pill's shadow.
-                                  if (voiceRecorderProvider.isActive &&
-                                      voiceRecorderProvider.state == VoiceRecorderState.recording)
-                                    Positioned(
-                                      left: 0,
-                                      top: 0,
-                                      bottom: 0,
-                                      child: Center(
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            HapticFeedback.lightImpact();
-                                            voiceRecorderProvider.processRecording();
-                                          },
-                                          child: Container(
-                                            height: 48,
-                                            width: 48,
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF1F1F25),
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: const Color(0xFF35343B), width: 1),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: Colors.black.withValues(alpha: 0.65),
-                                                  blurRadius: 60,
-                                                  spreadRadius: 14,
-                                                  offset: const Offset(0, -16),
-                                                ),
-                                                BoxShadow(
-                                                  color: Colors.black.withValues(alpha: 0.45),
-                                                  blurRadius: 32,
-                                                  spreadRadius: 6,
-                                                  offset: const Offset(0, -8),
-                                                ),
-                                                BoxShadow(
-                                                  color: Colors.black.withValues(alpha: 0.25),
-                                                  blurRadius: 10,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                            child: const Center(child: Icon(Icons.stop, color: Colors.white, size: 18)),
-                                          ),
-                                        ),
-                                      ),
+    return ChatEntrance(
+      revision: _introRevision,
+      child: Consumer2<MessageProvider, ConnectivityProvider>(
+        builder: (context, provider, connectivityProvider, child) {
+          _observeMessagesForAutoScroll(provider);
+          // Empty, the sheet is glass over the blurred page underneath (chat_route.dart); once there
+          // is a transcript it turns solid so long answers stay readable.
+          final isGlass = provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOut,
+            color: isGlass ? Colors.transparent : OmiColors.surface0,
+            child: Scaffold(
+              key: scaffoldKey,
+              backgroundColor: Colors.transparent,
+              appBar: ChatHeader(
+                provider: provider,
+                onHistory:
+                    provider.canSwitchChat && !context.watch<VoiceRecorderProvider>().isActive ? _openPastChats : null,
+              ),
+              endDrawer: ChatAppsDrawer(
+                onSelectApp: (id) => _handleAppSelection(id, context.read<AppProvider>()),
+                onEnableApps: _navigateToChatAppsPage,
+                onDisableApp: _disableChatApp,
+                onClearChat: _showClearChatDialog,
+              ),
+              onEndDrawerChanged: (isOpened) {
+                if (isOpened) {
+                  // Unfocus text field when drawer opens
+                  textFieldFocusNode.unfocus();
+                }
+              },
+              body: GestureDetector(
+                onTap: () {
+                  // Hide keyboard when tapping outside textfield
+                  FocusScope.of(context).unfocus();
+                },
+                child: Column(
+                  children: [
+                    if (provider.historyProblem != null)
+                      OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: provider.refreshMessages),
+                    if (provider.hasOlderMessages)
+                      TextButton(
+                        key: const Key('chat_load_older'),
+                        onPressed: provider.loadingOlderMessages || !provider.canSwitchChat
+                            ? null
+                            : () => _loadOlderMessages(provider),
+                        child: provider.loadingOlderMessages
+                            ? const OmiSpinner(size: OmiSpinnerSize.small)
+                            : Text(context.l10n.showMore),
+                      ),
+                    // Messages area - takes up remaining space
+                    Expanded(
+                      child: provider.isLoadingMessages && !provider.hasCachedMessages
+                          ? OmiLoadingState(label: provider.firstTimeLoadingText)
+                          : provider.isClearingChat
+                              ? OmiLoadingState(label: context.l10n.deletingMessages)
+                              : (provider.messages.isEmpty)
+                                  ? ChatGreeting(
+                                      isConnected: connectivityProvider.isConnected,
+                                      name: prefs.givenName,
                                     )
-                                  else if (!voiceRecorderProvider.isActive && shouldShowMenuButton())
-                                    Positioned(
-                                      left: 0,
-                                      top: 0,
-                                      bottom: 0,
-                                      child: Center(
-                                        child: PullDownButton(
-                                          itemBuilder: (context) => [
-                                            PullDownMenuItem(
-                                              title: context.l10n.takePhoto,
-                                              iconWidget: const FaIcon(FontAwesomeIcons.camera, size: 16),
-                                              onTap: () {
-                                                HapticFeedback.selectionClick();
-                                                if (mounted) {
-                                                  this.context.read<MessageProvider>().captureImage();
-                                                }
-                                              },
-                                            ),
-                                            PullDownMenuItem(
-                                              title: context.l10n.photoLibrary,
-                                              iconWidget: const FaIcon(FontAwesomeIcons.images, size: 16),
-                                              onTap: () {
-                                                HapticFeedback.selectionClick();
-                                                if (mounted) {
-                                                  this.context.read<MessageProvider>().selectImage();
-                                                }
-                                              },
-                                            ),
-                                            PullDownMenuItem(
-                                              title: context.l10n.chooseFile,
-                                              iconWidget: const FaIcon(FontAwesomeIcons.folder, size: 16),
-                                              onTap: () {
-                                                HapticFeedback.selectionClick();
-                                                if (mounted) {
-                                                  this.context.read<MessageProvider>().selectFile();
-                                                }
-                                              },
-                                            ),
-                                          ],
-                                          position: PullDownMenuPosition.automatic,
-                                          buttonBuilder: (context, showMenu) => GestureDetector(
-                                            onTap: () async {
-                                              HapticFeedback.lightImpact();
-                                              if (provider.selectedFiles.length > 3) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(context.l10n.maxFilesLimit),
-                                                    duration: const Duration(seconds: 2),
-                                                  ),
-                                                );
-                                                return;
-                                              }
-                                              if (textFieldFocusNode.hasFocus) {
-                                                FocusScope.of(context).unfocus();
-                                                await Future.delayed(const Duration(milliseconds: 280));
-                                                if (!context.mounted) return;
-                                              }
-                                              showMenu();
-                                            },
-                                            child: Container(
-                                              height: 48,
-                                              width: 48,
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF1F1F25),
-                                                shape: BoxShape.circle,
-                                                border: Border.all(color: const Color(0xFF35343B), width: 1),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black.withValues(alpha: 0.65),
-                                                    blurRadius: 60,
-                                                    spreadRadius: 14,
-                                                    offset: const Offset(0, -16),
-                                                  ),
-                                                  BoxShadow(
-                                                    color: Colors.black.withValues(alpha: 0.45),
-                                                    blurRadius: 32,
-                                                    spreadRadius: 6,
-                                                    offset: const Offset(0, -8),
-                                                  ),
-                                                  BoxShadow(
-                                                    color: Colors.black.withValues(alpha: 0.25),
-                                                    blurRadius: 10,
-                                                    offset: const Offset(0, 2),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: Center(
-                                                child: FaIcon(
-                                                  FontAwesomeIcons.plus,
-                                                  color: provider.selectedFiles.length > 3 ? Colors.grey : Colors.white,
-                                                  size: 18,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
+                                  : _buildTranscript(provider),
+                    ),
+                    _buildComposer(context, provider, connectivityProvider),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _loadOlderMessages(MessageProvider provider) async {
+    final before = scrollController.hasClients ? scrollController.position.maxScrollExtent : 0.0;
+    final offset = scrollController.hasClients ? scrollController.offset : 0.0;
+    _chatScrollMode = ChatScrollMode.freeScrolling;
+    await provider.loadOlderMessages();
+    if (!mounted) return;
+    if (provider.historyProblem != null) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !scrollController.hasClients) return;
+      final max = scrollController.position.maxScrollExtent;
+      scrollController.jumpTo((offset + max - before).clamp(0.0, max));
+    });
+  }
+
+  Widget _buildTranscript(MessageProvider provider) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            textSelectionTheme: TextSelectionThemeData(
+              selectionColor: OmiColors.textPrimary.withValues(alpha: 0.3),
+              selectionHandleColor: OmiColors.accent,
+            ),
+          ),
+          // Tight width: under the Column's loose constraints this Stack
+          // otherwise shrink-wraps to its only non-positioned child (the
+          // jump-to-latest chip, ~100pt), and every message collapses to a
+          // character-wide column whenever that chip is visible.
+          child: SizedBox(
+            width: constraints.maxWidth,
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                Positioned.fill(
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: _handleScrollNotification,
+                    child: ListView.builder(
+                      shrinkWrap: false,
+                      reverse: false,
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, ChatScrollPolicy.transcriptBottomPadding),
+                      itemCount: provider.messages.length,
+                      itemBuilder: (context, chatIndex) {
+                        if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                          _hasInitialScrolled = true;
+                          _schedulePostFrameModeAwareScroll();
+                        }
+
+                        final message = provider.messages[chatIndex];
+                        double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
+                        double bottomPadding = chatIndex == 0 ? 16 : 0;
+
+                        final messageBody = message.sender == MessageSender.ai
+                            ? AIMessage(
+                                showTypingIndicator:
+                                    provider.showTypingIndicator && chatIndex == provider.messages.length - 1,
+                                showThinkingAfterText: provider.agentThinkingAfterText,
+                                message: message,
+                                sendMessage: _sendMessageUtil,
+                                onAskOmi: (text) {
+                                  setState(() {
+                                    _selectedContext = text;
+                                  });
+                                  textFieldFocusNode.requestFocus();
+                                },
+                                displayOptions: provider.messages.length <= 1,
+                                appSender: provider.messageSenderApp(message.appId),
+                                updateConversation: (ServerConversation conversation) {
+                                  context.read<ConversationProvider>().updateConversation(conversation);
+                                },
+                                setMessageNps: (int value, {String? reason}) =>
+                                    provider.setMessageNps(message, value, reason: reason),
+                                replyFailed: provider.isReplyFailed(message),
+                                onRetry: provider.canRetryReply(message) ? () => _retryReply(message) : null,
+                              )
+                            : HumanMessage(
+                                message: message,
+                                onAskOmi: (text) {
+                                  setState(() {
+                                    _selectedContext = text;
+                                  });
+                                  textFieldFocusNode.requestFocus();
+                                },
+                              );
+                        return VisibilityDetector(
+                          key: ValueKey('chat-result-visibility-${message.id}'),
+                          onVisibilityChanged: (info) {
+                            if (message.sender == MessageSender.ai &&
+                                !message.isEmpty &&
+                                info.visibleFraction > 0 &&
+                                context.mounted) {
+                              provider.markChatResultVisible(message.id);
+                            }
+                          },
+                          child: Padding(
+                            key: ValueKey(message.id),
+                            padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                            child: messageBody,
                           ),
-                        ],
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                 ),
-                if (!textFieldFocusNode.hasFocus)
-                  BottomNavBar(
-                    onTabTap: (index, isRepeat) {
-                      context.read<HomeProvider>().setIndex(index);
-                      Navigator.of(context).pop();
-                    },
-                  ),
+                if (_chatScrollMode == ChatScrollMode.freeScrolling && _showLatestJump) _buildJumpToLatestButton(),
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  /// The composer card: the field (or the voice waveform) on top; attach, who answers, and the
+  /// mic or send button underneath.
+  Widget _buildComposer(BuildContext context, MessageProvider provider, ConnectivityProvider connectivityProvider) {
+    return Consumer<VoiceRecorderProvider>(
+      builder: (context, voiceRecorderProvider, child) {
+        final voiceActive = voiceRecorderProvider.isActive;
+        final recording = voiceRecorderProvider.state == VoiceRecorderState.recording;
+        final latest = provider.messages.isEmpty ? null : provider.messages.last;
+        final followUp = latest != null &&
+                latest.sender == MessageSender.ai &&
+                !provider.isReplyFailed(latest) &&
+                !provider.chatMutationInProgress &&
+                !provider.isLoadingMessages &&
+                !provider.isClearingChat
+            ? latest.followUpQuestion
+            : null;
+        final compactFollowUp = MediaQuery.sizeOf(context).height - MediaQuery.viewInsetsOf(context).bottom < 400;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Selected images display above the composer
+            const ChatSelectedFilesStrip(),
+            if (!connectivityProvider.isConnected) const _OfflineHint(),
+            // Scope chip (#4515) — clears an active conversation scope (Ask about this)
+            Builder(
+              builder: (context) {
+                final scope = _chatScope;
+                final hasConversation = scope?.type == 'conversation' && (scope?.id?.isNotEmpty ?? false);
+                if (!hasConversation) return const SizedBox.shrink();
+                final l10n = context.l10n;
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _ComposerChip(
+                          label: l10n.chatScopeAbout(scope!.title ?? l10n.conversationTab),
+                          onRemove: () => setState(() => _chatScope = null),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            if (provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat)
+              ChatSuggestions(
+                isConnected: connectivityProvider.isConnected,
+                hasExistingData: _chatScope != null ||
+                    (context.watch<ConversationProvider?>()?.conversations.isNotEmpty ?? false) ||
+                    (context.watch<MemoriesProvider?>()?.memories.isNotEmpty ?? false),
+                onSelected: (prompt) {
+                  textController.value = TextEditingValue(
+                    text: prompt,
+                    selection: TextSelection.collapsed(offset: prompt.length),
+                  );
+                  textFieldFocusNode.requestFocus();
+                  OmiHaptics.selection();
+                },
+              ),
+            if (followUp != null && connectivityProvider.isConnected && !voiceActive)
+              Padding(
+                key: const Key('chat_followup_suggestions'),
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xs),
+                child: ChatFollowUpChip(
+                  question: followUp,
+                  onSend: _sendMessageUtil,
+                  maxLines: compactFollowUp ? 1 : 2,
+                ),
+              ),
+            ChatComposerEntrance(
+              bottom: true,
+              maintainBottomViewPadding: false,
+              child: Container(
+                margin: EdgeInsets.fromLTRB(10, provider.selectedFiles.isNotEmpty ? 0 : 8, 10, 10),
+                padding: const EdgeInsets.fromLTRB(16, 8, 6, 4),
+                decoration: BoxDecoration(
+                  color: OmiColors.surface1,
+                  borderRadius: const BorderRadius.all(Radius.circular(24)),
+                  border: Border.all(color: OmiColors.border),
+                  boxShadow: kChatComposerShadow,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_selectedContext != null && !voiceActive)
+                      _SelectedTextChip(
+                        text: _selectedContext!,
+                        onRemove: () => setState(() => _selectedContext = null),
+                      ),
+                    if (voiceActive)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 10, top: 4),
+                        child: VoiceRecorderWidget(
+                          onTranscriptReady: (transcript, autoSend) {
+                            textController.text = transcript;
+                            voiceRecorderProvider.close();
+                            context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
+                            if (autoSend && transcript.trim().isNotEmpty) {
+                              _sendMessageUtil(transcript.trim());
+                            }
+                          },
+                          onClose: () {
+                            voiceRecorderProvider.close();
+                          },
+                        ),
+                      )
+                    else
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          textSelectionTheme: TextSelectionThemeData(
+                            selectionColor: OmiColors.textSecondary.withValues(alpha: 0.4),
+                            selectionHandleColor: OmiColors.textPrimary,
+                          ),
+                        ),
+                        child: TextField(
+                          key: const ValueKey('omi.chat.input'),
+                          enabled: true,
+                          controller: textController,
+                          focusNode: textFieldFocusNode,
+                          obscureText: false,
+                          textAlign: TextAlign.start,
+                          decoration: InputDecoration(
+                            hintText: context.l10n.askAnything,
+                            hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary),
+                            border: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            contentPadding: const EdgeInsets.only(top: 6, bottom: 4, right: 10),
+                            isDense: true,
+                          ),
+                          minLines: 1,
+                          maxLines: 8,
+                          keyboardType: TextInputType.multiline,
+                          textCapitalization: TextCapitalization.sentences,
+                          style: OmiType.callout.copyWith(height: 1.3),
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Transform.translate(
+                          // The 36pt circle sits on the card's inner margin, not the 44pt target's.
+                          offset: const Offset(-10, 0),
+                          child: voiceActive
+                              ? ChatComposerSideButton(
+                                  key: const ValueKey('omi.chat.voice.discard'),
+                                  icon: const Icon(Icons.close),
+                                  label: context.l10n.chatDiscardRecording,
+                                  onPressed: () {
+                                    OmiHaptics.light();
+                                    voiceRecorderProvider.discardRecording();
+                                  },
+                                )
+                              : _buildAttachButton(context, provider),
+                        ),
+                        if (!voiceActive)
+                          Transform.translate(offset: const Offset(-10, 0), child: _buildAppChip(context, provider)),
+                        const Spacer(),
+                        // Stop fills the draft; Send transcribes and sends.
+                        if (recording)
+                          ChatComposerRoundButton(
+                            buttonKey: const ValueKey('omi.chat.voice.transcribe'),
+                            icon: const Icon(Icons.stop),
+                            label: context.l10n.stopRecording,
+                            onPressed: () {
+                              OmiHaptics.light();
+                              voiceRecorderProvider.processRecording();
+                            },
+                          ),
+                        if (recording)
+                          ChatComposerRoundButton(
+                            buttonKey: const ValueKey('omi.chat.voice.send'),
+                            icon: const FaIcon(FontAwesomeIcons.arrowUp),
+                            label: context.l10n.chatSendMessage,
+                            onPressed: () {
+                              OmiHaptics.medium();
+                              voiceRecorderProvider.requestAutoSendOnNextTranscript();
+                              voiceRecorderProvider.processRecording();
+                            },
+                          ),
+                        if (!voiceActive && textController.text.isEmpty)
+                          ChatComposerRoundButton(
+                            icon: const FaIcon(FontAwesomeIcons.microphone),
+                            label: context.l10n.startVoiceRecording,
+                            onPressed: () {
+                              OmiHaptics.light();
+                              FocusScope.of(context).unfocus();
+                              voiceRecorderProvider.startRecording();
+                            },
+                          ),
+                        // Send — only with text and not in voice mode. Offline or uploading it
+                        // stays visible but is drawn disabled.
+                        if (!voiceActive && !provider.sendingMessage)
+                          ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: textController,
+                            builder: (context, value, child) {
+                              final hasText = value.text.trim().isNotEmpty;
+                              if (!hasText) return const SizedBox.shrink();
+                              final canSend = hasText &&
+                                  !provider.sendingMessage &&
+                                  !provider.isUploadingFiles &&
+                                  connectivityProvider.isConnected;
+                              return ChatComposerRoundButton(
+                                buttonKey: const ValueKey('omi.chat.send'),
+                                icon: const FaIcon(FontAwesomeIcons.arrowUp),
+                                label: context.l10n.chatSendMessage,
+                                onPressed: canSend
+                                    ? () {
+                                        OmiHaptics.medium();
+                                        final message = textController.text.trim();
+                                        if (message.isEmpty) return;
+                                        _sendMessageUtil(message);
+                                      }
+                                    : null,
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAttachButton(BuildContext context, MessageProvider provider) {
+    return PullDownButton(
+      itemBuilder: (context) => [
+        PullDownMenuItem(
+          title: context.l10n.takePhoto,
+          iconWidget: const FaIcon(FontAwesomeIcons.camera, size: 16),
+          onTap: () {
+            OmiHaptics.selection();
+            if (mounted) this.context.read<MessageProvider>().captureImage();
+          },
+        ),
+        PullDownMenuItem(
+          title: context.l10n.photoLibrary,
+          iconWidget: const FaIcon(FontAwesomeIcons.images, size: 16),
+          onTap: () {
+            OmiHaptics.selection();
+            if (mounted) this.context.read<MessageProvider>().selectImage();
+          },
+        ),
+        PullDownMenuItem(
+          title: context.l10n.chooseFile,
+          iconWidget: const FaIcon(FontAwesomeIcons.folder, size: 16),
+          onTap: () {
+            OmiHaptics.selection();
+            if (mounted) this.context.read<MessageProvider>().selectFile();
+          },
+        ),
+      ],
+      position: PullDownMenuPosition.automatic,
+      buttonBuilder: (context, showMenu) => ChatComposerSideButton(
+        icon: const FaIcon(FontAwesomeIcons.paperclip),
+        label: context.l10n.chatAddAttachment,
+        onPressed: () async {
+          OmiHaptics.light();
+          if (provider.selectedFiles.length > 3) {
+            OmiFeedback.info(context, context.l10n.maxFilesLimit);
+            return;
+          }
+          if (textFieldFocusNode.hasFocus) {
+            FocusScope.of(context).unfocus();
+            await Future.delayed(const Duration(milliseconds: 280));
+            if (!context.mounted) return;
+          }
+          showMenu();
+        },
+      ),
+    );
+  }
+
+  /// Omi, or the chat app picked for this thread; opens the chat apps drawer.
+  Widget _buildAppChip(BuildContext context, MessageProvider provider) {
+    return Consumer<AppProvider>(
+      builder: (context, appProvider, _) {
+        final selectedApp = provider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
+        return ChatAppChip(
+          name: selectedApp != null ? selectedApp.getName() : context.l10n.omiAppName,
+          avatar: selectedApp != null ? ChatAppAvatar(app: selectedApp) : const ChatOmiAvatar(),
+          onPressed: () {
+            OmiHaptics.selection();
+            // Dismiss the keyboard before opening the drawer, once the scaffold has settled.
+            FocusScope.of(context).unfocus();
+            WidgetsBinding.instance.addPostFrameCallback((_) => scaffoldKey.currentState?.openEndDrawer());
+          },
         );
       },
     );
@@ -966,16 +743,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Guard against re-entry (rapid double-tap of send, voice→transcribeSuccess
     // race firing onTranscriptReady twice, etc.). Without this the chat could
     // submit the same text twice and the AI replies twice.
-    if (provider.sendingMessage) return;
-
+    if (provider.chatMutationInProgress || provider.isLoadingMessages) return;
     String? currentContext = _selectedContext;
     setState(() {
       _selectedContext = null;
     });
-
     // Remove focus from text field
     FocusManager.instance.primaryFocus?.unfocus();
-
     if (currentContext != null) {
       text = 'Context: "$currentContext"\n\n$text';
     }
@@ -994,48 +768,34 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     provider.setSendingMessage(false);
   }
 
-  Widget _scopeChip({required String label, required bool selected, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF35343B) : const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: selected ? const Color(0xFFC4C4CC) : const Color(0xFF35343B)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : const Color(0xFFC4C4CC),
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
+  /// Sends the message behind a failed reply again (the reply's Try Again).
+  Future<void> _retryReply(ServerMessage failed) async {
+    final provider = context.read<MessageProvider>();
+    if (provider.chatMutationInProgress || provider.isLoadingMessages) return;
+    provider.setSendingMessage(true);
+    _resumeFollowingAndScroll(animated: true);
+    await provider.retryFailedReply(failed);
   }
 
   void _showPlansSheetOnQuotaExceeded() {
     if (!mounted) return;
     // Refresh subscription data so the plans sheet is up-to-date
     context.read<UsageProvider>().fetchSubscription();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const _PlansSheetWrapper(),
-    );
+    showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const _PlansSheetWrapper());
   }
 
   sendInitialAppMessage(App? app) async {
-    context.read<MessageProvider>().setSendingMessage(true);
+    // The provider outlives this page: release the composer even if the page closes mid-request.
+    final provider = context.read<MessageProvider>();
+    provider.setSendingMessage(true);
     _resumeFollowingAndScroll();
-    ServerMessage message = await getInitialAppMessage(app?.id);
-    if (mounted) {
-      context.read<MessageProvider>().addMessage(message);
+    try {
+      final message = await getInitialAppMessage(app?.id);
+      if (!mounted) return;
+      provider.addMessage(message);
       _resumeFollowingAndScroll();
-      context.read<MessageProvider>().setSendingMessage(false);
+    } finally {
+      provider.setSendingMessage(false);
     }
   }
 
@@ -1084,12 +844,35 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       isUserOrDragScroll: isUserScroll || isDragScroll,
       atLiveEdge: ChatScrollPolicy.atLiveEdge(notification.metrics),
     );
-    if (next == null) return false;
+    if (next == null) {
+      if (_chatScrollMode == ChatScrollMode.freeScrolling && (isUserScroll || isDragScroll)) {
+        _showLatestJumpOnActivity();
+      }
+      return false;
+    }
 
     _chatScrollMode = next;
     _cancelPendingScrolls();
+    if (next == ChatScrollMode.freeScrolling) {
+      _showLatestJumpOnActivity();
+    } else {
+      _latestJumpIdleTimer?.cancel();
+      _showLatestJump = false;
+    }
     if (mounted) setState(() {});
     return false;
+  }
+
+  void _showLatestJumpOnActivity() {
+    _latestJumpIdleTimer?.cancel();
+    if (!_showLatestJump) {
+      _showLatestJump = true;
+      if (mounted) setState(() {});
+    }
+    _latestJumpIdleTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (!mounted || _chatScrollMode != ChatScrollMode.freeScrolling) return;
+      setState(() => _showLatestJump = false);
+    });
   }
 
   Widget _buildJumpToLatestButton() {
@@ -1102,6 +885,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   void _resumeFollowingAndScroll({int delayMs = 0, bool animated = false}) {
     _cancelPendingScrolls();
+    _latestJumpIdleTimer?.cancel();
+    _showLatestJump = false;
     _chatScrollMode = ChatScrollMode.followingBottom;
     if (mounted) setState(() {});
     _scheduleModeAwareScroll(delayMs: delayMs, animated: animated, force: true);
@@ -1164,44 +949,22 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Unfocus the text field to prevent keyboard issues
     textFieldFocusNode.unfocus();
 
-    // clear chat
-    if (val == 'clear_chat') {
-      _showClearChatDialog();
-      return;
-    }
-
-    // enable apps - navigate to chat capability apps page
-    if (val == 'enable') {
-      _navigateToChatAppsPage();
-      return;
-    }
-
     // select app by id
     _selectApp(val, provider);
   }
 
-  void _showClearChatDialog() {
+  Future<void> _showClearChatDialog() async {
     if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return getDialog(
-          context,
-          () {
-            Navigator.of(context).pop();
-          },
-          () {
-            if (mounted) {
-              context.read<MessageProvider>().clearChat();
-              Navigator.of(context).pop();
-            }
-          },
-          context.l10n.clearChatQuestion,
-          context.l10n.clearChatConfirm,
-        );
-      },
+    final l10n = context.l10n;
+    // Clearing cannot be undone: confirm every time, with the verb on the button.
+    final confirmed = await showOmiConfirm(
+      context,
+      title: l10n.clearChatQuestion,
+      message: l10n.clearChatConfirm,
+      confirmLabel: l10n.clearChat,
+      destructive: true,
     );
+    if (confirmed && mounted) context.read<MessageProvider>().clearChat();
   }
 
   Future<void> _navigateToChatAppsPage() async {
@@ -1235,14 +998,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     messageProvider.setChatApps(localChatApps);
   }
 
-  Future<void> _handleAppUninstall(String appId, AppProvider appProvider, MessageProvider messageProvider) async {
-    if (!mounted) return;
-
-    // Immediately remove from local chat apps list for instant visual feedback
-    messageProvider.removeChatApp(appId);
-
-    // Disable the app on server (runs in background)
-    appProvider.toggleApp(appId, false, null);
+  /// Disables a chat app everywhere, with Undo (the same action as Disable on its detail page).
+  Future<void> _disableChatApp(App app) async {
+    final messageProvider = context.read<MessageProvider>();
+    Navigator.of(context).maybePop(); // close the drawer so the Undo toast is visible
+    await disableAppWithUndo(
+      context,
+      app,
+      onHidden: () => messageProvider.removeChatApp(app.id),
+      onRestored: () {
+        if (messageProvider.chatApps.every((a) => a.id != app.id)) {
+          messageProvider.setChatApps(List.of(messageProvider.chatApps)..add(app));
+        }
+      },
+    );
   }
 
   void _selectApp(String appId, AppProvider appProvider) async {
@@ -1253,7 +1022,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
     // Store references before async operation
     final messageProvider = mounted ? context.read<MessageProvider>() : null;
-    if (messageProvider == null) return;
+    if (messageProvider == null || !messageProvider.canSwitchChat || context.read<VoiceRecorderProvider>().isActive) {
+      return;
+    }
 
     // Set the selected app
     appProvider.setSelectedChatAppId(appId);
@@ -1278,341 +1049,167 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     }
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, MessageProvider provider) {
-    return AppBar(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      elevation: 0,
-      leading: Container(
-        width: 36,
-        height: 36,
-        margin: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-        child: IconButton(
-          padding: EdgeInsets.zero,
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
-          onPressed: () {
-            HapticFeedback.mediumImpact();
-            Navigator.of(context).pop();
-          },
-        ),
-      ),
-      title: Consumer<AppProvider>(
-        builder: (context, appProvider, child) {
-          return _buildSelectedAppDisplay(context, appProvider);
-        },
-      ),
-      centerTitle: true,
-      actions: [
-        Container(
-          width: 36,
-          height: 36,
-          margin: const EdgeInsets.only(right: 8),
-          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            icon: const Icon(Icons.extension, color: Colors.white, size: 18),
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              // Dismiss keyboard before opening drawer
-              FocusScope.of(context).unfocus();
-              // Use post-frame callback to ensure scaffold state is ready
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                scaffoldKey.currentState?.openEndDrawer();
-              });
-            },
-          ),
-        ),
-      ],
-      bottom: provider.isLoadingMessages
-          ? PreferredSize(
-              preferredSize: const Size.fromHeight(32),
-              child: Container(
-                width: double.infinity,
-                height: 32,
-                color: Colors.green,
-                child: Center(
-                  child: Text(context.l10n.syncingMessages, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                ),
-              ),
-            )
-          : null,
+  Future<void> _openPastChats() async {
+    FocusScope.of(context).unfocus();
+    final provider = context.read<MessageProvider>();
+    final choice = await Navigator.of(context).push<ChatHistoryChoice>(
+      omiPageRoute(builder: (_) => const PastChatsPage()),
     );
+    if (!mounted || choice == null || !provider.canSwitchChat || context.read<VoiceRecorderProvider>().isActive) {
+      return;
+    }
+    if (textController.text.isNotEmpty || provider.selectedFiles.isNotEmpty) {
+      final discard = await showOmiConfirm(
+        context,
+        title: context.l10n.discardChangesTitle,
+        message: context.l10n.discardChangesMessage,
+        confirmLabel: context.l10n.discard,
+        destructive: true,
+      );
+      if (!mounted || !discard || !provider.canSwitchChat || context.read<VoiceRecorderProvider>().isActive) {
+        return;
+      }
+    }
+    final draftBeforeSwitch = textController.text;
+    if (choice.action == ChatHistoryAction.open) {
+      if (!await provider.openChatSession(choice.session!)) {
+        if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+        return;
+      }
+    } else if (choice.action == ChatHistoryAction.newChat) {
+      if (!provider.startFreshChat()) return;
+      _introRevision++;
+    } else if (choice.action == ChatHistoryAction.app) {
+      _selectApp(choice.app!.id, context.read<AppProvider>());
+    }
+    if (!mounted) return;
+    setState(() {
+      if (textController.text == draftBeforeSwitch) textController.clear();
+      _selectedContext = null;
+      _chatScope = null;
+      _hasInitialScrolled = false;
+    });
+    _resumeFollowingAndScroll();
   }
+}
 
-  Widget _buildSelectedAppDisplay(BuildContext context, AppProvider provider) {
-    final messageProvider = Provider.of<MessageProvider>(context, listen: false);
-    var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
+/// "You're offline" above the composer; Send is disabled until the connection returns.
+class _OfflineHint extends StatelessWidget {
+  const _OfflineHint();
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
-        const SizedBox(width: 8),
-        Container(
-          constraints: const BoxConstraints(maxWidth: 140),
-          child: Text(
-            selectedApp != null ? selectedApp.getName() : context.l10n.omiAppName,
-            style: const TextStyle(color: Colors.white, fontSize: 16),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildChatAppsEndDrawer(BuildContext context) {
-    return Drawer(
-      backgroundColor: const Color(0xFF1F1F25),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(20), bottomLeft: Radius.circular(20)),
-      ),
-      child: SafeArea(
-        child: Consumer2<MessageProvider, AppProvider>(
-          builder: (context, messageProvider, appProvider, child) {
-            final chatApps = messageProvider.chatApps;
-            final selectedAppId = appProvider.selectedChatAppId;
-            final isOmiSelected = chatApps.firstWhereOrNull((a) => a.id == selectedAppId) == null;
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        context.l10n.chatAppsTitle,
-                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                      ),
-                      IconButton(
-                        icon: const Padding(
-                          padding: EdgeInsets.only(left: 2, top: 1),
-                          child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white60, size: 18),
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(color: Colors.white12, height: 1),
-                // Actions
-                ListTile(
-                  leading: const Padding(
-                    padding: EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.redAccent, size: 20),
-                  ),
-                  title: Text(context.l10n.clearChat, style: const TextStyle(color: Colors.redAccent, fontSize: 16)),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _handleAppSelection('clear_chat', appProvider);
-                  },
-                ),
-                ListTile(
-                  leading: const Padding(
-                    padding: EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.circlePlus, color: Colors.white, size: 20),
-                  ),
-                  title: Text(context.l10n.enableApps, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                  trailing: const Padding(
-                    padding: EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.chevronRight, color: Colors.white38, size: 14),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _navigateToChatAppsPage();
-                  },
-                ),
-                const Divider(color: Colors.white12, height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
-                  child: Text(
-                    context.l10n.selectApp,
-                    style: const TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
-                ),
-                // App list
-                Expanded(
-                  child: ListView(
-                    padding: EdgeInsets.zero,
-                    children: [
-                      // Omi option
-                      _buildDrawerAppItem(
-                        avatar: _getOmiAvatar(),
-                        name: context.l10n.omiAppName,
-                        isSelected: isOmiSelected,
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          _handleAppSelection('no_selected', appProvider);
-                        },
-                      ),
-                      // Enabled chat apps
-                      ...chatApps.map(
-                        (app) => _buildDrawerAppItem(
-                          avatar: _getAppAvatar(app),
-                          name: app.getName(),
-                          isSelected: selectedAppId == app.id,
-                          appId: app.id,
-                          onTap: () {
-                            Navigator.of(context).pop();
-                            _handleAppSelection(app.id, appProvider);
-                          },
-                          onConfirmDelete: selectedAppId != app.id
-                              ? () => _handleAppUninstall(app.id, appProvider, messageProvider)
-                              : null,
-                        ),
-                      ),
-                      if (chatApps.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Text(
-                            context.l10n.noChatAppsEnabled,
-                            style: const TextStyle(color: Colors.white38, fontSize: 14),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerAppItem({
-    required Widget avatar,
-    required String name,
-    required bool isSelected,
-    required VoidCallback onTap,
-    String? appId,
-    VoidCallback? onConfirmDelete,
-  }) {
-    final bool isPendingDelete = appId != null && _pendingDeleteAppId == appId;
-
-    if (isPendingDelete) {
-      // Show inline confirmation buttons - match ListTile height (56px)
-      return Container(
-        height: 56,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            avatar,
-            const SizedBox(width: 12),
-            Expanded(
+            ExcludeSemantics(child: Icon(Icons.cloud_off_rounded, size: 14, color: OmiColors.textTertiary)),
+            const SizedBox(width: 6),
+            Flexible(
               child: Text(
-                name,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Cancel button (white)
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _pendingDeleteAppId = null;
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                child: Text(
-                  context.l10n.cancel,
-                  style: const TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Disable button (red)
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _pendingDeleteAppId = null;
-                });
-                onConfirmDelete?.call();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(16)),
-                child: Text(
-                  context.l10n.disable,
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                ),
+                context.l10n.chatOfflineHint,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                textAlign: TextAlign.center,
               ),
             ),
           ],
         ),
-      );
-    }
-
-    return ListTile(
-      leading: avatar,
-      title: Text(
-        name,
-        style: const TextStyle(color: Colors.white, fontSize: 16),
-        overflow: TextOverflow.ellipsis,
       ),
-      trailing: isSelected
-          ? const Padding(
-              padding: EdgeInsets.only(left: 2, top: 1),
-              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.white, size: 18),
-            )
-          : appId != null && onConfirmDelete != null
-              ? GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _pendingDeleteAppId = appId;
-                    });
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
-                  ),
-                )
-              : null,
-      selected: isSelected,
-      selectedTileColor: Colors.white.withValues(alpha: 0.1),
-      onTap: onTap,
     );
   }
+}
 
-  Widget _getAppAvatar(App app) {
-    return CachedNetworkImage(
-      imageUrl: app.getImageUrl(),
-      imageBuilder: (context, imageProvider) {
-        return CircleAvatar(backgroundColor: Colors.white, radius: 12, backgroundImage: imageProvider);
-      },
-      errorWidget: (context, url, error) {
-        return const CircleAvatar(backgroundColor: Colors.white, radius: 12, child: Icon(Icons.error_outline_rounded));
-      },
-      progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-        backgroundColor: Colors.white,
-        radius: 12,
-        child: CircularProgressIndicator(
-          value: progress.progress,
-          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+/// A small chip above or inside the composer with a remove control (the conversation scope).
+class _ComposerChip extends StatelessWidget {
+  const _ComposerChip({required this.label, required this.onRemove});
+
+  final String label;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      hint: MaterialLocalizations.of(context).deleteButtonTooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onRemove,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
+              decoration: BoxDecoration(
+                color: OmiColors.surface2,
+                borderRadius: OmiRadius.lgAll,
+                border: Border.all(color: OmiColors.textTertiary),
+              ),
+              child: ExcludeSemantics(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(Icons.close, size: 14, color: OmiColors.textSecondary),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _getOmiAvatar() {
-    return Container(
-      decoration: BoxDecoration(
-        image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
-        borderRadius: const BorderRadius.all(Radius.circular(16.0)),
-      ),
-      height: 24,
-      width: 24,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [Image.asset(Assets.images.herologo.path, height: 16, width: 16)],
+/// The quoted text the next message asks about ("Ask Omi" on a selection), with a remove control.
+class _SelectedTextChip extends StatelessWidget {
+  const _SelectedTextChip({required this.text, required this.onRemove});
+
+  final String text;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: OmiSpacing.xxs, left: 2),
+      child: Container(
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
+        padding: const EdgeInsets.only(left: OmiSpacing.sm),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ExcludeSemantics(
+              child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary),
+            ),
+            const SizedBox(width: OmiSpacing.xs),
+            Flexible(
+              child: Text(
+                text,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            OmiIconButton(
+              icon: const Icon(Icons.close, size: 16),
+              label: context.l10n.chatRemoveSelectedText,
+              color: OmiColors.textSecondary,
+              onPressed: onRemove,
+            ),
+          ],
+        ),
       ),
     );
   }

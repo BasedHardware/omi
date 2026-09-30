@@ -501,7 +501,11 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert 'ref: ${{ github.sha }}' in text
     assert 'git rev-parse HEAD' in text
     assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text
-    assert 'credentials_json: ${{ secrets.GCP_CREDENTIALS }}' in text
+    # Both lanes authenticate keylessly: prod through omi-gha-deploy-prod, development
+    # through omi-gha-deploy-dev. No JSON key is passed.
+    assert 'secrets.GCP_CREDENTIALS' not in text
+    assert 'omi-gha-deploy-prod/providers/github' in text
+    assert 'omi-gha-deploy-dev/providers/github' in text
     composite = text.split('\n  reconcile_composite_indexes:', 1)[1].split(
         '\n  reconcile_development_composite_indexes:', 1
     )[0]
@@ -540,7 +544,10 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert '--dry-run' in plan
     assert '--dry-run' in plan
     assert '--dry-run' not in apply
-    assert '--timeout-seconds 3600' in apply
+    assert 'timeout-minutes: 240' in composite
+    assert 'timeout-minutes: 240' in development
+    assert '--timeout-seconds 10800' in apply
+    assert '--timeout-seconds 10800' in development
 
     # Firestore documents `gcloud firestore indexes fields update --disable-indexes`
     # as an explicit field override that does not affect composites. Keep that

@@ -27,8 +27,15 @@ class TranslationMetrics(Protocol):
 
     def skip(self, target_language: str, reason: str) -> None: ...
 
+    def decision(self, target_language: str, decision: str, reason: str) -> None: ...
+
+    def demand(self, state: str, mode: str, platform: str) -> None: ...
+
 
 class NoopTranslationMetrics:
+    def demand(self, state: str, mode: str, platform: str) -> None:
+        return None
+
     def cache(self, layer: str, result: str) -> None:
         return None
 
@@ -50,6 +57,9 @@ class NoopTranslationMetrics:
         return None
 
     def skip(self, target_language: str, reason: str) -> None:
+        return None
+
+    def decision(self, target_language: str, decision: str, reason: str) -> None:
         return None
 
 
@@ -92,11 +102,31 @@ class PrometheusTranslationMetrics:
             ['provider'],
             [1, 2, 5, 10, 20, 50, 100, 200],
         )
+        self._decisions = _counter(
+            'omi_translation_decisions_total',
+            'Translation admission and output decisions (not rendered badges)',
+            ['target_lang', 'decision', 'reason'],
+        )
         self._skips = _counter(
             'omi_translation_skip_total',
             'Translations skipped',
             ['target_lang', 'reason'],
         )
+        self._demand = _counter(
+            'omi_translation_demand_reports_total',
+            'Socket-local transcript visibility reports and expiry decisions',
+            ['state', 'mode', 'platform'],
+        )
+
+    def demand(self, state: str, mode: str, platform: str) -> None:
+        state_label = (
+            state
+            if state in {'legacy_unknown', 'legacy_stale', 'viewed', 'hidden', 'lease_expired', 'closed'}
+            else 'other'
+        )
+        mode_label = mode if mode in {'shadow', 'enforced'} else 'other'
+        platform_label = platform if platform in {'ios', 'android', 'macos', 'web', 'unknown'} else 'other'
+        self._demand.labels(state=state_label, mode=mode_label, platform=platform_label).inc()
 
     def cache(self, layer: str, result: str) -> None:
         self._cache_ops.labels(layer=_bounded(layer), result=_bounded(result)).inc()
@@ -125,6 +155,14 @@ class PrometheusTranslationMetrics:
 
     def skip(self, target_language: str, reason: str) -> None:
         self._skips.labels(target_lang=_bounded_language(target_language), reason=_bounded_reason(reason)).inc()
+
+    def decision(self, target_language: str, decision: str, reason: str) -> None:
+        decision = decision if decision in {'translate', 'skip', 'defer', 'rejected_by_guard'} else 'other'
+        self._decisions.labels(
+            target_lang=_bounded_language(target_language), decision=decision, reason=_bounded_reason(reason)
+        ).inc()
+        if decision in {'skip', 'defer', 'rejected_by_guard'}:
+            self.skip(target_language, reason)
 
 
 _default_metrics: TranslationMetrics | None = None
@@ -182,4 +220,26 @@ def _bounded_error(value: str) -> str:
 
 def _bounded_reason(value: str) -> str:
     normalized = _bounded(value)
-    return normalized if normalized in {'empty', 'target_language', 'cached'} else 'other'
+    return (
+        normalized
+        if normalized
+        in {
+            'empty',
+            'target_language',
+            'cached',
+            'unchanged',
+            'near_copy',
+            'out_of_profile',
+            'uncertain',
+            'eligible',
+            'output_guard',
+            'no_demand',
+            'budget_denied',
+            'duplicate_suppressed',
+            'redis_unavailable',
+            'oversized',
+            'stale_result',
+            'lease_lost',
+        }
+        else 'other'
+    )

@@ -633,9 +633,6 @@ actor AgentBridge {
   private var activeRequestId: String?
   private var realtimeChatLaneInterrupt = RealtimeChatLaneInterruptBinding()
   private var lastKnownQuota: OwnerBoundQuota?
-  private var tokenRefreshTask: Task<Void, Never>?
-  private var tokenRefreshTaskID: UUID?
-  private var tokenRefreshAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   private var stopTask: Task<Void, Never>?
   private var lifecycleGeneration: UInt64 = 0
   private var lifecycleFlight: LifecycleFlight?
@@ -1053,10 +1050,6 @@ actor AgentBridge {
   /// can spawn a fresh Node bridge (the process is already gone).
   func prepareForCrashRecovery() {
     lifecycleGeneration &+= 1
-    tokenRefreshTask?.cancel()
-    tokenRefreshTask = nil
-    tokenRefreshTaskID = nil
-    tokenRefreshAuthorizationSnapshot = nil
     registered = false
     synchronizedRuntimeAuthorityEpoch = nil
     synchronizedRuntimeAuthorityOwnerID = nil
@@ -1073,10 +1066,6 @@ actor AgentBridge {
       await stopTask.value
       return
     }
-    tokenRefreshTask?.cancel()
-    tokenRefreshTask = nil
-    tokenRefreshTaskID = nil
-    tokenRefreshAuthorizationSnapshot = nil
     lifecycleGeneration &+= 1
     let flightID = lifecycleFlight?.id
     registered = false
@@ -1112,7 +1101,6 @@ actor AgentBridge {
   ) async throws -> AgentDefaultExecutionProfile {
     let authorization = try captureAuthorization()
     try await start(authorizationSnapshot: authorization)
-    ensureTokenRefreshTask(authorizationSnapshot: authorization)
     _ = try? await refreshAuthToken(authorizationSnapshot: authorization)
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
       throw BridgeError.authMissing
@@ -1820,15 +1808,14 @@ actor AgentBridge {
             expectedUserId: expectedOwnerId
           )
         },
-        sendToken: { token, expectedOwnerId, snapshot in
-          await runtime.refreshAuthToken(
-            token,
+        sendToken: { _, expectedOwnerId, snapshot in
+          await runtime.confirmModelCredentials(
             expectedOwnerId: expectedOwnerId,
             authorizationSnapshot: snapshot)
         }
       )
       if !refreshed {
-        log("AgentBridge: refreshAuthToken owner changed or token was unavailable; skipping push")
+        log("AgentBridge: refreshAuthToken owner changed or token was unavailable; skipping authority update")
       }
       return refreshed
     } catch {
@@ -1837,9 +1824,9 @@ actor AgentBridge {
     }
   }
 
-  /// Fetches and sends one token under a single immutable owner identity.
+  /// Validates a credential under one immutable owner identity before confirming readiness.
   /// The second owner read closes the suspension window around the credential
-  /// fetch; the runtime performs the same comparison again at the send boundary.
+  /// fetch; readiness IPC performs the same comparison and carries no token.
   nonisolated static func refreshOwnerBoundToken<Authorization: Sendable>(
     captureAuthorization: @escaping @Sendable () async -> Authorization?,
     authorizationOwnerId: @escaping @Sendable (_ authorization: Authorization) -> String,
@@ -1878,47 +1865,10 @@ actor AgentBridge {
     return token.isEmpty ? nil : token
   }
 
-  private func ensureTokenRefreshTask(
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-    if tokenRefreshTask != nil,
-      tokenRefreshAuthorizationSnapshot == authorizationSnapshot
-    {
-      return
-    }
-    tokenRefreshTask?.cancel()
-    let taskID = UUID()
-    tokenRefreshTaskID = taskID
-    tokenRefreshAuthorizationSnapshot = authorizationSnapshot
-    tokenRefreshTask = Task { [weak self] in
-      defer {
-        Task { [weak self] in
-          await self?.finishTokenRefreshTask(id: taskID)
-        }
-      }
-      while !Task.isCancelled {
-        try? await Task.sleep(nanoseconds: 45 * 60 * 1_000_000_000)
-        guard !Task.isCancelled else { break }
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { break }
-        let refreshed = try? await self?.refreshAuthToken(
-          authorizationSnapshot: authorizationSnapshot)
-        guard refreshed == true else { break }
-      }
-    }
-  }
-
-  private func finishTokenRefreshTask(id: UUID) {
-    guard tokenRefreshTaskID == id else { return }
-    tokenRefreshTask = nil
-    tokenRefreshTaskID = nil
-    tokenRefreshAuthorizationSnapshot = nil
-  }
-
   /// Node starts with a non-authoritative local placeholder owner. Every
   /// harness must replace it before the first owner-scoped RPC. When a managed
-  /// token is available it is pushed even for ACP/Hermes/OpenClaw so a pinned
-  /// pi-mono session can still register; missing token only fails a pi-mono start.
+  /// credential check succeeds, only readiness is recorded; credentials are
+  /// obtained again on demand for each pi-mono provider request.
   nonisolated static func synchronizeAuthorityForStart(
     requiresCredentials: Bool,
     refreshCredentials: () async throws -> Bool,
@@ -1942,9 +1892,6 @@ actor AgentBridge {
     requiresCredentials: Bool
   ) async {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-    if requiresCredentials {
-      ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)
-    }
     await Self.synchronizeAuthorityForStart(
       requiresCredentials: requiresCredentials,
       refreshCredentials: { [weak self] in
@@ -2111,8 +2058,9 @@ enum BridgeError: LocalizedError {
     case .agentError(let message):
       return Self.isSessionAuthenticationFailureMessage(message)
     case .agentRuntimeFailure(let failure):
-      if failure.failureCode == .authentication {
-        return true
+      guard failure.provider == "omi" else { return false }
+      if failure.failureCode != .unknown {
+        return failure.failureCode == .authentication
       }
       return Self.isSessionAuthenticationFailureMessage(failure.displayMessage)
         || (failure.technicalMessage.map(Self.isSessionAuthenticationFailureMessage) ?? false)

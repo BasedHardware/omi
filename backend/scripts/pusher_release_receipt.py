@@ -142,6 +142,15 @@ def rendered_chart_documents(
     return documents
 
 
+def _drop_null_fields(value: Any) -> Any:
+    """Drop YAML nulls so Helm `secretKeyRef: null` matches the API-omitted key."""
+    if isinstance(value, dict):
+        return {key: _drop_null_fields(item) for key, item in value.items() if item is not None}
+    if isinstance(value, list):
+        return [_drop_null_fields(item) for item in value]
+    return value
+
+
 def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]:
     """Project capability-relevant PodTemplate fields without API defaults."""
     spec = template.get("spec") if isinstance(template.get("spec"), dict) else {}
@@ -185,7 +194,8 @@ def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]
     )
     projected_container = {field: copy.deepcopy(container[field]) for field in container_fields if field in container}
     projected_container["env"] = sorted(
-        (copy.deepcopy(item) for item in env if isinstance(item, dict)), key=lambda item: str(item.get("name", ""))
+        (_drop_null_fields(copy.deepcopy(item)) for item in env if isinstance(item, dict)),
+        key=lambda item: str(item.get("name", "")),
     )
     for probe_name in ("livenessProbe", "readinessProbe", "startupProbe"):
         probe = projected_container.get(probe_name)
@@ -198,6 +208,19 @@ def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]
             http_get = probe.get("httpGet") if isinstance(probe.get("httpGet"), dict) else None
             if http_get is not None:
                 http_get.setdefault("scheme", "HTTP")
+    # The API server marshals env value with omitempty, so a Helm-rendered
+    # `value: ""` (e.g. FREE_TIER_LOCAL_PROCESSING_COHORT from an unset repo
+    # variable) is stored and read back as {name} without the value key. Strip
+    # the empty value key from the rendered projection before hashing, the same
+    # way this projection already normalizes probe defaults and quantities.
+    projected_container["env"] = [
+        (
+            {key: value for key, value in item.items() if not (key == "value" and value == "")}
+            if isinstance(item, dict) and "valueFrom" not in item
+            else item
+        )
+        for item in projected_container["env"]
+    ]
     resources = projected_container.get("resources")
     if isinstance(resources, dict):
         for scope in ("requests", "limits"):
@@ -206,9 +229,12 @@ def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]
                 for resource_name in ("cpu", "memory"):
                     if resource_name in values:
                         values[resource_name] = _normalize_resource_quantity(resource_name, values[resource_name])
+    pod = {field: copy.deepcopy(spec[field]) for field in pod_fields if field in spec}
+    if pod.get("securityContext") == {}:
+        pod.pop("securityContext")
     return {
         "container": projected_container,
-        "pod": {field: copy.deepcopy(spec[field]) for field in pod_fields if field in spec},
+        "pod": pod,
     }
 
 
@@ -307,8 +333,15 @@ def validate_live_identity(
         if not isinstance(pod, dict):
             continue
         pod_metadata = pod.get("metadata") if isinstance(pod.get("metadata"), dict) else {}
+        # kubectl get pods includes terminating replicas. Helm rollout status can
+        # return success while an old replica is still pending deletion, which
+        # made auto-qual fail closed on a matching live Deployment (2026-09-10).
+        if pod_metadata.get("deletionTimestamp"):
+            continue
         pod_spec = pod.get("spec") if isinstance(pod.get("spec"), dict) else {}
         pod_status = pod.get("status") if isinstance(pod.get("status"), dict) else {}
+        if pod_status.get("phase") not in (None, "Running"):
+            continue
         spec_images = [
             image
             for item in pod_spec.get("containers", [])

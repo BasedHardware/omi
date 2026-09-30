@@ -155,8 +155,21 @@ HOLDER_PID=$!
 mkdir -p "$HELD_LOCK"
 echo "$HOLDER_PID" > "$HELD_LOCK/owner"
 
+# The Linux CI lanes that run this manifest have no xcrun, and bootstrap's
+# assert_xcode fires before lock acquisition — killing the flow before the
+# behavior under test. Stub xcrun (and, for the reclaim fixture below, git)
+# so every platform exercises the real lock-owner logic. Each stub fails
+# loudly if the hermetic flow ever reaches a real toolchain or network call.
+mkdir -p "$LOCK_TEST_CACHE/bin"
+cat > "$LOCK_TEST_CACHE/bin/xcrun" <<'SH'
+#!/usr/bin/env bash
+echo "lock-test fixture: xcrun must not run in the hermetic lock flow" >&2
+exit 75
+SH
+chmod +x "$LOCK_TEST_CACHE/bin/xcrun"
+
 set +e
-CONTENDED="$(SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_LOCK_TIMEOUT=2 "$WRAPPER" bootstrap 2>&1)"
+CONTENDED="$(PATH="$LOCK_TEST_CACHE/bin:$PATH" SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_LOCK_TIMEOUT=2 "$WRAPPER" bootstrap 2>&1)"
 CONTENDED_STATUS=$?
 set -e
 if [ "$CONTENDED_STATUS" -ne 0 ]; then
@@ -174,22 +187,36 @@ kill "$HOLDER_PID" 2>/dev/null || true
 wait "$HOLDER_PID" 2>/dev/null || true
 
 # Behavioral: a lock whose holder died is reclaimed rather than waited out
-# forever. Reuses the just-killed pid, which is guaranteed dead. The bootstrap
-# would go on to a real build, so it is killed as soon as it reports the
-# reclaim — the assertion is on the reclaim, not on the build.
+# forever. Reuses the just-killed pid, which is guaranteed dead. Stop at the
+# clone boundary: signaling a bootstrap can leave its clone/build running and
+# make this lock test wait for a real network operation or compiler.
 echo "$HOLDER_PID" > "$HELD_LOCK/owner"
 RECLAIM_LOG="$LOCK_TEST_CACHE/reclaim.log"
-SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_LOCK_TIMEOUT=30 \
-  "$WRAPPER" bootstrap >"$RECLAIM_LOG" 2>&1 &
-BOOT_PID=$!
-for _ in $(seq 1 20); do
-  grep -q "reclaiming bootstrap lock" "$RECLAIM_LOG" 2>/dev/null && break
-  sleep 0.5
-done
-kill "$BOOT_PID" 2>/dev/null || true
-wait "$BOOT_PID" 2>/dev/null || true
+mkdir -p "$LOCK_TEST_CACHE/bin"
+cat > "$LOCK_TEST_CACHE/bin/git" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" != clone ]; then
+  echo "unexpected git operation in lock-reclaim fixture" >&2
+  exit 74
+fi
+echo "lock-reclaim fixture reached clone boundary" >&2
+exit 73
+SH
+chmod +x "$LOCK_TEST_CACHE/bin/git"
+set +e
+PATH="$LOCK_TEST_CACHE/bin:$PATH" SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_LOCK_TIMEOUT=30 \
+  "$WRAPPER" bootstrap >"$RECLAIM_LOG" 2>&1
+RECLAIM_STATUS=$?
+set -e
+if [ "$RECLAIM_STATUS" -eq 73 ]; then
+  ok "reclaimed bootstrap reaches the controlled clone boundary"
+else
+  nok "reclaimed bootstrap must stop at the controlled clone boundary"
+fi
 assert_contains "$(cat "$RECLAIM_LOG" 2>/dev/null || true)" \
   "reclaiming bootstrap lock from dead pid" "a dead holder's lock is reclaimed"
+[ ! -e "$HELD_LOCK" ] && ok "failed bootstrap releases the reclaimed lock" \
+  || nok "failed bootstrap must release the reclaimed lock"
 rm -rf "$LOCK_TEST_CACHE"
 
 # --- enforcement fixtures (require bootstrapped binary; skip on non-macOS) ---

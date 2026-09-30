@@ -24,12 +24,14 @@ events ones below since they share the fixture and the same failure class.
 import hashlib
 import os
 import uuid
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from utils.manual_speaker_assignments import manual_assignment
 from fastapi import HTTPException
 from pydantic import ValidationError
 
@@ -159,6 +161,12 @@ def router():
         "database.mem_db": _pkg("database.mem_db"),
         "database.firestore_read_metrics": _pkg("database.firestore_read_metrics"),
         "utils.apps": _pkg("utils.apps"),
+        # routers.conversations also imports utils.product_metrics (#15099). Its
+        # real import chain reaches utils.account_cutover -> database.read_boundary,
+        # which cannot resolve under the faked "database" parent; the fake keeps
+        # the suite hermetic and its teardown from evicting real firestore modules
+        # that later files in the same shard process re-import (duplicate protos).
+        "utils.product_metrics": _pkg("utils.product_metrics"),
         "database.users": _pkg("database.users"),
         "database.vector_db": _pkg("database.vector_db"),
         "services.conversation_frame_evidence": _pkg("services.conversation_frame_evidence"),
@@ -264,9 +272,20 @@ class _FakeSegment:
         self.id = segment_id
         self.is_user = False
         self.person_id = None
+        self.speaker_id = 0
+        self.start = 0
+        self.end = 1
 
     def model_dump(self):
-        return {"id": self.id, "is_user": self.is_user, "person_id": self.person_id}
+        return {
+            "id": self.id,
+            "is_user": self.is_user,
+            "person_id": self.person_id,
+            "speaker_id": self.speaker_id,
+            "text": "test",
+            "start": self.start,
+            "end": self.end,
+        }
 
 
 def _fake_conversation_with_segments(count, status=None, with_ids=False):
@@ -287,6 +306,26 @@ def _segment_assign_handler(conv):
         if getattr(route, "path", None) == target and "PATCH" in getattr(route, "methods", set()):
             return route.endpoint
     raise AssertionError("segments/{segment_idx}/assign route is not registered")
+
+
+@pytest.fixture(autouse=True)
+def manual_command_seam(router, monkeypatch):
+    """Route contract uses real selection policy; transaction coverage is separate."""
+
+    def assign(uid, cid, **kwargs):
+        convo = router.conv.deserialize_conversation({})
+        raw = dict(
+            status=getattr(convo, 'status', None),
+            transcript_segments=[s.model_dump() for s in convo.transcript_segments],
+        )
+        before = [dict(s) for s in raw['transcript_segments']]
+        updated, receipt, resolved, _ = manual_assignment(raw, **kwargs)
+        selected_before = [s for i, s in enumerate(before) if updated[i]['id'] in resolved]
+        for segment, data in zip(convo.transcript_segments, updated):
+            segment.id, segment.is_user, segment.person_id = data['id'], data['is_user'], data['person_id']
+        return raw, resolved, [], selected_before
+
+    monkeypatch.setattr(router.conv.conversations_db, 'assign_conversation_speaker', assign)
 
 
 def test_segment_assign_out_of_range_returns_404(router):
@@ -437,6 +476,162 @@ def test_bulk_assign_rejects_unresolved_target_without_partial_mutation(router):
             router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
 
     assert exc.value.status_code == 409
+    assert 'Unable to resolve transcript segment assignment target(s): #index:99' == exc.value.detail
     assert segments[0].person_id == "old-person"
     assert update.call_count == 0
     assert background_tasks.tasks == []
+
+
+def _speaker_assign_handler(conv):
+    target = "/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}"
+    for route in conv.router.routes:
+        if getattr(route, "path", None) == target and "PATCH" in getattr(route, "methods", set()):
+            return route.endpoint
+    raise AssertionError("assign-speaker route is not registered")
+
+
+def test_locked_assign_routes_return_402_with_main_detail(router, monkeypatch):
+    def locked(*args, **kwargs):
+        raise PermissionError('Conversation is locked')
+
+    monkeypatch.setattr(router.conv.conversations_db, 'assign_conversation_speaker', locked)
+    convo, _ = _fake_conversation_with_segments(1, with_ids=True)
+    index_handler = _segment_assign_handler(router.conv)
+    speaker_handler = _speaker_assign_handler(router.conv)
+    with patch.object(router.conv, "deserialize_conversation", return_value=convo):
+        for call in (
+            lambda: index_handler("c1", 0, "is_user", value="true", uid="u1"),
+            lambda: speaker_handler("c1", 0, "person_id", value="person-9", uid="u1"),
+            lambda: router.conv.assign_segments_bulk(
+                "c1",
+                router.conv.BulkAssignSegmentsRequest(segment_ids=["segment-0"], assign_type="person_id", value="p"),
+                router.conv.BackgroundTasks(),
+                uid="u1",
+            ),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                call()
+            assert exc.value.status_code == 402
+            assert exc.value.detail == "A paid plan is required to access this conversation."
+
+
+@pytest.mark.parametrize(
+    'value,expected_user',
+    [('true', True), ('1', True), ('false', False), ('null', False), (None, False)],
+)
+def test_is_user_assign_parses_true_false_null_and_omitted(router, value, expected_user):
+    convo, segments = _fake_conversation_with_segments(1, with_ids=True)
+    handler = _segment_assign_handler(router.conv)
+    kwargs = dict(assign_type="is_user", uid="u1")
+    if value is not None:
+        kwargs['value'] = value
+    with patch.object(router.conv, "deserialize_conversation", return_value=convo):
+        handler("c1", 0, **kwargs)
+    assert segments[0].is_user is expected_user
+
+
+class _FakeActionItem:
+    def __init__(self, description):
+        self.description = description
+        self.completed = False
+        self.created_at = None
+        self.completed_at = None
+
+    def model_dump(self):
+        return {"description": self.description, "completed": self.completed}
+
+
+def _set_action_item_status(router, mirrored, values):
+    convo = SimpleNamespace(
+        structured=SimpleNamespace(action_items=[_FakeActionItem("Send the budget")]),
+        created_at=None,
+    )
+    notifications = ModuleType("utils.notifications")
+    notifications.sync_action_item_reminder = MagicMock()
+    data = router.conv.SetConversationActionItemsStateRequest(items_idx=[0], values=values)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv.conversations_db, "update_conversation_action_items"), patch.object(
+        router.conv.action_items_db, "get_action_items_by_conversation", return_value=mirrored
+    ), patch.object(
+        router.conv.action_items_db, "mark_action_item_completed"
+    ) as mark, patch.dict(
+        "sys.modules", {"utils.notifications": notifications}
+    ):
+        router.conv.set_action_item_status(data, "c1", uid="u1")
+    return mark, notifications.sync_action_item_reminder
+
+
+def test_checking_off_a_conversation_task_cancels_its_reminder(router):
+    due = datetime(2026, 9, 20, 9, tzinfo=timezone.utc)
+    mirrored = [{"id": "task-1", "description": "Send the budget", "due_at": due}]
+
+    mark, reminder = _set_action_item_status(router, mirrored, [True])
+
+    mark.assert_called_once_with("u1", "task-1", True)
+    reminder.assert_called_once_with(
+        user_id="u1", action_item_id="task-1", description="Send the budget", completed=True, due_at=due
+    )
+
+
+def test_unchecking_a_conversation_task_rearms_its_reminder(router):
+    due = datetime(2026, 9, 20, 9, tzinfo=timezone.utc)
+    mirrored = [{"id": "task-1", "description": "Send the budget", "due_at": due}]
+
+    mark, reminder = _set_action_item_status(router, mirrored, [False])
+
+    mark.assert_called_once_with("u1", "task-1", False)
+    reminder.assert_called_once_with(
+        user_id="u1", action_item_id="task-1", description="Send the budget", completed=False, due_at=due
+    )
+
+
+def _delete_conversation_action_item(router, mirrored, description="Send the budget"):
+    """Run the swipe-delete handler that removes one task from a conversation.
+
+    That DELETE path mirrors the removal into the standalone action_items collection,
+    so a deleted row can still own a client-scheduled reminder. The client only
+    cancels it on the deletion data message (ActionItemNotificationHandler
+    .handleDeletionMessage), so the handler must send one.
+    """
+    convo = SimpleNamespace(
+        structured=SimpleNamespace(action_items=[_FakeActionItem(description)]),
+        created_at=None,
+    )
+    notifications = ModuleType("utils.notifications")
+    notifications.sync_action_item_reminder = MagicMock()
+    data = router.conv.DeleteActionItemRequest(description=description, completed=False)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv.conversations_db, "update_conversation_action_items"), patch.object(
+        router.conv.action_items_db, "get_action_items_by_conversation", return_value=mirrored
+    ), patch.object(
+        router.conv.action_items_db, "delete_action_item"
+    ) as delete, patch.dict(
+        "sys.modules", {"utils.notifications": notifications}
+    ):
+        router.conv.delete_action_item(data, "c1", uid="u1")
+    return delete, notifications.sync_action_item_reminder
+
+
+def test_deleting_a_conversation_task_cancels_its_reminder(router):
+    due = datetime(2026, 9, 20, 9, tzinfo=timezone.utc)
+    mirrored = [{"id": "task-1", "description": "Send the budget", "due_at": due, "completed": False}]
+
+    delete, reminder = _delete_conversation_action_item(router, mirrored)
+
+    delete.assert_called_once_with("u1", "task-1")
+    reminder.assert_called_once_with(user_id="u1", action_item_id="task-1", description="", completed=True, due_at=None)
+
+
+def test_deleting_a_task_without_a_live_reminder_sends_nothing(router):
+    due = datetime(2026, 9, 20, 9, tzinfo=timezone.utc)
+    mirrored = [
+        {"id": "task-done", "description": "Send the budget", "due_at": due, "completed": True},
+        {"id": "task-other", "description": "Something else", "due_at": due, "completed": False},
+    ]
+
+    delete, reminder = _delete_conversation_action_item(router, mirrored)
+
+    delete.assert_called_once_with("u1", "task-done")
+    reminder.assert_not_called()

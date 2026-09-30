@@ -104,6 +104,8 @@ def fetch_default_read_list(
     item_filter: Optional[Callable[[Any], bool]] = None,
     item_formatter: Callable[[MemoryPayload, MemoryAccessPolicy], Any],
     max_limit: int = 500,
+    view: str = 'released',
+    as_of: Optional[datetime] = None,
 ) -> DefaultReadSearchResult:
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
         return deny_default_read_search(decision)
@@ -124,6 +126,8 @@ def fetch_default_read_list(
         now=now,
         limit=bounded_limit,
         offset=bounded_offset,
+        view=view,
+        as_of=as_of,
     )
     formatted: list[Any] = []
     for item in response['items']:

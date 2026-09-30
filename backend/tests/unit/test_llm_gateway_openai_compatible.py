@@ -13,6 +13,7 @@ from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.accounting import UsageStatus
 from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
+from llm_gateway.gateway import executor as gateway_executor
 from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
 from llm_gateway.gateway.request_context import JITBudgetHeaders, jit_budget_headers_for
@@ -23,6 +24,7 @@ from llm_gateway.routers import dependencies, openai_compatible
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
 from utils.llm.gateway_client import _chat_structured_payload
 from utils.llm.gateway_error_contract import is_byok_rate_limit_gateway_error
+from utils.llm.model_config import LUNA_MODEL
 
 LANE_ID = 'omi:auto:chat-structured'
 
@@ -86,10 +88,10 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'selected_route_artifact_id' not in body
     # The checked-in active route is in shadow rollout (percent 0), so live
     # traffic is served by the last-known-good route. The LKG primary uses the
-    # gateway-only chat_extraction policy (gpt-5.6-luna), aligned with the
+    # gateway-only chat_extraction policy (gpt-x-luna), aligned with the
     # direct product route while shadow-only.
-    assert provider.calls[0].model == 'gpt-5.6-luna'
-    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
+    assert provider.calls[0].model == LUNA_MODEL
+    assert provider.calls[0].request['model'] == LUNA_MODEL
     # Live OpenAI (gpt-5.6-luna, 2026-08): non-default temperature is rejected with
     # invalid_request_error param=temperature ("Only the default (1) value is supported").
     # Gateway strips non-default temperatures so callers cannot trip that 400.
@@ -169,6 +171,98 @@ def test_jit_budget_preflight_rejects_overlarge_input():
 
     with pytest.raises(openai_compatible.GatewayInvalidRequestError, match='input budget exceeded'):
         openai_compatible._apply_jit_request_budget(valid_request(), budget)
+
+
+def test_jit_budget_preserves_tool_schema_types_and_output_ceiling():
+    budget = JITBudgetHeaders(
+        contract_version='jit-cloud-qa-v1',
+        run_id='jit-tool-schema',
+        max_attempts=3,
+        max_output_tokens=2_048,
+        max_input_tokens=32_768,
+        max_spend_micro_usd=50_000,
+    )
+    tools = [
+        {
+            'type': 'function',
+            'function': {
+                'name': 'search_knowledge',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'type': {'type': 'string'},
+                        'query': {'type': ['string', 'null']},
+                    },
+                },
+            },
+        }
+    ]
+    body = valid_request(tools=tools)
+
+    openai_compatible._apply_jit_request_budget(body, budget)
+
+    assert body['tools'] == tools
+    assert body['max_completion_tokens'] == 2_048
+
+
+def test_jit_chat_route_accepts_tool_schema_through_http_preflight(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
+    tools = [
+        {
+            'type': 'function',
+            'function': {
+                'name': 'search_knowledge',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'type': {'type': 'string'},
+                        'query': {'type': ['string', 'null']},
+                    },
+                },
+            },
+        }
+    ]
+    provider = FakeChatCompletionProvider()
+    reservations: list[dict[str, object]] = []
+    settlements: list[dict[str, object]] = []
+
+    async def reserve_jit_attempt(**kwargs):
+        reservations.append(kwargs)
+        return object()
+
+    async def settle_jit_attempt(_reservation, **kwargs):
+        settlements.append(kwargs)
+        return True
+
+    monkeypatch.setattr(gateway_executor, 'reserve_jit_attempt', reserve_jit_attempt)
+    monkeypatch.setattr(gateway_executor, 'settle_jit_attempt', settle_jit_attempt)
+    app.dependency_overrides[dependencies.get_gateway_config] = _tools_enabled_gateway_config
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(tools=tools),
+            headers={
+                **auth_headers(),
+                'x-omi-jit-contract-version': 'jit-cloud-qa-v1',
+                'x-omi-jit-run-id': 'jit-tool-schema-http',
+                'x-omi-jit-max-attempts': '3',
+                'x-omi-jit-max-output-tokens': '2048',
+                'x-omi-jit-max-input-tokens': '32768',
+                'x-omi-jit-max-spend-micro-usd': '50000',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert len(provider.calls) == 1
+    assert provider.calls[0].request['tools'] == tools
+    assert provider.calls[0].request['max_completion_tokens'] == 2_048
+    assert len(reservations) == 1
+    assert reservations[0]['run_id'] == 'jit-tool-schema-http'
+    assert settlements and settlements[0]['status'] == 'succeeded'
 
 
 def test_jit_budget_preflight_rejects_unpriced_image_or_audio_inputs():
@@ -274,7 +368,7 @@ def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
     error = recorded[0]['error']
     assert error.failure_class == failure_class
     assert error.provider == 'openai'
-    assert error.model == 'gpt-5.6-luna'
+    assert error.model == LUNA_MODEL
     assert error.provider_rejection == provider_rejection
 
 
@@ -349,7 +443,7 @@ def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attrib
                 'id': 'chatcmpl-accounted',
                 'object': 'chat.completion',
                 'created': 1,
-                'model': 'gpt-5.6-luna',
+                'model': LUNA_MODEL,
                 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': '{}'}, 'finish_reason': 'stop'}],
                 'usage': {
                     'prompt_tokens': 100,
@@ -399,7 +493,7 @@ def test_gateway_provider_body_forwards_validated_gpt56_cache_fields_unchanged()
         ],
     )
     resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
-    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.6-luna'))
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model=LUNA_MODEL))
 
     assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
     assert forwarded['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
@@ -897,7 +991,7 @@ async def test_streaming_midstream_provider_failure_records_error_exactly_once(m
         first_chunk=b'data: {"choices":[]}\n\n',
         stream=failing_stream(),
         provider='openai',
-        model='gpt-5.6-luna',
+        model=LUNA_MODEL,
         fallback_used=False,
         fallback_reason=None,
     )
@@ -935,7 +1029,7 @@ async def test_streaming_consumer_abandonment_records_cancelled_exactly_once(mon
             first_chunk=b'data: {"choices":[]}\n\n',
             stream=remaining_stream(),
             provider='openai',
-            model='gpt-5.6-luna',
+            model=LUNA_MODEL,
             fallback_used=False,
             fallback_reason=None,
         ),
@@ -1082,7 +1176,7 @@ async def test_jit_stream_receipt_reframes_split_and_coalesced_sse(monkeypatch, 
         first_chunk=chunks[0],
         stream=remaining_stream(),
         provider='openai',
-        model='gpt-5.6-luna',
+        model=LUNA_MODEL,
         fallback_used=False,
         fallback_reason=None,
         reservation=object(),
@@ -1141,7 +1235,7 @@ async def test_jit_stream_settlement_failure_has_no_success_receipt(monkeypatch)
                     first_chunk=b'data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}\n\n',
                     stream=remaining_stream(),
                     provider='openai',
-                    model='gpt-5.6-luna',
+                    model=LUNA_MODEL,
                     fallback_used=False,
                     fallback_reason=None,
                     reservation=object(),
@@ -1203,7 +1297,7 @@ async def test_jit_stream_preserves_multiline_crlf_event_and_split_chunks(monkey
                     first_chunk=raw_chunks[0],
                     stream=remaining_stream(),
                     provider='openai',
-                    model='gpt-5.6-luna',
+                    model=LUNA_MODEL,
                     fallback_used=False,
                     fallback_reason=None,
                     reservation=object(),
@@ -1264,7 +1358,7 @@ async def test_jit_stream_preserves_crlf_and_flushes_unterminated_frame(monkeypa
                     first_chunk=raw_chunks[0],
                     stream=remaining_stream(),
                     provider='openai',
-                    model='gpt-5.6-luna',
+                    model=LUNA_MODEL,
                     fallback_used=False,
                     fallback_reason=None,
                     reservation=None,
@@ -1319,7 +1413,7 @@ async def test_jit_stream_flushes_final_unterminated_data_frame(monkeypatch):
                     first_chunk=raw,
                     stream=empty_stream(),
                     provider='openai',
-                    model='gpt-5.6-luna',
+                    model=LUNA_MODEL,
                     fallback_used=False,
                     fallback_reason=None,
                     reservation=None,
@@ -1356,7 +1450,7 @@ async def test_non_jit_stream_returns_provider_chunks_byte_for_byte():
                     first_chunk=raw_chunks[0],
                     stream=remaining_stream(),
                     provider='openai',
-                    model='gpt-5.6-luna',
+                    model=LUNA_MODEL,
                     fallback_used=False,
                     fallback_reason=None,
                 ),
@@ -1376,6 +1470,19 @@ def _streaming_enabled_gateway_config():
     config = load_gateway_config(prod_mode=True)
     lane = config.lanes[LANE_ID]
     capabilities = lane.capabilities.model_copy(update={'streaming': True})
+    lane = lane.model_copy(update={'capabilities': capabilities})
+    route_artifacts = dict(config.route_artifacts)
+    for route_id in (lane.active_route, lane.last_known_good):
+        route_artifacts[route_id] = route_artifacts[route_id].model_copy(update={'capabilities': capabilities})
+    lanes = dict(config.lanes)
+    lanes[LANE_ID] = lane
+    return config.model_copy(update={'lanes': lanes, 'route_artifacts': route_artifacts})
+
+
+def _tools_enabled_gateway_config():
+    config = load_gateway_config(prod_mode=True)
+    lane = config.lanes[LANE_ID]
+    capabilities = lane.capabilities.model_copy(update={'tools': True})
     lane = lane.model_copy(update={'capabilities': capabilities})
     route_artifacts = dict(config.route_artifacts)
     for route_id in (lane.active_route, lane.last_known_good):

@@ -10,6 +10,46 @@ export interface WeeklyNewUsersPoint {
   users: number;
 }
 
+export interface WeeklyGrowthInput {
+  week: string;
+  active: number;
+  newUsers: number;
+  retained: number;
+}
+
+export interface WeeklyGrowthPoint extends WeeklyGrowthInput {
+  resurrected: number;
+  /** People active in the previous complete week who are inactive this week. */
+  inactive: number;
+  /** Denominator for inactiveRate: prior week's active people. */
+  priorActive: number;
+  inactiveRate: number | null;
+  /** Negative visualization value for stacked growth charts. */
+  inactiveLoss: number;
+  netActiveChange: number;
+}
+
+export interface EstablishedRetentionInput {
+  week: string;
+  established: number;
+  retained: number;
+}
+
+export interface EstablishedRetentionPoint extends EstablishedRetentionInput {
+  rate: number | null;
+}
+
+export interface RollingGrowthSummary {
+  active: number;
+  priorActive: number;
+  newUsers: number;
+  retained: number;
+  resurrected: number;
+  inactive: number;
+  inactiveRate: number | null;
+  netActiveChange: number;
+}
+
 export interface DailyActivationPoint {
   date: string;
   signups: number;
@@ -64,6 +104,8 @@ function utcDate(value: string | Date): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+/** Return the Monday for the UTC calendar week containing `value`. */
+
 export function mondayKey(value: string | Date): string | null {
   const date = utcDate(value);
   if (!date) return null;
@@ -73,9 +115,163 @@ export function mondayKey(value: string | Date): string | null {
   return date.toISOString().slice(0, 10);
 }
 
+function dateDaysAgo(today: Date, days: number): Date {
+  const result = new Date(today.getTime());
+  result.setUTCDate(result.getUTCDate() - days);
+  return result;
+}
+
+/**
+ * Build growth accounting from complete UTC calendar weeks only.
+ *
+ * Callers should include at least one prior week in the query so the first
+ * returned point has a real prior-active denominator. The extra context is
+ * discarded after the previous-week comparison is computed.
+ */
+export function completedWeeklyGrowthAccounting(
+  points: readonly WeeklyGrowthInput[],
+  today = new Date(),
+  days = 60
+): WeeklyGrowthPoint[] {
+  const currentWeek = mondayKey(today);
+  const todayUtc = utcDate(today);
+  if (!currentWeek || !todayUtc || !Number.isFinite(days) || days < 0)
+    return [];
+
+  const historyStart = mondayKey(dateDaysAgo(todayUtc, days));
+  if (!historyStart) return [];
+
+  const byWeek = new Map<string, WeeklyGrowthInput>();
+  for (const point of points) {
+    const week = mondayKey(point.week);
+    if (
+      !week ||
+      week >= currentWeek ||
+      week < historyStart ||
+      !Number.isFinite(point.active) ||
+      !Number.isFinite(point.newUsers) ||
+      !Number.isFinite(point.retained)
+    ) {
+      continue;
+    }
+    // Query results are already grouped. Replacing duplicates rather than
+    // summing prevents a duplicated partial bucket from inflating WAU.
+    byWeek.set(week, { ...point, week });
+  }
+
+  const allPoints = new Map<string, WeeklyGrowthInput>();
+  for (const point of points) {
+    const week = mondayKey(point.week);
+    if (
+      !week ||
+      week >= currentWeek ||
+      !Number.isFinite(point.active) ||
+      !Number.isFinite(point.newUsers) ||
+      !Number.isFinite(point.retained)
+    ) {
+      continue;
+    }
+    allPoints.set(week, { ...point, week });
+  }
+
+  const completedWeeks: WeeklyGrowthInput[] = [];
+  const currentWeekDate = new Date(`${currentWeek}T00:00:00Z`);
+  for (
+    const cursor = new Date(`${historyStart}T00:00:00Z`);
+    cursor < currentWeekDate;
+    cursor.setUTCDate(cursor.getUTCDate() + 7)
+  ) {
+    const week = cursor.toISOString().slice(0, 10);
+    completedWeeks.push(
+      byWeek.get(week) ?? {
+        week,
+        active: 0,
+        newUsers: 0,
+        retained: 0,
+      }
+    );
+  }
+
+  return completedWeeks.map((point) => {
+    const previousWeek = new Date(`${point.week}T00:00:00Z`);
+    previousWeek.setUTCDate(previousWeek.getUTCDate() - 7);
+    const previousKey = previousWeek.toISOString().slice(0, 10);
+    const priorActive = allPoints.get(previousKey)?.active ?? 0;
+    const resurrected = Math.max(
+      0,
+      point.active - point.newUsers - point.retained
+    );
+    const inactive = Math.max(0, priorActive - point.retained);
+    return {
+      ...point,
+      resurrected,
+      inactive,
+      priorActive,
+      inactiveRate: percent(inactive, priorActive),
+      inactiveLoss: -inactive,
+      netActiveChange: point.active - priorActive,
+    };
+  });
+}
+
+/** Keep established-user retention on complete UTC weeks and expose its n. */
+export function completedEstablishedRetention(
+  points: readonly EstablishedRetentionInput[],
+  today = new Date(),
+  days = 60
+): EstablishedRetentionPoint[] {
+  const currentWeek = mondayKey(today);
+  const todayUtc = utcDate(today);
+  if (!currentWeek || !todayUtc || !Number.isFinite(days) || days < 0)
+    return [];
+  const historyStart = mondayKey(dateDaysAgo(todayUtc, days));
+  if (!historyStart) return [];
+
+  const byWeek = new Map<string, EstablishedRetentionInput>();
+  for (const point of points) {
+    const week = mondayKey(point.week);
+    if (
+      !week ||
+      week >= currentWeek ||
+      week < historyStart ||
+      !Number.isFinite(point.established) ||
+      !Number.isFinite(point.retained)
+    ) {
+      continue;
+    }
+    byWeek.set(week, { ...point, week });
+  }
+  return Array.from(byWeek.values())
+    .sort((a, b) => a.week.localeCompare(b.week))
+    .map((point) => ({
+      ...point,
+      rate: percent(point.retained, point.established),
+    }));
+}
+
+export function rollingGrowthSummary(values: {
+  active: number;
+  priorActive: number;
+  newUsers: number;
+  retained: number;
+}): RollingGrowthSummary {
+  const resurrected = Math.max(
+    0,
+    values.active - values.newUsers - values.retained
+  );
+  const inactive = Math.max(0, values.priorActive - values.retained);
+  return {
+    ...values,
+    resurrected,
+    inactive,
+    inactiveRate: percent(inactive, values.priorActive),
+    netActiveChange: values.active - values.priorActive,
+  };
+}
+
 export function completedWeeklyNewUsers(
   points: readonly DailyNewUsersPoint[],
-  today = new Date(),
+  today = new Date()
 ): WeeklyNewUsersPoint[] {
   const currentWeek = mondayKey(today);
   if (!currentWeek) return [];
@@ -88,14 +284,14 @@ export function completedWeeklyNewUsers(
   }
 
   return Array.from(totals, ([week, users]) => ({ week, users })).sort((a, b) =>
-    a.week.localeCompare(b.week),
+    a.week.localeCompare(b.week)
   );
 }
 
 export function maturedWeeklyActivation(
   points: readonly DailyActivationPoint[],
   today = new Date(),
-  maturityDays = 7,
+  maturityDays = 7
 ): WeeklyActivationPoint[] {
   const todayUtc = utcDate(today);
   if (!todayUtc) return [];
@@ -137,7 +333,7 @@ export function maturedWeeklyActivation(
   return Array.from(totals, ([week, totalsForWeek]) => {
     const weekStart = utcDate(week)!;
     const fullyMatureAt = new Date(
-      weekStart.getTime() + (7 + maturityDays) * DAY_MS,
+      weekStart.getTime() + (7 + maturityDays) * DAY_MS
     );
     return {
       week,
@@ -183,7 +379,7 @@ export interface ActivationSeries {
  * activation window has already elapsed.
  */
 export function rollUpActivationCohort(
-  members: readonly ActivationCohortMember[],
+  members: readonly ActivationCohortMember[]
 ): ActivationSeries {
   const totals = new Map<string, { signups: number; activated: number }>();
   let signups = 0;
@@ -223,7 +419,7 @@ export function rollUpActivationCohort(
 export function summarizeActivation(
   points: readonly DailyActivationPoint[],
   today = new Date(),
-  maturityDays = 7,
+  maturityDays = 7
 ): ActivationSummary {
   const todayUtc = utcDate(today);
   const empty: ActivationSummary = {

@@ -196,6 +196,7 @@ actor MemoryAssistant: ProactiveAssistant {
       memoryResult,
       ownerID: ownerID,
       screenshotId: nil,
+      captureTime: nil,
       sendEvent: sendEvent
     )
   }
@@ -205,6 +206,7 @@ actor MemoryAssistant: ProactiveAssistant {
     _ memoryResult: MemoryExtractionResult,
     ownerID: String,
     screenshotId: Int64?,
+    captureTime: Date? = nil,
     windowTitle: String? = nil,
     sendEvent: @escaping (String, [String: Any]) -> Void
   ) async {
@@ -250,6 +252,7 @@ actor MemoryAssistant: ProactiveAssistant {
       MemoryAssistantDurabilityRequest(
         memory: memory,
         screenshotId: screenshotId,
+        captureTime: captureTime,
         contextSummary: memoryResult.contextSummary,
         windowTitle: windowTitle,
         ownerID: ownerID
@@ -389,6 +392,7 @@ actor MemoryAssistant: ProactiveAssistant {
         result,
         ownerID: ownerID,
         screenshotId: frame.screenshotId,
+        captureTime: frame.captureTime,
         windowTitle: frame.windowTitle
       ) { type, data in
         let payload = EventPayloadBox(value: data)

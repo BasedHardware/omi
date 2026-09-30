@@ -15,7 +15,9 @@ export 'package:omi/backend/http/api/conversations.dart'
         SyncJobFetchOutcome,
         SyncRateLimitedException,
         SyncRateLimitKind,
-        SyncRecoveryWindowExceededException;
+        SyncUploadHttpException,
+        SyncRecoveryWindowExceededException,
+        isPacedBackfillReasonCode;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(
@@ -65,15 +67,23 @@ enum WalServiceStatus { init, ready, stop }
 
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {
-  Future<void> addExternalWal(Wal wal);
+  /// Session fence observed by device downloads. Capture at download
+  /// admission and pass to [addExternalWal]; do not re-read after an await.
+  int get sessionGeneration;
+
+  Future<void> addExternalWal(Wal wal, {required int admittedGeneration});
   Future<List<Wal>> getAllWals();
+
+  /// Bump the session fence and stop publishing retired-account WALs.
+  /// Durable bytes stay on disk; [getAllWals] returns the current session only.
+  void clearUserData();
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   Future<void> deleteAllCorruptedWals();
 
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.
-  void onFrameCaptured(WalFrame frame);
+  WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot});
 
   /// Mark a frame as synced (sent to server via WebSocket).
   /// Matches frames by sync key (source-agnostic).

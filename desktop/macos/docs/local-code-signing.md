@@ -159,18 +159,19 @@ history. After this, signing works from any session, including background ones.
 `run.sh` detects this failure and prints this remedy with your identity already
 substituted, so you should never have to find this section from a raw error.
 
-### The same wall blocks auth seeding
+### Auth dump/seed for developer bundles does not use the login keychain
 
-`scripts/omi-auth-dump.sh` reads Firebase tokens from a team-scoped Keychain item.
-From a background session it prints `WARNING: no auth_idToken found — is the source
-bundle signed in?` **even when the source bundle is signed in** — the UserDefaults
-half reads fine and the secret does not. Same cause, same shape of fix:
+Developer bundles (Omi Dev, named `omi-*` apps, ad-hoc / Apple Development local
+builds) store Firebase tokens in a JSON file under Application Support
+(`developer-secrets/<bundle-id>.json`). `scripts/omi-auth-dump.sh` and
+`scripts/omi-auth-seed.sh` read and write that file, so they work from a
+Background session with no login-keychain access. Rebuilds never prompt
+SecurityAgent for those tokens.
 
-```bash
-security set-generic-password-partition-list -S apple-tool:,apple:,security: \
-  -s "com.omi.desktop.firebase-rest-session.v2.team.<TEAM>.bundle.com.omi.desktop-dev" \
-  -a firebase-rest-tokens ~/Library/Keychains/login.keychain-db
-```
+Shipped bundles (`com.omi.computer-macos` and `com.omi.computer-macos.beta`)
+still use the login keychain. Dumping a production-family source still calls
+`security find-generic-password` and therefore still needs an Aqua session or a
+partition-list grant on that item.
 
 ## Do not "fix" a launch failure with ad-hoc signing
 

@@ -19,6 +19,9 @@ extension SettingsContentView {
             .toggleStyle(OmiToggleStyle())
             .labelsHidden()
             .onChange(of: showAskOmiBar) { _, newValue in
+              // A change that merely mirrors the preference (arriving via
+              // `.floatingBarEnabledDidChange`) is already applied; only a user flip acts.
+              guard newValue != FloatingControlBarManager.shared.isEnabled else { return }
               if newValue {
                 FloatingControlBarManager.shared.show()
               } else {
@@ -276,7 +279,7 @@ extension SettingsContentView {
 
             Spacer()
 
-            Button("Browse...") {
+            Button("Browse…") {
               let panel = NSOpenPanel()
               panel.canChooseFiles = false
               panel.canChooseDirectories = true
@@ -479,18 +482,13 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(Ink.secondary)
 
-              TextField("Search skills...", text: $skillSearchQuery)
+              TextField("Search skills…", text: $skillSearchQuery)
                 .textFieldStyle(.plain)
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.primary)
 
               if !skillSearchQuery.isEmpty {
-                Button(action: { skillSearchQuery = "" }) {
-                  Image(systemName: "xmark.circle.fill")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.secondary)
-                }
-                .buttonStyle(.plain)
+                ClearFieldButton { skillSearchQuery = "" }
               }
             }
             .padding(OmiSpacing.sm)
@@ -669,13 +667,13 @@ extension SettingsContentView {
                   UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
                 }) {
                   HStack(spacing: OmiSpacing.xxs) {
-                    Image(systemName: "xmark")
+                    Image(systemName: "arrow.counterclockwise")
                       .scaledFont(size: OmiType.caption)
                     Text("Reset")
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
           }
@@ -757,12 +755,7 @@ extension SettingsContentView {
 
         Spacer()
 
-        Button(action: { showFileViewer = false }) {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(Ink.secondary)
-        }
-        .buttonStyle(.plain)
+        DismissButton(action: { showFileViewer = false })
       }
       .padding(OmiSpacing.lg)
 

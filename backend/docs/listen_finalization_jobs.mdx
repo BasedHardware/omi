@@ -27,6 +27,16 @@ internal, excluded from OpenAPI, and accepts only an OIDC token from the
 configured task invoker. The handler rejects extra task fields, so content and
 credentials cannot be introduced accidentally through task payload expansion.
 
+The worker's attempt budget is the job's durable `attempt_count`, not only
+Cloud Tasks' retry header. Reconciliation creates a new named task generation,
+which resets that header; the durable count still caps failed processing at the
+configured maximum. A fresh queued generation is enqueued only by the
+transaction that created it. On failure, `finalizer.py` logs a bounded stage,
+exception class, and truncated SHA-256 keys for the job and conversation. The
+keys are log correlation aids, never metric labels; exception messages and
+transcript data are excluded. Use the job key to distinguish repeated attempts
+from distinct failing conversations before interpreting an HTTP 500 rate.
+
 ## State machine and ownership
 
 | Status | Meaning | Recovery |
@@ -71,8 +81,13 @@ LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS=300
 configuration. The finalizer's queue deadline, HTTP timeout, and Redis run-lock
 TTL must remain compatible; the default 1,500-second handler timeout matches
 the existing durable-work contract. The production deploy creates or updates
-the dedicated queue with five attempts and four concurrent dispatches. Other
-environments remain deliberately unconfigured, so the exact-ID customer route
+the dedicated queue with five attempts and sixteen concurrent dispatches.
+Listen finalization and self-heal recovery share this queue, so its dispatch
+delay must stay below `LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS` (default
+300 s): a longer delay makes the replay reconciler re-mint generations whose
+first task has not run yet, and the queue then fills with stale-generation
+acks. Four dispatches saturated it (median delay ~6 minutes, 2026-09-26 to
+2026-09-30). Other environments remain deliberately unconfigured, so the exact-ID customer route
 fails closed with `503` there instead of executing inline.
 
 ## Customer exact-ID finalization
@@ -96,8 +111,18 @@ the opaque handoff.
 Clients can poll `GET /v1/conversations/{conversation_id}/finalization` for
 the authoritative job id, status, terminal flag, retryable flag, and bounded
 attempt counts. `queued` is the retryable state; a `dead_letter` job is
-terminal and its conversation is transitioned to `failed` and `discarded`, not
-left on `processing`.
+terminal. Its still-bound processing conversation becomes `completed` with
+`finalization_status=dead_letter`, retaining the transcript in the normal list
+for explicit reprocess. If no structured result was stored, the terminal write
+adds an empty title/overview so the API can render an untitled transcript-only
+row. The job remains terminal and cannot retry itself.
+`LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED=false` disables the durable
+worker cap if this terminal policy must be rolled back; bounded failure
+diagnostics remain enabled. Accepted Cloud Tasks claims consume a durable
+worker slot, including a killed worker whose lease is later replayed. Duplicate
+deliveries and live pusher session handoffs do not consume worker slots.
+When an exhausted worker sees a committed fanout, it completes the fenced job
+without rerunning processing; the dead-letter transaction refuses that state.
 
 This first migration deliberately excludes `POST /v1/conversations` (the
 Redis current-conversation pointer), `reprocess`, and routes that create a
@@ -125,16 +150,21 @@ Operational signals:
 | `listen_finalization_dead_letter_total` / `{status="dead_letter"}` | Page for terminal failures; they require explicit replay. |
 | `omi_fallback_total{component="pusher",reason="enqueue_failed"}` | Investigate task configuration or task API availability. |
 
-To replay a terminal job safely:
+To recover a terminal job safely:
 
 1. Inspect the job document and the referenced conversation; never copy
    transcript/BYOK data into tickets or logs.
 2. Fix the underlying worker/provider/configuration failure.
-3. In a Firestore transaction, transition `dead_letter` to `queued`, increment
-   `dispatch_generation`, clear its lease, and record the approved operator
-   action in the incident.
-4. Enqueue the named task with only the new `job_id` and generation. Verify the
-   job reaches `completed` and the conversation reaches `completed`.
+3. For a transcript-only completed conversation, use the explicit user
+   reprocess route to regenerate structured results. A job replay may treat
+   the already-completed conversation as finished and cannot be relied on to
+   regenerate its summary.
+4. For a partially completed conversation whose missing fanout needs operator
+   recovery, fence the exact job/revision in a Firestore transaction before
+   transitioning `dead_letter` to `queued`, incrementing its generation and
+   clearing its lease and resetting `attempt_count`, `worker_claim_count`, and
+   `task_retry_count` to zero. Record the approved operator action in the incident.
+   Enqueue only the opaque new job id/generation and verify the missing effect.
 
 Do not replay `blocked_byok` using Omi credentials. A durable offline BYOK
 design needs a separate approved credential broker with its own retention,
@@ -168,7 +198,7 @@ session, and it is already visible on its own gauge).
 * The bound conversation is closed in the same transaction **only** when it is
   still `processing`, not `deferred`, and still bound to this exact job
   generation. It becomes
-  `completed` (not `failed`/`discarded`, as on the worker dead-letter path) so
+  `completed` (as on the worker dead-letter path) so
   the user's recording stays retrievable and can be reprocessed with their own
   keys. Many stranded rows bind a conversation the inline pusher lane already
   finalized: those job rows are orphaned bookkeeping and only the job is closed.

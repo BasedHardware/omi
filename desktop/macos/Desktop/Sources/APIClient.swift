@@ -366,7 +366,11 @@ actor APIClient {
         statusCode: httpResponse.statusCode,
         payload: payload,
         provider: provider)
-      throw RealtimeTokenMintError(statusCode: httpResponse.statusCode, healthError: healthError, payload: payload)
+      throw RealtimeTokenMintError(
+        statusCode: httpResponse.statusCode,
+        healthError: healthError,
+        payload: payload,
+        responseBody: data)
     }
 
     let resp = try decoder.decode(Resp.self, from: data)
@@ -620,6 +624,103 @@ actor APIClient {
     return (data, httpResponse)
   }
 
+  /// Streams a response body without first materializing it as one `Data` value.
+  ///
+  /// Authentication retry remains identical to `performAuthenticatedData`: a 401
+  /// is consumed, the Firebase header is refreshed once, and callers receive the
+  /// persistent response when their policy owns provider-boundary classification.
+  /// Successful bodies are delivered in bounded chunks; error bodies are retained
+  /// so endpoint-specific code can preserve its existing error mapping.
+  func performAuthenticatedStreamingData(
+    for request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false,
+    chunkSize: Int = 4 * 1024,
+    onChunk: @Sendable (Data) -> Void
+  ) async throws -> (Data, HTTPURLResponse) {
+    precondition(chunkSize > 0)
+    try validateExpectedOwner(authPolicy)
+    let endpoint = endpointLabel(for: request)
+    let (bytes, response) = try await session.bytes(for: request)
+    try validateExpectedOwner(authPolicy)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401 {
+      let body = try await Self.collect(bytes: bytes)
+      guard authPolicy.allowsAuthRetry else {
+        throw APIError.unauthorized
+      }
+      if retriedAuth, authPolicy.returnsPersistent401Response {
+        return (body, httpResponse)
+      }
+      if !retriedAuth, authPolicy.recordsAuthRetryTelemetry {
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
+      }
+      guard
+        let retryRequest = try await authorizedRetryRequest(
+          from: request,
+          retriedAuth: retriedAuth,
+          authPolicy: authPolicy
+        )
+      else {
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
+        }
+        throw APIError.unauthorized
+      }
+      do {
+        let result = try await performAuthenticatedStreamingData(
+          for: retryRequest,
+          authPolicy: authPolicy,
+          retriedAuth: true,
+          chunkSize: chunkSize,
+          onChunk: onChunk
+        )
+        let outcome = (200...299).contains(result.1.statusCode) ? "succeeded" : "failed"
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
+        }
+        return result
+      } catch {
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        }
+        throw error
+      }
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      return (try await Self.collect(bytes: bytes), httpResponse)
+    }
+
+    var chunk = Data()
+    chunk.reserveCapacity(chunkSize)
+    for try await byte in bytes {
+      try Task.checkCancellation()
+      chunk.append(byte)
+      if chunk.count == chunkSize {
+        onChunk(chunk)
+        chunk.removeAll(keepingCapacity: true)
+      }
+    }
+    if !chunk.isEmpty {
+      onChunk(chunk)
+    }
+    try validateExpectedOwner(authPolicy)
+    return (Data(), httpResponse)
+  }
+
+  private nonisolated static func collect(bytes: URLSession.AsyncBytes) async throws -> Data {
+    var data = Data()
+    for try await byte in bytes {
+      try Task.checkCancellation()
+      data.append(byte)
+    }
+    return data
+  }
+
   /// An owner-bound request may finish after the app has signed out or switched
   /// accounts. The authorization header still belongs to the original owner,
   /// so never let that response flow into the new owner's local state.
@@ -686,6 +787,21 @@ struct RealtimeTokenMintError: LocalizedError {
   let statusCode: Int
   let healthError: CredentialHealthError
   let payload: APIErrorPayload?
+  /// Raw HTTP body so `ManagedPlanGateHTTP` can read FastAPI nested `detail.error`
+  /// (`plan_gated`) that `APIErrorPayload` cannot decode as a string.
+  let responseBody: Data
+
+  init(
+    statusCode: Int,
+    healthError: CredentialHealthError,
+    payload: APIErrorPayload?,
+    responseBody: Data = Data()
+  ) {
+    self.statusCode = statusCode
+    self.healthError = healthError
+    self.payload = payload
+    self.responseBody = responseBody
+  }
 
   var errorDescription: String? {
     var description = healthError.localizedDescription
@@ -844,6 +960,13 @@ extension APIClient {
     let response: ConversationMutationResponse = try await performRequest(request)
     invalidateConversationsCountCache()
     return response.conversation
+  }
+
+  /// Separates a conversation from its cross-surface capture group. Sticky: the
+  /// server never regroups it with the members it left.
+  func separateConversationFromCaptureGroup(id: String) async throws {
+    struct SeparateResponse: Decodable { let status: String }
+    let _: SeparateResponse = try await post("v1/conversations/\(id)/capture-group/separate")
   }
 
   /// Sets the visibility of a conversation for sharing

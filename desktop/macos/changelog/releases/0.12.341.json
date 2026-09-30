@@ -1,0 +1,7 @@
+{
+  "version": "0.12.341",
+  "date": "2026-09-12",
+  "changes": [
+    "Restored icons and labels in the main window's top navigation for Chat, Memories, Tasks and Apps"
+  ]
+}

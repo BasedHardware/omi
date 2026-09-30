@@ -118,15 +118,13 @@ class LocalSegmentStore {
       id: json['id'] as String? ?? '',
       text: kept.text,
       speaker: kept.speaker,
+      speakerId: kept.speakerId,
       isUser: kept.isUser,
       personId: kept.personId,
       start: (json['start'] as num?)?.toDouble() ?? 0,
       end: (json['end'] as num?)?.toDouble() ?? 0,
       translations: const [],
     );
-    // Constructor re-derives speakerId from the label; restore the stored id
-    // so SPEAKER_00 + speaker_id 7 (v5) survives a reload.
-    segment.speakerId = kept.speakerId;
     return segment;
   }
 }

@@ -80,13 +80,15 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
             NSLog("[BatchWriter] matched audio characteristic — batch capture active (device=\(peripheralUuid), dir=\(config.dir))")
         }
 
-        let d = defaults
+        let admission = CaptureAdmissionPolicy.load(from: defaults)
         // Muted: drop the packet but keep the open file's gap timer alive so unmute
-        // resumes the same recording instead of starting a new one.
-        if d.bool(forKey: "flutter.batchMuted") {
+        // resumes the same recording instead of starting a new one. This check is
+        // deliberately native so it still applies when Dart is suspended.
+        if admission.muted {
             queue.async { self.touchKeepAlive() }
             return true
         }
+        let d = defaults
         // Manual "New recording": finalize the current file now; this packet opens a fresh one.
         if d.bool(forKey: "flutter.batchCutRequested") {
             d.set(false, forKey: "flutter.batchCutRequested")
@@ -95,7 +97,8 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
 
         let frames = transformFrames(deviceType: config.deviceType, value: value)
         if !frames.isEmpty {
-            queue.async { self.writeFrames(frames, config: config) }
+            let admittedRevision = admission.revision
+            queue.async { self.writeFrames(frames, config: config, admittedRevision: admittedRevision) }
         }
         // Audio packet on the configured characteristic: consume it (do not forward
         // to Dart) even if it carried no payload, to keep the engine idle.
@@ -107,12 +110,19 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
     /// Keep the open file's gap timer fresh while muted so unmute resumes it.
     private func touchKeepAlive() {
         if isOpen {
-            lastFrameMs = Int64(Date().timeIntervalSince1970 * 1000)
+            lastFrameMs = CheckedIntegerConversion.epochMs()
         }
     }
 
-    private func writeFrames(_ frames: [Data], config: Config) {
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+    private func writeFrames(_ frames: [Data], config: Config, admittedRevision: Int64) {
+        // The callback may have queued work before a mute, unmute, or mode
+        // transition. Retire that work before it can rotate/open a file.
+        let admission = CaptureAdmissionPolicy.load(from: defaults)
+        guard admission.permits(admittedRevision: admittedRevision) else {
+            if admission.muted { touchKeepAlive() }
+            return
+        }
+        let nowMs = CheckedIntegerConversion.epochMs()
 
         // Gap finalize: a pause longer than gapMs starts a new file (so the
         // backend places resumed audio as a separate conversation).
@@ -137,6 +147,13 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
             }
         }
 
+        // Re-read at the actual write boundary. A policy revision change while
+        // the queue was opening/rotating a file retires the queued packet too.
+        let writeAdmission = CaptureAdmissionPolicy.load(from: defaults)
+        guard writeAdmission.permits(admittedRevision: admittedRevision) else {
+            if writeAdmission.muted { touchKeepAlive() }
+            return
+        }
         guard writeFramesLocked(frames) else { return }
 
         lastFrameMs = nowMs

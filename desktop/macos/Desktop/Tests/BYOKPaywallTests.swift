@@ -2,9 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Verifies the BYOK-vs-paywall precedence fix: a user with a configured BYOK
-/// key locally is never paywalled, regardless of the persisted
-/// `desktop_isPaywalled` flag.
+/// Verifies BYOK enrollment, owner binding, and paywall precedence.
 @MainActor final class BYOKPaywallTests: XCTestCase {
   private let paywallKey = "desktop_isPaywalled"
 
@@ -31,7 +29,9 @@ import XCTest
       XCTFail("enroll(\(p)) called before \(p.storageKey) was set")
       return
     }
-    APIKeyService.persistEnrolledFingerprints([p.rawValue: APIKeyService.byokFingerprint(key)])
+    var fingerprints = APIKeyService.enrolledFingerprints()
+    fingerprints[p.rawValue] = APIKeyService.byokFingerprint(key)
+    APIKeyService.persistEnrolledFingerprints(fingerprints)
   }
 
   override func tearDown() async throws {
@@ -39,6 +39,8 @@ import XCTest
     clearAllBYOKKeys()
     UserDefaults.standard.removeObject(forKey: paywallKey)
     UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+    UserDefaults.standard.removeObject(forKey: .byokOwnerUid)
+    UserDefaults.standard.removeObject(forKey: .byokOwnerResetNotice)
     APIKeyService.persistEnrolledFingerprints([:])
   }
 
@@ -110,6 +112,7 @@ import XCTest
     setAllBYOKKeys()
     UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
     enroll(.openai)
+    enroll(.deepgram)
     let openAIKey = try XCTUnwrap(APIKeyService.byokKey(.openai))
     CredentialHealthManager.shared.recordProviderFailure(
       .providerAuthFailed(provider: .openai, mode: .byok),
@@ -193,6 +196,120 @@ import XCTest
       "rotated Deepgram key is not enrolled until validation succeeds")
   }
 
+  func testActiveSnapshotIncludesOnlyEnrolledCurrentFingerprints() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-or", forKey: BYOKProvider.openrouter.storageKey)
+    UserDefaults.standard.set("dg-original", forKey: BYOKProvider.deepgram.storageKey)
+    APIKeyService.persistEnrolledFingerprints([:])
+
+    XCTAssertTrue(APIKeyService.activeBYOKSnapshot.isEmpty)
+    XCTAssertEqual(
+      Set(APIKeyService.byokActivationCandidateSnapshot.keys),
+      Set([.openrouter, .deepgram]),
+      "configured keys remain validation candidates before enrollment")
+
+    let openRouterFingerprint = APIKeyService.byokFingerprint("sk-or")
+    APIKeyService.persistEnrolledFingerprints(["openrouter": openRouterFingerprint])
+    XCTAssertEqual(Set(APIKeyService.activeBYOKSnapshot.keys), Set([.openrouter]))
+
+    let deepgramFingerprint = APIKeyService.byokFingerprint("dg-original")
+    APIKeyService.persistEnrolledFingerprints([
+      "openrouter": openRouterFingerprint,
+      "deepgram": deepgramFingerprint,
+    ])
+    XCTAssertEqual(Set(APIKeyService.activeBYOKSnapshot.keys), Set([.openrouter, .deepgram]))
+
+    UserDefaults.standard.set("dg-rotated", forKey: BYOKProvider.deepgram.storageKey)
+    XCTAssertEqual(
+      Set(APIKeyService.activeBYOKSnapshot.keys),
+      Set([.openrouter]),
+      "a rotated Deepgram key stays out of runtime requests until validation enrolls it")
+
+    UserDefaults.standard.set("dg-original", forKey: BYOKProvider.deepgram.storageKey)
+    UserDefaults.standard.set("sk-or-rotated", forKey: BYOKProvider.openrouter.storageKey)
+    XCTAssertEqual(
+      Set(APIKeyService.activeBYOKSnapshot.keys),
+      Set([.deepgram]),
+      "each runtime capability independently requires its current enrolled fingerprint")
+  }
+
+  func testLegacyUnownedKeysAreClearedAndLeaveDurableReentryNotice() throws {
+    clearAllBYOKKeys()
+    UserDefaults.standard.removeObject(forKey: .byokOwnerUid)
+    UserDefaults.standard.removeObject(forKey: .byokOwnerResetNotice)
+    UserDefaults.standard.set("sk-legacy", forKey: BYOKProvider.openrouter.storageKey)
+
+    APIKeyService.bindBYOKOwner("owner-a")
+
+    XCTAssertNil(APIKeyService.byokKey(.openrouter))
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .byokOwnerUid), "owner-a")
+    let notice = try XCTUnwrap(APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-a"))
+    XCTAssertEqual(notice.reason, .legacyUnownedKeys)
+    XCTAssertNil(
+      APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-b"),
+      "a credential-reset notice must never cross the owner boundary")
+  }
+
+  func testDifferentOwnerKeysAreClearedWithDifferentOwnerNotice() throws {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set("owner-a", forKey: .byokOwnerUid)
+    UserDefaults.standard.set("sk-owner-a", forKey: BYOKProvider.openrouter.storageKey)
+
+    APIKeyService.bindBYOKOwner("owner-b")
+
+    XCTAssertNil(APIKeyService.byokKey(.openrouter))
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .byokOwnerUid), "owner-b")
+    XCTAssertEqual(
+      try XCTUnwrap(APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-b")).reason,
+      .differentOwner)
+  }
+
+  func testOwnerBindingWithoutKeysDoesNotInventAResetNotice() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.removeObject(forKey: .byokOwnerUid)
+    UserDefaults.standard.removeObject(forKey: .byokOwnerResetNotice)
+
+    APIKeyService.bindBYOKOwner("owner-a")
+
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .byokOwnerUid), "owner-a")
+    XCTAssertNil(APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-a"))
+  }
+
+  func testSameOwnerBindingPreservesKeysAndEnrollment() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set("owner-a", forKey: .byokOwnerUid)
+    UserDefaults.standard.set("sk-owner-a", forKey: BYOKProvider.openrouter.storageKey)
+    enroll(.openrouter)
+
+    APIKeyService.bindBYOKOwner("owner-a")
+
+    XCTAssertEqual(APIKeyService.byokKey(.openrouter), "sk-owner-a")
+    XCTAssertEqual(
+      APIKeyService.enrolledFingerprints()[BYOKProvider.openrouter.rawValue],
+      APIKeyService.byokFingerprint("sk-owner-a"))
+    XCTAssertNil(APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-a"))
+  }
+
+  func testResetNoticePersistsUntilTheUserAcknowledgesIt() throws {
+    clearAllBYOKKeys()
+    UserDefaults.standard.removeObject(forKey: .byokOwnerUid)
+    UserDefaults.standard.set("sk-legacy", forKey: BYOKProvider.openrouter.storageKey)
+    APIKeyService.bindBYOKOwner("owner-a")
+    let recorder = BYOKResetNoticeRecorder()
+
+    APIKeyService().presentPendingBYOKOwnerResetNotice(for: "owner-a", through: recorder)
+
+    XCTAssertEqual(recorder.title, "Re-add your custom API keys")
+    XCTAssertTrue(recorder.message?.contains("Settings → Advanced → Developer Keys") == true)
+    XCTAssertNotNil(
+      APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-a"),
+      "launching the sheet must not lose the recovery instruction before it is read")
+
+    try XCTUnwrap(recorder.completion)()
+    XCTAssertNil(APIKeyService.pendingBYOKOwnerResetNotice(for: "owner-a"))
+  }
+
   func testSelectedRealtimeBYOKKeyIgnoresUnselectedLeftover() {
     clearAllBYOKKeys()
     UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
@@ -204,5 +321,106 @@ import XCTest
     XCTAssertNil(APIKeyService.selectedRealtimeBYOKKey(for: .openai))
     XCTAssertNil(APIKeyService.selectedRealtimeBYOKKey(for: .gemini))
     XCTAssertEqual(APIKeyService.selectedRealtimeBYOKKey(for: .openrouter), "sk-or")
+  }
+
+  /// The realtime hub speaks through OpenAI Realtime or Gemini Live and nothing else, so
+  /// choosing one of those under Advanced → Voice Model is choosing that provider for
+  /// voice. Withholding the key because the *text* provider is something the hub can
+  /// never use — OpenRouter has no realtime API, and is the default — sent the turn to
+  /// the managed lane, where it failed on Omi billing with the user's own key unspent.
+  func testVoiceModelChoiceUnlocksItsOwnKeyWhileTextProviderDiffers() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-or", forKey: BYOKProvider.openrouter.storageKey)
+    UserDefaults.standard.set("sk-gemini-chosen", forKey: BYOKProvider.gemini.storageKey)
+
+    XCTAssertEqual(APIKeyService.selectedBYOKLLMProvider, .openrouter)
+    XCTAssertEqual(
+      APIKeyService.selectedRealtimeBYOKKey(for: .gemini, chosenForVoice: true),
+      "sk-gemini-chosen",
+      "a provider chosen as the Voice Model must be able to use its own key")
+  }
+
+  /// The other direction, which is the whole reason the guard exists: the failover path
+  /// does not pass `chosenForVoice`, so a key belonging to a provider the user picked
+  /// nowhere is still never spent.
+  func testFailoverStillRefusesAnUnchosenKey() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-or", forKey: BYOKProvider.openrouter.storageKey)
+    UserDefaults.standard.set("sk-openai-leftover", forKey: BYOKProvider.openai.storageKey)
+
+    XCTAssertNil(
+      APIKeyService.selectedRealtimeBYOKKey(for: .openai),
+      "the failover must not spend a key the user chose neither for text nor for voice")
+  }
+
+  /// The two tests above pin `APIKeyService`'s boolean, but the boolean is only ever as
+  /// good as what the call sites pass. The decision that actually separates primary from
+  /// failover is the equality at the session call site: `effectiveProvider` is
+  /// `fallbackProvider ?? RealtimeHubSettings.shared.provider`, so comparing against the
+  /// settings value is what withholds the key from a provider reached by failover.
+  /// Widening it to a blanket `true` would spend a leftover key on the failover path and
+  /// still pass every behavioral test here, so the shape is pinned directly.
+  func testTheSessionCallSiteDerivesVoiceChoiceFromTheVoiceModelSetting() throws {
+    let source = try RealtimeHubControllerSourceTestSupport.moduleSource()
+
+    XCTAssertTrue(
+      source.contains("chosenForVoice: RealtimeHubSettings.shared.isVoiceModelChoice(provider)"),
+      "the session call site must derive voice choice from the Voice Model setting, so a "
+        + "provider reached by failover or by `.auto` is still refused the user's key")
+    XCTAssertFalse(
+      source.contains("chosenForVoice: true"),
+      "no RealtimeHubController call site may claim voice choice unconditionally")
+  }
+
+  /// The E2E harness exists to drive the real path, so it has to make the same decision.
+  /// Before this was aligned it called `selectedRealtimeBYOKKey(for:)` with no
+  /// `chosenForVoice`, which meant that for exactly the configuration this fix addresses
+  /// — Voice Model Gemini or OpenAI, text provider OpenRouter — the harness found no key
+  /// and minted an ephemeral token, testing the managed lane instead of the fix.
+  func testTheAutomationHarnessResolvesTheKeyThroughTheSameRule() throws {
+    let source = try RealtimeHubControllerSourceTestSupport.source(
+      named: "RealtimeHubTestHarness.swift")
+
+    XCTAssertTrue(
+      source.contains("chosenForVoice: RealtimeHubSettings.shared.isVoiceModelChoice(provider)"),
+      "the harness must resolve BYOK auth the way a real session does")
+  }
+
+  /// `.auto` is the default Voice Model and resolves to Gemini, so treating "the hub is
+  /// on Gemini" as "the user chose Gemini" would spend a stored Gemini key for every user
+  /// who never opened the setting — a provider picked by a benchmark, not by them. Only an
+  /// explicit selection counts; `.auto` keeps the stricter Developer-Keys-only rule.
+  @MainActor
+  func testAutoVoiceModelIsNotAVoiceChoice() {
+    let previous = RealtimeOmniSettings.shared.selectedProvider
+    defer { RealtimeOmniSettings.shared.selectedProvider = previous }
+
+    RealtimeOmniSettings.shared.selectedProvider = .auto
+    XCTAssertFalse(
+      RealtimeHubSettings.shared.isVoiceModelChoice(RealtimeHubSettings.shared.provider),
+      "`.auto` resolving to a provider is not the user choosing it")
+
+    RealtimeOmniSettings.shared.selectedProvider = .geminiFlashLive
+    XCTAssertTrue(
+      RealtimeHubSettings.shared.isVoiceModelChoice(.gemini),
+      "an explicit Voice Model selection is a choice")
+    XCTAssertFalse(
+      RealtimeHubSettings.shared.isVoiceModelChoice(.openai),
+      "choosing one provider does not unlock the other's key")
+  }
+}
+
+@MainActor
+private final class BYOKResetNoticeRecorder: DesktopAlertPresenting {
+  private(set) var title: String?
+  private(set) var message: String?
+  private(set) var completion: (@MainActor () -> Void)?
+
+  func present(title: String, message: String, completion: (@MainActor () -> Void)?) {
+    self.title = title
+    self.message = message
+    self.completion = completion
   }
 }

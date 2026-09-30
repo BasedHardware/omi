@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-ble-listener-silent-on-disconnect",
+  "violated_contract": "A BLE listener coroutine that starts GATT notifications and then blocks must register the transport's own disconnect signal and terminate on it. Blocking on a fixed sleep with no disconnected_callback wired leaves a caller awaiting the listener with no terminal signal when the peripheral disconnects: sdks/python/omi/ble.py::listen() looped `await asyncio.sleep(3600)` and sdks/python/omi/bluetooth.py::listen_to_omi() slept a single `await asyncio.sleep(99999)`, so a real disconnect hung the caller for up to an hour, or about 27.7 hours in the legacy listener, instead of surfacing immediately.",
+  "canonical_prevention": "Register Bleak's disconnected_callback on an asyncio.Event at connect time, wait on that event (or poll it on a short interval, not a long fixed sleep), and raise a terminal ConnectionError once it fires so the caller can detect and react to a real disconnect (e.g. reconnect) instead of hanging.",
+  "canonical_prevention_artifact": [
+    "sdks/python/tests/test_ble_disconnect.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/python/omi/ble.py",
+    "sdks/python/omi/bluetooth.py"
+  ],
+  "status": "open"
+}

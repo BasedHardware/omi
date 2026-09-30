@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:collection/collection.dart';
-import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,7 +16,12 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/startup/boot_journal.dart';
+import 'package:omi/env/physical_qualification.dart';
+
+typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
 
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
@@ -35,6 +41,20 @@ class SharedPreferencesUtil {
   /// Plain prefs mirror for in-tree native readers (Android background socket).
   static const String _nativeAuthTokenPrefsKey = 'nativeAuthToken';
 
+  /// Native capture implementations read this same SharedPreferences value
+  /// when Dart is backgrounded or suspended.
+  static const String capturePolicyKey = 'capturePolicy';
+  static const String _legacyDeviceMutedKey = 'deviceMuted';
+  static const String _legacyBatchMutedKey = 'batchMuted';
+  static const MethodChannel _capturePolicyChannel = MethodChannel('com.omi/capture_policy');
+  static CapturePolicyBridge? _capturePolicyBridgeForTesting;
+
+  // Fail closed until initialization has loaded the persisted policy.  This
+  // also makes an early read safe while the app is still bringing up prefs.
+  static CapturePolicy _capturePolicyCache = const CapturePolicy(revision: 0, muted: true);
+  static int _capturePolicyNextRevision = 0;
+  static Future<void> _capturePolicyQueue = Future<void>.value();
+
   static bool _mirrorNativeAuthToken = false;
 
   static const int _duplicateKeychainItem = -25299;
@@ -43,6 +63,7 @@ class SharedPreferencesUtil {
   static const MacOsOptions _anyAccessibilityMacOs = MacOsOptions(accessibility: null);
 
   static Future<void> _secureQueue = Future<void>.value();
+  static final Set<String> _quarantinePending = <String>{};
 
   factory SharedPreferencesUtil() {
     return _instance;
@@ -50,12 +71,24 @@ class SharedPreferencesUtil {
 
   SharedPreferencesUtil._internal();
 
-  String get deviceIdHash => _preferences?.getString('deviceIdHash') ?? '';
+  String get deviceIdHash => getString('deviceIdHash');
   set deviceIdHash(String value) => _preferences?.setString('deviceIdHash', value);
+
+  static const String appearanceModeKey = 'appearanceMode';
+
+  String get appearanceMode => getString(appearanceModeKey, defaultValue: 'light');
+
+  Future<void> setAppearanceMode(String mode) async {
+    final prefs = _preferences ?? await SharedPreferences.getInstance();
+    await prefs.setString(appearanceModeKey, mode);
+  }
 
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
+    if (!PhysicalQualification.enabled) await _quarantineBootSettings();
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
+    await _loadCapturePolicy();
+    await _reconcileNativeCapturePolicy();
     if (secureStorage != null) {
       _secureStorage = secureStorage;
       _testSecureFallback = null;
@@ -74,9 +107,266 @@ class SharedPreferencesUtil {
     _authTokenCache = await _readSecureAuthToken() ?? '';
     // Codex P2: a failed secure write leaves the legacy prefs token; still use it.
     if (_authTokenCache.isEmpty) {
-      _authTokenCache = _preferences?.getString('authToken') ?? '';
+      _authTokenCache = _instance.getString('authToken');
     }
     await _syncNativeAuthToken(_authTokenCache);
+  }
+
+  static Future<void> _quarantineBootSettings() async {
+    final prefs = _preferences!;
+    final expected = <String, bool Function(Object)>{
+      'authToken': (value) => value is String,
+      _authTokenMigratedPrefsKey: (value) => value is bool,
+      'deviceIdHash': (value) => value is String,
+      appearanceModeKey: (value) => value is String,
+      'onboardingCompleted': (value) => value is bool,
+      'uid': (value) => value is String,
+      'fullName': (value) => value is String,
+      'batchModeEnabled': (value) => value is bool,
+      'flash_page_pending_uploads': (value) => value is List<String>,
+      'limitless_wal_migration_v1': (value) => value is bool,
+    };
+    for (final entry in expected.entries) {
+      final value = prefs.get(entry.key);
+      if (value != null && !entry.value(value)) {
+        await _quarantine(entry.key, value, reason: 'invalid_schema');
+      }
+    }
+  }
+
+  static Future<void> _quarantine(String key, Object value, {required String reason}) async {
+    final prefs = _preferences;
+    if (prefs == null || !_quarantinePending.add(key)) return;
+    try {
+      final archive = '$key.corrupt-${DateTime.now().microsecondsSinceEpoch}';
+      bool saved = false;
+      if (value is String) saved = await prefs.setString(archive, value);
+      if (value is bool) saved = await prefs.setBool(archive, value);
+      if (value is int) saved = await prefs.setInt(archive, value);
+      if (value is double) saved = await prefs.setDouble(archive, value);
+      if (value is List<String>) saved = await prefs.setStringList(archive, value);
+      if (value is List && value is! List<String>) saved = await prefs.setString(archive, jsonEncode(value));
+      if (saved) await prefs.remove(key);
+      await BootJournal.instance.record('quarantine:$key', saved ? reason : 'copy_failed');
+    } catch (_) {
+      await BootJournal.instance.record('quarantine:$key', 'copy_failed');
+    } finally {
+      _quarantinePending.remove(key);
+    }
+  }
+
+  /// Loads the canonical capture policy and performs the one-time migration
+  /// from the two legacy booleans.  A failed migration leaves the legacy keys
+  /// untouched and keeps Dart fail-closed until a later successful write.
+  static Future<void> _loadCapturePolicy() async {
+    _capturePolicyQueue = Future<void>.value();
+    final prefs = _preferences;
+    if (prefs == null) {
+      _capturePolicyCache = const CapturePolicy(revision: 0, muted: true);
+      _capturePolicyNextRevision = 0;
+      return;
+    }
+
+    final raw = prefs.get(capturePolicyKey);
+    final parsed = raw is String ? CapturePolicy.tryParse(raw) : null;
+    final hasCanonical = prefs.containsKey(capturePolicyKey);
+    final hasLegacy = prefs.containsKey(_legacyDeviceMutedKey) || prefs.containsKey(_legacyBatchMutedKey);
+
+    if (!PhysicalQualification.enabled && hasCanonical && parsed == null && raw != null) {
+      await _quarantine(capturePolicyKey, raw, reason: 'invalid_schema');
+    }
+
+    if (parsed != null) {
+      _capturePolicyCache = parsed;
+      _capturePolicyNextRevision = parsed.revision;
+
+      // Clean up old keys only after the canonical value has been written
+      // successfully. Rewriting is needed when legacy keys remain so a failed
+      // platform write cannot accidentally make the migration appear complete.
+      if (hasLegacy) {
+        try {
+          final persisted = await _persistCapturePolicy(parsed);
+          if (persisted) await _removeLegacyCapturePolicy();
+        } catch (e, stack) {
+          Logger.debug('Capture policy cleanup failed: $e');
+          Logger.debug('Stack: $stack');
+        }
+      }
+      return;
+    }
+
+    final fallback = !hasCanonical
+        ? CapturePolicy.fromLegacy(
+            deviceMuted: prefs.get(_legacyDeviceMutedKey) == true,
+            batchMuted: prefs.get(_legacyBatchMutedKey) == true,
+          )
+        : const CapturePolicy(revision: 0, muted: true);
+
+    try {
+      final persisted = await _persistCapturePolicy(fallback);
+      if (persisted) {
+        _capturePolicyCache = fallback;
+        _capturePolicyNextRevision = fallback.revision;
+        await _removeLegacyCapturePolicy();
+        return;
+      }
+    } catch (e, stack) {
+      Logger.debug('Capture policy migration failed: $e');
+      Logger.debug('Stack: $stack');
+    }
+
+    // A policy that could not be made durable must not authorize capture in
+    // memory. Keep legacy values for a retry on the next initialization.
+    _capturePolicyCache = const CapturePolicy(revision: 0, muted: true);
+    _capturePolicyNextRevision = 0;
+  }
+
+  static Future<bool> _persistCapturePolicy(CapturePolicy policy) async {
+    final prefs = _preferences;
+    if (prefs == null) return false;
+    final persisted = await prefs.setString(capturePolicyKey, policy.encode());
+    if (!persisted) {
+      // SharedPreferences updates its Dart cache before asking the platform
+      // store to persist. Reload the last durable value so a false result is
+      // not mistaken for a successful in-memory write by a later read.
+      try {
+        await prefs.reload();
+      } catch (e, stack) {
+        Logger.debug('Capture policy reload after failed write failed: $e');
+        Logger.debug('Stack: $stack');
+      }
+      return false;
+    }
+    return true;
+  }
+
+  static Future<void> _removeLegacyCapturePolicy() async {
+    final prefs = _preferences;
+    if (prefs == null) return;
+    await prefs.remove(_legacyDeviceMutedKey);
+    await prefs.remove(_legacyBatchMutedKey);
+  }
+
+  /// Native capture can outlive the Flutter engine. If it has already seen a
+  /// newer policy revision, keep Dart closed until a newer explicit intent
+  /// catches it up. This is the recovery path for a failed write followed by
+  /// Flutter engine reconstruction in the same process.
+  static Future<void> _reconcileNativeCapturePolicy() async {
+    if (_capturePolicyBridgeForTesting == null && !Platform.isAndroid && !Platform.isIOS) return;
+
+    final rawRevision = await _invokeCapturePolicyBridge('getRevision', const <String, Object>{});
+    if (rawRevision is! int || rawRevision < 0) {
+      throw StateError('Native capture policy returned an invalid revision');
+    }
+    if (rawRevision > _capturePolicyCache.revision) {
+      _capturePolicyCache = CapturePolicy(revision: rawRevision, muted: true);
+      _capturePolicyNextRevision = rawRevision;
+      return;
+    }
+    // Re-acknowledge the durable intent after engine reconstruction. Native
+    // treats an equal revision as idempotent for the same intent and accepts
+    // the durable state when recovering a missed release acknowledgement.
+    await _applyNativeCapturePolicy(_capturePolicyCache);
+  }
+
+  static Future<void> _applyNativeCapturePolicy(CapturePolicy policy) async {
+    await _invokeCapturePolicyBridge('setMuted', <String, Object>{'muted': policy.muted, 'revision': policy.revision});
+  }
+
+  static Future<Object?> _invokeCapturePolicyBridge(String method, Map<String, Object> arguments) async {
+    final bridge = _capturePolicyBridgeForTesting;
+    if (bridge != null) return bridge(method, arguments);
+    if (!Platform.isAndroid && !Platform.isIOS) return null;
+    return _capturePolicyChannel.invokeMethod<Object?>(method, arguments);
+  }
+
+  @visibleForTesting
+  static set capturePolicyBridgeForTesting(CapturePolicyBridge? bridge) => _capturePolicyBridgeForTesting = bridge;
+
+  /// The effective policy currently visible to Dart.  Mute is published before
+  /// its async persistence completes; unmute is published only after the
+  /// corresponding write is acknowledged.
+  CapturePolicy get capturePolicy => _capturePolicyCache;
+
+  // Read-only compatibility projections for existing injected preference
+  // contracts. Neither alias reads or writes a legacy preference key.
+  bool get deviceMuted => capturePolicy.muted;
+  bool get batchMuted => capturePolicy.muted;
+
+  /// Persists a new capture authorization in revision order.
+  ///
+  /// Writes are serialized because native readers may observe the preference
+  /// outside Dart.  A failed write is surfaced to the caller and leaves the
+  /// effective in-memory state muted.  If a newer request arrives while an
+  /// older write is pending, the older completion cannot publish stale state.
+  Future<CapturePolicy> setCaptureMuted(bool muted) {
+    final requested = CapturePolicy(revision: ++_capturePolicyNextRevision, muted: muted);
+
+    // A mute command takes effect immediately. Unmute waits for persistence so
+    // a slow or failed write cannot expose an authorization that native code
+    // has not received yet.
+    if (muted) _capturePolicyCache = requested;
+    // Observe errors immediately even if an older durable write holds the queue.
+    // Defer reporting until this intent has also attempted its durable deny.
+    final nativeMute = muted
+        ? _applyNativeCapturePolicy(
+            requested,
+          ).then<(Object, StackTrace)?>((_) => null, onError: (Object error, StackTrace stack) => (error, stack))
+        : Future<(Object, StackTrace)?>.value();
+
+    final operation = _capturePolicyQueue.then((_) async {
+      try {
+        final nativeMuteFailure = await nativeMute;
+        final persisted = await _persistCapturePolicy(requested);
+        if (!persisted) {
+          throw StateError('Failed to persist capture policy revision ${requested.revision}');
+        }
+
+        if (nativeMuteFailure != null) {
+          Error.throwWithStackTrace(nativeMuteFailure.$1, nativeMuteFailure.$2);
+        }
+
+        if (!muted && _capturePolicyNextRevision == requested.revision) {
+          // Release native admission only after the durable policy is visible.
+          // A channel error leaves the native latch closed and is propagated.
+          try {
+            await _applyNativeCapturePolicy(requested);
+          } catch (error) {
+            if (_capturePolicyNextRevision == requested.revision) {
+              final rollback = CapturePolicy(revision: ++_capturePolicyNextRevision, muted: true);
+              _capturePolicyCache = rollback;
+              try {
+                final persistedRollback = await _persistCapturePolicy(rollback);
+                if (!persistedRollback) {
+                  Logger.debug('Capture policy rollback did not persist');
+                }
+              } catch (rollbackError, rollbackStack) {
+                Logger.debug('Capture policy rollback failed: $rollbackError');
+                Logger.debug('Stack: $rollbackStack');
+              }
+            }
+            rethrow;
+          }
+        }
+
+        if (_capturePolicyNextRevision == requested.revision) {
+          _capturePolicyCache = requested;
+        }
+        return requested;
+      } catch (error) {
+        // Never let a failed unmute publish an unmuted policy. Preserve a
+        // newer request if one has already superseded this operation.
+        if (_capturePolicyNextRevision == requested.revision) {
+          _capturePolicyCache = CapturePolicy(revision: requested.revision, muted: true);
+        }
+        rethrow;
+      }
+    });
+
+    // Keep the queue usable after a failed operation while preserving the
+    // original error for this caller.
+    _capturePolicyQueue = operation.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return operation;
   }
 
   /// One-time move of `authToken` from SharedPreferences into secure storage.
@@ -87,7 +377,7 @@ class SharedPreferencesUtil {
   static Future<void> migrateAuthTokenFromPrefs() async {
     final prefs = _preferences;
     if (prefs == null || (_secureStorage == null && _testSecureFallback == null)) return;
-    if (prefs.getBool(_authTokenMigratedPrefsKey) == true) {
+    if (prefs.get(_authTokenMigratedPrefsKey) == true) {
       // Scrub any prefs residue written after migration (e.g. stale native/cache paths).
       if (prefs.containsKey('authToken')) {
         await prefs.remove('authToken');
@@ -95,7 +385,8 @@ class SharedPreferencesUtil {
       return;
     }
 
-    final legacyToken = prefs.getString('authToken');
+    final rawToken = prefs.get('authToken');
+    final legacyToken = rawToken is String ? rawToken : null;
     try {
       final existingSecure = await _readSecureAuthToken();
       if ((existingSecure == null || existingSecure.isEmpty) && legacyToken != null && legacyToken.isNotEmpty) {
@@ -228,11 +519,27 @@ class SharedPreferencesUtil {
   BtDevice get btDevice {
     final String device = getString('btDevice');
     if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
-    return BtDevice.fromJson(jsonDecode(device));
+    try {
+      final decoded = jsonDecode(device);
+      if (decoded is Map<String, dynamic>) {
+        final parsed = BtDevice.fromJson(decoded);
+        if (parsed.id.isNotEmpty) return parsed;
+      }
+      Logger.debug(
+        PhysicalQualification.enabled
+            ? 'Stored device is not a JSON object: ${decoded.runtimeType}'
+            : 'Stored device is not a JSON object',
+      );
+    } catch (e) {
+      Logger.debug(PhysicalQualification.enabled ? 'Error decoding stored device: $e' : 'Error decoding stored device');
+    }
+    if (!PhysicalQualification.enabled) unawaited(_quarantine('btDevice', device, reason: 'invalid_schema'));
+    return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
   }
 
   List<BtDevice> get btDevices {
     final devices = <BtDevice>[];
+    var invalid = false;
     for (final encodedDevice in getStringList('btDevices')) {
       try {
         final decoded = jsonDecode(encodedDevice);
@@ -240,11 +547,20 @@ class SharedPreferencesUtil {
           final device = BtDevice.fromJson(decoded);
           if (device.id.isNotEmpty && !devices.any((savedDevice) => savedDevice.id == device.id)) {
             devices.add(device);
+          } else if (device.id.isEmpty) {
+            invalid = true;
           }
+        } else {
+          invalid = true;
         }
       } catch (e) {
-        Logger.debug('Error decoding saved device: $e');
+        Logger.debug(PhysicalQualification.enabled ? 'Error decoding saved device: $e' : 'Error decoding saved device');
+        invalid = true;
       }
+    }
+    if (invalid && !PhysicalQualification.enabled) {
+      unawaited(_quarantine('btDevices', getStringList('btDevices'), reason: 'invalid_schema'));
+      devices.clear();
     }
 
     final legacyDevice = btDevice;
@@ -284,6 +600,10 @@ class SharedPreferencesUtil {
 
   set deviceOnboardingCompleted(bool value) => saveBool('deviceOnboardingCompleted', value);
 
+  bool get omiButtonActionsEnabled => getBool('omiButtonActionsEnabled', defaultValue: true);
+
+  set omiButtonActionsEnabled(bool value) => saveBool('omiButtonActionsEnabled', value);
+
   bool get backgroundModeEnabled => getBool('backgroundModeEnabled');
 
   set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);
@@ -301,20 +621,6 @@ class SharedPreferencesUtil {
   bool get phoneBatchAuto => getBool('phoneBatchAuto');
 
   set phoneBatchAuto(bool value) => saveBool('phoneBatchAuto', value);
-
-  // Transcribe Later: pause capture (native writer drops packets, keeps the file
-  // open) so the user can mute a sensitive moment and resume the same recording.
-  bool get batchMuted => getBool('batchMuted');
-
-  set batchMuted(bool value) => saveBool('batchMuted', value);
-
-  // Realtime device mute (double-tap pause). Persisted so the mute survives an
-  // app kill/restart — otherwise the device silently resumes recording on the
-  // next reconnect even though the user muted it. Restored into
-  // CaptureProvider._isPaused at startup and re-applied on reconnect.
-  bool get deviceMuted => getBool('deviceMuted');
-
-  set deviceMuted(bool value) => saveBool('deviceMuted', value);
 
   // Transcribe Later: one-shot flag — when set, the native writer finalizes the
   // current file and starts a fresh one (manual "New recording" cut), then clears it.
@@ -411,37 +717,9 @@ class SharedPreferencesUtil {
 
   set webhookAudioBytesDelay(String value) => saveString('webhookAudioBytesDelay', value);
 
-  set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
-
-  bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled');
-
   set transcriptionDiagnosticEnabled(bool value) => saveBool('transcriptionDiagnosticEnabled', value);
 
   bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled');
-
-  set autoCreateSpeakersEnabled(bool value) => saveBool('autoCreateSpeakersEnabled', value);
-
-  bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
-
-  // Goal tracker widget on homepage - default is true (experimental feature)
-  set showGoalTrackerEnabled(bool value) => saveBool('showGoalTrackerEnabled', value);
-
-  bool get showGoalTrackerEnabled => getBool('showGoalTrackerEnabled', defaultValue: true);
-
-  // Daily score widget on homepage - default is true
-  set showDailyScoreEnabled(bool value) => saveBool('showDailyScoreEnabled', value);
-
-  bool get showDailyScoreEnabled => getBool('showDailyScoreEnabled', defaultValue: true);
-
-  // Tasks widget on homepage - default is true
-  set showTasksEnabled(bool value) => saveBool('showTasksEnabled', value);
-
-  bool get showTasksEnabled => getBool('showTasksEnabled', defaultValue: true);
-
-  // Phone call floating button on home screen - default is true
-  set showPhoneCallButton(bool value) => saveBool('showPhoneCallButton', value);
-
-  bool get showPhoneCallButton => getBool('showPhoneCallButton', defaultValue: true);
 
   // Voice response playback mode for hardware-button replies.
   //   0 = off (never speak)
@@ -519,10 +797,6 @@ class SharedPreferencesUtil {
   set daySummaryToggled(bool value) => saveBool('daySummaryToggled', value);
 
   bool get daySummaryToggled => getBool('daySummaryToggled');
-
-  bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation', defaultValue: true);
-
-  set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);
 
   bool get showSubmitAppConfirmation => getBool('showSubmitAppConfirmation', defaultValue: true);
 
@@ -675,10 +949,24 @@ class SharedPreferencesUtil {
 
   set showGetOmiCard(bool value) => saveBool('showGetOmiCard', value);
 
-  List<App> get appsList {
-    final apps = getStringList('appsList');
-    return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());
+  List<T> _decodeCachedList<T>(String key, T Function(Map<String, dynamic> json) fromJson) {
+    final items = <T>[];
+    for (final encoded in getStringList(key)) {
+      try {
+        final decoded = jsonDecode(encoded);
+        if (decoded is Map<String, dynamic>) {
+          items.add(fromJson(decoded));
+        } else {
+          Logger.debug('Skipping unreadable ${key.split(':').first} entry: ${decoded.runtimeType}');
+        }
+      } catch (e) {
+        Logger.debug('Skipping unreadable ${key.split(':').first} entry: ${e.runtimeType}');
+      }
+    }
+    return items;
   }
+
+  List<App> get appsList => _decodeCachedList('appsList', (json) => App.fromJson(json));
 
   set appsList(List<App> value) {
     final List<String> apps = value.map((e) => jsonEncode(e.toJson())).toList();
@@ -719,13 +1007,11 @@ class SharedPreferencesUtil {
     if (getBool('migratedMemories')) {
       final cachedMemories = getStringList('cachedMemories');
       if (cachedMemories.isNotEmpty) {
-        final conversations = cachedMemories.map((e) => ServerConversation.fromJson(jsonDecode(e))).toList();
-        cachedConversations = conversations;
+        cachedConversations = _decodeCachedList('cachedMemories', (json) => ServerConversation.fromJson(json));
         saveBool('migratedMemories', true);
       }
     }
-    final conversations = getStringList('cachedConversations');
-    return conversations.map((e) => ServerConversation.fromJson(jsonDecode(e))).toList();
+    return _decodeCachedList('cachedConversations', (json) => ServerConversation.fromJson(json));
   }
 
   set cachedConversations(List<ServerConversation> value) {
@@ -733,14 +1019,33 @@ class SharedPreferencesUtil {
     saveStringList('cachedConversations', conversations);
   }
 
-  List<ServerMessage> get cachedMessages {
-    final messages = getStringList('cachedMessages');
-    return messages.map((e) => ServerMessage.fromJson(jsonDecode(e))).toList();
-  }
+  List<ServerMessage> get cachedMessages => _decodeCachedList('cachedMessages', (json) => ServerMessage.fromJson(json));
 
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
+  }
+
+  /// Last owner-scoped memory projection used for offline/restart rendering.
+  /// Memory.toJson deliberately includes optional temporal fields so a cached
+  /// assessment is never mistaken for a newly computed one after restart.
+  List<Memory> get cachedMemories {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return [];
+    _scopeLegacyUserData(ownerUid);
+    return _decodeCachedList(
+      _userScopedKey('cachedMemories', ownerUid),
+      (json) => Memory.fromJson(json),
+    ).where((memory) => memory.uid == ownerUid).toList();
+  }
+
+  set cachedMemories(List<Memory> value) {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
+    saveStringList(
+      _userScopedKey('cachedMemories', ownerUid),
+      value.map((memory) => jsonEncode(memory.toJson())).toList(),
+    );
   }
 
   // Pending memories - memories created offline that need to be synced
@@ -748,8 +1053,10 @@ class SharedPreferencesUtil {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return [];
     _scopeLegacyUserData(ownerUid);
-    final memories = getStringList(_userScopedKey('pendingMemories', ownerUid));
-    return memories.map((e) => Memory.fromJson(jsonDecode(e))).where((memory) => memory.uid == ownerUid).toList();
+    return _decodeCachedList(
+      _userScopedKey('pendingMemories', ownerUid),
+      (json) => Memory.fromJson(json),
+    ).where((memory) => memory.uid == ownerUid).toList();
   }
 
   set pendingMemories(List<Memory> value) {
@@ -760,21 +1067,27 @@ class SharedPreferencesUtil {
   }
 
   void addPendingMemory(Memory memory) {
-    final List<Memory> memories = pendingMemories;
-    memories.add(memory);
-    pendingMemories = memories;
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
+    _scopeLegacyUserData(ownerUid);
+    final key = _userScopedKey('pendingMemories', ownerUid);
+    saveStringList(key, [...getStringList(key), jsonEncode(memory.toJson())]);
   }
 
   void removePendingMemory(String memoryId, {String? ownerUid}) {
     final owner = ownerUid ?? uid;
     if (owner.isEmpty) return;
-    final encoded = getStringList(_userScopedKey('pendingMemories', owner));
-    final memories = encoded.map((e) => Memory.fromJson(jsonDecode(e))).toList();
-    memories.removeWhere((m) => m.id == memoryId);
-    saveStringList(
-      _userScopedKey('pendingMemories', owner),
-      memories.map((memory) => jsonEncode(memory.toJson())).toList(),
-    );
+    final key = _userScopedKey('pendingMemories', owner);
+    saveStringList(key, getStringList(key).where((encoded) => !_hasId(encoded, memoryId)).toList());
+  }
+
+  bool _hasId(String encoded, String id) {
+    try {
+      final decoded = jsonDecode(encoded);
+      return decoded is Map<String, dynamic> && decoded['id'] == id;
+    } catch (e) {
+      return false;
+    }
   }
 
   void clearPendingMemories() {
@@ -783,10 +1096,7 @@ class SharedPreferencesUtil {
     saveStringList(_userScopedKey('pendingMemories', ownerUid), []);
   }
 
-  List<Person> get cachedPeople {
-    final people = getStringList('cachedPeople');
-    return people.map((e) => Person.fromJson(jsonDecode(e))).toList();
-  }
+  List<Person> get cachedPeople => _decodeCachedList('cachedPeople', (json) => Person.fromJson(json));
 
   Person? getPersonById(String id) {
     return cachedPeople.firstWhereOrNull((element) => element.id == id);
@@ -822,10 +1132,35 @@ class SharedPreferencesUtil {
     }
   }
 
+  // Speaker label recency — person id -> epoch millis of the last speaker
+  // assignment made from the tag-speaker sheet. Used to surface recently
+  // tagged people first. Format: { "personId": 1712345678000 }
+  Map<String, int> get speakerLabelLastUsedMs {
+    final encoded = getString('speaker_label_last_used_ms');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, (value as num).toInt()));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  set speakerLabelLastUsedMs(Map<String, int> value) {
+    saveString('speaker_label_last_used_ms', jsonEncode(value));
+  }
+
   ServerConversation? get modifiedConversationDetails {
     final String conversation = getString('modifiedConversationDetails');
     if (conversation.isEmpty) return null;
-    return ServerConversation.fromJson(jsonDecode(conversation));
+    try {
+      final decoded = jsonDecode(conversation);
+      if (decoded is Map<String, dynamic>) return ServerConversation.fromJson(decoded);
+      Logger.debug('Skipping unreadable modifiedConversationDetails: ${decoded.runtimeType}');
+    } catch (e) {
+      Logger.debug('Skipping unreadable modifiedConversationDetails: ${e.runtimeType}');
+    }
+    return null;
   }
 
   set modifiedConversationDetails(ServerConversation? value) {
@@ -898,6 +1233,7 @@ class SharedPreferencesUtil {
     preferredSummarizationAppId = '';
     calendarEnabled = false;
     _preferences?.remove('cachedMemories');
+    if (ownerUid.isNotEmpty) _preferences?.remove(_userScopedKey('cachedMemories', ownerUid));
   }
 
   String _userScopedKey(String baseKey, String ownerUid) => '$baseKey:$ownerUid';
@@ -918,6 +1254,14 @@ class SharedPreferencesUtil {
       preferences.setStringList(pendingKey, {...scopedPending, ...legacyPending}.toList());
     }
     preferences.remove('pendingMemories');
+
+    final memoriesKey = _userScopedKey('cachedMemories', ownerUid);
+    final legacyMemories = preferences.getStringList('cachedMemories');
+    if (legacyMemories != null) {
+      final scopedMemories = preferences.getStringList(memoriesKey) ?? const <String>[];
+      preferences.setStringList(memoriesKey, {...scopedMemories, ...legacyMemories}.toList());
+    }
+    preferences.remove('cachedMemories');
 
     final goalsKey = _userScopedKey('goals_tracker_local_goals', ownerUid);
     final legacyGoals = preferences.getString('goals_tracker_local_goals');
@@ -984,16 +1328,29 @@ class SharedPreferencesUtil {
 
   //--------------------------- Setters & Getters -----------------------------//
 
-  String getString(String key, {String defaultValue = ''}) => _preferences?.getString(key) ?? defaultValue;
+  T _readOrDefault<T>(String key, T fallback) {
+    final value = _preferences?.get(key);
+    if (value == null) return fallback;
+    if (value is T) return value as T;
+    if (!PhysicalQualification.enabled) unawaited(_quarantine(key, value, reason: 'type_mismatch'));
+    return fallback;
+  }
 
-  int getInt(String key, {int defaultValue = 0}) => _preferences?.getInt(key) ?? defaultValue;
+  String getString(String key, {String defaultValue = ''}) =>
+      PhysicalQualification.enabled ? _preferences?.getString(key) ?? defaultValue : _readOrDefault(key, defaultValue);
 
-  bool getBool(String key, {bool defaultValue = false}) => _preferences?.getBool(key) ?? defaultValue;
+  int getInt(String key, {int defaultValue = 0}) =>
+      PhysicalQualification.enabled ? _preferences?.getInt(key) ?? defaultValue : _readOrDefault(key, defaultValue);
 
-  double getDouble(String key, {double defaultValue = 0.0}) => _preferences?.getDouble(key) ?? defaultValue;
+  bool getBool(String key, {bool defaultValue = false}) =>
+      PhysicalQualification.enabled ? _preferences?.getBool(key) ?? defaultValue : _readOrDefault(key, defaultValue);
 
-  List<String> getStringList(String key, {List<String> defaultValue = const []}) =>
-      _preferences?.getStringList(key) ?? defaultValue;
+  double getDouble(String key, {double defaultValue = 0.0}) =>
+      PhysicalQualification.enabled ? _preferences?.getDouble(key) ?? defaultValue : _readOrDefault(key, defaultValue);
+
+  List<String> getStringList(String key, {List<String> defaultValue = const []}) => PhysicalQualification.enabled
+      ? _preferences?.getStringList(key) ?? defaultValue
+      : _readOrDefault(key, defaultValue);
 
   Future<bool> saveString(String key, String value) async => await _preferences?.setString(key, value) ?? false;
 

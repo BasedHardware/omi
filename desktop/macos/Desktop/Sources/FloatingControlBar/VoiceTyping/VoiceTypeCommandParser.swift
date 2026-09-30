@@ -25,12 +25,40 @@ enum VoiceTypeCommandParser {
 
   /// Spoken openings that start a typing turn. `"type"` is the documented one;
   /// the others are what ASR reliably returns for the same intent, and they are
-  /// matched longest-first so "type out hello" dictates "hello", not "out hello".
+  /// matched longest-first so "type out hello" dictates "hello", not "out hello"
+  /// — except where `phrasesNeedingInstructionBoundary` says the last word may
+  /// belong to the speaker instead.
   static let wakeWords = ["type out", "type this", "type"]
+
+  /// Wake phrases whose last word is also an ordinary first word of dictated
+  /// text, so the phrase may only take that word when punctuation — or the end
+  /// of the utterance — marks it as the instruction it is.
+  ///
+  /// "this" is about the commonest word an English sentence opens with, and
+  /// nobody speaks the instruction as "type this hello there": they say "type
+  /// this: hello there", or just "type hello there". Taking it on a plain
+  /// space turned "type this is a test" into "Is a test" — the speaker's own
+  /// first word deleted, silently, inside their text. "type out" is not in
+  /// this set because it *is* spoken straight through ("type out an email"),
+  /// and dictation rarely opens on "out".
+  private static let phrasesNeedingInstructionBoundary: Set<String> = ["type this"]
 
   /// Punctuation ASR attaches to the wake word ("Type, hello") or that opens the
   /// dictated text. Stripped from the front of the payload, never from its body.
   private static let separators = CharacterSet(charactersIn: " \t\n,:;.-–—")
+
+  /// The subset of `separators` that marks the end of a spoken instruction
+  /// rather than an ordinary gap between words: the pause or colon a speaker
+  /// puts after "type this". A space is not one.
+  private static let instructionBoundary = CharacterSet(charactersIn: ",:;.-–—")
+
+  /// Whether what follows a wake phrase marks the phrase as an instruction:
+  /// punctuation, once any spaces are skipped, or nothing left to dictate.
+  private static func opensAnInstruction(_ rest: Substring) -> Bool {
+    let afterSpaces = rest.drop(while: { $0 == " " || $0 == "\t" })
+    guard let first = afterSpaces.unicodeScalars.first else { return true }
+    return instructionBoundary.contains(first)
+  }
 
   static func decide(_ transcript: String) -> Decision {
     let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -53,6 +81,11 @@ enum VoiceTypeCommandParser {
         // longer word, so this was never a command.
         continue
       }
+      // A phrase that would swallow an ordinary opening word needs the speaker
+      // to have marked it as an instruction. Falling through leaves the word to
+      // the shorter wake word's payload: "type this is a test" is "type" plus
+      // "this is a test", not "type this" plus "is a test".
+      if phrasesNeedingInstructionBoundary.contains(wake), !opensAnInstruction(rest[...]) { continue }
       let payload = String(
         rest.drop(while: { $0.unicodeScalars.allSatisfy(separators.contains) })
       )
@@ -128,7 +161,11 @@ enum VoiceTypeCommandParser {
     if case .typing(let payload) = decide(transcript) { return payload }
     let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
     let separatorClass = "[\\s,:;.\\-–—]*"
-    let alternatives = (wakeWords + wakeWordMishearings).map(NSRegularExpression.escapedPattern(for:))
+    // Boundary-requiring phrases are deliberately absent: `decide` has already
+    // settled them, and this looser pass must not take back the opening word it
+    // decided to keep.
+    let openings = wakeWords.filter { !phrasesNeedingInstructionBoundary.contains($0) } + wakeWordMishearings
+    let alternatives = openings.map(NSRegularExpression.escapedPattern(for:))
     let pattern = "^(?i)(?:" + alternatives.joined(separator: "|") + ")\\b" + separatorClass
     if let range = trimmed.range(of: pattern, options: .regularExpression) {
       return capitalizingFirstWord(String(trimmed[range.upperBound...]))

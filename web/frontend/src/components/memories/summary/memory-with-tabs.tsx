@@ -5,13 +5,17 @@ import Tabs from '../tabs';
 import Summary from './sumary';
 import Transcription from '../transcript/transcription';
 import Chat from '../chat/chat';
-import { Memory } from '@/src/types/memory.types';
+import { Memory, SharedScreenshotsResult } from '@/src/types/memory.types';
 
 interface MemoryWithTabsProps {
   memory: Memory;
+  screenshots?: SharedScreenshotsResult | null;
 }
 
-export default function MemoryWithTabs({ memory }: MemoryWithTabsProps) {
+export default function MemoryWithTabs({
+  memory,
+  screenshots = null,
+}: MemoryWithTabsProps) {
   const [currentTab, setCurrentTab] = useState('sum');
   const clearChatRef = useRef<(() => void) | null>(null);
   const [hasMessages, setHasMessages] = useState(false);
@@ -47,23 +51,37 @@ export default function MemoryWithTabs({ memory }: MemoryWithTabsProps) {
         onNewChat={handleNewChat}
         showNewChat={hasMessages}
       />
-      <div className="">
-        <div style={{ display: currentTab === 'sum' ? 'block' : 'none' }}>
-          <Summary memory={memory} />
+      <div>
+        <div
+          className="sn-tabpanel"
+          style={{ display: currentTab === 'sum' ? 'block' : 'none' }}
+        >
+          <Summary memory={memory} screenshots={screenshots} />
         </div>
-        <div style={{ display: currentTab === 'trs' ? 'block' : 'none' }}>
+        <div
+          className="sn-tabpanel"
+          style={{ display: currentTab === 'trs' ? 'block' : 'none' }}
+        >
           <Transcription
             transcript={memory.transcript_segments}
             externalData={memory.external_data}
             people={memory.people}
           />
         </div>
-        <div style={{ display: currentTab === 'chat' ? 'block' : 'none' }}>
+        <div
+          className="sn-tabpanel"
+          style={{ display: currentTab === 'chat' ? 'block' : 'none' }}
+        >
           <Chat
             conversationId={memory.id}
             transcript={memory.transcript_segments}
             onClearChatRef={handleClearChatRef}
             onMessagesChange={setHasMessages}
+            onChatEvent={(event) =>
+              document.dispatchEvent(
+                new CustomEvent('omi:shared-chat-action', { detail: event }),
+              )
+            }
           />
         </div>
       </div>

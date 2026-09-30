@@ -468,6 +468,7 @@ actor RewindDatabase {
     expectedUserId: String,
     expectedGeneration: Int
   ) async throws {
+    try Task.checkCancellation()
     guard dbQueue == nil else { return }
 
     // Resolve the directory once. `retargetEffectiveOwner` may run while
@@ -555,10 +556,22 @@ actor RewindDatabase {
         }
 
         if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
+          try Task.checkCancellation()
           log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
-          try await handleCorruptedDatabase(at: dbPath, in: omiDir, triggerError: retryError)
-          // Retry with recovered or fresh database
-          queue = try DatabasePool(path: dbPath, configuration: config)
+          let installedRecovered = try await handleCorruptedDatabase(
+            at: dbPath, in: omiDir, triggerError: retryError)
+          // Retry with recovered or fresh database. The corrupted original is already in
+          // backups/, so a recovered database that will not open is replaced by a fresh one.
+          do {
+            queue = try DatabasePool(path: dbPath, configuration: config)
+          } catch {
+            guard installedRecovered else { throw error }
+            log("RewindDatabase: Recovered database failed to open (\(error)), creating fresh database")
+            recoveredDatabaseAwaitingMigration = nil
+            recoveredRecordCount = 0
+            Self.removeDatabaseFiles(at: dbPath)
+            queue = try DatabasePool(path: dbPath, configuration: config)
+          }
         } else {
           throw retryError
         }
@@ -610,7 +623,27 @@ actor RewindDatabase {
         legacyOwnerFallback: migratedLegacyOwnerID)
     } catch {
       try? activeQueue.close()
-      throw error
+      guard recoveredDatabaseAwaitingMigration == dbPath else { throw error }
+      // The recovered ledger passed validation but its schema still disagrees with the
+      // ladder. The corrupted original is already in backups/; start fresh rather than
+      // fail here on every launch.
+      recoveredDatabaseAwaitingMigration = nil
+      log("RewindDatabase: Recovered database failed migration (\(error)), creating fresh database")
+      Self.removeDatabaseFiles(at: dbPath)
+      recoveredRecordCount = 0
+      activeQueue = try DatabasePool(path: dbPath, configuration: config)
+      do {
+        try migrate(
+          activeQueue,
+          ownerID: expectedUserId,
+          legacyOwnerFallback: migratedLegacyOwnerID)
+      } catch {
+        try? activeQueue.close()
+        throw error
+      }
+    }
+    if recoveredDatabaseAwaitingMigration == dbPath {
+      recoveredDatabaseAwaitingMigration = nil
     }
 
     dbQueue = activeQueue
@@ -880,75 +913,70 @@ actor RewindDatabase {
   /// Number of records recovered from corrupted database (0 if none)
   private(set) var recoveredRecordCount: Int = 0
 
-  /// Handle corrupted database: attempt recovery, backup, and recreate
+  /// `omi.db` path that corruption recovery just replaced with a recovered database, until
+  /// that database has been migrated. If the ladder still fails on it, initialization
+  /// starts fresh instead of failing on every launch.
+  private var recoveredDatabaseAwaitingMigration: String?
+
+  /// Handle corrupted database: move it aside, attempt recovery, and leave either the
+  /// recovered database or nothing at `dbPath` (the caller then creates a fresh one).
+  ///
+  /// - Returns: true when a recovered database was installed at `dbPath`.
+  @discardableResult
   private func handleCorruptedDatabase(
     at dbPath: String,
     in omiDir: URL,
     triggerError: Error? = nil
-  ) async throws {
+  ) async throws -> Bool {
     let fileManager = FileManager.default
-
-    // Create backup directory
     let backupDir = omiDir.appendingPathComponent("backups", isDirectory: true)
-    try fileManager.createDirectory(at: backupDir, withIntermediateDirectories: true)
 
     // Generate backup filename with timestamp
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyyMMdd_HHmmss"
     let timestamp = formatter.string(from: Date())
-    let backupPath = backupDir.appendingPathComponent("omi_corrupted_\(timestamp).db")
+    var backupPath = backupDir.appendingPathComponent("omi_corrupted_\(timestamp).db").path
+    if fileManager.fileExists(atPath: backupPath) {
+      backupPath = backupDir.appendingPathComponent("omi_corrupted_\(timestamp)_\(UUID().uuidString.prefix(8)).db").path
+    }
 
-    // Backup the corrupted database (for potential manual recovery)
-    log("RewindDatabase: Backing up corrupted database to \(backupPath.path)")
-    try fileManager.copyItem(atPath: dbPath, toPath: backupPath.path)
+    // Move the corrupted database out of `omi.db` (kept in backups/ for potential manual
+    // recovery) BEFORE attempting recovery, so no failure, timeout, or quit below can make
+    // the next launch start over on the same file.
+    log("RewindDatabase: Moving corrupted database aside to \(backupPath)")
+    let salvageSource = try Self.moveCorruptedDatabaseAside(dbPath: dbPath, backupPath: backupPath)
 
     // Attempt to recover data from corrupted database
     let recoveredPath = omiDir.appendingPathComponent("omi_recovered.db").path
-    let recoveredCount = await attemptDataRecovery(from: dbPath, to: recoveredPath)
-    recoveredRecordCount = recoveredCount
+    let recovery = await attemptDataRecovery(from: salvageSource, to: recoveredPath)
+    recoveredRecordCount = recovery.screenshotCount ?? 0
 
-    if recoveredCount > 0 {
-      log("RewindDatabase: Recovered \(recoveredCount) screenshot records from corrupted database")
-      // Use recovered database instead of creating fresh one
-      try fileManager.removeItem(atPath: dbPath)
-      try fileManager.moveItem(atPath: recoveredPath, toPath: dbPath)
-
-      // Remove WAL/SHM files from corrupted database
-      for ext in ["-wal", "-shm", "-journal"] {
-        let file = dbPath + ext
-        if fileManager.fileExists(atPath: file) {
-          try? fileManager.removeItem(atPath: file)
-        }
-      }
-
-      log("RewindDatabase: Using recovered database with \(recoveredCount) records")
-    } else {
-      // No data recovered, remove corrupted database and start fresh
-      log("RewindDatabase: No data could be recovered, creating fresh database")
-
-      // Clean up recovery attempt if it exists
-      if fileManager.fileExists(atPath: recoveredPath) {
-        try? fileManager.removeItem(atPath: recoveredPath)
-      }
-
-      // Remove corrupted database and associated WAL/SHM files
-      let filesToRemove = [
-        dbPath,
-        dbPath + "-wal",
-        dbPath + "-shm",
-        dbPath + "-journal",
-      ]
-
-      for file in filesToRemove {
-        if fileManager.fileExists(atPath: file) {
-          try fileManager.removeItem(atPath: file)
-          log("RewindDatabase: Removed \(file)")
-        }
+    var installedRecovered = false
+    if let recoveredCount = recovery.screenshotCount {
+      do {
+        try fileManager.moveItem(atPath: recoveredPath, toPath: dbPath)
+        installedRecovered = true
+        recoveredDatabaseAwaitingMigration = dbPath
+        log("RewindDatabase: Using recovered database with \(recoveredCount) screenshot records")
+      } catch {
+        log("RewindDatabase: Could not install recovered database (\(error.localizedDescription))")
       }
     }
+    if !installedRecovered {
+      log("RewindDatabase: No data could be recovered, creating fresh database")
+      Self.removeDatabaseFiles(at: recoveredPath)
+    }
+
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "rewind_database",
+      from: "corrupted_db",
+      to: installedRecovered ? recovery.method : "fresh_db",
+      reason: recovery.failureReason,
+      outcome: installedRecovered && recovery.method == "recovered_db" ? .recovered : .degraded)
 
     logError(
-      "RewindDatabase: Corrupted database backed up and removed. A fresh database will be created.",
+      "RewindDatabase: Corrupted database moved aside to backups. "
+        + (installedRecovered ? "A recovered database will be used." : "A fresh database will be created."),
       context: StorageFailureDiagnostics.context(
         pathClass: "rewind-db",
         containingURL: omiDir,
@@ -956,184 +984,64 @@ actor RewindDatabase {
         error: triggerError,
         appIsTerminating: Self.isTerminationInProgress))
 
-    // Clean up old backups (keep only last 5)
-    try await cleanupOldBackups(in: backupDir, keepCount: 5)
+    // Clean up old backups (keep only last 5). Never let this fail the recovery: the
+    // database at `dbPath` is already settled.
+    do {
+      try await cleanupOldBackups(in: backupDir, keepCount: 5)
+    } catch {
+      log("RewindDatabase: Failed to clean up old backups: \(error.localizedDescription)")
+    }
+    return installedRecovered
   }
 
-  /// Attempt to recover data from a corrupted database using sqlite3 .recover
-  /// Returns the number of screenshot records recovered
-  private func attemptDataRecovery(from corruptedPath: String, to recoveredPath: String) async -> Int {
-    let fileManager = FileManager.default
+  private struct DataRecoveryResult {
+    /// Screenshots in the database left at `recoveredPath`; nil when there is none to use.
+    var screenshotCount: Int?
+    /// `recovered_db` (sqlite3 `.recover`) or `salvaged_screenshots` (direct-table fallback).
+    var method: String
+    /// Why `.recover` could not be used (`none` when it was).
+    var failureReason: String
+  }
 
-    // Remove any existing recovered database
-    if fileManager.fileExists(atPath: recoveredPath) {
-      try? fileManager.removeItem(atPath: recoveredPath)
+  /// Rebuild a usable database at `recoveredPath` from the corrupted file moved aside to
+  /// `corruptedPath`: first with a bounded `sqlite3 .recover`, then, if that fails, by
+  /// copying the screenshots table directly.
+  private func attemptDataRecovery(from corruptedPath: String?, to recoveredPath: String) async -> DataRecoveryResult {
+    Self.removeDatabaseFiles(at: recoveredPath)
+    guard let corruptedPath else {
+      return DataRecoveryResult(screenshotCount: nil, method: "fresh_db", failureReason: "other")
     }
+    let ownerID = targetUserId()
 
-    // Run sqlite3 recovery in a detached task to avoid blocking the actor
-    // Process.waitUntilExit() is synchronous and would deadlock the actor
-    let (success, recoveredSQL) = await withCheckedContinuation {
-      (continuation: CheckedContinuation<(Bool, Data), Never>) in
-      Task.detached {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        process.arguments = [corruptedPath, ".recover"]
-
-        let outputPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-          try process.run()
-          process.waitUntilExit()
-
-          if process.terminationStatus == 0 {
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            continuation.resume(returning: (true, data))
-          } else {
-            continuation.resume(returning: (false, Data()))
-          }
-        } catch {
-          continuation.resume(returning: (false, Data()))
-        }
+    let outcome = await RewindSQLiteRecoveryPipeline.run(corruptedPath: corruptedPath, recoveredPath: recoveredPath)
+    let failureReason: String
+    switch outcome {
+    case .completed:
+      if let count = Self.validatedRecoveredScreenshotCount(at: recoveredPath, ownerID: ownerID) {
+        return DataRecoveryResult(screenshotCount: count, method: "recovered_db", failureReason: "none")
       }
-    }
-
-    if success && !recoveredSQL.isEmpty {
-      // Import recovered SQL into new database (also in detached task)
-      let importSuccess = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-        Task.detached {
-          let importProcess = Process()
-          importProcess.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-          importProcess.arguments = [recoveredPath]
-
-          let inputPipe = Pipe()
-          importProcess.standardInput = inputPipe
-          importProcess.standardOutput = FileHandle.nullDevice
-          importProcess.standardError = FileHandle.nullDevice
-
-          do {
-            try importProcess.run()
-            inputPipe.fileHandleForWriting.write(recoveredSQL)
-            inputPipe.fileHandleForWriting.closeFile()
-            importProcess.waitUntilExit()
-            continuation.resume(returning: importProcess.terminationStatus == 0)
-          } catch {
-            continuation.resume(returning: false)
-          }
-        }
-      }
-
-      if importSuccess && fileManager.fileExists(atPath: recoveredPath) {
-        return countRecoveredScreenshots(at: recoveredPath)
-      }
+      log("RewindDatabase: sqlite3 .recover output is not a usable database")
+      failureReason = "other"
+    case .timedOut:
+      log("RewindDatabase: sqlite3 .recover timed out and was terminated")
+      failureReason = "timeout"
+    case .launchFailed:
+      log("RewindDatabase: sqlite3 .recover could not be launched")
+      failureReason = "process_exited"
+    case .exited(let recoverStatus, let importStatus):
+      log("RewindDatabase: sqlite3 .recover failed (recover=\(recoverStatus), import=\(importStatus))")
+      failureReason = "process_exited"
     }
 
     // Fallback: Try to read screenshots table directly
-    return await attemptDirectTableRecovery(from: corruptedPath, to: recoveredPath)
-  }
-
-  /// Fallback recovery: try to read the screenshots table directly
-  private func attemptDirectTableRecovery(from corruptedPath: String, to recoveredPath: String) async -> Int {
-    var config = Configuration()
-    config.readonly = true
-
-    do {
-      let corruptedQueue = try DatabaseQueue(path: corruptedPath, configuration: config)
-
-      // Try to read screenshot records
-      let screenshots:
-        [(timestamp: Date, appName: String, windowTitle: String?, videoChunkPath: String?, frameOffset: Int?)] =
-          try await corruptedQueue.read { db in
-            var results: [(Date, String, String?, String?, Int?)] = []
-
-            // Try to fetch what we can from screenshots table
-            let rows = try? Row.fetchAll(
-              db,
-              sql: """
-                    SELECT timestamp, appName, windowTitle, videoChunkPath, frameOffset
-                    FROM screenshots
-                    ORDER BY timestamp DESC
-                    LIMIT 100000
-                """)
-
-            for row in rows ?? [] {
-              if let timestamp: Date = row["timestamp"],
-                let appName: String = row["appName"]
-              {
-                results.append(
-                  (
-                    timestamp,
-                    appName,
-                    row["windowTitle"] as String?,
-                    row["videoChunkPath"] as String?,
-                    row["frameOffset"] as Int?
-                  ))
-              }
-            }
-            return results
-          }
-
-      if screenshots.isEmpty {
-        return 0
-      }
-
-      // Create new database with recovered data
-      let recoveredQueue = try DatabaseQueue(path: recoveredPath)
-
-      try await recoveredQueue.write { db in
-        // Create minimal screenshots table
-        try db.execute(
-          sql: """
-                CREATE TABLE IF NOT EXISTS screenshots (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME NOT NULL,
-                    appName TEXT NOT NULL,
-                    windowTitle TEXT,
-                    imagePath TEXT NOT NULL DEFAULT '',
-                    videoChunkPath TEXT,
-                    frameOffset INTEGER,
-                    ocrText TEXT,
-                    ocrDataJson TEXT,
-                    isIndexed INTEGER NOT NULL DEFAULT 0,
-                    focusStatus TEXT,
-                    extractedTasksJson TEXT,
-                    adviceJson TEXT
-                )
-            """)
-
-        // Insert recovered records
-        for screenshot in screenshots {
-          try db.execute(
-            sql: """
-                  INSERT INTO screenshots (timestamp, appName, windowTitle, imagePath, videoChunkPath, frameOffset, isIndexed)
-                  VALUES (?, ?, ?, '', ?, ?, 0)
-              """,
-            arguments: [
-              screenshot.timestamp, screenshot.appName, screenshot.windowTitle, screenshot.videoChunkPath,
-              screenshot.frameOffset,
-            ])
-        }
-      }
-
-      return screenshots.count
-
-    } catch {
-      log("RewindDatabase: Direct table recovery failed: \(error)")
-      return 0
+    Self.removeDatabaseFiles(at: recoveredPath)
+    let salvaged = await Self.rebuildScreenshotsFromCorruptedDatabase(
+      at: corruptedPath, into: recoveredPath, ownerID: ownerID)
+    guard salvaged > 0 else {
+      return DataRecoveryResult(screenshotCount: nil, method: "fresh_db", failureReason: failureReason)
     }
-  }
-
-  /// Count screenshots in recovered database
-  private func countRecoveredScreenshots(at path: String) -> Int {
-    do {
-      let queue = try DatabaseQueue(path: path)
-      return try queue.read { db in
-        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM screenshots") ?? 0
-      }
-    } catch {
-      return 0
-    }
+    log("RewindDatabase: Salvaged \(salvaged) screenshot records from corrupted database")
+    return DataRecoveryResult(screenshotCount: salvaged, method: "salvaged_screenshots", failureReason: failureReason)
   }
 
   /// Clean up old database backups, keeping only the most recent ones
@@ -1153,9 +1061,12 @@ actor RewindDatabase {
       return date1 > date2
     }
 
-    // Remove files beyond keepCount
+    // Remove files beyond keepCount, with the WAL/journal moved aside alongside them
     for file in sortedFiles.dropFirst(keepCount) {
       try fileManager.removeItem(at: file)
+      for suffix in ["-wal", "-journal"] where fileManager.fileExists(atPath: file.path + suffix) {
+        try? fileManager.removeItem(atPath: file.path + suffix)
+      }
       log("RewindDatabase: Removed old backup \(file.lastPathComponent)")
     }
   }
@@ -1194,6 +1105,21 @@ actor RewindDatabase {
     ownerID: String? = nil,
     legacyOwnerFallback: String? = nil
   ) throws {
+    let contextBucketOwnerID = ownerID ?? openedForUserId ?? targetUserId()
+    let migrator = Self.makeMigrator(
+      contextBucketOwnerID: contextBucketOwnerID,
+      legacyOwnerFallback: legacyOwnerFallback)
+    try migrator.migrate(queue)
+    try ContextBucketSchema.removeMigratedLegacyDefaults(
+      afterMigrating: queue,
+      defaults: .standard,
+      ownerID: contextBucketOwnerID)
+  }
+
+  /// The full schema ladder, in registration order. Corruption recovery uses the same
+  /// ladder to validate a `.recover`ed database's migration ledger and to build the
+  /// fallback database, so neither can drift from what `migrate` will later apply.
+  static func makeMigrator(contextBucketOwnerID: String, legacyOwnerFallback: String?) -> DatabaseMigrator {
     var migrator = DatabaseMigrator()
 
     // Migration 1: Create screenshots table
@@ -1577,6 +1503,12 @@ actor RewindDatabase {
     migrator.registerMigration("addTranscriptionConversationRole") { db in
       try db.alter(table: "transcription_sessions") { t in
         t.add(column: "conversationRole", .text).notNull().defaults(to: "ambient")
+      }
+    }
+
+    migrator.registerMigration("addTranscriptionCaptureAttemptId") { db in
+      try db.alter(table: "transcription_sessions") { t in
+        t.add(column: "captureAttemptId", .text)
       }
     }
 
@@ -2616,7 +2548,6 @@ actor RewindDatabase {
       }
     }
 
-    let contextBucketOwnerID = ownerID ?? openedForUserId ?? targetUserId()
     ContextBucketSchema.registerMigration(
       on: &migrator,
       defaults: .standard,
@@ -2643,11 +2574,12 @@ actor RewindDatabase {
     JITTriggerMirrorSchema.registerMigration(on: &migrator)
     KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
     Self.registerClientProcessingProjectionMigration(on: &migrator)
-    try migrator.migrate(queue)
-    try ContextBucketSchema.removeMigratedLegacyDefaults(
-      afterMigrating: queue,
-      defaults: .standard,
-      ownerID: contextBucketOwnerID)
+    Self.registerConversationSummarySectionsMigration(on: &migrator)
+    Self.registerConversationLocalSummaryMigration(on: &migrator)
+    Self.registerConversationCaptureGroupMigration(on: &migrator)
+    SiriMemoryExpirySchema.registerMigration(on: &migrator)
+    LocalEmbeddingStore.registerMigration(on: &migrator)
+    return migrator
   }
 
   /// Kept as one callable migration boundary so a populated legacy table can be exercised in a
@@ -2696,6 +2628,29 @@ actor RewindDatabase {
   static func registerClientProcessingProjectionMigration(on migrator: inout DatabaseMigrator) {
     migrator.registerMigration("addClientProcessingProjection") { db in
       try Self.addTranscriptionSessionColumnIfMissing(db, name: "clientProcessingJson", type: .text)
+    }
+  }
+
+  /// Persist the structured summary sections alongside the legacy overview. Without this field,
+  /// a cache refresh silently dropped section bodies and their transcript evidence even though the
+  /// network decode had succeeded.
+  static func registerConversationSummarySectionsMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationSummarySections") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "sectionsJson", type: .text)
+    }
+  }
+
+  /// Display attribution is separate from clientProcessingJson, whose exact bytes own retries.
+  static func registerConversationLocalSummaryMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationLocalSummary") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "localSummaryJson", type: .text)
+    }
+  }
+
+  /// Cross-surface event membership, so a cached list collapses the same way before the server answers.
+  static func registerConversationCaptureGroupMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationCaptureGroup") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "captureGroupJson", type: .text)
     }
   }
 

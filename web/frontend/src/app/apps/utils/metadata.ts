@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { APP_STORE_HARDWARE_PRODUCT } from '@/src/constants/app-store-hardware-product';
 import envConfig from '@/src/constants/envConfig';
 import { getCategoryMetadata as getUICategoryMetadata } from './category';
 
@@ -99,11 +100,11 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
 };
 
 const productInfo = {
-  name: 'Omi',
-  description: 'AI-powered wearable. Real-time AI voice assistant.',
-  price: '89',
-  currency: 'USD',
-  url: 'https://www.omi.me/',
+  name: APP_STORE_HARDWARE_PRODUCT.name,
+  description: APP_STORE_HARDWARE_PRODUCT.description,
+  price: APP_STORE_HARDWARE_PRODUCT.schemaPrice,
+  currency: APP_STORE_HARDWARE_PRODUCT.currency,
+  url: APP_STORE_HARDWARE_PRODUCT.storeUrl,
 };
 
 const appStoreInfo = {

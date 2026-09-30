@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +11,8 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/siri_integration.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -20,19 +24,40 @@ class DataPrivacyPage extends StatefulWidget {
 }
 
 class _DataPrivacyPageState extends State<DataPrivacyPage> {
+  bool _siriEnabled = true;
+  int _siriRevision = 0;
+
+  Future<void> _loadSiriSetting() async {
+    final revision = _siriRevision;
+    try {
+      final enabled = await SiriIntegration.instance.isEnabled();
+      if (mounted && revision == _siriRevision) setState(() => _siriEnabled = enabled);
+    } catch (_) {/* Keep the default until native state is available. */}
+  }
+
+  void _setSiriEnabled(bool enabled) {
+    final revision = ++_siriRevision;
+    final previous = _siriEnabled;
+    setState(() => _siriEnabled = enabled);
+    unawaited(SiriIntegration.instance.setEnabled(enabled).catchError((Object _) {
+      if (mounted && revision == _siriRevision) setState(() => _siriEnabled = previous);
+    }));
+  }
+
   @override
   void initState() {
     super.initState();
     PlatformManager.instance.analytics.dataPrivacyPageOpened();
+    if (Platform.isIOS) _loadSiriSetting();
   }
 
   Widget _buildEncryptionBanner(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF35343B), width: 1),
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.lgAll,
+        border: Border.all(color: OmiColors.border),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,25 +65,22 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
           Container(
             width: 40,
             height: 40,
-            decoration: BoxDecoration(
-              color: Colors.deepPurple.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.lock_outline, color: Colors.deepPurple.shade200, size: 20),
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+            child: Icon(Icons.lock_outline, color: OmiColors.textPrimary, size: 20),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: RichText(
               text: TextSpan(
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade300, height: 1.5),
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.5),
                 children: [
                   TextSpan(text: '${context.l10n.dataEncryptedBanner} '),
                   TextSpan(
                     text: context.l10n.learnMore,
                     style: TextStyle(
-                      color: Colors.deepPurple.shade200,
+                      color: OmiColors.textPrimary,
                       decoration: TextDecoration.underline,
-                      decorationColor: Colors.deepPurple.shade200,
+                      decorationColor: OmiColors.textPrimary,
                     ),
                     recognizer: TapGestureRecognizer()
                       ..onTap = () async {
@@ -118,98 +140,67 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
         final isMigrating = provider.isMigrating;
 
         return Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: AppBar(
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            automaticallyImplyLeading: true,
-            title: Text(context.l10n.dataPrivacy, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
-            centerTitle: true,
-            leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.pop(context)),
-            elevation: 0,
-          ),
+          appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.dataPrivacy)),
           body: Stack(
             children: [
               ListView(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(OmiSpacing.md),
                 children: [
                   _buildEncryptionBanner(context),
-                  const SizedBox(height: 32),
+                  if (Platform.isIOS) ...[
+                    const SizedBox(height: OmiSpacing.xxl),
+                    Container(
+                      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                      child: SwitchListTile(
+                        title: Text(context.l10n.siriIndexSetting),
+                        subtitle: Text(context.l10n.siriIndexSettingDescription),
+                        value: _siriEnabled,
+                        onChanged: _setSiriEnabled,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: OmiSpacing.xxl),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
                       final appsWithDataAccess =
                           appProvider.apps.where((app) => app.enabled && app.worksExternally()).toList();
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.l10n.appAccess,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(context.l10n.appAccessDesc, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-                          const SizedBox(height: 16),
-                          if (appsWithDataAccess.isEmpty)
+                      if (appsWithDataAccess.isEmpty) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            OmiSectionHeader(context.l10n.appAccess, subtitle: context.l10n.appAccessDesc),
                             Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 32.0, horizontal: 16.0),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1A1A1A),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Center(
-                                child: Column(
-                                  children: [
-                                    Icon(Icons.apps_outlined, color: Colors.grey.shade600, size: 32),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      context.l10n.noAppsExternalAccess,
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(color: Colors.grey.shade400),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          else
-                            Column(
-                              children: appsWithDataAccess.map((app) {
-                                return Card(
-                                  color: const Color(0xFF1A1A1A),
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    side: const BorderSide(color: Color(0xFF35343B), width: 1),
-                                  ),
-                                  elevation: 0,
-                                  clipBehavior: Clip.antiAlias,
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    leading: CircleAvatar(backgroundImage: NetworkImage(app.getImageUrl())),
-                                    title: Text(app.getName()),
-                                    subtitle: Text(
-                                      _getAccessDescription(context, app),
-                                      style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                                    ),
-                                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                                    onTap: () {
-                                      routeToPage(context, AppDetailPage(app: app, preventAutoOpenHomePage: true));
-                                    },
-                                  ),
-                                );
-                              }).toList(),
+                              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                              child: OmiEmptyState(icon: Icons.apps_outlined, title: context.l10n.noAppsExternalAccess),
+                            ),
+                          ],
+                        );
+                      }
+                      return OmiSettingsGroup(
+                        header: context.l10n.appAccess,
+                        headerSubtitle: context.l10n.appAccessDesc,
+                        children: [
+                          for (final app in appsWithDataAccess)
+                            OmiSettingsRow(
+                              leading: CircleAvatar(radius: 16, backgroundImage: NetworkImage(app.getImageUrl())),
+                              title: app.getName(),
+                              subtitle: _getAccessDescription(context, app),
+                              onTap: () {
+                                routeToPage(context, AppDetailPage(app: app, preventAutoOpenHomePage: true));
+                              },
                             ),
                         ],
                       );
                     },
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: OmiSpacing.xxl),
                 ],
               ),
               if (isLoading && !isMigrating)
                 Container(
                   color: Colors.black.withValues(alpha: 0.5),
-                  child: const Center(child: CircularProgressIndicator()),
+                  child: const Center(child: OmiSpinner(size: OmiSpinnerSize.large)),
                 ),
             ],
           ),

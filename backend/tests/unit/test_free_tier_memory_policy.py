@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -167,7 +168,9 @@ def test_the_gate_is_wired_into_both_spending_call_sites(relpath: str, scope: st
     verdict without the flag is not a dark rollout.
     """
     source = (_BACKEND / relpath).read_text(encoding='utf-8')
-    assert 'free_tier_memory_suppression_enabled()' in source, f'{relpath} ({scope}) no longer reads the flag'
+    assert re.search(
+        r'free_tier_memory_suppression_enabled\((uid)?\)', source
+    ), f'{relpath} ({scope}) no longer reads the flag'
     assert 'memory_formation_verdict(' in source, f'{relpath} ({scope}) no longer consults the policy'
 
 

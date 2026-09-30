@@ -643,27 +643,8 @@ actor JITProactivityDelivery {
   ) async -> String {
     guard execution.lane == .ambient else { return "" }
     var output = ""
-    var recent = await store.recentDeliveredForBucket(
+    let recent = await store.recentDeliveredForBucket(
       bucketID: snapshot.bucketID, now: currentFrame.captureTime)
-    if await MainActor.run(body: { ContextBucketsFeature.isWorkstreamPoolingEnabled }),
-      let tag = await store.liveWorkstreamTag(for: fence, now: currentFrame.captureTime)
-    {
-      let pooled = ContextWorkstreamPooling.select(
-        await store.workstreamPool(
-          tag: tag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime),
-        now: currentFrame.captureTime)
-      if let section = ContextWorkstreamPooling.promptSection(
-        tag: tag, items: pooled, now: currentFrame.captureTime)
-      {
-        output += "\n\n" + section
-      }
-      recent = Array(
-        (recent
-          + (await store.recentDeliveredForWorkstream(
-            tag: tag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime)))
-          .sorted { $0.deliveredAt > $1.deliveredAt }
-          .prefix(ContextBucketRecentDelivery.promptCap))
-    }
     if let section = ContextProactivityPromptBuilder.recentDeliveriesSection(recent, timeZone: .current) {
       output += "\n\n" + section
     }

@@ -81,6 +81,7 @@ mock_is_trial_paywalled = MagicMock(return_value=False)
 mock_get_freq = MagicMock(return_value=3)
 mock_get_dev_keys = MagicMock(return_value=[])
 mock_send_notification = MagicMock()
+mock_dispatch_notification = MagicMock()
 
 # redis_mod / mem_mod aggregate the redis/mem-backed mocks. Each attribute is the
 # very mock object patched at the consumption site, so legacy test lines such as
@@ -130,6 +131,9 @@ def _apply_fakes(monkeypatch):
 
     # app_integrations local bindings (from X import Y).
     monkeypatch.setattr(app_int, 'get_user_goals', mock_get_user_goals)
+    # Date grounding reads a user timezone in production; this lane is hermetic.
+    monkeypatch.setattr(app_int, 'current_date_for_uid', lambda uid: '2026-09-21')
+    monkeypatch.setattr(notifications_db, 'resolve_user_timezone', lambda uid: 'UTC')
     monkeypatch.setattr(app_int, 'get_prompt_memories', mock_get_prompt_memories)
     monkeypatch.setattr(app_int, 'get_app_messages', mock_get_app_messages)
     monkeypatch.setattr(app_int, 'get_user_language_preference', mock_get_user_language)
@@ -140,10 +144,10 @@ def _apply_fakes(monkeypatch):
     monkeypatch.setattr(app_int, 'get_available_apps', mock_get_available_apps)
     monkeypatch.setattr(app_int, 'is_trial_paywalled', mock_is_trial_paywalled)
     monkeypatch.setattr(app_int, 'send_notification', mock_send_notification)
+    monkeypatch.setattr(app_int, 'dispatch_notification', mock_dispatch_notification)
     monkeypatch.setattr(app_int, 'incr_daily_notification_count', redis_mod.incr_daily_notification_count)
     monkeypatch.setattr(app_int, 'get_daily_notification_count', redis_mod.get_daily_notification_count)
     monkeypatch.setattr(app_int, 'delete_app_cache_by_id', redis_mod.delete_app_cache_by_id)
-    monkeypatch.setattr(app_int, 'NotificationMessage', MagicMock())
     monkeypatch.setattr(app_int, 'Conversation', MagicMock())
     monkeypatch.setattr(app_int, 'ConversationSource', MagicMock())
     monkeypatch.setattr(app_int, 'Message', MagicMock())
@@ -177,6 +181,7 @@ def _apply_fakes(monkeypatch):
 def _setup_app_integrations_stubs():
     """Reset the app_integrations-runtime shared mocks to a clean default state."""
     mock_send_notification.reset_mock()
+    mock_dispatch_notification.reset_mock()
     mock_get_dev_keys.reset_mock()
     mock_get_dev_keys.return_value = []
     mock_get_freq.return_value = 3
@@ -186,7 +191,7 @@ def _setup_app_integrations_stubs():
     redis_mod.incr_daily_notification_count.reset_mock()
     mem_mod.get_proactive_noti_sent_at.return_value = None
     mem_mod.set_proactive_noti_sent_at.reset_mock()
-    return mock_send_notification
+    return mock_dispatch_notification
 
 
 def _make_segments(count: int) -> list:
@@ -1079,7 +1084,9 @@ def test_app_proactive_notification_increments_shared_budget():
     result = app_int._process_proactive_notification("uid_send", app, {"prompt": "hello", "params": []})
 
     assert result == "Here is a useful nudge."
-    redis_mod.incr_daily_notification_count.assert_called_once_with("uid_send")
+    # The count is bucketed by the user's own calendar day, so the resolved zone rides along.
+    redis_mod.incr_daily_notification_count.assert_called_once()
+    assert redis_mod.incr_daily_notification_count.call_args.args[0] == "uid_send"
 
 
 def test_frequency_guidance_all_levels():
@@ -1151,6 +1158,25 @@ def test_validation_result_model():
     assert result.approved is True
 
 
+def _prompt_text(invoked):
+    """Flatten what the builder handed the LLM into the text the model actually reads.
+
+    The gate now sends its prompt as two content parts of one message so the stable
+    half can end on a cache breakpoint (see test_mentor_gate_prompt_cache); the other
+    builders still send a plain string. Both render to the same bytes.
+    """
+    if isinstance(invoked, str):
+        return invoked
+    parts = []
+    for message in invoked:
+        content = message.content
+        if isinstance(content, str):
+            parts.append(content)
+        else:
+            parts.extend(part["text"] for part in content)
+    return "".join(parts)
+
+
 def test_pipeline_anchors_prompts_to_user_timezone_date(monkeypatch):
     """All three pipeline prompts must carry the user's timezone date, not the UTC default.
 
@@ -1206,4 +1232,4 @@ def test_pipeline_anchors_prompts_to_user_timezone_date(monkeypatch):
     assert result is not None
     assert len(prompts) >= 3
     for prompt in prompts:
-        assert "2031-02-03" in prompt, "pipeline prompt lost the user-timezone date anchor"
+        assert "2031-02-03" in _prompt_text(prompt), "pipeline prompt lost the user-timezone date anchor"

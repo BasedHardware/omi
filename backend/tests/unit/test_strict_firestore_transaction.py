@@ -120,3 +120,51 @@ def test_transaction_create_inserts_a_new_document_and_rejects_an_existing_one()
 
     with pytest.raises(RuntimeError, match='document already exists'):
         transaction.create(record, {'value': 'again'})
+
+
+def test_bounded_equality_id_query_filters_and_enforces_transaction_ordering():
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
+    database = StrictFirestore(
+        {
+            ('fences', 'a'): {'uid': 'u', 'window': 'one'},
+            ('fences', 'b'): {'uid': 'u', 'window': 'two'},
+            ('fences', 'c'): {'uid': 'u', 'window': 'one'},
+            ('fences', 'd', 'nested', 'e'): {'uid': 'u', 'window': 'one'},
+        }
+    )
+    query = database.collection('fences').where(filter=FieldFilter('uid', '==', 'u'))
+    query = query.where(filter=FieldFilter('window', '==', 'one')).select(()).limit(1)
+    transaction = database.transaction()
+    assert [row.to_dict() for row in query.stream(transaction=transaction)] == [{}]
+    assert len(list(query.limit(10).stream(transaction=transaction))) == 2
+    with pytest.raises(ForeignTransactionError):
+        list(query.stream(transaction=StrictFirestore().transaction()))
+    transaction.set(database.document('fences/new'), {'uid': 'u', 'window': 'one'})
+    with pytest.raises(ReadAfterWriteError):
+        list(query.stream(transaction=transaction))
+
+
+def test_folder_batch_get_projects_membership_and_does_not_promise_order():
+    database = StrictFirestore({('records', 'one'): {'folder_id': 'folder', 'private': 'not returned'}})
+    references = [database.document('records/one'), database.document('records/missing')]
+    transaction = database.transaction()
+    rows = database.get_all(references, field_paths=['folder_id'], transaction=transaction)
+    assert [row.reference.path for row in rows] == [('records', 'missing'), ('records', 'one')]
+    assert rows[0].exists is False
+    assert rows[1].to_dict() == {'folder_id': 'folder'}
+    transaction.update(references[0], {'folder_id': None})
+    with pytest.raises(ReadAfterWriteError):
+        database.get_all(references, field_paths=['folder_id'], transaction=transaction)
+
+
+def test_folder_batch_get_rejects_foreign_store_and_unsupported_projection():
+    database = StrictFirestore()
+    with pytest.raises(ForeignTransactionError):
+        database.get_all(
+            [StrictFirestore().document('records/one')], field_paths=['folder_id'], transaction=database.transaction()
+        )
+    with pytest.raises(UnsupportedFirestoreOperationError):
+        database.get_all(
+            [database.document('records/one')], field_paths=['private'], transaction=database.transaction()
+        )

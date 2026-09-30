@@ -214,7 +214,7 @@ def _eligible_meeting_request(**overrides):
                 'speaker': 'SPEAKER_00',
                 'is_user': True,
                 'start': 0.0,
-                'end': 60.0,
+                'end': 300.0,
             }
         ],
         'started_at': NOW,
@@ -467,7 +467,10 @@ def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
                 'discarded': False,
                 'started_at': NOW,
                 'finished_at': NOW + timedelta(minutes=5),
-                'transcript_segments': [{'text': 'substantive meeting discussion', 'start': 0.0, 'end': 60.0}],
+                'transcript_segments': [
+                    {'text': 'opening discussion', 'start': 0.0, 'end': 30.0},
+                    {'text': 'closing discussion', 'start': 270.0, 'end': 300.0},
+                ],
                 'structured': {'title': 'Design review'},
                 'external_data': {'conversation_role': 'meeting'},
             }
@@ -702,3 +705,202 @@ def test_from_segments_renews_processing_lease_during_live_processing(monkeypatc
     developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-lease'))
 
     assert lease_renewed.is_set()
+
+
+def test_from_segments_rejects_timezone_naive_timestamps_with_422():
+    """GH #13505: a naive finished_at against the tz-aware started_at default made
+    the handler's finished_at <= started_at check raise TypeError — an uncaught
+    500 on a malformed body (the scripted-client failure shape). The shared model
+    now rejects offset-naive timestamps at validation, so both the developer and
+    first-party from-segments routes answer 422 instead."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match='timezone offset'):
+        developer.CreateConversationFromTranscriptRequest.model_validate(
+            {**_request_data(), 'finished_at': '2026-01-01T00:00:01'}
+        )
+
+    with pytest.raises(ValidationError, match='timezone offset'):
+        developer.CreateConversationFromTranscriptRequest.model_validate(
+            {**_request_data(), 'started_at': '2026-01-01T00:00:00'}
+        )
+
+    # Offset-aware values still validate.
+    assert developer.CreateConversationFromTranscriptRequest.model_validate(_request_data()).finished_at is not None
+
+
+def _request_data():
+    return {
+        'transcript_segments': [_segment()],
+        'source': 'desktop',
+        'started_at': NOW,
+        'finished_at': NOW.replace(second=2),
+        'language': 'en',
+    }
+
+
+@pytest.mark.parametrize(
+    'reason',
+    [
+        'recording_disabled',
+        'system_sleep',
+        'app_terminated',
+        'paywall',
+        'microphone_unavailable',
+        'device_unavailable',
+        'silent_mic_exhausted',
+        'rotation_failed',
+        'stt_fallback',
+        'settings_change',
+    ],
+)
+def test_from_segments_accepts_newer_desktop_finalization_reasons(reason):
+    """GH #19328: the desktop client's TranscriptionFinalizationReason enum grew
+    these ten cases without the backend's Literal being updated, so every
+    local_segments upload carrying one of them 422'd silently and the recording
+    was lost. The field is opaque client metadata (only 'max_duration_rotation'
+    is ever compared downstream), so it must accept any string, not a closed set."""
+    request = developer.CreateConversationFromTranscriptRequest.model_validate(
+        {**_request_data(), 'conversation_finalization_reason': reason}
+    )
+    assert request.conversation_finalization_reason == reason
+
+
+def test_dev_from_segments_route_uses_the_dedicated_rate_limited_dependency():
+    """GH #13505: the developer from-segments route must not ride the bare
+    conversations:write dependency — it needs the dedicated
+    dev:conversations_from_segments budget on top of the shared ceiling."""
+    import inspect
+
+    parameter = inspect.signature(developer.create_conversation_from_segments).parameters['uid']
+    # fastapi.Depends is a factory, so assert on the resolved dependency itself.
+    assert parameter.default.dependency is developer.get_uid_with_conversations_from_segments_write
+
+
+@pytest.mark.parametrize(
+    'platform,client_kind',
+    [('ios', 'mobile_ios'), ('macos', 'desktop_macos'), ('', 'unknown')],
+)
+@pytest.mark.parametrize('metric_failure', [False, True])
+@pytest.mark.parametrize('developer_auth', [False, True])
+def test_product_creation_metric_through_http(monkeypatch, platform, client_kind, metric_failure, developer_auth):
+    from prometheus_client import CollectorRegistry, Counter
+    from utils import product_metrics
+
+    registry = CollectorRegistry()
+    counter = Counter(
+        'omi_product_event_total',
+        'Events',
+        ['event', 'client_kind', 'app_build', 'outcome', 'source', 'op'],
+        registry=registry,
+    )
+    if metric_failure:
+        counter.labels = MagicMock(side_effect=RuntimeError('metrics unavailable'))
+    monkeypatch.setattr(product_metrics, 'OMI_PRODUCT_EVENT_TOTAL', counter)
+    monkeypatch.setattr(product_metrics, '_builds', set())
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+    monkeypatch.setattr(developer, 'process_conversation', lambda _uid, _language, conversation: conversation)
+    app = FastAPI()
+    app.include_router(developer.router)
+    route = '/v1/conversations/from-segments'
+    if developer_auth:
+        app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+        route = '/v1/dev/user/conversations/from-segments'
+        client_kind = 'unknown'
+    client = TestClient(app)
+    payload = _request(client_session_id='metric-session').model_dump(mode='json')
+    response = client.post(
+        route,
+        json=payload,
+        headers={'X-App-Version': '0.12.365', 'X-App-Platform': platform},
+    )
+    assert response.status_code == 200, response.text
+    labels = dict(
+        event='conversation_created',
+        client_kind=client_kind,
+        app_build='unknown' if developer_auth else '0.12.365',
+        outcome='none',
+        source='none',
+        op='none',
+    )
+    if not metric_failure:
+        assert registry.get_sample_value('omi_product_event_total', labels) == 1
+
+    # Replaying an existing row must not count a new creation.
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(
+            return_value={
+                'id': response.json()['id'],
+                'status': 'completed',
+                'discarded': False,
+            }
+        ),
+    )
+    replay = client.post(
+        route,
+        json=payload,
+        headers={'X-App-Version': '0.12.365', 'X-App-Platform': platform},
+    )
+    assert replay.status_code == 200, replay.text
+    if not metric_failure:
+        assert registry.get_sample_value('omi_product_event_total', labels) == 1
+
+
+def test_failed_creation_does_not_record_product_metric(monkeypatch):
+    record = MagicMock()
+    monkeypatch.setattr(developer, 'record_product_event', record)
+    monkeypatch.setattr(developer, 'process_conversation', MagicMock(side_effect=RuntimeError('processing failed')))
+    with pytest.raises(RuntimeError, match='processing failed'):
+        developer._create_conversation_from_segments('uid1', _request())
+    record.assert_not_called()
+
+
+def test_s1_lineage_piggybacks_on_existing_from_segments_claim_and_flag_off_is_identical(monkeypatch):
+    claim = MagicMock(return_value=True)
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+
+    def _process(_uid, _language, conversation):
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(developer, 'process_conversation', _process)
+    lineage = {
+        'version': 1,
+        'capability': 'stable_artifact',
+        'capture_root': 'local-session-1',
+        'clock_domain': 'desktop_session_ms',
+        'lineage': 'complete',
+        'units': [{'id': '42', 'start_ms': 0, 'end_ms': 1500}],
+    }
+    request = _request(client_session_id='local-session-1', capture_evidence=lineage)
+    monkeypatch.delenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', raising=False)
+    developer._create_conversation_from_segments('uid1', request)
+    assert 'capture_evidence' not in claim.call_args.args[1]['external_data']
+
+    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', '1')
+    developer._create_conversation_from_segments('uid1', request)
+    assert claim.call_args.args[1]['external_data']['capture_evidence'] == lineage
+    assert claim.call_count == 2  # no new Firestore claim/write operation
+
+    mismatched = _request(client_session_id='local-session-1', capture_evidence={**lineage, 'capture_root': 'foreign'})
+    developer._create_conversation_from_segments('uid1', mismatched)
+    assert claim.call_args.args[1]['external_data']['capture_evidence']['capability'] == 'unknown'
+    assert claim.call_args.args[1]['external_data']['capture_evidence']['reason'] == 'ineligible'
+
+    oversized = _request(
+        client_session_id='local-session-1',
+        capture_evidence={
+            **lineage,
+            'units': [
+                {'id': f'{index:02d}-' + 'x' * 50, 'start_ms': index, 'end_ms': index + 1} for index in range(64)
+            ],
+        },
+    )
+    developer._create_conversation_from_segments('uid1', oversized)
+    assert claim.call_args.args[1]['external_data']['capture_evidence']['reason'] == 'overflow'

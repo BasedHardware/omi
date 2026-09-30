@@ -4,14 +4,12 @@ import 'dart:convert';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
@@ -20,7 +18,6 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
-import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
@@ -37,8 +34,11 @@ import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
-import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/ui/ui.dart';
 import 'markdown_message_widget.dart';
+import 'message_action_bar.dart';
+
+export 'message_action_bar.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
 String? parseAppIdFromThinking(String thinkingText) {
@@ -60,6 +60,10 @@ String getThinkingDisplayText(String thinkingText) {
   return thinkingText;
 }
 
+/// Corner of the 15pt app and integration glyphs in the thinking line. The token scale starts at 8,
+/// which would turn a 15pt square into a circle.
+const BorderRadius _kGlyphRadius = BorderRadius.all(Radius.circular(3));
+
 /// Build app icon widget from app_id
 Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, double opacity = 1.0}) {
   final appProvider = Provider.of<AppProvider>(context, listen: false);
@@ -72,7 +76,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
     return Opacity(
       opacity: opacity,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: _kGlyphRadius,
         child: CachedNetworkImage(
           imageUrl: app.getImageUrl(),
           httpHeaders: const {
@@ -83,7 +87,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
             width: size,
             height: size,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: _kGlyphRadius,
               image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
             ),
           ),
@@ -93,13 +97,13 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
             child: Icon(
               Icons.apps,
               size: size * 0.7,
-              color: Colors.white.withValues(alpha: opacity),
+              color: OmiColors.textPrimary.withValues(alpha: opacity),
             ),
           ),
           errorWidget: (context, url, error) => Icon(
             Icons.apps,
             size: size * 0.7,
-            color: Colors.white.withValues(alpha: opacity),
+            color: OmiColors.textPrimary.withValues(alpha: opacity),
           ),
         ),
       ),
@@ -112,7 +116,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
     child: Icon(
       Icons.apps,
       size: size,
-      color: Colors.white.withValues(alpha: opacity),
+      color: OmiColors.textPrimary.withValues(alpha: opacity),
     ),
   );
 }
@@ -158,21 +162,22 @@ FaIconData _getThinkingIcon(String thinkingText) {
 }
 
 /// Build the thinking icon widget - either an integration logo or a fallback icon
-Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color color = Colors.white}) {
+Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color? color}) {
   final logoPath = _getIntegrationLogoPath(thinkingText);
   if (logoPath != null) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
+      borderRadius: _kGlyphRadius,
       child: Image.asset(
         logoPath,
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => FaIcon(_getThinkingIcon(thinkingText), size: size, color: color),
+        errorBuilder: (context, error, stackTrace) =>
+            FaIcon(_getThinkingIcon(thinkingText), size: size, color: color ?? OmiColors.textPrimary),
       ),
     );
   }
-  return FaIcon(_getThinkingIcon(thinkingText), size: size, color: color);
+  return FaIcon(_getThinkingIcon(thinkingText), size: size, color: color ?? OmiColors.textPrimary);
 }
 
 /// Conversation-shaped evidence is the same source list as [ServerMessage.memories].
@@ -225,6 +230,12 @@ class AIMessage extends StatefulWidget {
   final Function(int, {String? reason}) setMessageNps;
   final Future<ServerConversation?> Function(String id)? fetchConversation;
 
+  /// The reply failed; a localized error with [onRetry] replaces the raw server text.
+  final bool replyFailed;
+
+  /// Sends the user's message again. Null when the failed reply cannot be retried (voice).
+  final VoidCallback? onRetry;
+
   const AIMessage({
     super.key,
     required this.message,
@@ -237,6 +248,8 @@ class AIMessage extends StatefulWidget {
     this.showTypingIndicator = false,
     this.showThinkingAfterText = false,
     this.fetchConversation,
+    this.replyFailed = false,
+    this.onRetry,
   });
 
   @override
@@ -254,6 +267,7 @@ class _AIMessageState extends State<AIMessage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.replyFailed) return ChatReplyError(onRetry: widget.onRetry);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -271,6 +285,20 @@ class _AIMessageState extends State<AIMessage> {
           showThinkingAfterText: widget.showThinkingAfterText,
           fetchConversation: widget.fetchConversation,
         ),
+        if (!widget.showTypingIndicator && widget.message.memoryAction != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.psychology_outlined, size: 14, color: OmiColors.textTertiary),
+              const SizedBox(width: 4),
+              Text(
+                widget.message.memoryAction == 'updated' ? context.l10n.memoryReviewUpdated : context.l10n.saved,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -317,7 +345,7 @@ Widget buildMessageWidget(
     messageWidget = MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageMemories: message.memories,
-      messageText: message.isEmpty ? '...' : message.text.decodeString,
+      messageText: message.isEmpty ? '…' : message.text.decodeString,
       updateConversation: updateConversation,
       message: message,
       setMessageNps: sendMessageNps,
@@ -356,8 +384,8 @@ Widget buildMessageWidget(
   // Native content blocks. Both are additive chrome: an absent or malformed
   // block leaves the answer exactly as it renders today.
   final reviewCard = showTypingIndicator ? null : message.memoryReviewCard;
-  final followUp = showTypingIndicator ? null : message.followUpQuestion;
-  if (evidence == null && !appendBlocks && reviewCard == null && followUp == null) return messageWidget;
+  // Follow-ups are transient composer suggestions, not part of each historical answer's chrome.
+  if (evidence == null && !appendBlocks && reviewCard == null) return messageWidget;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
@@ -382,7 +410,6 @@ Widget buildMessageWidget(
         // can never become an external action.
         ChatEvidenceReferenceList(envelope: evidence),
       ],
-      if (followUp != null) ...[const SizedBox(height: 8), ChatFollowUpChip(question: followUp, onSend: sendMessage)],
     ],
   );
 }
@@ -415,11 +442,11 @@ class InitialMessageWidget extends StatelessWidget {
             : getMarkdownWidget(context, messageText, onAskOmi: onAskOmi),
         const SizedBox(height: 8),
         const SizedBox(height: 8),
-        InitialOptionWidget(optionText: 'What did I do yesterday?', sendMessage: sendMessage),
+        InitialOptionWidget(optionText: context.l10n.chatStarterYesterday, sendMessage: sendMessage),
         const SizedBox(height: 8),
-        InitialOptionWidget(optionText: 'What could I do differently today?', sendMessage: sendMessage),
+        InitialOptionWidget(optionText: context.l10n.chatStarterDoDifferently, sendMessage: sendMessage),
         const SizedBox(height: 8),
-        InitialOptionWidget(optionText: 'Can you teach me something new?', sendMessage: sendMessage),
+        InitialOptionWidget(optionText: context.l10n.chatStarterTeachMe, sendMessage: sendMessage),
       ],
     );
   }
@@ -438,13 +465,11 @@ class DaySummaryWidget extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '📅  Day Summary ~ ${dateTimeFormat('MMM, dd', date)}',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w500,
-            color: Colors.grey.shade300,
-            decoration: TextDecoration.underline,
+        Semantics(
+          header: true,
+          child: Text(
+            context.l10n.daySummaryForDate(OmiDateFormat.of(context).date(date)),
+            style: OmiType.headline.copyWith(color: OmiColors.textSecondary),
           ),
         ),
         const SizedBox(height: 16),
@@ -494,11 +519,11 @@ class DaySummaryWidget extends StatelessWidget {
           minLeadingWidth: 0,
           leading: Text(
             '${index + 1}.',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.grey.shade500),
+            style: OmiType.subhead.copyWith(fontWeight: FontWeight.bold, color: OmiColors.textTertiary),
           ),
           title: AutoSizeText(
             sentences[index],
-            style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500, height: 1.35, color: Colors.white),
+            style: OmiType.callout.copyWith(fontWeight: FontWeight.w500, height: 1.35),
             softWrap: true,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
@@ -559,25 +584,6 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
     super.dispose();
   }
 
-  Widget _buildChartShimmer() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      child: ShimmerWithTimeout(
-        baseColor: const Color(0xFF1A1A20),
-        highlightColor: const Color(0xFF282830),
-        timeoutSeconds: 15,
-        child: Container(
-          height: 236,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A20),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
@@ -589,61 +595,26 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
     bool shouldShowThinking =
         thinkingText != null || (!_showDots && widget.showTypingIndicator && widget.messageText.isEmpty);
-    String displayThinkingText = thinkingText ?? 'Thinking';
+    String displayThinkingText = thinkingText ?? context.l10n.thinking;
 
+    final working = widget.showTypingIndicator && widget.messageText.isEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         FilesHandlerWidget(message: widget.message),
-        widget.showTypingIndicator && widget.messageText.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    shouldShowThinking
-                        ? Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Icon stays outside shimmer to preserve colors (app icon or integration logo)
-                                    if (currentAppId != null) ...[
-                                      _buildAppIcon(context, currentAppId, size: 15),
-                                      const SizedBox(width: 6),
-                                    ] else ...[
-                                      _buildThinkingIconWidget(displayThinkingText, size: 15),
-                                      const SizedBox(width: 6),
-                                    ],
-                                    // Shimmer only applies to text
-                                    Flexible(
-                                      child: ShimmerWithTimeout(
-                                        baseColor: Colors.white,
-                                        highlightColor: Colors.grey,
-                                        child: Text(
-                                          overflow: TextOverflow.fade,
-                                          maxLines: 1,
-                                          softWrap: false,
-                                          displayThinkingText,
-                                          style: const TextStyle(color: Colors.white, fontSize: 15),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          )
-                        : const TypingIndicator(),
-                  ],
-                ),
-              )
-            : const SizedBox.shrink(),
+        // Tool steps: one line each while the reply works, folded into one line above the answer.
+        if (widget.message.thinkings.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: ChatActivitySteps(thinkings: widget.message.thinkings, working: working),
+          )
+        else if (working)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: shouldShowThinking ? _ThinkingLine(text: displayThinkingText) : const TypingIndicator(),
+          ),
         // !(showTypingIndicator && messageText.isEmpty)
         //     ? Container(
         //         margin: const EdgeInsets.only(bottom: 4.0),
@@ -686,31 +657,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
         if (widget.showTypingIndicator && widget.messageText.isNotEmpty && widget.showThinkingAfterText)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (currentAppId != null) ...[
-                  _buildAppIcon(context, currentAppId, size: 15),
-                  const SizedBox(width: 6),
-                ] else ...[
-                  _buildThinkingIconWidget(displayThinkingText, size: 15),
-                  const SizedBox(width: 6),
-                ],
-                Flexible(
-                  child: ShimmerWithTimeout(
-                    baseColor: Colors.white,
-                    highlightColor: Colors.grey,
-                    child: Text(
-                      overflow: TextOverflow.fade,
-                      maxLines: 1,
-                      softWrap: false,
-                      displayThinkingText,
-                      style: const TextStyle(color: Colors.white, fontSize: 15),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            child: _ThinkingLine(text: displayThinkingText, appId: currentAppId),
           ),
         if (widget.message.chartData != null)
           Padding(
@@ -718,7 +665,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
             child: ChartMessageWidget(chartData: widget.message.chartData!),
           )
         else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
-          _buildChartShimmer(),
+          const _ChartShimmer(),
         if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -766,7 +713,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   @override
   void initState() {
     conversationDetailLoading = List.filled(widget.messageMemories.length, false);
-    if (widget.showTypingIndicator && widget.messageText == '...' && widget.message.thinkings.isEmpty) {
+    if (widget.showTypingIndicator && widget.messageText == '…' && widget.message.thinkings.isEmpty) {
       _dotsTimer = Timer(const Duration(milliseconds: 500), () {
         if (mounted) {
           setState(() {
@@ -784,37 +731,16 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     super.dispose();
   }
 
-  Widget _buildChartShimmer() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      child: ShimmerWithTimeout(
-        baseColor: const Color(0xFF1A1A20),
-        highlightColor: const Color(0xFF282830),
-        timeoutSeconds: 15,
-        child: Container(
-          height: 236,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A20),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
 
-    // Parse app_id and display text from thinking messages
-    String? currentAppId = thinkingTextRaw != null ? parseAppIdFromThinking(thinkingTextRaw) : null;
     var thinkingText = thinkingTextRaw != null ? getThinkingDisplayText(thinkingTextRaw) : null;
 
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
     bool shouldShowThinking =
-        thinkingText != null || (!_showDots && widget.showTypingIndicator && widget.messageText == '...');
-    String displayThinkingText = thinkingText ?? 'Thinking';
+        thinkingText != null || (!_showDots && widget.showTypingIndicator && widget.messageText == '…');
+    String displayThinkingText = thinkingText ?? context.l10n.thinking;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -829,52 +755,21 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
         //     ),
         //   ),
         // ),
-        widget.showTypingIndicator && widget.messageText == '...'
-            ? Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    shouldShowThinking
-                        ? Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Icon stays outside shimmer to preserve colors (app icon or integration logo)
-                                    if (currentAppId != null) ...[
-                                      _buildAppIcon(context, currentAppId, size: 15),
-                                      const SizedBox(width: 6),
-                                    ] else ...[
-                                      _buildThinkingIconWidget(displayThinkingText, size: 15),
-                                      const SizedBox(width: 6),
-                                    ],
-                                    // Shimmer only applies to text
-                                    Flexible(
-                                      child: ShimmerWithTimeout(
-                                        baseColor: Colors.white,
-                                        highlightColor: Colors.grey,
-                                        child: Text(
-                                          overflow: TextOverflow.fade,
-                                          maxLines: 1,
-                                          softWrap: false,
-                                          displayThinkingText,
-                                          style: const TextStyle(color: Colors.white, fontSize: 15),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          )
-                        : const TypingIndicator(),
-                  ],
-                ),
-              )
+        if (widget.message.thinkings.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: ChatActivitySteps(
+              thinkings: widget.message.thinkings,
+              working: widget.showTypingIndicator && widget.messageText == '…',
+            ),
+          ),
+        widget.showTypingIndicator && widget.messageText == '…'
+            ? (widget.message.thinkings.isNotEmpty
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: shouldShowThinking ? _ThinkingLine(text: displayThinkingText) : const TypingIndicator(),
+                  ))
             : widget.showTypingIndicator
                 ? const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -898,7 +793,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       );
                     },
                   ),
-        if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
+        if (widget.messageText.isNotEmpty && widget.messageText != '…' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
             setMessageNps: widget.setMessageNps,
@@ -910,7 +805,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
             child: ChartMessageWidget(chartData: widget.message.chartData!),
           )
         else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
-          _buildChartShimmer(),
+          const _ChartShimmer(),
         const SizedBox(height: 16),
         Column(
           key: const ValueKey('chat-citation-list'),
@@ -925,10 +820,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
                     width: double.maxFinite,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(16.0),
-                    ),
+                    decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
                     child: Row(
                       children: [
                         Expanded(
@@ -941,15 +833,8 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                         ),
                         const SizedBox(width: 8),
                         conversationDetailLoading[data.$1]
-                            ? const SizedBox(
-                                height: 16,
-                                width: 16,
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
+                            ? OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary)
+                            : FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: OmiColors.textTertiary),
                       ],
                     ),
                   ),
@@ -964,9 +849,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   Future<void> _openCitedConversation(int index, MessageConversation citation) async {
     final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
     if (!connectivityProvider.isConnected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.pleaseCheckInternetConnection), duration: const Duration(seconds: 2)),
-      );
+      OmiFeedback.error(context, context.l10n.pleaseCheckInternetConnection);
       return;
     }
 
@@ -988,9 +871,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
 
     if (!mounted) return;
     if (conversation == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.conversationNotFoundOrDeleted), duration: const Duration(seconds: 2)),
-      );
+      OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);
       return;
     }
 
@@ -1003,9 +884,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     PlatformManager.instance.analytics.chatMessageConversationClicked(conversation);
     if (!context.mounted) return;
     context.read<ConversationDetailProvider>().updateConversation(conversation.id, date);
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: conversation)));
+    await routeToPage(context, ConversationDetailPage(conversation: conversation));
 
     if (SharedPreferencesUtil().modifiedConversationDetails?.id == conversation.id) {
       final modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
@@ -1032,392 +911,228 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   }
 }
 
-/// Feedback reason options for thumbs down
-enum FeedbackReason {
-  tooVerbose('too_verbose', 'Too verbose'),
-  incorrectOrHallucination('incorrect_or_hallucination', 'Incorrect / hallucination'),
-  notHelpfulOrIrrelevant('not_helpful_or_irrelevant', 'Not helpful / irrelevant'),
-  didntFollowInstructions('didnt_follow_instructions', "Didn't follow instructions"),
-  other('other', 'Other');
+/// The app icon or integration logo, then the shimmering "thinking" text, while a reply streams.
+class _ThinkingLine extends StatelessWidget {
+  const _ThinkingLine({required this.text, this.appId});
 
-  final String key;
-  final String label;
-
-  const FeedbackReason(this.key, this.label);
-}
-
-/// Bottom sheet for collecting feedback on chat messages
-class FeedbackBottomSheet extends StatefulWidget {
-  final Function(String reason, String? comment) onSubmit;
-
-  const FeedbackBottomSheet({super.key, required this.onSubmit});
-
-  @override
-  State<FeedbackBottomSheet> createState() => _FeedbackBottomSheetState();
-}
-
-class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
-  FeedbackReason? _selectedReason;
-  final TextEditingController _commentController = TextEditingController();
-  final FocusNode _commentFocusNode = FocusNode();
-
-  @override
-  void dispose() {
-    _commentController.dispose();
-    _commentFocusNode.dispose();
-    super.dispose();
-  }
-
-  void _handleSubmit() {
-    if (_selectedReason == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.pleaseSelectReason),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    HapticFeedback.mediumImpact();
-    final comment = _commentController.text.trim();
-    widget.onSubmit(_selectedReason!.key, comment.isEmpty ? null : comment);
-    Navigator.pop(context);
-  }
+  final String text;
+  final String? appId;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    final appId = this.appId;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // The icon stays outside the shimmer so an app icon or integration logo keeps its colours.
+        if (appId != null) _buildAppIcon(context, appId, size: 15) else _buildThinkingIconWidget(text, size: 15),
+        const SizedBox(width: 6),
+        Flexible(
+          child: ShimmerWithTimeout(
+            baseColor: OmiColors.textPrimary,
+            highlightColor: OmiColors.textTertiary,
+            child: Text(text, overflow: TextOverflow.fade, maxLines: 1, softWrap: false, style: OmiType.subhead),
+          ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Handle bar
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2)),
+      ],
+    );
+  }
+}
+
+/// What Omi did for a reply, the way Granola shows it: while the reply works, one quiet line per
+/// tool step with the current step shimmering; once the answer starts, the steps fold into one
+/// line naming the last step. Any line opens the Activity sheet with the whole timeline.
+class ChatActivitySteps extends StatelessWidget {
+  const ChatActivitySteps({super.key, required this.thinkings, required this.working});
+
+  /// The reply's steps as streamed (`think:` chunks), oldest first; may carry an `|app_id:` suffix.
+  final List<String> thinkings;
+
+  /// The reply is still streaming and has no answer text yet.
+  final bool working;
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = thinkings.map((t) => t.decodeString).where((t) => t.trim().isNotEmpty).toList();
+    if (steps.isEmpty) return const SizedBox.shrink();
+    void open() => showChatActivitySheet(context, steps: steps, working: working);
+    if (!working) {
+      return _ChatStepLine(key: const ValueKey('chat_activity_summary'), raw: steps.last, onTap: open);
+    }
+    return Column(
+      key: const ValueKey('chat_activity_steps'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < steps.length; i++)
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: _ChatStepLine(
+              key: ValueKey('chat_step_${i}_${i == steps.length - 1}'),
+              raw: steps[i],
+              current: i == steps.length - 1,
+              onTap: open,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One step: its app or integration glyph, its words, and a chevron to the Activity sheet.
+class _ChatStepLine extends StatelessWidget {
+  const _ChatStepLine({super.key, required this.raw, required this.onTap, this.current = false});
+
+  final String raw;
+  final VoidCallback onTap;
+
+  /// The step in progress; its words shimmer.
+  final bool current;
+
+  @override
+  Widget build(BuildContext context) {
+    final appId = parseAppIdFromThinking(raw);
+    final text = getThinkingDisplayText(raw);
+    final style = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
+    return Semantics(
+      button: true,
+      label: text,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 30),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 16,
+                child: Center(
+                  child: appId != null
+                      ? _buildAppIcon(context, appId, size: 13)
+                      : _buildThinkingIconWidget(text, size: 12, color: OmiColors.textTertiary),
+                ),
               ),
-            ),
-
-            // Header with title and submit button
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'What went wrong?',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
-                ),
-                TextButton(
-                  onPressed: _selectedReason != null ? _handleSubmit : null,
-                  child: Text(
-                    'Submit',
-                    style: TextStyle(
-                      color: _selectedReason != null ? Colors.blue : Colors.grey.shade600,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Reason options
-            const Text(
-              'Select a reason',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey),
-            ),
-            const SizedBox(height: 10),
-
-            // Reason chips
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: FeedbackReason.values.map((reason) {
-                final isSelected = _selectedReason == reason;
-                return GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() {
-                      _selectedReason = reason;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue.withValues(alpha: 0.2) : const Color(0xFF2C2C2E),
-                      borderRadius: BorderRadius.circular(20),
-                      border: isSelected ? Border.all(color: Colors.blue, width: 1.5) : null,
-                    ),
-                    child: Text(
-                      reason.label,
-                      style: TextStyle(
-                        color: isSelected ? Colors.blue : Colors.white,
-                        fontSize: 14,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 20),
-
-            // Comment input
-            const Text(
-              'Additional feedback (optional)',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(12)),
-              child: TextField(
-                controller: _commentController,
-                focusNode: _commentFocusNode,
-                style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  hintText: context.l10n.tellUsMoreWhatWentWrong,
-                  hintStyle: const TextStyle(color: Colors.grey, fontSize: 15),
-                ),
-                maxLines: 3,
-                minLines: 2,
-                maxLength: 500,
-                buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
-                textCapitalization: TextCapitalization.sentences,
+              const SizedBox(width: 8),
+              Flexible(
+                child: current
+                    ? ShimmerWithTimeout(
+                        baseColor: OmiColors.textSecondary,
+                        highlightColor: OmiColors.textTertiary.withValues(alpha: 0.4),
+                        child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+                      )
+                    : Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
               ),
-            ),
-            const SizedBox(height: 16),
-          ],
+              const SizedBox(width: 2),
+              Icon(Icons.chevron_right_rounded, size: 16, color: OmiColors.textTertiary),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Show the feedback bottom sheet
-Future<void> showFeedbackBottomSheet(
-  BuildContext context, {
-  required Function(String reason, String? comment) onSubmit,
-}) async {
-  await showModalBottomSheet(
+/// The Activity sheet: every step of a reply as a timeline, ending in Done (or a shimmering
+/// Thinking while the reply still works).
+Future<void> showChatActivitySheet(BuildContext context, {required List<String> steps, required bool working}) {
+  return showOmiSheet<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) => FeedbackBottomSheet(onSubmit: onSubmit),
+    title: context.l10n.activity,
+    builder: (sheetContext) => ChatActivityTimeline(steps: steps, working: working),
   );
 }
 
-class MessageActionBar extends StatefulWidget {
-  final String messageText;
-  final Function(int, {String? reason})? setMessageNps;
-  final int? currentNps;
+/// The body of the Activity sheet, public for the visual audit.
+class ChatActivityTimeline extends StatelessWidget {
+  const ChatActivityTimeline({super.key, required this.steps, required this.working});
 
-  const MessageActionBar({super.key, required this.messageText, this.setMessageNps, this.currentNps});
-
-  @override
-  State<MessageActionBar> createState() => _MessageActionBarState();
-}
-
-class _MessageActionBarState extends State<MessageActionBar> {
-  int? _selectedNps;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedNps = widget.currentNps;
-  }
-
-  @override
-  void didUpdateWidget(MessageActionBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Update local state if the widget's currentNps changed (e.g., from server fetch)
-    if (oldWidget.currentNps != widget.currentNps) {
-      setState(() {
-        _selectedNps = widget.currentNps;
-      });
-    }
-  }
-
-  /// Show bottom sheet with thumbs down reason options and comment field
-  void _showThumbsDownReasonPicker() {
-    showFeedbackBottomSheet(
-      context,
-      onSubmit: (reason, comment) {
-        setState(() {
-          _selectedNps = -1;
-        });
-        // Combine reason and comment for the API call
-        String feedbackReason = reason;
-        if (comment != null && comment.isNotEmpty) {
-          feedbackReason = '$reason: $comment';
-        }
-        widget.setMessageNps?.call(-1, reason: feedbackReason);
-
-        // Show confirmation snackbar
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.thanksForYourFeedback, style: const TextStyle(color: Colors.white)),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-      },
-    );
-  }
+  final List<String> steps;
+  final bool working;
 
   @override
   Widget build(BuildContext context) {
+    final rows = <Widget>[
+      for (final raw in steps)
+        _TimelineRow(
+          glyph: parseAppIdFromThinking(raw) != null
+              ? _buildAppIcon(context, parseAppIdFromThinking(raw)!, size: 14)
+              : _buildThinkingIconWidget(getThinkingDisplayText(raw), size: 13, color: OmiColors.textSecondary),
+          child: Text(getThinkingDisplayText(raw), style: OmiType.subhead),
+        ),
+      _TimelineRow(
+        last: true,
+        glyph: working
+            ? const OmiSpinner(size: OmiSpinnerSize.small)
+            : Icon(Icons.check_circle_outline_rounded, size: 16, color: OmiColors.textSecondary),
+        child: Text(
+          working ? context.l10n.thinking : context.l10n.done,
+          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+        ),
+      ),
+    ];
     return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Copy button
-          _buildActionButton(
-            icon: FontAwesomeIcons.copy,
-            onTap: () async {
-              HapticFeedback.lightImpact();
-              await Clipboard.setData(ClipboardData(text: widget.messageText));
-              PlatformManager.instance.analytics.track(
-                'Chat Message Copied',
-                properties: {'message': widget.messageText},
-              );
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.lg),
+      child: Column(mainAxisSize: MainAxisSize.min, children: rows),
+    );
+  }
+}
 
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      context.l10n.messageCopied,
-                      style: const TextStyle(color: Colors.white, fontSize: 12.0),
-                    ),
-                    duration: const Duration(milliseconds: 1500),
-                  ),
-                );
-              }
-            },
+class _TimelineRow extends StatelessWidget {
+  const _TimelineRow({required this.glyph, required this.child, this.last = false});
+
+  final Widget glyph;
+  final Widget child;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 20,
+            child: Column(
+              children: [
+                SizedBox(height: 22, child: Center(child: glyph)),
+                if (!last) Expanded(child: Center(child: Container(width: 1, color: OmiColors.border))),
+              ],
+            ),
           ),
-          // Thumbs up button
-          _buildActionButton(
-            icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
-            isSelected: _selectedNps == 1,
-            onTap: () {
-              HapticFeedback.lightImpact();
-              setState(() {
-                _selectedNps = _selectedNps == 1 ? null : 1;
-              });
-              widget.setMessageNps?.call(_selectedNps ?? 0);
-            },
-          ),
-          // Thumbs down button
-          _buildActionButton(
-            icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
-            isSelected: _selectedNps == -1,
-            onTap: () {
-              HapticFeedback.lightImpact();
-              if (_selectedNps == -1) {
-                // Already thumbs down, toggle off
-                setState(() {
-                  _selectedNps = null;
-                });
-                widget.setMessageNps?.call(0);
-              } else {
-                // Show reason picker for thumbs down
-                _showThumbsDownReasonPicker();
-              }
-            },
-          ),
-          // Share button
-          _buildActionButton(
-            icon: FontAwesomeIcons.share,
-            onTap: () async {
-              if (widget.messageText.isEmpty) return;
-              HapticFeedback.lightImpact();
-              await SharePlus.instance.share(
-                ShareParams(text: widget.messageText, sharePositionOrigin: shareSheetOrigin()),
-              );
-              PlatformManager.instance.analytics.track(
-                'Chat Message Shared',
-                properties: {'message': widget.messageText},
-              );
-            },
+          const SizedBox(width: OmiSpacing.sm),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(top: 2, bottom: last ? 0 : OmiSpacing.md),
+              child: child,
+            ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildActionButton({required FaIconData icon, required VoidCallback onTap, bool isSelected = false}) {
-    // The 14pt glyph alone is far below the 44pt tap minimum; pad the hit area
-    // (34x38) so finger taps on copy/share actually land. Visual pitch is kept
-    // by dropping the 20pt gaps between buttons in favour of this padding.
-    return InkWell(
-      splashColor: Colors.transparent,
-      focusColor: Colors.transparent,
-      hoverColor: Colors.transparent,
-      highlightColor: Colors.transparent,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade600, size: 14),
-      ),
-    );
-  }
 }
 
-class CopyButton extends StatelessWidget {
-  final String messageText;
-  final bool isUserMessage;
-
-  const CopyButton({super.key, required this.messageText, this.isUserMessage = false});
+/// Placeholder where a chart will appear while the reply that draws it is still streaming.
+class _ChartShimmer extends StatelessWidget {
+  const _ChartShimmer();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(0.0, 8, 0.0, 0.0),
-      child: InkWell(
-        splashColor: Colors.transparent,
-        focusColor: Colors.transparent,
-        hoverColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        onTap: () async {
-          await Clipboard.setData(ClipboardData(text: messageText));
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Message copied to clipboard.',
-                style: TextStyle(color: Color.fromARGB(255, 255, 255, 255), fontSize: 12.0),
-              ),
-              duration: Duration(milliseconds: 2000),
-            ),
-          );
-        },
-        child: Row(
-          mainAxisSize: MainAxisSize.max,
-          mainAxisAlignment: isUserMessage ? MainAxisAlignment.end : MainAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 4.0, 0.0),
-              child: Icon(Icons.content_copy, color: Theme.of(context).textTheme.bodySmall!.color, size: 10.0),
-            ),
-            Text(context.l10n.copyMessage, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(width: 8),
-          ],
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ShimmerWithTimeout(
+        baseColor: OmiColors.surface1,
+        highlightColor: OmiColors.surface2,
+        timeoutSeconds: 15,
+        child: Container(
+          height: 236,
+          decoration: BoxDecoration(
+            color: OmiColors.surface1,
+            borderRadius: OmiRadius.lgAll,
+            border: Border.all(color: OmiColors.textPrimary.withValues(alpha: 0.06)),
+          ),
         ),
       ),
     );
@@ -1432,16 +1147,54 @@ class InitialOptionWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10),
-        width: double.maxFinite,
-        decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12.0)),
-        child: Text(optionText, style: Theme.of(context).textTheme.bodyMedium),
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        child: Container(
+          constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 10),
+          width: double.maxFinite,
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+          child: Text(optionText, style: Theme.of(context).textTheme.bodyMedium),
+        ),
+        onTap: () {
+          sendMessage(optionText);
+        },
       ),
-      onTap: () {
-        sendMessage(optionText);
-      },
+    );
+  }
+}
+
+/// A reply that failed: a localized reason and Try Again, which sends the user's message again.
+class ChatReplyError extends StatelessWidget {
+  const ChatReplyError({super.key, this.onRetry});
+
+  /// Null when the message cannot be sent again from here (a voice message).
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(OmiSpacing.sm),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+        child: Row(
+          children: [
+            ExcludeSemantics(child: Icon(Icons.error_outline_rounded, size: 20, color: OmiColors.danger)),
+            const SizedBox(width: OmiSpacing.sm),
+            Expanded(
+              child: Text(l10n.chatReplyFailed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+            ),
+            if (onRetry != null)
+              Padding(
+                padding: const EdgeInsets.only(left: OmiSpacing.xs),
+                child: OmiButton.secondary(label: l10n.tryAgain, size: OmiButtonSize.compact, onPressed: onRetry),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

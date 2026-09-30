@@ -46,10 +46,13 @@ import XCTest
     // MARK: - Revision policy: what may revise a sealed `.completed` row
 
     func testUndeliveredSuccessTerminalRevisesTheSealedRow() {
+      // A sealed row exists only when the funnel journaled at
+      // provider-response-finish, so the revised row keeps stating that the
+      // answer text completed even though delivery did not.
       XCTAssertEqual(
         VoiceJournalSealedRowRevisionPolicy.revision(
           forTerminalReason: .success, answerDelivered: false, sealedCompletedRowExists: true),
-        .init(status: .failed, terminalReason: "answer_not_delivered"))
+        .init(status: .failed, terminalReason: "answer_not_delivered", answerTextCompleted: true))
     }
 
     func testDeliveredSuccessTerminalLeavesTheSealedRowAlone() {
@@ -62,7 +65,7 @@ import XCTest
       XCTAssertEqual(
         VoiceJournalSealedRowRevisionPolicy.revision(
           forTerminalReason: .playbackFailed, answerDelivered: false, sealedCompletedRowExists: true),
-        .init(status: .failed, terminalReason: "playback_failed"))
+        .init(status: .failed, terminalReason: "playback_failed", answerTextCompleted: true))
     }
 
     func testBargeInKeepsMergedDeliverySemanticsOnTheSealedRow() {
@@ -81,7 +84,8 @@ import XCTest
         VoiceJournalSealedRowRevisionPolicy.revision(
           forTerminalReason: .interruptedByBargeIn, answerDelivered: false,
           sealedCompletedRowExists: true),
-        .init(status: .failed, terminalReason: "interrupted_by_barge_in"))
+        .init(
+          status: .failed, terminalReason: "interrupted_by_barge_in", answerTextCompleted: true))
     }
 
     func testLaterJournalFailureNeverRewritesADeliveredAnswer() {
@@ -159,7 +163,7 @@ import XCTest
           forTerminalReason: terminal.reason,
           answerDelivered: coordinator.lastTerminalAnswerDelivered,
           sealedCompletedRowExists: true),
-        .init(status: .failed, terminalReason: "answer_not_delivered"))
+        .init(status: .failed, terminalReason: "answer_not_delivered", answerTextCompleted: true))
     }
 
     func testDrainedSuccessTerminalKeepsSealedRowCompleted() throws {
@@ -214,7 +218,49 @@ import XCTest
           forTerminalReason: .playbackFailed,
           answerDelivered: coordinator.lastTerminalAnswerDelivered,
           sealedCompletedRowExists: true),
-        .init(status: .failed, terminalReason: "playback_failed"))
+        .init(status: .failed, terminalReason: "playback_failed", answerTextCompleted: true))
+    }
+
+    // MARK: - Barge-in answer-text completion: what later context may rely on
+
+    func testBargeInAfterProviderFinishRecordsCompletedAnswerText() throws {
+      // 2026-09-09 incident: a PTT press during an answer whose text had
+      // finished (spoken playback still draining) journaled the reply
+      // `.failed` with no signal distinguishing it from a mid-stream fragment,
+      // so later context re-answered the old thread on a generic follow-up.
+      // The terminal record must state the answer text completed.
+      let (coordinator, turnID) = try providerFinishedTurn()
+      let identity = try XCTUnwrap(coordinator.activeTurn?.providerEffectIdentity)
+      coordinator.publish(
+        .providerTurnFinishedScoped(
+          turnID: turnID, identity: identity, sessionID: nil, responseID: nil))
+      XCTAssertTrue(coordinator.providerResponseFinished(turnID: turnID))
+
+      let newTurnID = coordinator.begin(intent: .hold)
+      XCTAssertNotEqual(newTurnID, turnID)
+      XCTAssertEqual(coordinator.model.lastTerminal?.turnID, turnID)
+      XCTAssertEqual(coordinator.model.lastTerminal?.reason, .interruptedByBargeIn)
+      XCTAssertEqual(coordinator.model.lastTerminal?.answerTextCompleted, true)
+      XCTAssertTrue(coordinator.lastTerminalAnswerTextCompleted)
+      // Text completing does not mean delivery: playback never drained.
+      XCTAssertFalse(coordinator.lastTerminalAnswerDelivered)
+      XCTAssertEqual(
+        VoiceTurnJournalStatusPolicy.status(
+          for: .interruptedByBargeIn, answerDelivered: false),
+        .failed)
+    }
+
+    func testBargeInMidStreamRecordsFragmentedAnswerText() throws {
+      // A press that cut the reply while the provider was still generating
+      // leaves a fragment: the terminal must not claim completed answer text.
+      let (coordinator, turnID) = try providerFinishedTurn()
+      XCTAssertFalse(coordinator.providerResponseFinished(turnID: turnID))
+
+      _ = coordinator.begin(intent: .hold)
+      XCTAssertEqual(coordinator.model.lastTerminal?.turnID, turnID)
+      XCTAssertEqual(coordinator.model.lastTerminal?.reason, .interruptedByBargeIn)
+      XCTAssertEqual(coordinator.model.lastTerminal?.answerTextCompleted, false)
+      XCTAssertFalse(coordinator.lastTerminalAnswerTextCompleted)
     }
 
     // MARK: - Ledger: the revision chains after the funnel's in-flight write
@@ -423,7 +469,7 @@ import XCTest
       XCTAssertEqual(
         RealtimeHubController.undeliveredTerminalRevision(
           forVoiceContinuityKey: key, coordinator: coordinator),
-        .init(status: .failed, terminalReason: "playback_failed"))
+        .init(status: .failed, terminalReason: "playback_failed", answerTextCompleted: true))
 
       // Another turn's continuity key is untouched by this terminal, and a
       // delivered terminal never downgrades.

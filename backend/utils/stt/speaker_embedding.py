@@ -11,6 +11,7 @@ from scipy.spatial.distance import cdist
 
 from utils.executors import storage_executor, run_blocking
 from utils.http_client import get_stt_client
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ from utils.stt.speaker_match import SPEAKER_MATCH_THRESHOLD  # noqa: E402
 __all__ = [
     'SPEAKER_MATCH_THRESHOLD',
     'MIN_EMBEDDING_AUDIO_DURATION',
+    'speaker_embedding_configured',
     'extract_embedding',
     'extract_embedding_from_bytes',
     'async_extract_embedding',
@@ -46,10 +48,44 @@ def _get_wav_duration(audio_data: bytes) -> float:
         return 0.0
 
 
+_unconfigured_warned = False
+
+
+def _speaker_embedding_url() -> str:
+    url = os.getenv('HOSTED_SPEAKER_EMBEDDING_API_URL')
+    return url.strip() if url else ''
+
+
+def _warn_unconfigured() -> None:
+    """Emit one process-wide warning when speaker embedding is off due to config."""
+    global _unconfigured_warned
+    if _unconfigured_warned:
+        return
+    _unconfigured_warned = True
+    logger.warning('HOSTED_SPEAKER_EMBEDDING_API_URL is unset; speaker embedding is disabled on this process')
+    record_fallback(
+        component='other',
+        from_mode='speaker_embedding',
+        to_mode='unlabeled',
+        reason='config_incomplete',
+        outcome='degraded',
+        log=logger,
+    )
+
+
+def speaker_embedding_configured() -> bool:
+    """Return whether this process can call the hosted speaker-embedding API."""
+    if _speaker_embedding_url():
+        return True
+    _warn_unconfigured()
+    return False
+
+
 def _get_api_url() -> str:
     """Get the speaker embedding API URL from environment."""
-    url = os.getenv('HOSTED_SPEAKER_EMBEDDING_API_URL')
+    url = _speaker_embedding_url()
     if not url:
+        _warn_unconfigured()
         raise ValueError("HOSTED_SPEAKER_EMBEDDING_API_URL environment variable not set")
     return url
 
@@ -86,13 +122,17 @@ def extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     return embedding
 
 
-def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray[Any, Any]:
+def extract_embedding_from_bytes(
+    audio_data: bytes, filename: str = "audio.wav", *, client: httpx.Client | None = None, timeout: float = 300.0
+) -> np.ndarray[Any, Any]:
     """
     Extract speaker embedding from audio bytes using hosted API.
 
     Args:
         audio_data: Raw audio bytes (wav format)
         filename: Filename to use in the request
+        client: Reused connection pool for callers embedding many clips in a row
+        timeout: Per-request timeout in seconds
 
     Returns:
         numpy array of shape (1, D) where D is embedding dimension
@@ -107,7 +147,8 @@ def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav")
     api_url = _get_api_url()
 
     files = {'file': (filename, audio_data, 'audio/wav')}
-    response = httpx.post(f"{api_url}/v2/embedding", files=files, timeout=300.0)
+    post = client.post if client is not None else httpx.post
+    response = post(f"{api_url}/v2/embedding", files=files, timeout=timeout)
     response.raise_for_status()
 
     result = response.json()

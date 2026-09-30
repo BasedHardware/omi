@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAdminAuth } from '@/lib/firebase/admin';
 import { verifyAdmin } from '@/lib/auth';
+import { isSafeDocumentId } from '@/lib/firestore-doc-id.mjs';
 import crypto from 'crypto';
 import zlib from 'zlib';
 
@@ -109,6 +110,10 @@ export async function GET(request: NextRequest) {
     const uid = request.nextUrl.searchParams.get('uid');
     if (!uid || uid.length < 10) {
       return NextResponse.json({ error: 'Valid uid parameter required' }, { status: 400 });
+    }
+
+    if (!isSafeDocumentId(uid)) {
+      return NextResponse.json({ error: 'Invalid uid' }, { status: 400 });
     }
 
     const userRef = db.collection('users').doc(uid);

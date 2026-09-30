@@ -7,7 +7,7 @@
     10171
   ],
   "scope_hints": [
-    "backend/config/canonical_memory_cohort.py",
+    "backend/config/chat_first_e2e_fixture.py",
     "backend/config/what_matters_now_smoke_fixture.py",
     "backend/database/task_recommendations.py",
     "backend/utils/task_intelligence/rollout.py",

@@ -107,14 +107,61 @@ final class RewindTrackTests: XCTestCase {
 
   // MARK: - Blocks
 
-  func testBlocksGroupContiguousAppsAndTile() {
+  func testBlocksGroupContiguousAppsAndLeaveABreakInCaptureUncovered() {
     let day = gappedDay()
     let blocks = RewindTrackWindow.blocks(from: day.instants, apps: day.apps)
     XCTAssertEqual(blocks.map(\.app), ["Xcode", "Safari"])
-    // The first block ends where the second begins — no seam the data did not put there.
-    XCTAssertEqual(blocks[0].endedAt, blocks[1].startedAt)
+    // Three hours with no capture is a break, not a seam: Xcode ends one sampling interval after
+    // its last capture and Safari starts at its first, so the gap stays the empty channel at every
+    // zoom instead of reading as Xcode at day zoom and as nothing once the viewport moves on.
+    XCTAssertEqual(blocks[0].endedAt, day.instants[4] + 60, accuracy: 0.001)
+    XCTAssertEqual(blocks[1].startedAt, day.instants[5])
+    XCTAssertLessThan(blocks[0].endedAt, blocks[1].startedAt)
     // The last block is given the run's own sampling interval rather than zero width.
     XCTAssertEqual(blocks[1].endedAt, day.instants[day.instants.count - 1] + 60, accuracy: 0.001)
+  }
+
+  /// The space between two samples is tiled; the space where capture stopped is not — and a run of
+  /// one app across a break is two blocks of that app.
+  func testBlocksTileSamplingGapsButBreakAtACaptureGap() {
+    let base = 1_700_000_000.0
+    // Xcode every 60 s, a 5-minute gap into Safari (tiled), then an hour of nothing before Xcode again.
+    let instants = [base, base + 60, base + 120, base + 420, base + 480, base + 4_080, base + 4_140]
+    let apps = ["Xcode", "Xcode", "Xcode", "Safari", "Safari", "Xcode", "Xcode"]
+    let blocks = RewindTrackWindow.blocks(from: instants, apps: apps)
+    XCTAssertEqual(blocks.map(\.app), ["Xcode", "Safari", "Xcode"])
+    XCTAssertEqual(blocks[0].endedAt, blocks[1].startedAt, "a five-minute sampling gap is tiled")
+    XCTAssertEqual(blocks[1].endedAt, base + 480 + 60, accuracy: 0.001, "an hour of nothing ends the run")
+    XCTAssertEqual(blocks[2].startedAt, base + 4_080)
+  }
+
+  /// A short history with one outage: the outage is most of the gaps, so a median would absorb it
+  /// and the block would reach across it. The sampling estimate must come from the samples.
+  func testAShortHistoryWithOneOutageStillBreaksAtTheOutage() {
+    let base = 1_700_000_000.0
+    let instants = [base, base + 60, base + 120, base + 3_600, base + 3_660]
+    let apps = ["Xcode", "Xcode", "Xcode", "Xcode", "Xcode"]
+    let blocks = RewindTrackWindow.blocks(from: instants, apps: apps)
+    XCTAssertEqual(blocks.count, 2, "an hour with no capture splits one app's run")
+    XCTAssertEqual(blocks[0].endedAt, base + 120 + 60, accuracy: 0.001)
+    XCTAssertEqual(blocks[1].startedAt, base + 3_600)
+
+    // Two frames an hour apart are a break, not a sampling rate.
+    let pair = RewindTrackWindow.blocks(from: [base, base + 3_600], apps: ["Xcode", "Xcode"])
+    XCTAssertEqual(pair.count, 2)
+    XCTAssertEqual(pair[0].endedAt, base + RewindTrackWindow.maximumTiledGap, accuracy: 0.001)
+  }
+
+  /// A sparse all-time sample is legitimately spaced wider than the cutoff; its own spacing is not
+  /// a break, so the day still reads as one stretch rather than a row of dashes.
+  func testASparseUniformSampleTilesItsOwnSpacing() {
+    let base = 1_700_000_000.0
+    let spacing = 1_210.0
+    let instants = (0..<40).map { base + Double($0) * spacing }
+    let apps = Array(repeating: "Safari", count: 40)
+    let blocks = RewindTrackWindow.blocks(from: instants, apps: apps)
+    XCTAssertEqual(blocks.count, 1)
+    XCTAssertEqual(blocks[0].endedAt, instants[39] + spacing, accuracy: 0.001)
   }
 
   func testBlocksSurviveAlternatingApps() {
@@ -126,6 +173,47 @@ final class RewindTrackTests: XCTestCase {
     XCTAssertTrue(RewindTrackWindow.blocks(from: [], apps: []).isEmpty)
   }
 
+  // MARK: - Pinch
+
+  /// `NSEvent.magnification` arrives as per-event deltas. The pinch has to sum them: read as totals,
+  /// ten small steps zoomed from the start span by the last step alone and the gesture went nowhere.
+  func testAPinchSumsItsDeltasAndAnchorsUnderTheFingers() throws {
+    let day = gappedDay()
+    let view = track(day.instants, day.apps)
+    let start = view.trackStart
+    let span = view.trackSpan
+    var zoomed: (start: Double, span: Double)?
+    view.onZoom = { zoomed = ($0, $1) }
+
+    view.handleMagnification(0, phase: .began, atX: 500)
+    for _ in 0..<10 { view.handleMagnification(0.1, phase: .changed, atX: 500) }
+    let result = try XCTUnwrap(zoomed)
+    XCTAssertEqual(result.span, span / 8, accuracy: 0.01, "a full pinch out shows an eighth of the time")
+    // The instant under the fingers stays under the fingers.
+    XCTAssertEqual(result.start + 0.5 * result.span, start + 0.5 * span, accuracy: 0.01)
+    view.handleMagnification(0, phase: .ended, atX: 500)
+
+    // The page applies the zoom back to the track; the next pinch composes from there.
+    view.apply(
+      blocks: RewindTrackWindow.blocks(from: day.instants, apps: day.apps), instants: day.instants,
+      searchResultIndices: nil, trackStart: result.start, trackSpan: result.span,
+      spanBounds: RewindTrackWindow.minimumSpan...span, playheadAt: nil)
+    view.handleMagnification(-0.5, phase: .began, atX: 500)
+    XCTAssertEqual(
+      try XCTUnwrap(zoomed).span, result.span * pow(2, 1.5), accuracy: 0.01,
+      "a pinch in composes with where the last pinch left the track")
+  }
+
+  func testAPinchStopsAtTheZoomFloor() throws {
+    let day = gappedDay()
+    let view = track(day.instants, day.apps)
+    var zoomed: (start: Double, span: Double)?
+    view.onZoom = { zoomed = ($0, $1) }
+    view.handleMagnification(0, phase: .began, atX: 500)
+    for _ in 0..<60 { view.handleMagnification(0.2, phase: .changed, atX: 500) }
+    XCTAssertEqual(try XCTUnwrap(zoomed).span, RewindTrackWindow.minimumSpan, accuracy: 0.001)
+  }
+
   // MARK: - Tick ladder
 
   func testTickLadderPicksTheFirstIntervalYieldingTwelveMarksOrFewer() {
@@ -133,6 +221,9 @@ final class RewindTrackTests: XCTestCase {
     XCTAssertEqual(RewindTrackNSView.tickInterval(forSpan: 24 * 3600), 2 * 3600)
     // An hour is minute marks only until there are more than twelve of them.
     XCTAssertEqual(RewindTrackNSView.tickInterval(forSpan: 600), 60)
+    // Below a minute the ladder keeps stepping down, so the floor still shows a dozen marks.
+    XCTAssertEqual(RewindTrackNSView.tickInterval(forSpan: 60), 5)
+    XCTAssertEqual(RewindTrackNSView.tickInterval(forSpan: RewindTrackWindow.minimumSpan), 1)
     XCTAssertEqual(RewindTrackNSView.tickInterval(forSpan: 3600), 300)
     XCTAssertEqual(RewindTrackNSView.tickInterval(forSpan: 6 * 3600), 1800)
     // Past the ladder's top the marks are a day apart rather than absent.
@@ -151,6 +242,11 @@ final class RewindTrackTests: XCTestCase {
       minutes.string(from: noon),
       minutes.string(from: noon.addingTimeInterval(60)),
       "two ticks a minute apart must not carry the same label")
+    let seconds = RewindTrackNSView.tickFormatter(forInterval: 5)
+    XCTAssertNotEqual(
+      seconds.string(from: noon),
+      seconds.string(from: noon.addingTimeInterval(5)),
+      "two ticks five seconds apart must not carry the same label")
   }
 
   func testAllTimeDayTicksNameDatesRatherThanRepeatingMidnight() {
@@ -283,7 +379,7 @@ final class RewindTrackTests: XCTestCase {
     XCTAssertEqual(tooNarrow.span, RewindTrackWindow.minimumSpan, accuracy: 0.001)
   }
 
-  func testZoomOutProgressivelyReachesAllHistoryAndZoomInStopsAtAMinute() {
+  func testZoomOutProgressivelyReachesAllHistoryAndZoomInStopsAtTheFloor() {
     let model = RewindTrackWindowModel()
     model.adopt(range: 0...14_400, initialWindow: 10_800...14_400)
     XCTAssertEqual(model.span, 3600, accuracy: 0.001, "first paint stays on the recent window")

@@ -38,6 +38,25 @@ final class QueryShellTests: XCTestCase {
     XCTAssertEqual(QueryComposerPlaceholder.chat, "Ask Omi")
   }
 
+  /// `chat_composer_snapshot` must expose the same placeholder/mode the composer draws, or a
+  /// harness cannot assert the Ask Omi prompt through the supported headless bridge (#13201).
+  func testChatComposerSnapshotExposesPlaceholderAndMode() {
+    let answer = ChatComposerAutomationSnapshot.detail(
+      draft: "", stagedAttachments: 0, firstAttachment: "", mode: .answer)
+    XCTAssertEqual(answer["placeholder"], "Ask Omi")
+    XCTAssertEqual(answer["mode"], "answer")
+    QueryShellComposerAutomation.publish(.answer)
+    XCTAssertEqual(QueryShellComposerAutomation.placeholder, "Ask Omi")
+
+    let results = ChatComposerAutomationSnapshot.detail(
+      draft: "priya", stagedAttachments: 0, firstAttachment: "", mode: .results)
+    XCTAssertEqual(results["placeholder"], RewindSearchMetrics.placeholder)
+    XCTAssertEqual(results["mode"], "results")
+    QueryShellComposerAutomation.publish(.results)
+    XCTAssertEqual(QueryShellComposerAutomation.placeholder, RewindSearchMetrics.placeholder)
+    QueryShellComposerAutomation.publish(.homeDefault)
+  }
+
   /// The search placement keeps its own prompt; it is a different control.
   func testSearchingKeepsTheSearchPlaceholder() {
     XCTAssertEqual(QueryComposerPlaceholder.text(mode: .results), RewindSearchMetrics.placeholder)
@@ -446,13 +465,18 @@ final class QueryShellTests: XCTestCase {
 
   // MARK: - The wordless controls
 
-  /// A control with no label is only legible if its dot is. Three states, three distinguishable
-  /// fills, and "off" must never look like "on".
+  /// A control with no label is only legible if its dot is. Four states, four distinguishable
+  /// fill-and-band pairs, and "off" or "armed" must never look like "recording".
   func testTheStateDotGivesEveryStateItsOwnColour() {
-    let fills = [HomeStatusState.active, .inactive, .blocked].map(ShellStatusDot.fill(for:))
-    XCTAssertEqual(
-      Set(fills.map(\.description)).count, 3,
-      "three states must not collapse onto two fills")
+    let states = [HomeStatusState.active, .armed, .inactive, .blocked]
+    let marks = states.map {
+      "\(ShellStatusDot.fill(for: $0).description)|\(ShellStatusDot.band(for: $0).description)"
+    }
+    XCTAssertEqual(Set(marks).count, states.count, "states must not collapse onto one dot: \(marks)")
+    XCTAssertNotEqual(
+      ShellStatusDot.fill(for: .armed).description,
+      ShellStatusDot.fill(for: .active).description,
+      "armed must not wear the recording fill")
     XCTAssertNotEqual(
       ShellStatusDot.fill(for: .inactive).description,
       ShellStatusDot.fill(for: .active).description,

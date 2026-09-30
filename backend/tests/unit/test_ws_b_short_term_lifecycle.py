@@ -76,7 +76,7 @@ def _import_isolation():
     restore_sys_modules(saved)
 
 
-from models.memory_apply import MemoryControlState, memory_content_hash
+from models.memory_apply import MemoryControlState, WriterMode, memory_content_hash
 from models.memory_evidence import (
     ArtifactPreservationState,
     MemoryEvidence,
@@ -742,6 +742,83 @@ def test_negative_user_review_is_authoritative_during_processing_race(monkeypatc
         "vector_sync": "delete",
     }
     assert all(doc["payload"]["content_hash"] == stored["content_hash"] for doc in review_events)
+
+
+@pytest.mark.parametrize("writer_mode", [WriterMode.compatibility, WriterMode.ledger])
+@pytest.mark.parametrize("review_value", [True, False])
+def test_belief_enabled_user_review_preserves_authority_across_writer_modes(
+    monkeypatch,
+    writer_mode,
+    review_value,
+):
+    """The belief review overlay must remain a direct owner write in both modes."""
+
+    uid = f"uid-belief-review-{writer_mode.value}-{review_value}"
+    db = _PromotionFakeDb()
+    _set_canonical(monkeypatch, uid)
+    monkeypatch.setattr("utils.memory.canonical_memory_adapter.belief_model_enabled", lambda: True)
+    payload = _sample_memory_payload(
+        uid=uid,
+        conversation_id=f"conversation-{writer_mode.value}-{review_value}",
+        content="The user is reviewing a stable preference.",
+    )
+    payload["evidence"][0]["evidence_id"] = f"ev-review-{writer_mode.value}-{review_value}"
+    memory_id = write_canonical_extraction_memory(
+        uid,
+        payload,
+        db_client=db,
+        admit_neighbors=False,
+    )
+    control_path = f"users/{uid}/memory_state/apply_control"
+    control = MemoryControlState(**db.docs[control_path])
+    db.docs[control_path] = control.model_copy(update={"writer_mode": writer_mode}).model_dump(mode="json")
+    before = MemoryItem(**db.docs[f"users/{uid}/memory_items/{memory_id}"])
+
+    updated = update_canonical_memory_review(uid, memory_id, review_value, db_client=db)
+
+    assert updated.memory_id == memory_id
+    assert updated.item_revision == before.item_revision + 1
+    assert updated.promotion["reviewed"] is True
+    assert updated.promotion["user_review"] is review_value
+    assert updated.content == before.content
+    assert updated.tier == before.tier
+    assert updated.valid_to == before.valid_to
+    assert [item.evidence_id for item in updated.evidence] == [item.evidence_id for item in before.evidence]
+    if review_value:
+        assert updated.corroboration_count == (before.corroboration_count or 0) + 1
+        assert updated.last_corroborated_at is not None
+        assert updated.confidence == 1.0
+        assert isinstance(updated.arguments, dict)
+    else:
+        assert updated.corroboration_count == before.corroboration_count
+        assert updated.last_corroborated_at == before.last_corroborated_at
+        assert updated.confidence == 0.0
+        assert updated.kg_extracted is False
+
+
+@pytest.mark.parametrize("writer_mode", [WriterMode.compatibility, WriterMode.ledger])
+def test_identical_belief_review_is_idempotent_without_corroboration_inflation(monkeypatch, writer_mode):
+    uid = f"uid-belief-review-retry-{writer_mode.value}"
+    db = _PromotionFakeDb()
+    _set_canonical(monkeypatch, uid)
+    monkeypatch.setattr("utils.memory.canonical_memory_adapter.belief_model_enabled", lambda: True)
+    payload = _sample_memory_payload(
+        uid=uid,
+        conversation_id=f"conversation-retry-{writer_mode.value}",
+        content="The user is reviewing a repeated preference.",
+    )
+    payload["evidence"][0]["evidence_id"] = f"ev-review-retry-{writer_mode.value}"
+    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db, admit_neighbors=False)
+    control_path = f"users/{uid}/memory_state/apply_control"
+    control = MemoryControlState(**db.docs[control_path])
+    db.docs[control_path] = control.model_copy(update={"writer_mode": writer_mode}).model_dump(mode="json")
+
+    first = update_canonical_memory_review(uid, memory_id, True, db_client=db)
+    second = update_canonical_memory_review(uid, memory_id, True, db_client=db)
+
+    assert second.item_revision == first.item_revision
+    assert second.corroboration_count == first.corroboration_count == 1
+    assert second.last_corroborated_at == first.last_corroborated_at
 
 
 def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(monkeypatch, caplog):

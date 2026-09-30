@@ -120,6 +120,25 @@ final class QueryComposerTests: XCTestCase {
     composer.assertTheGlassContainsTheText()
   }
 
+  // MARK: - Dropping a file on the editor itself, not just its border
+
+  /// #13774: the NSTextView covers the whole editor, so a SwiftUI `.onDrop` layered behind it only
+  /// ever sees the padding around the text — dropping on the text itself used to make AppKit insert
+  /// the file's path instead of staging it. This drives the real `performDragOperation` AppKit calls
+  /// on drop, on the exact `NSTextView` the composer mounted, rather than asserting on a wiring
+  /// static-checked in source.
+  func testDroppingAFileOnTheEditorInteriorStagesIt() throws {
+    let composer = try Composer()
+    defer { composer.tearDown() }
+    let url = URL(fileURLWithPath: "/tmp/omi-test-drop-\(UUID().uuidString).png")
+
+    composer.dropFile(url)
+
+    XCTAssertEqual(
+      composer.surface.stagedAttachments, [url],
+      "a file dropped on the editor interior never reached onAttachmentsAdded")
+  }
+
   /// **An empty bar is exactly as tall as it was.** The whole surface is laid out under this bar, so
   /// growing it would have been a regression if it had also moved the resting geometry.
   func testAnEmptyComposerLeavesTheBarAtItsRestingHeight() throws {
@@ -317,6 +336,74 @@ final class QueryComposerTests: XCTestCase {
     }
   }
 
+  // MARK: - The row's width is the field's
+
+  /// **Nothing the paperclip's menu carries can buy the field's width.**
+  ///
+  /// A live session was measured with the attach `Menu`'s backing control at 381 pt — half the
+  /// lane — so the row split its width evenly between the paperclip and the field, and the caret
+  /// landed mid-lane ("the input chat box UI got messed up"). The control's slot is pinned to one
+  /// disc in `QueryHeroBar.attachButton`; this asserts the observable contract through the editor
+  /// the composer actually puts on screen: the field spans the lane minus the row's fixed controls,
+  /// and what the menu offers — twelve rows, one longer than the lane itself is wide — changes
+  /// nothing. Without the pin this fails even on a fresh mount — the menu's backing chrome alone
+  /// takes a second disc — which is the same mechanism the live session amplified.
+  func testTheFieldKeepsTheLaneWhateverThePaperclipsMenuOffers() throws {
+    let lane: CGFloat = 842
+    let bare = try Composer(width: lane, mode: .answer)
+    defer { bare.tearDown() }
+    let stocked = try Composer(width: lane, mode: .answer, recentScreenFrames: Self.menuRows)
+    defer { stocked.tearDown() }
+
+    let expectedField =
+      lane
+      - QueryShellLayout.panelComposerEdgeInset * 2
+      - QueryShellLayout.panelComposerShellInset * 2
+      - QueryShellLayout.panelComposerControlDiameter * 3
+      - OmiSpacing.sm * 3
+
+    XCTAssertEqual(
+      bare.editorWidth, expectedField, accuracy: 2,
+      "the field does not span the lane the row owes it — some control is taking width it was never given")
+    XCTAssertEqual(
+      stocked.editorWidth, bare.editorWidth, accuracy: 1,
+      "the paperclip's menu content changed the field's width — a menu's rows are picker content, "
+        + "never a claim on the composer's lane")
+  }
+
+  /// The failure was seen as a field squeezed to half its lane. A floor in the field's own terms,
+  /// independent of the row's insets: whatever the controls negotiate, the typing surface keeps at
+  /// least three quarters of the lane it is mounted in.
+  func testTheFieldHoldsMostOfTheLaneEvenWhenTheRowIsContested() throws {
+    let lane: CGFloat = 842
+    let composer = try Composer(width: lane, mode: .answer, recentScreenFrames: Self.menuRows)
+    defer { composer.tearDown() }
+
+    XCTAssertGreaterThan(
+      composer.editorWidth, lane * 0.75,
+      "the field was squeezed below three quarters of the lane — the row's fixed controls are "
+        + "three 28 pt discs; anything larger is a control taking the reader's typing space")
+  }
+
+  /// Rows the paperclip's menu can offer: a full picker — several frames, one with a title wider
+  /// than any disc, and the trailing divider the real menu draws.
+  private static var menuRows: [RecentScreenFrameRow] {
+    (0..<12).compactMap { index in menuRow(index) }
+  }
+
+  private static func menuRow(_ index: Int) -> RecentScreenFrameRow? {
+    let appName: String
+    if index == 0 {
+      appName = "Some Extremely Long Enterprise Application Name With Suffix Edition"
+    } else {
+      appName = "App \(index)"
+    }
+    let timestamp = Date().addingTimeInterval(TimeInterval(-3600 * (index + 1)))
+    return RecentScreenFrameRow(
+      screenshot: Screenshot(
+        id: Int64(index), timestamp: timestamp, appName: appName, windowTitle: nil, imagePath: nil))
+  }
+
   // MARK: - Harness
 
   /// The real `QueryHeroBar` over the real `ChatComposerDraft`, in a window, with the `NSTextView`
@@ -330,9 +417,16 @@ final class QueryComposerTests: XCTestCase {
 
     let surface = Surface()
 
-    init(width: CGFloat = 768, height: CGFloat = 400, mode: QueryShellMode = .results) throws {
+    init(
+      width: CGFloat = 768,
+      height: CGFloat = 400,
+      mode: QueryShellMode = .results,
+      recentScreenFrames: [RecentScreenFrameRow] = []
+    ) throws {
       provider = ChatProvider()
-      host = NSHostingView(rootView: Host(provider: provider, surface: surface, mode: mode))
+      host = NSHostingView(
+        rootView: Host(
+          provider: provider, surface: surface, mode: mode, recentScreenFrames: recentScreenFrames))
       host.frame = NSRect(x: 0, y: 0, width: width, height: height)
       window = NSWindow(
         contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -389,6 +483,14 @@ final class QueryComposerTests: XCTestCase {
       return textView.enclosingScrollView?.frame.height ?? 0
     }
 
+    /// The editor's laid-out width in the bar the composer actually mounted — the number the row
+    /// gives the field after every control in it has taken what it claims. Read off the scroll
+    /// view's frame in its own superview, the same surface the reader types into.
+    var editorWidth: CGFloat {
+      settle()
+      return textView.enclosingScrollView?.frame.width ?? 0
+    }
+
     /// The bar's own laid-out height in a surface-shaped host, not its `fittingSize` — the failure
     /// this whole harness exists for was a bar that fitted in isolation and clipped in the window.
     var barHeight: CGFloat {
@@ -443,6 +545,17 @@ final class QueryComposerTests: XCTestCase {
       settle()
     }
 
+    /// Simulates a file dragged onto and dropped on the editor's own AppKit surface — the exact
+    /// `performDragOperation` call the interior text view receives, which a SwiftUI `.onDrop` layered
+    /// behind it never sees.
+    func dropFile(_ url: URL) {
+      let pasteboard = NSPasteboard(name: NSPasteboard.Name(rawValue: "omi.test.filedrop.\(UUID().uuidString)"))
+      pasteboard.clearContents()
+      pasteboard.writeObjects([url as NSURL])
+      _ = textView.performDragOperation(FakeFileDraggingInfo(pasteboard: pasteboard))
+      settle()
+    }
+
     /// SwiftUI applies a state change on the next layout pass, so ask for one rather than wait.
     private func settle() {
       host.layoutSubtreeIfNeeded()
@@ -471,6 +584,7 @@ final class QueryComposerTests: XCTestCase {
     @ObservedObject var provider: ChatProvider
     @ObservedObject var surface: Surface
     let mode: QueryShellMode
+    var recentScreenFrames: [RecentScreenFrameRow] = []
     let probe = HeightProbe()
 
     var body: some View {
@@ -491,7 +605,9 @@ final class QueryComposerTests: XCTestCase {
           isWorking: surface.isWorking,
           isStopping: surface.isStopping,
           mode: mode,
-          onAsk: { surface.asks += 1 }
+          onAsk: { surface.asks += 1 },
+          onAttachmentsAdded: { surface.stagedAttachments.append(contentsOf: $0) },
+          recentScreenFrames: recentScreenFrames
         )
         .background {
           GeometryReader { bar in
@@ -518,5 +634,45 @@ final class QueryComposerTests: XCTestCase {
     @Published var isWorking = false
     @Published var isStopping = false
     var asks = 0
+    var stagedAttachments: [URL] = []
   }
+}
+
+/// A minimal `NSDraggingInfo` for driving AppKit's real drag-and-drop call sites in a test — no
+/// live drag session is available outside an actual mouse-driven drag, so this stands in for one.
+/// Only `draggingPasteboard` is read by anything under test; the rest are inert stubs to satisfy
+/// the protocol.
+@MainActor
+private final class FakeFileDraggingInfo: NSObject, @MainActor NSDraggingInfo {
+  let draggingPasteboard: NSPasteboard
+  init(pasteboard: NSPasteboard) { draggingPasteboard = pasteboard }
+
+  var draggingDestinationWindow: NSWindow? { nil }
+  var draggingSourceOperationMask: NSDragOperation { .copy }
+  var draggingLocation: NSPoint { .zero }
+  var draggedImageLocation: NSPoint { .zero }
+  var draggedImage: NSImage? { nil }
+  var draggingSource: Any? { nil }
+  var draggingSequenceNumber: Int { 1 }
+  func slideDraggedImage(to screenPoint: NSPoint) {}
+  var draggingFormation: NSDraggingFormation {
+    get { .default }
+    set {}
+  }
+  var animatesToDestination: Bool {
+    get { false }
+    set {}
+  }
+  var numberOfValidItemsForDrop: Int {
+    get { 1 }
+    set {}
+  }
+  func enumerateDraggingItems(
+    options: NSDraggingItemEnumerationOptions = [], for view: NSView?,
+    classes classArray: [AnyClass], searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:],
+    using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void
+  ) {}
+  var draggingImageComponents: [NSDraggingImageComponent]? { nil }
+  var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+  func resetSpringLoading() {}
 }

@@ -25,7 +25,9 @@ extension ChatToolExecutor {
   ) -> Bool {
     guard let surfaceKind, ["main_chat", "floating_chat"].contains(surfaceKind) else { return false }
     guard let userText else { return false }
-    let text = userText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let text = strippingRuntimeClockPreamble(userText)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
     guard !text.isEmpty else { return false }
 
     // Keep this validator in lockstep with hasExplicitMemorySaveIntent in
@@ -79,6 +81,20 @@ extension ChatToolExecutor {
     return text.range(
       of: #"\b(?:i|we|you|they)\s+(?:remember|save|store|keep)\b"#,
       options: .regularExpression) == nil
+  }
+
+  /// The desktop chat runtime prefixes every run input with a machine-generated
+  /// clock preamble (ChatPrompts.currentTimePrompt: "# Current Time\n<iso>
+  /// (<tz>)\n\n"). Authorization must judge the raw current user turn that
+  /// follows it; strip exactly that prefix and nothing else, mirroring
+  /// hasExplicitMemorySaveIntent in external-surface-tool-policy.ts.
+  private nonisolated static let runtimeClockPreamblePattern = #"^# Current Time\n[^\n]*\n\n"#
+
+  private nonisolated static func strippingRuntimeClockPreamble(_ text: String) -> String {
+    guard
+      let range = text.range(of: runtimeClockPreamblePattern, options: [.regularExpression])
+    else { return text }
+    return String(text[range.upperBound...])
   }
 
   /// Memory writes may paraphrase the user's fact, but the content must still

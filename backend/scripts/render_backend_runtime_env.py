@@ -4,12 +4,18 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any, cast
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / 'backend') not in sys.path:
+    sys.path.insert(0, str(ROOT / 'backend'))
+
+from config.free_tier_rollout import validate_free_tier_deploy_value  # noqa: E402
+
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
 _DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029'})
@@ -17,6 +23,47 @@ _DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029
 
 def _as_config_dict(value: object) -> ConfigDict | None:
     return cast(ConfigDict, value) if isinstance(value, dict) else None
+
+
+_SYNC_LINEAGE_ALLOWLIST_KEY = 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST'
+_SYNC_LINEAGE_CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+
+
+def validate_sync_lineage_rollout(env: str, env_config: dict[str, Any], *, check_chart: bool = False) -> list[str]:
+    if env != 'prod':
+        return []  # dev deliberately admits everyone
+    services = env_config.get('cloud_run', {}).get('services', {})
+    listener = env_config.get('gke', {}).get('backend-listen', {})
+    hosts = [(f'cloud_run/{name}', services.get(name, {})) for name in _SYNC_LINEAGE_CLOUD_RUN_HOSTS]
+    hosts.append(('gke/backend-listen', listener))
+    errors = []
+    values = []
+    for scope, host in hosts:
+        entry = host.get('env', {}).get(_SYNC_LINEAGE_ALLOWLIST_KEY)
+        if not isinstance(entry, dict) or not isinstance(entry.get('value'), str):
+            errors.append(
+                f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} must be an explicit literal (empty deliberately widens)'
+            )
+        else:
+            values.append(entry['value'])
+    if len(set(values)) > 1:
+        errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must be identical on all five hosts')
+    if check_chart and not errors:
+        values_file = listener.get('values_file')
+        if not isinstance(values_file, str):
+            errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} requires a checked-in listen values_file')
+        else:
+            chart = yaml.safe_load((ROOT / values_file).read_text())
+            entries = [entry for entry in chart.get('env', []) if entry.get('name') == _SYNC_LINEAGE_ALLOWLIST_KEY]
+            if len(entries) != 1 or entries[0].get('value') != values[0]:
+                errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} listen chart must match the five-host manifest')
+    return errors
+
+
+def require_sync_lineage_rollout(env: str, env_config: dict[str, Any]) -> None:
+    errors = validate_sync_lineage_rollout(env, env_config, check_chart=True)
+    if errors:
+        raise ValueError('; '.join(errors))
 
 
 def main() -> int:
@@ -51,8 +98,9 @@ def main() -> int:
     env_config = _as_config_dict(environments[args.env]) or {}
 
     if args.desktop_state_output:
+        desktop_state = _render_desktop_backend_state(env_config)
         args.desktop_state_output.write_text(
-            json.dumps(_render_desktop_backend_state(env_config), indent=2, sort_keys=True) + '\n',
+            json.dumps(desktop_state, indent=2, sort_keys=True) + '\n',
             encoding='utf-8',
         )
         # desktop-backend deploys from its own workflow and does not set the
@@ -60,7 +108,16 @@ def main() -> int:
         # sidecar guard must not force those callers to supply it, so stop here
         # unless a backend render was also asked for.
         if not args.state_output and not args.job:
+            cohort = next(
+                entry['value']
+                for entry in desktop_state['services']['desktop-backend']['env']
+                if entry['name'] == 'FREE_TIER_LOCAL_PROCESSING_COHORT'
+            )
+            print(f'free_tier_local_processing_cohort={_escape_deploy_cloud_run_env_value(cohort)}')
             return 0
+
+    if not args.job:
+        require_sync_lineage_rollout(args.env, env_config)
 
     cloud_run = _as_config_dict(env_config['cloud_run']) or {}
 
@@ -144,6 +201,7 @@ def _render_env_entries(env_entries: ConfigDict) -> list[ConfigDict]:
         if value is None:
             # Provisional values belong to services not yet deployed in every environment.
             continue
+        validate_free_tier_deploy_value(str(name), value)
         rendered.append({'name': str(name), 'value': value})
     return rendered
 

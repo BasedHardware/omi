@@ -117,6 +117,7 @@ from utils.memory.canonical_memory_adapter import (
     retract_conversation_sourced_memories,
     search_canonical_memories,
 )
+import utils.memory.canonical_memory_adapter as canonical_adapter_mod
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem
 
@@ -181,6 +182,32 @@ def _data_protection_db(level: str = "enhanced") -> MagicMock:
     db_client = MagicMock()
     db_client.document.return_value = MagicMock(get=lambda: user_doc)
     return db_client
+
+
+def _patch_product_search_items(monkeypatch, items: list[MemoryItem], *, allow_full_fetch: bool = False):
+    by_id = {item.memory_id: item for item in items}
+
+    def _read_by_ids(uid, memory_ids, *, db_client):
+        del uid, db_client
+        return [by_id[memory_id] for memory_id in memory_ids if memory_id in by_id]
+
+    monkeypatch.setattr(
+        canonical_adapter_mod,
+        "fetch_authoritative_product_memory_items_by_ids",
+        _read_by_ids,
+    )
+    if allow_full_fetch:
+        monkeypatch.setattr(
+            canonical_adapter_mod,
+            "fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None, budget=None: list(items),
+        )
+    else:
+        monkeypatch.setattr(
+            canonical_adapter_mod,
+            "fetch_authoritative_product_memory_items",
+            lambda **kwargs: pytest.fail("product search must not scan the canonical collection"),
+        )
 
 
 def _run_bounded_ledger_search(
@@ -490,10 +517,7 @@ class TestKeywordSearchAndHybrid:
         def _empty_vector(*args, **kwargs):
             return _EmptyVectorResult()
 
-        monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None: [item],
-        )
+        _patch_product_search_items(monkeypatch, [item])
         results = search_canonical_memories(
             CANONICAL_UID,
             NEEDLE,
@@ -504,6 +528,124 @@ class TestKeywordSearchAndHybrid:
         assert len(results) == 1
         assert results[0]["memory_id"] == item.memory_id
         assert NEEDLE in results[0]["content"]
+
+    def test_temporal_search_reaches_retained_history_without_leaking_it_into_useful_now(self, monkeypatch):
+        monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+        now = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
+
+        def ledger(item: MemoryItem, **updates) -> MemoryItem:
+            return item.model_copy(
+                update={
+                    "ledger_schema_version": "knowledge_ledger.v1",
+                    "kind": MemoryKind.fact,
+                    "intent_backed": True,
+                    "write_reason": LedgerWriteReason.agent_reusable_conclusion,
+                    "belief_class": "state",
+                    "half_life_days": 30.0,
+                    **updates,
+                }
+            )
+
+        current = ledger(
+            _long_term_item(memory_id="mem-current", content=f"Current coffee fact {NEEDLE}", observed_at=now),
+        )
+        dated = ledger(
+            _long_term_item(memory_id="mem-dated", content=f"Dated coffee fact {NEEDLE}", observed_at=now),
+            valid_to=now - timedelta(days=1),
+        )
+        superseded = ledger(
+            _long_term_item(
+                memory_id="mem-superseded",
+                content=f"Superseded coffee fact {NEEDLE}",
+                status=MemoryItemStatus.superseded,
+                observed_at=now - timedelta(days=2),
+            ),
+            ledger_commit_id="commit_ws_m_superseded",
+            ledger_sequence=2,
+            superseded_by=current.memory_id,
+        )
+        suppressed = ledger(
+            _long_term_item(memory_id="mem-suppressed", content=f"Suppressed coffee fact {NEEDLE}", observed_at=now),
+            arguments={"memory_use": {"suppressed": True}},
+        )
+        items = [current, dated, superseded, suppressed]
+        by_id = {item.memory_id: item for item in items}
+
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
+            # The real derived indexes retain active candidates, not superseded
+            # history. The bounded canonical supplement must supply that row.
+            lambda *args, **kwargs: [current.memory_id, dated.memory_id, suppressed.memory_id],
+        )
+        scan_calls = []
+
+        def historical_page(uid, **kwargs):
+            assert uid == CANONICAL_UID
+            assert kwargs['limit'] == 60
+            assert kwargs['include_archive'] is False
+            assert kwargs['as_of'] == now
+            scan_calls.append(kwargs)
+            return (
+                [
+                    (canonical_adapter_mod.memory_item_to_memorydb(item), (item.updated_at, item.memory_id))
+                    for item in (superseded, suppressed)
+                ],
+                False,  # More rows exist; search must not traverse this cursor.
+            )
+
+        monkeypatch.setattr(canonical_adapter_mod, 'read_canonical_scan_page', historical_page)
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items_by_ids",
+            lambda uid, memory_ids, *, db_client: [by_id[memory_id] for memory_id in memory_ids if memory_id in by_id],
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda **kwargs: pytest.fail("temporal search must remain bounded to provider candidates"),
+        )
+
+        useful = search_canonical_memories(
+            CANONICAL_UID,
+            NEEDLE,
+            limit=10,
+            vector_query=_empty_vector_query,
+            db_client=_data_protection_db(),
+            view="useful_now",
+            as_of=now,
+        )
+        assert scan_calls == []
+        history = search_canonical_memories(
+            CANONICAL_UID,
+            NEEDLE,
+            limit=10,
+            vector_query=_empty_vector_query,
+            db_client=_data_protection_db(),
+            view="history",
+            as_of=now,
+        )
+
+        assert [row["memory_id"] for row in useful] == [current.memory_id]
+        assert {row["memory_id"] for row in history} == {
+            dated.memory_id,
+            superseded.memory_id,
+        }
+        assert len(scan_calls) == 1
+
+        # The canonical supplement is not a recovery route around a failed
+        # provider or global readiness check.
+        def unavailable(*args, **kwargs):
+            raise RuntimeError('provider unavailable')
+
+        monkeypatch.setattr('utils.memory.atom_keyword_index.keyword_search_memory_ids', unavailable)
+        with pytest.raises(RuntimeError, match='provider unavailable'):
+            search_canonical_memories(
+                CANONICAL_UID,
+                NEEDLE,
+                vector_query=_empty_vector_query,
+                db_client=_data_protection_db(),
+                view='history',
+                as_of=now,
+            )
+        assert len(scan_calls) == 1
 
     def test_ledger_search_hydrates_only_candidate_and_lineage_ids(self, monkeypatch):
         candidate = _long_term_item(memory_id="mem-ledger-candidate").model_copy(
@@ -678,10 +820,7 @@ class TestKeywordSearchAndHybrid:
             "utils.memory.atom_keyword_index.keyword_search_memory_ids",
             lambda uid, query, limit=5, db_client=None: ["mem_active", "mem_superseded"],
         )
-        monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None: [active, superseded],
-        )
+        _patch_product_search_items(monkeypatch, [active, superseded])
         results = search_canonical_memories(
             CANONICAL_UID,
             NEEDLE,
@@ -716,10 +855,7 @@ class TestKeywordSearchAndHybrid:
             "utils.memory.atom_keyword_index.keyword_search_memory_ids",
             lambda *args, **kwargs: [],
         )
-        monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None: [pending, long_term, short_term],
-        )
+        _patch_product_search_items(monkeypatch, [pending, long_term, short_term])
 
         def _vector_query(*args, **kwargs):
             return _VectorResult(
@@ -765,10 +901,7 @@ class TestKeywordSearchAndHybrid:
             "utils.memory.atom_keyword_index.keyword_search_memory_ids",
             lambda *args, **kwargs: ranked_ids,
         )
-        monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None: [*facts, document],
-        )
+        _patch_product_search_items(monkeypatch, [*facts, document])
 
         results = search_canonical_memories(
             CANONICAL_UID,
@@ -807,9 +940,10 @@ class TestKeywordSearchAndHybrid:
             "utils.memory.atom_keyword_index.keyword_search_memory_ids",
             lambda *args, **kwargs: [],
         )
-        monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None, budget=None: [unique_short_term, duplicate_short_term, survivor],
+        _patch_product_search_items(
+            monkeypatch,
+            [unique_short_term, duplicate_short_term, survivor],
+            allow_full_fetch=True,
         )
 
         def _vector_query(*args, **kwargs):
@@ -847,6 +981,111 @@ class TestKeywordSearchAndHybrid:
         assert [row["memory_id"] for row in default_list] == [survivor.memory_id, unique_short_term.memory_id]
         assert duplicate_short_term.memory_id not in {row["memory_id"] for row in first}
         assert first[1]["tier"] == MemoryTier.short_term.value
+
+    def test_temporal_empty_search_uses_bounded_scan_and_filters_negative_rows(self, monkeypatch):
+        now = datetime(2026, 9, 15, tzinfo=timezone.utc)
+        visible = _long_term_item(memory_id='mem-empty-visible', observed_at=now)
+        suppressed = _long_term_item(memory_id='mem-empty-suppressed', observed_at=now).model_copy(
+            update={'arguments': {'memory_use': {'suppressed': True}}}
+        )
+        negative = _long_term_item(memory_id='mem-empty-negative', observed_at=now).model_copy(
+            update={'promotion': {'user_review': False}}
+        )
+        scan_calls = []
+
+        def bounded_scan(uid, **kwargs):
+            assert uid == CANONICAL_UID
+            scan_calls.append(kwargs)
+            assert kwargs['limit'] == 60
+            return (
+                [
+                    (canonical_adapter_mod.memory_item_to_memorydb(item), (item.updated_at, item.memory_id))
+                    for item in (visible, suppressed, negative)
+                ],
+                True,
+            )
+
+        monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+        monkeypatch.setattr(canonical_adapter_mod, 'read_canonical_scan_page', bounded_scan)
+        monkeypatch.setattr(
+            canonical_adapter_mod,
+            'fetch_authoritative_product_memory_items',
+            lambda **kwargs: pytest.fail('temporal empty search must not scan the full collection'),
+        )
+
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            '',
+            limit=5,
+            db_client=_data_protection_db(),
+            view='history',
+            as_of=now,
+            item_filter=lambda item: True,
+        )
+
+        assert [row['memory_id'] for row in results] == [visible.memory_id]
+        assert results[0]['date'] == now.isoformat()
+        assert len(scan_calls) == 1
+        assert callable(scan_calls[0]['item_filter'])
+
+        # Beta keeps the bounded/suppressed-safe path even when callers omit
+        # the new view argument and receive the released default.
+        scan_calls.clear()
+        default_results = search_canonical_memories(
+            CANONICAL_UID,
+            '',
+            limit=5,
+            db_client=_data_protection_db(),
+            as_of=now,
+        )
+        assert [row['memory_id'] for row in default_results] == [visible.memory_id]
+        assert len(scan_calls) == 1
+
+    def test_product_search_follows_lineage_pointers_without_full_scan(self, monkeypatch):
+        survivor = _long_term_item(
+            memory_id="mem-root",
+            content=f"Survivor {NEEDLE}",
+            canonical_memory_id="mem-root",
+        )
+        alias = _long_term_item(
+            memory_id="mem-alias",
+            content=f"Alias {NEEDLE}",
+            tier=MemoryTier.short_term,
+            canonical_memory_id=survivor.memory_id,
+        )
+        by_id = {survivor.memory_id: survivor, alias.memory_id: alias}
+        read_batches = []
+
+        def _read_by_ids(uid, memory_ids, *, db_client):
+            del uid, db_client
+            read_batches.append(tuple(memory_ids))
+            return [by_id[memory_id] for memory_id in memory_ids if memory_id in by_id]
+
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
+            lambda *args, **kwargs: [alias.memory_id],
+        )
+        monkeypatch.setattr(
+            canonical_adapter_mod,
+            "fetch_authoritative_product_memory_items_by_ids",
+            _read_by_ids,
+        )
+        monkeypatch.setattr(
+            canonical_adapter_mod,
+            "fetch_authoritative_product_memory_items",
+            lambda **kwargs: pytest.fail("product search must not scan the canonical collection"),
+        )
+
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            NEEDLE,
+            limit=5,
+            vector_query=_empty_vector_query,
+            db_client=_data_protection_db(),
+        )
+
+        assert [row["memory_id"] for row in results] == [survivor.memory_id]
+        assert read_batches == [(alias.memory_id,), (survivor.memory_id,)]
 
     def test_memory_service_search_hybrid_for_canonical(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense

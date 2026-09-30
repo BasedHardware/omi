@@ -17,20 +17,30 @@ import { useEffect, useRef } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { getMemories } from '@/lib/api';
 import { cacheMemories, isCacheFresh } from '@/lib/indexeddb';
+import { getMemoryBackendScope, memoryCacheScopeKey } from '@/lib/cache';
 
 export function MemoriesPrefetcher() {
-  const { user } = useAuth();
-  const prefetchedRef = useRef(false);
+  const { user, loading } = useAuth();
+  const prefetchedScopeRef = useRef<string | null>(null);
+  const backendScope = getMemoryBackendScope();
+  const scope = !loading && user ? { ownerId: user.uid, backendScope } : null;
+  const scopeKey = scope ? memoryCacheScopeKey(scope) : null;
+  // Latest owner/backend session, read after each await so a mid-flight owner
+  // change cannot cache one owner's response under the other's scope.
+  const scopeKeyRef = useRef<string | null>(scopeKey);
+  scopeKeyRef.current = scopeKey;
 
   useEffect(() => {
-    // Only run once per session
-    if (prefetchedRef.current) return;
-    if (!user) return;
+    // Only run once per authenticated owner/backend session.
+    if (loading || !scope || !scopeKey) return;
+    if (prefetchedScopeRef.current === scopeKey) return;
+    prefetchedScopeRef.current = scopeKey;
 
     const prefetchMemories = async () => {
       try {
         // Check if we already have fresh cache
-        const cacheFresh = await isCacheFresh();
+        const cacheFresh = await isCacheFresh(scope);
+        if (scopeKeyRef.current !== scopeKey) return;
         if (cacheFresh) {
           console.log('[MemoriesPrefetcher] Cache is fresh, skipping prefetch');
           return;
@@ -40,13 +50,14 @@ export function MemoriesPrefetcher() {
 
         // Fetch memories in the background (backend returns up to 5000 when offset=0)
         const memories = await getMemories({ limit: 25, offset: 0 });
+        if (scopeKeyRef.current !== scopeKey) return;
 
         // Cache them in IndexedDB
-        await cacheMemories(memories);
+        await cacheMemories(memories, 'useful_now', scope);
 
         console.log(`[MemoriesPrefetcher] Prefetched ${memories.length} memories`);
-        prefetchedRef.current = true;
       } catch (error) {
+        prefetchedScopeRef.current = null;
         // Silent fail - prefetching is a nice-to-have
         console.error('[MemoriesPrefetcher] Failed to prefetch:', error);
       }
@@ -56,7 +67,10 @@ export function MemoriesPrefetcher() {
     const timeout = setTimeout(prefetchMemories, 2000);
 
     return () => clearTimeout(timeout);
-  }, [user]);
+    // `scope` is a pure function of the stable `scopeKey` inputs (owner uid +
+    // backend scope); depending on the primitives keeps the delay timer alive
+    // across rerenders that recreate the scope object.
+  }, [loading, scopeKey]);
 
   // This component doesn't render anything
   return null;

@@ -282,6 +282,12 @@ conv.attach_match_snippets_to_conversations = lambda conversations, _query: [
     dict(c) if isinstance(c, dict) else c for c in conversations
 ]
 conv.redact_conversations_for_list = MagicMock()
+# `_get_valid_conversation_by_id` now 404s tombstones via is_soft_deleted. The
+# AutoMock stub is truthy, which would 404 every live fixture. Bind the real
+# predicate so live rows pass and deleted rows still 404.
+from database.conversations import is_soft_deleted as _real_is_soft_deleted  # noqa: E402
+
+conv.conversations_db.is_soft_deleted = _real_is_soft_deleted
 
 
 def _client():
@@ -340,7 +346,7 @@ def test_named_speaker_is_validated_and_forwarded():
         ) as mock_search,
     ):
         client = _client()
-        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'person-1'})
+        resp = client.post('/v1/conversations/search', json={'query': 'hello', 'speaker_id': 'person-1'})
 
     assert resp.status_code == 200
     mock_get_person.assert_called_once_with('test-uid', 'person-1')
@@ -366,7 +372,7 @@ def test_user_speaker_does_not_require_person_record():
         ) as mock_search,
     ):
         client = _client()
-        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'user'})
+        resp = client.post('/v1/conversations/search', json={'query': 'hello', 'speaker_id': 'user'})
 
     assert resp.status_code == 200
     mock_get_person.assert_not_called()
@@ -476,6 +482,59 @@ def test_speaker_filter_is_applied_after_hydration(speaker_id, matching_segments
 
     assert resp.status_code == 200
     assert [item['id'] for item in resp.json()['items']] == ['conv-match']
+
+
+@pytest.mark.parametrize('query', ['hi'])
+def test_speaker_filter_keeps_paging_while_typesense_has_more(query):
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    ids = [f'conv-{index}' for index in range(10)]
+    hydrated = [
+        _conversation_dict(conversation_id, [_segment(person_id='person-1' if index < 2 else 'someone-else')])
+        for index, conversation_id in enumerate(ids)
+    ]
+    with (
+        patch.object(conv, 'conversation_matches_speaker', real_matcher),
+        patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={
+                'items': [{'id': conversation_id} for conversation_id in ids],
+                'total_pages': 2,
+                'current_page': 1,
+                'per_page': 10,
+            },
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': query, 'speaker_id': 'person-1'})
+
+    assert resp.status_code == 200
+    assert [item['id'] for item in resp.json()['items']] == ['conv-0', 'conv-1']
+    assert resp.json()['total_pages'] == 2
+
+
+def test_speaker_filter_stops_paging_on_the_last_typesense_page():
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    hydrated = [_conversation_dict('conv-0', [_segment(person_id='person-1')])]
+    with (
+        patch.object(conv, 'conversation_matches_speaker', real_matcher),
+        patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={'items': [{'id': 'conv-0'}], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'hi', 'speaker_id': 'person-1'})
+
+    assert resp.status_code == 200
+    assert resp.json()['total_pages'] == 1
 
 
 def test_search_without_speaker_keeps_every_hydrated_conversation():
@@ -645,10 +704,11 @@ def test_finalize_conversation_persists_durable_work_and_returns_without_process
         'test-uid',
         'conv-1',
         has_byok_keys=False,
-        force_process=True,
+        trigger=conv.ProcessingTrigger.CLIENT_FINALIZE,
         extra_updates=None,
         require_cloud_tasks=True,
         client_kind='mobile_ios',
+        app_build='unknown',
     )
     remove_pointer.assert_called_once_with('test-uid')
     process.assert_not_called()
@@ -928,6 +988,24 @@ def test_legacy_finalize_persistence_loser_returns_latest_without_integrations()
     assert response.conversation.status == ConversationStatus.failed
 
 
+def test_finalize_conversation_404s_a_soft_deleted_tombstone():
+    with (
+        patch.object(
+            conv.conversations_db,
+            'get_conversation',
+            return_value={'id': 'conv-1', 'deleted': True, 'sync_merged_into': 'survivor'},
+        ),
+        patch.object(conv.lifecycle_service, 'request_finalization') as request_finalization,
+        patch.object(conv, 'process_conversation') as process,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            conv.finalize_conversation('conv-1', uid='test-uid')
+
+    assert exc_info.value.status_code == 404
+    request_finalization.assert_not_called()
+    process.assert_not_called()
+
+
 def test_finalize_conversation_is_noop_for_completed_conversation():
     completed = _conversation(status=ConversationStatus.completed)
 
@@ -944,3 +1022,30 @@ def test_finalize_conversation_is_noop_for_completed_conversation():
     remove_pointer.assert_not_called()
     process.assert_not_called()
     assert response.conversation.status == ConversationStatus.completed
+
+
+def test_speaker_browse_without_a_query_walks_firestore_past_the_latest_page():
+    # The person only appears in conversations far older than the newest 20: the Typesense first page
+    # post-filter used to return nothing for this.
+    newest = [_conversation_dict(f'new-{i}', [_segment(person_id='someone-else')]) for i in range(60)]
+    older = [_conversation_dict('old-1', [_segment(person_id='person-1')])]
+    stream = newest + older
+    from utils.conversations.search import browse_conversations_by_speaker as real_browse
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    def fetch(uid, limit, offset, **kwargs):
+        return stream[offset : offset + limit]
+
+    with (
+        patch.object(conv, 'browse_conversations_by_speaker', real_browse),
+        patch('utils.conversations.search.conversation_matches_speaker', real_matcher),
+        patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}),
+        patch.object(conv, 'search_conversations') as mock_search,
+        patch.object(conv.conversations_db, 'get_conversations_without_photos', side_effect=fetch),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'person-1', 'per_page': 20})
+
+    assert resp.status_code == 200
+    assert [item['id'] for item in resp.json()['items']] == ['old-1']
+    mock_search.assert_not_called()

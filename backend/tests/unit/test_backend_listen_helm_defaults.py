@@ -33,6 +33,7 @@ ENV_IDENTITY_DEFAULTS = {
 # expected literals from the policy keeps this guard from drifting when the
 # serving order changes there.
 SAFE_STREAMING_ROUTE = ','.join(DEFAULT_MODELS_BY_SURFACE[STTServingSurface.STREAMING])
+CANARY_STREAMING_ROUTE = 'parakeet-window,' + SAFE_STREAMING_ROUTE.removesuffix(',parakeet')
 SAFE_PRERECORDED_ROUTE = ','.join(DEFAULT_MODELS_BY_SURFACE[STTServingSurface.PRERECORDED])
 
 
@@ -132,7 +133,7 @@ def test_dev_parity_pack_emptydir_is_writable_by_the_non_root_backend_image():
 def test_prod_values_serve_the_policy_owned_stt_routes():
     values = _load_values(ENV_IDENTITY_DEFAULTS['prod']['values_file'])
 
-    assert _env_value(values, 'STT_SERVICE_MODELS') == SAFE_STREAMING_ROUTE
+    assert _env_value(values, 'STT_SERVICE_MODELS') == CANARY_STREAMING_ROUTE
     assert _env_value(values, 'STT_PRERECORDED_MODEL') == SAFE_PRERECORDED_ROUTE
 
 
@@ -157,8 +158,51 @@ def test_rendered_prod_deployment_cannot_restore_parakeet_first_streaming():
         text=True,
     ).stdout
 
-    assert f'name: STT_SERVICE_MODELS\n              value: "{SAFE_STREAMING_ROUTE}"' in rendered
+    assert f'name: STT_SERVICE_MODELS\n              value: "{CANARY_STREAMING_ROUTE}"' in rendered
     # Scoped to the streaming key: the same literal is the intended batch route, so a
     # blanket check would forbid the pre-recorded default as collateral.
     assert f'name: STT_SERVICE_MODELS\n              value: "{SAFE_PRERECORDED_ROUTE}"' not in rendered
     assert f'name: STT_PRERECORDED_MODEL\n              value: "{SAFE_PRERECORDED_ROUTE}"' in rendered
+
+
+def test_windowed_live_rollout_is_prod_canary_and_bounded():
+    """July overload: changing order must never silently turn on unbounded TDT."""
+    prod = _load_values(ENV_IDENTITY_DEFAULTS['prod']['values_file'])
+    dev = _load_values(ENV_IDENTITY_DEFAULTS['dev']['values_file'])
+    # Prod connects in configured order since the 2026-09-26 Modulate incident
+    # (#19069) so Soniox backs Modulate; the guard that matters is that the
+    # windowed TDT leg stays on a reviewed step of the approved ramp
+    # (David, 2026-09-29), and the chart agrees with the prod runtime overlay.
+    assert _env_value(prod, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
+    prod_allocation = _env_value(prod, 'PARAKEET_WINDOW_ALLOCATION_PERCENT')
+    assert prod_allocation in {'0', '1', '2', '5', '25', '50', '100'}
+    overlay = yaml.safe_load(
+        (Path(__file__).resolve().parents[2] / 'deploy' / 'runtime_env' / 'prod.overlay.yaml').read_text(
+            encoding='utf-8'
+        )
+    )
+    listen_env = overlay['overlay']['gke']['backend-listen']['env']
+    assert str(listen_env['PARAKEET_WINDOW_ALLOCATION_PERCENT']['value']) == prod_allocation
+    assert (
+        _env_value(prod, 'PARAKEET_BATCH_PRESSURE_POOL_HOST')
+        == 'prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local'
+    )
+    assert _env_value(prod, 'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS') == '3'
+    assert _env_value(dev, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
+    assert _env_value(dev, 'PARAKEET_WINDOW_ALLOCATION_PERCENT') == '1'
+    assert (
+        _env_value(dev, 'PARAKEET_BATCH_PRESSURE_POOL_HOST')
+        == 'dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local'
+    )
+    assert _env_value(dev, 'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS') == '1'
+    assert _env_value(dev, 'STT_SERVICE_MODELS') == _env_value(prod, 'STT_SERVICE_MODELS')
+    assert _env_value(prod, 'STT_SERVICE_MODELS') == 'parakeet-window,modulate-velma-2,soniox,dg-nova-3'
+    assert _env_value(prod, 'PARAKEET_WINDOW_MAX_SESSIONS') == '8'
+    assert _env_value(prod, 'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS') == '12'
+    assert _env_value(prod, 'PARAKEET_WINDOW_MAX_EMPTY_STREAK') == '4'
+    assert _env_value(dev, 'PARAKEET_WINDOW_MAX_SESSIONS') == '1'
+    for values in (prod, dev):
+        assert _env_value(values, 'PARAKEET_WINDOW_DIARIZATION') == 'false'
+        assert _env_value(values, 'PARAKEET_WINDOW_PACE_SECONDS') == '6'
+        assert _env_value(values, 'PARAKEET_WINDOW_MAX_CONTEXT_SECONDS') == '24'
+        assert _env_value(values, 'STT_CIRCUIT_HALF_OPEN_PROBES') == '1'

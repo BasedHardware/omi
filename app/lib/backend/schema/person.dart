@@ -40,6 +40,12 @@ class Person {
   final List<String>? speechSampleTranscripts;
   final int speechSamplesVersion;
   final int? colorIdx;
+  final String voiceReadiness;
+
+  /// Stats over the newest conversations; null until the list is loaded with `includeStats`.
+  final int? conversationCount;
+  final DateTime? lastHeardAt;
+  final double? talkSeconds;
 
   Person({
     required this.id,
@@ -50,7 +56,28 @@ class Person {
     this.speechSampleTranscripts,
     this.speechSamplesVersion = 1,
     this.colorIdx,
+    this.voiceReadiness = 'unknown',
+    this.conversationCount,
+    this.lastHeardAt,
+    this.talkSeconds,
   });
+
+  Person copyWith({String? name, DateTime? updatedAt, List<String>? speechSamples}) {
+    return Person(
+      id: id,
+      name: name ?? this.name,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      speechSamples: speechSamples ?? this.speechSamples,
+      speechSampleTranscripts: speechSampleTranscripts,
+      speechSamplesVersion: speechSamplesVersion,
+      colorIdx: colorIdx,
+      voiceReadiness: voiceReadiness,
+      conversationCount: conversationCount,
+      lastHeardAt: lastHeardAt,
+      talkSeconds: talkSeconds,
+    );
+  }
 
   factory Person.fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedPerson.fromJson(json);
@@ -74,6 +101,10 @@ class Person {
       speechSamples: generated.speechSamples,
       speechSampleTranscripts: generated.speechSampleTranscripts,
       speechSamplesVersion: generated.speechSamplesVersion,
+      voiceReadiness: generated.voiceReadiness,
+      conversationCount: generated.conversationCount,
+      lastHeardAt: generated.lastHeardAt,
+      talkSeconds: generated.talkSeconds,
       colorIdx: colorIdx ?? generated.id.hashCode % speakerColors.length,
     );
   }
@@ -87,6 +118,10 @@ class Person {
       speechSamples: speechSamples ?? const [],
       speechSampleTranscripts: speechSampleTranscripts,
       speechSamplesVersion: speechSamplesVersion,
+      voiceReadiness: voiceReadiness,
+      conversationCount: conversationCount,
+      lastHeardAt: lastHeardAt,
+      talkSeconds: talkSeconds,
     );
   }
 

@@ -1,0 +1,16 @@
+{
+  "id": "c8-type-extension",
+  "kind": "question",
+  "owner": "Product infra",
+  "question": "Do generator-accepted bool, int, and closed-enum fields survive emit as the same adapter values? A zero here is a type-round-trip failure, not a missing product signal.",
+  "query": "contracts/analytics/consumers/c8-type-extension.sql",
+  "events": [
+    "typeExtensionProbe"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Missing rows mean the type-extension probe was not emitted in this namespace/build; they are not evidence that a user-facing funnel broke."
+}

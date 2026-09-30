@@ -35,6 +35,15 @@ SCHEMA_GROUPS = {
             'ScreenActivitySyncResponse',
         ),
     },
+    'screen_frames': {
+        'output': DEFAULT_OUTPUT_DIR / 'screen_frames_wire.g.dart',
+        'schemas': (
+            'NormalizedRect',
+            'ScreenFrameGround',
+            'ConversationScreenFrame',
+            'ConversationScreenFrameSet',
+        ),
+    },
     'conversation': {
         'output': DEFAULT_OUTPUT_DIR / 'conversation_wire.g.dart',
         'schemas': (
@@ -45,15 +54,22 @@ SCHEMA_GROUPS = {
             'PluginResult',
             'Event',
             'Section',
+            'Participant',
+            'Insight',
             'Structured',
             'Geolocation',
             'ConversationPhoto',
+            'ChunkSpan',
             'AudioFile',
             'ConversationAudioSpan',
             'ConversationAudio',
             'CalendarEventLink',
             'CalendarCaptureGap',
             'TranscriptMatchSnippet',
+            'CaptureGroupMember',
+            'CaptureGroup',
+            'ConversationSpeakers',
+            'AudioTimelineProvenance',
             'Conversation',
             'ProjectedActionItem',
             'ProjectedSection',
@@ -73,6 +89,10 @@ SCHEMA_GROUPS = {
             'SyncCaptureManifestRequest',
             'SyncCaptureManifestResponse',
         ),
+    },
+    'chat_sessions': {
+        'output': DEFAULT_OUTPUT_DIR / 'chat_sessions_wire.g.dart',
+        'schemas': ('ChatSessionResponse',),
     },
     'messages': {
         'output': DEFAULT_OUTPUT_DIR / 'messages_wire.g.dart',
@@ -203,6 +223,33 @@ SCHEMA_GROUPS = {
         'output': DEFAULT_OUTPUT_DIR / 'people_wire.g.dart',
         'schemas': ('Person',),
     },
+    'speaker_tag_prompts': {
+        'output': DEFAULT_OUTPUT_DIR / 'speaker_tag_prompts_wire.g.dart',
+        'schemas': (
+            'SpeakerTagPrompt',
+            'SpeakerTagPromptsResponse',
+            'SpeakerTagPromptsShownRequest',
+            'SpeakerTagPromptsShownResponse',
+            'SpeakerTagPromptAnswerRequest',
+            'SpeakerTagPromptAnswerResponse',
+            'SpeakerTagPromptClip',
+            'VoiceProfileSettings',
+            'VoiceProfileSettingsUpdate',
+        ),
+    },
+    'search': {
+        'output': DEFAULT_OUTPUT_DIR / 'search_wire.g.dart',
+        'schemas': (
+            'SearchOverviewFolder',
+            'SearchOverviewResponse',
+            'ProductMemorySearchItem',
+            'MemorySearchPolicyPayload',
+            'MemoryGlobalReadGateObservability',
+            'ReadRolloutCapabilities',
+            'ProductRolloutObservability',
+            'ProductMemorySearchResponse',
+        ),
+    },
     'imports_integrations': {
         'output': DEFAULT_OUTPUT_DIR / 'imports_integrations_wire.g.dart',
         'schemas': (
@@ -239,6 +286,7 @@ SCHEMA_GROUPS = {
             'KnowledgeGraphResponse',
             'RebuildResponse',
             'ErrorResponse',
+            'StatusResponse',
         ),
     },
     'wrapped_task_integrations': {
@@ -304,6 +352,7 @@ SCHEMA_GROUPS = {
     'users': {
         'output': DEFAULT_OUTPUT_DIR / 'users_wire.g.dart',
         'schemas': (
+            'MobileFeedbackReceipt',
             'UserStatusResponse',
             'UserWebhooksStatusResponse',
             'StoreRecordingPermissionResponse',
@@ -407,6 +456,10 @@ SCHEMA_GROUPS = {
         'output': DEFAULT_OUTPUT_DIR / 'memories_wire.g.dart',
         'schemas': (
             'Evidence',
+            'MemoryCaptureContext',
+            'MemoryUseAction',
+            'MemoryUseRequest',
+            'MemoryUseResponse',
             'MemoryDB',
             'MemoryEditResponse',
             'MemoryRevertRequest',

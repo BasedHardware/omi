@@ -255,6 +255,7 @@ final class AgentErrorClassifierTests: XCTestCase {
       // it renders as the generic "Omi couldn't answer this one", which is what
       // the 2026-08-20 gateway-parameter outage showed users for ~19 hours.
       ("Upstream provider error", true, true),
+      ("HTTP 503 status code (no body)", true, true),
     ]
     for (raw, mustNotBeUnknown, expectedRetryable) in corpus {
       let c = AgentErrorClassifier.classify(raw)
@@ -276,5 +277,54 @@ final class AgentErrorClassifierTests: XCTestCase {
     XCTAssertNotNil(notice)
     XCTAssertNotEqual(notice?.text, ChatTurnFailureNotice.unclassifiedText)
     XCTAssertEqual(notice?.text, classified.userMessage)
+  }
+
+  /// A 402 from the Omi proxy means the managed lane ran, which is exactly the case a
+  /// BYOK user needs told apart from their own provider billing. The shipped copy said
+  /// only "Omi's AI service" and pointed at Plan and Usage, so a user holding a funded
+  /// OpenRouter key read it as their key failing and spent the investigation on the
+  /// wrong account entirely.
+  func testBillingCopyNamesTheManagedLaneAndBothRemedies() {
+    let classified = AgentErrorClassifier.classify("HTTP 402 status code (no body)")
+
+    XCTAssertEqual(classified.code, .providerBillingExhausted)
+    XCTAssertFalse(classified.retryable)
+    XCTAssertTrue(
+      classified.userMessage.contains("This request ran on the managed lane"),
+      "the copy must say which lane declined, not just \"Omi's AI service\"")
+    XCTAssertTrue(
+      classified.userMessage.contains("Check Settings → Plan and Usage"),
+      "the managed remedy stays")
+    // Asserted as the whole remedy clause, not a bare `contains("key")`: the loose
+    // form passed on copy that merely mentioned a key without telling the user to
+    // add one, which is the half of the message this PR exists to add.
+    XCTAssertTrue(
+      classified.userMessage.contains("add a key for the provider this path uses"),
+      "a BYOK user needs the second remedy named as an action they can take")
+  }
+
+  /// Reproduced 2026-09-09: desktop-backend returned HTTP 503 with an empty
+  /// body. The classifier had 402 and 502 rules; 503 fell through to unknown
+  /// and the transcript showed "Omi couldn't answer this one".
+  func testBareHTTP503IsClassifiedRetryableLikeUpstreamProviderError() {
+    for raw in [
+      "HTTP 503 status code (no body)",
+      "HTTP 503",
+      "Request failed: http/503",
+      "status 503",
+      "status code: 503",
+    ] {
+      let classified = AgentErrorClassifier.classify(raw)
+      XCTAssertEqual(classified.code, .upstreamProviderFailed, "unclassified: \(raw)")
+      XCTAssertTrue(classified.retryable, "503 is retryable: \(raw)")
+      XCTAssertFalse(
+        classified.userMessage.contains("503"),
+        "raw transport status must not reach the user: \(raw)")
+      XCTAssertNotEqual(classified.userMessage, raw, "must not show the raw transport string: \(raw)")
+    }
+    XCTAssertNotEqual(
+      AgentErrorClassifier.classify("elapsed 1503ms").code,
+      .upstreamProviderFailed,
+      "an unrelated number must not be read as HTTP 503")
   }
 }

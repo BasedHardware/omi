@@ -18,7 +18,7 @@ class ChatToolResponse(BaseModel):
 
 class SearchPapersRequest(BaseModel):
     query: str = Field(..., min_length=2, max_length=200)
-    max_results: int = Field(default=5, ge=1, le=10)
+    max_results: Optional[int] = Field(default=5, ge=1, le=10)
     min_year: Optional[int] = Field(default=None, ge=1800, le=2100)
 
 
@@ -28,4 +28,4 @@ class GetPaperRequest(BaseModel):
 
 class GetAuthorPapersRequest(BaseModel):
     author_id: str = Field(..., min_length=1, max_length=100)
-    max_results: int = Field(default=5, ge=1, le=10)
+    max_results: Optional[int] = Field(default=5, ge=1, le=10)

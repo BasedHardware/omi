@@ -2,9 +2,15 @@ import Foundation
 import LocalAuthentication
 import Security
 
-/// File-based (login) keychain helpers for desktop secrets.
+/// Secret-store facade for desktop credentials.
 ///
-/// Design constraints (see #9167 / keychain ACL prompt fix):
+/// Shipped bundles (`com.omi.computer-macos` and `com.omi.computer-macos.beta`,
+/// `AppBuild.isProductionBundle`) persist through the login keychain. Every other
+/// bundle (Omi Dev, named `omi-*` apps, ad-hoc / Apple Development local builds)
+/// uses `DesktopDeveloperSecretStore` so rebuilds never call SecItem and never
+/// prompt SecurityAgent.
+///
+/// Login-keychain constraints (production only; see #9167 / keychain ACL prompt fix):
 /// - Never opt into the data-protection keychain (`kSecUseDataProtectionKeychain`) — this
 ///   non-sandboxed Developer ID app has no `keychain-access-groups` entitlement.
 /// - Never present the macOS keychain password dialog. Reads/writes that would require UI
@@ -18,11 +24,58 @@ import Security
 ///   still surface the login-keychain password sheet (`errSecUserCanceled` / -128). Leave
 ///   orphans alone — UserDefaults migration covers auth continuity for older installs.
 enum DesktopKeychainStore {
+  enum Backend: Equatable {
+    case keychain
+    case developerFile
+  }
+
+  struct KeychainOperations {
+    var readString: (_ service: String, _ account: String) -> ReadResult
+    var setString: (_ value: String, _ service: String, _ account: String) -> Bool
+    var delete: (_ service: String, _ account: String) -> Void
+  }
+
   /// Pre-scoping service names. Kept as constants for dump/seed scripts and docs only —
   /// app runtime must not SecItem-query these (see file header).
   static let legacyAuthTokenService = "com.omi.desktop.firebase-rest-session"
   static let legacyLocalAgentTokenService = "com.omi.desktop.local-agent-api"
   static let legacyClientDeviceService = "com.omi.client-device-id"
+
+  /// Test seam: force a backend instead of `AppBuild.isProductionBundle`.
+  nonisolated(unsafe) static var backendOverride: Backend?
+  /// Test seam: spy or stub the production keychain operations.
+  nonisolated(unsafe) static var keychainOperationsOverride: KeychainOperations?
+  /// Test seam: replace the developer file store (typically a temp-directory instance).
+  nonisolated(unsafe) static var developerSecretStoreOverride: DesktopDeveloperSecretStore?
+
+  static func resetTestHooks() {
+    backendOverride = nil
+    keychainOperationsOverride = nil
+    developerSecretStoreOverride = nil
+    _cachedBackend = nil
+  }
+
+  static func backend(forBundleIdentifier identifier: String) -> Backend {
+    AppBuild.productionFamilyBundleIdentifiers.contains(identifier) ? .keychain : .developerFile
+  }
+
+  static var backend: Backend {
+    if let backendOverride {
+      return backendOverride
+    }
+    if let _cachedBackend {
+      return _cachedBackend
+    }
+    let resolved: Backend = AppBuild.isProductionBundle ? .keychain : .developerFile
+    _cachedBackend = resolved
+    return resolved
+  }
+
+  private nonisolated(unsafe) static var _cachedBackend: Backend?
+
+  private static var developerSecretStore: DesktopDeveloperSecretStore {
+    developerSecretStoreOverride ?? .shared
+  }
 
   /// Signing Team ID of the running binary (e.g. `9536L8KLMP` for Developer ID,
   /// `JVMXE5G542` for a personal Apple Development cert). Falls back to an ad-hoc
@@ -98,6 +151,50 @@ enum DesktopKeychainStore {
   }
 
   static func readString(service: String, account: String) -> ReadResult {
+    switch backend {
+    case .developerFile:
+      if let value = developerSecretStore.readString(service: service, account: account) {
+        return .found(value)
+      }
+      return .missing
+    case .keychain:
+      return keychainOperationsOverride?.readString(service, account)
+        ?? keychainReadString(service: service, account: account)
+    }
+  }
+
+  static func string(service: String, account: String) -> String? {
+    if case .found(let value) = readString(service: service, account: account) {
+      return value
+    }
+    return nil
+  }
+
+  @discardableResult
+  static func setString(_ value: String, service: String, account: String) -> Bool {
+    switch backend {
+    case .developerFile:
+      return developerSecretStore.setString(value, service: service, account: account)
+    case .keychain:
+      return keychainOperationsOverride?.setString(value, service, account)
+        ?? keychainSetString(value, service: service, account: account)
+    }
+  }
+
+  static func delete(service: String, account: String) {
+    switch backend {
+    case .developerFile:
+      developerSecretStore.delete(service: service, account: account)
+    case .keychain:
+      if let keychainOperationsOverride {
+        keychainOperationsOverride.delete(service, account)
+      } else {
+        keychainDelete(service: service, account: account)
+      }
+    }
+  }
+
+  private static func keychainReadString(service: String, account: String) -> ReadResult {
     var query = baseQuery(service: service, account: account)
     query[kSecReturnData as String] = true
     query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -122,15 +219,7 @@ enum DesktopKeychainStore {
     return .unavailable(status)
   }
 
-  static func string(service: String, account: String) -> String? {
-    if case .found(let value) = readString(service: service, account: account) {
-      return value
-    }
-    return nil
-  }
-
-  @discardableResult
-  static func setString(_ value: String, service: String, account: String) -> Bool {
+  private static func keychainSetString(_ value: String, service: String, account: String) -> Bool {
     let data = Data(value.utf8)
     var query = baseQuery(service: service, account: account)
     applySilentAuth(&query)
@@ -180,7 +269,7 @@ enum DesktopKeychainStore {
     return false
   }
 
-  static func delete(service: String, account: String) {
+  private static func keychainDelete(service: String, account: String) {
     var query = baseQuery(service: service, account: account)
     applySilentAuth(&query)
     let status = SecItemDelete(query as CFDictionary)

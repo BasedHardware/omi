@@ -53,7 +53,7 @@ def _set_flag(monkeypatch, module, enabled: bool) -> None:
     # The shared producer gate (managed_memory_formation_suppressed) reads the
     # flag inside utils.free_tier_memory_policy, not at the producer module,
     # so that is the one seam that steers every site.
-    monkeypatch.setattr(memory_policy, 'free_tier_memory_suppression_enabled', lambda: enabled)
+    monkeypatch.setattr(memory_policy, 'free_tier_memory_suppression_enabled', lambda uid=None: enabled)
 
 
 def _authorize_as(monkeypatch, *, decision: Any, byok_key: bool = False, spy: list | None = None) -> None:

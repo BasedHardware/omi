@@ -147,6 +147,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())
+    conv_proc.validate_structured_source_segment_ids = lambda structured, _ids: structured
     add('utils.llm.conversation_processing', conv_proc)
 
     add('utils.llm.conversation_prompt_prefix', AutoMockModule('utils.llm.conversation_prompt_prefix'))
@@ -168,6 +169,7 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     subscription = add('utils.subscription', AutoMockModule('utils.subscription'))
     subscription.is_trial_paywalled = MagicMock(return_value=False)
+    subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
 
@@ -329,7 +331,7 @@ def _paid_decision() -> Decision:
 
 
 def _enable_flag(monkeypatch, pc) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
 
 
 def _authorize(monkeypatch, pc, decision: Decision) -> None:
@@ -564,7 +566,7 @@ def test_paid_plan_generic_persist_omits_projection_keeps_it_in_memory(monkeypat
 # In-memory attach still happens; the field is written only by ingest mutation.
 def test_flag_off_deferred_persist_omits_projection_keeps_it_in_memory(monkeypatch, stack) -> None:
     pc, _dev = stack
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     resolve = MagicMock(side_effect=AssertionError('policy must not run when flag is off'))
     monkeypatch.setattr(pc, 'resolve_free_tier_processing_plan', resolve)
@@ -866,6 +868,40 @@ def test_processor_projected_store_on_existing_conversation_omits_field(stack) -
     assert 'client_processing' not in payload
     assert _nested(payload, 'structured', 'title') == _SEGMENT_TEXT
     assert _nested(payload, 'structured', 'overview') == ''
+
+
+# red-proof: return the payload without `clear_summary_retryable` from either processing persist
+def test_processing_persists_clear_a_dead_letter_retry_marker_with_an_explicit_null(stack) -> None:
+    """A new processing pass answers the dead-letter's retry affordance.
+
+    merge=True keeps an omitted key, so a set marker must be cleared with an
+    explicit null, while an unset marker is never stamped as a new key.
+    """
+    pc, _dev = stack
+    retried = _conversation()
+    retried.summary_retryable = True
+    assert pc._normal_persist_payload(retried, clear_terminal_marker=False)['summary_retryable'] is None
+    assert 'summary_retryable' in pc._normal_persist_payload(retried, clear_terminal_marker=False)
+    assert pc._terminal_persist_payload(retried)['summary_retryable'] is None
+    assert 'summary_retryable' in pc._terminal_persist_payload(retried)
+    untouched = _conversation()
+    assert 'summary_retryable' not in pc._normal_persist_payload(untouched, clear_terminal_marker=False)
+    assert 'summary_retryable' not in pc._terminal_persist_payload(untouched)
+    assert 'summary_retryable' not in pc.omit_null_processing_state(untouched.dict())
+
+
+# red-proof: drop `conversation.summary_retryable = None` after `_terminal_persist_payload`
+def test_free_tier_retry_answers_the_dead_letter_marker_in_payload_and_response(stack) -> None:
+    pc, _dev = stack
+    persisted = pc.lifecycle_service.persist_processed_conversation
+    persisted.reset_mock()
+    conversation = _conversation()
+    conversation.summary_retryable = True
+    stored, ok = pc._store_deterministic_minimum(_UID, conversation, _minimum_plan(pc))
+    assert ok is True
+    assert stored.summary_retryable is None
+    payload = _persisted_payload(persisted)
+    assert 'summary_retryable' in payload and payload['summary_retryable'] is None
 
 
 # red-proof: `payload.update(client_processing_mutation(_projection()))` on the no-projection minimum persist

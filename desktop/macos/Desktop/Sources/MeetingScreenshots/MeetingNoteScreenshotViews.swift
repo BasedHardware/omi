@@ -50,27 +50,24 @@ struct MeetingNoteScreenshotsLayout<BeforeScreenshots: View, AfterScreenshots: V
   @ObservedObject var store: MeetingScreenshotsStore
 
   let conversation: ServerConversation
-  let date: Date
   let beforeScreenshots: BeforeScreenshots
   let afterScreenshots: AfterScreenshots
 
   init(
     store: MeetingScreenshotsStore,
     conversation: ServerConversation,
-    date: Date,
     @ViewBuilder beforeScreenshots: () -> BeforeScreenshots,
     @ViewBuilder afterScreenshots: () -> AfterScreenshots
   ) {
     self.store = store
     self.conversation = conversation
-    self.date = date
     self.beforeScreenshots = beforeScreenshots()
     self.afterScreenshots = afterScreenshots()
   }
 
   var body: some View {
     beforeScreenshots
-    MeetingNoteScreenshotStrip(store: store, conversation: conversation, date: date)
+    MeetingNoteScreenshotStrip(store: store, conversation: conversation)
     afterScreenshots
   }
 }
@@ -220,7 +217,10 @@ struct MeetingNoteHeaderInset: View {
 struct MeetingNoteScreenshotStrip: View {
   @ObservedObject var store: MeetingScreenshotsStore
   let conversation: ServerConversation
-  let date: Date
+
+  private var selectionWindow: MeetingScreenshotSelectionWindow? {
+    MeetingScreenshotSelectionWindow.resolve(conversation)
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -246,11 +246,10 @@ struct MeetingNoteScreenshotStrip: View {
         onDelete: { frame in await store.deleteFrame(frameID: frame.id) })
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .task(id: conversation.id) {
+    .task(id: "\(conversation.id):\(selectionWindow?.fingerprint ?? "untrusted")") {
       store.load(
         conversationID: conversation.id,
-        start: date,
-        end: conversation.finishedAt ?? date.addingTimeInterval(3600))
+        selectionWindow: selectionWindow)
     }
   }
 }
@@ -270,11 +269,15 @@ struct MeetingNoteScreenshotsSection: View {
       // `Color.clear` is a real view and keeps the modifier alive.
       Color.clear.frame(height: 0)
 
+    // Visible states carry the note's section spacing themselves; the hidden ones stay zero-height
+    // so a note without screenshots has no gap where the strip would be.
     case .selecting:
       label("Looking through what was on screen…")
+        .padding(.top, OmiSpacing.xxl)
 
     case .judging(let candidates):
       label("Reviewing \(candidates) moment\(candidates == 1 ? "" : "s")…")
+        .padding(.top, OmiSpacing.xxl)
 
     case .noCapture:
       // Deliberately silent. A meeting with no screen capture, or none of it approved, is the
@@ -297,8 +300,11 @@ struct MeetingNoteScreenshotsSection: View {
             .foregroundColor(Ink.secondary)
           Spacer()
         }
-        MeetingScreenshotStripRow(frames: store.frames, onOpen: onOpen, onDelete: onDelete)
+        MeetingScreenshotStripRow(
+          frames: store.frames, onOpen: onOpen, onDelete: onDelete,
+          onContentUnavailable: { Task { await store.refreshAfterContentUnavailable() } })
       }
+      .padding(.top, OmiSpacing.xxl)
     }
   }
 
@@ -318,6 +324,8 @@ struct MeetingScreenshotStripRow: View {
   let frames: [ConversationScreenFrame]
   let onOpen: (ConversationScreenFrame) -> Void
   let onDelete: (ConversationScreenFrame) async -> Void
+  /// A tile's thumbnail failed to load, most likely an expired signed URL.
+  var onContentUnavailable: (() -> Void)?
 
   var body: some View {
     ScrollView(.horizontal, showsIndicators: false) {
@@ -326,7 +334,8 @@ struct MeetingScreenshotStripRow: View {
           MeetingScreenshotTile(
             frame: frame,
             onOpen: { onOpen(frame) },
-            onDelete: { await onDelete(frame) })
+            onDelete: { await onDelete(frame) },
+            onContentUnavailable: onContentUnavailable)
         }
       }
       .padding(.vertical, 2)
@@ -339,9 +348,8 @@ struct MeetingScreenshotStripRow: View {
 }
 
 /// One strip tile. `AsyncImage` against the signed thumbnail URL; a load failure (most often an
-/// expired URL) is treated the same as "not loaded yet" — a neutral placeholder, never a broken-
-/// image glyph — because the surrounding row cannot itself refresh the set, only the caption tells
-/// the story.
+/// expired URL) shows the same neutral placeholder as "not loaded yet", never a broken-image glyph,
+/// and asks the store once to refetch the persisted set with fresh signatures.
 struct MeetingScreenshotTile: View {
   let frame: ConversationScreenFrame
   let onOpen: () -> Void
@@ -349,9 +357,17 @@ struct MeetingScreenshotTile: View {
   /// inside the viewer: the viewer is Quick Look now, its chrome is Apple's, and a tile's context
   /// menu is where the Finder puts exactly this command anyway.
   let onDelete: () async -> Void
+  /// Reported at most once per tile, so a URL that still fails after a refresh cannot loop.
+  var onContentUnavailable: (() -> Void)?
 
+  @State private var reportedUnavailable = false
   @State private var isHovering = false
   @State private var isConfirmingDelete = false
+
+  private static func isFailure(_ phase: AsyncImagePhase) -> Bool {
+    if case .failure = phase { return true }
+    return false
+  }
   @State private var isDeleting = false
 
   private var shape: RoundedRectangle {
@@ -388,6 +404,13 @@ struct MeetingScreenshotTile: View {
                 Image(systemName: glyphName)
                   .scaledFont(size: 20)
                   .foregroundColor(Ink.secondary)
+                  // Keyed on failure, not on appearance: the placeholder is already on screen
+                  // while loading, so it does not re-appear when the load then fails.
+                  .task(id: Self.isFailure(phase)) {
+                    guard Self.isFailure(phase), !reportedUnavailable else { return }
+                    reportedUnavailable = true
+                    onContentUnavailable?()
+                  }
               }
             }
           }
@@ -410,17 +433,17 @@ struct MeetingScreenshotTile: View {
       Button("Delete Screenshot…", role: .destructive) { isConfirmingDelete = true }
         .disabled(isDeleting)
     }
-    .alert("Delete Screenshot", isPresented: $isConfirmingDelete) {
-      Button("Cancel", role: .cancel) {}
-      Button("Delete", role: .destructive) {
-        isDeleting = true
-        Task {
-          await onDelete()
-          isDeleting = false
-        }
+    .shellConfirmation(
+      isPresented: $isConfirmingDelete,
+      title: "Delete Screenshot?",
+      message: "This removes the screenshot from this meeting's note. It can't be undone.",
+      confirmTitle: "Delete"
+    ) {
+      isDeleting = true
+      Task {
+        await onDelete()
+        isDeleting = false
       }
-    } message: {
-      Text("This removes the screenshot from this meeting's note. This cannot be undone.")
     }
     .accessibilityLabel(
       Text(frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)

@@ -27,6 +27,7 @@ jobs:
   deploy:
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
+      id-token: write
       contents: read
       actions: read
     runs-on: ubuntu-latest
@@ -53,9 +54,22 @@ jobs:
             --workflow-runs "$proof_path" --require-first-attempt
           git checkout --detach "$DEPLOY_SHA"
           test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-      - uses: google-github-actions/auth@v3
+      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C).
+      # Development keeps its JSON lane.
+      - name: Google Auth (prod WIF)
+        if: github.event.inputs.environment == 'prod'
+        uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth
+        if: github.event.inputs.environment != 'prod'
+        uses: google-github-actions/auth@v3
+        with:
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
       - run: gcloud auth configure-docker
       - uses: docker/setup-buildx-action@v4
       - name: Compute image tag
@@ -135,35 +149,40 @@ jobs:
           actual=$(gcloud run jobs describe "$SERVICE" --region="$REGION" \
             --project="${{ vars.GCP_PROJECT_ID }}" --format='value(template.template.containers[0].image)')
           test "$actual" = "$expected"
-      - name: Provision or update dedicated hourly Scheduler and validate
+      - name: Grant the declared Scheduler identity access to run this job
         env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          SCHEDULER_ENVIRONMENT: ${{ vars.ENV == 'prod' && 'prod' || 'dev' }}
           SCHEDULER_SERVICE_ACCOUNT: ${{ vars.FRAME_REQUEST_RETENTION_SCHEDULER_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
           test -n "$SCHEDULER_SERVICE_ACCOUNT"
-          target="https://run.googleapis.com/v2/projects/${{ vars.GCP_PROJECT_ID }}/locations/${REGION}/jobs/${SERVICE}:run"
-          common=(--location="$REGION" --project="${{ vars.GCP_PROJECT_ID }}" --schedule='0 * * * *' \
-            --time-zone='Etc/UTC' --uri="$target" --http-method=POST \
-            --oauth-service-account-email="$SCHEDULER_SERVICE_ACCOUNT")
-          if gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
-            gcloud scheduler jobs update http "$SCHEDULER_JOB" "${common[@]}"
-          else
-            gcloud scheduler jobs create http "$SCHEDULER_JOB" "${common[@]}"
-          fi
-          scheduler_state=$(gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" --format='value(state)')
-          if [[ "$scheduler_state" == "PAUSED" ]]; then
-            gcloud scheduler jobs resume "$SCHEDULER_JOB" --location="$REGION" \
-              --project="${{ vars.GCP_PROJECT_ID }}"
-          elif [[ "$scheduler_state" != "ENABLED" ]]; then
-            echo "ERROR: unexpected Scheduler state before validation: $scheduler_state" >&2
-            exit 1
-          fi
-          state_file=$(mktemp)
-          trap 'rm -f "$state_file"' EXIT
-          gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" --format=json > "$state_file"
-          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
-            --state-file "$state_file" --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" --scheduler-job "$SCHEDULER_JOB" --cloud-run-job "$SERVICE"
+          python3 - <<'PY'
+          import os
+          import yaml
+
+          environment = os.environ["SCHEDULER_ENVIRONMENT"]
+          project = os.environ["GCP_PROJECT_ID"]
+          manifest = yaml.safe_load(open("backend/deploy/scheduler/jobs.yaml", encoding="utf-8"))
+          jobs = manifest["environments"][environment]["jobs"]
+          job = next(item for item in jobs if item["name"] == "frame-request-retention-hourly")
+          expected_project = manifest["environments"][environment]["project"]
+          declared_account = job["target"]["oauth"]["service_account"]
+          if project != expected_project or declared_account != os.environ["SCHEDULER_SERVICE_ACCOUNT"]:
+              raise SystemExit("Scheduler identity or project does not match the manifest")
+          PY
+          gcloud run jobs add-iam-policy-binding "$SERVICE" \
+            --region="$REGION" --project="${{ vars.GCP_PROJECT_ID }}" \
+            --member="serviceAccount:$SCHEDULER_SERVICE_ACCOUNT" --role=roles/run.invoker
+      - name: Reconcile declared Scheduler trigger
+        env:
+          SCHEDULER_ENVIRONMENT: ${{ vars.ENV == 'prod' && 'prod' || 'dev' }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+          python3 backend/scripts/scheduler_reconcile.py \
+            --environment "$SCHEDULER_ENVIRONMENT" \
+            --project "${{ vars.GCP_PROJECT_ID }}" --apply --jobs "$SCHEDULER_JOB"
+          python3 backend/scripts/scheduler_reconcile.py \
+            --environment "$SCHEDULER_ENVIRONMENT" \
+            --project "${{ vars.GCP_PROJECT_ID }}" --check --jobs "$SCHEDULER_JOB"

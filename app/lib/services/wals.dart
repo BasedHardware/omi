@@ -24,5 +24,6 @@ export 'wals/wal_syncs.dart';
 export 'wals/wal_service.dart';
 export 'wals/sync_reconciler.dart';
 export 'wals/recording_transfer_coordinator.dart';
+export 'wals/sync_transfer_keep_alive.dart';
 export 'wals/sync_rate_limiter.dart';
 export 'wals/sync_upload_gate.dart';

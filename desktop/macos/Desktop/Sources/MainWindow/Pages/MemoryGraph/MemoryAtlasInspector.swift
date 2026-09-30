@@ -207,16 +207,8 @@ struct MemoryAtlasDetailPanel: View {
       .help("Center the map on this entity")
       .accessibilityIdentifier("memory_atlas_focus_selection")
 
-      Button(action: onClose) {
-        Image(systemName: "xmark")
-          .scaledFont(size: 10, weight: .semibold)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 24, height: 24)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .help("Clear selection (Esc)")
-      .accessibilityIdentifier("memory_atlas_clear_selection")
+      DismissButton(action: onClose, accessibilityLabel: "Clear Selection", size: .compact)
+        .accessibilityIdentifier("memory_atlas_clear_selection")
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 14)

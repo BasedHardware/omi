@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:pool/pool.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/startup/boot_journal.dart';
 
 class WalFileManager {
   static const String _walFileName = 'wals.json';
@@ -16,6 +18,7 @@ class WalFileManager {
 
   static File? _walFile;
   static File? _walBackupFile;
+  static final _saveLock = Pool(1);
 
   static Future<void> init() async {
     final directory = await getApplicationDocumentsDirectory();
@@ -28,34 +31,94 @@ class WalFileManager {
       await init();
     }
 
-    if (_walFile == null || !_walFile!.existsSync()) {
-      Logger.debug('WAL file does not exist, returning empty list');
-      return [];
-    }
-
-    final content = await _walFile!.readAsString();
-    if (content.isEmpty) {
-      Logger.debug('WAL file is empty, returning empty list');
-      return [];
-    }
-
-    dynamic jsonData;
-    try {
-      jsonData = jsonDecode(content);
-    } on FormatException catch (e) {
-      Logger.debug('WAL file is corrupted ($e), trying backup');
-      return await _loadFromBackup();
-    }
-    if (jsonData is! Map<String, dynamic> || jsonData['wals'] is! List) {
-      Logger.debug('Invalid WAL file format, returning empty list');
-      return [];
-    }
-
-    final walsList = jsonData['wals'] as List;
-    return Wal.fromJsonList(walsList);
+    if (_walFile == null || !await _walFile!.exists()) return await _loadFromBackup();
+    final loaded = await _loadIndex(_walFile!);
+    return loaded ?? await _loadFromBackup();
   }
 
-  static Future<bool> saveWals(List<Wal> wals) async {
+  /// Null means the index is unusable; a partially valid index retains every
+  /// readable entry and archives the original bytes before writing the repair.
+  static Future<List<Wal>?> _loadIndex(File file) async {
+    try {
+      final content = await file.readAsString();
+      final decoded = jsonDecode(content);
+      if (decoded is! Map<String, dynamic> || decoded['wals'] is! List) {
+        await _quarantineIndex(file, 'invalid_schema');
+        return null;
+      }
+      final loaded = <Wal>[];
+      var invalid = false;
+      for (final entry in decoded['wals'] as List) {
+        try {
+          if (entry is! Map<String, dynamic>) throw const FormatException();
+          // Old indices can omit new optional fields, but a WAL without its
+          // identity or with a wrong scalar type must never enter sync admission.
+          if (entry['timer_start'] is! int || entry['codec'] is! String) throw const FormatException();
+          for (final key in [
+            'channel',
+            'sample_rate',
+            'seconds',
+            'storage_offset',
+            'storage_total_bytes',
+            'file_num',
+            'total_frames',
+            'synced_frame_offset',
+            'retry_count',
+            'last_retry_at',
+            'uploaded_at',
+            'source_frame_start',
+            'source_clock_epoch'
+          ]) {
+            if (entry[key] != null && entry[key] is! int) throw const FormatException();
+          }
+          for (final key in [
+            'file_path',
+            'device',
+            'device_model',
+            'conversation_id',
+            'recording_session_id',
+            'owner_uid',
+            'capture_root',
+            'job_id'
+          ]) {
+            if (entry[key] != null && entry[key] is! String) throw const FormatException();
+          }
+          loaded.add(Wal.fromJson(entry));
+        } catch (_) {
+          invalid = true;
+        }
+      }
+      if (invalid) {
+        await _quarantineIndex(file, 'invalid_entry');
+        if (identical(file, _walFile)) {
+          try {
+            await _saveWals(loaded);
+          } catch (_) {
+            // The archived source remains available for another recovery.
+          }
+        }
+      }
+      return loaded;
+    } catch (_) {
+      await _quarantineIndex(file, 'unreadable');
+      return null;
+    }
+  }
+
+  static Future<void> _quarantineIndex(File file, String reason) async {
+    try {
+      if (await file.exists()) {
+        await file.rename('${file.path}.corrupt-${DateTime.now().microsecondsSinceEpoch}');
+      }
+      await BootJournal.instance.record('quarantine:${file.uri.pathSegments.last}', reason);
+    } catch (_) {
+      await BootJournal.instance.record('quarantine:${file.uri.pathSegments.last}', 'rename_failed');
+    }
+  }
+
+  static Future<bool> saveWals(List<Wal> wals) => _saveLock.withResource(() => _saveWals(wals));
+
+  static Future<bool> _saveWals(List<Wal> wals) async {
     if (_walFile == null) {
       await init();
     }
@@ -74,7 +137,9 @@ class WalFileManager {
     };
 
     final jsonString = jsonEncode(jsonData);
-    await _walFile!.writeAsString(jsonString);
+    final tmp = File('${_walFile!.path}.tmp');
+    await tmp.writeAsString(jsonString, flush: true);
+    await tmp.rename(_walFile!.path);
 
     Logger.debug('Successfully saved ${wals.length} WALs to file');
     return true;
@@ -83,10 +148,15 @@ class WalFileManager {
   static Future<void> _createBackup() async {
     try {
       if (_walFile != null && _walFile!.existsSync() && _walBackupFile != null) {
+        final content = await _walFile!.readAsString();
+        if (content.isEmpty) return;
+        jsonDecode(content);
         await _walFile!.copy(_walBackupFile!.path);
       }
     } on FileSystemException catch (e) {
       Logger.debug('WalFileManager: Failed to create backup: $e');
+    } on FormatException catch (e) {
+      Logger.debug('WalFileManager: Not backing up unreadable WAL file: $e');
     }
   }
 
@@ -95,25 +165,7 @@ class WalFileManager {
     if (_walBackupFile == null || !_walBackupFile!.existsSync()) {
       return [];
     }
-
-    final content = await _walBackupFile!.readAsString();
-    if (content.isEmpty) {
-      return [];
-    }
-
-    dynamic jsonData;
-    try {
-      jsonData = jsonDecode(content);
-    } on FormatException catch (e) {
-      Logger.debug('WAL backup file is also corrupted ($e), returning empty list');
-      return [];
-    }
-    if (jsonData is! Map<String, dynamic> || jsonData['wals'] is! List) {
-      return [];
-    }
-
-    final walsList = jsonData['wals'] as List;
-    return Wal.fromJsonList(walsList);
+    return await _loadIndex(_walBackupFile!) ?? [];
   }
 
   static Future<bool> migrateFromPreferences(List<Wal> prefsWals) async {

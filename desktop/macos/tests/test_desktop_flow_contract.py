@@ -49,6 +49,14 @@ class DesktopFlowContractTests(unittest.TestCase):
         for action in ("settings_notifications_snapshot", "set_notification_settings"):
             self.assertIn(action, registered)
 
+    def test_open_ask_omi_is_reachable_from_its_automation_file(self):
+        registered: set[str] = set()
+        for relative in ACTION_SOURCE_RELATIVE_PATHS:
+            path = DESKTOP_MACOS / relative
+            if path.is_file():
+                registered.update(ACTION_NAME.findall(path.read_text(encoding="utf-8")))
+        self.assertIn("open_ask_omi", registered)
+
     def test_listed_sources_all_exist(self):
         """Discovery must not invent a path: the lint fails hard on a missing source."""
         for relative in ACTION_SOURCE_RELATIVE_PATHS:

@@ -16,6 +16,10 @@ typedef SyncFilesUploader = Future<UploadFilesResult> Function(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  String? captureEvidence,
+  String? recordingSessionId,
+  double? audioStartSeconds,
+  double? audioEndSeconds,
   bool claimLiveCapture,
   Geolocation? geolocation,
 });
@@ -148,6 +152,10 @@ class SyncUploadGate {
     List<File> files, {
     UploadProgressCallback? onUploadProgress,
     String? conversationId,
+    String? captureEvidence,
+    String? recordingSessionId,
+    double? audioStartSeconds,
+    double? audioEndSeconds,
     bool claimLiveCapture = false,
     Geolocation? geolocation,
   }) async {
@@ -191,6 +199,10 @@ class SyncUploadGate {
           files,
           onUploadProgress: onUploadProgress,
           conversationId: conversationId,
+          captureEvidence: captureEvidence,
+          recordingSessionId: recordingSessionId,
+          audioStartSeconds: audioStartSeconds,
+          audioEndSeconds: audioEndSeconds,
           claimLiveCapture: claimLiveCapture,
           geolocation: geolocation,
         );
@@ -213,15 +225,20 @@ class SyncUploadGate {
           retryAfterSeconds: error.retryAfterSeconds,
           reason: error.kind == SyncRateLimitKind.fairUse ? RateLimitReason.fairUse : RateLimitReason.backendBusy,
         );
-        _recordUploadFailure(
-          error,
-          attemptId: attemptId,
-          recordingId: conversationId,
-          fileCount: files.length,
-          totalBytes: totalBytes,
-          claimsLiveCapture: claimLiveCapture,
-          startedAt: startedAt,
-        );
+        // Paced historical recovery is the server asking us to wait. The WAL
+        // stays pending and retries on Retry-After; it is not a user-visible
+        // upload failure. Fair-use and unscoped 429s still are.
+        if (!isPacedBackfillReasonCode(error.reasonCode)) {
+          _recordUploadFailure(
+            error,
+            attemptId: attemptId,
+            recordingId: conversationId,
+            fileCount: files.length,
+            totalBytes: totalBytes,
+            claimsLiveCapture: claimLiveCapture,
+            startedAt: startedAt,
+          );
+        }
         rethrow;
       } catch (error) {
         _recordUploadFailure(
@@ -362,6 +379,9 @@ class RecordingUploadTelemetry {
   };
 
   static String failureClass(Object error) {
+    // Expected backfill backoff never reaches here: the gate does not mint
+    // Recording Upload Failed for [isPacedBackfillReasonCode]. An unscoped
+    // rate limit is still `rate_limited`.
     if (error is SyncRateLimitedException) return 'rate_limited';
     if (error is TimeoutException) return 'timeout';
     if (error is SocketException) return 'network';

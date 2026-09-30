@@ -58,7 +58,10 @@ final class UnhandledKeystrokeSilenceTests: XCTestCase {
   func testTheFloatingPanelAbsorbsUnhandledKeysButStillActsOnEscape() throws {
     let window = FloatingControlBarWindow(
       contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-    defer { window.close() }
+    defer {
+      window.contentView = nil
+      window.close()
+    }
     let probe = NextResponderProbe()
     window.nextResponder = probe
 

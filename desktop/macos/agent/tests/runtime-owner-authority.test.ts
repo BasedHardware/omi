@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  authorizeRuntimeTokenRefresh,
   clearRuntimeOwnerAuthority,
   establishRuntimeOwner,
   prepareRuntimeOwnerRevocation,
@@ -36,29 +35,6 @@ describe("runtime owner handshake authority", () => {
       /established runtime owner replacement requires correlated revoke and a fresh process/,
     );
     expect(runtimeOwnerForEffects(repeated.state)).toBe("owner-a");
-  });
-
-  it("rejects ownerless and stale-owner token refresh before any credential side effect", () => {
-    const startup = { ownerId: "desktop-local-user", established: false };
-    let committedToken: string | undefined;
-    expect(() => authorizeRuntimeTokenRefresh(startup, undefined, () => {
-      committedToken = "ownerless-token";
-    })).toThrow(/non-empty ownerId/);
-    expect(committedToken).toBeUndefined();
-    expect(runtimeOwnerForEffects(startup)).toBe("");
-
-    const established = authorizeRuntimeTokenRefresh(startup, "owner-a", () => {
-      committedToken = "owner-a-token";
-    });
-    expect(committedToken).toBe("owner-a-token");
-    expect(runtimeOwnerForEffects(established.state)).toBe("owner-a");
-
-    committedToken = undefined;
-    expect(() => authorizeRuntimeTokenRefresh(established.state, "owner-b", () => {
-      committedToken = "stale-owner-b-token";
-    })).toThrow(/owner_mismatch/);
-    expect(committedToken).toBeUndefined();
-    expect(runtimeOwnerForEffects(established.state)).toBe("owner-a");
   });
 
   it("clear revokes owner effects until a new explicit handshake", () => {

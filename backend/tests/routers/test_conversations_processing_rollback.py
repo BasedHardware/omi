@@ -117,6 +117,30 @@ def test_recording_snapshot_wins_over_redis_location_fallback(monkeypatch, conve
     redis_read.assert_not_called()
 
 
+def _isolate_deferral_counter(monkeypatch):
+    """Detach a test that does not assert on `lazy_desktop_deferral_total` from it.
+
+    These tests return as soon as `process_conversation` runs, but the enrichment
+    thread keeps going and records its terminal event afterwards -- which used to
+    land inside a LATER test's before/after window and make the strict counter
+    assertions flaky. Replacing the recorder makes the leak impossible instead of
+    unlikely, and the returned event lets the test join the thread's terminal step.
+    """
+    import threading
+
+    terminal = threading.Event()
+
+    def _record(*, event: str) -> None:
+        if event in ('enrich_complete', 'enrich_failed'):
+            terminal.set()
+
+    monkeypatch.setattr(conversations_router, 'record_lazy_desktop_deferral', _record)
+    monkeypatch.setattr(
+        conversations_router, 'record_and_persist_finalized_meeting_receipt', MagicMock(), raising=False
+    )
+    return terminal
+
+
 def test_deferred_enrichment_renews_processing_lease_during_live_processing(monkeypatch):
     """Lazy enrichment of a deferred conversation must keep its admission lease
     fresh while process_conversation runs in the background thread (#10461
@@ -145,6 +169,7 @@ def test_deferred_enrichment_renews_processing_lease_during_live_processing(monk
 
     monkeypatch.setattr(conversations_router, 'process_conversation', blocking_process)
     monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', MagicMock())
+    terminal = _isolate_deferral_counter(monkeypatch)
 
     conv_obj = SimpleNamespace(id='deferred-conv-1', language='en', deferred=False)
     monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda data: conv_obj)
@@ -156,6 +181,7 @@ def test_deferred_enrichment_renews_processing_lease_during_live_processing(monk
     # The enrichment runs in a background thread; wait for it to prove the lease was renewed.
     assert enrichment_done.wait(timeout=10.0), 'deferred enrichment did not complete'
     assert lease_renewed.is_set()
+    assert terminal.wait(timeout=10.0), 'background enrichment did not reach a terminal event'
 
 
 def test_deferred_enrichment_atomically_reacquires_ownership_before_processing(monkeypatch):
@@ -182,6 +208,7 @@ def test_deferred_enrichment_atomically_reacquires_ownership_before_processing(m
     monkeypatch.setattr(conversations_router, 'process_conversation', blocking_process)
     monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
     monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', MagicMock())
+    terminal = _isolate_deferral_counter(monkeypatch)
 
     conv_obj = SimpleNamespace(id='deferred-conv-1', language='en', deferred=False)
     monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda data: conv_obj)
@@ -192,6 +219,7 @@ def test_deferred_enrichment_atomically_reacquires_ownership_before_processing(m
 
     assert enrichment_done.wait(timeout=10.0), 'deferred enrichment did not complete'
     assert reacquired.is_set(), 'reacquire_deferred_processing was not called'
+    assert terminal.wait(timeout=10.0), 'background enrichment did not reach a terminal event'
 
 
 def test_deferred_enrichment_skips_when_reacquisition_fails(monkeypatch):
@@ -247,3 +275,203 @@ def test_deferred_enrichment_failure_rearms_retry_through_lifecycle_owner(monkey
     assert recovered.wait(timeout=10.0), 'deferred failure recovery did not run'
     recovery.assert_called_once_with('uid1', 'deferred-conv-1')
     raw_update.assert_not_called()
+
+
+def _lazy_metric(event: str) -> float:
+    from utils.metrics import LAZY_DESKTOP_DEFERRAL_TOTAL
+
+    return LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=event)._value.get()
+
+
+def test_deferred_enrichment_counts_started_and_complete_on_the_real_counter(monkeypatch):
+    """First-open enrichment is the observed "ever opened" event for the lazy
+    desktop path. It must land on the bounded Prometheus counter, through the
+    actual _enrich_deferred_conversation entry point, not a log line."""
+    import threading
+
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'renew_processing_lease', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+    monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', MagicMock())
+    monkeypatch.setattr(
+        conversations_router, 'record_and_persist_finalized_meeting_receipt', MagicMock(), raising=False
+    )
+    conv_obj = SimpleNamespace(id='deferred-conv-metric', language='en', deferred=False)
+    monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda _data: conv_obj)
+    done = threading.Event()
+
+    def fake_process(_uid, _language, conversation, **_kwargs):
+        done.set()
+        return conversation
+
+    monkeypatch.setattr(conversations_router, 'process_conversation', fake_process)
+    started_before = _lazy_metric('enrich_started')
+    complete_before = _lazy_metric('enrich_complete')
+    failed_before = _lazy_metric('enrich_failed')
+
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-metric', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+
+    assert done.wait(timeout=10.0)
+    deadline = threading.Event()
+    for _ in range(200):
+        if _lazy_metric('enrich_complete') == complete_before + 1:
+            break
+        deadline.wait(0.01)
+    assert _lazy_metric('enrich_started') == started_before + 1
+    assert _lazy_metric('enrich_complete') == complete_before + 1
+    assert _lazy_metric('enrich_failed') == failed_before
+
+
+def test_deferred_enrichment_receipt_failure_does_not_count_as_enrich_failed(monkeypatch):
+    """The counter tracks enrichment outcomes: a Chat receipt publish failure
+    after `process_conversation` already succeeded must not be recorded as
+    `enrich_failed`, or the stored-vs-enrich_complete reconciliation drifts."""
+    import time
+
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'renew_processing_lease', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+    monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', MagicMock())
+    conv_obj = SimpleNamespace(id='deferred-conv-receipt-fail', language='en', deferred=False)
+    monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda _data: conv_obj)
+    monkeypatch.setattr(
+        conversations_router,
+        'process_conversation',
+        MagicMock(return_value=conv_obj),
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        'record_and_persist_finalized_meeting_receipt',
+        MagicMock(side_effect=RuntimeError('receipt backend down')),
+        raising=False,
+    )
+    recover = MagicMock(return_value=True)
+    monkeypatch.setattr(
+        lifecycle_service,
+        'recover_deferred_processing_failure',
+        recover,
+        raising=False,
+    )
+
+    complete_before = _lazy_metric('enrich_complete')
+    failed_before = _lazy_metric('enrich_failed')
+
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-receipt-fail', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+
+    # The receipt failure is swallowed, so there is no recovery call to wait
+    # on; poll for the counter to settle.
+    import time
+
+    for _ in range(200):
+        if _lazy_metric('enrich_complete') == complete_before + 1:
+            break
+        time.sleep(0.01)
+    assert _lazy_metric('enrich_complete') == complete_before + 1
+    assert _lazy_metric('enrich_failed') == failed_before
+    lifecycle_service.recover_deferred_processing_failure.assert_not_called()
+
+
+def test_deferred_enrichment_counts_failed_and_lost_ownership(monkeypatch):
+    import threading
+    import time
+
+    recovered = threading.Event()
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
+    monkeypatch.setattr(
+        lifecycle_service,
+        'recover_deferred_processing_failure',
+        MagicMock(side_effect=lambda *_args: recovered.set() or True),
+        raising=False,
+    )
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'renew_processing_lease', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+    monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', MagicMock())
+    monkeypatch.setattr(
+        conversations_router,
+        'deserialize_conversation',
+        lambda _data: SimpleNamespace(id='deferred-conv-fail', language='en', deferred=False),
+    )
+    monkeypatch.setattr(
+        conversations_router, 'process_conversation', MagicMock(side_effect=RuntimeError('enrichment unavailable'))
+    )
+    failed_before = _lazy_metric('enrich_failed')
+    complete_before = _lazy_metric('enrich_complete')
+    lost_before = _lazy_metric('enrich_lost_ownership')
+
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-fail', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+    assert recovered.wait(timeout=10.0)
+    for _ in range(200):
+        if _lazy_metric('enrich_failed') == failed_before + 1:
+            break
+        time.sleep(0.01)
+    assert _lazy_metric('enrich_failed') == failed_before + 1
+    assert _lazy_metric('enrich_complete') == complete_before
+
+    # Reacquisition loss is counted separately and never as a start.
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
+    started_before = _lazy_metric('enrich_started')
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-lost', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+    assert _lazy_metric('enrich_lost_ownership') == lost_before + 1
+    assert _lazy_metric('enrich_started') == started_before
+
+
+def test_deferred_enrichment_reacquire_exception_is_counted_apart_from_lost_ownership(monkeypatch):
+    """A reacquire that RAISED is a broken dependency; a reacquire that returned
+    False is a benign fence loss, and `deferred=True` doubles as that fence while
+    clients poll. One shared label would bury the dependency failure in the polls."""
+    monkeypatch.setattr(
+        lifecycle_service,
+        'reacquire_deferred_processing',
+        MagicMock(side_effect=RuntimeError('lifecycle store unavailable')),
+    )
+    process_called = MagicMock()
+    monkeypatch.setattr(conversations_router, 'process_conversation', process_called)
+
+    error_before = _lazy_metric('enrich_reacquire_error')
+    lost_before = _lazy_metric('enrich_lost_ownership')
+    started_before = _lazy_metric('enrich_started')
+
+    conversations_router._enrich_deferred_conversation(
+        'uid1',
+        {'id': 'deferred-conv-reacquire-error', 'status': 'processing', 'deferred': True, 'language': 'en'},
+    )
+
+    assert _lazy_metric('enrich_reacquire_error') == error_before + 1
+    assert _lazy_metric('enrich_lost_ownership') == lost_before
+    assert _lazy_metric('enrich_started') == started_before
+    process_called.assert_not_called()
+
+
+def test_deferred_enrichment_start_is_counted_inside_the_worker(monkeypatch):
+    """`enrich_started` must be recorded by the worker, not before the submit: a
+    submit rejected by a shut-down pool (deploy) would otherwise leave a start
+    with no terminal event and inflate the started-vs-complete gap."""
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
+    monkeypatch.setattr(
+        conversations_router,
+        'submit_with_context',
+        MagicMock(side_effect=RuntimeError('executor shut down')),
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        'deserialize_conversation',
+        lambda _data: SimpleNamespace(id='deferred-conv-submit-fail', language='en', deferred=False),
+    )
+
+    started_before = _lazy_metric('enrich_started')
+
+    with pytest.raises(RuntimeError, match='executor shut down'):
+        conversations_router._enrich_deferred_conversation(
+            'uid1',
+            {'id': 'deferred-conv-submit-fail', 'status': 'processing', 'deferred': True, 'language': 'en'},
+        )
+
+    assert _lazy_metric('enrich_started') == started_before

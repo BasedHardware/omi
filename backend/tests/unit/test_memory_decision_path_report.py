@@ -67,6 +67,7 @@ def test_report_deduplicates_capture_and_uses_explicit_denominators() -> None:
 
     assert report['status'] == 'complete'
     assert report['quality']['duplicate_capture_events_removed'] == 1
+    assert report['quality']['duplicate_sweep_events_removed'] == 1
     assert report['totals'] == {
         'capture_memories': 8,
         'capture_conversations': 7,
@@ -75,6 +76,13 @@ def test_report_deduplicates_capture_and_uses_explicit_denominators() -> None:
         'promotion_applied_decisions': 5,
         'promotion_failure_attempts': 6,
         'promotion_users': 3,
+        'sweep_days': 1,
+        'sweep_user_days': 1,
+        'sweep_users': 1,
+        'sweep_dropped_subjectless': 2,
+        'sweep_dropped_basis_proposed': 3,
+        'sweep_demoted_owner_untrusted': 1,
+        'sweep_skipped_duplicate_lookup': 1,
     }
     disagreement = report['capture']['attribution_disagreed']['true']
     assert disagreement['event_weighted']['numerator'] == 3
@@ -84,6 +92,33 @@ def test_report_deduplicates_capture_and_uses_explicit_denominators() -> None:
     assert disagreement['user_macro']['rate'] == pytest.approx(((2 / 3) + (1 / 4) + 0) / 3)
     assert disagreement['event_weighted']['ci95']['lower'] < 3 / 8
     assert disagreement['event_weighted']['ci95']['upper'] > 3 / 8
+
+
+def test_sweep_days_are_calendar_days_and_user_days_are_uid_date_rows() -> None:
+    raw = [
+        {
+            'stage': 'sweep',
+            'uid': uid,
+            'local_date': '2026-08-19',
+            'dropped_subjectless': 1,
+            'dropped_basis_proposed': 0,
+            'demoted_owner_untrusted': 0,
+            'skipped_duplicate_lookup': 0,
+        }
+        for uid in ('u1', 'u2')
+    ]
+    events, invalid = measurement.parse_events(raw)
+    report = measurement.build_report(
+        events,
+        source={'kind': 'test'},
+        input_entries=len(raw),
+        invalid_entries=invalid,
+    )
+    assert report['totals']['sweep_days'] == 1
+    assert report['totals']['sweep_user_days'] == 2
+    assert report['totals']['sweep_users'] == 2
+    rendered = measurement.render_human(report)
+    assert 'dropped_subjectless: 2 candidates across 2 user-days' in rendered
 
 
 def test_capture_regime_and_speaker_bucket_metrics_use_the_named_grain() -> None:
@@ -159,6 +194,8 @@ def test_human_output_prints_ratios_and_states_unavailable_diarization_metrics()
     assert 'user mean 30.6% across 3 users' in rendered
     assert 'owner-silent, multi-owner, or clean/degraded diarization' in rendered
     assert 'Operational failure statuses (attempt grain)' in rendered
+    assert 'Sweep candidate-gate drops' in rendered
+    assert 'dropped_subjectless: 2 candidates across 1 user-days' in rendered
 
 
 def test_empty_input_is_honest_and_emits_no_rates(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -331,6 +368,32 @@ def test_negative_owner_count_is_invalid_but_a_missing_one_is_not() -> None:
 
     assert len(events) == 2
     assert invalid == {'capture_owner_speaker_ids_invalid': 2}
+
+
+def test_negative_sweep_counter_is_invalid_but_zeros_are_not() -> None:
+    healthy = {
+        'stage': 'sweep',
+        'uid': 'u1',
+        'local_date': '2026-08-19',
+        'dropped_subjectless': 0,
+        'dropped_basis_proposed': 0,
+        'demoted_owner_untrusted': 0,
+        'skipped_duplicate_lookup': 0,
+    }
+    negative = {**healthy, 'dropped_basis_proposed': -1}
+    boolean = {**healthy, 'uid': 'u2', 'dropped_subjectless': True}
+    events, invalid = measurement.parse_events(
+        [
+            {'timestamp': '2026-08-22T00:00:01Z', 'textPayload': f'{measurement.EVENT_NAME} {json.dumps(event)}'}
+            for event in (healthy, negative, boolean)
+        ]
+    )
+
+    assert len(events) == 1
+    assert invalid == {
+        'sweep_dropped_basis_proposed_invalid': 1,
+        'sweep_dropped_subjectless_invalid': 1,
+    }
 
 
 def test_human_output_reports_owner_health_coverage_when_the_field_is_present() -> None:

@@ -56,7 +56,7 @@ extension SettingsContentView {
           Text("Language model")
             .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(Ink.primary)
-          Text("Choose the provider that powers chat, memory, and insights. OpenRouter is selected by default.")
+          Text("Choose a provider for supported memory and insight features. Desktop chat supports Anthropic keys.")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
           Picker("LLM provider", selection: $devBYOKLLMProvider) {
@@ -171,6 +171,14 @@ extension SettingsContentView {
     APIKeyService.isByokActive
   }
 
+  var byokStatusTitle: String {
+    APIKeyService.isByokActive ? "Custom keys active" : "Bring your own keys"
+  }
+
+  var byokUsageDescription: String {
+    "Keys cover only supported features. Desktop chat supports Anthropic keys; other keys do not remove Omi's chat limit."
+  }
+
   @ViewBuilder
   var byokStatusBanner: some View {
     settingsCard(settingId: "advanced.devkeys.info") {
@@ -178,13 +186,12 @@ extension SettingsContentView {
         Image(systemName: hasAllBYOKKeys ? "checkmark.seal.fill" : "key.fill")
           .foregroundColor(hasAllBYOKKeys ? Ink.listeningGreen : Ink.secondary)
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text(hasAllBYOKKeys ? "Free plan active" : "Use Omi free forever")
+          Text(byokStatusTitle)
             .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(Ink.primary)
           Text(
-            hasAllBYOKKeys
-              ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
-              : "Choose a language model provider, then add its key. Deepgram is optional and only powers transcription. Keys stay on this Mac — we never store them on our servers."
+            byokUsageDescription
+              + " Deepgram is optional for transcription. Keys are saved on this Mac and sent with requests, never stored on Omi's servers."
           )
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
@@ -249,15 +256,16 @@ extension SettingsContentView {
       return
 
     case .validateAndActivate:
+      let candidateSnapshot = APIKeyService.byokActivationCandidateSnapshot
       // The badge state the UI has always been able to draw but never reached:
       // say a provider is being checked while it is being checked.
       var checking: [BYOKProvider: BYOKValidator.Status] = [:]
-      for provider in APIKeyService.activeBYOKSnapshot.keys { checking[provider] = .checking }
+      for provider in candidateSnapshot.keys { checking[provider] = .checking }
       byokKeyStatuses = checking
 
       // Validate before flipping the backend flag — otherwise we'd put the
       // user on the free plan with dead keys and every chat would 401.
-      let snapshot = APIKeyService.activeBYOKSnapshot.reduce(into: [BYOKProvider: String]()) {
+      let snapshot = candidateSnapshot.reduce(into: [BYOKProvider: String]()) {
         acc, entry in acc[entry.key] = entry.value.key
       }
       let results = await BYOKValidator.validateAll(snapshot)
@@ -268,7 +276,7 @@ extension SettingsContentView {
           return false
         } ?? false
       if selectedLLMValid {
-        let fingerprints = APIKeyService.activeBYOKSnapshot.reduce(into: [String: String]()) { acc, entry in
+        let fingerprints = candidateSnapshot.reduce(into: [String: String]()) { acc, entry in
           if let status = results[entry.key], case .ok = status {
             acc[entry.key.rawValue] = entry.value.fingerprint
           }

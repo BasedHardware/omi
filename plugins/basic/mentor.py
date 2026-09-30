@@ -1,13 +1,35 @@
+import time
 import re
+from typing import Dict, Tuple
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 
+from .mentor_webhook_auth import require_mentor_webhook_auth
 from models import TranscriptSegment, ProactiveNotificationEndpointResponse, RealtimePluginRequest
 from db import get_upsert_segment_to_transcript_plugin
 
 router = APIRouter()
 
-scan_segment_session = {}
+# Bounded in-memory session tracking with TTL eviction to prevent memory leaks and state bloat
+# Stores {buffer_id: (scan_segment_index, last_accessed_timestamp)}
+MAX_MENTOR_SESSIONS = 1000
+MENTOR_SESSION_TTL_SECONDS = 3600  # 1 hour idle TTL
+scan_segment_session: Dict[str, Tuple[int, float]] = {}
+
+
+def _cleanup_stale_sessions():
+    """Prune sessions that exceed TTL or cap dictionary size."""
+    now = time.time()
+    stale_keys = [k for k, (_, ts) in scan_segment_session.items() if now - ts > MENTOR_SESSION_TTL_SECONDS]
+    for k in stale_keys:
+        scan_segment_session.pop(k, None)
+
+    # If still above capacity, remove the oldest entries
+    if len(scan_segment_session) > MAX_MENTOR_SESSIONS:
+        sorted_keys = sorted(scan_segment_session.keys(), key=lambda k: scan_segment_session[k][1])
+        for k in sorted_keys[: len(scan_segment_session) - MAX_MENTOR_SESSIONS]:
+            scan_segment_session.pop(k, None)
+
 
 # *******************************************************
 # ************ Basic Proactive Notification Plugin ************
@@ -20,23 +42,50 @@ scan_segment_session = {}
     response_model=ProactiveNotificationEndpointResponse,
     response_model_exclude_none=True,
 )
-def mentoring(data: RealtimePluginRequest):
+def mentoring(
+    data: RealtimePluginRequest,
+    uid: str = Depends(require_mentor_webhook_auth),
+):
     def normalize(text):
-        return re.sub(r' +', ' ', re.sub(r'[,?.!]', ' ', text)).lower().strip()
+        if not text:
+            return ""
+        return re.sub(r' +', ' ', re.sub(r'[,?.!]', ' ', str(text))).lower().strip()
 
-    session_id = data.session_id
-    segments = get_upsert_segment_to_transcript_plugin('mentor-01', session_id, data.segments)
-    if len(segments) <= len(data.segments) or session_id not in scan_segment_session:
-        scan_segment_session[session_id] = 0
-    scan_segment = scan_segment_session[session_id]
+    if data.session_id != uid:
+        raise HTTPException(status_code=403, detail='session_id must match uid')
+
+    _cleanup_stale_sessions()
+
+    buffer_id = uid
+    segments = get_upsert_segment_to_transcript_plugin('mentor-01', buffer_id, data.segments)
+
+    # If new conversation or buffer_id not in session tracking, reset index
+    if len(segments) <= len(data.segments) or buffer_id not in scan_segment_session:
+        scan_segment_session[buffer_id] = (0, time.time())
+    else:
+        # Update access timestamp
+        current_idx, _ = scan_segment_session[buffer_id]
+        scan_segment_session[buffer_id] = (current_idx, time.time())
+
+    scan_segment, _ = scan_segment_session[buffer_id]
 
     # 1. Detect codewords. You could either use a simple regexp or call LLMs to trigger the step 2.
     codewords = ['hey Omi what do you think']
     scan_segments = segments[scan_segment:]
-    print(session_id, "scan_segment", len(scan_segments), scan_segment)
     if len(scan_segments) == 0:
         return {}
-    text_lower = normalize(" ".join([segment.text for segment in scan_segments]))
+
+    # Guard against non-string segment texts
+    text_fragments = []
+    for segment in scan_segments:
+        seg_text = getattr(segment, 'text', None)
+        if seg_text:
+            text_fragments.append(str(seg_text))
+
+    if not text_fragments:
+        return {}
+
+    text_lower = normalize(" ".join(text_fragments))
     pattern = r'\b(?:' + '|'.join(map(re.escape, [normalize(cw) for cw in codewords])) + r')\b'
     if not bool(re.search(pattern, text_lower)):
         return {}
@@ -44,7 +93,7 @@ def mentoring(data: RealtimePluginRequest):
     # 2. Generate mentoring prompt
     # Omi will replace {{user_name}} in your prompt with the user's name
     # Omi will replace {{user_facts}} in your prompt  with the user's known facts.
-    scan_segment_session[session_id] = len(segments)
+    scan_segment_session[buffer_id] = (len(segments), time.time())
     transcript = TranscriptSegment.segments_as_string(segments)
 
     user_name = "{{user_name}}"
@@ -97,7 +146,7 @@ def mentoring(data: RealtimePluginRequest):
     # 3. Respond with the format {notification: {prompt, params, context}}
     #   - context: {question, filters: {people, topics, entities}} | None
     return {
-        'session_id': data.session_id,
+        'session_id': uid,
         'notification': {
             'prompt': prompt,
             'params': ['user_name', 'user_facts', 'user_context', 'user_chat'],

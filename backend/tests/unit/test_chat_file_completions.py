@@ -21,6 +21,7 @@ from utils.other import chat_file  # noqa: E402
 from utils.retrieval import graph  # noqa: E402
 from utils.retrieval.agentic import AGENT_STREAM_FAILURE_MESSAGE  # noqa: E402
 import utils.retrieval.tools.file_tools as file_tools  # noqa: E402
+from utils.llm.model_config import LUNA_MODEL
 
 
 class _Callback:
@@ -105,7 +106,7 @@ async def test_doc_file_chat_uses_completions_and_never_assistants(monkeypatch):
     assert answer == 'PDF summary'
     assert callback.chunks == ['PDF summary']
     assert callback.ended is True
-    assert request['model'] == 'gpt-5.6-luna'
+    assert request['model'] == LUNA_MODEL
     assert request['max_completion_tokens'] == 2048
     assert 'max_tokens' not in request
     assert request['messages'][0]['content'][1] == {'type': 'file', 'file': {'file_id': 'openai-file-1'}}
@@ -114,81 +115,7 @@ async def test_doc_file_chat_uses_completions_and_never_assistants(monkeypatch):
     assert not hasattr(chat_file.chat_db, 'update_chat_session_openai_ids')
 
 
-@pytest.mark.asyncio
-async def test_stale_file_id_is_typed_unsupported_attachment(monkeypatch):
-    async def create_completion(**_kwargs):
-        raise _not_found()
-
-    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_completion)))
-    monkeypatch.setattr(chat_file, '_get_async_openai', lambda: client)
-    monkeypatch.setattr(
-        chat_file.chat_db,
-        'get_chat_files_desc',
-        lambda *_args, **_kwargs: [_pdf_file().model_dump()],
-    )
-
-    tool = object.__new__(chat_file.FileChatTool)
-    tool.uid = 'uid1'
-    tool.chat_session_id = 'session1'
-    message = SimpleNamespace(files_id=['file-1'], text='summarize')
-    session = SimpleNamespace(id='session1', file_ids=['file-1'])
-    callback_data: dict[str, object] = {}
-
-    with monkeypatch.context() as ctx:
-        ctx.setattr(graph, 'FileChatTool', lambda *_args: tool)
-        chunks = [
-            chunk
-            async for chunk in graph._execute_file_chat_stream('uid1', [message], session, callback_data=callback_data)
-        ]
-
-    assert chunks[0].startswith('error: ')
-    assert 'Unsupported attachment' in chunks[0]
-    assert chunks[1] is None
-    assert len(chunks) == 2
-    assert callback_data['error'] == 'unsupported_attachment'
-    assert 'Unsupported attachment' in str(callback_data['answer'])
-    assert AGENT_STREAM_FAILURE_MESSAGE not in chunks[0]
-
-
-@pytest.mark.asyncio
-async def test_mid_stream_completion_error_is_journey_failure(monkeypatch):
-    async def create_completion(**_kwargs):
-        async def _gen():
-            yield _token('Hello')
-            raise RuntimeError('provider dropped after first token')
-
-        return _gen()
-
-    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_completion)))
-    monkeypatch.setattr(chat_file, '_get_async_openai', lambda: client)
-    monkeypatch.setattr(
-        chat_file.chat_db,
-        'get_chat_files_desc',
-        lambda *_args, **_kwargs: [_pdf_file().model_dump()],
-    )
-
-    tool = object.__new__(chat_file.FileChatTool)
-    tool.uid = 'uid1'
-    tool.chat_session_id = 'session1'
-    message = SimpleNamespace(files_id=['file-1'], text='summarize')
-    session = SimpleNamespace(id='session1', file_ids=['file-1'])
-    callback_data: dict[str, object] = {}
-
-    with monkeypatch.context() as ctx:
-        ctx.setattr(graph, 'FileChatTool', lambda *_args: tool)
-        chunks = [
-            chunk
-            async for chunk in graph._execute_file_chat_stream('uid1', [message], session, callback_data=callback_data)
-        ]
-
-    assert 'data: Hello' in chunks
-    assert any(isinstance(chunk, str) and chunk.startswith('error: ') for chunk in chunks)
-    assert chunks[-1] is None
-    assert callback_data['error'] == 'stream_failure'
-    assert callback_data['answer'] == AGENT_STREAM_FAILURE_MESSAGE
-
-
-def test_upload_pdf_uses_user_data_and_rejects_non_pdf(tmp_path, monkeypatch):
+def test_upload_pdf_uses_user_data_and_rejects_unsupported(tmp_path, monkeypatch):
     created: dict[str, object] = {}
 
     def _create(*, file, purpose):
@@ -203,10 +130,46 @@ def test_upload_pdf_uses_user_data_and_rejects_non_pdf(tmp_path, monkeypatch):
     assert result['file_id'] == 'file-1'
     assert created['purpose'] == 'user_data'
 
-    txt_path = tmp_path / 'note.txt'
-    txt_path.write_text('hello')
-    with pytest.raises(chat_file.UnsupportedChatFileError, match='txt'):
-        chat_file.FileChatTool.upload(txt_path)
+    zip_path = tmp_path / 'archive.zip'
+    zip_path.write_bytes(b'PK\x03\x04')
+    with pytest.raises(chat_file.UnsupportedChatFileError, match='zip'):
+        chat_file.FileChatTool.upload(zip_path)
+
+
+@pytest.mark.parametrize(
+    'name,mime_type',
+    [
+        ('note.txt', 'text/plain'),
+        (
+            'brief.docx',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ),
+    ],
+)
+def test_completion_messages_send_file_part_for_documents(name, mime_type):
+    tool = object.__new__(chat_file.FileChatTool)
+    attached = FileChat(
+        id='file-1',
+        name=name,
+        mime_type=mime_type,
+        openai_file_id='openai-file-doc',
+        created_at=datetime.now(timezone.utc),
+    )
+    messages = tool._completion_messages_sync('summarize', [attached])
+    assert messages[0]['content'][1] == {'type': 'file', 'file': {'file_id': 'openai-file-doc'}}
+
+
+def test_completion_messages_reject_legacy_unsupported_type():
+    tool = object.__new__(chat_file.FileChatTool)
+    attached = FileChat(
+        id='file-1',
+        name='note.ogg',
+        mime_type='audio/ogg',
+        openai_file_id='openai-file-ogg',
+        created_at=datetime.now(timezone.utc),
+    )
+    with pytest.raises(chat_file.UnsupportedChatFileError, match='ogg'):
+        tool._completion_messages_sync('summarize', [attached])
 
 
 def test_search_files_tool_provider_failure_is_soft(monkeypatch):

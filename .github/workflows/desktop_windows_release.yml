@@ -268,9 +268,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Provision .env (ships public Firebase/PostHog config)
+      - name: Provision Beta .env (dev memory serving plane)
         shell: pwsh
-        run: Copy-Item .env.example .env
+        run: Copy-Item .env.beta.example .env
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

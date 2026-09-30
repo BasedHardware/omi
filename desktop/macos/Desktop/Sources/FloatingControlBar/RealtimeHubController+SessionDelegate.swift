@@ -373,6 +373,10 @@ extension RealtimeHubController {
             // Cancel any streaming projection that may have started before the
             // spawn receipt arrived; the spawn owns the canonical exchange now.
             self.cancelStreamingJournalWrites(forContinuityKey: receipt.continuityKey)
+            self.bindNativeTurnEvidenceToProducingRow(
+              turnID: turnID,
+              journalUserTurnID: KernelTurnProjection.stableTurnID(
+                continuityKey: receipt.continuityKey, role: "user"))
             self.lastTurnDiagnostics = [
               "provider": self.providerTag,
               "provider_transcript": self.turnTranscript,
@@ -1535,28 +1539,11 @@ extension RealtimeHubController {
       fallbackProvider = nil
       pendingFailoverReason = nil
     }
-    if deferIdleRewarmIfUserAway(closeCategory: closeCategory) {
-      recordCloseResolution(
-        turnOutcome: turnOutcome,
-        recoveryAction: .sessionRewarm,
-        recoveryResult: .deferredUserAway)
-      return
-    }
-    guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else {
-      teardownSession()
-      recordCloseResolution(
-        turnOutcome: turnOutcome,
-        recoveryAction: .sessionRewarm,
-        recoveryResult: .exhausted)
-      return
-    }
-    hubReconnectStrikes += 1
-    reconnectPending = true
-    replaceSessionAfterDrain(reconnectDelayNanoseconds: 1_500_000_000)
+    let recovery = continueWarmAfterLifecycleClose(closeCategory: closeCategory)
     recordCloseResolution(
       turnOutcome: turnOutcome,
       recoveryAction: .sessionRewarm,
-      recoveryResult: .started)
+      recoveryResult: recovery)
   }
 
   /// A warm background socket must never terminate a Deepgram/Omni fallback

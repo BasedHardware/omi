@@ -1,0 +1,18 @@
+{
+  "id": "phone-mic-start-error-engine",
+  "revision": 1,
+  "schema_version": "phone-mic-native-events/v1",
+  "start_session_id": 41,
+  "events": [
+    {
+      "kind": "stateChanged",
+      "session_id": 41,
+      "state": "starting"
+    },
+    {
+      "kind": "stateChanged",
+      "session_id": 41,
+      "state": "idle"
+    }
+  ]
+}

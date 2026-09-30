@@ -41,7 +41,6 @@ from database.apps import (
 )
 from database.auth import get_user_name
 from database.conversations import get_conversations
-from database.memories import get_memories
 from database._client import db as firestore_db
 from utils.memory.memory_service import MemoryService
 from database.redis_db import (
@@ -80,12 +79,13 @@ from utils.llm.persona import condense_conversations, condense_memories, generat
 from utils.llm.usage_tracker import track_usage, Features
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.social import get_twitter_timeline
+from utils.marketplace_reviewers import parse_marketplace_reviewers, is_marketplace_reviewer
 import logging
 
 logger = logging.getLogger(__name__)
 
 _reviewers_env: Optional[str] = os.getenv('MARKETPLACE_APP_REVIEWERS')
-MarketplaceAppReviewUIDs: List[str] = _reviewers_env.split(',') if _reviewers_env else []
+MarketplaceAppReviewUIDs: List[str] = parse_marketplace_reviewers(_reviewers_env)
 
 
 def _records_with_ids(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -729,15 +729,14 @@ def upsert_app_payment_link(
 
 
 def get_is_user_paid_app(app_id: str, uid: str):
-    if uid in MarketplaceAppReviewUIDs:
+    if is_marketplace_reviewer(uid) or uid in MarketplaceAppReviewUIDs:
         return True
     return get_user_paid_app(app_id, uid) is not None
 
 
 def is_permit_payment_plan_get(uid: str):
-    if uid in MarketplaceAppReviewUIDs:
+    if is_marketplace_reviewer(uid) or uid in MarketplaceAppReviewUIDs:
         return False
-
     return True
 
 
@@ -817,8 +816,14 @@ async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
     """Generate a persona prompt based on user memories and conversations."""
 
     # Get latest memories and user info — exclude locked content
-    all_memories = await run_blocking(db_executor, get_memories, uid, limit=250)
-    memories = [m for m in all_memories if not m.get('is_locked')]
+    universal_memories = await run_blocking(
+        db_executor,
+        MemoryService(db_client=firestore_db).read,
+        uid,
+        limit=250,
+        offset=0,
+    )
+    memories = [m.dict() for m in universal_memories if not m.is_locked]
     user_name = await run_blocking(db_executor, get_user_name, uid)
 
     # Get and condense recent conversations — exclude locked content
@@ -902,7 +907,8 @@ async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
 
 def generate_persona_desc(uid: str, persona_name: str):
     """Generate a persona description based on user memories."""
-    memories = get_memories(uid, limit=250)
+    universal_memories = MemoryService(db_client=firestore_db).read(uid, limit=250, offset=0)
+    memories = [m.dict() for m in universal_memories]
 
     with track_usage(uid, Features.PERSONA):
         persona_description = generate_persona_description(memories, persona_name)

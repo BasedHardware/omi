@@ -12,8 +12,10 @@ from langdetect.lang_detect_exception import LangDetectException
 
 from models.transcript_segment import SENTENCE_FINDALL_RE
 
-# LRU Cache for language detection (local, free via langdetect)
-detection_cache: "OrderedDict[str, Union[str, Tuple[str, float]]]" = OrderedDict()
+# LRU Cache for language detection (local, free via langdetect).
+# Keys are (kind, text) tuples so plain and confidence-scored results never collide,
+# even when raw text happens to look like the other API's string cache key.
+detection_cache: "OrderedDict[Tuple[str, str], Union[str, Tuple[str, float]]]" = OrderedDict()
 MAX_DETECTION_CACHE_SIZE = 1000
 
 # A set of common English non-lexical utterances that can confuse language detectors.
@@ -123,7 +125,7 @@ def _ensure_detector_seeded() -> None:
         _detector_seeded = True
 
 
-# Languages with 100% accuracy in langdetect
+# Languages recognized by langdetect; membership does not imply reliable identification.
 LANGDETECT_RELIABLE_LANGUAGES = {
     'af',
     'ar',
@@ -225,16 +227,17 @@ def detect_language(text: str, remove_non_lexical: bool = False, hint_language: 
     if not text_for_detection:
         return None
 
-    if text_for_detection in detection_cache:
-        detection_cache.move_to_end(text_for_detection)
-        return cast(str, detection_cache[text_for_detection])
+    cache_key = ('lang', text_for_detection)
+    if cache_key in detection_cache:
+        detection_cache.move_to_end(cache_key)
+        return cast(str, detection_cache[cache_key])
 
     detected_language = _detect_with_langdetect(text_for_detection, hint_language)
 
     if detected_language:
         if len(detection_cache) >= MAX_DETECTION_CACHE_SIZE:
             detection_cache.popitem(last=False)
-        detection_cache[text_for_detection] = detected_language
+        detection_cache[cache_key] = detected_language
         return detected_language
 
     return detected_language
@@ -276,7 +279,7 @@ def detect_language_with_confidence(
         return (None, 0.0)
 
     # Check cache first (reuse existing detection_cache)
-    cache_key = f"conf:{text_for_detection}"
+    cache_key = ('conf', text_for_detection)
     if cache_key in detection_cache:
         detection_cache.move_to_end(cache_key)
         return cast(Tuple[str, float], detection_cache[cache_key])
@@ -339,6 +342,29 @@ def classify_translation_need(text: str, target_language: str, is_stable: bool =
 
     # Low-confidence foreign — defer
     return TranslationNeed.DEFER
+
+
+def expected_foreign_language(text: str, target: str, expected: Tuple[str, ...]) -> Optional[str]:
+    """Look for confident expected foreign clauses hidden by a dominant language.
+
+    Bounded to eight clauses / 1024 characters. This does not infer languages
+    from the profile alone and never changes the STT provider's inputs.
+    """
+    foreign = {code.split('-')[0].lower() for code in expected} - {target.split('-')[0].lower()}
+    if not foreign:
+        return None
+    for clause in re.split(r'[,;.!?。！？।\n]+', text[:1024])[:8]:
+        language, confidence = detect_language_with_confidence(clause)
+        raw_language, raw_confidence = detect_language_with_confidence(clause, remove_non_lexical=False)
+        if (
+            language
+            and language.split('-')[0].lower() in foreign
+            and confidence >= CONFIDENCE_FOREIGN_TRANSLATE
+            and raw_language == language
+            and raw_confidence >= CONFIDENCE_FOREIGN_TRANSLATE
+        ):
+            return language
+    return None
 
 
 def split_into_sentences(text: str) -> List[str]:

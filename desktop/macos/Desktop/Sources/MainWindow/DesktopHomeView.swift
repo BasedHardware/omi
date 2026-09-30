@@ -13,12 +13,13 @@ enum PersistedCaptureLaunchPolicy {
   static func shouldStartTranscription(
     intentEnabled: Bool,
     isTranscribing: Bool,
-    micPermissionAuthorized: Bool
+    micPermissionAuthorized: Bool,
+    isWaitingForMicrophone: Bool = false
   ) -> Bool {
     // Restores run on launch/reactivation/key-load/sync; without a mic grant an
     // attempted start would raise the TCC sheet (the skip-mic loop) or bounce a
     // denied alert. The intent waits for an explicit Listen/Grant action instead.
-    intentEnabled && !isTranscribing && micPermissionAuthorized
+    intentEnabled && !isTranscribing && !isWaitingForMicrophone && micPermissionAuthorized
   }
 
   static func shouldStartScreenAnalysis(intentEnabled: Bool, isMonitoring: Bool) -> Bool {
@@ -84,6 +85,8 @@ struct DesktopHomeView: View {
   /// Server-authoritative capability for the one shell. It never decides which
   /// shell mounts — only whether the capability-gated kernel features engage.
   @State private var chatFirstCapability = ChatFirstCapabilitySample()
+  /// EXP-002 arm state; the body gate holds the shell until it resolves.
+  @ObservedObject private var desktopExperiment = DesktopExperimentCoordinator.shared
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -336,6 +339,13 @@ struct DesktopHomeView: View {
             .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
               await resolveChatFirstCapabilityIfNeeded()
             }
+            // EXP-002: enrollment (both arms, one server code path) resolves
+            // alongside the capability. `isMemoryV1` stays false (control)
+            // until it completes, so treatment UI never renders ahead of
+            // assignment.
+            .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
+              await resolveDesktopExperimentIfNeeded()
+            }
 
           if !viewModelContainer.isInitialLoadComplete {
             TransparentWindowStatusPanel {
@@ -433,6 +443,9 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
       reconcileOnboardingCompletionOwner()
       chatFirstCapability.ownerDidChange(to: RuntimeOwnerIdentity.currentOwnerId())
+      // EXP-002: the previous owner's arm must not leak into the next
+      // owner's chrome; the body gate re-resolves from pending.
+      DesktopExperimentCoordinator.shared.ownerDidChange()
       // The provider's owner-bound gate rejects the previous sample for this
       // owner; no replacement sample is persisted or inferred locally.
       reportAutomationState()
@@ -657,12 +670,14 @@ struct DesktopHomeView: View {
       isSidebarCollapsed: chatFirstNavigation.isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
       isSignedIn: authState.isSignedIn,
+      accountUserID: AuthState.automationAccountUserID(),
+      accountEmail: authState.userEmail,
       isRestoringAuth: authState.isRestoringAuth,
       isAppActive: NSApp.isActive,
       mainWindowTitle: currentWindow?.title,
       floatingBarVisible: FloatingControlBarManager.shared.automationState.isVisible,
-      askOmiOpen: FloatingControlBarManager.shared.automationState.isAskOmiOpen,
-      askOmiFocused: FloatingControlBarManager.shared.automationState.isAskOmiFocused,
+      askOmiOpen: OpenAskOmiAutomation.isComposerPresented(chatFirstNavigation),
+      askOmiFocused: OpenAskOmiAutomation.isComposerFocused(chatFirstNavigation),
       floatingBarFrame: FloatingControlBarManager.shared.automationState.frame,
       floatingBarVoiceListening: FloatingControlBarManager.shared.automationState.isVoiceListening,
       floatingBarVoiceDictating: FloatingControlBarManager.shared.automationState.isVoiceDictating,
@@ -701,8 +716,12 @@ struct DesktopHomeView: View {
     }
     highlightedSettingId = settingId
 
-    if target.lowercased().replacingOccurrences(of: "-", with: "_") == "rewind" {
-      navigateToLegacyDestination(.rewind)
+    // Sidebar-named targets (including Conversations/Memories/Rewind) must go
+    // through the same hub-view adapter as the menu and keyboard. Selecting only
+    // the chat-first route leaves the hub on its remembered page — default
+    // Memories — so `navigate conversations` opened Memories.
+    if let item = SidebarNavItem.automationDestination(named: target) {
+      navigateToLegacyDestination(item, automationTarget: target)
       reportAutomationState()
       return
     }
@@ -716,6 +735,11 @@ struct DesktopHomeView: View {
       selectedSettingsSection = .about
     }
     if let route = ChatFirstRoute.automationVisibilityDestination(named: target) {
+      // Conversations and Memories share the one `.memories` shell route; the
+      // hub's persisted sub-destination decides which page actually mounts.
+      if let hubDestination = MemoryHubDestination.destination(forAutomationTarget: target) {
+        memoryDestinationRawValue = hubDestination.rawValue
+      }
       switch route {
       case .more(let page):
         chatFirstNavigation.selectMore(page)
@@ -902,12 +926,23 @@ struct DesktopHomeView: View {
     if PersistedCaptureLaunchPolicy.shouldStartTranscription(
       intentEnabled: settings.audioRecordingMode != .off,
       isTranscribing: appState.isTranscribing,
-      micPermissionAuthorized: appState.hasMicrophonePermission
+      micPermissionAuthorized: appState.hasMicrophonePermission,
+      isWaitingForMicrophone: appState.isWaitingForMicrophone
     ) {
       log("DesktopHomeView: Restoring transcription from persisted intent (\(reason))")
       // Local transcription does not require remote API keys. AppState owns the
       // permission and provider checks, so it remains the single start boundary.
-      appState.startTranscription(userInitiated: false)
+      let presence = CapturePresence.current()
+      if ArmedCaptureRecoveryPolicy.shouldWaitForUpdateRelaunch(
+        isUpdateRelaunch: CaptureLaunchContext.kindForStart() == .updateRelaunch,
+        consoleActive: presence.consoleSessionActive,
+        screenLocked: presence.screenLocked,
+        displaysAsleep: presence.displaysAsleep
+      ) {
+        appState.armedMicrophoneRecovery.enter(appState: appState)
+      } else {
+        appState.startTranscription(userInitiated: false)
+      }
     }
 
     let plugin = ProactiveAssistantsPlugin.shared
@@ -1051,6 +1086,20 @@ struct DesktopHomeView: View {
     reportAutomationState()
   }
 
+  /// EXP-002: resolve the identity-experiment arm for this owner before the
+  /// main shell paints. Non-production bundles use the local environment
+  /// override (never enrolled); the Beta bundle enrolls server-side
+  /// (idempotent); every other channel paints control. Failures resolve
+  /// control — a treatment arm is never applied unconfirmed.
+  private func resolveDesktopExperimentIfNeeded() async {
+    guard DesktopExperimentCoordinator.shared.phase == .pending else { return }
+    if AppBuild.isNonProduction {
+      DesktopExperimentCoordinator.shared.resolveFromLaunchEnvironment()
+      return
+    }
+    await DesktopExperimentCoordinator.shared.resolveForCurrentOwner()
+  }
+
   private func navigateAfterOnboarding() {
     chatFirstNavigation.selectPrimary(.chat)
     log("DesktopHomeView: Onboarding just completed — opening Chat")
@@ -1059,13 +1108,19 @@ struct DesktopHomeView: View {
   /// Existing menu, keyboard, and automation callers retain their legacy
   /// names. This is the sole root adapter between those callers and typed
   /// Chat-first navigation.
-  private func navigateToLegacyDestination(_ item: SidebarNavItem) {
+  private func navigateToLegacyDestination(
+    _ item: SidebarNavItem,
+    automationTarget: String? = nil
+  ) {
     if item == .permissions {
       selectedSettingsSection = .permissions
       chatFirstNavigation.selectMore(.settings)
       return
     }
-    if let destination = MemoryHubDestination.destination(for: item) {
+    if let destination =
+      automationTarget.flatMap(MemoryHubDestination.destination(forAutomationTarget:))
+      ?? MemoryHubDestination.destination(for: item)
+    {
       memoryDestinationRawValue = destination.rawValue
     }
     chatFirstNavigation.selectLegacyDestination(item)
@@ -1178,7 +1233,11 @@ struct DesktopHomeView: View {
           // labelled "Conversations" and the hub's remembered view defaults to Memories, so
           // without this the menu item lands you somewhere it did not name. The two automation
           // routes below already did this by hand; the menu and keyboard path did not.
-          if let destination = MemoryHubDestination.destination(for: item) {
+          if let hubRaw = notification.userInfo?["hubDestination"] as? Int,
+            let destination = MemoryHubDestination(rawValue: hubRaw)
+          {
+            memoryDestinationRawValue = destination.rawValue
+          } else if let destination = MemoryHubDestination.destination(for: item) {
             memoryDestinationRawValue = destination.rawValue
           }
           // Settings owns pages now, not only preference rows, so a caller that names Settings can
@@ -1234,6 +1293,8 @@ struct ConversationsPageHost: View {
   let appState: AppState
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  /// The hub page an open conversation came from; its Back returns there.
+  var detailOrigin: MemoryHubDestination? = nil
   /// Optional exact record supplied by a Chat-first conversation deep-link.
   /// The normal Conversations page still owns list loading and row selection;
   /// this value only seeds selection when a link fetched a record that is not
@@ -1263,6 +1324,7 @@ struct ConversationsPageHost: View {
       selectedConversation: $selectedConversation,
       brainDestination: brainDestination,
       onSelectBrainDestination: onSelectBrainDestination,
+      detailOrigin: detailOrigin,
       initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
       onCaptureFocusResolved: onCaptureFocusResolved,
       onDiscussInChat: onDiscussInChat,

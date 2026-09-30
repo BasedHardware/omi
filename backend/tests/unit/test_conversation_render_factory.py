@@ -27,10 +27,10 @@ def _ensure_stub(name):
 # Stub database chain so render.py can import at module level without Firestore
 _ensure_stub("database")
 sys.modules["database"].__path__ = getattr(sys.modules["database"], "__path__", [])
-for _sub in ["_client", "redis_db", "users", "folders"]:
+for _sub in ["_client", "redis_db", "users", "folders", "auth"]:
     _ensure_stub(f"database.{_sub}")
 sys.modules["database._client"].db = MagicMock()
-sys.modules["database.users"].get_user_profile = MagicMock(return_value={"name": "TestUser"})
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="TestUser")
 sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
 sys.modules["database.folders"].get_folders = MagicMock(return_value=[])
 
@@ -134,6 +134,13 @@ class TestFactory:
         result = deserialize_conversations([conv, data])
         assert result[0] is conv
         assert result[1].id == "new"
+
+    def test_deserialize_conversations_skips_poisoned_records(self):
+        conv = _make_conversation(id="valid")
+        poisoned = {"id": "bad-no-structured", "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc)}
+        result = deserialize_conversations([poisoned, conv, {"garbage": 123}])
+        assert len(result) == 1
+        assert result[0] is conv
 
 
 class TestRender:

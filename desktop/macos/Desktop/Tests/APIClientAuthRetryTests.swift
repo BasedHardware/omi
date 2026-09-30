@@ -525,7 +525,12 @@ import XCTest
       }
 
       XCTAssertEqual(AuthRetryURLStub.attempts, 2)
-      XCTAssertNil(UserDefaults.standard.string(forKey: .authUserId))
+      // Light invalidation intentionally preserves the owner so Claude/chat
+      // sessions can rehydrate after re-auth (#13859). The credential, not the
+      // owner identity, is what a persistent backend 401 must revoke.
+      XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), "user-1")
+      XCTAssertNil(UserDefaults.standard.string(forKey: .authIdToken))
+      XCTAssertEqual(AuthState.shared.sessionPhase, .needsReauth)
     }
 
     func testTTSProvider429ReturnsTypedQuotaFailure() async throws {
@@ -573,6 +578,28 @@ import XCTest
         XCTAssertEqual(detail, "TTS burst rate limit exceeded")
       }
 
+      XCTAssertEqual(AuthRetryURLStub.attempts, 1)
+    }
+
+    func testTTSStreamDeliversSuccessfulBodyChunks() async throws {
+      AuthRetryURLStub.returnStatus(200, body: "streamed-audio")
+      setenv("OMI_DESKTOP_API_URL", "http://rust-test:9002", 1)
+      defer { unsetenv("OMI_DESKTOP_API_URL") }
+
+      let config = URLSessionConfiguration.ephemeral
+      config.protocolClasses = [AuthRetryURLStub.self]
+      let client = APIClient(session: URLSession(configuration: config))
+      await client.setTestAuthHeader("Bearer test-token")
+
+      let stream = try await client.synthesizeSpeechStream(
+        request: APIClient.TtsSynthesizeRequest(text: "Hello", voiceId: "onyx", instructions: nil)
+      )
+      var received = Data()
+      for try await chunk in stream {
+        received.append(chunk)
+      }
+
+      XCTAssertEqual(received, Data("streamed-audio".utf8))
       XCTAssertEqual(AuthRetryURLStub.attempts, 1)
     }
 

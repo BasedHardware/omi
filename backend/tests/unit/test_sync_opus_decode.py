@@ -46,6 +46,7 @@ _stub_modules = [
     'models.conversation_enums',
     'models.transcript_segment',
     'utils.conversations.process_conversation',
+    'utils.sync.bridge',
     'utils.conversations.factory',
     'utils.other',
     'utils.other.endpoints',
@@ -168,6 +169,7 @@ _ensure_attrs(
         'get_sync_tasks_max_attempts',
         'is_audio_merge_dispatch_enabled',
         'is_cloud_tasks_dispatch_enabled',
+        'verify_audio_merge_cloud_tasks_oidc',
         'verify_cloud_tasks_oidc',
     ],
 )
@@ -206,7 +208,7 @@ _ensure_attrs('utils.speaker_assignment', ['process_speaker_assigned_segments'])
 _ensure_attrs('utils.speaker_identification', ['detect_speaker_from_text'])
 _ensure_attrs(
     'utils.stt.speaker_embedding',
-    ['extract_embedding_from_bytes', 'compare_embeddings', 'SPEAKER_MATCH_THRESHOLD'],
+    ['extract_embedding_from_bytes', 'compare_embeddings', 'speaker_embedding_configured', 'SPEAKER_MATCH_THRESHOLD'],
 )
 _ensure_attrs('utils.subscription', ['has_transcription_credits'])
 _ensure_attrs('pydub', ['AudioSegment'])

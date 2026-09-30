@@ -32,6 +32,9 @@ struct MemoryHubPage: View {
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
   @Binding var destinationRawValue: Int
   @State private var brainMapSearchText = ""
+  /// The hub page a conversation was opened from, so the detail's Back returns there ("‹ Activity",
+  /// "‹ Memories") instead of always landing on the Conversations list.
+  @State private var conversationOrigin: MemoryHubDestination?
   /// How this shell applies a hub selection. The modern shell only has to write the persisted
   /// destination; the chat-first shell also moves its own typed route, so it passes its own.
   var onSelectDestination: ((MemoryHubDestination) -> Void)? = nil
@@ -81,6 +84,8 @@ struct MemoryHubPage: View {
   }
 
   private func select(_ next: MemoryHubDestination) {
+    // A deliberate section change starts a fresh trail.
+    conversationOrigin = nil
     OmiMotion.withGated(.easeOut(duration: InkMotion.checkbox)) {
       if let onSelectDestination {
         onSelectDestination(next)
@@ -110,6 +115,7 @@ struct MemoryHubPage: View {
               conversationId: conversation.id, showTranscript: false)
             select(.conversations)
           }
+          conversationOrigin = .activity
         },
         onOpenMemory: { memory in
           // Same gate the Brain Map's citations use: leave Activity only once the memory is really
@@ -138,6 +144,7 @@ struct MemoryHubPage: View {
         appState: appState,
         brainDestination: destination,
         onSelectBrainDestination: select,
+        detailOrigin: conversationOrigin,
         initialConversation: initialConversation,
         initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
         onCaptureFocusResolved: onCaptureFocusResolved,
@@ -161,7 +168,7 @@ struct MemoryHubPage: View {
           QuerySearchBar(
             text: $brainMapSearchText,
             accessibilityID: "brain-map-search-field",
-            placeholder: "Search your entities…",
+            placeholder: "Search Brain Map",
             searchSurface: .brainMap
           )
         },
@@ -181,9 +188,11 @@ struct MemoryHubPage: View {
     if let onOpenConversationRecord {
       Task { @MainActor in
         guard let conversation = try? await APIClient.shared.getConversation(id: conversationID) else {
+          OmiToastCenter.shared.confirm("Couldn't open the source conversation")
           return
         }
         onOpenConversationRecord(conversation)
+        conversationOrigin = .memories
       }
     } else {
       ConversationDetailAutomationState.shared.requestOpen(
@@ -191,6 +200,7 @@ struct MemoryHubPage: View {
         showTranscript: false
       )
       select(.conversations)
+      conversationOrigin = .memories
     }
   }
 

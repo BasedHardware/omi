@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-same-speech-captured-twice-surfaces-twice",
+  "violated_contract": "Speech that two of one user's capture clients heard at the same time (an Omi device paired to the phone app and the macOS app in the same room) must surface as one conversation. Each /v4/listen stream correctly owns its own conversation so that captures of different audio stay separate (#5388), but nothing reconciled two captures of the same audio, so the user saw the same conversation twice (#3244).",
+  "canonical_prevention": "Keep multi-device recording enabled and decide duplication from content at finalization: before the LLM discard gate, fold a conversation whose wall window and word bigrams are already carried by another capture client's completed or earlier-created processing conversation into that primary via the existing discard exit, recording external_data.duplicate_capture_of. Never toggle a capture source off on a client, and never infer a duplicate from device presence alone.",
+  "canonical_prevention_artifact": [
+    "backend/utils/conversations/duplicate_capture.py",
+    "backend/tests/unit/test_duplicate_capture_policy.py",
+    "backend/tests/unit/test_process_conversation_duplicate_capture.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/conversations/**", "backend/routers/listen/**"],
+  "status": "open"
+}

@@ -4,6 +4,7 @@ tier: 1
 description: Cursor-free smoke flow for the Omi desktop experience harness.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+Notifications.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+RealtimeHub.swift
@@ -18,6 +19,7 @@ covers:
   - desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift
   - desktop/macos/Desktop/Sources/Auth/SessionRecoveryView.swift
   - desktop/macos/Desktop/Sources/Auth/AuthStorageCanary.swift
+  - desktop/macos/Desktop/Sources/Auth/DesktopDeveloperSecretStore.swift
   - desktop/macos/Desktop/Sources/DesktopKeychainStore.swift
   - desktop/macos/Desktop/Sources/Logger.swift
   - desktop/macos/Desktop/Sources/Observability/SentryBeforeSendPolicy.swift
@@ -40,6 +42,8 @@ covers:
   - desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift
   - desktop/macos/Desktop/Sources/Startup/OmiFontRegistration.swift
   - desktop/macos/Desktop/Sources/Startup/StartupSystemMaintenancePolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/AppDelegate+ShellWindowLaunch.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ShellWindowLaunchRecoveryPolicy.swift
 preconditions:
   - automation_bridge_ready
 
@@ -53,13 +57,21 @@ steps:
     expect:
       result.detail.mode: quiet
 
+  - id: S0a
+    name: Confirm the primary scene mounted during launch
+    log.expect:
+      contains:
+        - "OmiApp: Main window content appeared"
+      absent:
+        - "shell window not found after launch recovery retries"
+
   - id: S1
     name: Navigate to Dashboard
     bridge.navigate:
       target: dashboard
       activateApp: false
     wait:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S2
     name: Capture Dashboard Visual
@@ -69,7 +81,7 @@ steps:
   - id: S3
     name: Assert Dashboard State
     state.expect:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S4
     name: Navigate to Memories
@@ -77,7 +89,7 @@ steps:
       target: memories
       activateApp: false
     wait:
-      state.selectedTabIndex: 3
+      state.chatFirstRoute: memories
 
   - id: S5
     name: Refresh Data

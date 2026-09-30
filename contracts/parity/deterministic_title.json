@@ -1,0 +1,107 @@
+{
+  "$comment": "The model-free deterministic title (backend utils/conversations/deterministic_minimum.py: first sentence of the space-joined, whitespace-collapsed transcript, cut to 60 code points on a word boundary, no ellipsis). Clients use it as the last-resort title for a legacy row the server left untitled. `expected_title` null means the transcript yields no title; the server then uses its time label (`Recording · 3:14 PM`), which is not under this contract because it depends on the user's zone.",
+  "max_chars": 60,
+  "cases": [
+    {
+      "name": "sentence_spans_segments",
+      "segments": [
+        "We",
+        "agreed on Friday."
+      ],
+      "expected_title": "We agreed on Friday."
+    },
+    {
+      "name": "first_sentence_wins",
+      "segments": [
+        "We shipped the fence today. Then we broke it."
+      ],
+      "expected_title": "We shipped the fence today."
+    },
+    {
+      "name": "blank_segments_skipped",
+      "segments": [
+        "",
+        "   ",
+        "Second segment carries the title."
+      ],
+      "expected_title": "Second segment carries the title."
+    },
+    {
+      "name": "no_terminator_uses_whole_text",
+      "segments": [
+        "Standup with the backend crew"
+      ],
+      "expected_title": "Standup with the backend crew"
+    },
+    {
+      "name": "question_terminates",
+      "segments": [
+        "Can we ship on Friday? Probably not."
+      ],
+      "expected_title": "Can we ship on Friday?"
+    },
+    {
+      "name": "exclamation_terminates",
+      "segments": [
+        "It works! Finally."
+      ],
+      "expected_title": "It works!"
+    },
+    {
+      "name": "whitespace_collapses",
+      "segments": [
+        "  We   picked\nthe\tvenue.  ",
+        "Next."
+      ],
+      "expected_title": "We picked the venue."
+    },
+    {
+      "name": "long_text_cut_at_word_boundary_without_ellipsis",
+      "segments": [
+        "Budget planning session covering the quarterly hiring plan and vendor contract renewals for next year"
+      ],
+      "expected_title": "Budget planning session covering the quarterly hiring plan"
+    },
+    {
+      "name": "single_long_token_hard_cut",
+      "segments": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "expected_title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "name": "terminator_after_budget_still_truncates",
+      "segments": [
+        "The quick brown fox jumps over the lazy dog and keeps running far away. End."
+      ],
+      "expected_title": "The quick brown fox jumps over the lazy dog and keeps"
+    },
+    {
+      "name": "non_ascii_counts_code_points",
+      "segments": [
+        "Café meeting with Zoë about the new résumé format and naïve coördination plans today"
+      ],
+      "expected_title": "Café meeting with Zoë about the new résumé format and naïve"
+    },
+    {
+      "name": "astral_characters_count_as_one",
+      "segments": [
+        "🎉 Launch party planning for the whole team next Friday at the rooftop bar downtown"
+      ],
+      "expected_title": "🎉 Launch party planning for the whole team next Friday at"
+    },
+    {
+      "name": "no_segments_is_empty",
+      "segments": [],
+      "expected_title": null
+    },
+    {
+      "name": "blank_only_is_empty",
+      "segments": [
+        "  ",
+        "\n"
+      ],
+      "expected_title": null
+    }
+  ]
+}

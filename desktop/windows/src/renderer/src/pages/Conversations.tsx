@@ -59,7 +59,8 @@ import {
   mergeConversations,
   moveConversationToFolder,
   setConversationStarred,
-  setConversationTitle
+  setConversationTitle,
+  deleteCloudConversation
 } from '../lib/conversations/mutations'
 import { FolderTabsStrip } from '../components/conversations/FolderTabsStrip'
 import { DateFilterButton } from '../components/conversations/DateFilterButton'
@@ -607,7 +608,7 @@ export function Conversations(): React.JSX.Element {
       try {
         if (row.source === 'local') await window.omi.deleteLocalConversation(row.id)
         else {
-          await omiApi.delete(`/v1/conversations/${row.id}`)
+          await deleteCloudConversation(row.id)
           anyCloud = true
         }
         await window.omi.deleteJitConversationKeyframe(row.id)

@@ -14,6 +14,15 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.task_intelligence import candidate_service
 
 
+@pytest.fixture(autouse=True)
+def _no_outbound_reminders(monkeypatch):
+    """Accepting a Candidate reconciles the task's client reminder; keep that off the wire."""
+    import utils.notifications as notifications
+
+    monkeypatch.setattr(notifications, 'send_action_item_update_message', lambda **kwargs: None)
+    monkeypatch.setattr(notifications, 'send_action_item_deletion_message', lambda **kwargs: None)
+
+
 @pytest.fixture
 def fake_db(monkeypatch):
     database = StrictFirestore()
@@ -69,13 +78,13 @@ def task_create_proposal(**overrides):
     return CandidateCreate.model_validate(payload)
 
 
-def create_record(fake_db, **overrides):
+def create_record(fake_db, *, now=None, **overrides):
     return candidates_db.create_candidate(
         'user-1',
         task_create_proposal(**overrides),
         idempotency_key='conversation-1:item-1',
         account_generation=3,
-        now=datetime(2026, 7, 9, tzinfo=timezone.utc),
+        now=now,
     )
 
 
@@ -197,8 +206,8 @@ def test_candidate_union_rejects_mixed_or_invalid_payloads(patch):
 
 
 def test_candidate_create_and_accept_are_idempotent_and_preserve_envelope(fake_db):
-    record = create_record(fake_db)
-    duplicate = create_record(fake_db)
+    record = create_record(fake_db, now=datetime(2026, 7, 9, tzinfo=timezone.utc))
+    duplicate = create_record(fake_db, now=record.created_at)
     first = candidates_db.resolve_task_candidate(
         'user-1', record.candidate_id, account_generation=3, now=datetime(2026, 7, 10, tzinfo=timezone.utc)
     )
@@ -586,7 +595,9 @@ def test_accepted_active_task_coalesces_exact_cross_source_capture_until_work_cl
         account_generation=3,
         now=datetime(2026, 7, 9, tzinfo=timezone.utc),
     )
-    receipt = candidates_db.resolve_task_candidate('user-1', first.candidate_id, account_generation=3)
+    receipt = candidates_db.resolve_task_candidate(
+        'user-1', first.candidate_id, account_generation=3, now=first.created_at
+    )
     task_path = ('users', 'user-1', 'action_items', receipt.task_id)
     second_proposal = task_create_proposal(
         task_change={
@@ -1528,3 +1539,41 @@ def test_candidate_queries_have_required_firestore_composite_indexes():
     assert ('candidates', ('account_generation', 'created_at', '__name__')) in signatures
     assert ('candidates', ('status', 'account_generation', 'created_at', '__name__')) in signatures
     assert ('candidate_integration_outbox', ('account_generation', 'status', '__name__')) in signatures
+
+
+def test_accepting_a_task_candidate_with_a_due_date_arms_its_reminder(fake_db, monkeypatch):
+    import utils.notifications as notifications
+
+    scheduled = []
+    monkeypatch.setattr(
+        notifications,
+        'send_action_item_update_message',
+        lambda **kwargs: scheduled.append(kwargs),
+    )
+    monkeypatch.setattr(notifications, 'send_action_item_deletion_message', lambda **kwargs: None)
+    monkeypatch.setattr(
+        candidate_service.action_items_db,
+        'get_action_item',
+        lambda uid, task_id: fake_db.rows.get(('users', uid, 'action_items', task_id)),
+    )
+    # The integration outbox dispatch is a separate concern and talks to Firestore.
+    monkeypatch.setattr(candidate_service, '_dispatch_task_integration', lambda *_args, **_kwargs: None)
+    due_at = datetime.now(timezone.utc) + timedelta(days=1)
+    candidate = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(
+            task_change={
+                'description': 'Send the budget',
+                'owner': 'user',
+                'due_confidence': 0.9,
+                'due_at': due_at.isoformat(),
+            },
+        ),
+        idempotency_key='accept-with-due-date',
+        account_generation=3,
+    )
+
+    receipt = candidate_service.accept_candidate('user-1', candidate.candidate_id, account_generation=3)
+
+    assert receipt.task_id
+    assert [call['action_item_id'] for call in scheduled] == [receipt.task_id]

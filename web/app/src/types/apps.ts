@@ -237,6 +237,7 @@ export interface CreateAppRequest {
   };
   proactive_notification_scopes?: string[];
   source_code_url?: string;
+  thumbnails?: string[];
 }
 
 export interface UpdateAppRequest extends Partial<CreateAppRequest> {

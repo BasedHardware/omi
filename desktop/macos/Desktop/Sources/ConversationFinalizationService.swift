@@ -9,7 +9,18 @@ actor ConversationFinalizationService {
   private var meetingCompletionNotificationTask: Task<Void, Never>?
   private var pendingMeetingCompletionConversationIDs = Set<String>()
   private var pendingFinalizationProjectionPolls = Set<String>()
+  private var pendingScreenEvidenceRetries = Set<String>()
   private var localProjectionHooks: LocalProjectionTestHooks?
+  private var isNetworkReachable: @Sendable () async -> Bool =
+    ConversationFinalizationService.systemNetworkReachability
+  private var clock: @Sendable () -> Date = { Date() }
+  private var screenEvidencePass = MeetingScreenEvidencePass.production
+  private var meetingContextSyncForTesting: (@Sendable (DateInterval) async -> Void)?
+  private var isDeferredForOffline = false
+
+  private static let systemNetworkReachability: @Sendable () async -> Bool = {
+    await MainActor.run { NetworkReachability.shared.isOnline }
+  }
 
   private init() {}
 
@@ -23,6 +34,24 @@ actor ConversationFinalizationService {
 
   func setLocalProjectionHooksForTesting(_ hooks: LocalProjectionTestHooks?) {
     localProjectionHooks = hooks
+  }
+
+  func setNetworkReachabilityForTesting(_ probe: (@Sendable () async -> Bool)?) {
+    isNetworkReachable = probe ?? Self.systemNetworkReachability
+    isDeferredForOffline = false
+  }
+
+  func setClockForTesting(_ clock: (@Sendable () -> Date)?) {
+    self.clock = clock ?? { Date() }
+  }
+
+  func setScreenEvidencePassForTesting(_ pass: MeetingScreenEvidencePass?) {
+    screenEvidencePass = pass ?? .production
+  }
+
+  /// Replaces the calendar/on-device identity upload so a test can observe its order.
+  func setMeetingContextSyncForTesting(_ sync: (@Sendable (DateInterval) async -> Void)?) {
+    meetingContextSyncForTesting = sync
   }
 
   func finalizeSession(
@@ -53,14 +82,27 @@ actor ConversationFinalizationService {
         by: { $0.id ?? -1 }
       ).compactMap { $0.value.first }
 
-      if !sessionsById.isEmpty {
-        log(
-          "ConversationFinalization: Recovering \(sessionsById.count) pending sessions (\(exhaustedLocalFallbackSessions.count) exhausted cloud sessions have local fallback data)"
-        )
+      guard !sessionsById.isEmpty else { return }
+      // Every finalization path needs the backend. Attempting while offline only burns budget and
+      // leaves the row looking broken, so wait for a network path; the backoff clock keeps running.
+      guard await isNetworkReachable() else {
+        if !isDeferredForOffline {
+          isDeferredForOffline = true
+          log("ConversationFinalization: Offline; deferring \(sessionsById.count) pending sessions")
+        }
+        return
       }
+      if isDeferredForOffline {
+        isDeferredForOffline = false
+        log("ConversationFinalization: Network available; resuming pending finalizations")
+      }
+      log(
+        "ConversationFinalization: Recovering \(sessionsById.count) pending sessions (\(exhaustedLocalFallbackSessions.count) exhausted cloud sessions have local fallback data)"
+      )
       let exhaustedLocalFallbackIds = Set(exhaustedLocalFallbackSessions.compactMap(\.id))
+      let recoveryTime = clock()
       for session in sessionsById
-      where session.isReadyForRetry() || session.status != .failed || session.retryCount >= maxRetries {
+      where Self.isDueForRecovery(session, now: recoveryTime, maxRetries: maxRetries) {
         if let sessionId = session.id, exhaustedLocalFallbackIds.contains(sessionId) {
           await finalizeExhaustedCloudSessionFromLocalSegments(session)
           continue
@@ -76,6 +118,16 @@ actor ConversationFinalizationService {
     }
   }
 
+  /// Unfinished work is always due. Failed sessions wait out their backoff, except exhausted cloud
+  /// sessions, which get their bounded local-fallback attempts on the next tick.
+  static func isDueForRecovery(_ session: TranscriptionSessionRecord, now: Date, maxRetries: Int) -> Bool {
+    guard session.status == .failed else { return true }
+    if session.isReadyForRetry(now: now) {
+      return true
+    }
+    return session.effectiveFinalizationStrategy == .cloudReconcile && session.retryCount >= maxRetries
+  }
+
   private func finalizeExhaustedCloudSessionFromLocalSegments(_ session: TranscriptionSessionRecord) async {
     guard let sessionId = session.id else { return }
     guard session.status != .completed && !session.backendSynced else { return }
@@ -89,6 +141,9 @@ actor ConversationFinalizationService {
       guard let latestSession = try await TranscriptionStorage.shared.getSession(id: sessionId) else {
         throw TranscriptionStorageError.sessionNotFound
       }
+      // This recovery path bypasses `finalizeSession`, so the identity upload that must precede the
+      // notes (and the OCR flush inside `uploadLocalSegments`) runs here.
+      await storeMeetingContextIfEnabled(for: latestSession)
       let outcome = try await resolveExhaustedCloudReconciliation(session: latestSession, sessionId: sessionId)
       guard outcome.handled else {
         throw TranscriptionStorageError.invalidState("Exhausted cloud session has no local fallback")
@@ -149,8 +204,15 @@ actor ConversationFinalizationService {
     }
   }
 
+  /// The identity upload. It runs first in every finalization attempt, so it precedes the screen
+  /// evidence pass, whose adjudication marker tells the backend that identity, OCR, and frames
+  /// have all landed (the backend's bounded notes admission waits on that marker).
   private func storeMeetingContextIfEnabled(for session: TranscriptionSessionRecord) async {
     guard session.conversationRole == .meeting else { return }
+    if let meetingContextSyncForTesting {
+      await meetingContextSyncForTesting(Self.captureInterval(of: session))
+      return
+    }
     let enabled = await MainActor.run {
       (
         systemCalendar: SystemCalendarMeetingContextFeature.isEnabled,
@@ -204,6 +266,12 @@ actor ConversationFinalizationService {
       try await TranscriptionStorage.shared.deleteSession(id: sessionId)
       return false
     }
+    if bundle.session.conversationRole == .meeting {
+      // `/from-segments` writes the notes synchronously, so the bounded OCR flush must precede it —
+      // on every path that uploads local segments, including exhausted cloud reconciliation.
+      _ = await screenEvidencePass.beforeNotes(
+        captureInterval: Self.captureInterval(of: bundle.session), conversationID: nil, fetchSelectionWindow: nil)
+    }
 
     var merged: [APIClient.UploadSegment] = []
     for seg in bundle.segments {
@@ -249,6 +317,26 @@ actor ConversationFinalizationService {
       uploadSegments: uploadSegments,
       startedAt: bundle.session.startedAt
     )
+    let captureEvidence: APIClient.CaptureEvidenceLineage?
+    if ProcessInfo.processInfo.environment["CAPTURE_EVIDENCE_V1_DARK_WRITE"] == "1" {
+      let units = bundle.segments.compactMap { segment -> APIClient.CaptureEvidenceLineage.Unit? in
+        guard let id = segment.id, segment.startTime.isFinite, segment.endTime.isFinite,
+          segment.startTime >= 0, segment.endTime > segment.startTime
+        else { return nil }
+        return .init(
+          id: String(id),
+          startMs: Int64((segment.startTime * 1000).rounded()),
+          endMs: Int64((segment.endTime * 1000).rounded()))
+      }
+      let root = Self.localClientConversationId(session: bundle.session, sessionId: sessionId)
+      let complete = units.count == bundle.segments.count && units.count <= 64
+      captureEvidence = .init(
+        version: 1, capability: "stable_artifact", captureRoot: root,
+        clockDomain: "desktop_session_ms", lineage: complete ? "complete" : "incomplete",
+        units: complete ? units : [])
+    } else {
+      captureEvidence = nil
+    }
     let request = APIClient.CreateConversationFromSegmentsRequest(
       transcript_segments: uploadSegments,
       source: bundle.session.source,
@@ -258,7 +346,8 @@ actor ConversationFinalizationService {
       client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
       conversation_role: bundle.session.conversationRole.rawValue,
       conversation_finalization_reason: bundle.session.finalizationReason?.rawValue,
-      client_processing: clientProcessing
+      client_processing: clientProcessing,
+      captureEvidence: captureEvidence
     )
     let response = try await apiClient.createConversationFromSegments(request)
     let status = LocalConversationStatus(rawValue: response.status) ?? .processing
@@ -279,7 +368,13 @@ actor ConversationFinalizationService {
         "from-segments returned \(response.id) but local completion was rejected"
       )
     }
-    await hydrateUploadedLocalConversation(id: response.id)
+    let hydrated = await hydrateUploadedLocalConversation(id: response.id)
+    if bundle.session.conversationRole == .meeting, let hydrated {
+      // Notes are already written by `/from-segments`; adjudicate now so the screenshots exist on
+      // every surface before anyone opens the note. Nothing waits for it.
+      let pass = screenEvidencePass
+      Task { _ = await pass.afterCreation(conversation: hydrated) }
+    }
     log("ConversationFinalization: Uploaded local session \(sessionId) -> backend conversation \(response.id)")
     return response.meetingTreatmentEligible
   }
@@ -327,17 +422,103 @@ actor ConversationFinalizationService {
     )
   }
 
-  private func hydrateUploadedLocalConversation(id conversationId: String) async {
+  @discardableResult
+  private func hydrateUploadedLocalConversation(id conversationId: String) async -> ServerConversation? {
     do {
       let conversation = try await apiClient.getConversation(id: conversationId)
       _ = try await TranscriptionStorage.shared.syncServerConversation(conversation)
       log("ConversationFinalization: Hydrated uploaded local conversation \(conversationId)")
+      return conversation
     } catch {
       logError(
         "ConversationFinalization: Failed to hydrate uploaded local conversation \(conversationId)",
         error: error
       )
+      return nil
     }
+  }
+
+  static func captureInterval(of session: TranscriptionSessionRecord) -> DateInterval {
+    let end = max(session.finishedAt ?? Date(), session.startedAt.addingTimeInterval(1))
+    return DateInterval(start: session.startedAt, end: end)
+  }
+
+  /// Finalize (or, without force-process permission, read) one bound backend conversation,
+  /// gathering the meeting's screen evidence first either way. Evidence does not depend on
+  /// force-process permission: a max-duration rotation reads a conversation the socket close
+  /// already admitted to processing, and that processing waits on this pass's marker. Bounded and
+  /// fail-open (`MeetingScreenEvidencePass`).
+  private func finalizeBackendConversation(
+    id conversationId: String,
+    session: TranscriptionSessionRecord,
+    forceProcess: Bool = true
+  ) async throws -> ServerConversation {
+    let finalizeOrRead: () async throws -> ServerConversation = { [apiClient] in
+      forceProcess
+        ? try await apiClient.finalizeConversation(id: conversationId)
+        : try await apiClient.getConversation(id: conversationId)
+    }
+    guard session.conversationRole == .meeting else {
+      return try await finalizeOrRead()
+    }
+    let client = apiClient
+    let before = await screenEvidencePass.beforeNotes(
+      captureInterval: Self.captureInterval(of: session),
+      conversationID: conversationId,
+      fetchSelectionWindow: {
+        try await MeetingScreenEvidencePass.serverSelectionWindow(conversationID: conversationId, client: client)
+      })
+    let conversation = try await finalizeOrRead()
+    if before.needsTerminalPass {
+      retryScreenEvidenceAfterFinalize(conversationID: conversation.id)
+    }
+    return conversation
+  }
+
+  /// Adjudicate again once the backend's finalization is terminal. `/finalize` can answer while the
+  /// Cloud Tasks worker is still processing, so the POST response is not the signal: this follows
+  /// the same durable finalization projection, on the same schedule, as the meeting-completion
+  /// wake. Not awaited — finalization and the wake never wait on screen evidence — and coalesced
+  /// per conversation.
+  private func retryScreenEvidenceAfterFinalize(conversationID: String) {
+    guard pendingScreenEvidenceRetries.insert(conversationID).inserted else { return }
+    let pass = screenEvidencePass
+    let client = apiClient
+    Task { [weak self] in
+      if await Self.awaitTerminalFinalization(conversationID: conversationID, client: client) {
+        _ = await pass.afterFinalize(
+          conversationID: conversationID,
+          fetchSelectionWindow: {
+            try await MeetingScreenEvidencePass.serverSelectionWindow(conversationID: conversationID, client: client)
+          })
+      }
+      await self?.clearScreenEvidenceRetry(conversationID: conversationID)
+    }
+  }
+
+  private func clearScreenEvidenceRetry(conversationID: String) {
+    pendingScreenEvidenceRetries.remove(conversationID)
+  }
+
+  /// Whether the finalization projection reached `completed` within the projection-poll budget.
+  /// A missing projection (404) is an inline finalization, already terminal when `/finalize`
+  /// returned; `dead_letter` never produced notes worth attaching screenshots to.
+  static func awaitTerminalFinalization(conversationID: String, client: APIClient) async -> Bool {
+    for delay in finalizationProjectionForegroundDelays + finalizationProjectionBackgroundDelays {
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: delay)
+      }
+      do {
+        let status = try await client.getConversationFinalizationStatus(id: conversationID)
+        if status.status == "completed" { return true }
+        if status.status == "dead_letter" { return false }
+      } catch APIError.httpError(statusCode: 404, detail: _) {
+        return true
+      } catch {
+        continue
+      }
+    }
+    return false
   }
 
   static func compactSegmentsForBackendLimit(
@@ -391,7 +572,7 @@ actor ConversationFinalizationService {
         )
         if try await completeCloudConversation(
           id: clientConversationId,
-          sessionId: sessionId,
+          session: session,
           allowForceProcess: allowForceProcess,
           allowBackendIdOverride: true
         ) {
@@ -400,12 +581,8 @@ actor ConversationFinalizationService {
         throw TranscriptionStorageError.invalidState(
           "Bound backend conversation conflicts with client recording identity")
       }
-      let conversation: ServerConversation
-      if allowForceProcess {
-        conversation = try await apiClient.finalizeConversation(id: backendId)
-      } else {
-        conversation = try await apiClient.getConversation(id: backendId)
-      }
+      let conversation = try await finalizeBackendConversation(
+        id: backendId, session: session, forceProcess: allowForceProcess)
       if DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
         id: conversation.id,
         boundBackendId: backendId,
@@ -427,19 +604,29 @@ actor ConversationFinalizationService {
     if let clientConversationId = session.clientConversationId, !clientConversationId.isEmpty {
       if try await completeCloudConversation(
         id: clientConversationId,
-        sessionId: sessionId,
+        session: session,
         allowForceProcess: true
       ) {
         return nil
       }
     }
 
+    if allowForceProcess, session.conversationRole == .meeting {
+      // The conversation id is unknown until force-process answers, so only the OCR flush can
+      // precede it here.
+      _ = await screenEvidencePass.beforeNotes(
+        captureInterval: Self.captureInterval(of: session), conversationID: nil, fetchSelectionWindow: nil)
+    }
     if allowForceProcess, let conversation = try await apiClient.forceProcessConversation() {
       if DesktopConversationMatchPolicy.matchesDesktopConversation(
         startedAt: conversation.startedAt,
         source: conversation.source,
         sessionStartedAt: session.startedAt
       ) {
+        if session.conversationRole == .meeting {
+          // The id was unknown before force-process, so this is the first chance to adjudicate.
+          retryScreenEvidenceAfterFinalize(conversationID: conversation.id)
+        }
         let status = LocalConversationStatus(rawValue: conversation.status.rawValue) ?? .processing
         try await TranscriptionStorage.shared.markSessionCompleted(
           id: sessionId,
@@ -467,7 +654,7 @@ actor ConversationFinalizationService {
       )
     }
     for match in timestampMatches {
-      if try await completeTimestampMatchedConversation(match, sessionId: sessionId) {
+      if try await completeTimestampMatchedConversation(match, session: session) {
         return nil
       }
     }
@@ -476,7 +663,7 @@ actor ConversationFinalizationService {
       if let clientConversationId = session.clientConversationId, !clientConversationId.isEmpty {
         if try await completeCloudConversation(
           id: clientConversationId,
-          sessionId: sessionId,
+          session: session,
           allowForceProcess: true
         ) {
           return nil
@@ -493,13 +680,18 @@ actor ConversationFinalizationService {
 
   private func completeTimestampMatchedConversation(
     _ match: ServerConversation,
-    sessionId: Int64
+    session: TranscriptionSessionRecord
   ) async throws -> Bool {
+    guard let sessionId = session.id else { return false }
     let conversation: ServerConversation
     if DesktopConversationMatchPolicy.shouldFinalizeTimestampMatchedConversation(status: match.status) {
-      conversation = try await apiClient.finalizeConversation(id: match.id)
+      conversation = try await finalizeBackendConversation(id: match.id, session: session)
     } else {
       conversation = match
+      if session.conversationRole == .meeting {
+        // Already processed: nothing waits on a marker, but screenshots should still exist.
+        retryScreenEvidenceAfterFinalize(conversationID: match.id)
+      }
     }
 
     guard
@@ -582,17 +774,15 @@ actor ConversationFinalizationService {
 
   private func completeCloudConversation(
     id conversationId: String,
-    sessionId: Int64,
+    session: TranscriptionSessionRecord,
     allowForceProcess: Bool,
     allowBackendIdOverride: Bool = false
   ) async throws -> Bool {
+    guard let sessionId = session.id else { return false }
     let conversation: ServerConversation
     do {
-      if allowForceProcess {
-        conversation = try await apiClient.finalizeConversation(id: conversationId)
-      } else {
-        conversation = try await apiClient.getConversation(id: conversationId)
-      }
+      conversation = try await finalizeBackendConversation(
+        id: conversationId, session: session, forceProcess: allowForceProcess)
     } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
       return false
     }
@@ -620,27 +810,58 @@ actor ConversationFinalizationService {
   }
 
   private func markRetryableFailure(sessionId: Int64, error: Error) async {
+    let failureClass = FinalizationFailureClass.classify(error)
     let message = error.localizedDescription
     do {
       let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
+      if failureClass == .offline {
+        // Release the upload claim without spending budget: no path to the backend says nothing
+        // about whether this session can finalize.
+        log("ConversationFinalization: Session \(sessionId) attempt failed offline; retry budget unchanged")
+        try await TranscriptionStorage.shared.markSessionFailed(id: sessionId, error: message)
+        return
+      }
       let retryCount = (session?.retryCount ?? 0) + 1
-      if retryCount >= maxRetries {
+      if let session, session.effectiveFinalizationStrategy == .localSegments {
+        // The local transcript is the only copy and from-segments is idempotent on
+        // client_conversation_id, so there is no exhausted state: keep retrying on the capped backoff.
+        if failureClass == .permanent {
+          if !session.hasPermanentFinalizationFailure {
+            await reportPermanentLocalUploadRejection(session: session, error: error, retryCount: retryCount)
+          }
+          try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+          try await TranscriptionStorage.shared.markSessionFailed(
+            id: sessionId,
+            error: FinalizationRetryPolicy.permanentFailurePrefix + message
+          )
+          return
+        }
+      } else if retryCount >= maxRetries {
         // Retries are exhausted. The in-line reconciliation fallback (resolveExhaustedCloudReconciliation)
         // only runs when the final attempt returns cleanly with no match; when it fails by *throwing*
         // (backend/network error), we land here instead and would abandon the session, dropping any
         // recorded audio/transcript we still hold locally (#9083). Try to finalize from saved local
         // segments first so the recording is not lost.
-        if let session,
-          let outcome = try? await resolveExhaustedCloudReconciliation(session: session, sessionId: sessionId),
-          outcome.handled
-        {
-          log("ConversationFinalization: Recovered exhausted session \(sessionId) from local data after finalize error")
-          await postMeetingCompletionIfReady(
-            session: session,
-            reason: .retry,
-            meetingTreatmentEligible: outcome.meetingTreatmentEligible
-          )
-          return
+        if let session {
+          do {
+            let outcome = try await resolveExhaustedCloudReconciliation(session: session, sessionId: sessionId)
+            if outcome.handled {
+              log(
+                "ConversationFinalization: Recovered exhausted session \(sessionId) from local data after finalize error"
+              )
+              await postMeetingCompletionIfReady(
+                session: session,
+                reason: .retry,
+                meetingTreatmentEligible: outcome.meetingTreatmentEligible
+              )
+              return
+            }
+          } catch {
+            logError(
+              "ConversationFinalization: Local fallback for exhausted session \(sessionId) failed",
+              error: error
+            )
+          }
         }
         let segmentCount = try? await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
         let diagnostics = ReconciliationFailureDiagnostics(
@@ -667,6 +888,41 @@ actor ConversationFinalizationService {
     } catch {
       logError("ConversationFinalization: Failed to record finalization failure for session \(sessionId)", error: error)
     }
+  }
+
+  /// Reported once per transition into the rejected state; the session stays queued at the
+  /// hourly cadence so a backend fix drains it without user action.
+  private func reportPermanentLocalUploadRejection(
+    session: TranscriptionSessionRecord,
+    error: Error,
+    retryCount: Int
+  ) async {
+    let statusLabel: String
+    if case APIError.httpError(let statusCode, _) = error {
+      statusLabel = String(statusCode)
+    } else {
+      statusLabel = "unknown"
+    }
+    logError(
+      "ConversationFinalization: Backend rejected local session \(session.id ?? -1) upload (HTTP \(statusLabel)); retrying hourly",
+      error: error
+    )
+    let segmentCount: Int?
+    if let sessionId = session.id {
+      segmentCount = try? await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
+    } else {
+      segmentCount = nil
+    }
+    await AnalyticsManager.shared.conversationReconciliationFailed(
+      error: "local_upload_rejected_http_\(statusLabel)",
+      reason: "local_segments_rejected",
+      source: session.source,
+      stage: TranscriptionFinalizationStrategy.localSegments.rawValue,
+      retryCount: retryCount,
+      hasBackendId: session.backendId?.isEmpty == false,
+      hasClientConversationId: session.clientConversationId?.isEmpty == false,
+      segmentCount: segmentCount
+    )
   }
 
   static func localClientConversationId(session: TranscriptionSessionRecord, sessionId: Int64) -> String {
@@ -740,8 +996,7 @@ actor ConversationFinalizationService {
     // The first probe is immediate; subsequent bounded delays cover the normal
     // Cloud Tasks admission/worker/fanout path without keeping recovery alive
     // indefinitely. A missing projection is an older inline-finalization path.
-    let delays: [UInt64] = [0, 250_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 4_000_000_000]
-    for delay in delays {
+    for delay in Self.finalizationProjectionForegroundDelays {
       if delay > 0 {
         try? await Task.sleep(nanoseconds: delay)
       }
@@ -779,8 +1034,7 @@ actor ConversationFinalizationService {
           await self?.clearFinalizationProjectionPoll(conversationID: conversationID)
         }
       }
-      let delays: [UInt64] = [5_000_000_000, 15_000_000_000, 30_000_000_000, 60_000_000_000, 120_000_000_000]
-      for delay in delays {
+      for delay in Self.finalizationProjectionBackgroundDelays {
         try? await Task.sleep(nanoseconds: delay)
         guard !Task.isCancelled else { return }
         do {
@@ -800,6 +1054,16 @@ actor ConversationFinalizationService {
       }
     }
   }
+
+  /// The finalization-projection poll schedule, shared by the meeting-completion wake and the
+  /// post-finalization screen-evidence retry: an immediate probe plus short foreground delays, then
+  /// a slower background tail for a slow Cloud Tasks fanout.
+  static let finalizationProjectionForegroundDelays: [UInt64] = [
+    0, 250_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 4_000_000_000,
+  ]
+  static let finalizationProjectionBackgroundDelays: [UInt64] = [
+    5_000_000_000, 15_000_000_000, 30_000_000_000, 60_000_000_000, 120_000_000_000,
+  ]
 
   private func clearFinalizationProjectionPoll(conversationID: String) {
     pendingFinalizationProjectionPolls.remove(conversationID)
@@ -864,6 +1128,7 @@ struct ConversationCreatedTelemetry: Equatable, Sendable {
   let conversationId: String
   let source: String
   let durationSeconds: Int?
+  let attemptId: String?
 
   init(session: TranscriptionSessionRecord, conversationId: String) {
     self.conversationId = conversationId
@@ -871,6 +1136,7 @@ struct ConversationCreatedTelemetry: Equatable, Sendable {
     durationSeconds = session.finishedAt.map {
       max(0, Int($0.timeIntervalSince(session.startedAt)))
     }
+    attemptId = session.captureAttemptId
   }
 }
 

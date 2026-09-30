@@ -4,6 +4,10 @@ tier: 2
 description: Ask Omi open + stubbed typed turn on the floating bar (distinct from perf benchmarks)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMenuBarItem.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMotion.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNoticePolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchDismissButton.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCard.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCardCoordinator.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCardPolicy.swift
@@ -26,8 +30,12 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarLaunchPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarPresentation.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService+ProgressiveTTS.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ProgressiveMP3Player.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ProgressiveTTSPlaybackPipeline.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMouseInterception.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarSurfaceFloor.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
@@ -90,6 +98,15 @@ steps:
     state.expect:
       state.floatingBarVisible: true
 
+  - id: S1b
+    name: Idle island frame satisfies the surface floor for its state
+    bridge.action:
+      name: notch_hover
+      params:
+        action: "state"
+    expect:
+      result.detail.surfaceFloorSatisfied: "true"
+
   - id: S2
     name: Open Ask Omi
     bridge.action:
@@ -98,7 +115,7 @@ steps:
         reset: "true"
         wait: "true"
     expect:
-      result.detail.focused: "true"
+      result.detail.target: "main_chat"
 
   - id: S3
     name: Send stubbed floating-bar query

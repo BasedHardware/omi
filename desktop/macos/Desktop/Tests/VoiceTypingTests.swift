@@ -52,6 +52,42 @@ final class VoiceTypeCommandParserTests: XCTestCase {
       .typing(payload: "Buy milk"))
   }
 
+  func testAnOpeningThisBelongsToTheSpeakerNotTheWakePhrase() {
+    // Reported live: "type this is a test" came out as "Is a test". The
+    // longest-match wake phrase "type this" ate the speaker's own first word,
+    // and "this" is about the commonest word an English sentence opens with.
+    XCTAssertEqual(
+      VoiceTypeCommandParser.decide("type this is a test"),
+      .typing(payload: "This is a test"))
+    XCTAssertEqual(
+      VoiceTypeCommandParser.decide("Type this looks wrong to me"),
+      .typing(payload: "This looks wrong to me"))
+    XCTAssertEqual(
+      VoiceTypeCommandParser.payloadAssumingDictation("Type this is a test"), "This is a test")
+    // The same word is still the speaker's after a misheard wake word.
+    XCTAssertEqual(
+      VoiceTypeCommandParser.payloadAssumingDictation("Typed this is a test"), "This is a test")
+    XCTAssertEqual(
+      VoiceTypeCommandParser.payloadAssumingDictation("Tie, this is a test"), "This is a test")
+  }
+
+  func testAPauseOrColonStillMarksTypeThisAsTheInstruction() {
+    // Spoken as an instruction, the phrase keeps its word: what tells the two
+    // apart is the punctuation a speaker's pause leaves behind.
+    for opening in ["type this: buy milk", "Type this, buy milk", "Type this. Buy milk"] {
+      XCTAssertEqual(
+        VoiceTypeCommandParser.decide(opening), .typing(payload: "Buy milk"), opening)
+    }
+    // Straight-through phrasings are untouched: nobody dictates text opening
+    // on "out", and "type out an email" is how people speak the instruction.
+    XCTAssertEqual(
+      VoiceTypeCommandParser.decide("type out the address"), .typing(payload: "The address"))
+    // And the turn is still claimed either way.
+    for opening in ["type this is a test", "type this: buy milk"] {
+      XCTAssertTrue(VoiceTypeCommandParser.opensLikeDictation(opening), opening)
+    }
+  }
+
   func testAClaimedTurnReadsAMisheardWakeWordLeniently() {
     // The closing transcript comes from a stronger recognizer than the probe
     // that claimed the turn, and it may spell the wake word its own way.
@@ -121,7 +157,7 @@ final class VoiceTypeSessionTests: XCTestCase {
     var caretAfterWord = false
     var focus: String? = "1:com.example.editor"
 
-    func paste(_ text: String, into target: TextInsertionTarget) -> TextInsertionResult {
+    func paste(_ text: String, into target: TextInsertionTarget) async -> TextInsertionResult {
       guard pasteSucceeds, focusTarget() == target else { return .notInserted }
       pasted.append(text)
       return .inserted
@@ -152,33 +188,36 @@ final class VoiceTypeSessionTests: XCTestCase {
     return (session, sink)
   }
 
-  func testAClosingTranscriptThatOpensWithTheWakeWordIsPastedWhole() {
+  func testAClosingTranscriptThatOpensWithTheWakeWordIsPastedWhole() async {
     let (session, sink) = makeSession()
     XCTAssertEqual(session.payload(from: "Type hello world."), "Hello world.")
     XCTAssertTrue(session.claimsTurn)
-    XCTAssertEqual(session.deliver("Hello world."), .pasted("Hello world."))
+    let delivered = await session.deliver("Hello world.")
+    XCTAssertEqual(delivered, .pasted("Hello world."))
     XCTAssertEqual(sink.pasted, ["Hello world."])
     XCTAssertTrue(sink.copied.isEmpty)
     XCTAssertFalse(session.claimsTurn, "delivery ends the turn")
   }
 
-  func testAQuestionIsLeftToChatAndNothingIsPasted() {
+  func testAQuestionIsLeftToChatAndNothingIsPasted() async {
     let (session, sink) = makeSession()
     XCTAssertNil(session.payload(from: "what's on my calendar tomorrow"))
     XCTAssertFalse(session.claimsTurn)
-    XCTAssertEqual(session.deliver("what's on my calendar tomorrow"), .none)
+    let delivered = await session.deliver("what's on my calendar tomorrow")
+    XCTAssertEqual(delivered, .none)
     XCTAssertTrue(sink.pasted.isEmpty)
     XCTAssertTrue(sink.copied.isEmpty)
   }
 
-  func testAProbeClaimLatchesAndTheClosingTranscriptIsReadLeniently() {
+  func testAProbeClaimLatchesAndTheClosingTranscriptIsReadLeniently() async {
     // The mid-hold probe heard the wake word; the closing transcript, from the
     // backend, spelled it differently. The turn stays a dictation and the
     // stray word is dropped rather than pasted.
     let (session, sink) = makeSession()
     XCTAssertTrue(session.claim(transcript: "Type hello wor"))
     XCTAssertEqual(session.payload(from: "Tie, hello world, how are you?"), "Hello world, how are you?")
-    XCTAssertEqual(session.deliver("Hello world, how are you?"), .pasted("Hello world, how are you?"))
+    let delivered = await session.deliver("Hello world, how are you?")
+    XCTAssertEqual(delivered, .pasted("Hello world, how are you?"))
     XCTAssertEqual(sink.pasted, ["Hello world, how are you?"])
   }
 
@@ -201,7 +240,7 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertEqual(session.payload(from: "Type hello"), "Hello")
   }
 
-  func testWithoutAccessibilityTheTurnStillDictatesButCopiesInsteadOfPasting() {
+  func testWithoutAccessibilityTheTurnStillDictatesButCopiesInsteadOfPasting() async {
     // Regression for #12877: a "type …" turn with no Accessibility grant used
     // to release itself to the realtime model once blocked, which then acted
     // on the words as an instruction (spawned an agent) instead of dictating
@@ -211,18 +250,23 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertTrue(session.claim(transcript: "Type hello"), "a blocked turn still claims itself")
     XCTAssertEqual(session.payload(from: "Type hello again"), "Hello again", "one denied turn stays denied")
     XCTAssertTrue(session.claimsTurn)
-    XCTAssertEqual(session.deliver("Hello again"), .copied("Hello again"))
+    let delivered = await session.deliver("Hello again")
+    XCTAssertEqual(delivered, .copied("Hello again", .accessibilityDenied))
     XCTAssertTrue(sink.pasted.isEmpty, "no Accessibility grant means no paste is even attempted")
+    XCTAssertEqual(
+      delivered.journalAcknowledgement?.contains("Turn on Accessibility"), true,
+      "the transcript is where the user finds out why their dictation did not land at the cursor")
     XCTAssertEqual(sink.copied, ["Hello again"])
   }
 
-  func testADictationThatContinuesALineOpensWithASpace() {
+  func testADictationThatContinuesALineOpensWithASpace() async {
     let (session, sink) = makeSession()
     sink.caretAfterWord = true
     session.noteRelease()
     XCTAssertNotNil(session.payload(from: "Type I think so"))
     // The space is on screen but not part of what the turn dictated.
-    XCTAssertEqual(session.deliver("I think so"), .pasted("I think so"))
+    let delivered = await session.deliver("I think so")
+    XCTAssertEqual(delivered, .pasted("I think so"))
     XCTAssertEqual(sink.pasted, [" I think so"])
   }
 
@@ -238,89 +282,97 @@ final class VoiceTypeSessionTests: XCTestCase {
     }
   }
 
-  func testADictationAtALineStartAddsNoSpace() {
+  func testADictationAtALineStartAddsNoSpace() async {
     let (session, sink) = makeSession()
     sink.caretAfterWord = false
     XCTAssertNotNil(session.payload(from: "Type hello"))
-    _ = session.deliver("Hello")
+    _ = await session.deliver("Hello")
     XCTAssertEqual(sink.pasted, ["Hello"])
   }
 
-  func testFocusThatMovedAfterReleaseCopiesInsteadOfPasting() {
+  func testFocusThatMovedAfterReleaseCopiesInsteadOfPasting() async {
     // Observed live before this existed: a dock click brought Omi's own window
     // forward and the dictation landed in it instead of the document.
     let (session, sink) = makeSession()
     XCTAssertNotNil(session.payload(from: "Type hello world"))
     sink.focus = "2:com.omi.desktop-dev"
-    XCTAssertEqual(session.deliver("Hello world"), .copied("Hello world"))
+    let delivered = await session.deliver("Hello world")
+    XCTAssertEqual(delivered, .copied("Hello world", .insertionUnavailable))
     XCTAssertTrue(sink.pasted.isEmpty)
     XCTAssertEqual(sink.copied, ["Hello world"])
   }
 
-  func testAnUnreadableFocusAtReleaseCopiesInsteadOfGuessing() {
+  func testAnUnreadableFocusAtReleaseCopiesInsteadOfGuessing() async {
     let sink = RecordingSink()
     sink.focus = nil
     let session = authorizedSession(sink: sink)
     session.begin()
     session.noteRelease()
     XCTAssertNotNil(session.payload(from: "Type hello"))
-    XCTAssertEqual(session.deliver("Hello"), .copied("Hello"))
+    let delivered = await session.deliver("Hello")
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertTrue(sink.pasted.isEmpty)
     XCTAssertEqual(sink.copied, ["Hello"])
   }
 
-  func testFocusThatBecameUnreadableAfterReleaseCopies() {
+  func testFocusThatBecameUnreadableAfterReleaseCopies() async {
     let (session, sink) = makeSession()
     XCTAssertNotNil(session.payload(from: "Type hello"))
     sink.focus = nil
-    XCTAssertEqual(session.deliver("Hello"), .copied("Hello"))
+    let delivered = await session.deliver("Hello")
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertTrue(sink.pasted.isEmpty)
     XCTAssertEqual(sink.copied, ["Hello"])
   }
 
-  func testAFailedPasteFallsBackToTheClipboard() {
+  func testAFailedPasteFallsBackToTheClipboard() async {
     let (session, sink) = makeSession()
     sink.pasteSucceeds = false
     XCTAssertNotNil(session.payload(from: "Type hello"))
-    XCTAssertEqual(session.deliver("Hello"), .copied("Hello"))
+    let delivered = await session.deliver("Hello")
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertEqual(sink.copied, ["Hello"])
   }
 
-  func testEmptyTextDeliversNothing() {
+  func testEmptyTextDeliversNothing() async {
     let (session, sink) = makeSession()
     XCTAssertEqual(session.payload(from: "Type."), "")
-    XCTAssertEqual(session.deliver("   "), .none)
+    let delivered = await session.deliver("   ")
+    XCTAssertEqual(delivered, .none)
     XCTAssertTrue(sink.pasted.isEmpty)
     XCTAssertTrue(sink.copied.isEmpty)
   }
 
-  func testTextWithNothingInItDeliversNothing() {
+  func testTextWithNothingInItDeliversNothing() async {
     // A breath decoded as "." or "…" is not a dictation: nothing is pasted
     // and nothing is left on the clipboard.
     for text in [".", "…", ", ,", "?!"] {
       let (session, sink) = makeSession()
       XCTAssertNotNil(session.payload(from: "Type hello"))
-      XCTAssertEqual(session.deliver(text), .none, text)
+      let delivered = await session.deliver(text)
+      XCTAssertEqual(delivered, .none, text)
       XCTAssertTrue(sink.pasted.isEmpty)
       XCTAssertTrue(sink.copied.isEmpty)
     }
   }
 
-  func testANewTurnForgetsThePreviousClaim() {
+  func testANewTurnForgetsThePreviousClaim() async {
     let (session, sink) = makeSession()
     XCTAssertTrue(session.claim(transcript: "Type hello"))
     session.begin()
     XCTAssertFalse(session.claimsTurn)
-    XCTAssertEqual(session.deliver("Hello"), .none)
+    let delivered = await session.deliver("Hello")
+    XCTAssertEqual(delivered, .none)
     XCTAssertTrue(sink.pasted.isEmpty)
   }
 
-  func testAbandonEndsTheTurnWithoutDelivering() {
+  func testAbandonEndsTheTurnWithoutDelivering() async {
     let (session, sink) = makeSession()
     XCTAssertTrue(session.claim(transcript: "Type hello"))
     session.abandon()
     XCTAssertFalse(session.claimsTurn)
-    XCTAssertEqual(session.deliver("Hello"), .none)
+    let delivered = await session.deliver("Hello")
+    XCTAssertEqual(delivered, .none)
     XCTAssertTrue(sink.pasted.isEmpty)
   }
 }
@@ -657,8 +709,9 @@ final class DictationTranscriberTests: XCTestCase {
 
   func testOnlineTheBackendTranscriptWinsAndTheDeviceIsNotAsked() async {
     let calls = Calls()
-    let result = await makeTranscriber(online: true, calls: calls).transcribe(audio)
-    XCTAssertEqual(result, DictationTranscriber.Result(text: "type hello from the backend", source: .backend))
+    let outcome = await makeTranscriber(online: true, calls: calls).outcome(for: audio)
+    XCTAssertEqual(
+      outcome, .transcribed(DictationTranscriber.Result(text: "type hello from the backend", source: .backend)))
     XCTAssertEqual(calls.backendCalls, 1)
     XCTAssertEqual(calls.onDeviceCalls, 0)
     XCTAssertTrue(calls.fallbacks.isEmpty)
@@ -666,33 +719,36 @@ final class DictationTranscriberTests: XCTestCase {
 
   func testABackendFailureFallsBackToTheDeviceAndSaysWhy() async {
     let calls = Calls()
-    let result = await makeTranscriber(online: true, backendThrows: true, calls: calls).transcribe(audio)
-    XCTAssertEqual(result, DictationTranscriber.Result(text: "type hello from the device", source: .onDevice))
+    let outcome = await makeTranscriber(online: true, backendThrows: true, calls: calls).outcome(for: audio)
+    XCTAssertEqual(
+      outcome, .transcribed(DictationTranscriber.Result(text: "type hello from the device", source: .onDevice)))
     XCTAssertEqual(calls.fallbacks, ["other"])
   }
 
   func testAnEmptyBackendTranscriptFallsBackToTheDevice() async {
     let calls = Calls()
-    let result = await makeTranscriber(online: true, backendText: "  ", calls: calls).transcribe(audio)
-    XCTAssertEqual(result?.source, .onDevice)
+    let outcome = await makeTranscriber(online: true, backendText: "  ", calls: calls).outcome(for: audio)
+    XCTAssertEqual(
+      outcome, .transcribed(DictationTranscriber.Result(text: "type hello from the device", source: .onDevice)))
     XCTAssertEqual(calls.fallbacks, ["empty"])
   }
 
   func testOfflineTheBackendIsNeverTried() async {
     let calls = Calls()
-    let result = await makeTranscriber(online: false, calls: calls).transcribe(audio)
-    XCTAssertEqual(result, DictationTranscriber.Result(text: "type hello from the device", source: .onDevice))
+    let outcome = await makeTranscriber(online: false, calls: calls).outcome(for: audio)
+    XCTAssertEqual(
+      outcome, .transcribed(DictationTranscriber.Result(text: "type hello from the device", source: .onDevice)))
     XCTAssertEqual(calls.backendCalls, 0)
     XCTAssertTrue(calls.fallbacks.isEmpty, "no fallback was taken when there was never a backend to fall from")
   }
 
   func testWhenNeitherRecognizerAnswersTheTurnHasNoTranscript() async {
     let calls = Calls()
-    let result = await makeTranscriber(online: true, backendThrows: true, onDeviceText: nil, calls: calls)
-      .transcribe(audio)
-    XCTAssertNil(result)
-    let empty = await makeTranscriber(online: true, calls: calls).transcribe(Data())
-    XCTAssertNil(empty, "no audio, no transcript")
+    let outcome = await makeTranscriber(online: true, backendThrows: true, onDeviceText: nil, calls: calls)
+      .outcome(for: audio)
+    XCTAssertEqual(outcome, .unavailable(.noTranscript))
+    let empty = await makeTranscriber(online: true, calls: calls).outcome(for: Data())
+    XCTAssertEqual(empty, .unavailable(.emptyAudio), "no audio, no transcript")
   }
 
   /// A request that never completes on its own and only ends when the
@@ -746,12 +802,12 @@ final class DictationTranscriberTests: XCTestCase {
       },
       didFallBack: { calls.fallback($0) })
     let audio = self.audio
-    let task = Task { await transcriber.transcribe(audio) }
+    let task = Task { await transcriber.outcome(for: audio) }
     // The backend has been asked (its call is synchronous up to the stall).
     while calls.backendCalls == 0 { await Task.yield() }
     task.cancel()
-    let result = await task.value
-    XCTAssertNil(result)
+    let outcome = await task.value
+    XCTAssertEqual(outcome, .cancelled)
     XCTAssertEqual(calls.onDeviceCalls, 0)
     XCTAssertTrue(calls.fallbacks.isEmpty)
   }
@@ -771,10 +827,91 @@ final class DictationTranscriberTests: XCTestCase {
       },
       didFallBack: { calls.fallback($0) })
     transcriber.backendTimeout = 0.01
-    let result = await transcriber.transcribe(audio)
-    XCTAssertEqual(result?.source, .onDevice)
+    let outcome = await transcriber.outcome(for: audio)
+    XCTAssertEqual(
+      outcome, .transcribed(DictationTranscriber.Result(text: "type hello from the device", source: .onDevice)))
     XCTAssertEqual(calls.fallbacks, ["timeout"])
     XCTAssertEqual(calls.backendCalls, 1)
+  }
+
+  func testAnOnDeviceDecoderThatNeverAnswersReturnsTypedTimeoutAtTheDeadline() async {
+    let calls = Calls()
+    let stalled = UncooperativeOnDeviceRequest()
+    var transcriber = makeTranscriber(online: false, calls: calls)
+    transcriber.onDevice = { _ in
+      calls.onDevice()
+      return await stalled.run()
+    }
+    transcriber.onDeviceTimeout = 0.02
+
+    let started = Date()
+    let outcome = await transcriber.outcome(for: audio)
+
+    XCTAssertEqual(outcome, .unavailable(.onDeviceTimedOut))
+    XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+    XCTAssertEqual(calls.backendCalls, 0)
+    XCTAssertEqual(calls.onDeviceCalls, 1)
+    stalled.finish("type too late")
+  }
+
+  func testCancellingAnOnDeviceDecodeDoesNotBecomeATimeout() async {
+    let calls = Calls()
+    let stalled = UncooperativeOnDeviceRequest()
+    var transcriber = makeTranscriber(online: false, calls: calls)
+    transcriber.onDevice = { _ in
+      calls.onDevice()
+      return await stalled.run()
+    }
+    transcriber.onDeviceTimeout = 5
+
+    let audio = self.audio
+    let task = Task { await transcriber.outcome(for: audio) }
+    while calls.onDeviceCalls == 0 { await Task.yield() }
+    task.cancel()
+
+    let outcome = await task.value
+    XCTAssertEqual(outcome, .cancelled)
+    stalled.finish("type too late")
+  }
+
+  private final class UncooperativeOnDeviceRequest: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<String?, Never>?
+
+    func run() async -> String? {
+      await withCheckedContinuation { continuation in
+        lock.lock()
+        self.continuation = continuation
+        lock.unlock()
+      }
+    }
+
+    func finish(_ value: String?) {
+      lock.lock()
+      let pending = continuation
+      continuation = nil
+      lock.unlock()
+      pending?.resume(returning: value)
+    }
+  }
+}
+
+final class VoiceTypingAutomationResultTests: XCTestCase {
+  func testOnDeviceTimeoutIsExposedAsTypedUnavailableResult() {
+    var run = PushToTalkManager.DictationRun()
+    run.transcriptionUnavailableReason = .onDeviceTimedOut
+
+    XCTAssertEqual(run.automationTranscriptionFields["transcription_status"], "unavailable")
+    XCTAssertEqual(run.automationTranscriptionFields["error_code"], "on_device_transcription_timeout")
+    XCTAssertEqual(
+      run.automationTranscriptionFields["error"],
+      "on-device transcription did not complete within the 12-second deadline")
+  }
+
+  func testSuccessfulTranscriptionHasNoErrorFields() {
+    let fields = PushToTalkManager.DictationRun().automationTranscriptionFields
+
+    XCTAssertEqual(fields, ["transcription_status": "transcribed"])
   }
 }
 

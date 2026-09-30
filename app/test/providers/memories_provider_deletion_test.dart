@@ -46,4 +46,62 @@ void main() {
     expect(deletedIDs, [memory.id]);
     expect(provider.memories.map((memory) => memory.id), [memory.id]);
   });
+
+  Memory memoryWithId(String id) => Memory(
+        id: id,
+        uid: 'memory-delete-test-user',
+        content: 'Memory $id',
+        category: MemoryCategory.manual,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+        visibility: MemoryVisibility.private,
+      );
+
+  test('deleting a second memory inside the undo window still deletes the first', () async {
+    final first = memoryWithId('first');
+    final second = memoryWithId('second');
+    final serverMemories = [first, second];
+    final deletedIDs = <String>[];
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        return GetMemoriesResult(List.of(serverMemories), true);
+      },
+      deleteMemoryRequest: (id) async {
+        deletedIDs.add(id);
+        serverMemories.removeWhere((memory) => memory.id == id);
+        return true;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await provider.loadMemories();
+    provider.deleteMemory(first);
+    provider.deleteMemory(second);
+    await provider.confirmPendingDeletion();
+
+    expect(deletedIDs, unorderedEquals([first.id, second.id]));
+
+    await provider.loadMemories();
+    expect(provider.memories, isEmpty);
+  });
+
+  test('a failed delete of the first memory restores it while the second is pending', () async {
+    final first = memoryWithId('first');
+    final second = memoryWithId('second');
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        return GetMemoriesResult([first, second], true);
+      },
+      deleteMemoryRequest: (id) async => id != first.id,
+    );
+    addTearDown(provider.dispose);
+
+    await provider.loadMemories();
+    provider.deleteMemory(first);
+    provider.deleteMemory(second);
+    await pumpEventQueue();
+
+    expect(provider.memories.map((memory) => memory.id), [first.id]);
+    expect(provider.lastDeletedMemory?.id, second.id);
+  });
 }

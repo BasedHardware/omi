@@ -1,0 +1,8 @@
+{
+  "version": "0.12.368",
+  "date": "2026-09-20",
+  "changes": [
+    "A local summary that came back empty no longer replaces the basic conversation details with a blank page",
+    "Summaries of long conversations no longer lose the detail extracted from each part"
+  ]
+}

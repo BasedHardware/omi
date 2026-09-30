@@ -163,18 +163,6 @@ export class WindowsJitRuntime {
       ownerId,
       accountGeneration,
       authorizationCurrent,
-      calendarObservation: async () => {
-        const { isConnected } = await import('../integrations/oauth')
-        if (!isConnected()) return { authorized: false, events: [] }
-        const { fetchCalendar } = await import('../integrations/google')
-        const events = await fetchCalendar()
-        return {
-          authorized: true,
-          events: events
-            .slice(0, 32)
-            .map((event) => ({ title: event.title, eventType: 'calendar_event' }))
-        }
-      },
       frameExists: (frameId) =>
         Boolean(db.prepare('SELECT id FROM rewind_frames WHERE id = ?').get(frameId))
     })
@@ -515,11 +503,8 @@ export class WindowsJitRuntime {
     }
     if (evaluation.nextLane === 'bounded_planned_triage')
       return { kind: 'suppressed', reason: 'planned_match_ambiguous' }
-    if (evaluation.nextLane === 'none') {
-      return loaded.triggers.length === 0
-        ? { kind: 'suppressed', reason: 'empty_watchlist' }
-        : { kind: 'suppressed', reason: 'planned_runtime_rejected' }
-    }
+    if (evaluation.nextLane === 'none')
+      return { kind: 'suppressed', reason: 'planned_runtime_rejected' }
     return { kind: 'suppressed', reason: 'no_eligible_planned_trigger' }
   }
 

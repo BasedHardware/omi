@@ -3,7 +3,7 @@
 # Declare variables to be passed into your templates.
 
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
-replicaCount: 1
+replicaCount: 2
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
@@ -94,8 +94,9 @@ env:
         key: ENCRYPTION_SECRET
   - name: PARAKEET_MODEL
     value: "nvidia/parakeet-tdt-0.6b-v3"
-  - name: PARAKEET_STREAM_MODEL
-    value: "nvidia/parakeet-rnnt-1.1b"
+  # No PARAKEET_STREAM_MODEL in prod: /v3/stream (PTT) serves VAD utterances with
+  # the TDT model above. Prod has run this way since the 2026-07-23 fatal-CUDA
+  # mitigation removed RNNT by hand; loading RNNT here is a separate rollout.
   - name: PARAKEET_INFERENCE_MODE
     value: "nemo"
   - name: PARAKEET_MAX_SPEECH_S
@@ -123,7 +124,9 @@ env:
   - name: PARAKEET_STARVATION_TIMEOUT
     value: "5.0"
   - name: PARAKEET_MAX_INFLIGHT
-    value: "2"
+    # Keep dispatch at the GPU batch boundary so backfill cannot queue ahead
+    # of newly arrived live work in the worker's FIFO queue.
+    value: "1"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
 
@@ -183,8 +186,8 @@ prometheus-adapter:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 1
-  maxReplicas: 2
+  minReplicas: 3
+  maxReplicas: 6
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
@@ -231,6 +234,11 @@ affinity:
               operator: In
               values:
                 - prod
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
 
 
 strategy:

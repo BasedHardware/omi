@@ -18,6 +18,7 @@ from database.account_deletion_transitions import (
     record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
+from database.firestore_tier_context import invalidate_subscription, observe_subscription
 from database.person_aliases import rename_person_retaining_aliases
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import (
@@ -207,9 +208,8 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
 
 def is_exists_user(uid: str):
     user_ref = db.collection('users').document(uid)
-    if not user_ref.get().exists:
-        return False
-    return True
+    snapshot = user_ref.get(field_paths=['uid'])
+    return parse_snapshot_or_none(lambda _payload: True, snapshot) is not None
 
 
 def get_user_profile(uid: str) -> dict:
@@ -232,12 +232,12 @@ def set_user_store_recording_permission(uid: str, value: bool):
     user_ref.update({'store_recording_permission': value})
 
 
-def get_meeting_note_screenshots_enabled(uid: str) -> bool:
+def get_meeting_note_screenshots_enabled(uid: str, *, rpc_timeout: Optional[float] = None) -> bool:
     """Account-level setting gating screen-frame egress admission (contract
     §6). Default true — off means the feature does nothing and existing
-    frames stay hidden (contract §9), it does not delete anything."""
+    frames stay hidden (contract §9); ``rpc_timeout`` bounds it to one attempt."""
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict() or {}
+    user_data = user_ref.get(**({'timeout': rpc_timeout, 'retry': None} if rpc_timeout else {})).to_dict() or {}
     return user_data.get('meeting_note_screenshots_enabled', True)
 
 
@@ -903,6 +903,14 @@ def get_people(uid: str):
     return result
 
 
+def count_people(uid: str, *, firestore_client: Any = None) -> int:
+    """Server-side count of the user's people (speaker profiles) collection."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    people_ref = client.collection('users').document(uid).collection('people')
+    result = people_ref.count().get()
+    return int(result[0][0].value or 0)
+
+
 def get_person_by_name(uid: str, name: str):
     people_ref = db.collection('users').document(uid).collection('people')
     query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
@@ -1021,6 +1029,81 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
 
 
 @transactional
+def _replace_speech_profile_transaction(transaction, person_ref, expected_updated_at, profile, user_ref=None):
+    snapshot = person_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return None
+    if user_ref is not None and not (user_ref.get(transaction=transaction).to_dict() or {}).get(
+        'save_other_voice_profiles', True
+    ):
+        return None
+    person = snapshot.to_dict()
+    if person.get('updated_at') != expected_updated_at:
+        return None  # Deleted, corrected or replaced while audio work was in flight.
+    old_samples = person.get('speech_samples', [])
+    transaction.update(person_ref, {**profile, 'updated_at': datetime.now(timezone.utc)})
+    return old_samples
+
+
+def replace_person_speech_profile(
+    uid: str,
+    person_id: str,
+    expected_updated_at,
+    sample_path: str,
+    transcript: str,
+    embedding: list,
+    conversation_id: str,
+    segment_ids: list[str],
+) -> Optional[list[str]]:
+    """Publish one verified sample, its embedding and teaching provenance atomically.
+
+    None means the result lost its ownership/version fence; [] is a first enrollment.
+    """
+    user_ref = db.collection('users').document(uid)
+    ref = user_ref.collection('people').document(person_id)
+    return _replace_speech_profile_transaction(
+        db.transaction(),
+        ref,
+        expected_updated_at,
+        {
+            'speech_samples': [sample_path],
+            'speech_sample_transcripts': [transcript],
+            'speech_samples_version': 3,
+            'speaker_embedding': embedding,
+            'speech_sample_source': {'conversation_id': conversation_id, 'segment_ids': segment_ids},
+        },
+        user_ref=user_ref,
+    )
+
+
+@transactional
+def _invalidate_speech_profile_transaction(transaction, person_ref, conversation_id, segment_ids):
+    snapshot = person_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return []
+    person = snapshot.to_dict()
+    source = person.get('speech_sample_source') or {}
+    # Always fence in-flight teaching, even when it has not published provenance yet.
+    update = {'updated_at': datetime.now(timezone.utc)}
+    removed = []
+    if source.get('conversation_id') == conversation_id and set(source.get('segment_ids', [])) & set(segment_ids):
+        removed = person.get('speech_samples', [])
+        update.update(
+            speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
+        )
+    transaction.update(person_ref, update)
+    return removed
+
+
+def invalidate_person_speech_profile(
+    uid: str, person_id: str, conversation_id: str, segment_ids: list[str]
+) -> list[str]:
+    """A corrected teaching label must stop identifying that voice as the old person."""
+    ref = db.collection('users').document(uid).collection('people').document(person_id)
+    return _invalidate_speech_profile_transaction(db.transaction(), ref, conversation_id, segment_ids)
+
+
+@transactional
 def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> bool:
     """Atomically remove a sample and its aligned transcript."""
     snapshot = person_ref.get(transaction=transaction)
@@ -1045,6 +1128,10 @@ def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> boo
         {
             'speech_samples': samples,
             'speech_sample_transcripts': transcripts,
+            # A legacy profile can contain multiple samples. The remaining sample
+            # must be re-embedded; retaining the deleted voice's vector is unsafe.
+            'speaker_embedding': None,
+            'speech_sample_source': None,
             'updated_at': datetime.now(timezone.utc),
         },
     )
@@ -1090,31 +1177,15 @@ def get_user_speaker_embedding(uid: str) -> Optional[list]:
     return user_doc.to_dict().get('speaker_embedding')
 
 
-def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:
-    """
-    Store speaker embedding for a person.
-
-    Args:
-        uid: User ID
-        person_id: Person ID
-        embedding: List of floats representing the speaker embedding
-
-    Returns:
-        True if stored successfully, False if person not found
-    """
-    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_doc = person_ref.get()
-
-    if not person_doc.exists:
-        return False
-
-    person_ref.update(
-        {
-            'speaker_embedding': embedding,
-            'updated_at': datetime.now(timezone.utc),
-        }
+def set_person_speaker_embedding(uid: str, person_id: str, embedding: list, *, expected_updated_at) -> bool:
+    """Recover a vector only while the sample snapshot that produced it is current."""
+    ref = db.collection('users').document(uid).collection('people').document(person_id)
+    return (
+        _replace_speech_profile_transaction(
+            db.transaction(), ref, expected_updated_at, {'speaker_embedding': embedding}
+        )
+        is not None
     )
-    return True
 
 
 def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[list]:
@@ -1342,6 +1413,7 @@ def set_chat_message_rating_score(
     reason: str = None,
     platform: str = None,
     app_version: str = None,
+    app_build: str = None,
     notification_kind: str = None,
     app_id: str = None,
 ):
@@ -1373,6 +1445,8 @@ def set_chat_message_rating_score(
         data['platform'] = platform
     if app_version:
         data['app_version'] = app_version
+    if app_build:
+        data['app_build'] = app_build
     if notification_kind:
         data['notification_kind'] = notification_kind
     if app_id:
@@ -1451,7 +1525,11 @@ def update_user_subscription(uid: str, subscription_data: dict):
     subscription_data_to_store.pop('limits', None)
 
     user_ref = db.collection('users').document(uid)
-    user_ref.update({'subscription': subscription_data_to_store})
+    invalidate_subscription(uid)
+    try:
+        user_ref.update({'subscription': subscription_data_to_store})
+    finally:
+        invalidate_subscription(uid)
 
 
 # **************************************
@@ -1688,6 +1766,7 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
             if legacy_free_plan:
                 sub_data['plan'] = PlanType.basic.value
                 update_user_subscription(uid, sub_data)
+            observe_subscription(uid, subscription)
             return subscription
 
     # If subscription doesn't exist for the user, create and return a default free plan.
@@ -1702,6 +1781,7 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
     sub_to_store.pop('features', None)
     sub_to_store.pop('limits', None)
     user_ref.set({'subscription': sub_to_store}, merge=True)
+    observe_subscription(uid, default_subscription)
     return default_subscription
 
 
@@ -1710,10 +1790,12 @@ def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = N
     user_ref = (firestore_client or db).collection('users').document(uid)
     user_doc = user_ref.get(['subscription'])
     if not user_doc.exists:
+        observe_subscription(uid, None)
         return None
 
     user_data = user_doc.to_dict()
     if 'subscription' not in user_data:
+        observe_subscription(uid, None)
         return None
 
     sub_data = user_data['subscription']
@@ -1726,7 +1808,9 @@ def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = N
             payload['plan'] = PlanType.basic.value
         return payload
 
-    return parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
+    subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
+    observe_subscription(uid, subscription)
+    return subscription
 
 
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:

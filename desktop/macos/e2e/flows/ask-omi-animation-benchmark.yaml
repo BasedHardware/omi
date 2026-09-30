@@ -1,7 +1,7 @@
 version: 1
 name: ask-omi-animation-benchmark
 tier: 3
-description: Capture short frame sequences for Ask Omi open and close transitions.
+description: Capture short frame sequences for Ask Omi open of the chat-first main-window composer.
 app: non-prod
 preconditions:
   - automation_bridge_ready
@@ -19,7 +19,7 @@ steps:
       params:
         reset: false
         wait: false
-      target: floating
+      target: main
       frames: 8
       interval_ms: 16
 
@@ -27,7 +27,6 @@ steps:
     name: Assert Open State
     state.expect:
       state.askOmiOpen: true
-      state.askOmiFocused: true
 
   - id: S4
     name: Capture Close Animation
@@ -35,14 +34,14 @@ steps:
       action: close_ask_omi
       params:
         wait: false
-      target: floating
+      target: main
       frames: 8
       interval_ms: 16
 
   - id: S5
-    name: Assert Closed State
+    name: Assert Composer Remains The Main Chat Surface
     state.expect:
-      state.askOmiOpen: false
+      state.askOmiOpen: true
 
   - id: S6
     name: Assert Logs Are Clean

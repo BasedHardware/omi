@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
+import json
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -8,6 +9,7 @@ import yaml
 from google.cloud import firestore
 
 from database import sync_ledger, user_usage
+from scripts import render_cloud_run_clone_env
 from scripts.render_cloud_run_clone_env import clone_environment
 from utils.sync import backfill, capture_manifest, content_id, lanes
 
@@ -150,6 +152,82 @@ def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():
     assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in secrets
 
 
+def _keyed_backend_sync_live() -> dict[str, Any]:
+    return {
+        'spec': {
+            'template': {
+                'spec': {
+                    'serviceAccountName': '208440318997-compute@developer.gserviceaccount.com',
+                    'containers': [
+                        {
+                            'env': [
+                                {'name': 'REDIS_DB_HOST', 'value': '10.0.0.1'},
+                                {'name': 'GOOGLE_APPLICATION_CREDENTIALS', 'value': 'google-credentials.json'},
+                                {
+                                    'name': 'SERVICE_ACCOUNT_JSON',
+                                    'valueFrom': {'secretKeyRef': {'name': 'SERVICE_ACCOUNT_JSON', 'key': '1'}},
+                                },
+                                {
+                                    'name': 'ENCRYPTION_SECRET',
+                                    'valueFrom': {'secretKeyRef': {'name': 'ENCRYPTION_SECRET', 'key': 'latest'}},
+                                },
+                            ]
+                        }
+                    ],
+                }
+            }
+        }
+    }
+
+
+def _backfill_live(service_account: str) -> dict[str, Any]:
+    return {'spec': {'template': {'spec': {'serviceAccountName': service_account, 'containers': [{'env': []}]}}}}
+
+
+def _run_clone_main(tmp_path, monkeypatch, capsys, target: dict[str, Any] | None) -> str:
+    source_path = tmp_path / 'backend-sync-live.json'
+    source_path.write_text(json.dumps(_keyed_backend_sync_live()), encoding='utf-8')
+    argv = ['render_cloud_run_clone_env.py', '--source-json', str(source_path)]
+    if target is not None:
+        target_path = tmp_path / 'backend-sync-backfill-live.json'
+        target_path.write_text(json.dumps(target), encoding='utf-8')
+        argv += ['--target-json', str(target_path)]
+    monkeypatch.setattr('sys.argv', argv)
+    monkeypatch.setenv('ENV_OVERLAY', 'SYNC_TASKS_QUEUE=sync-backfill')
+    monkeypatch.setenv('SECRET_OVERLAY', '')
+    monkeypatch.setenv('REMOVE_ENV_VARS', 'HOSTED_PUSHER_API_URL')
+    assert render_cloud_run_clone_env.main() == 0
+    return capsys.readouterr().out
+
+
+def test_cloud_run_clone_keeps_key_refs_while_worker_runs_as_default_compute(tmp_path, monkeypatch, capsys):
+    out = _run_clone_main(
+        tmp_path, monkeypatch, capsys, _backfill_live('208440318997-compute@developer.gserviceaccount.com')
+    )
+
+    assert 'SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:1' in out
+    assert 'GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json' in out
+    assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in out
+
+
+def test_cloud_run_clone_keeps_key_refs_on_first_deploy_without_live_worker(tmp_path, monkeypatch, capsys):
+    out = _run_clone_main(tmp_path, monkeypatch, capsys, None)
+
+    assert 'SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:1' in out
+
+
+def test_cloud_run_clone_drops_key_refs_when_worker_runs_as_attached_identity(tmp_path, monkeypatch, capsys):
+    out = _run_clone_main(
+        tmp_path, monkeypatch, capsys, _backfill_live('backend-runtime@based-hardware.iam.gserviceaccount.com')
+    )
+
+    assert 'SERVICE_ACCOUNT_JSON' not in out
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in out
+    assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in out
+    assert 'REDIS_DB_HOST=10.0.0.1' in out
+    assert 'SYNC_TASKS_QUEUE=sync-backfill' in out
+
+
 def test_cloud_run_clone_removes_retired_source_env():
     service = {
         'spec': {
@@ -223,8 +301,22 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     )
     assert 'provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}' in composite
     assert 'for THRESHOLD in 70 90' in action
-    assert 'gcloud monitoring policies create' in action
+    assert '.github/scripts/ensure_monitoring_metric_alert_policy.py' in action
+    assert 'reconcile_sync_backfill_alert_policy.py' in action
+    assert 'verify_sync_backfill_alert_policy.py' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
+    assert 'METRIC="sync_backfill_dispatch_abort"' in action
+    assert 'The request was aborted because there was no available instance' in action
+
+
+def test_sync_backfill_lifecycle_alerts_on_scheduler_failure_and_missing_sweep():
+    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    assert 'sync_backfill_uid_sequencer_scheduler_failure' in action or 'scheduler_${KIND}' in action
+    assert 'resource.labels.job_id=\"sync-backfill-uid-sequencer\"' in action
+    assert 'AttemptFinished' in action
+    assert 'action=sweep_summary outcome=done' in action
+    assert "CONDITION='absent'" in action
+    assert "DURATION='600s'" in action
 
 
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
@@ -238,7 +330,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
         assert 'uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle' in workflow
         assert 'id: sync-backfill' in workflow
         assert 'mode: worker' in workflow
-        assert 'mode: platform' in workflow
+        assert "'platform' || 'dispatch'" in workflow
         assert '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}' in workflow
         assert '${{ steps.sync-backfill.outputs.revision }}' in workflow
         assert 'provision_sync_ledger_ttl: \'true\'' in workflow
@@ -261,18 +353,63 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
     # back it off, which previously stranded recordings for hours. A warm
     # instance keeps a scale-from-zero poke from being rejected outright.
-    assert '--min-instances=1' in action
-    assert '--max-instances=30' in action
-    assert '--concurrency=1' in action
+    assert '--min-instances=2' in action
+    assert '--max-instances=20' in action
+    assert '--max=20' in action
+    assert '--concurrency=2' in action
+    assert '--cpu=2' in action
+    assert '--memory=8Gi' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     assert 'gcloud tasks queues create sync-backfill' in action
     assert '--max-concurrent-dispatches=30' in action
+    assert '--max-dispatches-per-second=30' in action
     assert '--max-backoff=60s' in action
     assert 'collection-group=sync_content_ledger' in action
     assert "inputs.provision_sync_ledger_ttl == 'true'" in action
     assert 'firestore_project_id:' in action
     assert 'FIRESTORE_PROJECT_ID' in action
     assert "inputs.provision_budget_alerts == 'true'" in action
+
+
+def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation():
+    """cloud-run-only deploys keep the bounded lane without IAM/TTL writes."""
+    composite = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+    steps = composite['runs']['steps']
+    lane = next(step for step in steps if step.get('name') == 'Provision sync-backfill lane')
+    assert 'if' not in lane
+    mode = lane['with']['mode']
+    assert "deploy_profile == 'auto-dev'" in mode
+    assert "deploy_targets == 'all'" in mode
+    assert "'platform'" in mode and "'dispatch'" in mode
+
+    lifecycle = yaml.safe_load(
+        (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(encoding='utf-8')
+    )
+    lsteps = {step['name']: step for step in lifecycle['runs']['steps']}
+    iam = lsteps['Bind backend-sync invoker to backfill worker']
+    queue = lsteps['Reconcile bounded sync backfill queue']
+    ttl = lsteps['Provision and verify sync ledger TTL']
+    budget = lsteps['Provision routed backfill budget alerts']
+    abort = lsteps['Provision sync-backfill dispatch-abort alert']
+
+    assert 'dispatch' not in iam['if'] and 'platform' in iam['if']
+    assert 'dispatch' not in ttl['if'] and 'platform' in ttl['if']
+    assert 'dispatch' not in budget['if'] and 'platform' in budget['if']
+    assert 'dispatch' in queue['if'] and 'platform' in queue['if']
+    assert 'dispatch' in abort['if'] and 'platform' in abort['if']
+    assert "provision_budget_alerts == 'true'" in abort['if']
+
+    run = queue['run']
+    for flag in (
+        '--max-concurrent-dispatches=30',
+        '--max-dispatches-per-second=30',
+        '--min-backoff=5s',
+        '--max-backoff=60s',
+    ):
+        assert run.count(flag) == 2
+    assert 'sync_backfill_dispatch_abort' in abort['run']
+    assert 'THRESHOLD=30' in abort['run'] and 'WINDOW=1800s' in abort['run']
+    assert abort['run'].count('--threshold-value="$THRESHOLD" --alignment-period="$WINDOW"') == 2
 
 
 def test_cloud_run_default_service_lists_include_sync_backfill():
@@ -444,6 +581,7 @@ def test_server_manifest_allows_only_one_content_set_per_conversation(monkeypatc
 
 
 def test_backfill_reservation_maps_user_and_global_caps(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     # Admission caps are opt-in now (Cloud Tasks queue is the pacer); enable them
     # to exercise the user/global cap → reason mapping.
     monkeypatch.setenv('SYNC_BACKFILL_ADMISSION_LIMITS', 'true')

@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { AdapterRuntimeError } from "../src/runtime/failures.js";
 import { baseRunInput, createKernelHarness, FakeRuntimeAdapter } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
@@ -112,7 +113,7 @@ describe("AgentRuntimeKernel adapter binding resolution", () => {
     store.close();
   });
 
-  it("recycles a poisoned pi-mono worker so the next send succeeds in the same daemon", async () => {
+  it("retries a recycled pi-mono worker on the same turn after a successful recycle", async () => {
     const adapters: FakeRuntimeAdapter[] = [];
     let genericRecoveryCalls = 0;
     const makeAdapter = () => {
@@ -140,39 +141,27 @@ describe("AgentRuntimeKernel adapter binding resolution", () => {
       }),
       makeAdapter,
     );
-    adapter.failNextExecutionError = new Error("poisoned local adapter state");
-
-    const failed = await kernel.executeRun({
-      ...baseRunInput,
-      adapterId: "pi-mono",
-      defaultAdapterId: "pi-mono",
-      requestId: "request-poisoned",
-    });
-    expect(failed.terminalStatus).toBe("failed");
-    expect(adapters).toHaveLength(1);
-    expect(adapter.executed).toHaveLength(1);
-    expect(genericRecoveryCalls).toBe(0);
-    expect(adapter.stopped).toBe(1);
-    expect(store.getRow("SELECT status FROM adapter_bindings").status).toBe("stale");
-    expect(JSON.parse(failed.run.resultJson!)).toMatchObject({
-      failure: {
-        code: "adapter_execution_failed",
-        recoveryAction: "worker_recycled",
-        recoveryOutcome: "recovered",
-        retryDisposition: "next_send",
-        retryable: true,
-      },
-    });
+    adapter.failNextExecutionError = new Error("HTTP 503 status code (no body)");
 
     const recovered = await kernel.executeRun({
       ...baseRunInput,
       adapterId: "pi-mono",
       defaultAdapterId: "pi-mono",
-      requestId: "request-after-recycle",
+      requestId: "request-poisoned",
     });
     expect(recovered.terminalStatus).toBe("succeeded");
     expect(adapters).toHaveLength(2);
+    expect(adapter.executed).toHaveLength(1);
     expect(adapters[1]?.executed).toHaveLength(1);
+    expect(genericRecoveryCalls).toBe(0);
+    expect(adapter.stopped).toBe(1);
+    expect(store.allRows(
+      "SELECT attempt_no, status, retry_reason FROM run_attempts WHERE run_id = ? ORDER BY attempt_no",
+      [recovered.run.runId],
+    )).toEqual([
+      expect.objectContaining({ attempt_no: 1, status: "failed" }),
+      expect.objectContaining({ attempt_no: 2, status: "succeeded", retry_reason: "worker_recycled" }),
+    ]);
     expect(store.allRows("SELECT status FROM adapter_bindings ORDER BY binding_generation"))
       .toEqual([
         expect.objectContaining({ status: "closed" }),
@@ -184,6 +173,7 @@ describe("AgentRuntimeKernel adapter binding resolution", () => {
     ).payload_json)).toMatchObject({
       recoveryOutcome: "recovered",
       bindingStalePersisted: true,
+      retryDisposition: "same_turn",
     });
     store.close();
   });
@@ -227,6 +217,142 @@ describe("AgentRuntimeKernel adapter binding resolution", () => {
       },
     });
     expect(JSON.parse(failed.run.resultJson!).failure.userMessage).not.toContain("Send your message again");
+    store.close();
+  });
+
+  it("keeps next-send when worker recycle stop fails", async () => {
+    const adapters: FakeRuntimeAdapter[] = [];
+    const makeAdapter = () => {
+      const adapter = new FakeRuntimeAdapter("pi-mono");
+      Object.assign(adapter.capabilities, {
+        resumeFidelity: "none",
+        supportsNativeResume: false,
+        requiresPinnedWorker: true,
+        restartBehavior: "process_local_bindings_stale",
+      });
+      adapters.push(adapter);
+      return adapter;
+    };
+    const { store, adapter, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "pi-mono",
+      1,
+      undefined,
+      undefined,
+      makeAdapter,
+    );
+    adapter.failNextExecutionError = new Error("HTTP 503 status code (no body)");
+    adapter.failNextStop = true;
+
+    const failed = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-stop-failed",
+      maxAttempts: 2,
+    });
+    expect(failed.terminalStatus).toBe("failed");
+    expect(adapters).toHaveLength(1);
+    expect(JSON.parse(failed.run.resultJson!)).toMatchObject({
+      failure: {
+        code: "adapter_execution_failed",
+        recoveryAction: "worker_recycled",
+        recoveryOutcome: "stop_failed",
+        retryDisposition: "next_send",
+        retryable: true,
+      },
+    });
+    expect(JSON.parse(failed.run.resultJson!).failure.userMessage).toContain("Send your message again");
+    store.close();
+  });
+
+  it("does not same-turn retry authentication after a successful recycle", async () => {
+    const makeAdapter = () => {
+      const adapter = new FakeRuntimeAdapter("pi-mono");
+      Object.assign(adapter.capabilities, {
+        resumeFidelity: "none",
+        supportsNativeResume: false,
+        requiresPinnedWorker: true,
+        restartBehavior: "process_local_bindings_stale",
+      });
+      return adapter;
+    };
+    const { store, adapter, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "pi-mono",
+      1,
+      undefined,
+      undefined,
+      makeAdapter,
+    );
+    adapter.failNextExecutionError = new AdapterRuntimeError({
+      code: "provider_auth_required",
+      failureCode: "authentication",
+      userMessage: "Claude sign-in is required to continue this chat.",
+      retryable: false,
+    });
+
+    const failed = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-auth",
+      maxAttempts: 2,
+    });
+    expect(failed.terminalStatus).toBe("failed");
+    expect(adapter.executed).toHaveLength(1);
+    expect(JSON.parse(failed.run.resultJson!)).toMatchObject({
+      failure: {
+        code: "provider_auth_required",
+        failureCode: "authentication",
+        retryable: false,
+        recoveryAction: "worker_recycled",
+        recoveryOutcome: "recovered",
+      },
+    });
+    expect(JSON.parse(failed.run.resultJson!).failure.retryDisposition).not.toBe("same_turn");
+    store.close();
+  });
+
+  it("keeps next-send when recycle succeeded but attempts are exhausted", async () => {
+    const makeAdapter = () => {
+      const adapter = new FakeRuntimeAdapter("pi-mono");
+      Object.assign(adapter.capabilities, {
+        resumeFidelity: "none",
+        supportsNativeResume: false,
+        requiresPinnedWorker: true,
+        restartBehavior: "process_local_bindings_stale",
+      });
+      return adapter;
+    };
+    const { store, adapter, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "pi-mono",
+      1,
+      undefined,
+      undefined,
+      makeAdapter,
+    );
+    adapter.failNextExecutionError = new Error("HTTP 503 status code (no body)");
+
+    const failed = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-exhausted",
+      maxAttempts: 1,
+    });
+    expect(failed.terminalStatus).toBe("failed");
+    expect(adapter.executed).toHaveLength(1);
+    expect(JSON.parse(failed.run.resultJson!)).toMatchObject({
+      failure: {
+        code: "adapter_execution_failed",
+        recoveryAction: "worker_recycled",
+        recoveryOutcome: "recovered",
+        retryDisposition: "next_send",
+        retryable: true,
+      },
+    });
     store.close();
   });
 

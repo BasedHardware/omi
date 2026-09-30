@@ -1,5 +1,6 @@
 'use server';
 import envConfig from '@/src/constants/envConfig';
+import { sharedApiUrl } from '@/src/lib/shared-api-url.mjs';
 
 export interface SharedTaskData {
   sender_name: string;
@@ -11,12 +12,15 @@ export default async function getSharedTasks(
   token: string,
 ): Promise<SharedTaskData | undefined> {
   try {
-    const response = await fetch(`${envConfig.API_URL}/v1/action-items/shared/${token}`, {
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      sharedApiUrl(envConfig.API_URL, 'v1', 'action-items', 'shared', token),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-cache',
       },
-      cache: 'no-cache',
-    });
+    );
     if (!response.ok) {
       return undefined;
     }

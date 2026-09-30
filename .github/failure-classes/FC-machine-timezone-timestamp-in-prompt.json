@@ -5,6 +5,7 @@
   "canonical_prevention": "At the point a date enters prompt text, format it in an injected user TimeZone (or as relative phrasing) and tell the model timestamps are already local; pin the zone in tests to a non-UTC identifier so a CI runner in UTC cannot keep a machine-zone regression green.",
   "evidence_prs": [11392],
   "scope_hints": ["desktop/macos/Desktop/Sources/ProactiveAssistants/**"],
-  "status": "open",
+  "status": "dormant",
+  "dormant_since": "2026-09-14T09:26:47.107846Z",
   "canonical_prevention_artifact": ["desktop/macos/Desktop/Tests/ContextBucketPromptAssemblerTests.swift"]
 }

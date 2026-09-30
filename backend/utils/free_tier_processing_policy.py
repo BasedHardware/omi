@@ -25,6 +25,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from utils.free_tier_cohort import cohort_admits
 from utils.managed_compute import DECISION_REASONS, Decision
 
 logger = logging.getLogger(__name__)
@@ -59,9 +60,19 @@ _BASIC_PLAN = 'basic'
 DecisionFor = Callable[[str], Decision]
 
 
-def free_tier_local_processing_enabled() -> bool:
-    """Read the rollout flag. Tests monkeypatch this (or the module constant)."""
-    return FREE_TIER_LOCAL_PROCESSING
+def free_tier_local_processing_enabled(uid: str | None = None) -> bool:
+    """Is the free-tier local-processing path lit for ``uid``?
+
+    The flag is necessary, never sufficient: a lit flag admits only the
+    cohort configured in ``FREE_TIER_LOCAL_PROCESSING_COHORT`` and not stopped
+    by ``FREE_TIER_EMERGENCY_STOP`` / the remote kill switch
+    (``utils.free_tier_cohort``). A caller that passes no uid is answered
+    ``False`` while the flag is on (logged once), so a boolean alone lights
+    nobody. Tests monkeypatch this (or the module constant plus the cohort env).
+    """
+    if not FREE_TIER_LOCAL_PROCESSING:
+        return False
+    return cohort_admits('FREE_TIER_LOCAL_PROCESSING', uid)
 
 
 @dataclass(frozen=True)

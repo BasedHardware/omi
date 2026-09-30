@@ -61,7 +61,8 @@ extension FloatingControlBarManager {
     userText: String,
     assistantText: String,
     assistantStatus: KernelJournalTurnStatus = .completed,
-    terminalReason: String? = nil
+    terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil
   ) async -> Bool {
     guard RuntimeOwnerIdentity.currentOwnerId() == projection.ownerID,
       let provider = sharedFloatingProvider
@@ -78,7 +79,8 @@ extension FloatingControlBarManager {
       if await provider.kernelTurnProjection.updateTurn(
         surface: surface,
         message: projection.assistantMessage(text: assistantText, isStreaming: false),
-        status: assistantStatus, terminalReason: terminalReason, ownerID: projection.ownerID) != nil
+        status: assistantStatus, terminalReason: terminalReason,
+        answerTextCompleted: answerTextCompleted, ownerID: projection.ownerID) != nil
       {
         await consumeInterjectHubTranscript(assistantText)
         return true
@@ -101,7 +103,8 @@ extension FloatingControlBarManager {
     surface: AgentSurfaceReference,
     ownerID: String,
     continuityKey: String,
-    terminalReason: String
+    terminalReason: String,
+    answerTextCompleted: Bool = false
   ) async -> Bool {
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
       let provider = sharedFloatingProvider
@@ -113,6 +116,7 @@ extension FloatingControlBarManager {
         surface: surface,
         turnId: turnID,
         terminalReason: terminalReason,
+        answerTextCompleted: answerTextCompleted,
         ownerID: ownerID) != nil
       {
         return true

@@ -171,6 +171,49 @@ void main() {
     });
   });
 
+  group('getSessionWals', () {
+    test('returns synced and unsynced disk WALs of the session window', () {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final sessionStart = now - 300;
+
+      sync.testWals = [
+        _makeWal(timerStart: sessionStart + 10, status: WalStatus.miss, storage: WalStorage.disk),
+        _makeWal(timerStart: sessionStart + 60, status: WalStatus.synced, storage: WalStorage.disk),
+        _makeWal(timerStart: sessionStart + 120, status: WalStatus.uploaded, storage: WalStorage.disk),
+        // Before the session window
+        _makeWal(timerStart: sessionStart - 60, status: WalStatus.synced, storage: WalStorage.disk),
+        // Not on phone storage
+        _makeWal(timerStart: sessionStart + 30, status: WalStatus.miss, storage: WalStorage.mem),
+        _makeWal(timerStart: sessionStart + 40, status: WalStatus.miss, storage: WalStorage.sdcard),
+      ];
+
+      final result = sync.getSessionWals(sessionStart);
+
+      expect(result.length, 3);
+      expect(result.map((w) => w.status), containsAll([WalStatus.miss, WalStatus.synced, WalStatus.uploaded]));
+      expect(result.every((w) => w.storage == WalStorage.disk), true);
+    });
+
+    test('keeps the same scope as getSessionUnsyncedWals', () {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final sessionStart = now - 120;
+
+      sync.testWals = [
+        _makeWal(timerStart: sessionStart + 10, status: WalStatus.miss, storage: WalStorage.disk),
+        _makeWal(timerStart: sessionStart + 70, status: WalStatus.miss, storage: WalStorage.disk),
+      ];
+
+      expect(sync.getSessionWals(sessionStart).length, 2);
+      expect(sync.getSessionUnsyncedWals(sessionStart).length, 2);
+
+      // One WAL uploaded: the total stays, the unsynced count drains — the
+      // "pending X/Y" chip reads exactly this pair.
+      sync.testWals[0].status = WalStatus.synced;
+      expect(sync.getSessionWals(sessionStart).length, 2);
+      expect(sync.getSessionUnsyncedWals(sessionStart).length, 1);
+    });
+  });
+
   group('markWalSyncedAndPersist', () {
     test('updates status to synced', () async {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;

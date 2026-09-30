@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:path_provider/path_provider.dart';
@@ -42,6 +43,9 @@ class StorageSyncImpl implements StorageSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   StorageSyncImpl(this.listener);
+
+  @visibleForTesting
+  set testWals(List<Wal> wals) => _wals = wals;
 
   @override
   void setLocalSync(LocalWalSync localSync) {
@@ -219,7 +223,8 @@ class StorageSyncImpl implements StorageSync {
 
   @override
   Future deleteWal(Wal wal) async {
-    await _deleteWalsOnDevice([wal]);
+    if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
+    if (wal.device == _device?.id) await _deleteWalsOnDevice([wal]);
     _wals = _wals.where((w) => w.id != wal.id).toList();
     listener.onWalUpdated();
   }
@@ -394,6 +399,7 @@ class StorageSyncImpl implements StorageSync {
     int fileIndex = 0,
     int totalFiles = 1,
   }) async {
+    final admittedGeneration = _localSync?.sessionGeneration ?? -1;
     Logger.debug(
       'StorageSync._syncSingleFile: fileNum=${wal.fileNum} size=${wal.storageTotalBytes} offset=${wal.storageOffset}',
     );
@@ -591,14 +597,14 @@ class StorageSyncImpl implements StorageSync {
       var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
       bytesLeft += chunkSize;
       var file = await _flushToDisk(wal, chunk, timerStart);
-      await _registerWithLocalSync(wal, file, timerStart, chunk.length);
+      await _registerWithLocalSync(wal, file, timerStart, chunk.length, admittedGeneration);
       timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
     }
 
     if (bytesLeft < bytesData.length) {
       var chunk = bytesData.sublist(bytesLeft);
       var file = await _flushToDisk(wal, chunk, timerStart);
-      await _registerWithLocalSync(wal, file, timerStart, chunk.length);
+      await _registerWithLocalSync(wal, file, timerStart, chunk.length, admittedGeneration);
     }
 
     Logger.debug(
@@ -634,7 +640,8 @@ class StorageSyncImpl implements StorageSync {
   }
 
   /// Register a downloaded chunk with LocalWalSync so it gets uploaded to backend.
-  Future<void> _registerWithLocalSync(Wal wal, File file, int timerStart, int frameCount) async {
+  Future<void> _registerWithLocalSync(
+      Wal wal, File file, int timerStart, int frameCount, int admittedGeneration) async {
     if (_localSync == null) {
       Logger.debug("StorageSync: WARNING - Cannot register file, LocalWalSync not available");
       return;
@@ -659,7 +666,7 @@ class StorageSyncImpl implements StorageSync {
       originalStorage: WalStorage.sdcard,
     );
 
-    await _localSync!.addExternalWal(localWal);
+    await _localSync!.addExternalWal(localWal, admittedGeneration: admittedGeneration);
     Logger.debug('StorageSync: Registered chunk (ts=$timerStart, ${seconds}s, $frameCount frames) with LocalWalSync');
   }
 }

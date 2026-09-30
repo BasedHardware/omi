@@ -60,19 +60,21 @@
       "owner_paths": [
         "desktop/macos/Desktop/Sources/Stores/TasksStore.swift",
         "desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift",
-        "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift",
+        "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailSections.swift",
         "desktop/macos/Desktop/Sources/APIClient.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift",
         "desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift",
         "desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift",
         "desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift",
-        "backend/routers/desktop_core.py"
+        "desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexHooks.swift",
+        "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntentService.swift",
+        "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntents.swift"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
         {
-          "path": "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift",
+          "path": "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailSections.swift",
           "symbol": "client.createTask",
           "discover": true
         },
@@ -87,8 +89,23 @@
           "discover": true
         },
         {
-          "path": "backend/routers/desktop_core.py",
-          "symbol": "action_items_db.create_action_item",
+          "path": "desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexHooks.swift",
+          "symbol": "client.deleteTask",
+          "discover": true
+        },
+        {
+          "path": "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntentService.swift",
+          "symbol": "client.createActionItem",
+          "discover": true
+        },
+        {
+          "path": "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntentService.swift",
+          "symbol": "client.updateActionItem",
+          "discover": true
+        },
+        {
+          "path": "desktop/macos/Desktop/Sources/SiriIntegration/SiriIntents.swift",
+          "symbol": "client.createTask",
           "discover": true
         }
       ]

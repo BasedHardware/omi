@@ -276,7 +276,7 @@ extension SettingsContentView {
 
             Spacer()
 
-            Button("Browse...") {
+            Button("Browse…") {
               let panel = NSOpenPanel()
               panel.canChooseFiles = false
               panel.canChooseDirectories = true
@@ -395,13 +395,13 @@ extension SettingsContentView {
                   UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
                 }) {
                   HStack(spacing: OmiSpacing.xxs) {
-                    Image(systemName: "xmark")
+                    Image(systemName: "arrow.counterclockwise")
                       .scaledFont(size: OmiType.caption)
                     Text("Reset")
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
           }
@@ -470,6 +470,14 @@ extension SettingsContentView {
 
       if showProfileAndStats {
         aiUserProfileSubsection
+          .shellConfirmation(
+            isPresented: $isConfirmingAIProfileDelete,
+            title: "Delete AI User Profile?",
+            message: "Omi forgets this profile. A new one is generated on next launch, or with Generate Now.",
+            confirmTitle: "Delete"
+          ) {
+            deleteCurrentAIProfile()
+          }
         statsSubsection
       }
     }
@@ -567,25 +575,14 @@ extension SettingsContentView {
                     .foregroundColor(Ink.secondary)
                 }
 
-                Button(action: {
+                OmiIconButton("pencil", help: "Edit Profile", size: .compact) {
                   aiProfileEditText = text
                   isEditingAIProfile = true
-                }) {
-                  Image(systemName: "pencil")
-                    .scaledFont(size: OmiType.caption)
                 }
-                .buttonStyle(.borderless)
-                .help("Edit profile")
 
-                Button(action: {
-                  deleteCurrentAIProfile()
-                }) {
-                  Image(systemName: "trash")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.errorRed)
+                OmiIconButton("trash", help: "Delete Profile…", size: .compact, isDestructive: true) {
+                  isConfirmingAIProfileDelete = true
                 }
-                .buttonStyle(.borderless)
-                .help("Delete this profile")
               }
             }
           } else if !isGeneratingAIProfile {
@@ -599,7 +596,7 @@ extension SettingsContentView {
               Spacer()
               VStack(spacing: OmiSpacing.sm) {
                 ProgressView()
-                Text("Generating profile...")
+                Text("Generating profile…")
                   .scaledFont(size: OmiType.body)
                   .foregroundColor(Ink.secondary)
               }

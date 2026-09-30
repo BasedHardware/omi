@@ -5,8 +5,10 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/l10n/app_localizations_en.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_transfer_keep_alive.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -70,6 +72,46 @@ class _FakeWalService implements IWalService {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('stale phone WAL inventory is reported to upload-health monitoring', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+    final now = DateTime.utc(2026, 9, 26, 12);
+    final events = <String>[];
+    var recoveryWakes = 0;
+    final monitor = CaptureWedgeMonitor(
+      now: () => now,
+      featureGate: () async => false,
+      track: (event, properties) => events.add(event),
+      bleRetry: (_) async {},
+      transferRetry: () async => recoveryWakes++,
+      appBuild: () => 'test',
+      platform: () => 'ios',
+    );
+    final wal = Wal(
+      timerStart: now.subtract(const Duration(hours: 3)).millisecondsSinceEpoch ~/ 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+    );
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(_FakeSyncs([wal])),
+      startBackgroundSync: false,
+      captureWedgeMonitor: monitor,
+    );
+    await provider.initialized;
+    await pumpEventQueue();
+
+    expect(recoveryWakes, 1);
+    expect(events, contains('Capture Wedge Detected'));
+    // Upload silence is telemetry-only; the pending-transcriptions chip is its user-facing surface.
+    expect(monitor.visiblePrompt, isNull);
+    provider.dispose();
+    monitor.dispose();
+  });
 
   test('syncWal 202 wakes the transfer coordinator for reconciliation', () async {
     SharedPreferences.setMockInitialValues({});
@@ -284,6 +326,82 @@ void main() {
 
     expect(SyncRateLimiter.instance.isLimited, isTrue);
     expect(syncs.syncWalCalls, 1, reason: 'device recovery must stay available during an upload cooldown');
+    provider.dispose();
+  });
+
+  test('syncWal holds transfer keep-alive until the upload finishes (#5221)', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    var starts = 0;
+    var stops = 0;
+    final hang = Completer<SyncLocalFilesResponse?>();
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..hangSyncWal = hang;
+    final keepAlive = SyncTransferKeepAlive(
+      isAndroid: () => true,
+      start: () async {
+        starts++;
+      },
+      stop: () async {
+        stops++;
+      },
+    );
+
+    final provider = SyncProvider(walService: _FakeWalService(syncs), startBackgroundSync: false, keepAlive: keepAlive);
+    await provider.initialized;
+
+    final upload = provider.syncWal(wal);
+    await Future<void>.delayed(Duration.zero);
+    expect(starts, 1);
+    expect(stops, 0);
+    expect(keepAlive.isHeld, isTrue);
+
+    hang.complete(SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []));
+    await upload;
+
+    expect(stops, 1);
+    expect(keepAlive.isHeld, isFalse);
+    provider.dispose();
+  });
+
+  test('cancelSync drops transfer keep-alive immediately (#5221)', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    var stops = 0;
+    final hang = Completer<SyncLocalFilesResponse?>();
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..hangSyncWal = hang;
+    final keepAlive = SyncTransferKeepAlive(
+      isAndroid: () => true,
+      start: () async {},
+      stop: () async {
+        stops++;
+      },
+    );
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: false,
+      keepAlive: keepAlive,
+      wakeTransfer: (_) async {},
+    );
+    await provider.initialized;
+
+    final upload = provider.syncWal(wal);
+    await Future<void>.delayed(Duration.zero);
+    expect(keepAlive.isHeld, isTrue);
+
+    provider.cancelSync();
+    expect(keepAlive.isHeld, isFalse);
+    expect(stops, 1);
+
+    hang.complete(SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []));
+    await upload;
+    expect(stops, 1, reason: 'the in-flight finally must not stop a second time after cancel');
     provider.dispose();
   });
 }

@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional, cast
 from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
 from google.cloud.firestore import ArrayUnion, ArrayRemove
 
-from ulid import ULID
 
 from models.app import App, UsageHistoryType
 from .redis_db import get_generic_cache, set_generic_cache
@@ -96,7 +95,7 @@ def get_popular_apps_db() -> List[Dict[str, Any]]:
 
 def set_app_popular_db(app_id: str, popular: bool) -> None:
     app_ref = db.collection(apps_collection).document(app_id)
-    app_ref.update({'is_popular': popular})
+    app_ref.set({'is_popular': popular}, merge=True)
 
 
 def search_apps_db(
@@ -224,17 +223,26 @@ def get_apps_for_tester_db(uid: str) -> List[Dict[str, Any]]:
 
 
 def add_app_to_db(app_data: Dict[str, Any]) -> None:
+    app_id = app_data.get('id')
+    if not app_id:
+        raise ValueError("app_data must include 'id'")
     app_ref = db.collection(apps_collection)
-    app_ref.add(app_data, app_data['id'])
+    app_ref.add(app_data, app_id)
 
 
 def upsert_app_to_db(app_data: Dict[str, Any]) -> None:
-    app_ref = db.collection(apps_collection).document(app_data['id'])
-    app_ref.set(app_data)
+    app_id = app_data.get('id')
+    if not app_id:
+        raise ValueError("app_data must include 'id'")
+    app_ref = db.collection(apps_collection).document(app_id)
+    app_ref.set(app_data, merge=True)
 
 
 def update_app_in_db(app_data: Dict[str, Any]) -> None:
-    app_ref = db.collection(apps_collection).document(app_data['id'])
+    app_id = app_data.get('id')
+    if not app_id:
+        raise ValueError("app_data must include 'id'")
+    app_ref = db.collection(apps_collection).document(app_id)
     app_ref.update(app_data)
 
 
@@ -245,21 +253,11 @@ def delete_app_from_db(app_id: str) -> None:
 
 def update_app_visibility_in_db(app_id: str, private: bool) -> None:
     app_ref = db.collection(apps_collection).document(app_id)
-    if 'private' in app_id and not private:
-        app = _typed_doc(app_ref.get())
-        if not app:
-            # The private app document is gone (deleted, or a stale read-cache pointed the caller
-            # here). There is nothing to republish, so skip the delete-and-recreate instead of
-            # dereferencing None below (which raised TypeError -> 500).
-            return
-        app_ref.delete()
-        new_app_id = app_id.split('-private')[0] + '-' + str(ULID())
-        app['id'] = new_app_id
-        app['private'] = private
-        app_ref = db.collection(apps_collection).document(new_app_id)
-        app_ref.set(app)
-    else:
-        app_ref.update({'private': private})
+    # Update in place: re-minting the document id orphans everything keyed on the
+    # old id — reviews, api_keys, usage history, per-user installed entries, and
+    # the Redis reviews mirror — because Firestore does not cascade. The
+    # '-private' suffix staying in a now-public app's id is cosmetic.
+    app_ref.update({'private': private})
 
 
 def change_app_approval_status(app_id: str, approved: bool) -> None:
@@ -335,12 +333,12 @@ def add_tester_db(data: Dict[str, Any]) -> None:
 
 def add_app_access_for_tester_db(app_id: str, uid: str) -> None:
     app_ref = db.collection(testers_collection).document(uid)
-    app_ref.update({'apps': ArrayUnion([app_id])})
+    app_ref.set({'apps': ArrayUnion([app_id])}, merge=True)
 
 
 def remove_app_access_for_tester_db(app_id: str, uid: str) -> None:
     app_ref = db.collection(testers_collection).document(uid)
-    app_ref.update({'apps': ArrayRemove([app_id])})
+    app_ref.set({'apps': ArrayRemove([app_id])}, merge=True)
 
 
 def remove_tester_db(uid: str) -> None:
@@ -510,8 +508,11 @@ def get_omi_persona_apps_by_uid_db(uid: str) -> List[Dict[str, Any]]:
 
 
 def update_persona_in_db(persona_data: Dict[str, Any]) -> None:
-    persona_ref = db.collection(apps_collection).document(persona_data['id'])
-    persona_ref.update(persona_data)
+    persona_id = persona_data.get('id')
+    if not persona_id:
+        raise ValueError("persona_data must include 'id'")
+    persona_ref = db.collection(apps_collection).document(persona_id)
+    persona_ref.set(persona_data, merge=True)
 
 
 def migrate_app_owner_id_db(new_id: str, old_id: str) -> None:
@@ -562,7 +563,13 @@ def list_api_keys_db(app_id: str) -> List[Dict[str, Any]]:
 
 
 def delete_api_key_db(app_id: str, key_id: str) -> bool:
-    """Delete an API key"""
+    """Delete an API key.
+
+    Returns False when no key was stored under [key_id], so callers can tell a
+    confirmed revocation from a delete that removed nothing.
+    """
     api_key_ref = db.collection(apps_collection).document(app_id).collection('api_keys').document(key_id)
+    if not api_key_ref.get().exists:
+        return False
     api_key_ref.delete()
     return True
