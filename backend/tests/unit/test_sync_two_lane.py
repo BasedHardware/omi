@@ -275,10 +275,12 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
     # back it off, which previously stranded recordings for hours. A warm
     # instance keeps a scale-from-zero poke from being rejected outright.
-    assert '--min-instances=1' in action
-    assert '--max-instances=30' in action
-    assert '--max=30' in action
-    assert '--concurrency=1' in action
+    assert '--min-instances=2' in action
+    assert '--max-instances=20' in action
+    assert '--max=20' in action
+    assert '--concurrency=2' in action
+    assert '--cpu=2' in action
+    assert '--memory=8Gi' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     assert 'gcloud tasks queues create sync-backfill' in action
     assert '--max-concurrent-dispatches=30' in action
