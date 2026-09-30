@@ -35,7 +35,7 @@ Future<T?> showOmiSheet<T>({
   EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
   RouteSettings? routeSettings,
 }) {
-  return showModalBottomSheet<T>(
+  return showOmiSurfaceSheet<T>(
     context: context,
     isScrollControlled: isScrollControlled,
     useSafeArea: useSafeArea,
@@ -43,11 +43,6 @@ Future<T?> showOmiSheet<T>({
     enableDrag: enableDrag,
     useRootNavigator: useRootNavigator,
     routeSettings: routeSettings,
-    // Size (36x4) and colour come from the app theme's bottomSheetTheme (buildOmiTheme).
-    showDragHandle: true,
-    backgroundColor: OmiColors.surface1,
-    shape: const RoundedRectangleBorder(borderRadius: OmiRadius.sheetTop),
-    clipBehavior: Clip.antiAlias,
     builder: (sheetContext) => OmiSheetScaffold(
       title: title,
       showCloseButton: showCloseButton,
@@ -55,6 +50,79 @@ Future<T?> showOmiSheet<T>({
       child: Builder(builder: builder),
     ),
   );
+}
+
+/// Shows a modal bottom sheet in the Omi shell (24pt top corners, framework drag handle) whose
+/// [surface] follows the active appearance, and returns its result.
+///
+/// [showOmiSheet] uses this with its title row and close X. Call it directly only for a sheet that
+/// draws its own header on a different surface, such as Settings on [OmiColors.surface0].
+///
+/// `showModalBottomSheet(backgroundColor: ...)` fixes the colour when the sheet opens, so a sheet
+/// left open across a Light/Dark switch kept the old surface under content drawn in the new
+/// palette. [OmiSheetRoute] reads [surface] again whenever the theme rebuilds the sheet.
+Future<T?> showOmiSurfaceSheet<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  Color Function() surface = _surface1,
+  bool isScrollControlled = true,
+  bool useSafeArea = true,
+  bool isDismissible = true,
+  bool enableDrag = true,
+  bool useRootNavigator = false,
+  RouteSettings? routeSettings,
+}) {
+  final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
+  final localizations = MaterialLocalizations.of(context);
+  return navigator.push(
+    OmiSheetRoute<T>(
+      surface: surface,
+      builder: builder,
+      capturedThemes: InheritedTheme.capture(from: context, to: navigator.context),
+      isScrollControlled: isScrollControlled,
+      barrierLabel: localizations.scrimLabel,
+      barrierOnTapHint: localizations.scrimOnTapHint(localizations.bottomSheetLabel),
+      shape: const RoundedRectangleBorder(borderRadius: OmiRadius.sheetTop),
+      clipBehavior: Clip.antiAlias,
+      isDismissible: isDismissible,
+      modalBarrierColor: Theme.of(context).bottomSheetTheme.modalBarrierColor,
+      enableDrag: enableDrag,
+      // Size (36x4) and colour come from the app theme's bottomSheetTheme (buildOmiTheme).
+      showDragHandle: true,
+      settings: routeSettings,
+      useSafeArea: useSafeArea,
+    ),
+  );
+}
+
+Color _surface1() => OmiColors.surface1;
+
+/// A modal bottom sheet route whose background is [surface], read each time the sheet builds.
+///
+/// The framework route stores `backgroundColor` once; its page re-reads it whenever the theme
+/// changes, so resolving the colour here keeps an open sheet on the current palette.
+class OmiSheetRoute<T> extends ModalBottomSheetRoute<T> {
+  OmiSheetRoute({
+    required this.surface,
+    required super.builder,
+    required super.isScrollControlled,
+    super.capturedThemes,
+    super.barrierLabel,
+    super.barrierOnTapHint,
+    super.shape,
+    super.clipBehavior,
+    super.isDismissible,
+    super.modalBarrierColor,
+    super.enableDrag,
+    super.showDragHandle,
+    super.settings,
+    super.useSafeArea,
+  });
+
+  final Color Function() surface;
+
+  @override
+  Color get backgroundColor => surface();
 }
 
 /// The inside of an Omi sheet: optional title row with a trailing close X, the content, and the

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import os
 import socket
@@ -90,6 +91,27 @@ HEAD_RECOVERY_MIN_SPEECH_SECONDS = 2.0
 # with window size now set by a 15 s pace, sliding by pace would discard 15 s of
 # speech the model returned nothing for. Keep the slide at the measured 6 s.
 EMPTY_CAP_SLIDE_SECONDS = 6.0
+FIRST_TEXT_DEADLINE_SECONDS = 12.0
+MAX_EMPTY_STREAK = 4
+
+
+def _positive_float_env(name: str, default: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if math.isfinite(value) and value > 0 else default
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+logger = logging.getLogger(__name__)
 
 
 def pcm16_peak(pcm: bytes) -> float:
@@ -206,10 +228,9 @@ class WindowAdmission:
             WINDOW_CAP.set(cap)
             if self.active >= cap:
                 WINDOW_ADMISSION.labels(outcome='overflow').inc()
-                raise ParakeetConnectionError('capacity_full')
+                raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
             self.active += 1
             WINDOW_ACTIVE.inc()
-            WINDOW_ADMISSION.labels(outcome='accepted').inc()
         released = False
 
         def release() -> None:
@@ -232,8 +253,8 @@ class BatchPressure:
     REFRESH_SECONDS = 5.0
     STALE_SECONDS = 15.0
     MAX_REPLICAS = 8
-    MAX_PENDING = 4
-    MAX_OLDEST_SECONDS = 1.0
+    MAX_LIVE_PENDING_PER_REPLICA = 4
+    MAX_LIVE_OLDEST_SECONDS = 0.75
 
     def __init__(self) -> None:
         self._task: asyncio.Task[None] | None = None
@@ -330,13 +351,15 @@ class BatchPressure:
             if len(ips) < min_replicas:
                 raise ValueError('Parakeet batch pool has fewer ready replicas than expected')
             responses = await asyncio.gather(*(client.get(f'http://{ip}:8080/batch/metrics') for ip in ips))
-            pending_total = 0.0
-            oldest_max = 0.0
+            busiest_live_replica = 0.0
+            oldest_live_wait = 0.0
             for response in responses:
                 response.raise_for_status()
                 metrics = response.json()
-                pending = metrics['pending_requests']
-                oldest = metrics['oldest_pending_seconds']
+                # A mixed-revision pool lacks these fields. Stand down until
+                # every ready GPU replica reports the live lane explicitly.
+                pending = metrics['live_pending_requests']
+                oldest = metrics['live_oldest_pending_seconds']
                 if any(
                     isinstance(value, bool)
                     or not isinstance(value, (int, float))
@@ -345,9 +368,14 @@ class BatchPressure:
                     for value in (pending, oldest)
                 ):
                     raise ValueError('Invalid Parakeet batch pressure sample')
-                pending_total += pending
-                oldest_max = max(oldest_max, oldest)
-            self._busy = pending_total >= self.MAX_PENDING or oldest_max >= self.MAX_OLDEST_SECONDS
+                if int(pending) != pending:
+                    raise ValueError('Invalid Parakeet live pending count')
+                busiest_live_replica = max(busiest_live_replica, pending)
+                oldest_live_wait = max(oldest_live_wait, oldest)
+            self._busy = (
+                busiest_live_replica >= self.MAX_LIVE_PENDING_PER_REPLICA
+                or oldest_live_wait >= self.MAX_LIVE_OLDEST_SECONDS
+            )
             self._observed_at = time.monotonic()
             WINDOW_PRESSURE_REFRESH.labels(outcome='pressure' if self._busy else 'healthy').inc()
         except Exception:
@@ -381,6 +409,13 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._health_close: Callable[[], None] = lambda: None
         self._first_speech_at: float | None = None
         self._first_text_recorded = False
+        self._first_text_deadline = _positive_float_env(
+            'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', FIRST_TEXT_DEADLINE_SECONDS
+        )
+        self._max_empty_streak = _positive_int_env('PARAKEET_WINDOW_MAX_EMPTY_STREAK', MAX_EMPTY_STREAK)
+        self._empty_streak = 0
+        self._first_text_timer: asyncio.TimerHandle | None = None
+        self._session_outcome_recorded = False
         self._wake = asyncio.Event()
         self._pause_requested = False
         self._idle_flushed = False
@@ -403,6 +438,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._anchor_bytes = 0
         self._now_bytes = 0
         self._last_emitted_end = 0.0
+        self._capacity_subtype: str | None = None
+        self._on_replay_progress: Callable[[], None] = lambda: None
         # Anchor bytes of the one window whose beyond-window drops are being
         # re-posted (see `_run_job`): bounded to a single retry per anchor.
         self._beyond_window_repost: int | None = None
@@ -412,6 +449,29 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
         self._health_success, self._health_close = on_success, on_close
 
+    @property
+    def typed_death_reason(self) -> str | None:
+        return getattr(self, '_typed_death_reason', None)
+
+    @property
+    def capacity_subtype(self) -> str | None:
+        return self._capacity_subtype
+
+    def has_untranscribed_speech(self) -> bool:
+        """Whether replay still protects speech that this leg has not emitted."""
+        return (self._first_speech_at is not None and not self._first_text_recorded) or self._has_unemitted_speech()
+
+    def replay_anchor_sample(self) -> int | None:
+        """Provider sample before which emitted text makes capture replay unnecessary."""
+        if not self._first_text_recorded:
+            return None
+        with self._lock:
+            # Empty forced cuts may slide the POST anchor without emitting text.
+            return min(self._anchor_bytes, self._to_bytes(self._last_emitted_end)) // 2
+
+    def set_replay_progress_callback(self, callback: Callable[[], None]) -> None:
+        self._on_replay_progress = callback
+
     def start(self) -> None:
         super().start()
         assert self._pump_task is not None
@@ -419,19 +479,59 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._pump_task.add_done_callback(self._on_pump_done)
 
     def _on_pump_done(self, task: asyncio.Task[None]) -> None:
-        if not self._closed:
+        if not self._closed and not self._dead:
             self._dead = True
             self._dead_reason = 'cancelled' if task.cancelled() else 'connection_lost'
-        self._health_close()
-        if self._first_speech_at is not None:
-            WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text').inc()
-        self._release()
+        try:
+            self._record_session_outcome()
+        finally:
+            try:
+                self._close_health()
+            finally:
+                self._release()
+
+    def _close_health(self) -> None:
+        try:
+            self._health_close()
+        except Exception:
+            # A health callback is auxiliary; it cannot suppress session
+            # telemetry or admission release after the pump has ended.
+            logger.warning('Parakeet window health-close callback failed')
+
+    def _record_session_outcome(self) -> None:
+        if self._session_outcome_recorded or self._first_speech_at is None:
+            return
+        self._session_outcome_recorded = True
+        reason = self._dead_reason if self._dead_reason in {'first_text_deadline', 'empty_streak'} else 'none'
+        WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text', reason=reason).inc()
+
+    def _cancel_first_text_timer(self) -> None:
+        if self._first_text_timer is not None:
+            self._first_text_timer.cancel()
+            self._first_text_timer = None
+
+    def _expire_first_text(self) -> None:
+        self._first_text_timer = None
+        if not self._first_text_recorded and not self._closed and not self._dead:
+            self.fail('first_text_deadline')
 
     def mark_speech(self) -> None:
         self._next_send_speech = True
 
     def _buffer_cap(self) -> int:
         return int(buffer_cap_seconds(self._pace_seconds, self._max_context_seconds) * self._sample_rate) * 2
+
+    def _compact_speech_spans(self) -> None:
+        """Keep VAD flicker bounded without forgetting speech or the POST anchor."""
+        if len(self._speech_spans) <= 1024:
+            return
+        spans = list(self._speech_spans)
+        pair = min(
+            range(len(spans) - 1),
+            key=lambda index: spans[index + 1][0] - spans[index][1],
+        )
+        spans[pair : pair + 2] = [(spans[pair][0], spans[pair + 1][1])]
+        self._speech_spans = deque(spans)
 
     def send(self, data: bytes) -> bool:
         if self._closed or self._dead:
@@ -446,15 +546,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._next_send_speech and data:
             if self._first_speech_at is None:
                 self._first_speech_at = time.monotonic()
+                self._first_text_timer = asyncio.get_running_loop().call_later(
+                    self._first_text_deadline, self._expire_first_text
+                )
             end = self._received_bytes + len(data)
             if self._speech_spans and self._speech_spans[-1][1] == self._received_bytes:
                 start, _ = self._speech_spans.pop()
                 self._speech_spans.append((start, end))
-            elif len(self._speech_spans) < 1024:
-                self._speech_spans.append((self._received_bytes, end))
             else:
-                self.fail('capacity_full')
-                return False
+                self._speech_spans.append((self._received_bytes, end))
+                self._compact_speech_spans()
         self._next_send_speech = False
         self._received_bytes += len(data)
         accepted = super().send(data)
@@ -518,29 +619,37 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._pause_requested = True
         self._wake.set()
 
-    def fail(self, reason: str) -> None:
+    def fail(self, reason: str, *, capacity_subtype: str | None = None) -> None:
         if self._dead:
             return
         self._dead, self._dead_reason = True, reason
+        if reason == 'capacity_full':
+            self._capacity_subtype = capacity_subtype
+        if reason in {'first_text_deadline', 'empty_streak', 'capacity_full'}:
+            self._typed_death_reason = reason
         self.finish()
 
     def _shed_capacity(self) -> None:
         st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
-        self.fail('capacity_full')
+        self.fail('capacity_full', capacity_subtype='buffer_cap')
 
     def finish(self) -> None:
         self._closed = True
+        self._cancel_first_text_timer()
         self._buf.clear()
         self._speech_spans.clear()
         self._wake.set()
         pump = self._pump_task
         if pump is not None and not pump.done() and pump is not asyncio.current_task():
             pump.cancel()
-        self._health_close()
-        self._release()
+        try:
+            self._close_health()
+        finally:
+            self._release()
 
     async def drain_and_close(self) -> None:
         self._closed = True
+        self._cancel_first_text_timer()
         self._wake.set()
         self._release()
         try:
@@ -580,20 +689,35 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     await self._wake.wait()
                     self._wake.clear()
         except asyncio.CancelledError:
-            self._dead = True
-            self._dead_reason = 'cancelled'
+            # A deadline can cancel an in-flight POST through finish(). Preserve
+            # that first failure so session telemetry matches the replay reason.
+            if not self._dead:
+                self._dead = True
+                self._dead_reason = 'cancelled'
             raise
         except Exception:
             # Bounded reason only: never include audio, text or HTTP bodies in logs.
             self.fail('provider_5xx')
         finally:
-            self._health_close()
-            self._release()
+            try:
+                self._close_health()
+            finally:
+                self._release()
 
     async def _run_job(self, job: _WindowJob) -> None:
         segments = await self._post_and_parse(job.pcm, job.duration)
         if self._dead:
             return
+        if segments:
+            self._empty_streak = 0
+        elif not self._first_text_recorded:
+            with self._lock:
+                has_speech = self._speech_bytes_locked(job.start_bytes, job.end_bytes) > 0
+            if has_speech:
+                self._empty_streak += 1
+                if self._empty_streak >= self._max_empty_streak:
+                    self.fail('empty_streak')
+                    return
         segments = await self._recover_skipped_head(job, segments)
         if self._dead:
             return
@@ -604,6 +728,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             force=job.force,
             pause=job.pause,
             empty_cap_slide=EMPTY_CAP_SLIDE_SECONDS,
+            # Preserve sentence anchoring while the buffer has room. Force
+            # the long held tail only when another pace of audio would leave
+            # too little room for the next POST to make progress.
+            min_cap_progress=(self._pace_seconds if len(self._buf) >= self._buffer_cap() - self._pace_bytes else 0.0),
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
@@ -611,6 +739,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if emitted and not self._dead:
             if not self._first_text_recorded and any(str(item.get('text', '')).strip() for item in emitted):
                 self._first_text_recorded = True
+                self._cancel_first_text_timer()
                 if self._first_speech_at is not None:
                     WINDOW_FIRST_TEXT.observe(max(0.0, time.monotonic() - self._first_speech_at))
             # Snapshot the emission boundary in this socket's stream seconds
@@ -797,6 +926,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     def _advance_anchor(self, new_anchor: int) -> None:
         with self._lock:
+            previous = self._anchor_bytes
             origin = self._origin_bytes()
             drop = new_anchor - origin
             if drop > 0:
@@ -805,6 +935,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._anchor_bytes = max(new_anchor, origin)
             while self._speech_spans and self._speech_spans[0][1] <= self._anchor_bytes:
                 self._speech_spans.popleft()
+            if self._speech_spans and self._speech_spans[0][0] < self._anchor_bytes:
+                _, end = self._speech_spans.popleft()
+                self._speech_spans.appendleft((self._anchor_bytes, end))
+        if self._anchor_bytes > previous:
+            try:
+                self._on_replay_progress()
+            except Exception:
+                # Replay telemetry/compaction cannot turn a successful POST
+                # into provider failure; the receiver checks again before send.
+                logger.warning('Parakeet window replay anchor callback failed')
 
     async def _assign_speaker(self, seg_pcm: bytes) -> int:
         if self._embedded_this_window:
@@ -969,11 +1109,15 @@ def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate
         min_replicas,
     ):
         WINDOW_ADMISSION.labels(outcome='batch_pressure').inc()
-        raise ParakeetConnectionError('capacity_full')
+        raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
     release = admission.acquire()
     try:
         socket = WindowedParakeetSocket(callback, os.environ['HOSTED_PARAKEET_API_URL'], sample_rate, release)
         socket.start()
+        # Count only a socket whose pump started successfully. Keeping this at the
+        # connection boundary makes the accepted outcome describe an actual
+        # admission, rather than an acquired slot whose socket failed to start.
+        WINDOW_ADMISSION.labels(outcome='accepted').inc()
         return socket
     except BaseException:
         release()

@@ -10,13 +10,23 @@ Contract fields (same mental model as desktop Swift/Rust emitters):
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
 
 logger = logging.getLogger(__name__)
 
 FallbackOutcome = Literal['recovered', 'degraded', 'exhausted']
+
+
+class CapacityFallbackKwargs(TypedDict, total=False):
+    capacity_subtype: str
+
+
+def capacity_fallback_kwargs(subtype: str | None) -> CapacityFallbackKwargs:
+    """Add capacity detail only when present; other fallback calls stay unchanged."""
+    return {'capacity_subtype': subtype} if subtype is not None else {}
+
 
 FALLBACK_EVENT = 'omi_fallback_event'
 
@@ -45,6 +55,8 @@ ALLOWED_REASONS = frozenset(
         'byok',
         'malformed_doc',
         'capacity_full',
+        'first_text_deadline',
+        'empty_streak',
         'allocation_rejected',
         'private_tool_output_in_context',
         'not_authorized',
@@ -54,6 +66,10 @@ ALLOWED_REASONS = frozenset(
         'none',
     }
 )
+
+# Diagnostic detail in the log only. The shared metric's reason vocabulary and
+# label dimensions remain unchanged.
+ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap'})
 
 ALLOWED_COMPONENTS = frozenset(
     {
@@ -92,6 +108,7 @@ def record_fallback(
     reason: str,
     outcome: str,
     log: logging.Logger | None = None,
+    capacity_subtype: str | None = None,
 ) -> None:
     """Increment ``omi_fallback_total`` and emit a matching warning log.
 
@@ -117,15 +134,12 @@ def record_fallback(
 
     emit_log = log or logger
     try:
-        emit_log.warning(
-            '%s component=%s from=%s to=%s reason=%s outcome=%s',
-            FALLBACK_EVENT,
-            component_label,
-            from_label,
-            to_label,
-            reason_label,
-            outcome_label,
-        )
+        fields = (FALLBACK_EVENT, component_label, from_label, to_label, reason_label, outcome_label)
+        if reason_label == 'capacity_full':
+            subtype = capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown'
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
+        else:
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s', *fields)
     except Exception:
         pass
 

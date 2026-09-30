@@ -11517,6 +11517,121 @@ class AppLocalizationsSv extends AppLocalizations {
   String get searchPartialFailure => 'Vissa resultat kunde inte läsas in';
 
   @override
+  String get peopleSearchPlaceholder => 'Sök personer';
+
+  @override
+  String get peopleNotHeardYet => 'Inte hörd ännu';
+
+  @override
+  String get peopleRecent => 'Senaste';
+
+  @override
+  String get deletePeopleMessage =>
+      'Detta tar bort deras röstprover och kan inte ångras. Deras repliker i tidigare samtal blir namnlösa talare.';
+
+  @override
+  String get personTalkTime => 'Taltid';
+
+  @override
+  String get personLastHeard => 'Senast hörd';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ta bort $count personer?',
+      one: 'Ta bort 1 person?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Röst saknas';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personer',
+      one: '1 person',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Inga matchande personer';
+
+  @override
+  String get deselectAll => 'Avmarkera alla';
+
+  @override
+  String get voiceRecognitionSettings => 'Röstigenkänning';
+
+  @override
+  String get greetingMorning => 'God morgon';
+
+  @override
+  String get greetingAfternoon => 'God eftermiddag';
+
+  @override
+  String get greetingEvening => 'God kväll';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Vad vill du veta?';
+
+  @override
+  String get askSuggestDecide => 'Vad bestämde jag i dag?';
+
+  @override
+  String get askSuggestOwe => 'Vad är jag fortfarande skyldig folk?';
+
+  @override
+  String get askSuggestNotice => 'Vad märkte Omi?';
+
+  @override
+  String get pastChats => 'Tidigare chattar';
+
+  @override
+  String get newChat => 'Ny chatt';
+
+  @override
+  String get startFresh => 'Börja om';
+
+  @override
+  String get noPastChats => 'Dina chattar med Omi visas här.';
+
+  @override
+  String get deleteChatQuestion => 'Radera den här chatten?';
+
+  @override
+  String get deleteChatMessage => 'Den försvinner från tidigare chattar för gott.';
+
+  @override
+  String get deleteChat => 'Radera chatt';
+
+  @override
+  String get appsAskWith => 'Fråga Omi med';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtal i dag.',
+      one: '1 samtal i dag.',
+      zero: 'Inga samtal i dag.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get secondDevice => 'Andra enhet';
 
   @override

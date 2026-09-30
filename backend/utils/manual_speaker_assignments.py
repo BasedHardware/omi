@@ -49,8 +49,8 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
         if not decisions:
             continue
         decision = max(decisions, key=lambda value: value.get('generation', 0))
-        is_user = decision['is_user']
-        person_id = decision['person_id']
+        is_user = bool(decision.get('is_user', False))
+        person_id = decision.get('person_id')
         status = 'user' if is_user else 'not_user' if person_id else 'unknown'
         if (
             segment.get('is_user') == is_user

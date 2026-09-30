@@ -23,6 +23,7 @@ import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
+import 'package:omi/pages/home/widgets/header_sync_button.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
@@ -829,7 +830,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _openChat({bool voice = false}) {
     OmiHaptics.selection();
     PlatformManager.instance.analytics.bottomNavigationTabClicked(voice ? 'Chat Voice' : 'Chat');
-    openChatSheet(context, ChatPage(isPivotBottom: false, autoStartVoice: voice));
+    openChatSheet(context, ChatPage(isPivotBottom: false, startFresh: true, autoStartVoice: voice));
   }
 
   Widget _buildChatBar(BuildContext context) {
@@ -946,38 +947,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
           Row(
             children: [
-              // Sync: while recordings wait on the paired device, or whenever one is paired.
-              Consumer2<DeviceProvider, SyncProvider>(
-                builder: (context, deviceProvider, syncProvider, child) {
-                  final device = deviceProvider.pairedDevice;
-                  // Only show orange indicator for files still on device (SD card or Limitless)
-                  final hasPendingOnDevice = syncProvider.missingWalsOnDevice.isNotEmpty;
-                  final isSyncing = syncProvider.isSyncing;
-                  if (device == null && !hasPendingOnDevice) return const SizedBox.shrink();
-                  return HeaderCircleButton(
-                    semanticLabel: context.l10n.sync,
-                    onTap: () {
-                      OmiHaptics.selection();
-                      final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
-                      routeToPage(context, page);
-                    },
-                    // Neutral while syncing (INV-UI-1); warning tint while files wait on the device.
-                    color: isSyncing
-                        ? OmiColors.surface3
-                        : hasPendingOnDevice
-                            ? OmiColors.warning.withValues(alpha: 0.15)
-                            : OmiColors.surface1,
-                    icon: Icon(
-                      Icons.cloud_rounded,
-                      size: 18,
-                      color: isSyncing
-                          ? OmiColors.textPrimary
-                          : hasPendingOnDevice
-                              ? OmiColors.warning
-                              : OmiColors.textSecondary,
-                    ),
-                  );
-                },
+              // Sync: whenever a device is paired or recordings wait; badge counts the backlog.
+              Consumer<DeviceProvider>(
+                builder: (context, deviceProvider, child) => HeaderSyncButton(
+                  hasPairedDevice: deviceProvider.pairedDevice != null,
+                  onTap: () {
+                    OmiHaptics.selection();
+                    final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                    routeToPage(context, page);
+                  },
+                ),
               ),
               // Search: conversations, recaps, tasks and memories, from any page of the shell.
               HeaderCircleButton(

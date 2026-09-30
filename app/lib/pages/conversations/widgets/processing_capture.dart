@@ -180,10 +180,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter
   /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
-  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 12, 8, 14);
+  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 10, 8, 12);
 
   Widget _cardShell(Widget child, {EdgeInsets? padding}) => Container(
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
         width: double.maxFinite,
         padding: padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16),
         decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),

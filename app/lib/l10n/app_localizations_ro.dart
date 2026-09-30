@@ -11562,6 +11562,121 @@ class AppLocalizationsRo extends AppLocalizations {
   String get searchPartialFailure => 'Unele rezultate nu au putut fi încărcate';
 
   @override
+  String get peopleSearchPlaceholder => 'Caută persoane';
+
+  @override
+  String get peopleNotHeardYet => 'Încă neauzit';
+
+  @override
+  String get peopleRecent => 'Recente';
+
+  @override
+  String get deletePeopleMessage =>
+      'Aceasta le elimină mostrele vocale și nu poate fi anulată. Replicile lor din conversațiile trecute devin vorbitori fără nume.';
+
+  @override
+  String get personTalkTime => 'Timp de vorbire';
+
+  @override
+  String get personLastHeard => 'Ultima ascultare';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ștergi persoane: $count?',
+      one: 'Ștergi 1 persoană?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Necesită voce';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Persoane: $count',
+      one: '1 persoană',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nicio persoană potrivită';
+
+  @override
+  String get deselectAll => 'Deselectează tot';
+
+  @override
+  String get voiceRecognitionSettings => 'Recunoaștere vocală';
+
+  @override
+  String get greetingMorning => 'Bună dimineața';
+
+  @override
+  String get greetingAfternoon => 'Bună ziua';
+
+  @override
+  String get greetingEvening => 'Bună seara';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ce vrei să afli?';
+
+  @override
+  String get askSuggestDecide => 'Ce am decis azi?';
+
+  @override
+  String get askSuggestOwe => 'Ce le mai datorez oamenilor?';
+
+  @override
+  String get askSuggestNotice => 'Ce a observat Omi?';
+
+  @override
+  String get pastChats => 'Conversații anterioare';
+
+  @override
+  String get newChat => 'Conversație nouă';
+
+  @override
+  String get startFresh => 'Începe de la capăt';
+
+  @override
+  String get noPastChats => 'Conversațiile tale cu Omi apar aici.';
+
+  @override
+  String get deleteChatQuestion => 'Ștergi această conversație?';
+
+  @override
+  String get deleteChatMessage => 'Dispare definitiv din conversațiile anterioare.';
+
+  @override
+  String get deleteChat => 'Șterge conversația';
+
+  @override
+  String get appsAskWith => 'Întreabă Omi cu';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversații azi.',
+      one: '1 conversație azi.',
+      zero: 'Nicio conversație azi.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get secondDevice => 'Al doilea dispozitiv';
 
   @override

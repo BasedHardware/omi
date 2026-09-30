@@ -11552,6 +11552,121 @@ class AppLocalizationsHu extends AppLocalizations {
   String get searchPartialFailure => 'Néhány találatot nem sikerült betölteni';
 
   @override
+  String get peopleSearchPlaceholder => 'Személyek keresése';
+
+  @override
+  String get peopleNotHeardYet => 'Még nem hallott';
+
+  @override
+  String get peopleRecent => 'Legutóbbiak';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ez eltávolítja a hangmintáikat, és nem vonható vissza. A korábbi beszélgetésekben elhangzott mondataik névtelen beszélőkké válnak.';
+
+  @override
+  String get personTalkTime => 'Beszédidő';
+
+  @override
+  String get personLastHeard => 'Utoljára hallott';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy törlése?',
+      one: '1 személy törlése?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Hang szükséges';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy',
+      one: '1 személy',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nincs egyező személy';
+
+  @override
+  String get deselectAll => 'Kijelölés megszüntetése';
+
+  @override
+  String get voiceRecognitionSettings => 'Hangfelismerés';
+
+  @override
+  String get greetingMorning => 'Jó reggelt';
+
+  @override
+  String get greetingAfternoon => 'Jó napot';
+
+  @override
+  String get greetingEvening => 'Jó estét';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Mit szeretnél tudni?';
+
+  @override
+  String get askSuggestDecide => 'Mit döntöttem ma?';
+
+  @override
+  String get askSuggestOwe => 'Mivel tartozom még másoknak?';
+
+  @override
+  String get askSuggestNotice => 'Mit vett észre az Omi?';
+
+  @override
+  String get pastChats => 'Korábbi csevegések';
+
+  @override
+  String get newChat => 'Új csevegés';
+
+  @override
+  String get startFresh => 'Kezdj tiszta lappal';
+
+  @override
+  String get noPastChats => 'Az Omival folytatott csevegéseid itt jelennek meg.';
+
+  @override
+  String get deleteChatQuestion => 'Törlöd ezt a csevegést?';
+
+  @override
+  String get deleteChatMessage => 'Véglegesen eltűnik a korábbi csevegések közül.';
+
+  @override
+  String get deleteChat => 'Csevegés törlése';
+
+  @override
+  String get appsAskWith => 'Kérdezd az Omit ezzel';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés ma.',
+      one: '1 beszélgetés ma.',
+      zero: 'Ma nem volt beszélgetés.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get secondDevice => 'Második eszköz';
 
   @override

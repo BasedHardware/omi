@@ -35,7 +35,7 @@ final chatScenarios = <AuditScenario>[
     run: (a) async {
       a.server.assistantReplyText =
           'You agreed to send Alex the revised design notes on Friday. Start with the recording flow and memory search.';
-      await a.pump(const ChatPage());
+      await a.pump(const ChatPage(startFresh: true));
       expect(find.text('What can you do for me?'), findsOneWidget);
       expect(find.text('Summarize my recent activity'), findsNothing);
       await a.shot('Open Ask Omi with no saved personal data', step: 'empty');
@@ -46,7 +46,10 @@ final chatScenarios = <AuditScenario>[
       await a.enterText(find.byKey(_input), 'What did I agree to send Alex?');
       await a.shot('Compose a question', step: 'draft');
       await a.tap(find.byKey(_send));
+      // The completed reply names the new chat in the background; let that request finish too.
+      await a.settle();
       expect(a.server.countOf('POST', '/v2/messages'), 1);
+      expect(a.server.countOf('POST', '/v2/chat/generate-title'), 1);
       await a.shot('Send and receive the fixture reply', step: 'reply');
       mockCommonPlatformChannels();
       await a.tester.tap(find.bySemanticsLabel('Copy Message'));
@@ -63,13 +66,17 @@ final chatScenarios = <AuditScenario>[
     run: (a) async {
       final memories = MemoriesProvider();
       await a.tester.runAsync(() => memories.createMemory('I prefer morning meetings.', MemoryVisibility.private));
-      await a.pump(const ChatPage(), providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)]);
-      expect(find.text('Summarize my recent activity'), findsOneWidget);
-      expect(find.text('How can I improve?'), findsOneWidget);
+      await a.pump(
+        const ChatPage(startFresh: true),
+        providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)],
+      );
+      expect(find.text('What did I decide today?'), findsOneWidget);
+      expect(find.text('What do I still owe people?'), findsOneWidget);
+      expect(find.text('What did Omi notice?'), findsOneWidget);
       expect(find.text('What can you do for me?'), findsNothing);
       await a.shot('Open empty chat with a saved memory');
-      await a.tap(find.byKey(const Key('chat_starter_activity')));
-      expect(_composer(a), 'Summarize my recent activity');
+      await a.tap(find.byKey(const Key('chat_starter_decide')));
+      expect(_composer(a), 'What did I decide today?');
       expect(a.server.countOf('POST', '/v2/messages'), 0);
     },
   ),
@@ -79,7 +86,7 @@ final chatScenarios = <AuditScenario>[
     page: _page,
     state: 'No saved personal data and no enabled chat apps',
     run: (a) async {
-      await a.pump(const ChatPage());
+      await a.pump(const ChatPage(startFresh: true));
       await a.tap(find.bySemanticsLabel('Chat Apps'));
       await a.shot('Open the Chat Apps drawer', step: 'drawer');
       await a.tap(find.text('Clear Chat').first);
@@ -93,7 +100,7 @@ final chatScenarios = <AuditScenario>[
     state: 'One question answered by the fixture backend',
     run: (a) async {
       a.server.assistantReplyText = 'You agreed to send Alex the revised design notes on Friday.';
-      await a.pump(const ChatPage());
+      await a.pump(const ChatPage(startFresh: true));
       await _ask(a, 'What did I agree to?');
       await a.tap(find.bySemanticsLabel('Not Helpful'));
       await a.shot('Tap Not Helpful on the reply: the feedback reason sheet');
@@ -123,7 +130,10 @@ final chatScenarios = <AuditScenario>[
               ]),
             ),
           ),
-          const ChatSheetTransition(animation: AlwaysStoppedAnimation(0.7), child: ChatPage()),
+          const ChatSheetTransition(
+            animation: AlwaysStoppedAnimation(0.7),
+            child: ChatPage(startFresh: true),
+          ),
         ]),
         scaffold: false,
       );
