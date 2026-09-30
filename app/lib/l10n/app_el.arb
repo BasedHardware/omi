@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Επισήμανε και τη μετέπειτα ομιλία αυτού του ομιλητή",
     "updateSummaryWithNewNames": "Ενημέρωση περίληψης με τα νέα ονόματα",
     "syncStatusUnsupportedAudio": "Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Τι μπορείς να κάνεις για μένα;} goal{Βοήθησέ με να θέσω έναν στόχο} activity{Σύνοψε την πρόσφατη δραστηριότητά μου} improve{Πώς μπορώ να βελτιωθώ;} other{}}",
     "nextWeek": "Επόμενη εβδομάδα",
     "clearSearch": "Εκκαθάριση αναζήτησης",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "Συνδέστε τα OmiGlass μαζί με το Omi σας, ώστε φωτογραφίες και ήχος να πηγαίνουν στην ίδια συζήτηση.",
     "pairSecondDevice": "Σύζευξη δεύτερης συσκευής",
     "secondDevice": "Δεύτερη συσκευή",
-    "forgetSecondDevice": "Διαγραφή δεύτερης συσκευής"
+    "forgetSecondDevice": "Διαγραφή δεύτερης συσκευής",
+    "conversationSummaryFailed": "Η σύνοψη απέτυχε"
 }

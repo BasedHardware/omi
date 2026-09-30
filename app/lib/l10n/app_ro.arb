@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Etichetează și vorbirea ulterioară a acestui vorbitor",
     "updateSummaryWithNewNames": "Actualizează rezumatul cu numele noi",
     "syncStatusUnsupportedAudio": "Audio nu a putut fi citit — nu poate fi sincronizat",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ce poți face pentru mine?} goal{Ajută-mă să stabilesc un obiectiv} activity{Rezumă activitatea mea recentă} improve{Cum mă pot îmbunătăți?} other{}}",
     "nextWeek": "Săptămâna viitoare",
     "clearSearch": "Șterge căutarea",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "Conectează OmiGlass alături de Omi, astfel încât fotografiile și sunetul să ajungă în aceeași conversație.",
     "pairSecondDevice": "Asociază un al doilea dispozitiv",
     "secondDevice": "Al doilea dispozitiv",
-    "forgetSecondDevice": "Uită al doilea dispozitiv"
+    "forgetSecondDevice": "Uită al doilea dispozitiv",
+    "conversationSummaryFailed": "Rezumatul a eșuat"
 }

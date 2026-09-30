@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "इस वक्ता की बाद की बात भी टैग करें",
     "updateSummaryWithNewNames": "नए नामों के साथ सारांश अपडेट करें",
     "syncStatusUnsupportedAudio": "ऑडियो पढ़ा नहीं जा सका — सिंक नहीं हो सकता",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{तुम मेरे लिए क्या कर सकते हो?} goal{मुझे एक लक्ष्य तय करने में मदद करो} activity{मेरी हाल की गतिविधियों का सारांश दो} improve{मैं कैसे सुधार कर सकता हूँ?} other{}}",
     "nextWeek": "अगले सप्ताह",
     "clearSearch": "खोज साफ़ करें",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "अपने Omi के साथ OmiGlass कनेक्ट करें ताकि फ़ोटो और ऑडियो एक ही बातचीत में जाएँ।",
     "pairSecondDevice": "दूसरा डिवाइस पेयर करें",
     "secondDevice": "दूसरा डिवाइस",
-    "forgetSecondDevice": "दूसरा डिवाइस भूल जाएँ"
+    "forgetSecondDevice": "दूसरा डिवाइस भूल जाएँ",
+    "conversationSummaryFailed": "सारांश नहीं बन सका"
 }

@@ -10105,12 +10105,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Ääntä ei voitu lukea — ei voi synkronoida';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11650,4 +11644,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Unohda toinen laite';
+
+  @override
+  String get conversationSummaryFailed => 'Yhteenveto epäonnistui';
 }

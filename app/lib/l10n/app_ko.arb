@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "이 화자의 이후 발화도 태그하기",
     "updateSummaryWithNewNames": "새 이름으로 요약 업데이트",
     "syncStatusUnsupportedAudio": "오디오를 읽을 수 없어 동기화할 수 없습니다",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{나를 위해 무엇을 해줄 수 있어?} goal{목표를 세우는 걸 도와줘} activity{최근 활동을 요약해 줘} improve{어떻게 하면 더 나아질 수 있을까?} other{}}",
     "nextWeek": "다음 주",
     "clearSearch": "검색 지우기",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "Omi와 함께 OmiGlass를 연결하면 사진과 오디오가 같은 대화에 담깁니다.",
     "pairSecondDevice": "두 번째 기기 페어링",
     "secondDevice": "두 번째 기기",
-    "forgetSecondDevice": "두 번째 기기 삭제"
+    "forgetSecondDevice": "두 번째 기기 삭제",
+    "conversationSummaryFailed": "요약 실패"
 }

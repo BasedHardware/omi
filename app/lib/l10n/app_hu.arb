@@ -3334,8 +3334,6 @@
     "tagSpeakerIncludingLaterSpeech": "Jelöld meg ennek a beszélőnek a későbbi beszédét is",
     "updateSummaryWithNewNames": "Összefoglaló frissítése az új nevekkel",
     "syncStatusUnsupportedAudio": "A hang nem olvasható — nem szinkronizálható",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Mit tudsz tenni értem?} goal{Segíts kitűzni egy célt} activity{Foglald össze a legutóbbi tevékenységeimet} improve{Hogyan fejlődhetek?} other{}}",
     "nextWeek": "Jövő héten",
     "clearSearch": "Keresés törlése",
@@ -3761,5 +3759,6 @@
     "pairSecondDeviceDescription": "Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.",
     "pairSecondDevice": "Második eszköz párosítása",
     "secondDevice": "Második eszköz",
-    "forgetSecondDevice": "Második eszköz elfelejtése"
+    "forgetSecondDevice": "Második eszköz elfelejtése",
+    "conversationSummaryFailed": "Az összefoglaló nem sikerült"
 }

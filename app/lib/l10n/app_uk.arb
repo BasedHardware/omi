@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Також позначити пізніше мовлення цього мовця",
     "updateSummaryWithNewNames": "Оновити підсумок з новими іменами",
     "syncStatusUnsupportedAudio": "Не вдалося прочитати аудіо — синхронізація неможлива",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Що ти можеш для мене зробити?} goal{Допоможи мені поставити мету} activity{Підсумуй мою нещодавню діяльність} improve{Як я можу покращитися?} other{}}",
     "nextWeek": "Наступного тижня",
     "clearSearch": "Очистити пошук",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "Підключіть OmiGlass разом з Omi, щоб фото та звук потрапляли в одну розмову.",
     "pairSecondDevice": "Підключити другий пристрій",
     "secondDevice": "Другий пристрій",
-    "forgetSecondDevice": "Забути другий пристрій"
+    "forgetSecondDevice": "Забути другий пристрій",
+    "conversationSummaryFailed": "Не вдалося створити підсумок"
 }

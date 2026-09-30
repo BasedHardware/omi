@@ -210,18 +210,20 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
     )
 
 
-def enforce_and_persist(
+def persist_enforced_frames(
     uid: str,
     conversation_id: str,
     max_persisted: int,
     new_frames: List[NewPersistedFrame],
-) -> tuple[ConversationScreenFrameSet, bool]:
+) -> bool:
     """Merge newly-written frames into the conversation's persisted set,
     apply the cap, (re)assign banner/strip roles, and persist the result.
 
-    Returns (frame_set, committed) where committed is True iff at least one
-    of `new_frames` survived into the persisted set (i.e. wasn't immediately
-    evicted by the cap) — this drives the adjudication response's "outcome".
+    Returns committed: True iff at least one of `new_frames` survived into the
+    persisted set (i.e. wasn't immediately evicted by the cap) — this drives the
+    adjudication response's "outcome". Persistence only: the caller stamps the
+    adjudication marker and then builds the response (build_frame_set_response),
+    so a response failure (URL signing) can never leave persisted frames unmarked.
     """
     # Only this environment's frames compete for the cap and the banner.
     bucket = storage.configured_screen_frames_bucket()
@@ -239,8 +241,7 @@ def enforce_and_persist(
     if new_docs and bucket:
         screen_frames_db.bump_conversation_screen_frames_revision(uid, conversation_id, bucket=bucket)
 
-    committed = any(doc['id'] in new_ids for doc in survivors)
-    return build_frame_set_response(uid, conversation_id), committed
+    return any(doc['id'] in new_ids for doc in survivors)
 
 
 def promote_banner_after_deletion(uid: str, conversation_id: str) -> ConversationScreenFrameSet:

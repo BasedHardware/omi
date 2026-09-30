@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "同时标记该说话人之后的发言",
     "updateSummaryWithNewNames": "用新名字更新摘要",
     "syncStatusUnsupportedAudio": "无法读取音频，无法同步",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{你能为我做些什么？} goal{帮我设定一个目标} activity{总结我最近的活动} improve{我该如何改进？} other{}}",
     "nextWeek": "下周",
     "clearSearch": "清除搜索",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "将 OmiGlass 与你的 Omi 一起连接，让照片和音频进入同一段对话。",
     "pairSecondDevice": "配对第二台设备",
     "secondDevice": "第二台设备",
-    "forgetSecondDevice": "忘记第二台设备"
+    "forgetSecondDevice": "忘记第二台设备",
+    "conversationSummaryFailed": "摘要生成失败"
 }

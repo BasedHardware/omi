@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "I-tag din ang susunod na pananalita ng speaker na ito",
     "updateSummaryWithNewNames": "I-update ang buod gamit ang mga bagong pangalan",
     "syncStatusUnsupportedAudio": "Hindi mabasa ang audio — hindi ma-sync",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ano ang magagawa mo para sa akin?} goal{Tulungan mo akong magtakda ng layunin} activity{Ibuod ang mga kamakailan kong aktibidad} improve{Paano pa ako mapapabuti?} other{}}",
     "nextWeek": "Sa susunod na linggo",
     "clearSearch": "I-clear ang paghahanap",
@@ -11225,5 +11223,6 @@
     "pairSecondDevice": "Ipares ang ikalawang device",
     "secondDevice": "Ikalawang device",
     "pairSecondDeviceDescription": "Ikonekta ang OmiGlass kasama ng iyong Omi para mapunta sa iisang usapan ang mga larawan at audio.",
-    "forgetSecondDevice": "Kalimutan ang ikalawang device"
+    "forgetSecondDevice": "Kalimutan ang ikalawang device",
+    "conversationSummaryFailed": "Nabigo ang buod"
 }

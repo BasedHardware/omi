@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "گفتار بعدی این گوینده را هم برچسب بزن",
     "updateSummaryWithNewNames": "به‌روزرسانی خلاصه با نام‌های جدید",
     "syncStatusUnsupportedAudio": "صدا خوانده نشد — قابل همگام‌سازی نیست",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{چه کاری می‌توانی برایم انجام دهی؟} goal{کمکم کن هدفی تعیین کنم} activity{فعالیت‌های اخیرم را خلاصه کن} improve{چطور می‌توانم بهتر شوم؟} other{}}",
     "nextWeek": "هفتهٔ آینده",
     "clearSearch": "پاک کردن جستجو",
@@ -11225,5 +11223,6 @@
     "pairSecondDevice": "جفت‌کردن دستگاه دوم",
     "secondDevice": "دستگاه دوم",
     "pairSecondDeviceDescription": "OmiGlass را در کنار Omi خود متصل کنید تا عکس‌ها و صدا در همان گفتگو قرار بگیرند.",
-    "forgetSecondDevice": "فراموش‌کردن دستگاه دوم"
+    "forgetSecondDevice": "فراموش‌کردن دستگاه دوم",
+    "conversationSummaryFailed": "خلاصه ایجاد نشد"
 }

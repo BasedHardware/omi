@@ -10186,12 +10186,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio nicht lesbar — Synchronisierung nicht möglich';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11741,4 +11735,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Zweites Gerät vergessen';
+
+  @override
+  String get conversationSummaryFailed => 'Zusammenfassung fehlgeschlagen';
 }

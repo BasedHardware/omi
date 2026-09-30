@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "இந்த பேச்சாளரின் பிந்தைய பேச்சையும் குறியிடு",
     "updateSummaryWithNewNames": "புதிய பெயர்களுடன் சுருக்கத்தைப் புதுப்பி",
     "syncStatusUnsupportedAudio": "ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{நீ எனக்கு என்ன செய்ய முடியும்?} goal{இலக்கை அமைக்க எனக்கு உதவு} activity{எனது சமீபத்திய செயல்பாடுகளைச் சுருக்கிக் கூறு} improve{நான் எப்படி மேம்படலாம்?} other{}}",
     "nextWeek": "அடுத்த வாரம்",
     "clearSearch": "தேடலை அழி",
@@ -11225,5 +11223,6 @@
     "pairSecondDevice": "இரண்டாவது சாதனத்தை இணைக்கவும்",
     "secondDevice": "இரண்டாவது சாதனம்",
     "pairSecondDeviceDescription": "புகைப்படங்களும் ஒலியும் ஒரே உரையாடலுக்குச் செல்ல, உங்கள் Omi உடன் OmiGlass ஐ இணைக்கவும்.",
-    "forgetSecondDevice": "இரண்டாவது சாதனத்தை மறக்கவும்"
+    "forgetSecondDevice": "இரண்டாவது சாதனத்தை மறக்கவும்",
+    "conversationSummaryFailed": "சுருக்கம் தோல்வியடைந்தது"
 }

@@ -3280,8 +3280,6 @@
     "tagSpeakerIncludingLaterSpeech": "Mærk også senere tale fra denne taler",
     "updateSummaryWithNewNames": "Opdater resuméet med de nye navne",
     "syncStatusUnsupportedAudio": "Lyden kunne ikke læses — kan ikke synkroniseres",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Hvad kan du gøre for mig?} goal{Hjælp mig med at sætte et mål} activity{Opsummer mine seneste aktiviteter} improve{Hvordan kan jeg blive bedre?} other{}}",
     "nextWeek": "Næste uge",
     "clearSearch": "Ryd søgning",
@@ -3707,5 +3705,6 @@
     "pairSecondDeviceDescription": "Forbind OmiGlass sammen med din Omi, så billeder og lyd ender i samme samtale.",
     "pairSecondDevice": "Par en anden enhed",
     "secondDevice": "Anden enhed",
-    "forgetSecondDevice": "Glem anden enhed"
+    "forgetSecondDevice": "Glem anden enhed",
+    "conversationSummaryFailed": "Resuméet mislykkedes"
 }

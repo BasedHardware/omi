@@ -228,3 +228,46 @@ def test_hosted_vad_fallback_reason_buckets(monkeypatch):
     assert vad_mod._hosted_vad_fallback_reason(requests.HTTPError(response=response429)) == 'provider_429'
 
     assert vad_mod._hosted_vad_fallback_reason(RuntimeError('boom')) == 'other'
+
+
+def test_replay_diagnostics_are_bounded_log_values_not_metric_labels(monkeypatch, caplog):
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    diagnostics = fallback_mod.ReplayLagDiagnostics(
+        capture_seconds=1e20,
+        admitted_seconds=float('nan'),
+        seconds_since_text=-1,
+        posts_since_anchor=1000001,
+        empty_posts_since_anchor=-10,
+        post_in_flight=True,
+        empty_streak=5,
+        cut_pending=True,
+        pacing_wait=False,
+    )
+    fallback_mod.record_fallback(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='capacity_full',
+        outcome='recovered',
+        capacity_subtype='replay_ring_cap',
+        replay_diagnostics=diagnostics,
+    )
+    labels, _ = counter.increments[0]
+    assert set(labels) == {'component', 'from_mode', 'to_mode', 'reason', 'outcome'}
+    line = caplog.records[-1].message
+    assert 'un_emitted_capture_seconds=86400.000' in line
+    assert 'vad_admitted_seconds=-1.000' in line and 'seconds_since_text=-1.000' in line
+    assert 'posts_since_anchor=1000000' in line and 'empty_posts_since_anchor=0' in line
+    assert 'post_in_flight=1 empty_streak=5 cut_pending=1 pacing_wait=0' in line
+    caplog.clear()
+    fallback_mod.record_fallback(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='capacity_full',
+        outcome='recovered',
+        capacity_subtype='buffer_cap',
+        replay_diagnostics=diagnostics,
+    )
+    assert 'un_emitted_capture_seconds' not in caplog.records[-1].message

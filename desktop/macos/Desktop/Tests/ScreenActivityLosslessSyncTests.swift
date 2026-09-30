@@ -136,6 +136,234 @@ final class ScreenActivityLosslessSyncTests: XCTestCase {
     }
   }
 
+  /// A meeting's own rows must reach the backend before its notes are written, even though their
+  /// bucket is still open — one winner per bucket inside the meeting, nothing outside it.
+  func testMeetingFlushShipsTheOpenBucketsWinnerInsideTheMeetingOnly() throws {
+    let queue = try makeLegacyQueue()
+    let bucketStart = Date(timeIntervalSince1970: 1_700_000_100)
+    let meeting = DateInterval(start: bucketStart, end: bucketStart.addingTimeInterval(200))
+    try queue.write { db in
+      try RewindDatabase.installScreenActivitySyncStateSchema(db)
+      let rows: [(Double, String, String)] = [
+        (-60, "SyntheticApp", "before the meeting"),
+        (10, "SyntheticApp", "short"),
+        (120, "SyntheticApp", "the longest text in the open bucket"),
+        (150, "OtherApp", "other window"),
+        (250, "SyntheticApp", "after the meeting ended"),
+      ]
+      for (offset, app, text) in rows {
+        try db.execute(
+          sql: "INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText) VALUES (?, ?, ?, ?)",
+          arguments: [bucketStart.addingTimeInterval(offset), app, "SyntheticWindow", text])
+      }
+
+      // The periodic path ships nothing yet: the bucket is still open.
+      let now = bucketStart.addingTimeInterval(210)
+      try ScreenActivitySyncService.compactClosedBuckets(db: db, now: now, slack: 300)
+      XCTAssertTrue(
+        try ScreenActivitySyncService.fetchSyncCandidates(
+          db: db, limit: 100, now: now, slack: 300, embeddingGrace: 900
+        ).isEmpty)
+
+      try ScreenActivitySyncService.compactMeetingWindow(db: db, interval: meeting)
+      let candidates = try ScreenActivitySyncService.fetchMeetingWindowCandidates(
+        db: db, interval: meeting, limit: 100)
+      XCTAssertEqual(candidates.map(\.id), [3, 4], "one winner per (app, window, bucket) inside the meeting")
+      try ScreenActivitySyncService.markCandidatesSynced(db: db, candidates: candidates)
+
+      let states = try Row.fetchAll(db, sql: "SELECT id, screenActivitySyncState FROM screenshots ORDER BY id")
+        .map { ($0["id"] as Int64, $0["screenActivitySyncState"] as Int) }
+      XCTAssertEqual(
+        states.map(\.1),
+        [
+          ScreenActivitySyncState.pending.rawValue,
+          ScreenActivitySyncState.compacted.rawValue,
+          ScreenActivitySyncState.textSynced.rawValue,
+          ScreenActivitySyncState.textSynced.rawValue,
+          ScreenActivitySyncState.pending.rawValue,
+        ])
+    }
+  }
+
+  /// A failed meeting flush is a fail-open path: notes go ahead without the end of the call's
+  /// screen text, so it must record degraded telemetry and leave the rows for the periodic path.
+  func testMeetingFlushFailuresRecordDegradedFallbackAndLeaveRowsPending() async throws {
+    let queue = try makeLegacyQueue()
+    let start = Date(timeIntervalSince1970: 1_700_000_100)
+    let meeting = DateInterval(start: start, duration: 200)
+    try await queue.write { db in
+      try RewindDatabase.installScreenActivitySyncStateSchema(db)
+      try db.execute(
+        sql: "INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText) VALUES (?, ?, ?, ?)",
+        arguments: [start.addingTimeInterval(30), "SyntheticApp", "SyntheticWindow", "decision slide"])
+    }
+    var reasons: [String] = []
+
+    let pushFailed = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue, push: { _ in false }, shouldContinue: { true },
+      recordFallback: { reasons.append($0) })
+    XCTAssertEqual(pushFailed, .pushFailed(synced: 0))
+    let state = try await queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT screenActivitySyncState FROM screenshots WHERE id = 1")
+    }
+    XCTAssertEqual(state, ScreenActivitySyncState.pending.rawValue)
+
+    let brokenDatabase = try DatabaseQueue()  // no screenshots table
+    let databaseFailed = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: brokenDatabase, push: { _ in true }, shouldContinue: { true },
+      recordFallback: { reasons.append($0) })
+    XCTAssertEqual(databaseFailed, .databaseFailed(synced: 0))
+
+    let synced = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue, push: { _ in true }, shouldContinue: { true },
+      recordFallback: { reasons.append($0) })
+    XCTAssertEqual(synced, .synced(1))
+    XCTAssertEqual(reasons, ["upload_failed", "other"], "a successful flush records nothing")
+  }
+
+  /// The sync route rejects more than 100 rows with a 400, so a long meeting ships in batches, and
+  /// the pass deadline stops the drain with degraded telemetry rather than holding the notes.
+  func testMeetingFlushShipsBatchesTheSyncRouteAcceptsAndStopsAtTheDeadline() async throws {
+    let queue = try makeLegacyQueue()
+    let start = Date(timeIntervalSince1970: 1_700_000_100)
+    let meeting = DateInterval(start: start, duration: 3_600)
+    try await queue.write { db in
+      try RewindDatabase.installScreenActivitySyncStateSchema(db)
+      // 250 distinct windows, so compaction keeps every row.
+      for index in 0..<250 {
+        try db.execute(
+          sql: "INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText) VALUES (?, ?, ?, ?)",
+          arguments: [start.addingTimeInterval(Double(index)), "SyntheticApp", "Window \(index)", "text \(index)"])
+      }
+    }
+    var batches: [Int] = []
+    var reasons: [String] = []
+
+    let drained = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue,
+      push: { rows in
+        batches.append(rows.count)
+        return true
+      },
+      shouldContinue: { true }, recordFallback: { reasons.append($0) })
+    XCTAssertEqual(drained, .synced(250))
+    XCTAssertEqual(batches, [100, 100, 50])
+
+    try await queue.write { db in
+      try db.execute(sql: "UPDATE screenshots SET screenActivitySyncState = 0")
+    }
+    batches = []
+    var allowed = 1
+    let stopped = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue,
+      push: { rows in
+        batches.append(rows.count)
+        return true
+      },
+      shouldContinue: {
+        allowed -= 1
+        return allowed >= 0
+      },
+      recordFallback: { reasons.append($0) })
+    XCTAssertEqual(stopped, .deadlineReached(synced: 100))
+    XCTAssertEqual(batches, [100])
+    XCTAssertEqual(reasons, ["timeout"])
+  }
+
+  /// Owner-bound background sync: a batch read for owner A is never sent, nor marked, once the
+  /// signed-in account has changed.
+  func testMeetingFlushStopsWhenTheSignedInAccountChanges() async throws {
+    let queue = try makeLegacyQueue()
+    let start = Date(timeIntervalSince1970: 1_700_000_100)
+    let meeting = DateInterval(start: start, duration: 3_600)
+    try await queue.write { db in
+      try RewindDatabase.installScreenActivitySyncStateSchema(db)
+      for index in 0..<150 {
+        try db.execute(
+          sql: "INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText) VALUES (?, ?, ?, ?)",
+          arguments: [start.addingTimeInterval(Double(index)), "SyntheticApp", "Window \(index)", "text \(index)"])
+      }
+    }
+    var batches: [Int] = []
+    var reasons: [String] = []
+    var ownerIsCurrent = true
+
+    let result = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue,
+      push: { rows in
+        batches.append(rows.count)
+        ownerIsCurrent = false  // the account switches while the first batch is in flight
+        return true
+      },
+      authorizationIsCurrent: { ownerIsCurrent },
+      shouldContinue: { true },
+      recordFallback: { reasons.append($0) })
+
+    XCTAssertEqual(result, .ownerChanged(synced: 0))
+    XCTAssertEqual(batches, [100], "no further batch goes out under the new session")
+    XCTAssertEqual(reasons, ["auth"])
+    let pending = try await queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM screenshots WHERE screenActivitySyncState = 0")
+    }
+    XCTAssertEqual(pending, 150, "nothing is marked synced for a replaced owner")
+
+    batches = []
+    reasons = []
+    let refused = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue,
+      push: { rows in
+        batches.append(rows.count)
+        return true
+      },
+      authorizationIsCurrent: { false }, shouldContinue: { true }, recordFallback: { reasons.append($0) })
+    XCTAssertEqual(refused, .ownerChanged(synced: 0))
+    XCTAssertEqual(batches, [], "a batch read for a replaced owner is never pushed")
+  }
+
+  /// INV-AUTH-1: the flush's sync-state writes are commit-bound to the owner it captured, so a
+  /// replacement owner's rows are never compacted or marked, even by a pool opened before the switch.
+  func testMeetingFlushNeverMutatesRowsOnceTheOwnerLeaseIsRevoked() async throws {
+    let queue = try makeLegacyQueue()
+    let start = Date(timeIntervalSince1970: 1_700_000_100)
+    let meeting = DateInterval(start: start, duration: 200)
+    try await queue.write { db in
+      try RewindDatabase.installScreenActivitySyncStateSchema(db)
+      // Two rows in one bucket and window: compaction would mark the shorter one `compacted`.
+      for (offset, text) in [(10.0, "short"), (20.0, "the longer row")] {
+        try db.execute(
+          sql: "INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText) VALUES (?, ?, ?, ?)",
+          arguments: [start.addingTimeInterval(offset), "SyntheticApp", "SyntheticWindow", text])
+      }
+    }
+    var reasons: [String] = []
+    var pushes = 0
+
+    let result = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue,
+      push: { _ in
+        pushes += 1
+        return true
+      },
+      mutation: LocalMutationAuthorization { false },
+      shouldContinue: { true },
+      recordFallback: { reasons.append($0) })
+
+    XCTAssertEqual(result, .ownerChanged(synced: 0))
+    XCTAssertEqual(reasons, ["auth"])
+    XCTAssertEqual(pushes, 0)
+    let states = try await queue.read { db in
+      try Int.fetchAll(db, sql: "SELECT screenActivitySyncState FROM screenshots ORDER BY id")
+    }
+    XCTAssertEqual(states, [ScreenActivitySyncState.pending.rawValue, ScreenActivitySyncState.pending.rawValue])
+  }
+
+  /// An account switch during frame-request delivery could read the replacement owner's pixels
+  /// under the previous owner's headers, so the owner-bound meeting flush never delivers them.
+  func testOnlyThePeriodicSyncDeliversFrameRequests() {
+    XCTAssertFalse(ScreenActivitySyncService.deliversFrameRequests(ownerBoundPush: true))
+    XCTAssertTrue(ScreenActivitySyncService.deliversFrameRequests(ownerBoundPush: false))
+  }
+
   /// A row whose vector is still pending must not ship text-only and then ship again unchanged:
   /// the second push is a byte-identical Firestore document write plus a full index rewrite.
   func testARowWaitsForItsEmbeddingRatherThanShippingTwice() throws {

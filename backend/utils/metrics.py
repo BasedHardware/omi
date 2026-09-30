@@ -700,6 +700,12 @@ LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
     ['state'],
 )
 
+MEETING_NOTES_EVIDENCE_WAIT_TOTAL = Counter(
+    'meeting_notes_evidence_wait_total',
+    'Desktop meeting finalizations by screen-evidence admission outcome',
+    ['outcome'],
+)
+
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
     'listen_finalization_retries_total',
     'Durable listen finalization jobs replayed by the reconciler',
@@ -1061,6 +1067,18 @@ OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL = Counter(
 OMI_SYNC_INTAKE_TOTAL = Counter(
     'omi_sync_intake_total',
     'Sync conversation intake outcomes (created vs merged) by bounded outcome',
+    ['outcome'],
+)
+
+# One decision per safety-WAL upload that carries a recording id and audio
+# bounds (utils/sync/recording_lineage.py). Emitted from backend-sync, so the
+# matching `event=sync_lineage_resolve` log line is the queryable backup.
+OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
+    'omi_sync_lineage_resolve_total',
+    (
+        'Sync recording-lineage binding decisions. outcome is a closed set: bound|split_across_generations|'
+        'stamp_overridden|stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted'
+    ),
     ['outcome'],
 )
 

@@ -18669,18 +18669,6 @@ abstract class AppLocalizations {
   /// **'Audio couldn\'t be read — can\'t be synced'**
   String get syncStatusUnsupportedAudio;
 
-  /// Inline conversation-row hint when processing finished but the title pass produced nothing
-  ///
-  /// In en, this message translates to:
-  /// **'Title didn\'t generate'**
-  String get conversationTitleDidntGenerate;
-
-  /// Inline conversation-row action to rerun title and summary generation
-  ///
-  /// In en, this message translates to:
-  /// **'Reprocess'**
-  String get conversationReprocess;
-
   /// Editable empty-chat starter; use capabilities/goal without personal data, activity/improve with saved data.
   ///
   /// In en, this message translates to:
@@ -21182,6 +21170,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Forget second device'**
   String get forgetSecondDevice;
+
+  /// Conversation list row chip: the server could not summarize this conversation after its retries, and retrying can still succeed. Shown next to a Retry button.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary failed'**
+  String get conversationSummaryFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -74,6 +74,17 @@ and background processing.
   structure is a typed failure before persistence. The flagged Cloud Tasks
   worker closes that job on its first occurrence, retaining the transcript as
   a visible completed conversation; provider and parser errors still retry.
+  A clear rule-level discard is not a minimal structure: recovery records it
+  as an explicit server-recovery discard only after strict transcript decoding,
+  so contentless rows never surface. Discard persistence omits the transcript
+  fields, preserving the stored blob byte-for-byte. It rechecks protected
+  structure, user title, and the restore marker transactionally; a raced edit or
+  restore takes the same typed-minimum terminal path, retaining a visible row
+  with no new discard decision. Selfheal reports that job as dead-lettered.
+  Every terminal that moves a `processing` row into the list (dead-letter, BYOK
+  abandonment, orphan recovery) replaces an empty title with
+  `deterministic_minimum_title`; the dead-letter also marks a transient failure
+  `summary_retryable` (see `database/conversation_finalization_jobs.py`).
 - `smart_merge.py` folds a finished pendant conversation into the immediately
   preceding one of the same device partition when Jev says it is the same
   occasion (`CONVERSATION_SMART_MERGE_MODE=off|shadow|merge`, default `merge`; `off`

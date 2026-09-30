@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "Означи и каснији говор овог говорника",
     "updateSummaryWithNewNames": "Ажурирај резиме са новим именима",
     "syncStatusUnsupportedAudio": "Звук не може да се прочита — синхронизација није могућа",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Шта можеш да урадиш за мене?} goal{Помози ми да поставим циљ} activity{Сажми моје недавне активности} improve{Како могу да напредујем?} other{}}",
     "nextWeek": "Следеће недеље",
     "clearSearch": "Обриши претрагу",
@@ -11225,5 +11223,6 @@
     "pairSecondDevice": "Упари други уређај",
     "secondDevice": "Други уређај",
     "pairSecondDeviceDescription": "Повежите OmiGlass уз свој Omi како би фотографије и звук ишли у исти разговор.",
-    "forgetSecondDevice": "Заборави други уређај"
+    "forgetSecondDevice": "Заборави други уређај",
+    "conversationSummaryFailed": "Резиме није успео"
 }

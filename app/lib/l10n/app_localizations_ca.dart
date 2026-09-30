@@ -10160,12 +10160,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'No s\'ha pogut llegir l\'àudio — no es pot sincronitzar';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11714,4 +11708,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Oblida el segon dispositiu';
+
+  @override
+  String get conversationSummaryFailed => 'No s\'ha pogut crear el resum';
 }

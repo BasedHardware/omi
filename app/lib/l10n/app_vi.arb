@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Gắn thẻ cả lời nói sau này của người nói này",
     "updateSummaryWithNewNames": "Cập nhật tóm tắt với tên mới",
     "syncStatusUnsupportedAudio": "Không đọc được âm thanh — không thể đồng bộ",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Bạn có thể giúp gì cho tôi?} goal{Giúp tôi đặt mục tiêu} activity{Tóm tắt hoạt động gần đây của tôi} improve{Tôi có thể cải thiện như thế nào?} other{}}",
     "nextWeek": "Tuần tới",
     "clearSearch": "Xóa tìm kiếm",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.",
     "pairSecondDevice": "Ghép nối thiết bị thứ hai",
     "secondDevice": "Thiết bị thứ hai",
-    "forgetSecondDevice": "Quên thiết bị thứ hai"
+    "forgetSecondDevice": "Quên thiết bị thứ hai",
+    "conversationSummaryFailed": "Tạo tóm tắt thất bại"
 }

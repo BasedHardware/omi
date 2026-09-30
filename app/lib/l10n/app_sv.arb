@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Märk även senare tal från den här talaren",
     "updateSummaryWithNewNames": "Uppdatera sammanfattningen med de nya namnen",
     "syncStatusUnsupportedAudio": "Ljudet kunde inte läsas — kan inte synkroniseras",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Vad kan du göra för mig?} goal{Hjälp mig att sätta ett mål} activity{Sammanfatta mina senaste aktiviteter} improve{Hur kan jag bli bättre?} other{}}",
     "nextWeek": "Nästa vecka",
     "clearSearch": "Rensa sökning",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "Anslut OmiGlass tillsammans med din Omi så att bilder och ljud hamnar i samma konversation.",
     "pairSecondDevice": "Para ihop en andra enhet",
     "secondDevice": "Andra enhet",
-    "forgetSecondDevice": "Glöm andra enhet"
+    "forgetSecondDevice": "Glöm andra enhet",
+    "conversationSummaryFailed": "Sammanfattningen misslyckades"
 }

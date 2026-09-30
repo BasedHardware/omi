@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Atzīmēt arī šī runātāja turpmāko runu",
     "updateSummaryWithNewNames": "Atjaunināt kopsavilkumu ar jaunajiem vārdiem",
     "syncStatusUnsupportedAudio": "Neizdevās nolasīt audio — nevar sinhronizēt",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ko tu vari manā labā darīt?} goal{Palīdzi man izvirzīt mērķi} activity{Apkopo manas nesenās aktivitātes} improve{Kā es varu pilnveidoties?} other{}}",
     "nextWeek": "Nākamnedēļ",
     "clearSearch": "Notīrīt meklēšanu",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "Pievienojiet OmiGlass līdzās savam Omi, lai fotoattēli un audio nonāktu vienā sarunā.",
     "pairSecondDevice": "Savienot pārī otro ierīci",
     "secondDevice": "Otrā ierīce",
-    "forgetSecondDevice": "Aizmirst otro ierīci"
+    "forgetSecondDevice": "Aizmirst otro ierīci",
+    "conversationSummaryFailed": "Kopsavilkums neizdevās"
 }

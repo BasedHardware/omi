@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Ook latere spraak van deze spreker taggen",
     "updateSummaryWithNewNames": "Samenvatting bijwerken met nieuwe namen",
     "syncStatusUnsupportedAudio": "Audio niet leesbaar — kan niet worden gesynchroniseerd",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Wat kun je voor me doen?} goal{Help me een doel te stellen} activity{Vat mijn recente activiteiten samen} improve{Hoe kan ik me verbeteren?} other{}}",
     "nextWeek": "Volgende week",
     "clearSearch": "Zoekopdracht wissen",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "Verbind OmiGlass naast je Omi zodat foto's en audio in hetzelfde gesprek terechtkomen.",
     "pairSecondDevice": "Tweede apparaat koppelen",
     "secondDevice": "Tweede apparaat",
-    "forgetSecondDevice": "Tweede apparaat vergeten"
+    "forgetSecondDevice": "Tweede apparaat vergeten",
+    "conversationSummaryFailed": "Samenvatting mislukt"
 }

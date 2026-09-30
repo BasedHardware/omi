@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Označit i pozdější řeč tohoto mluvčího",
     "updateSummaryWithNewNames": "Aktualizovat souhrn s novými jmény",
     "syncStatusUnsupportedAudio": "Zvuk nelze přečíst — synchronizace není možná",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Co pro mě můžeš udělat?} goal{Pomoz mi stanovit cíl} activity{Shrň mé nedávné aktivity} improve{Jak se mohu zlepšit?} other{}}",
     "nextWeek": "Příští týden",
     "clearSearch": "Vymazat hledání",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.",
     "pairSecondDevice": "Spárovat druhé zařízení",
     "secondDevice": "Druhé zařízení",
-    "forgetSecondDevice": "Zapomenout druhé zařízení"
+    "forgetSecondDevice": "Zapomenout druhé zařízení",
+    "conversationSummaryFailed": "Shrnutí se nepodařilo"
 }

@@ -168,15 +168,19 @@ env:
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
-    value: "false"
+    value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "false"
+    value: "true"
   - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
-    value: "false"
+    value: "true"
   - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
-    value: "false"
+    value: "true"
   - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
-    value: "false"
+    value: "true"
+  - name: BUCKET_SCREEN_FRAMES
+    value: "based-hardware-prod-screen-frames"
+  - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
+    value: "25"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
   - name: CAPTURE_JEV_SHADOW_ENABLED
@@ -185,6 +189,10 @@ env:
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: CAPTURE_JEV_SHADOW_PERCENT
     value: "0"
+  # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
+  # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
+  - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE

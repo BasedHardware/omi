@@ -12,9 +12,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import math
 from concurrent.futures import wait
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -38,6 +37,12 @@ from utils.executors import llm_executor, storage_executor, submit_with_context
 from utils.other import endpoints as auth
 from utils.screen_frames import enforcement, store as screen_frame_store
 from utils.screen_frames.availability import screen_frame_egress_enabled
+from utils.conversations.screen_content_window import (
+    LEGACY_LIFECYCLE_FINGERPRINT,
+    ensure_aware as _ensure_aware,
+    selection_fingerprint as _selection_fingerprint,
+    trusted_content_window as _trusted_content_window,
+)
 from utils.screen_frames.pipeline import (
     ScreenFrameDigestMismatch,
     canonicalize_for_judging,
@@ -59,17 +64,8 @@ router = APIRouter()
 MAX_CANDIDATE_DECODED_BYTES = 20 * 1024 * 1024
 
 CAPTURE_WINDOW_SLACK_SECONDS = 120
-CONTENT_WINDOW_POLICY = 'meeting-content-v1'
-LEGACY_CONTENT_WINDOW_TOLERANCE_SECONDS = 30
-LEGACY_LIFECYCLE_FINGERPRINT = 'legacy-lifecycle-v1'
 IDEMPOTENCY_TTL_SECONDS = 86400
 EMPTY_FRAME_SET = ConversationScreenFrameSet(revision=0, banner=None, strip=[])
-
-
-def _ensure_aware(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
 
 
 def _get_owned_conversation(uid: str, conversation_id: str) -> Dict[str, Any]:
@@ -101,57 +97,6 @@ def _require_adjudication_admission(uid: str, conversation: Dict[str, Any]) -> N
         raise HTTPException(status_code=409, detail={"code": "conversation_not_completed"})
     if not users_db.get_meeting_note_screenshots_enabled(uid):
         raise HTTPException(status_code=409, detail={"code": "meeting_note_screenshots_disabled"})
-
-
-def _selection_fingerprint(lower: datetime, upper: datetime) -> str:
-    lower_ms = round(lower.timestamp() * 1000)
-    upper_ms = round(upper.timestamp() * 1000)
-    return f'{CONTENT_WINDOW_POLICY}:{lower_ms}:{upper_ms}'
-
-
-def _trusted_content_window(conversation: Dict[str, Any]) -> tuple[datetime, datetime] | None:
-    """Project transcript offsets only when their wall-clock origin is trustworthy.
-
-    Legacy listen rows can preserve a socket-first-audio ``started_at`` across a rollover, while
-    their transcript offsets restart at zero. In that shape, the projection disagrees with
-    ``finished_at`` and must not be used to retrieve screen content.
-    """
-    started_at = conversation.get('started_at')
-    if not isinstance(started_at, datetime):
-        return None
-
-    spans: list[tuple[float, float]] = []
-    for segment in conversation.get('transcript_segments') or []:
-        if not isinstance(segment, dict) or not str(segment.get('text') or '').strip():
-            continue
-        start = segment.get('start')
-        end = segment.get('end')
-        if isinstance(start, bool) or isinstance(end, bool) or not isinstance(start, (int, float)):
-            continue
-        if not isinstance(end, (int, float)) or not math.isfinite(start) or not math.isfinite(end):
-            continue
-        if start < 0 or end <= start:
-            continue
-        spans.append((float(start), float(end)))
-    if not spans:
-        return None
-
-    started_at = _ensure_aware(started_at)
-    lower = started_at + timedelta(seconds=min(start for start, _ in spans))
-    upper = started_at + timedelta(seconds=max(end for _, end in spans))
-    audio_timeline = conversation.get('audio_timeline')
-    external_data = conversation.get('external_data') or {}
-    has_trusted_origin = (isinstance(audio_timeline, dict) and audio_timeline.get('version') == 2) or (
-        isinstance(external_data, dict) and bool(external_data.get('from_segments_client_session_id'))
-    )
-    if not has_trusted_origin:
-        finished_at = conversation.get('finished_at')
-        if not isinstance(finished_at, datetime):
-            return None
-        difference = abs((upper - _ensure_aware(finished_at)).total_seconds())
-        if difference > LEGACY_CONTENT_WINDOW_TOLERANCE_SECONDS:
-            return None
-    return lower, upper
 
 
 def _validate_capture_window(conversation: Dict[str, Any], candidates: List[ScreenFrameCandidateIn]) -> str:
@@ -361,18 +306,22 @@ def adjudicate_screen_frames(
             raise HTTPException(status_code=503, detail={"code": "writer_unavailable"}) from failure
         raise
 
-    # Mark the attempt BEFORE building the response, and unconditionally — an all-rejected pass
+    # Mark the attempt unconditionally (below, once the docs are persisted) — an all-rejected pass
     # is exactly the case this exists for. `revision` cannot record it, because nothing was
     # approved to bump it, so without this the client cannot tell that it already offered these
     # frames and had them refused, and re-uploads them on every reopen.
+    committed = enforcement.persist_enforced_frames(uid, request.subject.id, policy.max_persisted, new_frames)
+    # Stamped after the frame docs are persisted and before the response is built: the notes
+    # finalizer treats this marker as "the evidence is readable"
+    # (utils/conversations/meeting_evidence_admission.py), so it must never precede the docs,
+    # and a failure building the response (URL signing) must not leave the pass unmarked.
     screen_frames_db.mark_conversation_screen_frames_adjudicated(
         uid,
         request.subject.id,
         selection_fingerprint=selection_fingerprint,
         bucket=bucket,
     )
-
-    frame_set, committed = enforcement.enforce_and_persist(uid, request.subject.id, policy.max_persisted, new_frames)
+    frame_set = enforcement.build_frame_set_response(uid, request.subject.id)
     response = ScreenFrameAdjudicationResponse(
         attempt_id=request.attempt_id,
         outcome="committed" if committed else "no_approved_frames",

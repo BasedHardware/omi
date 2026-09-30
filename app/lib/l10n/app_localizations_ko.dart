@@ -9932,12 +9932,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncStatusUnsupportedAudio => '오디오를 읽을 수 없어 동기화할 수 없습니다';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11458,4 +11452,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => '두 번째 기기 삭제';
+
+  @override
+  String get conversationSummaryFailed => '요약 실패';
 }

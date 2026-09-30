@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Spätere Sprache dieses Sprechers ebenfalls markieren",
     "updateSummaryWithNewNames": "Zusammenfassung mit neuen Namen aktualisieren",
     "syncStatusUnsupportedAudio": "Audio nicht lesbar — Synchronisierung nicht möglich",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Was kannst du für mich tun?} goal{Hilf mir, ein Ziel zu setzen} activity{Fasse meine letzten Aktivitäten zusammen} improve{Wie kann ich mich verbessern?} other{}}",
     "nextWeek": "Nächste Woche",
     "clearSearch": "Suche löschen",
@@ -3665,5 +3663,6 @@
     "pairSecondDeviceDescription": "Verbinde OmiGlass zusätzlich zu deinem Omi, damit Fotos und Audio in dieselbe Unterhaltung fließen.",
     "pairSecondDevice": "Zweites Gerät koppeln",
     "secondDevice": "Zweites Gerät",
-    "forgetSecondDevice": "Zweites Gerät vergessen"
+    "forgetSecondDevice": "Zweites Gerät vergessen",
+    "conversationSummaryFailed": "Zusammenfassung fehlgeschlagen"
 }

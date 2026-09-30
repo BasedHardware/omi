@@ -10134,12 +10134,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'ಆಡಿಯೋ ಓದಲಾಗಲಿಲ್ಲ — ಸಿಂಕ್ ಮಾಡಲಾಗದು';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11683,4 +11677,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ';
+
+  @override
+  String get conversationSummaryFailed => 'ಸಾರಾಂಶ ವಿಫಲವಾಗಿದೆ';
 }

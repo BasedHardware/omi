@@ -121,6 +121,7 @@ def with_conversation_notes_v2_env(payload: str) -> str:
         r'\n        {"name": "MEETING_NOTES_RICH_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "MEETING_NOTES_EVIDENCE_WAIT_SECONDS", "value": "25"},'
         r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
     )
     payload = re.sub(
