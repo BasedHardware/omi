@@ -11556,6 +11556,68 @@ class AppLocalizationsVi extends AppLocalizations {
   String get voiceRecognitionSettings => 'Nhận dạng giọng nói';
 
   @override
+  String get greetingMorning => 'Chào buổi sáng';
+
+  @override
+  String get greetingAfternoon => 'Chào buổi chiều';
+
+  @override
+  String get greetingEvening => 'Chào buổi tối';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Bạn muốn biết điều gì?';
+
+  @override
+  String get askSuggestDecide => 'Hôm nay tôi đã quyết định gì?';
+
+  @override
+  String get askSuggestOwe => 'Tôi còn nợ ai điều gì?';
+
+  @override
+  String get askSuggestNotice => 'Omi nhận thấy điều gì?';
+
+  @override
+  String get pastChats => 'Các cuộc trò chuyện trước';
+
+  @override
+  String get newChat => 'Cuộc trò chuyện mới';
+
+  @override
+  String get startFresh => 'Bắt đầu lại';
+
+  @override
+  String get noPastChats => 'Các cuộc trò chuyện của bạn với Omi xuất hiện ở đây.';
+
+  @override
+  String get deleteChatQuestion => 'Xóa cuộc trò chuyện này?';
+
+  @override
+  String get deleteChatMessage => 'Nó sẽ biến mất khỏi các cuộc trò chuyện trước vĩnh viễn.';
+
+  @override
+  String get deleteChat => 'Xóa cuộc trò chuyện';
+
+  @override
+  String get appsAskWith => 'Hỏi Omi bằng';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hôm nay có $count cuộc trò chuyện.',
+      one: 'Hôm nay có 1 cuộc trò chuyện.',
+      zero: 'Hôm nay chưa có cuộc trò chuyện.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get meetingScreenshotsTitle => 'Nội dung trên màn hình';
 
   @override

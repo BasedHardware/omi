@@ -11570,6 +11570,68 @@ class AppLocalizationsSv extends AppLocalizations {
   String get voiceRecognitionSettings => 'Röstigenkänning';
 
   @override
+  String get greetingMorning => 'God morgon';
+
+  @override
+  String get greetingAfternoon => 'God eftermiddag';
+
+  @override
+  String get greetingEvening => 'God kväll';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Vad vill du veta?';
+
+  @override
+  String get askSuggestDecide => 'Vad bestämde jag i dag?';
+
+  @override
+  String get askSuggestOwe => 'Vad är jag fortfarande skyldig folk?';
+
+  @override
+  String get askSuggestNotice => 'Vad märkte Omi?';
+
+  @override
+  String get pastChats => 'Tidigare chattar';
+
+  @override
+  String get newChat => 'Ny chatt';
+
+  @override
+  String get startFresh => 'Börja om';
+
+  @override
+  String get noPastChats => 'Dina chattar med Omi visas här.';
+
+  @override
+  String get deleteChatQuestion => 'Radera den här chatten?';
+
+  @override
+  String get deleteChatMessage => 'Den försvinner från tidigare chattar för gott.';
+
+  @override
+  String get deleteChat => 'Radera chatt';
+
+  @override
+  String get appsAskWith => 'Fråga Omi med';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtal i dag.',
+      one: '1 samtal i dag.',
+      zero: 'Inga samtal i dag.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get meetingScreenshotsTitle => 'Vad som visades på skärmen';
 
   @override

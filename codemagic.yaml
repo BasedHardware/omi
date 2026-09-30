@@ -396,6 +396,7 @@ workflows:
         - app_env
         - firebase
         - shorebird
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for collect_mobile_release_admission.py
       vars:
         APP_ID: 6502156163
       flutter: 3.44.5
@@ -762,6 +763,7 @@ workflows:
         - firebase
         - google_play
         - shorebird
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for collect_mobile_release_admission.py
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
@@ -2912,12 +2914,9 @@ workflows:
     environment:
       groups:
         - google_play
-      vars:
-        CONFIRM: ""
-        PROMOTE_PLATFORM: ""
-        PROMOTE_VERSION: ""
-        PROMOTE_IOS_BUILD: ""
-        PROMOTE_ANDROID_BUILD: ""
+      # CONFIRM, PROMOTE_PLATFORM, PROMOTE_VERSION, PROMOTE_IOS_BUILD and PROMOTE_ANDROID_BUILD are
+      # supplied per run (Codemagic API `environment.variables` or the start-build dialog). Declaring
+      # them here with empty defaults failed Codemagic's yaml validation, so the workflow never started.
     working_directory: app
     scripts:
       - name: Submit explicitly selected existing builds

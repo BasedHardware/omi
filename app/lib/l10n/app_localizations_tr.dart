@@ -11573,6 +11573,68 @@ class AppLocalizationsTr extends AppLocalizations {
   String get voiceRecognitionSettings => 'Ses Tanıma';
 
   @override
+  String get greetingMorning => 'Günaydın';
+
+  @override
+  String get greetingAfternoon => 'İyi öğleden sonralar';
+
+  @override
+  String get greetingEvening => 'İyi akşamlar';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ne bilmek istersin?';
+
+  @override
+  String get askSuggestDecide => 'Bugün neye karar verdim?';
+
+  @override
+  String get askSuggestOwe => 'Hâlâ insanlara ne borçluyum?';
+
+  @override
+  String get askSuggestNotice => 'Omi neyi fark etti?';
+
+  @override
+  String get pastChats => 'Geçmiş sohbetler';
+
+  @override
+  String get newChat => 'Yeni sohbet';
+
+  @override
+  String get startFresh => 'Baştan başla';
+
+  @override
+  String get noPastChats => 'Omi ile sohbetleriniz burada görünür.';
+
+  @override
+  String get deleteChatQuestion => 'Bu sohbet silinsin mi?';
+
+  @override
+  String get deleteChatMessage => 'Geçmiş sohbetlerden kalıcı olarak kaldırılır.';
+
+  @override
+  String get deleteChat => 'Sohbeti sil';
+
+  @override
+  String get appsAskWith => 'Omi\'ye şununla sor';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Bugün $count konuşma.',
+      one: 'Bugün 1 konuşma.',
+      zero: 'Bugün konuşma yok.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get meetingScreenshotsTitle => 'Ekranda olanlar';
 
   @override

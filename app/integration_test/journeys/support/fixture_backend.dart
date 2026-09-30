@@ -40,6 +40,7 @@ class JourneyFixtureBackend {
   final List<Map<String, dynamic>> conversations = [];
   final List<Map<String, dynamic>> memories = [];
   final List<Map<String, dynamic>> actionItems = [];
+  final List<Map<String, dynamic>> chatSessions = [];
 
   /// Meeting screenshot sets by conversation id, in the owner route's wire shape
   /// (`ConversationScreenFrameSet`). A conversation without one serves the empty set, as the real
@@ -159,6 +160,32 @@ class JourneyFixtureBackend {
         final uid = body['uid'] as String? ?? fixtureUid;
         req.response.statusCode = 200;
         req.response.write(jsonEncode({'custom_token': 'synthetic-custom-token-for-$uid'}));
+        await req.response.close();
+        return;
+
+      case 'POST /v2/chat-sessions':
+        final session = {
+          'id': 'fixture-chat-${chatSessions.length}',
+          'title': 'New Chat',
+          'created_at': DateTime.utc(2026, 9, 29).toIso8601String(),
+          'updated_at': DateTime.utc(2026, 9, 29).toIso8601String(),
+          'message_count': 0
+        };
+        chatSessions.insert(0, session);
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(session));
+        await req.response.close();
+        return;
+      case 'GET /v2/chat-sessions':
+        final offset = int.tryParse(req.uri.queryParameters['offset'] ?? '') ?? 0;
+        final limit = int.tryParse(req.uri.queryParameters['limit'] ?? '') ?? 50;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(chatSessions.skip(offset).take(limit).toList()));
+        await req.response.close();
+        return;
+      case 'POST /v2/chat/generate-title':
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({'title': 'Fixture chat'}));
         await req.response.close();
         return;
 
