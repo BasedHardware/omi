@@ -1,7 +1,7 @@
 """Scores — daily, weekly, and overall productivity scores computed from action items."""
 
 import logging
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
