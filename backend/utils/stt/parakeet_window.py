@@ -216,6 +216,7 @@ class _WindowJob:
     end_bytes: int
     force: bool
     pause: bool
+    terminal_silence: bool = False
 
 
 class WindowAdmission:
@@ -422,6 +423,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._wake = asyncio.Event()
         self._pause_requested = False
         self._idle_flushed = False
+        self._capture_silence_seconds = 0.0
+        self._capture_silence_flush = False
+        self._short_fragment_answered = False
         self._last_accepted_at = 0.0
         self._last_post_anchor = -1
         self._last_post_end = -1
@@ -470,7 +474,13 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     def has_untranscribed_speech(self) -> bool:
         """Whether replay still protects speech that this leg has not emitted."""
-        return (self._first_speech_at is not None and not self._first_text_recorded) or self._has_unemitted_speech()
+        # finish() clears the PCM/spans. A failed or closing leg must still
+        # protect its replay snapshot until the receiver replaces/drains it.
+        if self._closed or self._dead:
+            return True
+        return (
+            self._first_speech_at is not None and not self._first_text_recorded and not self._short_fragment_answered
+        ) or self._has_unemitted_speech()
 
     def replay_anchor_sample(self) -> int | None:
         """Provider sample before which emitted text makes capture replay unnecessary."""
@@ -553,8 +563,31 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if not self._first_text_recorded and not self._closed and not self._dead:
             self.fail('first_text_deadline')
 
+    def observe_capture(self, is_speech: bool, duration: float, *, speech_ended: bool = False) -> None:
+        """See gated-out silence too; capture can advance faster than wall time."""
+        if self._closed or self._dead:
+            return
+        if is_speech:
+            self._capture_silence_seconds = 0.0
+            self._capture_silence_flush = False
+        else:
+            self._capture_silence_seconds = min(SILENCE_FLUSH_SECONDS, self._capture_silence_seconds + duration)
+            if (
+                (speech_ended or self._capture_silence_seconds >= SILENCE_FLUSH_SECONDS)
+                and not self._capture_silence_flush
+                and not self._idle_flushed
+                and self._has_unemitted_speech()
+            ):
+                self._capture_silence_flush = True
+                self._wake.set()
+
     def mark_speech(self) -> None:
+        if not self._has_unemitted_speech():
+            # A VAD finalize received with no pending speech belongs to the
+            # previous utterance, not this new fragment.
+            self._pause_requested = False
         self._next_send_speech = True
+        self._short_fragment_answered = False
 
     def _buffer_cap(self) -> int:
         return int(buffer_cap_seconds(self._pace_seconds, self._max_context_seconds) * self._sample_rate) * 2
@@ -747,7 +780,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self._release()
 
     async def _run_job(self, job: _WindowJob) -> None:
-        segments = await self._post_and_parse(job.pcm, job.duration)
+        posted_pcm = job.pcm
+        if job.terminal_silence and len(posted_pcm) < self._silence_bytes:
+            # Give a short completed fragment a silence envelope, retaining
+            # the real duration for timestamps and the original PCM for replay.
+            posted_pcm += bytes(self._silence_bytes - len(posted_pcm))
+        segments = await self._post_and_parse(posted_pcm, job.duration)
         if self._dead:
             return
         if segments:
@@ -829,6 +867,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._beyond_window_repost = None
         if new_anchor_bytes is not None:
             self._advance_anchor(new_anchor_bytes)
+            if (
+                job.terminal_silence
+                and job.duration <= SILENCE_FLUSH_SECONDS
+                and not beyond_window
+                and not self._has_unemitted_speech()
+            ):
+                # Only an answered, completed short clip resolves startup
+                # accounting. Empty context-cap slides keep replay protection.
+                self._short_fragment_answered = True
+                self._capture_silence_flush = False
+                self._replay_cut_requested = False
             if emitted:
                 self._replay_cut_requested = False
         if cut_requested:
@@ -905,7 +954,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 stepped = self._anchor_bytes + self._pace_bytes
             closing = self._closed
             pause = False
-            if silence_flush or idle_flush:
+            if silence_flush or idle_flush or self._capture_silence_flush:
                 end = min(received, self._anchor_bytes + self._max_context_bytes)
                 force = True
             elif closing:
@@ -929,14 +978,25 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             if not force and self._anchor_bytes == self._last_post_anchor and end <= self._last_post_end:
                 self._pause_requested = False
                 return None
-            if idle_flush and end >= received:
+            terminal_silence = (silence_flush or idle_flush or self._capture_silence_flush) and end >= received
+            if terminal_silence:
                 self._idle_flushed = True
+                self._capture_silence_flush = False
             if self._pause_requested and (pause or force or end >= received):
                 self._pause_requested = False
             pcm = self._pcm_range_locked(self._anchor_bytes, end)
             start = self._to_seconds(self._anchor_bytes)
             duration = self._to_seconds(end - self._anchor_bytes)
-            return _WindowJob(pcm, start, duration, self._anchor_bytes, end, force, pause)
+            return _WindowJob(
+                pcm,
+                start,
+                duration,
+                self._anchor_bytes,
+                end,
+                force,
+                pause,
+                terminal_silence=terminal_silence,
+            )
 
     def _origin_bytes(self) -> int:
         return self._received_bytes - len(self._buf)

@@ -503,6 +503,8 @@ class LiveLegSocket(STTSocket):
             self._send_tracker.send_path = 'managed_chain'
             self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
+        if self.window and output is not None and isinstance(self.raw, WindowedParakeetSocket):
+            self.raw.observe_capture(output.is_speech, duration, speech_ended=output.should_finalize)
         self._seconds += duration
         speech_ms = self.gate.consume_speech_ms_delta() if self.gate is not None else 0
         if not self._replaying:

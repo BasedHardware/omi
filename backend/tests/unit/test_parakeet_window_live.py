@@ -1230,6 +1230,161 @@ async def test_partial_vad_admission_unfinished_tdt_tail_keeps_replay_anchor_wit
     await actual._drain_stt_sockets()
 
 
+async def _fragment_session(monkeypatch, *, earlier_text=False, response_text=False):
+    def short_response(_n, kwargs):
+        pcm = np.frombuffer(_posted_pcm(kwargs), dtype=np.int16)
+        onset = int(np.flatnonzero(pcm)[0]) / 16000
+        return {'segments': [{'text': 'Short.', 'start': onset, 'end': onset + 0.02}]}
+
+    client = SeqClient(
+        ([{'segments': [{'text': 'Earlier.', 'start': 0.0, 'end': 4.5}]}] if earlier_text else [])
+        + [short_response if response_text else {'text': ''}]
+    )
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    previous.raw._first_text_deadline = 12
+    clock = [window.time.monotonic()]
+    # Keep asyncio's scheduling clock real, and control only the socket's wall
+    # observations. This models capture ahead of wall time without waiting 90s.
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=window.time.time))
+    job_signals = []
+    original_run = previous.raw._run_job
+
+    async def observed_run(job):
+        job_signals.append((job.start, job.duration, job.force, job.pause, job.terminal_silence))
+        return await original_run(job)
+
+    monkeypatch.setattr(previous.raw, '_run_job', observed_run)
+    previous.raw.test_job_signals = job_signals
+    sample = 0
+    if earlier_text:
+        pcm = b'\x01\x00' * 16000 * 6
+        await _flush_capture(actual, pcm, sample)
+        sample += 6 * 16000
+        clock[0] += 2  # select the first window as a completed idle utterance
+        for _ in range(100):
+            if base.emitted:
+                break
+            await _REAL_SLEEP(0)
+        assert len(base.emitted) == 1
+    return actual, base, previous, client, replayed, callbacks, clock, sample
+
+
+async def _fragment_frame(actual, clock, sample, *, speech=False, wall_seconds=0.04):
+    pcm = (b'\x01\x00' if speech else b'\x00\x00') * 640
+    clock[0] += wall_seconds
+    await _flush_capture(actual, pcm, sample)
+    await _REAL_SLEEP(0)
+    return sample + 640
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('earlier_text', [False, True])
+@pytest.mark.parametrize('response_text', [False, True])
+async def test_late_blip_after_full_silent_ring_flushes_once_without_capacity_failover(
+    monkeypatch, earlier_text, response_text
+):
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(
+        monkeypatch, earlier_text=earlier_text, response_text=response_text
+    )
+    # The signature does not locate the blip within the 90s ring. In fact a
+    # NEW blip after long silence hits a full ring before either timer is due.
+    for _ in range(4725 if earlier_text else 2250):
+        sample = await _fragment_frame(actual, clock, sample)
+    previous.raw._next_post = 0  # the long quiet interval outlives the wall pace
+    sample = await _fragment_frame(actual, clock, sample, speech=True)
+    assert actual.stt_socket is previous
+    assert previous.raw._received_bytes >= int(0.28 * 16000) * 2
+    if not earlier_text:
+        assert previous.raw._first_text_timer is not None  # armed on send, not POST
+        assert clock[0] - previous.raw._first_speech_at < 0.05
+    sample = await _fragment_frame(actual, clock, sample)
+    assert actual.stt_socket is previous, previous.raw.replay_lag_diagnostics
+    for _ in range(2250):
+        sample = await _fragment_frame(actual, clock, sample)
+        assert actual.stt_socket is previous
+        assert actual._window_ring().buffered_bytes <= 90 * 16000 * 2
+    assert len(client.requests) == 1 + int(earlier_text), previous.raw.test_job_signals
+    assert previous.raw._empty_streak == int(not response_text)
+    assert not previous.raw._has_unemitted_speech()
+    assert not replayed and not callbacks
+    if response_text:
+        assert [item['text'] for item in base.emitted] == (['Earlier.'] if earlier_text else []) + ['Short.']
+        assert previous.raw._first_text_timer is None
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('earlier_text', [False, True])
+@pytest.mark.parametrize('response_text', [False, True])
+async def test_blip_followed_by_fast_capture_silence_flushes_below_post_pace(monkeypatch, earlier_text, response_text):
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(
+        monkeypatch, earlier_text=earlier_text, response_text=response_text
+    )
+    sample = await _fragment_frame(actual, clock, sample, speech=True, wall_seconds=0)
+    for _ in range(2250):
+        sample = await _fragment_frame(actual, clock, sample, wall_seconds=0)
+        assert actual.stt_socket is previous, previous.raw.replay_lag_diagnostics
+    assert len(client.requests) == 1 + int(earlier_text)
+    assert [item['text'] for item in base.emitted] == (['Earlier.'] if earlier_text else []) + (
+        ['Short.'] if response_text else []
+    )
+    assert not previous.raw.has_untranscribed_speech()
+    assert not replayed and not callbacks
+    last_pcm = _posted_pcm(client.requests[-1][1])
+    assert len(last_pcm) >= int(window.SILENCE_FLUSH_SECONDS * 16000) * 2
+    assert len(last_pcm) > previous.raw._received_bytes - (6 * 16000 * 2 if earlier_text else 0)
+    if response_text or earlier_text:
+        assert previous.raw._first_text_timer is None
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['replay_ring_cap', 'first_text_deadline'])
+async def test_stalled_fragment_post_replays_once_without_late_text(monkeypatch, failure):
+    actual, base, previous, _client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    client = RacingTextClient()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sample = await _fragment_frame(actual, clock, sample, speech=True, wall_seconds=0)
+    for _ in range(50):
+        sample = await _fragment_frame(actual, clock, sample, wall_seconds=0)
+        if client.started.is_set():
+            break
+    assert client.started.is_set()
+    assert previous.raw._post_in_flight
+    ring = actual._window_ring()
+    snapshot = None
+    unsent = None
+    if failure == 'first_text_deadline':
+        snapshot = ring.snapshot()
+        previous.raw._expire_first_text()
+        assert previous.raw.has_untranscribed_speech()  # finish cleared PCM, not replay protection
+        unsent = bytes(640 * 2)
+        sample = await _fragment_frame(actual, clock, sample, wall_seconds=0)
+    else:
+        for _ in range(2300):
+            snapshot = ring.snapshot()
+            unsent = bytes(640 * 2)
+            sample = await _fragment_frame(actual, clock, sample, wall_seconds=0)
+            if actual.stt_socket is not previous:
+                break
+        else:
+            pytest.fail('stalled fragment must fail over before protected audio is evicted')
+        assert previous.raw.capacity_subtype == 'replay_ring_cap'
+    expected_reason = 'capacity_full' if failure == 'replay_ring_cap' else failure
+    assert previous.raw.death_reason == expected_reason
+    assert actual._pending_live_failover.reason == expected_reason
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == b''.join(data for _, data in snapshot) + (unsent or b'')
+    assert base.emitted == []
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert base.emitted == []
+    assert len(client.requests) == 1
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    await actual._drain_stt_sockets()
+
+
 class LagScenarioClient(ProgressThenHoldClient):
     def __init__(self, *, tiny=False):
         super().__init__()
@@ -1669,8 +1824,8 @@ async def test_completed_window_post_allows_silent_ring_trim_without_failover(mo
     assert not previous.is_connection_dead
     assert replayed == []
     assert callbacks == []
-    assert ring.snapshot()[0][0] == 16000
-    assert ring.buffered_bytes == len(pcm)
+    assert ring.snapshot()[0][0] == len(pcm) // 2 - int(0.3 * 16000)
+    assert ring.buffered_bytes == int(0.3 * 16000) * 2 + len(next_silence)
     await actual._drain_stt_sockets()
 
 
@@ -1798,8 +1953,8 @@ async def test_long_vad_silence_does_not_replace_healthy_window_leg(monkeypatch)
     assert actual.stt_socket is previous
     assert not previous.is_connection_dead
     assert not previous.raw.has_untranscribed_speech()
-    assert ring.buffered_bytes == 3 * len(one_second)
-    assert ring.snapshot()[0][0] == 2 * 16000
+    assert ring.buffered_bytes == int(1.3 * 16000) * 2
+    assert ring.snapshot()[0][0] == int(3.7 * 16000)
     assert client.requests == []
     fallback.assert_not_awaited()
     await actual._drain_stt_sockets()

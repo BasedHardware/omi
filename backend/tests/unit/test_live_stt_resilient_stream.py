@@ -180,7 +180,7 @@ async def test_window_ring_trims_only_after_all_speech_is_transcribed(monkeypatc
     assert raw.failure is None
     listener._failover_stt_socket.assert_not_awaited()
     assert sent == [(old, 6, b'B\x00' * 2)]
-    assert ring.snapshot() == ((2, b'A\x00' * 4), (6, b'B\x00' * 2))
+    assert ring.snapshot() == ((6, b'B\x00' * 2),)  # sub-sample lead-in at this fixture's 2 Hz
     assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before + 1
 
 

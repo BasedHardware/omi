@@ -8,6 +8,7 @@ from collections import deque
 from typing import Any, Literal
 
 from utils.stt.live_metrics import RECONNECT, REPLAY_SECONDS, WINDOW_REPLAY_SAFE_TRIMS
+from utils.stt.window_anchor import LEAD_IN_SECONDS
 
 RING_SECONDS = 15
 MAX_RECONNECTS = 3
@@ -121,6 +122,13 @@ def window_replay_action(
     raw = getattr(socket, 'raw', None)
     has_untranscribed_speech = getattr(raw, 'has_untranscribed_speech', None)
     speech_pending = callable(has_untranscribed_speech) and has_untranscribed_speech()
+    if callable(has_untranscribed_speech) and not speech_pending:
+        # Keeping 90s of settled silence leaves a NEW blip only one capture
+        # packet of headroom. Keep the VAD pre-roll instead, before admission.
+        _, capture_end = ring.capture_bounds
+        keep_from = max(0, capture_end - int(LEAD_IN_SECONDS * ring.sample_rate))
+        if ring.finalize_through(keep_from):
+            WINDOW_REPLAY_SAFE_TRIMS.inc()
     request_cut = getattr(raw, 'request_replay_cut', None)
     if (
         speech_pending
