@@ -87,6 +87,8 @@ def create_advice(
             context_summary=request.context_summary,
             current_activity=request.current_activity,
         )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except HTTPException:
         raise
     except Exception as e:
@@ -106,6 +108,8 @@ def get_advice(
         return advice_db.get_advice(
             uid, limit=limit, offset=offset, category=category, include_dismissed=include_dismissed
         )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except HTTPException:
         raise
     except Exception as e:
@@ -124,6 +128,8 @@ def update_advice(
         raise HTTPException(status_code=400, detail='At least one of is_read or is_dismissed is required')
     try:
         result = advice_db.update_advice(uid, advice_id, is_read=request.is_read, is_dismissed=request.is_dismissed)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except HTTPException:
         raise
     except Exception as e:
@@ -142,6 +148,8 @@ def delete_advice(
     advice_id = _require_advice_id(advice_id)
     try:
         deleted = advice_db.delete_advice(uid, advice_id)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except HTTPException:
         raise
     except Exception as e:
@@ -156,6 +164,8 @@ def delete_advice(
 def mark_all_advice_read(uid: str = Depends(auth.get_current_user_uid)):
     try:
         count = advice_db.mark_all_advice_read(uid)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except HTTPException:
         raise
     except Exception as e:

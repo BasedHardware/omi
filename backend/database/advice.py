@@ -19,21 +19,42 @@ logger = logging.getLogger(__name__)
 BATCH_LIMIT = 500  # Firestore hard limit
 
 
+def _clean_str(val: Any, name: str) -> str:
+    if not val or not isinstance(val, str):
+        raise ValueError(f"{name} must be a non-empty string")
+    clean = val.strip()
+    if not clean:
+        raise ValueError(f"{name} must be a non-empty string")
+    return clean
+
+
 def _user_col(uid: str, collection: str) -> Any:
     """Shorthand for users/{uid}/{collection}."""
-    return db.collection('users').document(uid).collection(collection)
+    clean_uid = _clean_str(uid, 'uid')
+    return db.collection('users').document(clean_uid).collection(collection)
 
 
 def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any) -> Dict[str, Any]:
+    clean_uid = _clean_str(uid, 'uid')
+    clean_content = _clean_str(content, 'content')
+    confidence_val = kwargs.get('confidence', 0.5)
+    if confidence_val is not None:
+        try:
+            confidence = max(0.0, min(1.0, float(confidence_val)))
+        except (ValueError, TypeError):
+            confidence = 0.5
+    else:
+        confidence = 0.5
+
     advice_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     doc: Dict[str, Any] = {
         'id': advice_id,
-        'content': content,
-        'category': category,
+        'content': clean_content,
+        'category': category or 'other',
         'reasoning': kwargs.get('reasoning'),
         'source_app': kwargs.get('source_app'),
-        'confidence': kwargs.get('confidence', 0.5),
+        'confidence': confidence,
         'context_summary': kwargs.get('context_summary'),
         'current_activity': kwargs.get('current_activity'),
         'created_at': now,
@@ -41,14 +62,17 @@ def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any
         'is_read': False,
         'is_dismissed': False,
     }
-    _user_col(uid, 'advice').document(advice_id).set(doc)
+    _user_col(clean_uid, 'advice').document(advice_id).set(doc)
     return doc
 
 
 def get_advice(
     uid: str, category: Optional[str] = None, limit: int = 50, offset: int = 0, include_dismissed: bool = False
 ) -> List[Dict[str, Any]]:
-    col = _user_col(uid, 'advice')
+    clean_uid = _clean_str(uid, 'uid')
+    limit = max(1, min(1000, int(limit) if limit is not None else 50))
+    offset = max(0, int(offset) if offset is not None else 0)
+    col = _user_col(clean_uid, 'advice')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
     if category:
         query = query.where(filter=FieldFilter('category', '==', category))
@@ -70,7 +94,9 @@ def get_advice(
 def update_advice(
     uid: str, advice_id: str, is_read: Optional[bool] = None, is_dismissed: Optional[bool] = None
 ) -> Optional[Dict[str, Any]]:
-    ref = _user_col(uid, 'advice').document(advice_id)
+    clean_uid = _clean_str(uid, 'uid')
+    clean_advice_id = _clean_str(advice_id, 'advice_id')
+    ref = _user_col(clean_uid, 'advice').document(clean_advice_id)
     snap = ref.get()
     if not getattr(snap, "exists", False):
         return None
@@ -89,12 +115,14 @@ def update_advice(
         # The advice was deleted between the update and the re-read.
         return None
     result: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-    result['id'] = advice_id
+    result['id'] = clean_advice_id
     return result
 
 
 def delete_advice(uid: str, advice_id: str) -> bool:
-    ref = _user_col(uid, 'advice').document(advice_id)
+    clean_uid = _clean_str(uid, 'uid')
+    clean_advice_id = _clean_str(advice_id, 'advice_id')
+    ref = _user_col(clean_uid, 'advice').document(clean_advice_id)
     if not getattr(ref.get(), "exists", False):
         return False
     ref.delete()
@@ -102,7 +130,8 @@ def delete_advice(uid: str, advice_id: str) -> bool:
 
 
 def mark_all_advice_read(uid: str) -> int:
-    col = _user_col(uid, 'advice')
+    clean_uid = _clean_str(uid, 'uid')
+    col = _user_col(clean_uid, 'advice')
     query = col.where(filter=FieldFilter('is_read', '==', False))
     batch = db.batch()
     total = 0
