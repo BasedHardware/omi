@@ -14,6 +14,7 @@ from enum import Enum
 from fastapi import HTTPException
 
 from database import conversations as conversations_db
+from database import conversation_finalization_jobs as finalization_jobs_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.redis_db import get_cached_user_geolocation
 from models.conversation_enums import ConversationStatus
@@ -121,6 +122,22 @@ async def finalize_persisted_conversation(
     stage = 'geolocation'
     try:
         if is_donor(conversation_data):
+            # Resume precedes the fanout fence, but never the job ownership fence.
+            # A worker can wake after expiry/reclaim or after the job terminalizes.
+            stage = 'donor_resume_admission'
+            job = await run_blocking(db_executor, finalization_jobs_db.get_finalization_job, finalization_job_id)
+            if not job or (
+                job.get('status') != 'leased'
+                or job.get('dispatch_generation') != dispatch_generation
+                or job.get('lease_epoch') != lease_epoch
+                or job.get('uid') != uid
+                or job.get('conversation_id') != conversation_id
+                or conversation_data.get('finalization_job_id') != finalization_job_id
+                or conversation_data.get('finalization_revision') != job.get('finalization_revision')
+            ):
+                return ConversationFinalizationDisposition.fenced
+            if job.get('fanout_status') == 'completed':
+                return ConversationFinalizationDisposition.completed
             # A retry of a committed smart-merge absorb whose cleanup or survivor
             # refresh failed. The donor is discarded, so the fanout claim fences it;
             # finish the absorb first. A failure raises and stays retryable. Only

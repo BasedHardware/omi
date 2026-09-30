@@ -34,6 +34,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
+from uuid import uuid4
 
 from config.conversation_smart_merge import (
     JEV_MAX_ATTEMPTS,
@@ -427,6 +428,8 @@ _INCOMPLETE_CODES = frozenset(
         'refresh_not_persisted',
         'survivor_vector_failed',
         'refresh_completion_fenced',
+        'processing_checkpoint_fenced',
+        'donor_cleanup_deferred',
     }
 )
 
@@ -505,10 +508,16 @@ def _cleanup_donor(uid: str, donor_id: str, donor: Mapping[str, Any], survivor_i
     if not deferred and (needs_cleanup or needs_copy):
         if not mark_sync_bridge_cleaned(uid, donor_id, donor_revision, audio_target):
             raise SmartMergeIncomplete('donor_receipt_revision_changed')
+    if deferred:
+        # A held source still owes retraction. Do not close its only durable retry.
+        raise SmartMergeIncomplete('donor_cleanup_deferred')
 
 
 def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
     """Regenerate the survivor once for its current revision, under a short lease."""
+    # Job ids survive lease expiry and redelivery. Each invocation needs its own
+    # token so a late failure cannot release a newer delivery of the same job.
+    owner = f'{owner}:{uuid4().hex}'
     claimed = smart_merge_db.claim_survivor_refresh(
         uid, survivor_id, owner=owner, now=datetime.now(timezone.utc), lease_seconds=REFRESH_LEASE_SECONDS
     )
@@ -538,25 +547,33 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str) ->
         if row and not row.get('deleted'):
             raise SmartMergeIncomplete('survivor_changed_before_refresh')
         return
-    conversation = deserialize_conversation(row)
-    persistence = {'owned': True}
-    try:
-        processed = process_conversation(
-            uid,
-            conversation.language or 'en',
-            conversation,
-            trigger=ProcessingTrigger.SMART_MERGE,
-            persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
-            smart_merge_refresh=(claimed, owner),
-        )
-    except Exception:
-        record_conversation_smart_merge_refresh('failed')
-        raise
-    if not persistence['owned']:
-        # Deleted, or a sync append moved the transcript on; the next decision
-        # against this survivor pays the refresh it still owes.
-        record_conversation_smart_merge_refresh('fenced')
-        raise SmartMergeIncomplete('refresh_not_persisted')
+    processed = deserialize_conversation(row)
+    state = smart_merge_state(row)
+    if int(state.get('processed_revision') or 0) < claimed or state.get('processed_sync_revision') != row.get(
+        'sync_content_revision'
+    ):
+        persistence = {'owned': True}
+        try:
+            processed = process_conversation(
+                uid,
+                processed.language or 'en',
+                processed,
+                trigger=ProcessingTrigger.SMART_MERGE,
+                persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
+                smart_merge_refresh=(claimed, owner),
+            )
+        except Exception:
+            record_conversation_smart_merge_refresh('failed')
+            raise
+        if not persistence['owned']:
+            # Deleted, or a sync append moved the transcript on; the next decision
+            # against this survivor pays the refresh it still owes.
+            record_conversation_smart_merge_refresh('fenced')
+            raise SmartMergeIncomplete('refresh_not_persisted')
+        if not smart_merge_db.checkpoint_survivor_processing(
+            uid, survivor_id, owner=owner, revision=claimed, sync_revision=row.get('sync_content_revision')
+        ):
+            raise SmartMergeIncomplete('processing_checkpoint_fenced')
     try:
         # Reprocess never re-embeds; the merged occasion must be findable as a whole.
         save_structured_vector(uid, processed)

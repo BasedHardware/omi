@@ -483,7 +483,11 @@ survivor keeps cloud audio, and the survivor is reprocessed once per merge
 (`ProcessingTrigger.SMART_MERGE`) under a revision lease. A committed merge whose
 cleanup or refresh fails fails the finalization attempt; every retry resumes the
 donor, whatever the mode, before the fanout claim (which fences the discarded
-donor and so closes the job), and a failed refresh releases its own lease. Late
+donor and so closes the job), after checking its job epoch/generation/binding.
+Stale or terminal jobs never resume. A failed refresh releases its unique invocation
+lease; even same-job refreshes are exclusive. A processing receipt tied to both
+merge and sync revisions lets a failed vector write retry without rerunning the
+completed processing bundle. Deferred retraction keeps cleanup retryable. Late
 repair WALs that target a donor append to its survivor (`utils/sync/assignment.py`). The absorb advances the survivor's
 `sync_content_revision` to fence an older processor, and the refresh write
 requires the current lease owner and revision.

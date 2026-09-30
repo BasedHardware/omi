@@ -504,15 +504,17 @@ def test_failed_survivor_vector_write_keeps_refresh_retryable(world):
     world.vector_error = None
     smart_merge.finish_absorb(UID, 'n', owner='job')
     assert world.vectors == ['p']
+    assert world.processed == [('p', 4)]  # vector retry must not recreate tasks or rerun apps
     assert world.raw('p')['smart_merge']['refreshed_revision'] == 1
 
 
-def test_destructive_gate_defers_retraction_but_not_the_refresh(world):
+def test_deferred_retraction_keeps_the_donor_retryable(world):
     world.add('p', 0, 10)
     world.add('n', 15, 10)
     world.retract_error = DestructiveOperationInProgress(UID)
-    assert world.finish('n') is True
-    assert 'sync_bridge_cleaned_revision' not in world.raw('n') and world.processed == [('p', 4)]
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        world.finish('n')
+    assert 'sync_bridge_cleaned_revision' not in world.raw('n')
     world.retract_error = None
     smart_merge.finish_absorb(UID, 'n', owner='job')
     assert world.retracted == ['n'] and world.raw('n')['sync_bridge_cleaned_revision'] == 1
@@ -648,6 +650,7 @@ class _Jobs:
             'finalization_revision': 1,
             'fanout_status': 'pending',
             'dispatch_generation': 1,
+            'status': 'queued',
         }
         self.epoch = 0
 
@@ -657,11 +660,16 @@ class _Jobs:
 
     async def attempt(self):
         """One leased delivery, closed the way the pusher and Cloud Tasks callers close it."""
-        self.epoch += 1
-        self.job.update(status='leased', lease_epoch=self.epoch)
-        disposition = await finalizer.finalize_persisted_conversation(
-            UID, 'n', finalization_job_id=JOB, dispatch_generation=1, lease_epoch=self.epoch
-        )
+        claim = jobs_db.claim_finalization_job(JOB, 1)
+        assert claim['status'] == 'claimed'
+        self.epoch = claim['lease_epoch']
+        try:
+            disposition = await finalizer.finalize_persisted_conversation(
+                UID, 'n', finalization_job_id=JOB, dispatch_generation=1, lease_epoch=self.epoch
+            )
+        except finalizer.ConversationFinalizationError:
+            assert jobs_db.mark_finalization_retryable(JOB, 1, self.epoch)
+            raise
         assert disposition is finalizer.ConversationFinalizationDisposition.fenced
         assert lifecycle_service.complete_fenced_finalization(JOB, 1, self.epoch) is True
         return disposition
@@ -707,6 +715,158 @@ async def test_failed_refresh_is_finished_by_the_finalization_retry_exactly_once
     messages = [r.getMessage() for r in caplog.records]
     assert messages.count('event=smart_merge outcome=incomplete step=refresh cause=RuntimeError') == 1
     assert messages.count('event=smart_merge outcome=resumed_ok') == 2
+
+
+def test_success_never_uses_the_failure_lease_release(world, monkeypatch):
+    world.add('p', 0, 10, smart_merge={'revision': 1})
+    releases = []
+    monkeypatch.setattr(smart_merge_db, 'release_survivor_refresh', lambda *a, **kw: releases.append(kw))
+    smart_merge.refresh_survivor(UID, 'p', owner='job')
+    assert releases == [] and 'refresh_lease' not in world.raw('p')['smart_merge']
+
+
+def test_lease_release_failure_preserves_the_original_refresh_exception(world, monkeypatch):
+    world.add('p', 0, 10, smart_merge={'revision': 1})
+    error = RuntimeError('synthetic processing failure')
+    world.process_error = error
+
+    def fail_release(*args, **kwargs):
+        raise ValueError('synthetic release failure')
+
+    monkeypatch.setattr(smart_merge_db, 'release_survivor_refresh', fail_release)
+    with pytest.raises(RuntimeError) as raised:
+        smart_merge.refresh_survivor(UID, 'p', owner='job')
+    assert raised.value is error
+
+
+@pytest.mark.parametrize('change', ['owner', 'revision', 'expired', 'sync_revision', 'deleted'])
+def test_processing_checkpoint_checks_lease_and_transcript_fences(world, change):
+    world.add('p', 0, 10, sync_content_revision=1, smart_merge={'revision': 1})
+    assert (
+        smart_merge_db.claim_survivor_refresh(UID, 'p', owner='job', now=datetime.now(timezone.utc), lease_seconds=600)
+        == 1
+    )
+    row = world.raw('p')
+    if change == 'owner':
+        row['smart_merge']['refresh_lease']['owner'] = 'new-job'
+    elif change == 'revision':
+        row['smart_merge']['revision'] = 2
+    elif change == 'expired':
+        row['smart_merge']['refresh_lease']['until'] = T0
+    elif change == 'sync_revision':
+        row['sync_content_revision'] = 2
+    else:
+        row['deleted'] = True
+    assert not smart_merge_db.checkpoint_survivor_processing(UID, 'p', owner='job', revision=1, sync_revision=1)
+    assert 'processed_revision' not in row['smart_merge']
+    assert world.store.transactions[-1].has_written is False
+
+
+def test_vector_retry_reprocesses_if_sync_changed_the_content(world):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.vector_error = RuntimeError('synthetic vector failure')
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        world.finish('n')
+    world.raw('p')['sync_content_revision'] += 1
+    world.vector_error = None
+    smart_merge.finish_absorb(UID, 'n', owner='job')
+    assert world.processed == [('p', 4), ('p', 4)]
+
+
+def test_refresh_lease_excludes_a_second_call_even_with_the_same_owner(world):
+    world.add('p', 0, 10, smart_merge={'revision': 1})
+    args = dict(owner='job', now=datetime.now(timezone.utc), lease_seconds=600)
+    assert smart_merge_db.claim_survivor_refresh(UID, 'p', **args) == 1
+    assert smart_merge_db.claim_survivor_refresh(UID, 'p', **args) is None
+
+
+def test_overlapping_deliveries_of_one_job_do_not_both_process(world, monkeypatch):
+    world.add('p', 0, 10, smart_merge={'revision': 1})
+    real_process = world.process
+    entered = []
+
+    def overlap(*args, **kwargs):
+        if entered:
+            return real_process(*args, **kwargs)
+        entered.append(True)
+        with pytest.raises(smart_merge.SmartMergeIncomplete, match='refresh_lease_busy'):
+            smart_merge.refresh_survivor(UID, 'p', owner='job')
+        return real_process(*args, **kwargs)
+
+    monkeypatch.setattr(smart_merge, 'process_conversation', overlap)
+    smart_merge.refresh_survivor(UID, 'p', owner='job')
+    assert world.processed == [('p', 2)]
+
+
+def test_expired_delivery_cannot_release_a_new_delivery_of_the_same_job(world, monkeypatch):
+    world.add('p', 0, 10, smart_merge={'revision': 1})
+    newer = {}
+
+    def reclaim_then_fail(*args, **kwargs):
+        old = kwargs['smart_merge_refresh'][1]
+        world.raw('p')['smart_merge']['refresh_lease']['until'] = T0
+
+        def paused(uid, cid, revision, *, owner):
+            newer.update(world.raw('p')['smart_merge']['refresh_lease'])
+            assert owner != old
+
+        monkeypatch.setattr(smart_merge, '_refresh_claimed', paused)
+        smart_merge.refresh_survivor(UID, 'p', owner='job')
+        raise RuntimeError('synthetic failure')
+
+    monkeypatch.setattr(smart_merge, 'process_conversation', reclaim_then_fail)
+    with pytest.raises(RuntimeError, match='synthetic failure'):
+        smart_merge.refresh_survivor(UID, 'p', owner='job')
+    assert world.raw('p')['smart_merge']['refresh_lease'] == newer
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', ['completed', 'dead_letter', 'stale_epoch', 'stale_generation', 'unbound'])
+async def test_stale_or_terminal_donor_delivery_is_read_only(world, monkeypatch, terminal):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10, finalization_job_id=JOB, finalization_revision=1)
+    world.process_error = RuntimeError('synthetic provider failure')
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        world.finish('n')
+    jobs = _Jobs(world, monkeypatch)
+    jobs.job.update(status='leased', lease_epoch=2)
+    epoch, generation = 2, 1
+    if terminal in {'completed', 'dead_letter'}:
+        jobs.job['status'] = terminal
+    elif terminal == 'stale_epoch':
+        epoch = 1
+    elif terminal == 'stale_generation':
+        generation = 0
+    else:
+        world.raw('n')['finalization_revision'] = 99
+    writes = sum(len(tx.updates) for tx in world.store.transactions)
+    assert (
+        await finalizer.finalize_persisted_conversation(
+            UID, 'n', finalization_job_id=JOB, dispatch_generation=generation, lease_epoch=epoch
+        )
+        is finalizer.ConversationFinalizationDisposition.fenced
+    )
+    assert sum(len(tx.updates) for tx in world.store.transactions) == writes
+    assert world.processed == []
+
+
+@pytest.mark.asyncio
+async def test_permanently_failed_donor_dead_letters_without_mutating_conversations(world, monkeypatch):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10, finalization_job_id=JOB, finalization_revision=1)
+    monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'merge')
+    jobs = _Jobs(world, monkeypatch)
+    world.process_error = RuntimeError('synthetic provider failure')
+    for _ in range(2):
+        with pytest.raises(finalizer.ConversationFinalizationError):
+            await jobs.attempt()
+    claim = jobs_db.claim_finalization_job(JOB, 1)
+    donor, survivor = world.get(UID, 'n'), world.get(UID, 'p')
+    assert jobs_db.mark_finalization_dead_letter(JOB, 1, claim['lease_epoch'], 3)
+    assert jobs.job['status'] == 'dead_letter'
+    assert world.get(UID, 'n') == donor and world.get(UID, 'p') == survivor
+    assert jobs_db.claim_finalization_job(JOB, 1)['status'] == 'dead_letter'
 
 
 # --------------------------------------------------------------------------- replay

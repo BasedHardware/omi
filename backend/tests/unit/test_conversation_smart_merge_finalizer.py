@@ -15,7 +15,14 @@ from utils.conversations import smart_merge
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import SmartMergeIncomplete
 
-_JOB = {'finalization_revision': 1}
+_JOB = {
+    'finalization_revision': 1,
+    'uid': 'u',
+    'conversation_id': 'n',
+    'status': 'leased',
+    'dispatch_generation': 1,
+    'lease_epoch': 1,
+}
 _BOUND = {'finalization_job_id': 'job', 'finalization_revision': 1}
 _DONOR = {
     'deleted': True,
@@ -45,6 +52,8 @@ def harness(monkeypatch):
         calls.append(function)
         if function is finalizer.conversations_db.get_conversation:
             return row
+        if function is finalizer.finalization_jobs_db.get_finalization_job:
+            return _JOB
         if function is finalizer.get_cached_user_geolocation:
             return None
         if function is finalizer.lifecycle_service.claim_finalization_fanout:
@@ -151,16 +160,20 @@ async def test_non_donor_stage_order_is_unchanged_in_every_mode(harness, resumes
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['off', 'merge'])
-async def test_donor_retry_resumes_the_absorb_before_the_claim_fences_it(harness, resumes, monkeypatch, mode):
+@pytest.mark.parametrize(
+    'trigger', [ProcessingTrigger.CAPTURE_END, ProcessingTrigger.CLIENT_FINALIZE, ProcessingTrigger.SERVER_RECOVERY]
+)
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'merge'])
+async def test_donor_retry_resumes_the_absorb_before_the_claim_fences_it(harness, resumes, monkeypatch, mode, trigger):
     calls, row = harness
     row.update(_DONOR)
     monkeypatch.setenv('CONVERSATION_SMART_MERGE_MODE', mode)
-    assert await _finalize() is finalizer.ConversationFinalizationDisposition.fenced
+    assert await _finalize(trigger) is finalizer.ConversationFinalizationDisposition.fenced
     assert resumes['calls'] == [('u', 'n', {'owner': 'job', 'resumed': True})]
     # No geolocation, no derived work: resume, then the claim that closes the job.
     assert calls == [
         finalizer.conversations_db.get_conversation,
+        finalizer.finalization_jobs_db.get_finalization_job,
         finalizer.lifecycle_service.claim_finalization_fanout,
     ]
 
@@ -174,5 +187,5 @@ async def test_donor_resume_failure_stays_retryable_and_never_claims(harness, re
     with pytest.raises(finalizer.ConversationFinalizationError) as raised:
         await _finalize()
     assert str(raised.value) == 'processing_failed'
-    assert calls == [finalizer.conversations_db.get_conversation]
+    assert calls == [finalizer.conversations_db.get_conversation, finalizer.finalization_jobs_db.get_finalization_job]
     assert any('stage=smart_merge exception_type=SmartMergeIncomplete' in r.getMessage() for r in caplog.records)
