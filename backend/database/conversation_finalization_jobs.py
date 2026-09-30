@@ -18,7 +18,11 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database._client import document_id_from_seed, get_firestore_client
-from database.conversation_terminal_title import kept_row_title_update, user_time_zone
+from database.conversation_terminal_title import (
+    dead_letter_conversation_updates,
+    kept_row_title_update,
+    user_time_zone,
+)
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
@@ -60,11 +64,6 @@ DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS = 900
 # reconnect window.
 DEFAULT_BYOK_ABANDONED_AFTER_SECONDS = 14 * 86_400
 BYOK_ABANDONED_FAILURE_CODE = 'byok_session_abandoned'
-# Terminal failure codes after which a user reprocess can still succeed: the
-# retry budget ran out on a provider, parser or worker failure. Deliberately
-# excludes ``recovery_structure_unavailable`` (the model ran and found nothing
-# to summarize, so a retry gives the same answer) and BYOK abandonment.
-SUMMARY_RETRYABLE_FAILURE_CODES = frozenset({'processing_failed', 'final_attempt_failed'})
 MEETING_RECEIPT_SCHEMA_VERSION = 1
 MEETING_RECEIPT_RECONCILE_AFTER = timedelta(minutes=10)
 
@@ -1181,7 +1180,7 @@ def _mark_finalization_dead_letter_txn(
     ):
         # Computed before the first write: it may read the photos child
         # collection inside this transaction.
-        conversation_updates = _dead_letter_conversation_updates(
+        conversation_updates = dead_letter_conversation_updates(
             uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid
         )
     transaction.update(
@@ -1204,52 +1203,6 @@ def _mark_finalization_dead_letter_txn(
     if conversation_updates is not None:
         transaction.update(conversation_ref, conversation_updates)
     return True
-
-
-def _dead_letter_has_photos(conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any) -> bool:
-    if conversation.get('photos') or conversation.get('has_photos'):
-        return True
-    # Photo-only rows written before `has_photos` keep their photos only in
-    # the child collection; read it inside this transaction's snapshot.
-    return next(iter(conversation_ref.collection('photos').limit(1).stream(transaction=transaction)), None) is not None
-
-
-def _dead_letter_conversation_updates(
-    uid: str,
-    conversation: Mapping[str, Any],
-    conversation_ref: Any,
-    transaction: Any,
-    failure_code: str,
-    time_zone_for_uid: Callable[[str], str | None] | None,
-) -> dict[str, Any]:
-    """Close a still-bound ``processing`` row as a visible, titled conversation.
-
-    Matches BYOK abandonment and orphan recovery (``completed``, kept), and
-    also guarantees every row it leaves in the default list carries something
-    useful: an empty generated title is replaced by the model-free
-    ``deterministic_minimum_title`` (first transcript sentence, else
-    ``"Recording · 3:14 PM"``). A real title or a user title is never touched.
-
-    ``summary_retryable=True`` is written only when a user reprocess
-    can succeed: the retry budget ran out on a transient failure, the row has
-    transcript text or photos to summarize, and it holds no earlier summary
-    that the failure chip would misdescribe.
-    """
-    had_summary = structured_has_protected_content(conversation.get('structured'), conversation.get('user_title'))
-    title_update, texts = kept_row_title_update(uid, conversation, time_zone_for_uid)
-    updates: dict[str, Any] = {
-        'status': 'completed',
-        'discarded': False,
-        'finalization_status': 'dead_letter',
-        **title_update,
-    }
-    if (
-        failure_code in SUMMARY_RETRYABLE_FAILURE_CODES
-        and not had_summary
-        and (texts or _dead_letter_has_photos(conversation, conversation_ref, transaction))
-    ):
-        updates['summary_retryable'] = True
-    return updates
 
 
 def mark_finalization_dead_letter(
