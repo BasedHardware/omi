@@ -11554,4 +11554,17 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Nhận dạng giọng nói';
+
+  @override
+  String get meetingScreenshotsTitle => 'Nội dung trên màn hình';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ảnh chụp màn hình từ cuộc họp này';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Xóa ảnh chụp màn hình?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Thao tác này sẽ xóa ảnh chụp màn hình khỏi ghi chú của cuộc họp này. Không thể hoàn tác.';
 }

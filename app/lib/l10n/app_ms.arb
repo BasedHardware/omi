@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 orang} other{{count} orang}}",
     "noMatchingPeople": "Tiada Orang yang Sepadan",
     "deselectAll": "Nyahpilih Semua",
-    "voiceRecognitionSettings": "Pengecaman Suara"
+    "voiceRecognitionSettings": "Pengecaman Suara",
+    "meetingScreenshotsTitle": "Apa yang ada di skrin",
+    "meetingScreenshotFallbackCaption": "Tangkapan skrin daripada mesyuarat ini",
+    "deleteMeetingScreenshotTitle": "Padam tangkapan skrin?",
+    "deleteMeetingScreenshotMessage": "Ini akan mengalih keluar tangkapan skrin daripada nota mesyuarat ini. Tindakan ini tidak boleh dibuat asal."
 }

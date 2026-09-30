@@ -11595,4 +11595,17 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Prepoznavanje glasa';
+
+  @override
+  String get meetingScreenshotsTitle => 'Što je bilo na zaslonu';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Snimka zaslona s ovog sastanka';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Izbrisati snimku zaslona?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ovo uklanja snimku zaslona iz bilješke ovog sastanka. Radnja se ne može poništiti.';
 }

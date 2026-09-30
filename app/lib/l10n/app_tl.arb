@@ -11200,5 +11200,9 @@
     "peopleCount": "{count, plural, =1{1 tao} other{{count} tao}}",
     "noMatchingPeople": "Walang Tugmang Tao",
     "deselectAll": "Alisin ang Lahat ng Pili",
-    "voiceRecognitionSettings": "Pagkilala sa Boses"
+    "voiceRecognitionSettings": "Pagkilala sa Boses",
+    "meetingScreenshotsTitle": "Ano ang nasa screen",
+    "meetingScreenshotFallbackCaption": "Screenshot mula sa meeting na ito",
+    "deleteMeetingScreenshotTitle": "Burahin ang Screenshot?",
+    "deleteMeetingScreenshotMessage": "Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik."
 }

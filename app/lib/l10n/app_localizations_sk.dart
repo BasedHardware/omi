@@ -11550,4 +11550,17 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Rozpoznávanie hlasu';
+
+  @override
+  String get meetingScreenshotsTitle => 'Čo bolo na obrazovke';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Snímka obrazovky z tejto schôdzky';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Odstrániť snímku obrazovky?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Snímka obrazovky sa odstráni z poznámky tejto schôdzky. Túto akciu nie je možné vrátiť.';
 }

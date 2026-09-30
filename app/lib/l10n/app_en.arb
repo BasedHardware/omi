@@ -13748,5 +13748,21 @@
     "voiceRecognitionSettings": "Voice Recognition",
     "@voiceRecognitionSettings": {
         "description": "Section header above the voice-learning switches on the People page"
+    },
+    "meetingScreenshotsTitle": "What was on screen",
+    "@meetingScreenshotsTitle": {
+        "description": "Heading of the strip of meeting screenshots in a conversation summary"
+    },
+    "meetingScreenshotFallbackCaption": "Screenshot from this meeting",
+    "@meetingScreenshotFallbackCaption": {
+        "description": "Caption and accessibility label for a meeting screenshot that has no caption"
+    },
+    "deleteMeetingScreenshotTitle": "Delete Screenshot?",
+    "@deleteMeetingScreenshotTitle": {
+        "description": "Title of the dialog confirming deletion of one meeting screenshot"
+    },
+    "deleteMeetingScreenshotMessage": "This removes the screenshot from this meeting's note. It can't be undone.",
+    "@deleteMeetingScreenshotMessage": {
+        "description": "Body of the dialog confirming deletion of one meeting screenshot"
     }
 }

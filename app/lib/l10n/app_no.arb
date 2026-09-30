@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 person} other{{count} personer}}",
     "noMatchingPeople": "Ingen samsvarende personer",
     "deselectAll": "Fjern alle valg",
-    "voiceRecognitionSettings": "Stemmegjenkjenning"
+    "voiceRecognitionSettings": "Stemmegjenkjenning",
+    "meetingScreenshotsTitle": "Hva som var på skjermen",
+    "meetingScreenshotFallbackCaption": "Skjermbilde fra dette møtet",
+    "deleteMeetingScreenshotTitle": "Slette skjermbildet?",
+    "deleteMeetingScreenshotMessage": "Dette fjerner skjermbildet fra notatet for dette møtet. Det kan ikke angres."
 }

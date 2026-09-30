@@ -18,6 +18,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:uuid/uuid.dart';
 
+import 'conversation_screenshots_section.dart';
 import 'feedback_prompt_policy.dart';
 import 'feedback_sheet.dart';
 
@@ -123,6 +124,13 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                                   );
                             },
                           ),
+                    // Where the Mac puts its strip: after the note's own sections. Only a completed
+                    // conversation can have adjudicated screenshots.
+                    if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
+                      ConversationScreenshotsSection(
+                        key: ValueKey('conversation-screenshots-${conversation.id}'),
+                        conversationId: conversation.id,
+                      ),
                     if (feedbackKind == FeedbackPromptKind.summary)
                       SummaryFeedbackPrompt(
                         key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),

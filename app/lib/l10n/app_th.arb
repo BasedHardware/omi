@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 คน} other{{count} คน}}",
     "noMatchingPeople": "ไม่พบบุคคลที่ตรงกัน",
     "deselectAll": "ยกเลิกการเลือกทั้งหมด",
-    "voiceRecognitionSettings": "การจดจำเสียง"
+    "voiceRecognitionSettings": "การจดจำเสียง",
+    "meetingScreenshotsTitle": "สิ่งที่อยู่บนหน้าจอ",
+    "meetingScreenshotFallbackCaption": "ภาพหน้าจอจากการประชุมนี้",
+    "deleteMeetingScreenshotTitle": "ลบภาพหน้าจอหรือไม่",
+    "deleteMeetingScreenshotMessage": "การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้"
 }

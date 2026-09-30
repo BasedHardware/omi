@@ -3675,5 +3675,9 @@
     "peopleCount": "{count, plural, =1{1 orang} other{{count} orang}}",
     "noMatchingPeople": "Tidak Ada Orang yang Cocok",
     "deselectAll": "Batalkan Semua",
-    "voiceRecognitionSettings": "Pengenalan Suara"
+    "voiceRecognitionSettings": "Pengenalan Suara",
+    "meetingScreenshotsTitle": "Yang ada di layar",
+    "meetingScreenshotFallbackCaption": "Tangkapan layar dari rapat ini",
+    "deleteMeetingScreenshotTitle": "Hapus tangkapan layar?",
+    "deleteMeetingScreenshotMessage": "Ini akan menghapus tangkapan layar dari catatan rapat ini. Tindakan ini tidak dapat dibatalkan."
 }

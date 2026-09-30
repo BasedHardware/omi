@@ -11200,5 +11200,9 @@
     "peopleCount": "{count, plural, =1{1 వ్యక్తి} other{{count} మంది}}",
     "noMatchingPeople": "సరిపోలే వ్యక్తులు లేరు",
     "deselectAll": "అన్నింటి ఎంపిక తీసివేయి",
-    "voiceRecognitionSettings": "వాయిస్ గుర్తింపు"
+    "voiceRecognitionSettings": "వాయిస్ గుర్తింపు",
+    "meetingScreenshotsTitle": "స్క్రీన్‌పై ఏముంది",
+    "meetingScreenshotFallbackCaption": "ఈ సమావేశం నుండి స్క్రీన్‌షాట్",
+    "deleteMeetingScreenshotTitle": "స్క్రీన్‌షాట్‌ను తొలగించాలా?",
+    "deleteMeetingScreenshotMessage": "ఇది ఈ సమావేశం నోట్ నుండి స్క్రీన్‌షాట్‌ను తీసివేస్తుంది. దీన్ని రద్దు చేయలేరు."
 }

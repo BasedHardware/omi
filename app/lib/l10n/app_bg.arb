@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 човек} other{{count} души}}",
     "noMatchingPeople": "Няма съвпадащи хора",
     "deselectAll": "Размаркирай всички",
-    "voiceRecognitionSettings": "Разпознаване на глас"
+    "voiceRecognitionSettings": "Разпознаване на глас",
+    "meetingScreenshotsTitle": "Какво имаше на екрана",
+    "meetingScreenshotFallbackCaption": "Екранна снимка от тази среща",
+    "deleteMeetingScreenshotTitle": "Изтриване на екранната снимка?",
+    "deleteMeetingScreenshotMessage": "Екранната снимка ще бъде премахната от бележката за тази среща. Това не може да бъде отменено."
 }

@@ -3675,5 +3675,9 @@
     "peopleCount": "{count, plural, =1{1 человек} other{Людей: {count}}}",
     "noMatchingPeople": "Нет подходящих людей",
     "deselectAll": "Снять выбор",
-    "voiceRecognitionSettings": "Распознавание голоса"
+    "voiceRecognitionSettings": "Распознавание голоса",
+    "meetingScreenshotsTitle": "Что было на экране",
+    "meetingScreenshotFallbackCaption": "Снимок экрана с этой встречи",
+    "deleteMeetingScreenshotTitle": "Удалить снимок экрана?",
+    "deleteMeetingScreenshotMessage": "Снимок экрана будет удалён из заметки этой встречи. Это действие нельзя отменить."
 }

@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{شخص واحد} other{الأشخاص: {count}}}",
     "noMatchingPeople": "لا يوجد أشخاص مطابقون",
     "deselectAll": "إلغاء تحديد الكل",
-    "voiceRecognitionSettings": "التعرف على الصوت"
+    "voiceRecognitionSettings": "التعرف على الصوت",
+    "meetingScreenshotsTitle": "ما كان على الشاشة",
+    "meetingScreenshotFallbackCaption": "لقطة شاشة من هذا الاجتماع",
+    "deleteMeetingScreenshotTitle": "حذف لقطة الشاشة؟",
+    "deleteMeetingScreenshotMessage": "سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك."
 }

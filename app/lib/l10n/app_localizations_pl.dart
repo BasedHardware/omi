@@ -11595,4 +11595,17 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Rozpoznawanie głosu';
+
+  @override
+  String get meetingScreenshotsTitle => 'Co było na ekranie';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Zrzut ekranu z tego spotkania';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Usunąć zrzut ekranu?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Zrzut ekranu zostanie usunięty z notatki tego spotkania. Tej operacji nie można cofnąć.';
 }

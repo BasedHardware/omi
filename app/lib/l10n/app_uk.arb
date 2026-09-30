@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 людина} other{Людей: {count}}}",
     "noMatchingPeople": "Немає відповідних людей",
     "deselectAll": "Зняти вибір",
-    "voiceRecognitionSettings": "Розпізнавання голосу"
+    "voiceRecognitionSettings": "Розпізнавання голосу",
+    "meetingScreenshotsTitle": "Що було на екрані",
+    "meetingScreenshotFallbackCaption": "Знімок екрана з цієї зустрічі",
+    "deleteMeetingScreenshotTitle": "Видалити знімок екрана?",
+    "deleteMeetingScreenshotMessage": "Знімок екрана буде видалено з нотатки цієї зустрічі. Цю дію не можна скасувати."
 }

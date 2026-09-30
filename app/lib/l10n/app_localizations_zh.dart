@@ -11347,4 +11347,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => '声音识别';
+
+  @override
+  String get meetingScreenshotsTitle => '屏幕上显示的内容';
+
+  @override
+  String get meetingScreenshotFallbackCaption => '本次会议的屏幕截图';
+
+  @override
+  String get deleteMeetingScreenshotTitle => '删除屏幕截图？';
+
+  @override
+  String get deleteMeetingScreenshotMessage => '这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。';
 }

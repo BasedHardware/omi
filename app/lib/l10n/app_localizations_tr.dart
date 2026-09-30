@@ -11571,4 +11571,17 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Ses Tanıma';
+
+  @override
+  String get meetingScreenshotsTitle => 'Ekranda olanlar';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Bu toplantıdan ekran görüntüsü';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Ekran görüntüsü silinsin mi?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Bu işlem ekran görüntüsünü bu toplantının notundan kaldırır. Geri alınamaz.';
 }

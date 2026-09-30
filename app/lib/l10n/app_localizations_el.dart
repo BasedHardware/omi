@@ -11637,4 +11637,17 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Αναγνώριση Φωνής';
+
+  @override
+  String get meetingScreenshotsTitle => 'Τι υπήρχε στην οθόνη';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Στιγμιότυπο οθόνης από αυτή τη σύσκεψη';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Διαγραφή στιγμιότυπου οθόνης;';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση.';
 }

@@ -11577,4 +11577,17 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Reconhecimento de Voz';
+
+  @override
+  String get meetingScreenshotsTitle => 'O que estava na tela';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Captura de tela desta reunião';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Excluir captura de tela?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Isso remove a captura de tela da nota desta reunião. Não é possível desfazer.';
 }

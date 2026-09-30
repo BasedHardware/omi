@@ -11489,4 +11489,17 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'التعرف على الصوت';
+
+  @override
+  String get meetingScreenshotsTitle => 'ما كان على الشاشة';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'لقطة شاشة من هذا الاجتماع';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'حذف لقطة الشاشة؟';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك.';
 }

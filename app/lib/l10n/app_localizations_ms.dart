@@ -11590,4 +11590,17 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Pengecaman Suara';
+
+  @override
+  String get meetingScreenshotsTitle => 'Apa yang ada di skrin';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Tangkapan skrin daripada mesyuarat ini';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Padam tangkapan skrin?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ini akan mengalih keluar tangkapan skrin daripada nota mesyuarat ini. Tindakan ini tidak boleh dibuat asal.';
 }

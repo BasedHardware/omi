@@ -11493,4 +11493,17 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'การจดจำเสียง';
+
+  @override
+  String get meetingScreenshotsTitle => 'สิ่งที่อยู่บนหน้าจอ';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'ภาพหน้าจอจากการประชุมนี้';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'ลบภาพหน้าจอหรือไม่';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้';
 }

@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 person} other{{count} personer}}",
     "noMatchingPeople": "Inga matchande personer",
     "deselectAll": "Avmarkera alla",
-    "voiceRecognitionSettings": "Röstigenkänning"
+    "voiceRecognitionSettings": "Röstigenkänning",
+    "meetingScreenshotsTitle": "Vad som visades på skärmen",
+    "meetingScreenshotFallbackCaption": "Skärmbild från det här mötet",
+    "deleteMeetingScreenshotTitle": "Radera skärmbilden?",
+    "deleteMeetingScreenshotMessage": "Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra."
 }

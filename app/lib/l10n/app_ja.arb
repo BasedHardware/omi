@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1人} other{{count}人}}",
     "noMatchingPeople": "一致する人がいません",
     "deselectAll": "すべて選択解除",
-    "voiceRecognitionSettings": "音声認識"
+    "voiceRecognitionSettings": "音声認識",
+    "meetingScreenshotsTitle": "画面に表示されていた内容",
+    "meetingScreenshotFallbackCaption": "このミーティングのスクリーンショット",
+    "deleteMeetingScreenshotTitle": "スクリーンショットを削除しますか？",
+    "deleteMeetingScreenshotMessage": "このミーティングのメモからスクリーンショットを削除します。この操作は取り消せません。"
 }

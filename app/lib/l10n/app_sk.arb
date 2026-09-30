@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 osoba} other{Počet osôb: {count}}}",
     "noMatchingPeople": "Žiadne zodpovedajúce osoby",
     "deselectAll": "Zrušiť výber",
-    "voiceRecognitionSettings": "Rozpoznávanie hlasu"
+    "voiceRecognitionSettings": "Rozpoznávanie hlasu",
+    "meetingScreenshotsTitle": "Čo bolo na obrazovke",
+    "meetingScreenshotFallbackCaption": "Snímka obrazovky z tejto schôdzky",
+    "deleteMeetingScreenshotTitle": "Odstrániť snímku obrazovky?",
+    "deleteMeetingScreenshotMessage": "Snímka obrazovky sa odstráni z poznámky tejto schôdzky. Túto akciu nie je možné vrátiť."
 }

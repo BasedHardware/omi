@@ -11570,4 +11570,16 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'آواز کی شناخت';
+
+  @override
+  String get meetingScreenshotsTitle => 'اسکرین پر کیا تھا';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'اس میٹنگ کا اسکرین شاٹ';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'اسکرین شاٹ حذف کریں؟';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'یہ اس میٹنگ کے نوٹ سے اسکرین شاٹ ہٹا دے گا۔ اسے واپس نہیں کیا جا سکتا۔';
 }

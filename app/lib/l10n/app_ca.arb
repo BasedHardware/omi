@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 persona} other{{count} persones}}",
     "noMatchingPeople": "Cap persona coincident",
     "deselectAll": "Desselecciona-ho tot",
-    "voiceRecognitionSettings": "Reconeixement de veu"
+    "voiceRecognitionSettings": "Reconeixement de veu",
+    "meetingScreenshotsTitle": "Què hi havia a la pantalla",
+    "meetingScreenshotFallbackCaption": "Captura de pantalla d'aquesta reunió",
+    "deleteMeetingScreenshotTitle": "Vols suprimir la captura de pantalla?",
+    "deleteMeetingScreenshotMessage": "Això elimina la captura de pantalla de la nota d'aquesta reunió. No es pot desfer."
 }

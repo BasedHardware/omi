@@ -11200,5 +11200,9 @@
     "peopleCount": "{count, plural, =1{1 osoba} other{Osoba: {count}}}",
     "noMatchingPeople": "Nema odgovarajućih osoba",
     "deselectAll": "Poništi odabir svega",
-    "voiceRecognitionSettings": "Prepoznavanje glasa"
+    "voiceRecognitionSettings": "Prepoznavanje glasa",
+    "meetingScreenshotsTitle": "Što je bilo na zaslonu",
+    "meetingScreenshotFallbackCaption": "Snimka zaslona s ovog sastanka",
+    "deleteMeetingScreenshotTitle": "Izbrisati snimku zaslona?",
+    "deleteMeetingScreenshotMessage": "Ovo uklanja snimku zaslona iz bilješke ovog sastanka. Radnja se ne može poništiti."
 }

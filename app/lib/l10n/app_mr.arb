@@ -11200,5 +11200,9 @@
     "peopleCount": "{count, plural, =1{1 व्यक्ती} other{{count} लोक}}",
     "noMatchingPeople": "जुळणारे लोक नाहीत",
     "deselectAll": "सर्व निवड रद्द करा",
-    "voiceRecognitionSettings": "आवाज ओळख"
+    "voiceRecognitionSettings": "आवाज ओळख",
+    "meetingScreenshotsTitle": "स्क्रीनवर काय होते",
+    "meetingScreenshotFallbackCaption": "या मीटिंगचा स्क्रीनशॉट",
+    "deleteMeetingScreenshotTitle": "स्क्रीनशॉट हटवायचा?",
+    "deleteMeetingScreenshotMessage": "यामुळे या मीटिंगच्या नोटमधून स्क्रीनशॉट काढला जाईल. हे पूर्ववत करता येणार नाही."
 }

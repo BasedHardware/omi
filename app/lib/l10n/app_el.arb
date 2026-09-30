@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 άτομο} other{{count} άτομα}}",
     "noMatchingPeople": "Δεν Βρέθηκαν Άτομα",
     "deselectAll": "Αποεπιλογή Όλων",
-    "voiceRecognitionSettings": "Αναγνώριση Φωνής"
+    "voiceRecognitionSettings": "Αναγνώριση Φωνής",
+    "meetingScreenshotsTitle": "Τι υπήρχε στην οθόνη",
+    "meetingScreenshotFallbackCaption": "Στιγμιότυπο οθόνης από αυτή τη σύσκεψη",
+    "deleteMeetingScreenshotTitle": "Διαγραφή στιγμιότυπου οθόνης;",
+    "deleteMeetingScreenshotMessage": "Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση."
 }

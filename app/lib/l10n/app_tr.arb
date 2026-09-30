@@ -3675,5 +3675,9 @@
     "peopleCount": "{count, plural, =1{1 kişi} other{{count} kişi}}",
     "noMatchingPeople": "Eşleşen Kişi Yok",
     "deselectAll": "Tümünün Seçimini Kaldır",
-    "voiceRecognitionSettings": "Ses Tanıma"
+    "voiceRecognitionSettings": "Ses Tanıma",
+    "meetingScreenshotsTitle": "Ekranda olanlar",
+    "meetingScreenshotFallbackCaption": "Bu toplantıdan ekran görüntüsü",
+    "deleteMeetingScreenshotTitle": "Ekran görüntüsü silinsin mi?",
+    "deleteMeetingScreenshotMessage": "Bu işlem ekran görüntüsünü bu toplantının notundan kaldırır. Geri alınamaz."
 }

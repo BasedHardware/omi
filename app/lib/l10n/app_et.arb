@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 inimene} other{{count} inimest}}",
     "noMatchingPeople": "Sobivaid inimesi pole",
     "deselectAll": "Tühista kõik valikud",
-    "voiceRecognitionSettings": "Häältuvastus"
+    "voiceRecognitionSettings": "Häältuvastus",
+    "meetingScreenshotsTitle": "Mis oli ekraanil",
+    "meetingScreenshotFallbackCaption": "Ekraanipilt sellelt koosolekult",
+    "deleteMeetingScreenshotTitle": "Kas kustutada ekraanipilt?",
+    "deleteMeetingScreenshotMessage": "See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta."
 }

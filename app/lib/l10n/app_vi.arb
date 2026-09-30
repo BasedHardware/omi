@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 người} other{{count} người}}",
     "noMatchingPeople": "Không có người phù hợp",
     "deselectAll": "Bỏ chọn tất cả",
-    "voiceRecognitionSettings": "Nhận dạng giọng nói"
+    "voiceRecognitionSettings": "Nhận dạng giọng nói",
+    "meetingScreenshotsTitle": "Nội dung trên màn hình",
+    "meetingScreenshotFallbackCaption": "Ảnh chụp màn hình từ cuộc họp này",
+    "deleteMeetingScreenshotTitle": "Xóa ảnh chụp màn hình?",
+    "deleteMeetingScreenshotMessage": "Thao tác này sẽ xóa ảnh chụp màn hình khỏi ghi chú của cuộc họp này. Không thể hoàn tác."
 }

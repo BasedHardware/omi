@@ -35,6 +35,15 @@ SCHEMA_GROUPS = {
             'ScreenActivitySyncResponse',
         ),
     },
+    'screen_frames': {
+        'output': DEFAULT_OUTPUT_DIR / 'screen_frames_wire.g.dart',
+        'schemas': (
+            'NormalizedRect',
+            'ScreenFrameGround',
+            'ConversationScreenFrame',
+            'ConversationScreenFrameSet',
+        ),
+    },
     'conversation': {
         'output': DEFAULT_OUTPUT_DIR / 'conversation_wire.g.dart',
         'schemas': (

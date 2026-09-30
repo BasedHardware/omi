@@ -11595,4 +11595,17 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ';
+
+  @override
+  String get meetingScreenshotsTitle => 'ಪರದೆಯ ಮೇಲೆ ಏನಿತ್ತು';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'ಈ ಸಭೆಯ ಸ್ಕ್ರೀನ್‌ಶಾಟ್';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅಳಿಸುವುದೇ?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'ಇದು ಈ ಸಭೆಯ ಟಿಪ್ಪಣಿಯಿಂದ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
 }

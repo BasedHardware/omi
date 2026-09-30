@@ -11200,5 +11200,9 @@
     "peopleCount": "{count, plural, =1{1 чалавек} other{Людзей: {count}}}",
     "noMatchingPeople": "Няма адпаведных людзей",
     "deselectAll": "Зняць выбар з усіх",
-    "voiceRecognitionSettings": "Распазнаванне голасу"
+    "voiceRecognitionSettings": "Распазнаванне голасу",
+    "meetingScreenshotsTitle": "Што было на экране",
+    "meetingScreenshotFallbackCaption": "Здымак экрана з гэтай сустрэчы",
+    "deleteMeetingScreenshotTitle": "Выдаліць здымак экрана?",
+    "deleteMeetingScreenshotMessage": "Здымак экрана будзе выдалены з нататкі гэтай сустрэчы. Гэта нельга адрабіць."
 }

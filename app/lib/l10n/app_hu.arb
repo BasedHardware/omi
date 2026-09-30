@@ -3736,5 +3736,9 @@
     "peopleCount": "{count, plural, =1{1 személy} other{{count} személy}}",
     "noMatchingPeople": "Nincs egyező személy",
     "deselectAll": "Kijelölés megszüntetése",
-    "voiceRecognitionSettings": "Hangfelismerés"
+    "voiceRecognitionSettings": "Hangfelismerés",
+    "meetingScreenshotsTitle": "Mi volt a képernyőn",
+    "meetingScreenshotFallbackCaption": "Képernyőkép erről a megbeszélésről",
+    "deleteMeetingScreenshotTitle": "Törli a képernyőképet?",
+    "deleteMeetingScreenshotMessage": "A képernyőkép törlődik a megbeszélés jegyzetéből. Ez nem vonható vissza."
 }

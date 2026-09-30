@@ -11660,4 +11660,17 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Pagkilala sa Boses';
+
+  @override
+  String get meetingScreenshotsTitle => 'Ano ang nasa screen';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Screenshot mula sa meeting na ito';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Burahin ang Screenshot?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik.';
 }

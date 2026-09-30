@@ -11200,5 +11200,9 @@
     "peopleCount": "{count, plural, =1{1 ವ್ಯಕ್ತಿ} other{{count} ಜನರು}}",
     "noMatchingPeople": "ಹೊಂದಿಕೆಯಾಗುವ ಜನರಿಲ್ಲ",
     "deselectAll": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದುಮಾಡಿ",
-    "voiceRecognitionSettings": "ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ"
+    "voiceRecognitionSettings": "ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ",
+    "meetingScreenshotsTitle": "ಪರದೆಯ ಮೇಲೆ ಏನಿತ್ತು",
+    "meetingScreenshotFallbackCaption": "ಈ ಸಭೆಯ ಸ್ಕ್ರೀನ್‌ಶಾಟ್",
+    "deleteMeetingScreenshotTitle": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅಳಿಸುವುದೇ?",
+    "deleteMeetingScreenshotMessage": "ಇದು ಈ ಸಭೆಯ ಟಿಪ್ಪಣಿಯಿಂದ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ."
 }

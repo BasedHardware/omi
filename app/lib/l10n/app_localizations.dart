@@ -21032,6 +21032,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Voice Recognition'**
   String get voiceRecognitionSettings;
+
+  /// Heading of the strip of meeting screenshots in a conversation summary
+  ///
+  /// In en, this message translates to:
+  /// **'What was on screen'**
+  String get meetingScreenshotsTitle;
+
+  /// Caption and accessibility label for a meeting screenshot that has no caption
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot from this meeting'**
+  String get meetingScreenshotFallbackCaption;
+
+  /// Title of the dialog confirming deletion of one meeting screenshot
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Screenshot?'**
+  String get deleteMeetingScreenshotTitle;
+
+  /// Body of the dialog confirming deletion of one meeting screenshot
+  ///
+  /// In en, this message translates to:
+  /// **'This removes the screenshot from this meeting\'s note. It can\'t be undone.'**
+  String get deleteMeetingScreenshotMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 persona} other{Personas: {count}}}",
     "noMatchingPeople": "Nav atbilstošu personu",
     "deselectAll": "Noņemt visu atlasi",
-    "voiceRecognitionSettings": "Balss atpazīšana"
+    "voiceRecognitionSettings": "Balss atpazīšana",
+    "meetingScreenshotsTitle": "Kas bija ekrānā",
+    "meetingScreenshotFallbackCaption": "Ekrānuzņēmums no šīs sapulces",
+    "deleteMeetingScreenshotTitle": "Dzēst ekrānuzņēmumu?",
+    "deleteMeetingScreenshotMessage": "Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt."
 }

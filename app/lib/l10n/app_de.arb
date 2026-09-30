@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 Person} other{{count} Personen}}",
     "noMatchingPeople": "Keine passenden Personen",
     "deselectAll": "Alle abwählen",
-    "voiceRecognitionSettings": "Stimmerkennung"
+    "voiceRecognitionSettings": "Stimmerkennung",
+    "meetingScreenshotsTitle": "Was auf dem Bildschirm war",
+    "meetingScreenshotFallbackCaption": "Bildschirmfoto aus diesem Meeting",
+    "deleteMeetingScreenshotTitle": "Bildschirmfoto löschen?",
+    "deleteMeetingScreenshotMessage": "Das Bildschirmfoto wird aus der Notiz dieses Meetings entfernt. Dies kann nicht rückgängig gemacht werden."
 }

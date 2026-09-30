@@ -11584,4 +11584,16 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Balss atpazīšana';
+
+  @override
+  String get meetingScreenshotsTitle => 'Kas bija ekrānā';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ekrānuzņēmums no šīs sapulces';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Dzēst ekrānuzņēmumu?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt.';
 }

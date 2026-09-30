@@ -11200,5 +11200,9 @@
     "peopleCount": "{count, plural, =1{১ জন} other{{count} জন}}",
     "noMatchingPeople": "মিলে যাওয়া কেউ নেই",
     "deselectAll": "সব বাদ দিন",
-    "voiceRecognitionSettings": "ভয়েস শনাক্তকরণ"
+    "voiceRecognitionSettings": "ভয়েস শনাক্তকরণ",
+    "meetingScreenshotsTitle": "স্ক্রিনে যা ছিল",
+    "meetingScreenshotFallbackCaption": "এই মিটিংয়ের স্ক্রিনশট",
+    "deleteMeetingScreenshotTitle": "স্ক্রিনশট মুছবেন?",
+    "deleteMeetingScreenshotMessage": "এটি এই মিটিংয়ের নোট থেকে স্ক্রিনশটটি সরিয়ে দেবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।"
 }

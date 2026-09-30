@@ -3675,5 +3675,9 @@
     "peopleCount": "{count, plural, =1{1 osoba} other{Osoby: {count}}}",
     "noMatchingPeople": "Brak pasujących osób",
     "deselectAll": "Odznacz wszystko",
-    "voiceRecognitionSettings": "Rozpoznawanie głosu"
+    "voiceRecognitionSettings": "Rozpoznawanie głosu",
+    "meetingScreenshotsTitle": "Co było na ekranie",
+    "meetingScreenshotFallbackCaption": "Zrzut ekranu z tego spotkania",
+    "deleteMeetingScreenshotTitle": "Usunąć zrzut ekranu?",
+    "deleteMeetingScreenshotMessage": "Zrzut ekranu zostanie usunięty z notatki tego spotkania. Tej operacji nie można cofnąć."
 }

@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 人} other{{count} 人}}",
     "noMatchingPeople": "没有匹配的人",
     "deselectAll": "取消全选",
-    "voiceRecognitionSettings": "声音识别"
+    "voiceRecognitionSettings": "声音识别",
+    "meetingScreenshotsTitle": "屏幕上显示的内容",
+    "meetingScreenshotFallbackCaption": "本次会议的屏幕截图",
+    "deleteMeetingScreenshotTitle": "删除屏幕截图？",
+    "deleteMeetingScreenshotMessage": "这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。"
 }

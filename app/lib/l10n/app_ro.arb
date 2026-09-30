@@ -3640,5 +3640,9 @@
     "peopleCount": "{count, plural, =1{1 persoană} other{Persoane: {count}}}",
     "noMatchingPeople": "Nicio persoană potrivită",
     "deselectAll": "Deselectează tot",
-    "voiceRecognitionSettings": "Recunoaștere vocală"
+    "voiceRecognitionSettings": "Recunoaștere vocală",
+    "meetingScreenshotsTitle": "Ce era pe ecran",
+    "meetingScreenshotFallbackCaption": "Captură de ecran din această întâlnire",
+    "deleteMeetingScreenshotTitle": "Ștergi captura de ecran?",
+    "deleteMeetingScreenshotMessage": "Captura de ecran va fi eliminată din nota acestei întâlniri. Acțiunea nu poate fi anulată."
 }

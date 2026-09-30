@@ -11595,4 +11595,17 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Stemherkenning';
+
+  @override
+  String get meetingScreenshotsTitle => 'Wat er op het scherm stond';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Schermafbeelding van deze vergadering';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Schermafbeelding verwijderen?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Hiermee wordt de schermafbeelding uit de notitie van deze vergadering verwijderd. Dit kan niet ongedaan worden gemaakt.';
 }

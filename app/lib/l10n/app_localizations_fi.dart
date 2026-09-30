@@ -11562,4 +11562,17 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Äänentunnistus';
+
+  @override
+  String get meetingScreenshotsTitle => 'Mitä näytöllä oli';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Kuvakaappaus tästä kokouksesta';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Poistetaanko kuvakaappaus?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.';
 }
