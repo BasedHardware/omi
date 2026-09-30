@@ -85,3 +85,44 @@ class TestDeleteClosesBothObjectsAndCache:
 
         assert len(calls) == 2
         assert len(evicted) == 2
+
+
+class TestSignedUrlReportsTheTrueExpiry:
+    """Signed URLs are cached ~60 min; a cache hit must report the cached signature's
+    remaining life, and a nearly dead cached URL must not be handed out at all."""
+
+    def _blob(self):
+        blob = MagicMock()
+        blob.name = "u/c/f.jpg"
+        blob.generate_signed_url.return_value = "https://fresh"
+        return blob
+
+    def test_cache_hit_reports_remaining_life(self, monkeypatch):
+        import datetime as dt
+
+        monkeypatch.setattr(storage_mod, "get_cached_signed_url", lambda path: "https://cached")
+        monkeypatch.setattr(storage_mod, "get_cached_signed_url_ttl", lambda path: 20 * 60)
+        blob = self._blob()
+        before = dt.datetime.now(dt.timezone.utc)
+
+        url, expires_at = storage_mod._screen_frame_signed_url(blob)
+
+        assert url == "https://cached"
+        assert dt.timedelta(minutes=19) < expires_at - before <= dt.timedelta(minutes=20, seconds=1)
+        blob.generate_signed_url.assert_not_called()
+
+    def test_nearly_expired_cache_entry_is_re_signed(self, monkeypatch):
+        import datetime as dt
+
+        cached: list = []
+        monkeypatch.setattr(storage_mod, "get_cached_signed_url", lambda path: "https://cached")
+        monkeypatch.setattr(storage_mod, "get_cached_signed_url_ttl", lambda path: 5 * 60)
+        monkeypatch.setattr(storage_mod, "cache_signed_url", lambda *args: cached.append(args))
+        monkeypatch.setattr(storage_mod, "iam_signing_kwargs", lambda client: {})
+        before = dt.datetime.now(dt.timezone.utc)
+
+        url, expires_at = storage_mod._screen_frame_signed_url(self._blob())
+
+        assert url == "https://fresh"
+        assert expires_at - before >= dt.timedelta(minutes=59)
+        assert cached == [("u/c/f.jpg", "https://fresh", 3600)]

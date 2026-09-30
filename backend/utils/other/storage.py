@@ -23,7 +23,12 @@ else:
     _opus_import_error = None
 from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
 
-from database.redis_db import cache_signed_url, get_cached_signed_url, delete_cached_signed_url
+from database.redis_db import (
+    cache_signed_url,
+    get_cached_signed_url,
+    get_cached_signed_url_ttl,
+    delete_cached_signed_url,
+)
 from database.legal_holds import external_write_fence
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
@@ -1943,6 +1948,23 @@ def get_desktop_update_signed_url(blob_path: str, expiration_hours: int = 1) -> 
 # deploy prerequisite; not something this change provisions).
 
 SCREEN_FRAME_SIGNED_URL_MINUTES = 60
+# A cached URL is reused only with this much life left, so a client that renews
+# at the reported expiry never holds a URL that is about to die.
+SCREEN_FRAME_MIN_REUSE_SECONDS = 15 * 60
+
+
+def _screen_frame_signed_url(blob: Any) -> Tuple[str, datetime.datetime]:
+    """A signed URL and its TRUE expiry: a cache hit reports the cached signature's remaining life."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cached = get_cached_signed_url(blob.name)
+    remaining = get_cached_signed_url_ttl(blob.name) if cached else 0
+    if cached and remaining >= SCREEN_FRAME_MIN_REUSE_SECONDS:
+        return cached, now + datetime.timedelta(seconds=remaining)
+    signer = iam_signing_kwargs(getattr(blob, "client", None))
+    lifetime = datetime.timedelta(minutes=SCREEN_FRAME_SIGNED_URL_MINUTES)
+    signed_url: str = blob.generate_signed_url(version="v4", expiration=lifetime, method="GET", **signer)
+    cache_signed_url(blob.name, signed_url, SCREEN_FRAME_SIGNED_URL_MINUTES * 60)
+    return signed_url, now + lifetime
 
 
 def _screen_frame_blob_path(uid: str, conversation_id: str, frame_id: str) -> str:
@@ -1980,16 +2002,16 @@ def upload_screen_frame_blobs(
     thumb_blob.upload_from_string(thumbnail_jpeg_bytes, content_type='image/jpeg')
 
 
-def get_screen_frame_signed_url(uid: str, conversation_id: str, frame_id: str) -> str:
+def get_screen_frame_signed_url(uid: str, conversation_id: str, frame_id: str) -> Tuple[str, datetime.datetime]:
     bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
-    blob = bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id))
-    return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
+    return _screen_frame_signed_url(bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id)))
 
 
-def get_screen_frame_thumbnail_signed_url(uid: str, conversation_id: str, frame_id: str) -> str:
+def get_screen_frame_thumbnail_signed_url(
+    uid: str, conversation_id: str, frame_id: str
+) -> Tuple[str, datetime.datetime]:
     bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
-    blob = bucket.blob(_screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id))
-    return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
+    return _screen_frame_signed_url(bucket.blob(_screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id)))
 
 
 def download_screen_frame_bytes(uid: str, conversation_id: str, frame_id: str, *, timeout: float) -> bytes:

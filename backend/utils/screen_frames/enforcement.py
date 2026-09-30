@@ -136,9 +136,11 @@ def _apply_cap_and_roles(
 
 def _to_api_frame(uid: str, conversation_id: str, doc: Dict[str, Any]) -> ConversationScreenFrame:
     frame_id = doc['id']
-    content_url = storage.get_screen_frame_signed_url(uid, conversation_id, frame_id)
-    thumbnail_url = storage.get_screen_frame_thumbnail_signed_url(uid, conversation_id, frame_id)
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=storage.SCREEN_FRAME_SIGNED_URL_MINUTES)
+    content_url, content_expires_at = storage.get_screen_frame_signed_url(uid, conversation_id, frame_id)
+    thumbnail_url, thumbnail_expires_at = storage.get_screen_frame_thumbnail_signed_url(uid, conversation_id, frame_id)
+    # The true signature expiry (a cached URL may have far less than the full hour left),
+    # so a client renewing at url_expires_at never holds a dead URL.
+    expires_at = min(content_expires_at, thumbnail_expires_at)
     ground_data = doc.get('ground') or _NEUTRAL_GROUND_FALLBACK
     return ConversationScreenFrame(
         id=frame_id,

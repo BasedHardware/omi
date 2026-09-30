@@ -174,9 +174,10 @@ class TestBuildFrameSetResponse:
         monkeypatch.setattr(enforcement_mod, "screen_frames_db", fake_screen_frames_db)
 
         fake_storage = MagicMock()
-        fake_storage.get_screen_frame_signed_url.side_effect = lambda uid, cid, fid: f"https://signed/{fid}"
-        fake_storage.get_screen_frame_thumbnail_signed_url.side_effect = (
-            lambda uid, cid, fid: f"https://signed/{fid}/thumb"
+        fake_storage.get_screen_frame_signed_url.side_effect = lambda uid, cid, fid: (f"https://signed/{fid}", _t(3600))
+        fake_storage.get_screen_frame_thumbnail_signed_url.side_effect = lambda uid, cid, fid: (
+            f"https://signed/{fid}/thumb",
+            _t(3600),
         )
         fake_storage.SCREEN_FRAME_SIGNED_URL_MINUTES = 60
         fake_storage.configured_screen_frames_bucket.return_value = LEGACY_SCREEN_FRAMES_BUCKET
@@ -258,8 +259,10 @@ def test_one_unrepresentable_stored_frame_does_not_break_the_whole_read(monkeypa
     monkeypatch.setattr(
         enf.screen_frames_db, "get_conversation_screen_frames_selection_fingerprint", lambda *_, **__: None
     )
-    monkeypatch.setattr(enf.storage, "get_screen_frame_signed_url", lambda *_: "https://example/c")
-    monkeypatch.setattr(enf.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: "https://example/t")
+    monkeypatch.setattr(enf.storage, "get_screen_frame_signed_url", lambda *_: ("https://example/c", _t(3600)))
+    monkeypatch.setattr(
+        enf.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: ("https://example/t", _t(3600))
+    )
 
     frame_set = enf.build_frame_set_response("uid", "cid")
 
@@ -290,9 +293,13 @@ class TestEnvironmentScoping:
         monkeypatch.setattr(enforcement_mod, "screen_frames_db", fake_db)
         signed: list[str] = []
         monkeypatch.setattr(
-            enforcement_mod.storage, "get_screen_frame_signed_url", lambda uid, cid, fid: signed.append(fid) or "u"
+            enforcement_mod.storage,
+            "get_screen_frame_signed_url",
+            lambda uid, cid, fid: signed.append(fid) or ("u", _t(3600)),
         )
-        monkeypatch.setattr(enforcement_mod.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: "t")
+        monkeypatch.setattr(
+            enforcement_mod.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: ("t", _t(3600))
+        )
         return fake_db, signed
 
     def test_prod_never_signs_a_legacy_dev_frame(self, monkeypatch):
@@ -369,3 +376,20 @@ def test_frame_doc_persists_notes_evidence_and_the_writers_bucket():
     # Server-side only: the wire model has no field for either.
     assert "screen_summary" not in enforcement_mod.ConversationScreenFrame.model_fields
     assert "visible_participant_names" not in enforcement_mod.ConversationScreenFrame.model_fields
+
+
+def test_url_expires_at_is_the_earliest_true_signature_expiry(monkeypatch):
+    """A cached URL can have minutes left; the response must say so, not claim a fresh hour."""
+    doc = _stored("f", 1)
+    fake_db = MagicMock()
+    fake_db.get_conversation_screen_frames.return_value = [doc]
+    fake_db.get_conversation_screen_frames_revision.return_value = 1
+    fake_db.get_conversation_screen_frames_adjudicated_at.return_value = None
+    fake_db.get_conversation_screen_frames_selection_fingerprint.return_value = None
+    monkeypatch.setattr(enforcement_mod, "screen_frames_db", fake_db)
+    monkeypatch.setattr(enforcement_mod.storage, "get_screen_frame_signed_url", lambda *_: ("c", _t(1200)))
+    monkeypatch.setattr(enforcement_mod.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: ("t", _t(3600)))
+
+    frame_set = enforcement_mod.build_frame_set_response(UID, CONVERSATION_ID)
+
+    assert frame_set.strip[0].url_expires_at == _t(1200)
