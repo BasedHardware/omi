@@ -132,3 +132,18 @@ def test_a_deadline_bounds_the_marker_read_to_one_attempt(monkeypatch):
     assert ref.rpc_bounds == {'timeout': 3.5, 'retry': None}
     screen_frames_db.get_conversation_screen_frames_adjudicated_at('u', 'c', bucket=PROD)
     assert ref.rpc_bounds == {}
+
+
+def test_the_marker_read_returns_stamp_and_fingerprint_for_this_bucket(monkeypatch):
+    ref = _ref(
+        monkeypatch, {'screen_frames_adjudicated_at': 'dev-stamp', 'screen_frames_selection_fingerprint': 'dev-fp'}
+    )
+    screen_frames_db.mark_conversation_screen_frames_adjudicated('u', 'c', selection_fingerprint='prod-fp', bucket=PROD)
+
+    prod = screen_frames_db.get_conversation_screen_frames_marker('u', 'c', bucket=PROD, rpc_timeout=2.0)
+    assert prod[1] == 'prod-fp' and prod[0] is not None
+    assert ref.rpc_bounds == {'timeout': 2.0, 'retry': None}
+    assert screen_frames_db.get_conversation_screen_frames_marker('u', 'c', bucket=LEGACY_SCREEN_FRAMES_BUCKET) == (
+        'dev-stamp',
+        'dev-fp',
+    )

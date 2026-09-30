@@ -10,8 +10,8 @@ This admission step runs in the shared persisted-conversation finalizer (pusher
 and Cloud Tasks workers alike, which also covers POST /finalize). It is an async
 wait: each poll borrows a db_executor thread for one Firestore read and the
 sleep holds no thread, so no pool slot is held for the bound. It proceeds as
-soon as this environment's adjudication marker for the conversation is set,
-otherwise after MEETING_NOTES_EVIDENCE_WAIT_SECONDS. It never fails
+soon as this environment's adjudication marker for the conversation is set for
+its current content window (same fingerprint the Mac's pass stamped), otherwise after MEETING_NOTES_EVIDENCE_WAIT_SECONDS. It never fails
 finalization: every error proceeds without evidence.
 """
 
@@ -23,13 +23,14 @@ import os
 import time
 from typing import Any, Awaitable, Callable, Mapping
 
-from database.screen_frames import get_conversation_screen_frames_adjudicated_at
+from database.screen_frames import get_conversation_content_window_fields, get_conversation_screen_frames_marker
 from database.users import get_meeting_note_screenshots_enabled
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import db_executor, run_blocking
 from utils.metrics import MEETING_NOTES_EVIDENCE_WAIT_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.other.storage import configured_screen_frames_bucket
+from utils.conversations.screen_content_window import current_selection_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +102,7 @@ async def await_meeting_evidence(
             return 'not_applicable'
         first = True
         while True:
-            if await _bounded(
-                get_conversation_screen_frames_adjudicated_at, uid, conversation_id, bucket=bucket, budget=remaining()
-            ):
+            if await _current_pass_landed(uid, conversation_id, bucket, remaining):
                 outcome = 'present' if first else 'arrived'
                 break
             first = False
@@ -135,6 +134,22 @@ async def await_meeting_evidence(
         conversation_id,
     )
     return outcome
+
+
+async def _current_pass_landed(uid: str, conversation_id: str, bucket: str, remaining: Callable[[], float]) -> bool:
+    """This bucket's marker covers the conversation's CURRENT content window.
+
+    A marker stamped mid-meeting for an earlier window is stale once the
+    transcript extends: the Mac then runs a fresh pass for the new fingerprint,
+    and the notes must wait for that one. Both reads are re-done each poll.
+    """
+    stamp, fingerprint = await _bounded(
+        get_conversation_screen_frames_marker, uid, conversation_id, bucket=bucket, budget=remaining()
+    )
+    if stamp is None:
+        return False
+    conversation = await _bounded(get_conversation_content_window_fields, uid, conversation_id, budget=remaining())
+    return conversation is not None and fingerprint == current_selection_fingerprint(conversation)
 
 
 async def _bounded(fn: Callable[..., Any], *args: Any, budget: float, **kwargs: Any) -> Any:

@@ -28,7 +28,7 @@ from google.cloud import firestore
 
 from utils import encryption
 from ._client import db, get_firestore_client
-from .conversations import conversations_collection
+from .conversations import conversations_collection, prepare_conversation_for_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
 screen_frames_subcollection = 'screen_frames'
@@ -324,6 +324,45 @@ def get_conversation_screen_frames_adjudicated_at(
     uid: str, conversation_id: str, *, bucket: str, rpc_timeout: Optional[float] = None
 ):
     return _read_state(_conversation_ref(uid, conversation_id), bucket, 'adjudicated_at', rpc_timeout)
+
+
+def get_conversation_screen_frames_marker(
+    uid: str, conversation_id: str, *, bucket: str, rpc_timeout: Optional[float] = None
+) -> tuple[Any, Any]:
+    """This bucket's (adjudicated_at, selection_fingerprint), in one bounded read."""
+    ref = _conversation_ref(uid, conversation_id)
+    bounds = _rpc_bounds(rpc_timeout)
+    if bucket == LEGACY_SCREEN_FRAMES_BUCKET:
+        paths = [_LEGACY_STATE_FIELDS['adjudicated_at'], _LEGACY_STATE_FIELDS['selection_fingerprint']]
+        data = ref.get(field_paths=paths, **bounds).to_dict() or {}
+        return data.get(paths[0]), data.get(paths[1])
+    state = (ref.get(field_paths=[_ENV_STATE_FIELD], **bounds).to_dict() or {}).get(_ENV_STATE_FIELD)
+    scoped = state.get(_state_key(bucket)) if isinstance(state, dict) else None
+    scoped = scoped if isinstance(scoped, dict) else {}
+    return scoped.get('adjudicated_at'), scoped.get('selection_fingerprint')
+
+
+_CONTENT_WINDOW_FIELDS = [
+    'started_at',
+    'finished_at',
+    'transcript_segments',
+    'transcript_segments_compressed',
+    'data_protection_level',
+    'audio_timeline',
+    'external_data',
+]
+
+
+def get_conversation_content_window_fields(
+    uid: str, conversation_id: str, *, rpc_timeout: Optional[float] = None
+) -> Dict[str, Any] | None:
+    """Only what the content window needs (decoded segments), in one bounded read."""
+    snapshot = _conversation_ref(uid, conversation_id).get(
+        field_paths=_CONTENT_WINDOW_FIELDS, **_rpc_bounds(rpc_timeout)
+    )
+    if not getattr(snapshot, 'exists', False):
+        return None
+    return prepare_conversation_for_read(snapshot.to_dict() or {}, uid)
 
 
 def get_conversation_screen_frames_selection_fingerprint(uid: str, conversation_id: str, *, bucket: str):

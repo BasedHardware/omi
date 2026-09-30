@@ -15,6 +15,7 @@ from models.conversation_enums import ConversationStatus
 from utils.conversations import finalizer  # imported at collection: the finalizer's import graph is not per-test cost
 from utils.conversations import meeting_evidence_admission as admission
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.screen_content_window import current_selection_fingerprint
 
 BUCKET = 'based-hardware-dev-screen-frames'
 MEETING = {'source': 'desktop', 'external_data': {'conversation_role': 'meeting', 'screen_evidence_pass': True}}
@@ -58,16 +59,39 @@ def fallbacks(monkeypatch):
     return recorded
 
 
-def _marker(monkeypatch, stamps):
-    """Adjudication marker reads return successive values (None = not yet)."""
+def _window(end_seconds: float) -> dict:
+    """The content-window fields of a v2-timeline meeting whose speech ends at ``end_seconds``."""
+    return {
+        'started_at': STAMP,
+        'audio_timeline': {'version': 2},
+        'transcript_segments': [{'text': 'hello', 'start': 5.0, 'end': end_seconds}],
+    }
+
+
+CURRENT = _window(300.0)
+CURRENT_FINGERPRINT = current_selection_fingerprint(CURRENT)
+EARLIER_FINGERPRINT = current_selection_fingerprint(_window(120.0))
+
+
+def _marker(monkeypatch, stamps, window=CURRENT):
+    """Marker reads return successive values: None (not yet), STAMP (a pass over the
+    current window), or an explicit (stamp, fingerprint) pair."""
     reads = []
 
     def read(uid, conversation_id, *, bucket, rpc_timeout):
         assert 0 < rpc_timeout <= 25.0  # every RPC is bounded by what is left of the wait
         reads.append(bucket)
-        return stamps[min(len(reads) - 1, len(stamps) - 1)]
+        value = stamps[min(len(reads) - 1, len(stamps) - 1)]
+        if value is None:
+            return None, None
+        return value if isinstance(value, tuple) else (value, CURRENT_FINGERPRINT)
 
-    monkeypatch.setattr(admission, 'get_conversation_screen_frames_adjudicated_at', read)
+    def window_fields(uid, conversation_id, *, rpc_timeout):
+        assert 0 < rpc_timeout <= 25.0
+        return window
+
+    monkeypatch.setattr(admission, 'get_conversation_screen_frames_marker', read)
+    monkeypatch.setattr(admission, 'get_conversation_content_window_fields', window_fields)
     return reads
 
 
@@ -156,7 +180,7 @@ def test_a_read_failure_proceeds_degraded_instead_of_failing_finalization(monkey
     def boom(*_args, **_kwargs):
         raise RuntimeError('firestore unavailable')
 
-    monkeypatch.setattr(admission, 'get_conversation_screen_frames_adjudicated_at', boom)
+    monkeypatch.setattr(admission, 'get_conversation_screen_frames_marker', boom)
     assert _run(clock) == 'error'
     assert fallbacks and fallbacks[0]['outcome'] == 'degraded'
     assert fallbacks[0]['component'] == 'conversation_finalization'
@@ -249,3 +273,33 @@ def test_the_finalizer_admits_evidence_before_any_processing_step(monkeypatch):
 
 def test_a_completed_replay_does_not_wait(monkeypatch):
     assert _finalize_until_geolocation(monkeypatch, 'completed') == ['geolocation']
+
+
+class TestTheMarkerMustCoverTheCurrentWindow:
+    """A marker stamped mid-meeting for an earlier content window is stale once the
+    transcript extends; the Mac runs a fresh pass for the new fingerprint."""
+
+    def test_a_stale_marker_keeps_waiting_until_the_bound(self, monkeypatch, clock, fallbacks):
+        _marker(monkeypatch, [(STAMP, EARLIER_FINGERPRINT)])
+        assert _run(clock) == 'timed_out'
+        assert clock.now == pytest.approx(25.0)
+        assert [f['reason'] for f in fallbacks] == ['timeout']
+
+    def test_a_stale_marker_releases_when_the_current_pass_lands(self, monkeypatch, clock):
+        _marker(monkeypatch, [(STAMP, EARLIER_FINGERPRINT), (STAMP, EARLIER_FINGERPRINT), (STAMP, CURRENT_FINGERPRINT)])
+        assert _run(clock) == 'arrived'
+        assert clock.now == pytest.approx(2 * admission.EVIDENCE_POLL_SECONDS)
+
+    def test_the_window_is_re_read_each_poll(self, monkeypatch, clock):
+        windows = iter([_window(120.0), _window(300.0)])
+        _marker(monkeypatch, [(STAMP, CURRENT_FINGERPRINT)])
+        monkeypatch.setattr(
+            admission, 'get_conversation_content_window_fields', lambda uid, cid, *, rpc_timeout: next(windows)
+        )
+        # First poll: the transcript still ended at 120 s, so the current-window marker does
+        # not match yet; the next read sees the extended transcript and it does.
+        assert _run(clock) == 'arrived'
+
+    def test_a_deleted_conversation_does_not_count_as_evidence(self, monkeypatch, clock):
+        _marker(monkeypatch, [STAMP], window=None)
+        assert _run(clock) == 'timed_out'
