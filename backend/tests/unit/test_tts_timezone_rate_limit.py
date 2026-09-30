@@ -6,8 +6,11 @@ Verifies:
 2. Fallback to UTC occurs cleanly when user_tz is None, empty, or invalid.
 3. check_tts_rate_limit passes local daily keys and TTL into Lua script.
 4. tts_synthesize passes user_tz from user settings into check_tts_rate_limit.
+5. The timezone read itself is a blocking Firestore call, so tts_synthesize resolves it on
+   a db_executor worker thread rather than on the event loop.
 """
 
+import threading
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
@@ -71,6 +74,10 @@ async def test_tts_synthesize_passes_user_tz(monkeypatch):
     captured_kwargs = {}
 
     async def mock_run_blocking(executor, fn, *args, **kwargs):
+        if fn is tts_router._get_user_time_zone:
+            # The timezone lookup now runs on its own executor hop; keep the router's resolver
+            # real so this test still asserts the stored timezone reaches check_tts_rate_limit.
+            return tts_router._get_user_time_zone(*args)
         captured_kwargs.update(kwargs)
         return 0, 0
 
@@ -89,3 +96,40 @@ async def test_tts_synthesize_passes_user_tz(monkeypatch):
     await tts_router.tts_synthesize(req, uid="user123")
 
     assert captured_kwargs.get("user_tz") == "Asia/Tokyo"
+
+
+@pytest.mark.asyncio
+async def test_tts_synthesize_resolves_timezone_off_the_event_loop(monkeypatch):
+    """The Firestore timezone read must not run on the event loop (backend/AGENTS.md Lane 2)."""
+    loop_thread = threading.current_thread()
+    observed = {}
+
+    def fake_get_user_time_zone(uid):
+        observed["tz_thread"] = threading.current_thread()
+        return None
+
+    def fake_check_tts_rate_limit(uid, **kwargs):
+        observed["rate_limit_uid"] = uid
+        observed["rate_limit_kwargs"] = kwargs
+        return 0, 0
+
+    async def mock_open_stream(**kwargs):
+        async def _chunks():
+            yield b"data"
+
+        return _chunks()
+
+    # run_blocking is deliberately NOT patched: the hop under test must be a real executor hop.
+    monkeypatch.setattr(tts_router, "_get_user_time_zone", fake_get_user_time_zone)
+    monkeypatch.setattr(tts_router.redis_db, "check_tts_rate_limit", fake_check_tts_rate_limit)
+    monkeypatch.setattr(tts_router, "get_tts_provider", lambda: "gemini")
+    monkeypatch.setattr(tts_router, "open_gemini_mp3_stream", mock_open_stream)
+
+    req = TtsSynthesizeRequest(text="Hello world")
+    await tts_router.tts_synthesize(req, uid="user123")
+
+    assert observed["tz_thread"] is not loop_thread
+    assert observed["tz_thread"].name.startswith("db")
+    assert observed["rate_limit_uid"] == "user123"
+    # Fallback path preserved: an unresolvable timezone still reaches the limiter as None.
+    assert observed["rate_limit_kwargs"].get("user_tz") is None

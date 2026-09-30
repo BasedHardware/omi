@@ -24,7 +24,7 @@ from models.tts import DEFAULT_MODEL_ID, TtsSynthesizeRequest
 from utils.http_client import get_tts_client, get_tts_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
-from utils.executors import run_blocking, critical_executor
+from utils.executors import run_blocking, critical_executor, db_executor
 from utils.tts import (
     TtsConfigurationError,
     TtsRequestLog,
@@ -60,7 +60,11 @@ def _is_valid_voice_id(voice_id: str) -> bool:
 
 
 def _get_user_time_zone(uid: str) -> Optional[str]:
-    """Retrieve user timezone from notification_db, failing gracefully to None (UTC fallback)."""
+    """Retrieve user timezone from notification_db, failing gracefully to None (UTC fallback).
+
+    Blocking Firestore read: call it through ``run_blocking(db_executor, ...)`` never directly
+    from async code (see backend/AGENTS.md Lane 2).
+    """
     try:
         from database import notifications as notification_db
 
@@ -101,7 +105,11 @@ async def tts_synthesize(
             detail=f"text exceeds maximum length of {_TTS_REQUEST_CHAR_LIMIT} characters",
         )
 
-    user_tz = _get_user_time_zone(uid)
+    # The Firestore user-document read is blocking, so it gets its own hop on the DB pool
+    # (Firestore CRUD belongs to db_executor per backend/AGENTS.md; same shape as the
+    # get_user_from_uid hop in routers/apps.py). critical_executor stays reserved for the
+    # rate-limit gate itself, which every request queues behind.
+    user_tz = await run_blocking(db_executor, _get_user_time_zone, uid)
     status, retry_after = await run_blocking(
         critical_executor,
         redis_db.check_tts_rate_limit,

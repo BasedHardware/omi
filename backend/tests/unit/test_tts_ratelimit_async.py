@@ -1,15 +1,21 @@
-"""The TTS synthesize handler must not block the event loop on the rate-limit check.
+"""The TTS synthesize handler must not block the event loop on its pre-flight sync work.
 
 ``tts_synthesize`` (``POST /v2/tts/synthesize`` in ``routers/tts.py``) is an ``async`` handler
-that streams the upstream TTS response via an httpx async client, but it first runs the
-synchronous Redis rate-limit check ``redis_db.check_tts_rate_limit`` directly on the event
-loop. The sync Redis call blocks the loop (``database.*`` is exactly the class the
-async-blocker lint does not catch).
+that streams the upstream TTS response via an httpx async client, but it first runs two
+synchronous calls directly on the event loop:
 
-It must be offloaded with ``await run_blocking(critical_executor, redis_db.check_tts_rate_limit,
-...)`` (the auth/rate-limit pool per ``AGENTS.md``). These AST checks assert the offload stays
-in place, including that the ``run_blocking`` call is awaited (a bare call would be a dangling
-coroutine that never runs).
+- the Redis rate-limit check ``redis_db.check_tts_rate_limit``
+- the Firestore user timezone read ``_get_user_time_zone`` (via
+  ``notification_db.get_user_time_zone``), which feeds that limiter's daily bucket
+
+Both block the loop (``database.*`` is exactly the class the async-blocker lint struggles
+to see through a module-local wrapper, and it reports the unwrapped timezone read as
+``STRUCTURAL (mixed await+sync DB)``).
+
+They must be offloaded with ``await run_blocking(<pool>, fn, ...)`` — ``critical_executor``
+for the auth/rate-limit gate, ``db_executor`` for the Firestore read, per ``AGENTS.md`` pool
+assignment. These AST checks assert each offload stays in place, including that the
+``run_blocking`` call is awaited (a bare call would be a dangling coroutine that never runs).
 """
 
 import ast
@@ -20,6 +26,8 @@ TTS_ROUTER = BACKEND_DIR / "routers" / "tts.py"
 
 _HANDLER = "tts_synthesize"
 _BLOCKING = "redis_db.check_tts_rate_limit"
+# The Firestore read is called as a module-local helper, so it is matched by bare name.
+_BLOCKING_TIMEZONE = "_get_user_time_zone"
 
 
 def _dotted(func):
@@ -76,3 +84,17 @@ class TestTtsRateLimitOffload:
 
     def test_handler_is_async(self):
         assert isinstance(_handler_node(), ast.AsyncFunctionDef)
+
+
+class TestTtsTimezoneLookupOffload:
+    """#19861: the Firestore timezone read must leave the event loop too."""
+
+    def test_timezone_lookup_is_not_called_directly_in_the_async_handler(self):
+        assert _BLOCKING_TIMEZONE not in _direct_calls(_handler_node()), (
+            f"{_HANDLER} runs {_BLOCKING_TIMEZONE} directly on the event loop. "
+            f"Offload it with await run_blocking(db_executor, {_BLOCKING_TIMEZONE}, uid)."
+        )
+
+    def test_timezone_lookup_is_offloaded_via_awaited_run_blocking(self):
+        offloaded = _offloaded_via_awaited_run_blocking(_handler_node())
+        assert _BLOCKING_TIMEZONE in offloaded, f"{_BLOCKING_TIMEZONE} is not offloaded via awaited run_blocking"
