@@ -10,6 +10,7 @@ from google.cloud import firestore
 
 from database import conversations as conversations_db
 from database._client import get_firestore_client, run_transactional
+from database.legal_holds import assert_no_destructive_operation_transaction
 from database.smart_merge import conversation_collection, decode_merge_row, audit_ref, merge_audit
 
 
@@ -43,6 +44,9 @@ def unmerge_transaction(
 
     @firestore.transactional
     def undo(transaction) -> UnmergeResult:
+        # The audit sibling this transaction writes is user-scoped data the
+        # account-deletion wipe owns; never recreate it under a live wipe gate.
+        assert_no_destructive_operation_transaction(transaction, client, uid=uid)
         requested = collection.document(donor_id).get(transaction=transaction).to_dict() or {}
         donor_state = requested.get('smart_merge') or {}
         survivor_id = str(donor_state.get('survivor_id') or '')

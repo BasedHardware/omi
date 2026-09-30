@@ -588,3 +588,24 @@ def test_audio_removal_uses_exact_copied_filenames(monkeypatch):
     monkeypatch.setattr(storage, 'list_audio_chunks', lambda uid, cid: [])
     storage.delete_copied_smart_merge_audio(UID, 'n', 'p', filenames=['100.000.opus.enc'])
     assert deleted == [f'chunks/{UID}/p/100.000.opus.enc']
+
+
+def test_unmerge_fenced_while_account_wipe_runs(world):
+    """The audit sibling is user data the account wipe owns: a live wipe gate
+    must block the undo transaction instead of recreating audit documents."""
+    from database.legal_holds import LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION
+
+    world.store.rows[('legal_hold_deletion_gates', UID)] = {
+        'schema_version': LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+        'uid': UID,
+        'kind': 'account_data_wipe',
+        'token': 'live-wipe',
+        'state': 'running',
+        'started_at': datetime.now(timezone.utc),
+        'finished_at': None,
+    }
+    before = deepcopy(world.store.rows)
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        smart_merge.unmerge_conversation(UID, 'n', dry_run=False)
+    assert world.store.rows == before  # no partial undo, no audit resurrection
+    assert not world.restored and not world.removed_audio

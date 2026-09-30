@@ -685,10 +685,18 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True)
 
 
-def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> None:
-    """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
+def delete_conversation_with_sync_sources(
+    uid: str, conversation_id: str, *, _restored_donor_cleaned: bool = False
+) -> None:
+    """User/source deletion owns retained bridge artifacts, unlike raw DB deletion.
+
+    ``_restored_donor_cleaned`` marks the internal delegation from
+    ``_delete_conversation_and_related_data``, which already ran the restored-donor
+    cleanup before deleting the donor's own audio: exactly one layer owns it.
+    """
     row = conversations_db.get_conversation(uid, conversation_id) or {}
-    cleanup_restored_donor(uid, row)
+    if not _restored_donor_cleaned:
+        cleanup_restored_donor(uid, row)
     merged_at = None
     try:
         state = row.get('smart_merge') or {}
@@ -832,7 +840,7 @@ def _delete_conversation_and_related_data(
         # Purge retained bridge sources only for a real source/user deletion.
         # Rollback of a newly created merge target still uses raw DB deletion.
         if purge_sync_sources:
-            delete_conversation_with_sync_sources(uid, conversation_id)
+            delete_conversation_with_sync_sources(uid, conversation_id, _restored_donor_cleaned=True)
         else:
             conversations_db.delete_conversation(uid, conversation_id)
     except Exception as e:

@@ -11,6 +11,7 @@ import os
 from typing import Sequence
 
 from utils.conversations.smart_merge import unmerge_conversation
+from utils.executors import postprocess_executor
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -28,16 +29,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Even an apply may print only our closed ids/counts/reason projection.
         logging.disable(logging.CRITICAL)
         with open(os.devnull, 'w') as sink, contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
-            result = unmerge_conversation(args.uid, args.donor_id, force=args.force, dry_run=not args.apply)
-        output = {
-            'donor_id': args.donor_id,
-            'survivor_id': result.survivor_id,
-            'donor_ids': list(result.donor_ids),
-            'donor_count': len(result.donor_ids),
-            'removed_segment_count': result.removed_segments,
-            'reason': result.reason,
-        }
-        status = 2 if result.outcome == 'ineligible' else 0
+            try:
+                result = unmerge_conversation(args.uid, args.donor_id, force=args.force, dry_run=not args.apply)
+                output = {
+                    'donor_id': args.donor_id,
+                    'survivor_id': result.survivor_id,
+                    'donor_ids': list(result.donor_ids),
+                    'donor_count': len(result.donor_ids),
+                    'removed_segment_count': result.removed_segments,
+                    'reason': result.reason,
+                }
+                status = 2 if result.outcome == 'ineligible' else 0
+            finally:
+                # Restored-donor processing submits fire-and-forget vector,
+                # action-item, goal and webhook work to the shared postprocess
+                # executor. Drain it before output is restored, or that work can
+                # print legacy/provider output after the closed JSON projection.
+                postprocess_executor.drain_submitted(timeout=600)
     except Exception:
         output = {'donor_id': args.donor_id, 'reason': 'error'}
         status = 1

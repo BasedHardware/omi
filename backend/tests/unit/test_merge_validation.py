@@ -55,7 +55,9 @@ def merge():
     storage_stub = ModuleType("utils.other.storage")
     for _name in [
         "compute_audio_files_fingerprint",
+        "delete_cached_merged_audio",
         "delete_conversation_audio_files",
+        "delete_copied_smart_merge_audio",
         "enqueue_conversation_artifact_build",
         "list_audio_chunks",
         "_get_storage_client",

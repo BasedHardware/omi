@@ -33,7 +33,7 @@ import contextvars
 import functools
 import logging
 import threading
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
         self._active_count = 0
         self._active_lock = threading.Lock()
         self.max_queue_size = max_queue_size
+        self._submitted: set["Future[Any]"] = set()
         max_workers = self._max_workers
         self._submission_slots = (
             threading.BoundedSemaphore(max_workers + max_queue_size) if max_queue_size is not None else None
@@ -82,9 +83,34 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
             if slots is not None:
                 slots.release()
             raise
+        self._track_submitted(future)
         if slots is not None:
             future.add_done_callback(lambda _future: slots.release())
         return future
+
+    def _track_submitted(self, future: "Future[Any]") -> None:
+        with self._active_lock:
+            self._submitted.add(future)
+        future.add_done_callback(self._discard_submitted)
+
+    def _discard_submitted(self, future: "Future[Any]") -> None:
+        with self._active_lock:
+            self._submitted.discard(future)
+
+    def drain_submitted(self, timeout: float | None = None) -> bool:
+        """Wait for every task this executor has been asked to run.
+
+        Non-destructive: the pool stays usable after draining. Returns True when
+        all submitted work finished within ``timeout``. Callers that must not
+        outlive their output redirection (one-shot admin CLIs) use this instead
+        of ``shutdown``, which would kill the shared pool for later runs.
+        """
+        with self._active_lock:
+            pending = set(self._submitted)
+        if not pending:
+            return True
+        _done, still_pending = wait(pending, timeout=timeout)
+        return not still_pending
 
     def _tracked(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         with self._active_lock:

@@ -26,6 +26,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations as conversations_db
 from database._client import get_firestore_client, run_transactional
+from database.legal_holds import assert_no_destructive_operation_transaction
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
 
 logger = logging.getLogger(__name__)
@@ -188,6 +189,10 @@ def absorb_conversation(
 
     @firestore.transactional
     def absorb(transaction) -> AbsorbResult:
+        # The sibling audit is user-scoped data the account-deletion wipe owns;
+        # never create it inside a transaction that could commit under a live
+        # wipe gate after the wipe already passed this collection.
+        assert_no_destructive_operation_transaction(transaction, client, uid=uid)
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
