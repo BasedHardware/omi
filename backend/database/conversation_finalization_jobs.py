@@ -18,6 +18,11 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database._client import document_id_from_seed, get_firestore_client
+from database.conversation_terminal_title import (
+    dead_letter_conversation_updates,
+    kept_row_terminal_update,
+    user_time_zone,
+)
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
@@ -1133,6 +1138,7 @@ def _mark_finalization_dead_letter_txn(
     conversation_ref_for_job: Callable[[str, str], Any] | None = None,
     projection_collection: Any | None = None,
     failure_code: str = 'final_attempt_failed',
+    time_zone_for_uid: Callable[[str], str | None] | None = None,
 ) -> bool:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -1162,6 +1168,21 @@ def _mark_finalization_dead_letter_txn(
         conversation_ref = conversation_ref_for_job(uid, conversation_id)
         conversation_snapshot = conversation_ref.get(transaction=transaction)
         conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
+    conversation_updates: dict[str, Any] | None = None
+    if (
+        conversation_ref is not None
+        and isinstance(uid, str)
+        and isinstance(conversation, Mapping)
+        and conversation.get('status') == 'processing'
+        and not conversation.get('discarded')
+        and conversation.get('finalization_job_id') == job_ref.id
+        and conversation.get('finalization_revision') == job.get('finalization_revision')
+    ):
+        # Computed before the first write: it may read the photos child
+        # collection inside this transaction.
+        conversation_updates = dead_letter_conversation_updates(
+            uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid
+        )
     transaction.update(
         job_ref,
         {
@@ -1179,24 +1200,7 @@ def _mark_finalization_dead_letter_txn(
         },
     )
     _record_projection_delta(transaction, projection_collection, job, leased=-1, dead_letter=1, failure=1)
-    if (
-        conversation_ref is not None
-        and isinstance(conversation, Mapping)
-        and conversation.get('status') == 'processing'
-        and not conversation.get('discarded')
-        and conversation.get('finalization_job_id') == job_ref.id
-        and conversation.get('finalization_revision') == job.get('finalization_revision')
-    ):
-        # Match BYOK abandonment/orphan recovery. A failed first processing
-        # pass may have no structured field at all, which the API model needs
-        # even to return an untitled transcript-only conversation.
-        conversation_updates: dict[str, Any] = {
-            'status': 'completed',
-            'discarded': False,
-            'finalization_status': 'dead_letter',
-        }
-        if not isinstance(conversation.get('structured'), Mapping):
-            conversation_updates['structured'] = {'title': '', 'overview': ''}
+    if conversation_updates is not None:
         transaction.update(conversation_ref, conversation_updates)
     return True
 
@@ -1223,6 +1227,7 @@ def mark_finalization_dead_letter(
         lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         failure_code,
+        lambda uid: user_time_zone(client, uid),
     )
 
 
@@ -2057,7 +2062,12 @@ def complete_unstampable_orphan_conversation(
 
 
 def _complete_orphan_conversation_txn(
-    transaction: Any, conversation_ref: Any, expected_admitted_at: datetime | None, now: datetime
+    transaction: Any,
+    conversation_ref: Any,
+    expected_admitted_at: datetime | None,
+    now: datetime,
+    uid: str | None = None,
+    time_zone_for_uid: Callable[[str], str | None] | None = None,
 ) -> bool:
     """Terminalize exactly the scanned orphan generation, fencing every live owner.
 
@@ -2071,7 +2081,8 @@ def _complete_orphan_conversation_txn(
 
     Only when every assumption still holds is the row moved to ``completed``. Any
     divergence is an expected CAS fencing (``False``), never a terminalization of
-    live or durable-owned work.
+    live or durable-owned work. An untitled row also gets its deterministic title
+    (``kept_row_terminal_update``) so it never lands in the list untitled.
     """
     del now  # the terminal write carries no timestamp; the fence is the generation
     snapshot = conversation_ref.get(transaction=transaction)
@@ -2085,7 +2096,11 @@ def _complete_orphan_conversation_txn(
     admitted_at = data.get('processing_admitted_at')
     if not isinstance(admitted_at, datetime) or admitted_at != expected_admitted_at:
         return False
-    transaction.update(conversation_ref, {'status': 'completed'})
+    uid = uid or _uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
+    terminal: dict[str, Any] = {'status': 'completed'}
+    if uid:
+        terminal = kept_row_terminal_update(uid, data, conversation_ref, terminal, time_zone_for_uid)
+    transaction.update(conversation_ref, terminal)
     return True
 
 
@@ -2096,7 +2111,14 @@ def complete_orphan_conversation(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_complete_orphan_conversation_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), expected_admitted_at, _now())
+    return transactional(
+        transaction,
+        _conversation_ref(client, uid, conversation_id),
+        expected_admitted_at,
+        _now(),
+        uid,
+        lambda zone_uid: user_time_zone(client, zone_uid),
+    )
 
 
 def _renew_processing_lease_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
@@ -2297,6 +2319,7 @@ def _abandon_byok_finalization_job_txn(
     now: datetime,
     conversation_ref_for_job: Callable[[str, str], Any] | None = None,
     projection_collection: Any | None = None,
+    time_zone_for_uid: Callable[[str], str | None] | None = None,
 ) -> ByokAbandonment:
     """Terminalize exactly the scanned unownable BYOK generation, fencing every live owner.
 
@@ -2356,6 +2379,21 @@ def _abandon_byok_finalization_job_txn(
         conversation_snapshot = conversation_ref.get(transaction=transaction)
         conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
 
+    closes_conversation = (
+        conversation_ref is not None
+        and isinstance(uid, str)
+        and isinstance(conversation, Mapping)
+        and conversation.get('finalization_job_id') == job_ref.id
+        and conversation.get('finalization_revision') == job.get('finalization_revision')
+        and conversation.get('status') == 'processing'
+        and not conversation.get('discarded')
+        and not conversation.get('deferred')
+    )
+    # Pure decode of the snapshot already held; no transactional read after a write.
+    terminal: dict[str, Any] = {'status': 'completed', 'finalization_status': 'dead_letter'}
+    if closes_conversation and isinstance(uid, str) and isinstance(conversation, Mapping):
+        terminal = kept_row_terminal_update(uid, conversation, conversation_ref, terminal, time_zone_for_uid)
+
     transaction.update(
         job_ref,
         {
@@ -2396,7 +2434,7 @@ def _abandon_byok_finalization_job_txn(
         # A desktop lazy row intentionally stays on `processing` and is owned by
         # its own lane, exactly as the bare-`processing` sweep treats it.
         return _byok_abandonment('abandoned', 'deferred')
-    transaction.update(conversation_ref, {'status': 'completed', 'finalization_status': 'dead_letter'})
+    transaction.update(conversation_ref, terminal)
     return _byok_abandonment('abandoned', 'closed')
 
 
@@ -2424,6 +2462,7 @@ def abandon_byok_finalization_job(
         now,
         lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
+        lambda uid: user_time_zone(client, uid),
     )
 
 

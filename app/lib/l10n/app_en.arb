@@ -11913,14 +11913,6 @@
     "@syncStatusUnsupportedAudio": {
         "description": "Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help."
     },
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "@conversationTitleDidntGenerate": {
-        "description": "Inline conversation-row hint when processing finished but the title pass produced nothing"
-    },
-    "conversationReprocess": "Reprocess",
-    "@conversationReprocess": {
-        "description": "Inline conversation-row action to rerun title and summary generation"
-    },
     "chatStarterPrompt": "{kind, select, capabilities{What can you do for me?} goal{Help me set a goal} activity{Summarize my recent activity} improve{How can I improve?} other{}}",
     "@chatStarterPrompt": {
         "description": "Editable empty-chat starter; use capabilities/goal without personal data, activity/improve with saved data.",
@@ -13845,5 +13837,9 @@
     "deleteMeetingScreenshotMessage": "This removes the screenshot from this meeting's note. It can't be undone.",
     "@deleteMeetingScreenshotMessage": {
         "description": "Body of the dialog confirming deletion of one meeting screenshot"
+    },
+    "conversationSummaryFailed": "Summary failed",
+    "@conversationSummaryFailed": {
+        "description": "Conversation list row chip: the server could not summarize this conversation after its retries, and retrying can still succeed. Shown next to a Retry button."
     }
 }

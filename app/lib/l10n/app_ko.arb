@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "이 화자의 이후 발화도 태그하기",
     "updateSummaryWithNewNames": "새 이름으로 요약 업데이트",
     "syncStatusUnsupportedAudio": "오디오를 읽을 수 없어 동기화할 수 없습니다",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{나를 위해 무엇을 해줄 수 있어?} goal{목표를 세우는 걸 도와줘} activity{최근 활동을 요약해 줘} improve{어떻게 하면 더 나아질 수 있을까?} other{}}",
     "nextWeek": "다음 주",
     "clearSearch": "검색 지우기",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "화면에 표시된 내용",
     "meetingScreenshotFallbackCaption": "이 회의의 스크린샷",
     "deleteMeetingScreenshotTitle": "스크린샷을 삭제할까요?",
-    "deleteMeetingScreenshotMessage": "이 회의 노트에서 스크린샷이 삭제됩니다. 되돌릴 수 없습니다."
+    "deleteMeetingScreenshotMessage": "이 회의 노트에서 스크린샷이 삭제됩니다. 되돌릴 수 없습니다.",
+    "conversationSummaryFailed": "요약 실패"
 }

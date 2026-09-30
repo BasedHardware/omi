@@ -3334,8 +3334,6 @@
     "tagSpeakerIncludingLaterSpeech": "Jelöld meg ennek a beszélőnek a későbbi beszédét is",
     "updateSummaryWithNewNames": "Összefoglaló frissítése az új nevekkel",
     "syncStatusUnsupportedAudio": "A hang nem olvasható — nem szinkronizálható",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Mit tudsz tenni értem?} goal{Segíts kitűzni egy célt} activity{Foglald össze a legutóbbi tevékenységeimet} improve{Hogyan fejlődhetek?} other{}}",
     "nextWeek": "Jövő héten",
     "clearSearch": "Keresés törlése",
@@ -3757,5 +3755,6 @@
     "meetingScreenshotsTitle": "Mi volt a képernyőn",
     "meetingScreenshotFallbackCaption": "Képernyőkép erről a megbeszélésről",
     "deleteMeetingScreenshotTitle": "Törli a képernyőképet?",
-    "deleteMeetingScreenshotMessage": "A képernyőkép törlődik a megbeszélés jegyzetéből. Ez nem vonható vissza."
+    "deleteMeetingScreenshotMessage": "A képernyőkép törlődik a megbeszélés jegyzetéből. Ez nem vonható vissza.",
+    "conversationSummaryFailed": "Az összefoglaló nem sikerült"
 }

@@ -3273,8 +3273,6 @@
     "tagSpeakerIncludingLaterSpeech": "Etiquetar também a fala posterior deste locutor",
     "updateSummaryWithNewNames": "Atualizar o resumo com os novos nomes",
     "syncStatusUnsupportedAudio": "Não foi possível ler o áudio — não pode ser sincronizado",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{O que você pode fazer por mim?} goal{Ajude-me a definir uma meta} activity{Resuma minha atividade recente} improve{Como posso melhorar?} other{}}",
     "nextWeek": "Na próxima semana",
     "clearSearch": "Limpar pesquisa",
@@ -3696,5 +3694,6 @@
     "meetingScreenshotsTitle": "O que estava na tela",
     "meetingScreenshotFallbackCaption": "Captura de tela desta reunião",
     "deleteMeetingScreenshotTitle": "Excluir captura de tela?",
-    "deleteMeetingScreenshotMessage": "Isso remove a captura de tela da nota desta reunião. Não é possível desfazer."
+    "deleteMeetingScreenshotMessage": "Isso remove a captura de tela da nota desta reunião. Não é possível desfazer.",
+    "conversationSummaryFailed": "Falha no resumo"
 }
