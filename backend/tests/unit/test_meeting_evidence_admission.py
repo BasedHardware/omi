@@ -303,3 +303,60 @@ class TestTheMarkerMustCoverTheCurrentWindow:
     def test_a_deleted_conversation_does_not_count_as_evidence(self, monkeypatch, clock):
         _marker(monkeypatch, [STAMP], window=None)
         assert _run(clock) == 'timed_out'
+
+
+def _process_after_wait(monkeypatch, *, reloaded_status, outcome='arrived'):
+    """Run the finalizer to process_conversation with a transcript that grows during the wait."""
+    before = dict(MEETING, id='c', status='processing', segments=['hello'])
+    after = dict(MEETING, id='c', status=reloaded_status, segments=['hello', 'tail said during the wait'])
+    reads = iter([before, after])
+    processed: list = []
+
+    class _Conversation:
+        def __init__(self, data):
+            self.id = 'c'
+            self.source = 'desktop'
+            self.geolocation = None
+            self.status = getattr(ConversationStatus, data['status'])
+            self.segments = list(data['segments'])
+
+    async def fake_run_blocking(_executor, function, *args, **kwargs):
+        if function is finalizer.conversations_db.get_conversation:
+            return next(reads)
+        if function is finalizer.get_cached_user_geolocation:
+            return None
+        if function is finalizer.process_conversation:
+            processed.append(args[2])
+            raise _Stop()
+        raise AssertionError(f'unexpected blocking call: {function!r}')
+
+    async def fake_admission(uid, conversation_id, conversation_data, *, trigger):
+        return outcome
+
+    monkeypatch.setattr(finalizer, 'run_blocking', fake_run_blocking)
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', _Conversation)
+    monkeypatch.setattr(finalizer, 'await_meeting_evidence', fake_admission)
+    monkeypatch.setattr(finalizer, '_maybe_start_shadow', lambda *a: None)
+    try:
+        asyncio.run(
+            finalizer.finalize_persisted_conversation(
+                'u', 'c', finalization_job_id='job', dispatch_generation=1, lease_epoch=1
+            )
+        )
+    except Exception:
+        pass
+    return processed
+
+
+@pytest.mark.parametrize('outcome', ['present', 'arrived', 'timed_out', 'error'])
+def test_processing_uses_the_row_as_it_is_after_the_wait(monkeypatch, outcome):
+    """Tail segments that land during the wait are summarized, and the pre-wait snapshot
+    never reaches process_conversation (whose persist would overwrite the newer transcript)."""
+    processed = _process_after_wait(monkeypatch, reloaded_status='processing', outcome=outcome)
+    assert len(processed) == 1
+    assert processed[0].segments == ['hello', 'tail said during the wait']
+
+
+def test_a_row_completed_by_another_owner_during_the_wait_is_not_reprocessed(monkeypatch):
+    processed = _process_after_wait(monkeypatch, reloaded_status='completed')
+    assert processed == []
