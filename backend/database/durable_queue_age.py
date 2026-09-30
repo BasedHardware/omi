@@ -133,13 +133,10 @@ def _sample_status_page(
     spec: Mapping[str, Any],
     page_size: int = _STORE_WIDE_PAGE,
 ) -> List[datetime]:
-    if client is None or not hasattr(client, "collection_group"):
-        return []
-    try:
-        collection = str(spec['collection'])
-        created_at_field = str(spec.get('created_at_field') or 'created_at')
-    except (KeyError, TypeError):
-        return []
+    if client is None or not hasattr(client, 'collection_group'):
+        raise RuntimeError('Firestore client unavailable or missing collection_group')
+    collection = str(spec['collection'])
+    created_at_field = str(spec.get('created_at_field') or 'created_at')
 
     limit = max(1, min(page_size, 1000))
     event_type = spec.get('event_type')
@@ -147,28 +144,19 @@ def _sample_status_page(
     ready_statuses: tuple[Any, ...] = tuple(spec.get('ready_statuses') or ())
     created_ats: List[datetime] = []
 
-    try:
-        if status_field and ready_statuses:
-            for status in ready_statuses:
-                try:
-                    query = (
-                        client.collection_group(collection)
-                        .where(filter=FieldFilter(status_field, '==', status))
-                        .limit(limit)
-                    )
-                    snapshots: Iterable[Any] = query.stream()
-                    created_ats.extend(
-                        _created_ats_from_page(snapshots, created_at_field=created_at_field, event_type=event_type)
-                    )
-                except Exception as query_exc:
-                    logger.warning("Query failed for collection %s status %s: %s", collection, status, query_exc)
-            return created_ats
+    if status_field and ready_statuses:
+        for status in ready_statuses:
+            query = (
+                client.collection_group(collection).where(filter=FieldFilter(status_field, '==', status)).limit(limit)
+            )
+            snapshots: Iterable[Any] = query.stream()
+            created_ats.extend(
+                _created_ats_from_page(snapshots, created_at_field=created_at_field, event_type=event_type)
+            )
+        return created_ats
 
-        query = client.collection_group(collection).limit(limit)
-        return _created_ats_from_page(query.stream(), created_at_field=created_at_field, event_type=event_type)
-    except Exception as exc:
-        logger.warning("Failed to sample status page for collection %s: %s", collection, exc)
-        return []
+    query = client.collection_group(collection).limit(limit)
+    return _created_ats_from_page(query.stream(), created_at_field=created_at_field, event_type=event_type)
 
 
 def sample_store_wide_oldest_ready_ages(

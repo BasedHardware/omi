@@ -118,8 +118,10 @@ class TestDurableQueueAgePageSampling:
 
     def test_sample_status_page_null_or_missing_client(self):
         spec = QUEUE_AGE_SAMPLERS["memory_outbox"]
-        assert _sample_status_page(None, spec) == []
-        assert _sample_status_page(object(), spec) == []
+        with pytest.raises(Exception):
+            _sample_status_page(None, spec)
+        with pytest.raises(Exception):
+            _sample_status_page(object(), spec)
 
     def test_sample_status_page_query_with_statuses(self):
         mock_client = MagicMock()
@@ -143,8 +145,23 @@ class TestDurableQueueAgePageSampling:
         mock_client = MagicMock()
         mock_client.collection_group.side_effect = RuntimeError("Firestore unavailable")
         spec = QUEUE_AGE_SAMPLERS["memory_outbox"]
-        res = _sample_status_page(mock_client, spec)
-        assert res == []
+        with pytest.raises(RuntimeError):
+            _sample_status_page(mock_client, spec)
+
+    def test_sampler_failure_leaves_the_queue_absent(self):
+        class _Boom:
+            def collection_group(self, _name: str):
+                raise RuntimeError("firestore unavailable")
+
+        now = datetime(2026, 9, 30, 8, 10, 0, tzinfo=timezone.utc)
+        ages = sample_store_wide_oldest_ready_ages(
+            now=now,
+            firestore_client=_Boom(),
+            finalization_summary={"oldest_nonterminal_age_seconds": 1},
+        )
+        assert "memory_outbox" not in ages
+        assert ages["daily_memory_sweep"] == 0.0
+        assert ages["conversation_finalization_jobs"] == 1.0
 
 
 class TestStoreWideSamplingResilience:
