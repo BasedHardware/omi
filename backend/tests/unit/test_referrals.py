@@ -26,7 +26,7 @@ REFERRALS_ROUTER_PATH = Path(__file__).resolve().parents[2] / "routers" / "refer
 @contextmanager
 def _loaded_referrals_router() -> Iterator[ModuleType]:
     endpoints = ModuleType("utils.other.endpoints")
-    endpoints.get_current_user_uid = lambda: "test-user"
+    setattr(endpoints, "get_current_user_uid", lambda: "test-user")
     with stub_modules({"utils.other.endpoints": endpoints}):
         yield load_module_fresh("routers.referrals", str(REFERRALS_ROUTER_PATH))
 
@@ -105,6 +105,36 @@ def test_referral_claim_rejects_already_claimed_or_ineligible_users(user_data, i
 
     assert patch is None
     assert reason == expected_reason
+
+
+def test_referral_claim_grants_trial_only_to_a_fresh_authenticated_account(monkeypatch):
+    monkeypatch.setenv("ENCRYPTION_SECRET", TEST_SECRET.decode())
+    code = create_referral_code("referrer-123")
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    claims = []
+    events = []
+
+    with _loaded_referrals_router() as referrals:
+        monkeypatch.setattr(
+            referrals.firebase_admin.auth,
+            "get_user",
+            lambda _uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=now_ms)),
+        )
+        monkeypatch.setattr(
+            referrals,
+            "claim_referral_trial",
+            lambda referred_uid, referrer_uid, *, is_new_user: claims.append((referred_uid, referrer_uid, is_new_user))
+            or (True, "granted"),
+        )
+        monkeypatch.setattr(referrals, "emit_posthog_event", lambda *event: events.append(event))
+        response = referrals.claim_referral(referrals.ReferralClaimRequest(code=code), "new-user")
+
+    assert response.claimed is True
+    assert response.trial_days == 30
+    assert claims == [("new-user", "referrer-123", True)]
+    assert events == [
+        ("new-user", "Referral Claimed", {"program": "desktop_operator_month_v1", "claimed": True, "reason": "granted"})
+    ]
 
 
 @pytest.mark.parametrize(
@@ -309,6 +339,9 @@ def test_capture_referral_redirects_to_signup_with_cookie(monkeypatch):
     set_cookie = response.headers.get("set-cookie", "")
     assert REFERRAL_COOKIE_NAME in set_cookie
     assert f"{REFERRAL_COOKIE_NAME}={code}" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=lax" in set_cookie
     assert events == [
         (
             "referrer-123",
@@ -316,6 +349,18 @@ def test_capture_referral_redirects_to_signup_with_cookie(monkeypatch):
             {"program": "desktop_operator_month_v1"},
         ),
     ]
+
+
+def test_dev_referral_opens_signup_against_the_dev_backend(monkeypatch):
+    monkeypatch.setenv("ENCRYPTION_SECRET", TEST_SECRET.decode())
+    monkeypatch.setenv("REFERRAL_PUBLIC_BASE_URL", "https://api.omiapi.com")
+    code = create_referral_code("referrer-123")
+
+    with _loaded_referrals_router() as referrals:
+        response = referrals.capture_referral(code)
+
+    assert response.status_code == 302
+    assert response.headers["location"] == f"https://app.omi.me/login?referral={code}&environment=dev"
 
 
 def test_capture_referral_rejects_invalid_code(monkeypatch):
