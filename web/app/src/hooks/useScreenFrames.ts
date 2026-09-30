@@ -46,6 +46,10 @@ export function useScreenFrames(
   // So an in-flight fetch/mutation for a conversation the user has since
   // navigated away from can't clobber the newer conversation's state.
   const lastUrlRefreshAt = useRef(0);
+  // Bumped by every load and mutation. A background URL refresh applies its
+  // response only if nothing replaced the set while it was in flight;
+  // otherwise it would resurrect frames a delete had just removed.
+  const setGeneration = useRef(0);
   const convIdRef = useRef(conversationId);
   useEffect(() => {
     convIdRef.current = conversationId;
@@ -59,6 +63,7 @@ export function useScreenFrames(
     }
 
     const requestedId = conversationId;
+    setGeneration.current += 1;
     lastUrlRefreshAt.current = Date.now();
     try {
       setLoading(true);
@@ -99,9 +104,12 @@ export function useScreenFrames(
     const requestedId = conversationId;
     const timer = setTimeout(async () => {
       lastUrlRefreshAt.current = Date.now();
+      const generation = setGeneration.current;
       try {
         const data = await getConversationScreenFrames(requestedId, { fresh: true });
-        if (convIdRef.current === requestedId) setFrameSet(data);
+        if (convIdRef.current === requestedId && setGeneration.current === generation) {
+          setFrameSet(data);
+        }
       } catch (err) {
         // Keep the current set; the next mount or manual refresh retries.
         console.error('Failed to refresh screen frame URLs:', err);
@@ -114,6 +122,7 @@ export function useScreenFrames(
     async (frameId: string): Promise<boolean> => {
       if (!conversationId) return false;
       const requestedId = conversationId;
+      setGeneration.current += 1;
       try {
         const updated = await deleteScreenFrame(requestedId, frameId);
         if (convIdRef.current === requestedId) {
@@ -135,6 +144,7 @@ export function useScreenFrames(
   const deleteAll = useCallback(async (): Promise<boolean> => {
     if (!conversationId) return false;
     const requestedId = conversationId;
+    setGeneration.current += 1;
     try {
       const updated = await deleteAllScreenFrames(requestedId);
       if (convIdRef.current === requestedId) {
@@ -155,6 +165,7 @@ export function useScreenFrames(
     async (enabledValue: boolean): Promise<boolean> => {
       if (!conversationId) return false;
       const requestedId = conversationId;
+      setGeneration.current += 1;
       try {
         const updated = await patchScreenFrameSharing(requestedId, enabledValue);
         if (convIdRef.current === requestedId) {

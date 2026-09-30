@@ -203,4 +203,49 @@ describe('useScreenFrames', () => {
       vi.useRealTimers();
     }
   });
+
+  it('never lets an in-flight URL refresh resurrect frames a delete removed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));
+      let resolveRefresh: (set: ConversationScreenFrameSet) => void = () => {};
+      vi.mocked(api.getConversationScreenFrames)
+        .mockReset()
+        .mockResolvedValueOnce(frameSet())
+        .mockImplementationOnce(
+          () =>
+            new Promise<ConversationScreenFrameSet>((resolve) => {
+              resolveRefresh = resolve;
+            }),
+        );
+      vi.mocked(api.deleteScreenFrame).mockResolvedValue(
+        frameSet({ strip: [frame('b')] }),
+      );
+      const { result } = renderHook(() => useScreenFrames('conv-1'));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      // The expiry refresh starts and is still waiting on the network...
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(58 * 60 * 1000);
+      });
+      expect(api.getConversationScreenFrames).toHaveBeenLastCalledWith('conv-1', {
+        fresh: true,
+      });
+
+      // ...when a delete lands with the server's authoritative set.
+      await act(async () => {
+        await result.current.deleteFrame('a');
+      });
+      expect(result.current.frameSet?.strip?.map((f) => f.id)).toEqual(['b']);
+
+      // The stale refresh response (still carrying 'a') must be discarded.
+      await act(async () => {
+        resolveRefresh(frameSet());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.frameSet?.strip?.map((f) => f.id)).toEqual(['b']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
