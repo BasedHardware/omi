@@ -578,10 +578,11 @@ def _get_structured(
         # Only described photos reach the model (ConversationPhoto.photos_as_string).
         has_described_photos = any((photo.description or '').strip() for photo in main_conv.photos or [])
         if trigger is ProcessingTrigger.SERVER_RECOVERY and recovery_minimum_terminal_enabled():
-            # Recovery must preserve the row, but a clear rule-level discard
-            # would never reach the notes model during ordinary capture-end
-            # processing. Return a minimum so the worker closes the job with
-            # the transcript visible, without paying for a futile LLM call.
+            # A clear rule-level discard (empty transcript, filler, mic check)
+            # is what ordinary capture-end processing would have concluded, so
+            # recovery records the same verdict as an explicit server-recovery
+            # discard instead of surfacing an untitled row with nothing in it.
+            # Discard stays restorable (Show discarded), and no paid LLM call runs.
             ordinary = decide_relevance(
                 trigger=ProcessingTrigger.CAPTURE_END,
                 texts=[segment.text for segment in segments],
@@ -599,7 +600,11 @@ def _get_structured(
             )
             if ordinary.discard and ordinary.decided_by == 'rule':
                 logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
-                return Structured(), False
+                if relevance_observer is not None:
+                    relevance_observer(
+                        RelevanceDecision('discard', 'rule', ordinary.reason, ProcessingTrigger.SERVER_RECOVERY)
+                    )
+                return Structured(), True
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).

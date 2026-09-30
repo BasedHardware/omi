@@ -74,6 +74,8 @@ and background processing.
   structure is a typed failure before persistence. The flagged Cloud Tasks
   worker closes that job on its first occurrence, retaining the transcript as
   a visible completed conversation; provider and parser errors still retry.
+  A clear rule-level discard is not a minimal structure: recovery records it
+  as an explicit server-recovery discard, so contentless rows never surface.
 - `smart_merge.py` folds a finished pendant conversation into the immediately
   preceding one of the same device partition when Jev says it is the same
   occasion (`CONVERSATION_SMART_MERGE_MODE=off|shadow|merge`, default `merge`; `off`
