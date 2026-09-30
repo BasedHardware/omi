@@ -1070,6 +1070,18 @@ OMI_SYNC_INTAKE_TOTAL = Counter(
     ['outcome'],
 )
 
+# One decision per safety-WAL upload that carries a recording id and audio
+# bounds (utils/sync/recording_lineage.py). Emitted from backend-sync, so the
+# matching `event=sync_lineage_resolve` log line is the queryable backup.
+OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
+    'omi_sync_lineage_resolve_total',
+    (
+        'Sync recording-lineage binding decisions. outcome is a closed set: bound|split_across_generations|'
+        'stamp_overridden|stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted'
+    ),
+    ['outcome'],
+)
+
 # Conversation shape at first durable completed persist. source is a closed
 # 6-value vocabulary (live/sync/import/integration/desktop/unknown). Sync
 # children are emitted from backend-sync, which is not scraped today; the

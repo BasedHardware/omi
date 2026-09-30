@@ -2257,6 +2257,9 @@ environments:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -2754,6 +2757,9 @@ environments:
             CAPTURE_JEV_SHADOW_PERCENT:
               value: '0'
               category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -2967,6 +2973,9 @@ environments:
             CAPTURE_JEV_SHADOW_PERCENT:
               value: '0'
               category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -3149,6 +3158,9 @@ environments:
             CAPTURE_JEV_SHADOW_PERCENT:
               value: '0'
               category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
           provisional: true
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -3278,6 +3290,9 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
+              category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: rollout
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
