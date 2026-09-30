@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Označit i pozdější řeč tohoto mluvčího",
     "updateSummaryWithNewNames": "Aktualizovat souhrn s novými jmény",
     "syncStatusUnsupportedAudio": "Zvuk nelze přečíst — synchronizace není možná",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Co pro mě můžeš udělat?} goal{Pomoz mi stanovit cíl} activity{Shrň mé nedávné aktivity} improve{Jak se mohu zlepšit?} other{}}",
     "nextWeek": "Příští týden",
     "clearSearch": "Vymazat hledání",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "Název se ukládá přímo do Omi, takže se zobrazí na každém telefonu, se kterým ho spárujete.",
     "deviceRenamed": "Zařízení přejmenováno na {name}",
     "tapToRename": "Klepnutím přejmenujete",
-    "deviceNameCannotBeEmpty": "Název zařízení nemůže být prázdný"
+    "deviceNameCannotBeEmpty": "Název zařízení nemůže být prázdný",
+    "conversationSummaryFailed": "Shrnutí se nepodařilo"
 }

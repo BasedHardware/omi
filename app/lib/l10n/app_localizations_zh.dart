@@ -9911,12 +9911,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusUnsupportedAudio => '无法读取音频，无法同步';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11449,4 +11443,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String deviceRenamed(String name) {
     return '设备已重命名为 $name';
   }
+
+  @override
+  String get conversationSummaryFailed => '摘要生成失败';
 }

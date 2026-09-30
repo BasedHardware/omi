@@ -3273,8 +3273,6 @@
     "tagSpeakerIncludingLaterSpeech": "Oznacz też późniejszą mowę tego mówcy",
     "updateSummaryWithNewNames": "Zaktualizuj podsumowanie o nowe imiona",
     "syncStatusUnsupportedAudio": "Nie można odczytać dźwięku — synchronizacja niemożliwa",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Co możesz dla mnie zrobić?} goal{Pomóż mi wyznaczyć cel} activity{Podsumuj moje ostatnie aktywności} improve{Jak mogę się poprawić?} other{}}",
     "nextWeek": "W przyszłym tygodniu",
     "clearSearch": "Wyczyść wyszukiwanie",
@@ -3704,5 +3702,6 @@
     "renameDeviceDescription": "Nazwa jest zapisywana w samym Omi, więc pojawia się na każdym telefonie, z którym je sparujesz.",
     "deviceRenamed": "Zmieniono nazwę urządzenia na {name}",
     "tapToRename": "Dotknij, aby zmienić nazwę",
-    "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta"
+    "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta",
+    "conversationSummaryFailed": "Nie udało się utworzyć podsumowania"
 }

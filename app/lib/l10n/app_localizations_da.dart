@@ -10088,12 +10088,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Lyden kunne ikke læses — kan ikke synkroniseres';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11648,4 +11642,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Enheden er omdøbt til $name';
   }
+
+  @override
+  String get conversationSummaryFailed => 'Resuméet mislykkedes';
 }

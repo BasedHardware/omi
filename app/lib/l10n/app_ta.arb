@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "இந்த பேச்சாளரின் பிந்தைய பேச்சையும் குறியிடு",
     "updateSummaryWithNewNames": "புதிய பெயர்களுடன் சுருக்கத்தைப் புதுப்பி",
     "syncStatusUnsupportedAudio": "ஆடியோவைப் படிக்க முடியவில்லை — ஒத்திசைக்க முடியாது",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{நீ எனக்கு என்ன செய்ய முடியும்?} goal{இலக்கை அமைக்க எனக்கு உதவு} activity{எனது சமீபத்திய செயல்பாடுகளைச் சுருக்கிக் கூறு} improve{நான் எப்படி மேம்படலாம்?} other{}}",
     "nextWeek": "அடுத்த வாரம்",
     "clearSearch": "தேடலை அழி",
@@ -11229,5 +11227,6 @@
     "deviceNameCannotBeEmpty": "சாதனத்தின் பெயர் வெறுமையாக இருக்க முடியாது",
     "deviceNameInvalidCharacters": "பெயரில் ஆதரிக்கப்படாத எழுத்துகள் உள்ளன",
     "deviceNameTooLong": "பெயர் மிக நீளமானது (அதிகபட்சம் {maxBytes} எழுத்துகள்; எமோஜிகள் மற்றும் உயிர்மெய் குறிகள் அதிகமாகக் கணக்கிடப்படும்)",
-    "deviceRenamed": "சாதனத்தின் பெயர் {name} என மாற்றப்பட்டது"
+    "deviceRenamed": "சாதனத்தின் பெயர் {name} என மாற்றப்பட்டது",
+    "conversationSummaryFailed": "சுருக்கம் தோல்வியடைந்தது"
 }

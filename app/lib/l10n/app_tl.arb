@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "I-tag din ang susunod na pananalita ng speaker na ito",
     "updateSummaryWithNewNames": "I-update ang buod gamit ang mga bagong pangalan",
     "syncStatusUnsupportedAudio": "Hindi mabasa ang audio — hindi ma-sync",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ano ang magagawa mo para sa akin?} goal{Tulungan mo akong magtakda ng layunin} activity{Ibuod ang mga kamakailan kong aktibidad} improve{Paano pa ako mapapabuti?} other{}}",
     "nextWeek": "Sa susunod na linggo",
     "clearSearch": "I-clear ang paghahanap",
@@ -11229,5 +11227,6 @@
     "deviceNameCannotBeEmpty": "Hindi maaaring blangko ang pangalan ng device",
     "deviceNameInvalidCharacters": "May hindi sinusuportahang character ang pangalan",
     "deviceNameTooLong": "Masyadong mahaba ang pangalan (hanggang {maxBytes} character; mas malaki ang bilang ng emoji at accent)",
-    "deviceRenamed": "Pinalitan ang pangalan ng device sa {name}"
+    "deviceRenamed": "Pinalitan ang pangalan ng device sa {name}",
+    "conversationSummaryFailed": "Nabigo ang buod"
 }

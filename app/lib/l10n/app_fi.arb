@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Merkitse myös tämän puhujan myöhempi puhe",
     "updateSummaryWithNewNames": "Päivitä yhteenveto uusilla nimillä",
     "syncStatusUnsupportedAudio": "Ääntä ei voitu lukea — ei voi synkronoida",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Mitä voit tehdä hyväkseni?} goal{Auta minua asettamaan tavoite} activity{Tee yhteenveto viimeaikaisista toimistani} improve{Miten voin kehittyä?} other{}}",
     "nextWeek": "Ensi viikolla",
     "clearSearch": "Tyhjennä haku",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "Nimi tallennetaan itse Omiin, joten se näkyy jokaisessa puhelimessa, johon sen yhdistät.",
     "deviceRenamed": "Laite nimettiin uudelleen: {name}",
     "tapToRename": "Napauta nimetäksesi uudelleen",
-    "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä"
+    "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä",
+    "conversationSummaryFailed": "Yhteenveto epäonnistui"
 }

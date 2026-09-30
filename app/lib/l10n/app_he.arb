@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "תייג גם דיבור מאוחר יותר של הדובר הזה",
     "updateSummaryWithNewNames": "עדכן את הסיכום עם השמות החדשים",
     "syncStatusUnsupportedAudio": "לא ניתן לקרוא את האודיו — אי אפשר לסנכרן",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{מה אפשר לעשות בשבילי?} goal{עזור לי להגדיר מטרה} activity{סכם את הפעילות האחרונה שלי} improve{איך אוכל להשתפר?} other{}}",
     "nextWeek": "בשבוע הבא",
     "clearSearch": "ניקוי החיפוש",
@@ -11229,5 +11227,6 @@
     "deviceNameCannotBeEmpty": "שם המכשיר לא יכול להיות ריק",
     "deviceNameInvalidCharacters": "השם מכיל תווים שאינם נתמכים",
     "deviceNameTooLong": "השם ארוך מדי (עד {maxBytes} תווים; אמוג'י וניקוד נספרים יותר)",
-    "deviceRenamed": "שם המכשיר שונה ל-{name}"
+    "deviceRenamed": "שם המכשיר שונה ל-{name}",
+    "conversationSummaryFailed": "יצירת הסיכום נכשלה"
 }

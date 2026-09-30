@@ -10096,12 +10096,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Không đọc được âm thanh — không thể đồng bộ';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11658,4 +11652,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Đã đổi tên thiết bị thành $name';
   }
+
+  @override
+  String get conversationSummaryFailed => 'Tạo tóm tắt thất bại';
 }

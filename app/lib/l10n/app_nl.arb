@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Ook latere spraak van deze spreker taggen",
     "updateSummaryWithNewNames": "Samenvatting bijwerken met nieuwe namen",
     "syncStatusUnsupportedAudio": "Audio niet leesbaar — kan niet worden gesynchroniseerd",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Wat kun je voor me doen?} goal{Help me een doel te stellen} activity{Vat mijn recente activiteiten samen} improve{Hoe kan ik me verbeteren?} other{}}",
     "nextWeek": "Volgende week",
     "clearSearch": "Zoekopdracht wissen",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "De naam wordt op je Omi zelf opgeslagen en verschijnt dus op elke telefoon waarmee je hem koppelt.",
     "deviceRenamed": "Apparaat hernoemd naar {name}",
     "tapToRename": "Tik om te hernoemen",
-    "deviceNameCannotBeEmpty": "De apparaatnaam mag niet leeg zijn"
+    "deviceNameCannotBeEmpty": "De apparaatnaam mag niet leeg zijn",
+    "conversationSummaryFailed": "Samenvatting mislukt"
 }

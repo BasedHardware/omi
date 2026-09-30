@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Märk även senare tal från den här talaren",
     "updateSummaryWithNewNames": "Uppdatera sammanfattningen med de nya namnen",
     "syncStatusUnsupportedAudio": "Ljudet kunde inte läsas — kan inte synkroniseras",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Vad kan du göra för mig?} goal{Hjälp mig att sätta ett mål} activity{Sammanfatta mina senaste aktiviteter} improve{Hur kan jag bli bättre?} other{}}",
     "nextWeek": "Nästa vecka",
     "clearSearch": "Rensa sökning",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.",
     "deviceRenamed": "Enheten har fått namnet {name}",
     "tapToRename": "Tryck för att byta namn",
-    "deviceNameCannotBeEmpty": "Enhetsnamnet får inte vara tomt"
+    "deviceNameCannotBeEmpty": "Enhetsnamnet får inte vara tomt",
+    "conversationSummaryFailed": "Sammanfattningen misslyckades"
 }

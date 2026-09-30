@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "이 화자의 이후 발화도 태그하기",
     "updateSummaryWithNewNames": "새 이름으로 요약 업데이트",
     "syncStatusUnsupportedAudio": "오디오를 읽을 수 없어 동기화할 수 없습니다",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{나를 위해 무엇을 해줄 수 있어?} goal{목표를 세우는 걸 도와줘} activity{최근 활동을 요약해 줘} improve{어떻게 하면 더 나아질 수 있을까?} other{}}",
     "nextWeek": "다음 주",
     "clearSearch": "검색 지우기",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "이름은 Omi 기기 자체에 저장되므로 페어링하는 모든 휴대폰에 표시됩니다.",
     "deviceRenamed": "기기 이름 변경: {name}",
     "tapToRename": "탭하여 이름 변경",
-    "deviceNameCannotBeEmpty": "기기 이름은 비워둘 수 없습니다"
+    "deviceNameCannotBeEmpty": "기기 이름은 비워둘 수 없습니다",
+    "conversationSummaryFailed": "요약 실패"
 }

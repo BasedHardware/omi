@@ -10101,12 +10101,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'صدا خوانده نشد — قابل همگام‌سازی نیست';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11659,4 +11653,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'نام دستگاه به $name تغییر یافت';
   }
+
+  @override
+  String get conversationSummaryFailed => 'خلاصه ایجاد نشد';
 }

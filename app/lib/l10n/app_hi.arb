@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "इस वक्ता की बाद की बात भी टैग करें",
     "updateSummaryWithNewNames": "नए नामों के साथ सारांश अपडेट करें",
     "syncStatusUnsupportedAudio": "ऑडियो पढ़ा नहीं जा सका — सिंक नहीं हो सकता",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{तुम मेरे लिए क्या कर सकते हो?} goal{मुझे एक लक्ष्य तय करने में मदद करो} activity{मेरी हाल की गतिविधियों का सारांश दो} improve{मैं कैसे सुधार कर सकता हूँ?} other{}}",
     "nextWeek": "अगले सप्ताह",
     "clearSearch": "खोज साफ़ करें",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "नाम आपके Omi पर ही सहेजा जाता है, इसलिए यह हर उस फ़ोन पर दिखेगा जिससे आप इसे जोड़ेंगे।",
     "deviceRenamed": "डिवाइस का नाम बदलकर {name} कर दिया गया",
     "tapToRename": "नाम बदलने के लिए टैप करें",
-    "deviceNameCannotBeEmpty": "डिवाइस का नाम खाली नहीं हो सकता"
+    "deviceNameCannotBeEmpty": "डिवाइस का नाम खाली नहीं हो सकता",
+    "conversationSummaryFailed": "सारांश नहीं बन सका"
 }

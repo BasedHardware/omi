@@ -10155,12 +10155,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Аудиото не може да се прочита — не може да се синхронизира';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11726,4 +11720,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Уредот е преименуван во $name';
   }
+
+  @override
+  String get conversationSummaryFailed => 'Резимето не успеа';
 }

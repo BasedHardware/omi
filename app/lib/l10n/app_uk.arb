@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Також позначити пізніше мовлення цього мовця",
     "updateSummaryWithNewNames": "Оновити підсумок з новими іменами",
     "syncStatusUnsupportedAudio": "Не вдалося прочитати аудіо — синхронізація неможлива",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Що ти можеш для мене зробити?} goal{Допоможи мені поставити мету} activity{Підсумуй мою нещодавню діяльність} improve{Як я можу покращитися?} other{}}",
     "nextWeek": "Наступного тижня",
     "clearSearch": "Очистити пошук",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "Ім'я зберігається на самому Omi, тому воно з'явиться на будь-якому телефоні, з яким ви його з'єднаєте.",
     "deviceRenamed": "Пристрій перейменовано на {name}",
     "tapToRename": "Торкніться, щоб перейменувати",
-    "deviceNameCannotBeEmpty": "Ім'я пристрою не може бути порожнім"
+    "deviceNameCannotBeEmpty": "Ім'я пристрою не може бути порожнім",
+    "conversationSummaryFailed": "Не вдалося створити підсумок"
 }

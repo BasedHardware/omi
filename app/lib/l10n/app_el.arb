@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Επισήμανε και τη μετέπειτα ομιλία αυτού του ομιλητή",
     "updateSummaryWithNewNames": "Ενημέρωση περίληψης με τα νέα ονόματα",
     "syncStatusUnsupportedAudio": "Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Τι μπορείς να κάνεις για μένα;} goal{Βοήθησέ με να θέσω έναν στόχο} activity{Σύνοψε την πρόσφατη δραστηριότητά μου} improve{Πώς μπορώ να βελτιωθώ;} other{}}",
     "nextWeek": "Επόμενη εβδομάδα",
     "clearSearch": "Εκκαθάριση αναζήτησης",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "Το όνομα αποθηκεύεται στο ίδιο το Omi, ώστε να εμφανίζεται σε κάθε τηλέφωνο με το οποίο το συζευγνύετε.",
     "deviceRenamed": "Η συσκευή μετονομάστηκε σε {name}",
     "tapToRename": "Πατήστε για μετονομασία",
-    "deviceNameCannotBeEmpty": "Το όνομα της συσκευής δεν μπορεί να είναι κενό"
+    "deviceNameCannotBeEmpty": "Το όνομα της συσκευής δεν μπορεί να είναι κενό",
+    "conversationSummaryFailed": "Η σύνοψη απέτυχε"
 }

@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "Таксама пазначыць пазнейшую мову гэтага спікера",
     "updateSummaryWithNewNames": "Абнавіць зводку з новымі імёнамі",
     "syncStatusUnsupportedAudio": "Не ўдалося прачытаць аўдыя — сінхранізацыя немагчымая",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Што ты можаш зрабіць для мяне?} goal{Дапамажы мне паставіць мэту} activity{Падсумуй маю нядаўнюю дзейнасць} improve{Як я магу палепшыцца?} other{}}",
     "nextWeek": "На наступным тыдні",
     "clearSearch": "Ачысціць пошук",
@@ -11229,5 +11227,6 @@
     "deviceNameCannotBeEmpty": "Імя прылады не можа быць пустым",
     "deviceNameInvalidCharacters": "Імя змяшчае непадтрымоўваныя сімвалы",
     "deviceNameTooLong": "Імя занадта доўгае (да {maxBytes} сімвалаў; эмодзі і дыякрытыка лічацца за больш)",
-    "deviceRenamed": "Прылада перайменавана ў {name}"
+    "deviceRenamed": "Прылада перайменавана ў {name}",
+    "conversationSummaryFailed": "Не ўдалося стварыць зводку"
 }

@@ -10114,12 +10114,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Ses okunamadı — eşitlenemiyor';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11675,4 +11669,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Cihaz adı $name olarak değiştirildi';
   }
+
+  @override
+  String get conversationSummaryFailed => 'Özet oluşturulamadı';
 }

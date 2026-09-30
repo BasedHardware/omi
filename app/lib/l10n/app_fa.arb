@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "گفتار بعدی این گوینده را هم برچسب بزن",
     "updateSummaryWithNewNames": "به‌روزرسانی خلاصه با نام‌های جدید",
     "syncStatusUnsupportedAudio": "صدا خوانده نشد — قابل همگام‌سازی نیست",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{چه کاری می‌توانی برایم انجام دهی؟} goal{کمکم کن هدفی تعیین کنم} activity{فعالیت‌های اخیرم را خلاصه کن} improve{چطور می‌توانم بهتر شوم؟} other{}}",
     "nextWeek": "هفتهٔ آینده",
     "clearSearch": "پاک کردن جستجو",
@@ -11229,5 +11227,6 @@
     "deviceNameCannotBeEmpty": "نام دستگاه نمی‌تواند خالی باشد",
     "deviceNameInvalidCharacters": "نام شامل نویسه‌های پشتیبانی‌نشده است",
     "deviceNameTooLong": "نام خیلی طولانی است (حداکثر {maxBytes} نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)",
-    "deviceRenamed": "نام دستگاه به {name} تغییر یافت"
+    "deviceRenamed": "نام دستگاه به {name} تغییر یافت",
+    "conversationSummaryFailed": "خلاصه ایجاد نشد"
 }

@@ -10097,12 +10097,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Heli ei õnnestunud lugeda — sünkroonimine pole võimalik';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11660,4 +11654,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Seade nimetati ümber: $name';
   }
+
+  @override
+  String get conversationSummaryFailed => 'Kokkuvõtte loomine ebaõnnestus';
 }

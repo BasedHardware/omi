@@ -1,0 +1,3 @@
+{
+  "change": "Conversations no longer show as Untitled: each one shows its first words, and a Retry button appears only when a failed summary can still be made"
+}

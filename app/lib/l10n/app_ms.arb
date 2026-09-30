@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Tandai juga ucapan kemudian daripada penceramah ini",
     "updateSummaryWithNewNames": "Kemas kini ringkasan dengan nama baharu",
     "syncStatusUnsupportedAudio": "Audio tidak dapat dibaca — tidak boleh disegerakkan",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Apa yang boleh kamu lakukan untuk saya?} goal{Bantu saya menetapkan matlamat} activity{Ringkaskan aktiviti terkini saya} improve{Bagaimana saya boleh menjadi lebih baik?} other{}}",
     "nextWeek": "Minggu depan",
     "clearSearch": "Kosongkan carian",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "Nama disimpan pada Omi itu sendiri, jadi ia dipaparkan pada mana-mana telefon yang anda pasangkan.",
     "deviceRenamed": "Peranti dinamakan semula kepada {name}",
     "tapToRename": "Ketik untuk menamakan semula",
-    "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong"
+    "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong",
+    "conversationSummaryFailed": "Ringkasan gagal"
 }

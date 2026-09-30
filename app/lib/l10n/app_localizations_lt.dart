@@ -10119,12 +10119,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Nepavyko nuskaityti garso — sinchronizuoti negalima';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11682,4 +11676,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Įrenginys pervadintas į $name';
   }
+
+  @override
+  String get conversationSummaryFailed => 'Santrauka nepavyko';
 }

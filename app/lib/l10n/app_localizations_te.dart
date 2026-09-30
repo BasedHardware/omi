@@ -10149,12 +10149,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'ఆడియో చదవలేకపోయాం — సింక్ చేయడం సాధ్యం కాదు';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11712,4 +11706,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'పరికరం పేరు $name గా మార్చబడింది';
   }
+
+  @override
+  String get conversationSummaryFailed => 'సారాంశం విఫలమైంది';
 }

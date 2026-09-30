@@ -3334,8 +3334,6 @@
     "tagSpeakerIncludingLaterSpeech": "Jelöld meg ennek a beszélőnek a későbbi beszédét is",
     "updateSummaryWithNewNames": "Összefoglaló frissítése az új nevekkel",
     "syncStatusUnsupportedAudio": "A hang nem olvasható — nem szinkronizálható",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Mit tudsz tenni értem?} goal{Segíts kitűzni egy célt} activity{Foglald össze a legutóbbi tevékenységeimet} improve{Hogyan fejlődhetek?} other{}}",
     "nextWeek": "Jövő héten",
     "clearSearch": "Keresés törlése",
@@ -3765,5 +3763,6 @@
     "renameDeviceDescription": "A név magán az Omin tárolódik, így minden telefonon megjelenik, amellyel párosítod.",
     "deviceRenamed": "Az eszköz új neve: {name}",
     "tapToRename": "Koppints az átnevezéshez",
-    "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres"
+    "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres",
+    "conversationSummaryFailed": "Az összefoglaló nem sikerült"
 }

@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Atzīmēt arī šī runātāja turpmāko runu",
     "updateSummaryWithNewNames": "Atjaunināt kopsavilkumu ar jaunajiem vārdiem",
     "syncStatusUnsupportedAudio": "Neizdevās nolasīt audio — nevar sinhronizēt",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ko tu vari manā labā darīt?} goal{Palīdzi man izvirzīt mērķi} activity{Apkopo manas nesenās aktivitātes} improve{Kā es varu pilnveidoties?} other{}}",
     "nextWeek": "Nākamnedēļ",
     "clearSearch": "Notīrīt meklēšanu",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "Nosaukums tiek saglabāts pašā Omi, tāpēc tas parādās jebkurā tālrunī, ar kuru to savienosiet pārī.",
     "deviceRenamed": "Ierīce pārdēvēta uz {name}",
     "tapToRename": "Pieskarieties, lai pārdēvētu",
-    "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs"
+    "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs",
+    "conversationSummaryFailed": "Kopsavilkums neizdevās"
 }

@@ -59,6 +59,11 @@ class StrictFirestoreDocument:
         self._database = database
         self.path = path
 
+    @property
+    def id(self) -> str:
+        """The document's own id, as ``DocumentReference.id`` (e.g. the uid of ``users/{uid}``)."""
+        return self.path[-1]
+
     def collection(self, name: str) -> StrictFirestoreCollection:
         return StrictFirestoreCollection(self._database, (*self.path, name))
 

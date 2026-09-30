@@ -10091,12 +10091,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio couldn\'t be read — can\'t be synced';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11650,4 +11644,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Device renamed to $name';
   }
+
+  @override
+  String get conversationSummaryFailed => 'Summary failed';
 }

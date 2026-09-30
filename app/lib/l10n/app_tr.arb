@@ -3273,8 +3273,6 @@
     "tagSpeakerIncludingLaterSpeech": "Bu konuşmacının sonraki konuşmasını da etiketle",
     "updateSummaryWithNewNames": "Özeti yeni adlarla güncelle",
     "syncStatusUnsupportedAudio": "Ses okunamadı — eşitlenemiyor",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Benim için neler yapabilirsin?} goal{Bir hedef belirlememe yardım et} activity{Son etkinliklerimi özetle} improve{Kendimi nasıl geliştirebilirim?} other{}}",
     "nextWeek": "Gelecek hafta",
     "clearSearch": "Aramayı temizle",
@@ -3704,5 +3702,6 @@
     "renameDeviceDescription": "Ad Omi'nin kendisine kaydedilir, böylece eşleştirdiğiniz her telefonda görünür.",
     "deviceRenamed": "Cihaz adı {name} olarak değiştirildi",
     "tapToRename": "Yeniden adlandırmak için dokunun",
-    "deviceNameCannotBeEmpty": "Cihaz adı boş olamaz"
+    "deviceNameCannotBeEmpty": "Cihaz adı boş olamaz",
+    "conversationSummaryFailed": "Özet oluşturulamadı"
 }

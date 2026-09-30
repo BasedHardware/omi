@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "Označi i kasniji govor ovog govornika",
     "updateSummaryWithNewNames": "Ažuriraj sažetak s novim imenima",
     "syncStatusUnsupportedAudio": "Zvuk se ne može pročitati — sinkronizacija nije moguća",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Šta možeš učiniti za mene?} goal{Pomozi mi da postavim cilj} activity{Sažmi moje nedavne aktivnosti} improve{Kako mogu napredovati?} other{}}",
     "nextWeek": "Sljedeće sedmice",
     "clearSearch": "Očisti pretragu",
@@ -11229,5 +11227,6 @@
     "deviceNameCannotBeEmpty": "Ime uređaja ne može biti prazno",
     "deviceNameInvalidCharacters": "Ime sadrži nepodržane znakove",
     "deviceNameTooLong": "Ime je predugo (do {maxBytes} znakova; emoji i dijakritici se računaju više)",
-    "deviceRenamed": "Uređaj je preimenovan u {name}"
+    "deviceRenamed": "Uređaj je preimenovan u {name}",
+    "conversationSummaryFailed": "Sažetak nije uspio"
 }

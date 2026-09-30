@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Etiqueta també la parla posterior d'aquest parlant",
     "updateSummaryWithNewNames": "Actualitza el resum amb els noms nous",
     "syncStatusUnsupportedAudio": "No s'ha pogut llegir l'àudio — no es pot sincronitzar",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Què pots fer per mi?} goal{Ajuda’m a fixar un objectiu} activity{Resumeix la meva activitat recent} improve{Com puc millorar?} other{}}",
     "nextWeek": "La setmana que ve",
     "clearSearch": "Esborra la cerca",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "El nom es desa al mateix Omi, així que apareix a qualsevol telèfon amb què l'emparellis.",
     "deviceRenamed": "Dispositiu reanomenat a {name}",
     "tapToRename": "Toca per canviar el nom",
-    "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit"
+    "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit",
+    "conversationSummaryFailed": "No s'ha pogut crear el resum"
 }

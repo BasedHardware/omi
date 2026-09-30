@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Märgi ka selle kõneleja hilisem kõne",
     "updateSummaryWithNewNames": "Uuenda kokkuvõtet uute nimedega",
     "syncStatusUnsupportedAudio": "Heli ei õnnestunud lugeda — sünkroonimine pole võimalik",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Mida sa minu heaks teha saad?} goal{Aita mul eesmärk seada} activity{Tee kokkuvõte minu hiljutisest tegevusest} improve{Kuidas saan end parandada?} other{}}",
     "nextWeek": "Järgmisel nädalal",
     "clearSearch": "Tühjenda otsing",
@@ -3669,5 +3667,6 @@
     "renameDeviceDescription": "Nimi salvestatakse Omi seadmesse, seega kuvatakse seda igas telefonis, millega selle seod.",
     "deviceRenamed": "Seade nimetati ümber: {name}",
     "tapToRename": "Puuduta ümbernimetamiseks",
-    "deviceNameCannotBeEmpty": "Seadme nimi ei saa olla tühi"
+    "deviceNameCannotBeEmpty": "Seadme nimi ei saa olla tühi",
+    "conversationSummaryFailed": "Kokkuvõtte loomine ebaõnnestus"
 }

@@ -10130,12 +10130,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio niet leesbaar — kan niet worden gesynchroniseerd';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11700,4 +11694,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Apparaat hernoemd naar $name';
   }
+
+  @override
+  String get conversationSummaryFailed => 'Samenvatting mislukt';
 }

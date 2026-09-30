@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "Означи го и подоцнежниот говор на овој говорник",
     "updateSummaryWithNewNames": "Ажурирај го резимето со новите имиња",
     "syncStatusUnsupportedAudio": "Аудиото не може да се прочита — не може да се синхронизира",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Што можеш да направиш за мене?} goal{Помогни ми да поставам цел} activity{Сумирај ги моите неодамнешни активности} improve{Како можам да се подобрам?} other{}}",
     "nextWeek": "Следната недела",
     "clearSearch": "Исчисти го пребарувањето",
@@ -11229,5 +11227,6 @@
     "deviceNameCannotBeEmpty": "Името на уредот не може да биде празно",
     "deviceNameInvalidCharacters": "Името содржи неподдржани знаци",
     "deviceNameTooLong": "Името е предолго (до {maxBytes} знаци; емоџи и акценти се бројат повеќе)",
-    "deviceRenamed": "Уредот е преименуван во {name}"
+    "deviceRenamed": "Уредот е преименуван во {name}",
+    "conversationSummaryFailed": "Резимето не успеа"
 }

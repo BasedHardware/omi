@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "या वक्त्याचे नंतरचे बोलणेही टॅग करा",
     "updateSummaryWithNewNames": "नवीन नावांसह सारांश अद्यतनित करा",
     "syncStatusUnsupportedAudio": "ऑडिओ वाचता आला नाही — सिंक करता येत नाही",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{तू माझ्यासाठी काय करू शकतोस?} goal{मला ध्येय ठरवायला मदत कर} activity{माझ्या अलीकडील कामांचा सारांश दे} improve{मी कशी सुधारणा करू शकतो?} other{}}",
     "nextWeek": "पुढील आठवड्यात",
     "clearSearch": "शोध साफ करा",
@@ -11229,5 +11227,6 @@
     "deviceNameCannotBeEmpty": "डिव्हाइसचे नाव रिकामे असू शकत नाही",
     "deviceNameInvalidCharacters": "नावात असमर्थित अक्षरे आहेत",
     "deviceNameTooLong": "नाव खूप लांब आहे (कमाल {maxBytes} अक्षरे; इमोजी आणि मात्रा जास्त मोजल्या जातात)",
-    "deviceRenamed": "डिव्हाइसचे नाव बदलून {name} केले"
+    "deviceRenamed": "डिव्हाइसचे नाव बदलून {name} केले",
+    "conversationSummaryFailed": "सारांश अयशस्वी झाला"
 }
