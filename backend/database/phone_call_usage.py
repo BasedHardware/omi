@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 import logging
 from typing import Any, Optional, Tuple
 
-from database.redis_db import r, try_catch_decorator
+from database.redis_db import r
 
 _TTL_SECONDS = 40 * 24 * 3600  # 40 days — comfortably past any month rollover
 logger = logging.getLogger(__name__)
