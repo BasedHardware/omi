@@ -353,9 +353,53 @@ class CleanerMemory(BaseModel):
     archive_default_visible: Optional[bool] = None
     policy: Optional[dict] = None
 
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
 
 class SearchedMemory(CleanerMemory):
     relevance_score: float
+
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
+
+def _validate_cleaner_memories(memories: Sequence[Any], uid: str) -> List[dict]:
+    """Validate each memory individually so one malformed row cannot 500 the whole page."""
+    valid_memories: List[dict] = []
+    for mem in memories:
+        if not isinstance(mem, (dict, CleanerMemory)):
+            continue
+        try:
+            if isinstance(mem, dict):
+                CleanerMemory.model_validate(mem)
+                valid_memories.append(mem)
+            else:
+                valid_memories.append(mem.model_dump())
+        except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
+            mem_id = mem.get("id") if isinstance(mem, dict) else getattr(mem, "id", "unknown")
+            logger.warning("Skipping malformed memory %s for uid %s: %s", mem_id, uid, type(e).__name__)
+            continue
+    return valid_memories
+
+
+def _validate_searched_memories(memories: Sequence[Any], uid: str) -> List[dict]:
+    """Validate each searched memory individually so one malformed row cannot 500 the whole page."""
+    valid_memories: List[dict] = []
+    for mem in memories:
+        if not isinstance(mem, (dict, SearchedMemory)):
+            continue
+        try:
+            if isinstance(mem, dict):
+                SearchedMemory.model_validate(mem)
+                valid_memories.append(mem)
+            else:
+                valid_memories.append(mem.model_dump())
+        except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
+            mem_id = mem.get("id") if isinstance(mem, dict) else getattr(mem, "id", "unknown")
+            logger.warning("Skipping malformed searched memory %s for uid %s: %s", mem_id, uid, type(e).__name__)
+            continue
+    return valid_memories
 
 
 @router.get("/v1/mcp/memories/search", tags=["mcp"], response_model=List[SearchedMemory])
@@ -374,7 +418,8 @@ def search_memories(
     uid = auth_context.uid
     logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
     result = _call_tool_handler("search_memories", uid, {"query": query, "limit": limit}, auth_context)
-    return result["memories"]
+    raw_memories = result.get("memories", []) if isinstance(result, dict) else []
+    return _validate_searched_memories(raw_memories, uid)
 
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
@@ -455,7 +500,8 @@ def get_memories(
     _next_cursor_header(response, result.get("next_cursor"))
     if result.get("scan_truncated"):
         response.headers["X-Scan-Truncated"] = "true"
-    return result["memories"]
+    raw_memories = result.get("memories", []) if isinstance(result, dict) else []
+    return _validate_cleaner_memories(raw_memories, uid)
 
 
 class SimpleStructured(BaseModel):
@@ -913,6 +959,28 @@ class SimpleChatMessage(BaseModel):
     type: Optional[str] = None
     created_at: Optional[datetime] = None
 
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
+
+def _validate_simple_chat_messages(messages: Sequence[Any], uid: str) -> List[dict]:
+    """Validate each chat message individually so one malformed row cannot 500 the whole page."""
+    valid_messages: List[dict] = []
+    for msg in messages:
+        if not isinstance(msg, (dict, SimpleChatMessage)):
+            continue
+        try:
+            if isinstance(msg, dict):
+                SimpleChatMessage.model_validate(msg)
+                valid_messages.append(msg)
+            else:
+                valid_messages.append(msg.model_dump())
+        except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
+            msg_id = msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", "unknown")
+            logger.warning("Skipping malformed chat message %s for uid %s: %s", msg_id, uid, type(e).__name__)
+            continue
+    return valid_messages
+
 
 @router.get("/v1/mcp/chat", response_model=List[SimpleChatMessage], tags=["mcp"])
 def get_chat_messages(
@@ -931,7 +999,8 @@ def get_chat_messages(
         {"limit": limit, "offset": offset, "cursor": cursor},
     )
     _next_cursor_header(response, result.get("next_cursor"))
-    return result["messages"]
+    raw_messages = result.get("messages", []) if isinstance(result, dict) else []
+    return _validate_simple_chat_messages(raw_messages, uid)
 
 
 # ---------------------------------------------------------------------------
