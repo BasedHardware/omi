@@ -143,6 +143,8 @@ def resolve_live_continuation(
             if cid and sid:
                 row_snap = user.collection('conversations').document(cid).get(transaction=transaction)
                 row = (row_snap.to_dict() or {}) if getattr(row_snap, 'exists', None) is not False else {}
+                if 'finished_at' in row and isinstance(row['finished_at'], datetime):
+                    row['finished_at'] = _align_datetime_tz(row['finished_at'], valid_now)
                 if resumable_continuation(
                     row, source=clean_source, device_id=clean_device_id, now=valid_now, timeout=valid_timeout
                 ):
@@ -154,8 +156,7 @@ def resolve_live_continuation(
                     and not row.get('is_locked')
                     and isinstance(finish, datetime)
                 ):
-                    finish_aligned = _align_datetime_tz(finish, valid_now)
-                    if gap_splits((valid_now - finish_aligned).total_seconds(), valid_timeout):
+                    if gap_splits((valid_now - finish).total_seconds(), valid_timeout):
                         retired = {'conversation_id': cid, 'recording_session_id': sid}
             if clean_proposed is None:
                 return None, None
@@ -165,6 +166,8 @@ def resolve_live_continuation(
                 .get(transaction=transaction)
             )
             candidate = (candidate_snap.to_dict() or {}) if getattr(candidate_snap, 'exists', None) is not False else {}
+            if 'finished_at' in candidate and isinstance(candidate['finished_at'], datetime):
+                candidate['finished_at'] = _align_datetime_tz(candidate['finished_at'], valid_now)
             if not resumable_continuation(
                 candidate, source=clean_source, device_id=clean_device_id, now=valid_now, timeout=valid_timeout
             ):

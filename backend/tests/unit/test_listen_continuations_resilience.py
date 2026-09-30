@@ -291,3 +291,42 @@ def test_resolve_live_continuation_firestore_exception_resilience():
     )
     assert adopted is None
     assert retired is None
+
+
+def test_resolve_live_continuation_naive_finished_at_alignment():
+    client = FakeFirestoreClient()
+    # Aware now
+    now = datetime(2026, 9, 30, 10, 0, tzinfo=timezone.utc)
+
+    client.store["users/u1/recording_sessions/orig1"] = FakeDocument(
+        {
+            "uid": "u1",
+            "recording_session_id": "orig1",
+            "live_continuation": {"conversation_id": "conv_existing", "recording_session_id": "rec_existing"},
+        }
+    )
+
+    # Naive finished_at in row (without tzinfo)
+    naive_finish = datetime(2026, 9, 30, 9, 59, 40)
+    client.store["users/u1/conversations/conv_existing"] = FakeDocument(
+        {
+            "status": "in_progress",
+            "source": "mic",
+            "client_device_id": "dev1",
+            "finished_at": naive_finish,
+        }
+    )
+
+    # Must not raise TypeError when subtracting aware now and naive finished_at
+    adopted, retired = resolve_live_continuation(
+        "u1",
+        "orig1",
+        source="mic",
+        device_id="dev1",
+        now=now,
+        timeout=120,
+        firestore_client=client,
+    )
+
+    assert adopted == {"conversation_id": "conv_existing", "recording_session_id": "rec_existing"}
+    assert retired is None
