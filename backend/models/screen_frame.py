@@ -62,7 +62,10 @@ class ScreenFrameAdjudicationRequest(BaseModel):
     attempt_id: UUID
     purpose: Literal["meeting_note_v1"]
     subject: ScreenFrameSubjectIn
-    candidates: List[ScreenFrameCandidateIn] = Field(min_length=1, max_length=8)
+    # Empty means "evidence pass done, nothing to offer": no judging, no bytes, only
+    # this bucket's adjudication marker. The desktop sends it after its identity
+    # upload and OCR flush, so the marker also says those finished.
+    candidates: List[ScreenFrameCandidateIn] = Field(max_length=8)
 
 
 class ScreenFrameSharingUpdateRequest(BaseModel):

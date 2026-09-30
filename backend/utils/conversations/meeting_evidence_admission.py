@@ -51,12 +51,19 @@ def evidence_wait_seconds() -> float:
 
 
 def is_desktop_meeting_capture(conversation_data: Mapping[str, Any]) -> bool:
+    """A desktop meeting whose client declared it runs the pre-notes evidence pass.
+
+    The declaration (listen query ``screen_evidence=enabled``, persisted as
+    ``external_data.screen_evidence_pass``) keeps released desktop builds, which
+    never run the pass, from waiting on evidence that will not come.
+    """
     source = conversation_data.get('source')
     external_data = conversation_data.get('external_data')
     return (
         getattr(source, 'value', source) == 'desktop'
         and isinstance(external_data, Mapping)
         and external_data.get('conversation_role') == 'meeting'
+        and external_data.get('screen_evidence_pass') is True
     )
 
 

@@ -17,7 +17,7 @@ from utils.conversations import meeting_evidence_admission as admission
 from utils.conversations.processing_trigger import ProcessingTrigger
 
 BUCKET = 'based-hardware-dev-screen-frames'
-MEETING = {'source': 'desktop', 'external_data': {'conversation_role': 'meeting'}}
+MEETING = {'source': 'desktop', 'external_data': {'conversation_role': 'meeting', 'screen_evidence_pass': True}}
 STAMP = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
 
 
@@ -93,6 +93,8 @@ def test_no_evidence_proceeds_at_the_bound(monkeypatch, clock):
         {'source': 'desktop', 'external_data': {'conversation_role': 'dictation'}},
         {'source': 'omi', 'external_data': {'conversation_role': 'meeting'}},
         {'source': 'desktop'},
+        # A released desktop build: a meeting, but it never runs the pass.
+        {'source': 'desktop', 'external_data': {'conversation_role': 'meeting'}},
     ],
 )
 def test_non_meeting_conversations_never_wait(monkeypatch, clock, data):
