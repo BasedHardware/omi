@@ -611,7 +611,8 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
 
         raw_attempts = record.get('wipe_attempts')
         attempts = raw_attempts if isinstance(raw_attempts, int) and raw_attempts > 0 else 0
-        if attempts >= users_db.DELETION_WIPE_MAX_ATTEMPTS:
+        max_attempts = getattr(users_db, 'DELETION_WIPE_MAX_ATTEMPTS', 10)
+        if attempts >= max_attempts:
             users_db.mark_user_deletion_wipe_terminal_failed(
                 uid, reason='reconciliation_attempts_exhausted', error=str(record.get('wipe_error', ''))
             )
@@ -677,7 +678,7 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
         except Exception as e:
             logger.error(f'delete_account reconciliation enqueue failed for {uid}: {sanitize(str(e))}')
             new_attempts = attempts + 1
-            if new_attempts >= users_db.DELETION_WIPE_MAX_ATTEMPTS:
+            if new_attempts >= max_attempts:
                 users_db.mark_user_deletion_wipe_terminal_failed(uid, reason='enqueue_attempts_exhausted', error=str(e))
                 _emit_deletion_telemetry(
                     uid,

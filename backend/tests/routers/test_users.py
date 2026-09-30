@@ -241,6 +241,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
             {'uid': 'uid1', 'wipe_status': state['status'], 'wipe_job_id': state['job_id']}
         ],
         claim_deletion_wipe=lambda _uid: 'uid1',
+        DELETION_WIPE_MAX_ATTEMPTS=10,
     )
     monkeypatch.setitem(service_globals, 'users_db', users_db)
     monkeypatch.setitem(service_globals, 'auth', types.SimpleNamespace(delete_account=lambda _uid: None))
