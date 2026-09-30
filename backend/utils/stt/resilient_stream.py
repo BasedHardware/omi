@@ -35,11 +35,15 @@ class ResilientAudio:
     def buffered_bytes(self) -> int:
         return sum(len(data) for _, data in self._chunks)
 
-    def would_overflow(self, data: bytes, start_sample: int | None) -> bool:
+    def projected_span_samples(self, data: bytes, start_sample: int | None) -> int:
+        """Capture-time span after a send, including VAD-gated gaps."""
         if start_sample is None or not data:
-            return False
+            return 0
         first = self._chunks[0][0] if self._chunks else start_sample
-        return start_sample + len(data) // 2 - first > self.ring_seconds * self.sample_rate
+        return max(0, start_sample + len(data) // 2 - first)
+
+    def would_overflow(self, data: bytes, start_sample: int | None) -> bool:
+        return self.projected_span_samples(data, start_sample) > self.ring_seconds * self.sample_rate
 
     def append(self, data: bytes, start_sample: int | None) -> None:
         if start_sample is None or not data:
@@ -109,13 +113,24 @@ def window_replay_action(
     if ring is None:
         return 'append'
     trim_window_replay_to_anchor(ring, socket)
-    if not ring.would_overflow(data, start_sample):
-        return 'append'
     raw = getattr(socket, 'raw', None)
     has_untranscribed_speech = getattr(raw, 'has_untranscribed_speech', None)
+    speech_pending = callable(has_untranscribed_speech) and has_untranscribed_speech()
+    request_cut = getattr(raw, 'request_replay_cut', None)
+    if (
+        speech_pending
+        and callable(request_cut)
+        and ring.projected_span_samples(data, start_sample) >= ring.ring_seconds * ring.sample_rate * 2 // 3
+    ):
+        # Provider PCM can advance slower than capture time when VAD gates
+        # portions of a chunk. Ask the next successful POST to emit its held
+        # tail while a third of the replay ring is still available.
+        request_cut()
+    if not ring.would_overflow(data, start_sample):
+        return 'append'
     if (
         callable(has_untranscribed_speech)
-        and not has_untranscribed_speech()
+        and not speech_pending
         and len(data) <= ring.ring_seconds * ring.sample_rate * 2
     ):
         assert start_sample is not None

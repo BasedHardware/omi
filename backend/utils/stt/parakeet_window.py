@@ -439,6 +439,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._now_bytes = 0
         self._last_emitted_end = 0.0
         self._capacity_subtype: str | None = None
+        self._replay_cut_requested = False
         self._on_replay_progress: Callable[[], None] = lambda: None
         # Anchor bytes of the one window whose beyond-window drops are being
         # re-posted (see `_run_job`): bounded to a single retry per anchor.
@@ -471,6 +472,13 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     def set_replay_progress_callback(self, callback: Callable[[], None]) -> None:
         self._on_replay_progress = callback
+
+    def request_replay_cut(self) -> None:
+        """Bound capture-ring lag on the next TDT result that contains text."""
+        if self._closed or self._dead:
+            return
+        self._replay_cut_requested = True
+        self._wake.set()
 
     def start(self) -> None:
         super().start()
@@ -732,6 +740,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             # the long held tail only when another pace of audio would leave
             # too little room for the next POST to make progress.
             min_cap_progress=(self._pace_seconds if len(self._buf) >= self._buffer_cap() - self._pace_bytes else 0.0),
+            force_replay_cut=self._replay_cut_requested,
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
@@ -780,6 +789,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._beyond_window_repost = None
         if new_anchor_bytes is not None:
             self._advance_anchor(new_anchor_bytes)
+            if emitted:
+                self._replay_cut_requested = False
 
     async def _recover_skipped_head(self, job: _WindowJob, segments: list[RawSegment]) -> list[RawSegment]:
         if not segments or segments[0].start < HEAD_RECOVERY_MIN_GAP_SECONDS:

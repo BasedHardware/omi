@@ -1350,7 +1350,11 @@ anchor; rapid VAD flicker coalesces adjacent spans within the 1,024-entry
 bound while retaining every speech sample. Near the PCM buffer limit, a long
 unfinished TDT tail at the context cap is forced out if an earlier tiny
 segment would advance the anchor slower than one POST pace; earlier and normally
-progressing windows keep their sentence boundary. `capacity_full` fallback logs
+progressing windows keep their sentence boundary. Because VAD can admit fewer
+provider seconds than the capture ring retains, the window also cuts a held
+TDT tail when projected capture lag reaches two thirds of the 90-second ring.
+The remaining third covers another paced POST and its timeout; a stalled leg
+still fails over before replay audio is evicted. `capacity_full` fallback logs
 carry a bounded `subtype` identifying PCM buffer, replay ring, or admission
 capacity without adding a metric label. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
