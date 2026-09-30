@@ -79,6 +79,7 @@ There are exactly two ways out, and they mean different things.
 | Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
 | A level (how sure Omi is, how close a voice is) | `OmiLevelMeter(level: 0–3, semanticsLabel:)` — three neutral steps; a newly filled step animates in (`OmiMotion.standard`) | a percentage, a coloured or traffic-light bar |
 | Loading indicator | `OmiSpinner` (small / regular / large) | `CircularProgressIndicator(` with a local colour and stroke (`raw-spinner`) |
+| Locked card preview | `OmiLockedPreview(child:, label:, onPressed:)` — clips a child-only blur and a translucent surface beneath an `OmiButton`; excludes the obscured content from touch and semantics | a dark strip with readable content overlapping its upgrade label |
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label
   next to a checkbox (`OmiCheckboxRow`).
