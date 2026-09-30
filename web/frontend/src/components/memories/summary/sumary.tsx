@@ -1,15 +1,17 @@
-import { Memory } from '@/src/types/memory.types';
+import { Memory, SharedScreenFrameSet } from '@/src/types/memory.types';
 import { assignSectionIds, splitSections } from '@/src/lib/shared-note.mjs';
 import ActionItems from './action-items';
+import ScreenMoments from './screen-moments';
 import MemoryEvents from '../events/memory-events';
 import Plugins from '../plugins/plugins';
 import Markdown from 'markdown-to-jsx';
 
 interface SummaryProps {
   memory: Memory;
+  screenFrames?: SharedScreenFrameSet | null;
 }
 
-export default function Summary({ memory }: SummaryProps) {
+export default function Summary({ memory, screenFrames = null }: SummaryProps) {
   const overview = (memory?.structured?.overview || '').trim();
   const { mains, sideNotes } = splitSections(memory?.structured?.sections);
   const ids = assignSectionIds(mains);
@@ -80,6 +82,12 @@ export default function Summary({ memory }: SummaryProps) {
           <ActionItems items={memory.structured.action_items} />
         </div>
       )}
+
+      <ScreenMoments
+        conversationId={memory.id}
+        initialSet={screenFrames}
+        startedAt={memory.started_at}
+      />
 
       {memory?.structured?.events?.length > 0 && (
         <div className="sn-block">

@@ -120,3 +120,30 @@ export interface TranscriptSegment {
   start: number;
   end: number;
 }
+
+/**
+ * Public meeting-note screenshots, mirroring `ConversationScreenFrame` /
+ * `ConversationScreenFrameSet` in backend/models/screen_frame.py. The signed
+ * URLs last 60 minutes (`url_expires_at`).
+ */
+export interface SharedScreenFrame {
+  id: string;
+  captured_at: string;
+  role: 'banner' | 'strip';
+  rank: number;
+  caption: string;
+  labels: string[];
+  source_badge?: 'code' | 'browser' | 'document' | 'slides' | 'product' | null;
+  width: number;
+  height: number;
+  content_url: string;
+  thumbnail_url: string;
+  url_expires_at: string;
+  ground: { stops: string[]; is_neutral: boolean };
+}
+
+export interface SharedScreenFrameSet {
+  revision: number;
+  banner?: SharedScreenFrame | null;
+  strip?: SharedScreenFrame[];
+}

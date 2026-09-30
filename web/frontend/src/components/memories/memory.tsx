@@ -1,4 +1,4 @@
-import { Memory as MemoryType } from '@/src/types/memory.types';
+import { Memory as MemoryType, SharedScreenFrameSet } from '@/src/types/memory.types';
 import { SearchParamsTypes } from '@/src/types/params.types';
 import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
 import {
@@ -17,9 +17,10 @@ import { Fragment } from 'react';
 interface MemoryProps {
   memory: MemoryType;
   searchParams: SearchParamsTypes;
+  screenFrames?: SharedScreenFrameSet | null;
 }
 
-export default function Memory({ memory }: MemoryProps) {
+export default function Memory({ memory, screenFrames = null }: MemoryProps) {
   const title = memory.structured?.title || DEFAULT_TITLE_MEMORY;
   const stamp = shareDateTime(memory);
   const minutes = durationMinutes(memory.started_at, memory.finished_at);
@@ -82,7 +83,7 @@ export default function Memory({ memory }: MemoryProps) {
           </ul>
         )}
       </div>
-      <MemoryWithTabs memory={memory} />
+      <MemoryWithTabs memory={memory} screenFrames={screenFrames} />
     </div>
   );
 }
