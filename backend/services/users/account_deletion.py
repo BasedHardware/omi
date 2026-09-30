@@ -393,7 +393,10 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         # Mark the wipe as failed so a reconciliation worker can retry. Do NOT mark
         # completed — that would hide a partial wipe from the recovery path.
         try:
-            users_db.mark_user_deletion_wipe_failed(uid, error=error_msg)
+            try:
+                users_db.mark_user_deletion_wipe_failed(uid, error=error_msg)
+            except TypeError:
+                users_db.mark_user_deletion_wipe_failed(uid)
         except Exception as persist_err:
             logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
         _emit_deletion_telemetry(
@@ -454,7 +457,10 @@ def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
 
 def _mark_wipe_failed_after_enqueue_error(uid: str, error: Exception):
     try:
-        users_db.mark_user_deletion_wipe_failed(uid, error=str(error))
+        try:
+            users_db.mark_user_deletion_wipe_failed(uid, error=str(error))
+        except TypeError:
+            users_db.mark_user_deletion_wipe_failed(uid)
     except Exception as persist_err:
         logger.error(
             f'delete_account enqueue failure status persist failed for {uid}: {sanitize(str(persist_err))}; '
