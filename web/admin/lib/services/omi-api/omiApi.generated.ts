@@ -1362,6 +1362,7 @@ export interface ConversationScreenFrameSet {
   revision: number;
   selection_fingerprint?: string | null;
   strip?: Array<ConversationScreenFrame>;
+  trusted_selection_fingerprint?: string | null;
 }
 
 export interface ConversationSearchItem {

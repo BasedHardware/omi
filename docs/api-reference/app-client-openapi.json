@@ -8658,6 +8658,17 @@
             "maxItems": 6,
             "title": "Strip",
             "type": "array"
+          },
+          "trusted_selection_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trusted Selection Fingerprint"
           }
         },
         "required": [

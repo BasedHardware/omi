@@ -36,6 +36,9 @@ MAX_PEOPLE_CHARACTERS = 900
 MAX_GOALS_CHARACTERS = 400
 MAX_MEMORIES_CHARACTERS = 850
 MAX_SCREEN_CHARACTERS = 2_500
+# Rendered before SCREEN ACTIVITY so the overall cap trims the raw OCR digest,
+# not the judge's per-frame summaries.
+MAX_SCREEN_MOMENTS_CHARACTERS = 900
 
 MAX_PRIOR_MEETINGS = 3
 MAX_PRIOR_OPEN_ITEMS = 3
@@ -72,10 +75,18 @@ class MeetingContextPack:
     goals: tuple[str, ...] = ()
     memories: tuple[str, ...] = ()
     screen_text: str = ''
+    screen_moments: tuple[str, ...] = ()
 
     @property
     def empty(self) -> bool:
-        return not (self.prior_meetings or self.people_facts or self.goals or self.memories or self.screen_text)
+        return not (
+            self.prior_meetings
+            or self.people_facts
+            or self.goals
+            or self.memories
+            or self.screen_text
+            or self.screen_moments
+        )
 
 
 def _truncate(value: str, limit: int) -> str:
@@ -140,6 +151,9 @@ def render_meeting_context_pack(pack: Optional[MeetingContextPack]) -> str:
     memories = _render_part((f'- {memory}' for memory in pack.memories), MAX_MEMORIES_CHARACTERS)
     if memories:
         parts.append(f'MEMORIES\n{memories}')
+    moments = _render_part(pack.screen_moments, MAX_SCREEN_MOMENTS_CHARACTERS)
+    if moments:
+        parts.append(f'SCREEN MOMENTS (approved screenshots from this call)\n{moments}')
     if pack.screen_text:
         parts.append(f'SCREEN ACTIVITY\n{_truncate(pack.screen_text, MAX_SCREEN_CHARACTERS)}')
     rendered = '\n\n'.join(parts)
@@ -569,6 +583,7 @@ def gather_meeting_context_pack(
     people: Optional[Sequence[Mapping[str, Any]]] = None,
     include_screen_text: bool = False,
     timezone_name: Optional[str] = None,
+    screen_moments: Sequence[str] = (),
 ) -> Optional[MeetingContextPack]:
     """Assemble the background pack. Every source degrades independently.
 
@@ -601,6 +616,7 @@ def gather_meeting_context_pack(
         screen_text=(
             _try('screen_activity', lambda: _gather_screen_text(uid, conversation), '') if include_screen_text else ''
         ),
+        screen_moments=tuple(screen_moments),
     )
     return None if pack.empty else pack
 
