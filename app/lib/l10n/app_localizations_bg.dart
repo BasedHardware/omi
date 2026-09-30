@@ -11682,7 +11682,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get failedConnections => 'Неуспешни връзки';
 
   @override
-  String get failedConnectionsRecent => 'Неуспешни връзки(последните 7 дни)';
+  String get failedConnectionsRecent => 'Неуспешни връзки (последните 7 дни)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

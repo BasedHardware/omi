@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "Sažetak nije uspio",
     "reconnectionsRecent": "Ponovna povezivanja (posljednjih 7 dana)",
     "failedConnections": "Neuspjele veze",
-    "failedConnectionsRecent": "Neuspjele veze(posljednjih 7 dana)",
+    "failedConnectionsRecent": "Neuspjele veze (posljednjih 7 dana)",
     "diagnosticsCountSincePairing": "{count} od uparivanja"
 }

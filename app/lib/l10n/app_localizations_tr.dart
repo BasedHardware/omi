@@ -11651,7 +11651,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get failedConnections => 'Başarısız bağlantılar';
 
   @override
-  String get failedConnectionsRecent => 'Başarısız bağlantılar(son 7 gün)';
+  String get failedConnectionsRecent => 'Başarısız bağlantılar (son 7 gün)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

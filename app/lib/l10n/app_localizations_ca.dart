@@ -11706,7 +11706,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get failedConnections => 'Connexions fallides';
 
   @override
-  String get failedConnectionsRecent => 'Connexions fallides(últims 7 dies)';
+  String get failedConnectionsRecent => 'Connexions fallides (últims 7 dies)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

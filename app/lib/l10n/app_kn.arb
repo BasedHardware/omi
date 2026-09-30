@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "ಸಾರಾಂಶ ವಿಫಲವಾಗಿದೆ",
     "reconnectionsRecent": "ಮರುಸಂಪರ್ಕಗಳು (ಕಳೆದ 7 ದಿನಗಳು)",
     "failedConnections": "ವಿಫಲ ಸಂಪರ್ಕಗಳು",
-    "failedConnectionsRecent": "ವಿಫಲ ಸಂಪರ್ಕಗಳು(ಕಳೆದ 7 ದಿನಗಳು)",
+    "failedConnectionsRecent": "ವಿಫಲ ಸಂಪರ್ಕಗಳು (ಕಳೆದ 7 ದಿನಗಳು)",
     "diagnosticsCountSincePairing": "ಜೋಡಿಯಾದಾಗಿನಿಂದ {count}"
 }

@@ -11663,7 +11663,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get failedConnections => 'Neveiksmīgi savienojumi';
 
   @override
-  String get failedConnectionsRecent => 'Neveiksmīgi savienojumi(pēdējās 7 dienas)';
+  String get failedConnectionsRecent => 'Neveiksmīgi savienojumi (pēdējās 7 dienas)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

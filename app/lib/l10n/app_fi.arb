@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Yhteenveto epäonnistui",
     "reconnectionsRecent": "Uudelleenyhdistykset (viimeiset 7 päivää)",
     "failedConnections": "Epäonnistuneet yhteydet",
-    "failedConnectionsRecent": "Epäonnistuneet yhteydet(viimeiset 7 päivää)",
+    "failedConnectionsRecent": "Epäonnistuneet yhteydet (viimeiset 7 päivää)",
     "diagnosticsCountSincePairing": "{count} parituksen jälkeen"
 }

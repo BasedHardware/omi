@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "Nabigo ang buod",
     "reconnectionsRecent": "Muling pagkonekta (nakaraang 7 araw)",
     "failedConnections": "Mga bigong koneksyon",
-    "failedConnectionsRecent": "Mga bigong koneksyon(nakaraang 7 araw)",
+    "failedConnectionsRecent": "Mga bigong koneksyon (nakaraang 7 araw)",
     "diagnosticsCountSincePairing": "{count} mula nang ipares"
 }

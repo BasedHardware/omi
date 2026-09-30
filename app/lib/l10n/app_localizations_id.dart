@@ -11650,7 +11650,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get failedConnections => 'Koneksi gagal';
 
   @override
-  String get failedConnectionsRecent => 'Koneksi gagal(7 hari terakhir)';
+  String get failedConnectionsRecent => 'Koneksi gagal (7 hari terakhir)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

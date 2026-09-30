@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "خلاصہ ناکام ہو گیا",
     "reconnectionsRecent": "دوبارہ کنکشن (پچھلے 7 دن)",
     "failedConnections": "ناکام کنکشن",
-    "failedConnectionsRecent": "ناکام کنکشن(پچھلے 7 دن)",
+    "failedConnectionsRecent": "ناکام کنکشن (پچھلے 7 دن)",
     "diagnosticsCountSincePairing": "جوڑنے کے بعد سے {count}"
 }

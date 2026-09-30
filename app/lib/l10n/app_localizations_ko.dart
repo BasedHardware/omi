@@ -11451,7 +11451,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get failedConnections => '실패한 연결';
 
   @override
-  String get failedConnectionsRecent => '실패한 연결(최근 7일)';
+  String get failedConnectionsRecent => '실패한 연결 (최근 7일)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

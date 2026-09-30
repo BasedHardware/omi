@@ -11669,7 +11669,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get failedConnections => 'Няўдалыя злучэнні';
 
   @override
-  String get failedConnectionsRecent => 'Няўдалыя злучэнні(апошнія 7 дзён)';
+  String get failedConnectionsRecent => 'Няўдалыя злучэнні (апошнія 7 дзён)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

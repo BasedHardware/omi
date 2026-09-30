@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "சுருக்கம் தோல்வியடைந்தது",
     "reconnectionsRecent": "மீண்டும் இணைப்புகள் (கடந்த 7 நாட்கள்)",
     "failedConnections": "தோல்வியுற்ற இணைப்புகள்",
-    "failedConnectionsRecent": "தோல்வியுற்ற இணைப்புகள்(கடந்த 7 நாட்கள்)",
+    "failedConnectionsRecent": "தோல்வியுற்ற இணைப்புகள் (கடந்த 7 நாட்கள்)",
     "diagnosticsCountSincePairing": "இணைத்ததிலிருந்து {count}"
 }

@@ -11675,7 +11675,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get failedConnections => 'Neuspješne veze';
 
   @override
-  String get failedConnectionsRecent => 'Neuspješne veze(posljednjih 7 dana)';
+  String get failedConnectionsRecent => 'Neuspješne veze (posljednjih 7 dana)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

@@ -11701,7 +11701,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get failedConnections => 'Неуспешни поврзувања';
 
   @override
-  String get failedConnectionsRecent => 'Неуспешни поврзувања(последните 7 дена)';
+  String get failedConnectionsRecent => 'Неуспешни поврзувања (последните 7 дена)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

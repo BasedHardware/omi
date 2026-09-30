@@ -11619,7 +11619,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get failedConnections => 'विफल कनेक्शन';
 
   @override
-  String get failedConnectionsRecent => 'विफल कनेक्शन(पिछले 7 दिन)';
+  String get failedConnectionsRecent => 'विफल कनेक्शन (पिछले 7 दिन)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

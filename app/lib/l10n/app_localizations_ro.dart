@@ -11693,7 +11693,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get failedConnections => 'Conexiuni eșuate';
 
   @override
-  String get failedConnectionsRecent => 'Conexiuni eșuate(ultimele 7 zile)';
+  String get failedConnectionsRecent => 'Conexiuni eșuate (ultimele 7 zile)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

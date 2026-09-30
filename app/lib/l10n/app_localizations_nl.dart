@@ -11675,7 +11675,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get failedConnections => 'Mislukte verbindingen';
 
   @override
-  String get failedConnectionsRecent => 'Mislukte verbindingen(laatste 7 dagen)';
+  String get failedConnectionsRecent => 'Mislukte verbindingen (laatste 7 dagen)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

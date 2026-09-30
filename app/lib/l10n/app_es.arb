@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "No se pudo crear el resumen",
     "reconnectionsRecent": "Reconexiones (últimos 7 días)",
     "failedConnections": "Conexiones fallidas",
-    "failedConnectionsRecent": "Conexiones fallidas(últimos 7 días)",
+    "failedConnectionsRecent": "Conexiones fallidas (últimos 7 días)",
     "diagnosticsCountSincePairing": "{count} desde el emparejamiento"
 }

@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "Резимето не успеа",
     "reconnectionsRecent": "Повторни поврзувања (последните 7 дена)",
     "failedConnections": "Неуспешни поврзувања",
-    "failedConnectionsRecent": "Неуспешни поврзувања(последните 7 дена)",
+    "failedConnectionsRecent": "Неуспешни поврзувања (последните 7 дена)",
     "diagnosticsCountSincePairing": "{count} од спарувањето"
 }

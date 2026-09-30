@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "خلاصه ایجاد نشد",
     "reconnectionsRecent": "اتصال مجدد (7 روز گذشته)",
     "failedConnections": "اتصالات ناموفق",
-    "failedConnectionsRecent": "اتصالات ناموفق(7 روز گذشته)",
+    "failedConnectionsRecent": "اتصالات ناموفق (7 روز گذشته)",
     "diagnosticsCountSincePairing": "{count} از زمان جفت‌سازی"
 }

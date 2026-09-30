@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Tạo tóm tắt thất bại",
     "reconnectionsRecent": "Kết nối lại (7 ngày qua)",
     "failedConnections": "Kết nối thất bại",
-    "failedConnectionsRecent": "Kết nối thất bại(7 ngày qua)",
+    "failedConnectionsRecent": "Kết nối thất bại (7 ngày qua)",
     "diagnosticsCountSincePairing": "{count} kể từ khi ghép đôi"
 }

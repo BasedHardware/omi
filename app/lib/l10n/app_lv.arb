@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Kopsavilkums neizdevās",
     "reconnectionsRecent": "Atkārtoti savienojumi (pēdējās 7 dienas)",
     "failedConnections": "Neveiksmīgi savienojumi",
-    "failedConnectionsRecent": "Neveiksmīgi savienojumi(pēdējās 7 dienas)",
+    "failedConnectionsRecent": "Neveiksmīgi savienojumi (pēdējās 7 dienas)",
     "diagnosticsCountSincePairing": "{count} kopš savienošanas pārī"
 }

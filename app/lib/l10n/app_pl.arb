@@ -3698,6 +3698,6 @@
     "conversationSummaryFailed": "Nie udało się utworzyć podsumowania",
     "reconnectionsRecent": "Ponowne połączenia (ostatnie 7 dni)",
     "failedConnections": "Nieudane połączenia",
-    "failedConnectionsRecent": "Nieudane połączenia(ostatnie 7 dni)",
+    "failedConnectionsRecent": "Nieudane połączenia (ostatnie 7 dni)",
     "diagnosticsCountSincePairing": "{count} od sparowania"
 }

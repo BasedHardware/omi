@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "فشل إنشاء الملخص",
     "reconnectionsRecent": "إعادة الاتصال (آخر 7 أيام)",
     "failedConnections": "اتصالات فاشلة",
-    "failedConnectionsRecent": "اتصالات فاشلة(آخر 7 أيام)",
+    "failedConnectionsRecent": "اتصالات فاشلة (آخر 7 أيام)",
     "diagnosticsCountSincePairing": "{count} منذ الاقتران"
 }

@@ -11687,7 +11687,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get failedConnections => 'విఫలమైన కనెక్షన్లు';
 
   @override
-  String get failedConnectionsRecent => 'విఫలమైన కనెక్షన్లు(గత 7 రోజులు)';
+  String get failedConnectionsRecent => 'విఫలమైన కనెక్షన్లు (గత 7 రోజులు)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

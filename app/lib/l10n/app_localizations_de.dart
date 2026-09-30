@@ -11733,7 +11733,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get failedConnections => 'Fehlgeschlagene Verbindungen';
 
   @override
-  String get failedConnectionsRecent => 'Fehlgeschlagene Verbindungen(letzte 7 Tage)';
+  String get failedConnectionsRecent => 'Fehlgeschlagene Verbindungen (letzte 7 Tage)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

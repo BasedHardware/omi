@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "יצירת הסיכום נכשלה",
     "reconnectionsRecent": "חיבורים מחדש (7 הימים האחרונים)",
     "failedConnections": "חיבורים שנכשלו",
-    "failedConnectionsRecent": "חיבורים שנכשלו(7 הימים האחרונים)",
+    "failedConnectionsRecent": "חיבורים שנכשלו (7 הימים האחרונים)",
     "diagnosticsCountSincePairing": "{count} מאז ההתאמה"
 }

@@ -11634,7 +11634,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get failedConnections => 'Kết nối thất bại';
 
   @override
-  String get failedConnectionsRecent => 'Kết nối thất bại(7 ngày qua)';
+  String get failedConnectionsRecent => 'Kết nối thất bại (7 ngày qua)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

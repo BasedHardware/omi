@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Riepilogo non riuscito",
     "reconnectionsRecent": "Riconnessioni (ultimi 7 giorni)",
     "failedConnections": "Connessioni non riuscite",
-    "failedConnectionsRecent": "Connessioni non riuscite(ultimi 7 giorni)",
+    "failedConnectionsRecent": "Connessioni non riuscite (ultimi 7 giorni)",
     "diagnosticsCountSincePairing": "{count} dall'associazione"
 }

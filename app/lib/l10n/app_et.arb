@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Kokkuvõtte loomine ebaõnnestus",
     "reconnectionsRecent": "Taasühendused (viimased 7 päeva)",
     "failedConnections": "Ebaõnnestunud ühendused",
-    "failedConnectionsRecent": "Ebaõnnestunud ühendused(viimased 7 päeva)",
+    "failedConnectionsRecent": "Ebaõnnestunud ühendused (viimased 7 päeva)",
     "diagnosticsCountSincePairing": "{count} pärast sidumist"
 }

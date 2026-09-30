@@ -11630,7 +11630,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get failedConnections => 'Neúspešné pripojenia';
 
   @override
-  String get failedConnectionsRecent => 'Neúspešné pripojenia(posledných 7 dní)';
+  String get failedConnectionsRecent => 'Neúspešné pripojenia (posledných 7 dní)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

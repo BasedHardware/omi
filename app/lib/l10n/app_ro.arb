@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Rezumatul a eșuat",
     "reconnectionsRecent": "Reconectări (ultimele 7 zile)",
     "failedConnections": "Conexiuni eșuate",
-    "failedConnectionsRecent": "Conexiuni eșuate(ultimele 7 zile)",
+    "failedConnectionsRecent": "Conexiuni eșuate (ultimele 7 zile)",
     "diagnosticsCountSincePairing": "{count} de la asociere"
 }

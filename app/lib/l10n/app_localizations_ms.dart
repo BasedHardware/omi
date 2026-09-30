@@ -11670,7 +11670,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get failedConnections => 'Sambungan gagal';
 
   @override
-  String get failedConnectionsRecent => 'Sambungan gagal(7 hari lepas)';
+  String get failedConnectionsRecent => 'Sambungan gagal (7 hari lepas)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

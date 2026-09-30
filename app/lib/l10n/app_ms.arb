@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Ringkasan gagal",
     "reconnectionsRecent": "Sambungan semula (7 hari lepas)",
     "failedConnections": "Sambungan gagal",
-    "failedConnectionsRecent": "Sambungan gagal(7 hari lepas)",
+    "failedConnectionsRecent": "Sambungan gagal (7 hari lepas)",
     "diagnosticsCountSincePairing": "{count} sejak pemasangan"
 }

@@ -11637,7 +11637,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get failedConnections => 'Neúspěšná připojení';
 
   @override
-  String get failedConnectionsRecent => 'Neúspěšná připojení(posledních 7 dní)';
+  String get failedConnectionsRecent => 'Neúspěšná připojení (posledních 7 dní)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

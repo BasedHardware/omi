@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "সারাংশ তৈরি করা যায়নি",
     "reconnectionsRecent": "পুনরায় সংযোগ (শেষ ৭ দিন)",
     "failedConnections": "ব্যর্থ সংযোগ",
-    "failedConnectionsRecent": "ব্যর্থ সংযোগ(শেষ ৭ দিন)",
+    "failedConnectionsRecent": "ব্যর্থ সংযোগ (শেষ ৭ দিন)",
     "diagnosticsCountSincePairing": "জোড়া হওয়ার পর থেকে {count}"
 }

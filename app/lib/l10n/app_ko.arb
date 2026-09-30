@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "요약 실패",
     "reconnectionsRecent": "재연결 (최근 7일)",
     "failedConnections": "실패한 연결",
-    "failedConnectionsRecent": "실패한 연결(최근 7일)",
+    "failedConnectionsRecent": "실패한 연결 (최근 7일)",
     "diagnosticsCountSincePairing": "페어링 이후 {count}"
 }

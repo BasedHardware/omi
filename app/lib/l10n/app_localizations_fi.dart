@@ -11642,7 +11642,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get failedConnections => 'Epäonnistuneet yhteydet';
 
   @override
-  String get failedConnectionsRecent => 'Epäonnistuneet yhteydet(viimeiset 7 päivää)';
+  String get failedConnectionsRecent => 'Epäonnistuneet yhteydet (viimeiset 7 päivää)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Sammanfattningen misslyckades",
     "reconnectionsRecent": "Återanslutningar (senaste 7 dagarna)",
     "failedConnections": "Misslyckade anslutningar",
-    "failedConnectionsRecent": "Misslyckade anslutningar(senaste 7 dagarna)",
+    "failedConnectionsRecent": "Misslyckade anslutningar (senaste 7 dagarna)",
     "diagnosticsCountSincePairing": "{count} sedan kopplingen"
 }

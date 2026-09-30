@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Η σύνοψη απέτυχε",
     "reconnectionsRecent": "Επανασυνδέσεις (τελευταίες 7 ημέρες)",
     "failedConnections": "Αποτυχημένες συνδέσεις",
-    "failedConnectionsRecent": "Αποτυχημένες συνδέσεις(τελευταίες 7 ημέρες)",
+    "failedConnectionsRecent": "Αποτυχημένες συνδέσεις (τελευταίες 7 ημέρες)",
     "diagnosticsCountSincePairing": "{count} από τη σύζευξη"
 }

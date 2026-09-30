@@ -11649,7 +11649,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get failedConnections => 'ناکام کنکشن';
 
   @override
-  String get failedConnectionsRecent => 'ناکام کنکشن(پچھلے 7 دن)';
+  String get failedConnectionsRecent => 'ناکام کنکشن (پچھلے 7 دن)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

@@ -11569,7 +11569,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get failedConnections => 'اتصالات فاشلة';
 
   @override
-  String get failedConnectionsRecent => 'اتصالات فاشلة(آخر 7 أيام)';
+  String get failedConnectionsRecent => 'اتصالات فاشلة (آخر 7 أيام)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

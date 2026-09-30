@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Zhrnutie zlyhalo",
     "reconnectionsRecent": "Opätovné pripojenia (posledných 7 dní)",
     "failedConnections": "Neúspešné pripojenia",
-    "failedConnectionsRecent": "Neúspešné pripojenia(posledných 7 dní)",
+    "failedConnectionsRecent": "Neúspešné pripojenia (posledných 7 dní)",
     "diagnosticsCountSincePairing": "{count} od spárovania"
 }

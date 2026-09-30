@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Samenvatting mislukt",
     "reconnectionsRecent": "Herverbindingen (laatste 7 dagen)",
     "failedConnections": "Mislukte verbindingen",
-    "failedConnectionsRecent": "Mislukte verbindingen(laatste 7 dagen)",
+    "failedConnectionsRecent": "Mislukte verbindingen (laatste 7 dagen)",
     "diagnosticsCountSincePairing": "{count} sinds koppeling"
 }

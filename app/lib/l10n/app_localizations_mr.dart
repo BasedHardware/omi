@@ -11647,7 +11647,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get failedConnections => 'अयशस्वी कनेक्शन';
 
   @override
-  String get failedConnectionsRecent => 'अयशस्वी कनेक्शन(गेल्या 7 दिवसांत)';
+  String get failedConnectionsRecent => 'अयशस्वी कनेक्शन (गेल्या 7 दिवसांत)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

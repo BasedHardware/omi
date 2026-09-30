@@ -11547,7 +11547,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get failedConnections => 'חיבורים שנכשלו';
 
   @override
-  String get failedConnectionsRecent => 'חיבורים שנכשלו(7 הימים האחרונים)';
+  String get failedConnectionsRecent => 'חיבורים שנכשלו (7 הימים האחרונים)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

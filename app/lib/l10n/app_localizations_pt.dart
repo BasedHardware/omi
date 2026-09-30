@@ -11657,7 +11657,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get failedConnections => 'Falhas de conexão';
 
   @override
-  String get failedConnectionsRecent => 'Falhas de conexão(últimos 7 dias)';
+  String get failedConnectionsRecent => 'Falhas de conexão (últimos 7 dias)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

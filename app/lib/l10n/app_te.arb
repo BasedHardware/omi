@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "సారాంశం విఫలమైంది",
     "reconnectionsRecent": "తిరిగి కనెక్షన్లు (గత 7 రోజులు)",
     "failedConnections": "విఫలమైన కనెక్షన్లు",
-    "failedConnectionsRecent": "విఫలమైన కనెక్షన్లు(గత 7 రోజులు)",
+    "failedConnectionsRecent": "విఫలమైన కనెక్షన్లు (గత 7 రోజులు)",
     "diagnosticsCountSincePairing": "జతచేసినప్పటినుండి {count}"
 }

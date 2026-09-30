@@ -3698,6 +3698,6 @@
     "conversationSummaryFailed": "Özet oluşturulamadı",
     "reconnectionsRecent": "Yeniden bağlantılar (son 7 gün)",
     "failedConnections": "Başarısız bağlantılar",
-    "failedConnectionsRecent": "Başarısız bağlantılar(son 7 gün)",
+    "failedConnectionsRecent": "Başarısız bağlantılar (son 7 gün)",
     "diagnosticsCountSincePairing": "{count} eşleştirmeden beri"
 }

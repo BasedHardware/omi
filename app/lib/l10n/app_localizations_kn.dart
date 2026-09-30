@@ -11675,7 +11675,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get failedConnections => 'ವಿಫಲ ಸಂಪರ್ಕಗಳು';
 
   @override
-  String get failedConnectionsRecent => 'ವಿಫಲ ಸಂಪರ್ಕಗಳು(ಕಳೆದ 7 ದಿನಗಳು)';
+  String get failedConnectionsRecent => 'ವಿಫಲ ಸಂಪರ್ಕಗಳು (ಕಳೆದ 7 ದಿನಗಳು)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

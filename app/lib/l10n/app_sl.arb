@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "Povzetek ni uspel",
     "reconnectionsRecent": "Ponovne povezave (zadnjih 7 dni)",
     "failedConnections": "Neuspešne povezave",
-    "failedConnectionsRecent": "Neuspešne povezave(zadnjih 7 dni)",
+    "failedConnectionsRecent": "Neuspešne povezave (zadnjih 7 dni)",
     "diagnosticsCountSincePairing": "{count} od seznanitve"
 }

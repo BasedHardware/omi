@@ -11740,7 +11740,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get failedConnections => 'Mga bigong koneksyon';
 
   @override
-  String get failedConnectionsRecent => 'Mga bigong koneksyon(nakaraang 7 araw)';
+  String get failedConnectionsRecent => 'Mga bigong koneksyon (nakaraang 7 araw)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

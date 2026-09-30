@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Не вдалося створити підсумок",
     "reconnectionsRecent": "Повторні підключення (останні 7 днів)",
     "failedConnections": "Невдалі підключення",
-    "failedConnectionsRecent": "Невдалі підключення(останні 7 днів)",
+    "failedConnectionsRecent": "Невдалі підключення (останні 7 днів)",
     "diagnosticsCountSincePairing": "{count} з моменту спарування"
 }

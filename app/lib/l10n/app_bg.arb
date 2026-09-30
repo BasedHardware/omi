@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Резюмето не бе създадено",
     "reconnectionsRecent": "Повторни свързвания (последните 7 дни)",
     "failedConnections": "Неуспешни връзки",
-    "failedConnectionsRecent": "Неуспешни връзки(последните 7 дни)",
+    "failedConnectionsRecent": "Неуспешни връзки (последните 7 дни)",
     "diagnosticsCountSincePairing": "{count} от сдвояването"
 }

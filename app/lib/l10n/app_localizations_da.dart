@@ -11624,7 +11624,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get failedConnections => 'Mislykkede forbindelser';
 
   @override
-  String get failedConnectionsRecent => 'Mislykkede forbindelser(seneste 7 dage)';
+  String get failedConnectionsRecent => 'Mislykkede forbindelser (seneste 7 dage)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

@@ -11653,7 +11653,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get failedConnections => 'Неуспеле везе';
 
   @override
-  String get failedConnectionsRecent => 'Неуспеле везе(последњих 7 дана)';
+  String get failedConnectionsRecent => 'Неуспеле везе (последњих 7 дана)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

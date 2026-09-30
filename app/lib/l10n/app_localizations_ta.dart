@@ -11717,7 +11717,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get failedConnections => 'தோல்வியுற்ற இணைப்புகள்';
 
   @override
-  String get failedConnectionsRecent => 'தோல்வியுற்ற இணைப்புகள்(கடந்த 7 நாட்கள்)';
+  String get failedConnectionsRecent => 'தோல்வியுற்ற இணைப்புகள் (கடந்த 7 நாட்கள்)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

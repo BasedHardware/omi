@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "सारांश अयशस्वी झाला",
     "reconnectionsRecent": "पुन्हा कनेक्शन (गेल्या 7 दिवसांत)",
     "failedConnections": "अयशस्वी कनेक्शन",
-    "failedConnectionsRecent": "अयशस्वी कनेक्शन(गेल्या 7 दिवसांत)",
+    "failedConnectionsRecent": "अयशस्वी कनेक्शन (गेल्या 7 दिवसांत)",
     "diagnosticsCountSincePairing": "जोडणीनंतर {count}"
 }

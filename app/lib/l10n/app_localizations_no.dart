@@ -11639,7 +11639,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get failedConnections => 'Mislykkede tilkoblinger';
 
   @override
-  String get failedConnectionsRecent => 'Mislykkede tilkoblinger(siste 7 dager)';
+  String get failedConnectionsRecent => 'Mislykkede tilkoblinger (siste 7 dager)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

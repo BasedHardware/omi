@@ -11660,7 +11660,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get failedConnections => 'Невдалі підключення';
 
   @override
-  String get failedConnectionsRecent => 'Невдалі підключення(останні 7 днів)';
+  String get failedConnectionsRecent => 'Невдалі підключення (останні 7 днів)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

@@ -11639,7 +11639,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get failedConnections => 'ব্যর্থ সংযোগ';
 
   @override
-  String get failedConnectionsRecent => 'ব্যর্থ সংযোগ(শেষ ৭ দিন)';
+  String get failedConnectionsRecent => 'ব্যর্থ সংযোগ (শেষ ৭ দিন)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

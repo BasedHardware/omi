@@ -11223,6 +11223,6 @@
     "conversationSummaryFailed": "Не ўдалося стварыць зводку",
     "reconnectionsRecent": "Перазлучэнні (апошнія 7 дзён)",
     "failedConnections": "Няўдалыя злучэнні",
-    "failedConnectionsRecent": "Няўдалыя злучэнні(апошнія 7 дзён)",
+    "failedConnectionsRecent": "Няўдалыя злучэнні (апошнія 7 дзён)",
     "diagnosticsCountSincePairing": "{count} з моманту спарвання"
 }

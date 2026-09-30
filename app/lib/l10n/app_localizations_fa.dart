@@ -11635,7 +11635,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get failedConnections => 'اتصالات ناموفق';
 
   @override
-  String get failedConnectionsRecent => 'اتصالات ناموفق(7 روز گذشته)';
+  String get failedConnectionsRecent => 'اتصالات ناموفق (7 روز گذشته)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

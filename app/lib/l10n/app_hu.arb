@@ -3759,6 +3759,6 @@
     "conversationSummaryFailed": "Az összefoglaló nem sikerült",
     "reconnectionsRecent": "Újracsatlakozások (elmúlt 7 nap)",
     "failedConnections": "Sikertelen kapcsolatok",
-    "failedConnectionsRecent": "Sikertelen kapcsolatok(elmúlt 7 nap)",
+    "failedConnectionsRecent": "Sikertelen kapcsolatok (elmúlt 7 nap)",
     "diagnosticsCountSincePairing": "{count} a párosítás óta"
 }

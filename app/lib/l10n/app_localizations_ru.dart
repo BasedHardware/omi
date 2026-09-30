@@ -11678,7 +11678,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get failedConnections => 'Неудачные подключения';
 
   @override
-  String get failedConnectionsRecent => 'Неудачные подключения(последние 7 дней)';
+  String get failedConnectionsRecent => 'Неудачные подключения (последние 7 дней)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

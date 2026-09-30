@@ -11657,7 +11657,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get failedConnections => 'Nepavykę ryšiai';
 
   @override
-  String get failedConnectionsRecent => 'Nepavykę ryšiai(paskutinės 7 dienos)';
+  String get failedConnectionsRecent => 'Nepavykę ryšiai (paskutinės 7 dienos)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

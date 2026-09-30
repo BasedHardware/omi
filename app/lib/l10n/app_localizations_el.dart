@@ -11717,7 +11717,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get failedConnections => 'Αποτυχημένες συνδέσεις';
 
   @override
-  String get failedConnectionsRecent => 'Αποτυχημένες συνδέσεις(τελευταίες 7 ημέρες)';
+  String get failedConnectionsRecent => 'Αποτυχημένες συνδέσεις (τελευταίες 7 ημέρες)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

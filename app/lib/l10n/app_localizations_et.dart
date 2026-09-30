@@ -11635,7 +11635,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get failedConnections => 'Ebaõnnestunud ühendused';
 
   @override
-  String get failedConnectionsRecent => 'Ebaõnnestunud ühendused(viimased 7 päeva)';
+  String get failedConnectionsRecent => 'Ebaõnnestunud ühendused (viimased 7 päeva)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

@@ -11683,7 +11683,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get failedConnections => 'Sikertelen kapcsolatok';
 
   @override
-  String get failedConnectionsRecent => 'Sikertelen kapcsolatok(elmúlt 7 nap)';
+  String get failedConnectionsRecent => 'Sikertelen kapcsolatok (elmúlt 7 nap)';
 
   @override
   String diagnosticsCountSincePairing(int count) {

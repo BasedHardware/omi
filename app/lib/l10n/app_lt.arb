@@ -3663,6 +3663,6 @@
     "conversationSummaryFailed": "Santrauka nepavyko",
     "reconnectionsRecent": "Persijungimai iš naujo (paskutinės 7 dienos)",
     "failedConnections": "Nepavykę ryšiai",
-    "failedConnectionsRecent": "Nepavykę ryšiai(paskutinės 7 dienos)",
+    "failedConnectionsRecent": "Nepavykę ryšiai (paskutinės 7 dienos)",
     "diagnosticsCountSincePairing": "{count} nuo susiejimo"
 }

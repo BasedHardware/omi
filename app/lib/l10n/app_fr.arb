@@ -3698,6 +3698,6 @@
     "conversationSummaryFailed": "Échec du résumé",
     "reconnectionsRecent": "Reconnexions (7 derniers jours)",
     "failedConnections": "Échecs de connexion",
-    "failedConnectionsRecent": "Échecs de connexion(7 derniers jours)",
+    "failedConnectionsRecent": "Échecs de connexion (7 derniers jours)",
     "diagnosticsCountSincePairing": "{count} depuis l'appairage"
 }
