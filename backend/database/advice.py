@@ -4,6 +4,7 @@ Collection: users/{uid}/advice
 """
 
 import logging
+import math
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
@@ -41,7 +42,10 @@ def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any
         confidence = float(raw_confidence)
     except (TypeError, ValueError):
         confidence = 0.5
-    confidence = max(0.0, min(1.0, confidence))
+    if not math.isfinite(confidence):
+        confidence = 0.5
+    else:
+        confidence = max(0.0, min(1.0, confidence))
 
     advice_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)

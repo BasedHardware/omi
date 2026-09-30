@@ -77,6 +77,21 @@ def test_create_advice_handles_invalid_confidence_type():
     assert res["confidence"] == 0.5
 
 
+def test_create_advice_handles_nan_confidence():
+    fake_db = MagicMock()
+    doc_ref = MagicMock()
+    fake_db.collection.return_value.document.return_value.collection.return_value.document.return_value = doc_ref
+
+    with patch.object(advice_db, "db", fake_db):
+        res = advice_db.create_advice(
+            "user-1",
+            "Valid advice",
+            confidence=float("nan"),  # falls back cleanly to 0.5
+        )
+
+    assert res["confidence"] == 0.5
+
+
 # ---------------------------------------------------------------------------
 # get_advice validation & limits
 # ---------------------------------------------------------------------------
