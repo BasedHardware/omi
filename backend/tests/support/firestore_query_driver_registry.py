@@ -1311,10 +1311,26 @@ _add(
         neutrals={'limit': _LIMIT},
     )
 )
-_add(DriverEntry('database.mcp_oauth.delete_user_oauth_credentials', base={'uid': UID}))
 _add(DriverEntry('database.mcp_oauth.list_user_grants', base={'uid': UID}))
 _MCP_NOOP_CACHE = (_redis_noop('database.mcp_token_cache.invalidate_grant'),)
 _MCP_GRANT_DOC = {'uid': UID, 'client_id': 'client-1', 'resource': 'res-1', 'scopes': []}
+
+
+def _seed_delete_user_oauth_credentials(client, combo, trial):
+    """Trial 0 keeps the empty path; trial 1 exercises the per-grant deletes.
+
+    A queued grant makes ``delete_user_oauth_credentials`` walk every grant and
+    issue the per-grant ``mcp_oauth_access_tokens`` / ``mcp_oauth_refresh_tokens``
+    queries (inside ``revoke_grant`` and its own loop) plus the final grant
+    document delete; the token streams consume the remaining empty queues.
+    """
+    if trial == 0:
+        return
+    client.queue_results([client.snapshot('mcp_oauth_grants/grant-1', dict(_MCP_GRANT_DOC))])
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([])
 
 
 def _seed_mcp_refresh_replay(client, combo, trial):
@@ -1330,6 +1346,15 @@ def _seed_mcp_refresh_replay(client, combo, trial):
     }
 
 
+_add(
+    DriverEntry(
+        'database.mcp_oauth.delete_user_oauth_credentials',
+        base={'uid': UID},
+        setup=_seed_delete_user_oauth_credentials,
+        patchers=_MCP_NOOP_CACHE,
+        trials=2,
+    )
+)
 _add(
     DriverEntry(
         'database.mcp_oauth.revoke_grant',

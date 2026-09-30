@@ -160,6 +160,23 @@ def test_collection_group_single_field_requires_opt_in_or_declared_index():
     assert is_served(shape(scope='COLLECTION_GROUP'), {})
 
 
+def test_collection_group_descending_single_field_also_serves_equality():
+    """Equality is unordered: a DESCENDING-only group override must not be a false gap."""
+    query = shape([('status', '==')], scope='COLLECTION_GROUP')
+    assert is_served(
+        query,
+        {
+            'fieldOverrides': [
+                {
+                    'collectionGroup': 'conversations',
+                    'fieldPath': 'status',
+                    'indexes': [{'queryScope': 'COLLECTION_GROUP', 'order': DESC}],
+                }
+            ]
+        },
+    )
+
+
 def test_single_field_exemptions_wildcard_parent_and_specific_override():
     query = shape([('metadata.time', '>')])
     base = [{'collectionGroup': 'conversations', 'fieldPath': '*', 'indexes': []}]

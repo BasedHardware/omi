@@ -128,7 +128,10 @@ def _automatic_modes(spec: IndexSpec) -> set[str]:
     if mode == ARRAY:
         return {ARRAY} if spec.fields[-1][1] == ASC else set()
     if field in spec.equality_fields:
-        return {spec.fields[-1][1]}
+        # Equality segments are unordered: either scalar direction serves them
+        # (firebase-js-sdk TargetIndexMatcher treats them direction-agnostically;
+        # the composite matcher below accepts ASC or DESC for the same reason).
+        return {ASC, DESC}
     return {mode} if mode == spec.fields[-1][1] else set()
 
 
