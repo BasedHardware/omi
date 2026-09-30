@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.426",
+      "date": "2026-09-30",
+      "changes": [
+        "Meeting notes now name the people shown on video call tiles, and meeting screenshots are chosen when the meeting ends instead of when you first open the note"
+      ]
+    },
+    {
       "version": "0.12.425",
       "date": "2026-09-30",
       "changes": [
