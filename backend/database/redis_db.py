@@ -1419,10 +1419,21 @@ return {0, 0}
 """)
 
 
-def _seconds_until_midnight_utc() -> int:
-    now = datetime.now(timezone.utc)
+def _get_daily_bucket_and_ttl(user_tz: Optional[str] = None) -> tuple[str, int]:
+    tz = timezone.utc
+    if user_tz:
+        try:
+            from zoneinfo import ZoneInfo
+
+            tz = ZoneInfo(user_tz)
+        except Exception:
+            tz = timezone.utc
+
+    now = datetime.now(tz)
+    date_str = now.strftime('%Y%m%d')
     tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return max(1, int((tomorrow - now).total_seconds()))
+    ttl = max(1, int((tomorrow - now).total_seconds()))
+    return date_str, ttl
 
 
 def check_tts_rate_limit(
@@ -1431,6 +1442,7 @@ def check_tts_rate_limit(
     burst_limit: int = 50,
     burst_window_secs: int = 60,
     daily_char_limit: int = 10_000,
+    user_tz: Optional[str] = None,
 ) -> tuple[int, int]:
     """Atomic per-user TTS rate limit check.
 
@@ -1442,11 +1454,10 @@ def check_tts_rate_limit(
     """
     try:
         burst_key = f'tts:burst:{uid}'
-        today_utc = datetime.now(timezone.utc).strftime('%Y%m%d')
-        daily_key = f'tts:chars:{uid}:{today_utc}'
+        today_local, daily_ttl = _get_daily_bucket_and_ttl(user_tz)
+        daily_key = f'tts:chars:{uid}:{today_local}'
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         window_ms = burst_window_secs * 1000
-        daily_ttl = _seconds_until_midnight_utc()
         result = _TTS_RATE_LIMIT_LUA(
             keys=[burst_key, daily_key],
             args=[now_ms, window_ms, burst_limit, char_count, daily_char_limit, daily_ttl],

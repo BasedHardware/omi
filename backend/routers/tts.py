@@ -6,14 +6,14 @@ provider credentials to the client.
 
 Rate limits per user (Redis-backed sliding-window + daily counter):
   - 50 requests per rolling 60 seconds → 429
-  - 10,000 characters per UTC day → 429
+  - 10,000 characters per local day (resets at local midnight) → 429
   - 5,000 characters per single request (hard cap, 400)
 """
 
 import asyncio
 import logging
 import os
-from typing import Any, Callable, Dict, cast
+from typing import Any, Callable, Dict, Optional, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -59,6 +59,16 @@ def _is_valid_voice_id(voice_id: str) -> bool:
     return 1 <= len(voice_id) <= 128 and voice_id.isalnum()
 
 
+def _get_user_time_zone(uid: str) -> Optional[str]:
+    """Retrieve user timezone from notification_db, failing gracefully to None (UTC fallback)."""
+    try:
+        from database import notifications as notification_db
+
+        return notification_db.get_user_time_zone(uid)
+    except Exception:
+        return None
+
+
 @router.post(
     '/v2/tts/synthesize',
     tags=['tts'],
@@ -91,6 +101,7 @@ async def tts_synthesize(
             detail=f"text exceeds maximum length of {_TTS_REQUEST_CHAR_LIMIT} characters",
         )
 
+    user_tz = _get_user_time_zone(uid)
     status, retry_after = await run_blocking(
         critical_executor,
         redis_db.check_tts_rate_limit,
@@ -99,6 +110,7 @@ async def tts_synthesize(
         burst_limit=_TTS_BURST_PER_MINUTE,
         burst_window_secs=_TTS_BURST_WINDOW_SECS,
         daily_char_limit=_TTS_DAILY_CHAR_LIMIT,
+        user_tz=user_tz,
     )
     if status == 1:
         logger.warning(f"tts_synthesize: burst rate limit exceeded uid={uid}")
@@ -111,7 +123,7 @@ async def tts_synthesize(
         logger.warning(f"tts_synthesize: daily character limit exceeded uid={uid}")
         raise HTTPException(
             status_code=429,
-            detail="Daily TTS character limit exceeded. Resets at midnight UTC.",
+            detail="Daily TTS character limit exceeded. Resets at midnight.",
             headers={"Retry-After": str(retry_after or 3600)},
         )
     # status == -1 (Redis error): fail-open intentionally — TTS is best-effort.
