@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from utils import executors
 from utils.executors import (
     MonitoredThreadPoolExecutor,
     _background_tasks,
@@ -25,6 +26,26 @@ from utils.executors import (
 
 _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="test")
 _test_ctxvar = contextvars.ContextVar("test_key", default=None)
+
+
+def test_shadow_pool_is_lazy_propagates_context_and_shuts_down_with_registered_pools(monkeypatch):
+    monkeypatch.setattr(executors, '_jev_shadow_executor', None)
+    monkeypatch.setattr(executors, '_ALL_EXECUTORS', [])
+    assert executors._ALL_EXECUTORS == []
+    pool = executors.get_jev_shadow_executor()
+    assert executors.get_jev_shadow_executor() is pool
+    assert pool._max_workers == 4 and executors._ALL_EXECUTORS == [pool]
+    token = _test_ctxvar.set('shadow-context')
+    try:
+        future = submit_with_context(pool, lambda: (_test_ctxvar.get(), threading.current_thread().name))
+        value, thread = future.result(timeout=2)
+        assert value == 'shadow-context' and thread.startswith('jev-shadow')
+    finally:
+        _test_ctxvar.reset(token)
+        executors.shutdown_executors()
+        pool.shutdown(wait=True)
+    with pytest.raises(RuntimeError, match='shutdown'):
+        pool.submit(lambda: None)
 
 
 @pytest.mark.asyncio

@@ -181,3 +181,6 @@ its eight-candidate budget. It records the full owner distribution without
 changing capture output. Both shadows share `jev_shadow.py` admission/worker
 primitives and persist only numeric/enum/identifier metadata through
 `database/jev_shadow.py`; Redis unavailable fails closed before vendor egress.
+Their lazy four-worker `jev-shadow` executor is isolated from foreground LLM
+work. Admission owns a bounded Redis client per attempt; vendor calls and
+retry-free Firestore writes consume only the remaining 2.5-second task budget.

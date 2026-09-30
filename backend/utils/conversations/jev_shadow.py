@@ -13,16 +13,19 @@ import re
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, cast
+
+import redis
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 from config.jev_decisions import RelevanceArm, percentage, uid_bucket
-from database import redis_db
 from database.jev_shadow import write_jev_shadow
 from models.conversation_enums import ConversationSource
 from utils.conversations import owner_jev, relevance_jev
 from utils.conversations.relevance import JEV_DISCARD_THRESHOLD, RelevanceDecision
 from utils.conversations.relevance_rules import transcript_word_count
-from utils.executors import llm_executor, submit_with_context
+from utils.executors import get_jev_shadow_executor, submit_with_context
 from utils.llm.jev_client import ask_jev
 from utils.metrics import (
     JEV_SHADOW_LATENCY,
@@ -61,7 +64,32 @@ def _in_cohort(lane: Lane, conversation_id: str) -> bool:
     return uid_bucket(conversation_id, f'{lane}-shadow-v1') < percent
 
 
-def _admit(lane: Lane, uid: str, conversation_id: str, content_sha: str, version: str) -> str:
+def _get_shadow_redis(deadline: float) -> Any:
+    """A lazy, attempt-owned pool avoids sharing mutable socket deadlines."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError
+    # Leave budget for connect/auth/command reads; no health-check or retry IO.
+    timeout = min(0.5, remaining / 8)
+    port = os.getenv('REDIS_DB_PORT')
+    return redis.Redis(
+        host=cast(str, os.getenv('REDIS_DB_HOST')),
+        port=int(port) if port is not None else 6379,
+        username='default',
+        password=os.getenv('REDIS_DB_PASSWORD'),
+        ssl=False,
+        socket_connect_timeout=timeout,
+        socket_timeout=timeout,
+        retry=Retry(NoBackoff(), 0),
+        retry_on_timeout=False,
+        health_check_interval=0,
+        max_connections=1,
+        lib_name='',
+        lib_version='',
+    )
+
+
+def _admit(lane: Lane, uid: str, conversation_id: str, content_sha: str, version: str, deadline: float) -> str:
     try:
         cap = int(
             os.getenv('CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP', '60000')
@@ -76,14 +104,15 @@ def _admit(lane: Lane, uid: str, conversation_id: str, content_sha: str, version
     ttl = 86400 - (now.hour * 3600 + now.minute * 60 + now.second) + 60
     fingerprint = _sha(f'{uid}\0{conversation_id}\0{content_sha}\0{version}')
     try:
-        result = redis_db.r.eval(
-            _ADMIT_LUA,
-            2,
-            f'jev:shadow:{lane}:{now:%Y%m%d}',
-            f'jev:shadow:{lane}:claim:{fingerprint}',
-            cap,
-            ttl,
-        )
+        with _get_shadow_redis(deadline) as client:
+            result = client.eval(
+                _ADMIT_LUA,
+                2,
+                f'jev:shadow:{lane}:{now:%Y%m%d}',
+                f'jev:shadow:{lane}:claim:{fingerprint}',
+                cap,
+                ttl,
+            )
         return 'admitted' if result == 1 else 'deduped' if result == 2 else 'cap'
     except Exception:
         return 'redis_unavailable'
@@ -101,7 +130,7 @@ def _submit(
         return
     try:
         future = submit_with_context(
-            llm_executor,
+            get_jev_shadow_executor(),
             _run,
             lane,
             uid,
@@ -136,7 +165,7 @@ def _run(
         if time.monotonic() >= deadline:
             record_jev_shadow_outcome(lane, 'timeout')
             return
-        admission = _admit(lane, uid, conversation_id, content_sha, record['question_version'])
+        admission = _admit(lane, uid, conversation_id, content_sha, record['question_version'], deadline)
         if admission != 'admitted':
             record_jev_shadow_outcome(lane, admission)
             return
@@ -181,8 +210,10 @@ def _run(
                 record[f'p_{option}'] = answers.choice_probability(owner_jev.QUESTION_NAME, option)
             OWNER_JEV_SHADOW_SCORE.observe(record['p_user'])
         record_id = _sha(f'{lane}|{conversation_id}|{content_sha}')[:32]
-        write_jev_shadow(uid, record_id, record)
+        write_jev_shadow(uid, record_id, record, deadline=deadline)
         record_jev_shadow_outcome(lane, 'ok')
+    except TimeoutError:
+        record_jev_shadow_outcome(lane, 'timeout')
     except Exception:
         record_jev_shadow_outcome(lane, 'jev_failed')
     finally:

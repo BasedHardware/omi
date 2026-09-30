@@ -50,8 +50,12 @@ its budget of 8) are eligible. State is assembled from already available values;
 workers receive strings and numeric/enum metadata, never conversation objects.
 
 Each lane has a process bound of two queued/active tasks. Queue-full work drops
-without waiting; a 2.5-second deadline includes queue and Redis time, with one
-vendor attempt and no retry. Redis atomically claims UID + conversation ID +
+without waiting on a dedicated, lazily created four-worker `jev-shadow` executor.
+A 2.5-second task deadline includes queue, Redis, vendor and persistence time.
+Admission uses an attempt-owned Redis client with connect/read timeouts at most
+0.5 seconds and bounded by the remaining budget; Redis retries are disabled.
+The vendor gets one attempt, and Firestore writes disable SDK retries and use
+only the remaining task budget. Redis atomically claims UID + conversation ID +
 content SHA256 + question version and increments a global UTC-day cap.
 `CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP` and
 `MEMORY_OWNER_JEV_SHADOW_DAILY_CAP` default to 60000. Bad caps or unavailable

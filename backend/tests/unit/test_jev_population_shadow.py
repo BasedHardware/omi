@@ -2,6 +2,7 @@
 
 import hashlib
 import threading
+import time
 from concurrent.futures import Future
 from dataclasses import replace
 from datetime import timedelta
@@ -11,13 +12,14 @@ import fakeredis
 import pytest
 
 from database import jev_shadow as store
-from utils import metrics
+from utils import executors, metrics
 from utils.conversations import jev_shadow as shadow
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.relevance import RelevanceDecision
 from utils.llm.jev_client import JevAnswers
 
 SENTINEL = 'PRIVATE_SENTINEL_NEVER_PERSIST_5831'
+GET_SHADOW_REDIS = shadow._get_shadow_redis
 MODEL = RelevanceDecision(
     'discard',
     'model',
@@ -36,7 +38,8 @@ def harness(monkeypatch):
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP', '60000')
     monkeypatch.setenv('MEMORY_OWNER_JEV_SHADOW_DAILY_CAP', '60000')
     redis = fakeredis.FakeRedis()
-    monkeypatch.setattr(shadow.redis_db, 'r', redis)
+    monkeypatch.setattr(shadow, '_get_shadow_redis', lambda deadline: redis)
+    monkeypatch.setattr(shadow, 'get_jev_shadow_executor', MagicMock())
     monkeypatch.setattr(
         shadow, '_slots', {'relevance': threading.BoundedSemaphore(2), 'owner': threading.BoundedSemaphore(2)}
     )
@@ -60,7 +63,9 @@ def harness(monkeypatch):
 
     monkeypatch.setattr(shadow, 'ask_jev', ask)
     monkeypatch.setattr(shadow, 'submit_with_context', submit)
-    monkeypatch.setattr(shadow, 'write_jev_shadow', lambda uid, rid, record: records.append((uid, rid, record)))
+    monkeypatch.setattr(
+        shadow, 'write_jev_shadow', lambda uid, rid, record, **kwargs: records.append((uid, rid, record))
+    )
     monkeypatch.setattr(shadow, 'record_jev_shadow_outcome', lambda lane, outcome: outcomes.append((lane, outcome)))
     return redis, asked, records, outcomes
 
@@ -166,7 +171,7 @@ def test_invalid_cap_never_calls_vendor(harness, monkeypatch, cap):
 
 def test_redis_down_never_calls_vendor(harness, monkeypatch):
     _, asked, _, outcomes = harness
-    monkeypatch.setattr(shadow.redis_db.r, 'eval', MagicMock(side_effect=RuntimeError(SENTINEL)))
+    monkeypatch.setattr(harness[0], 'eval', MagicMock(side_effect=RuntimeError(SENTINEL)))
     relevance()
     owner()
     assert not asked
@@ -293,15 +298,183 @@ def test_cancelled_queue_task_releases_slot(harness, monkeypatch):
     assert shadow._slots['relevance'].acquire(blocking=False)
 
 
-def test_store_adds_60_day_expiry_without_plaintext_or_client_reads():
+def test_store_adds_60_day_expiry_without_plaintext_or_client_reads(monkeypatch):
     client = MagicMock()
-    store.write_jev_shadow('user', 'hash-id', {'lane': 'owner', 'p_user': 0.91}, firestore_client=client)
+    monkeypatch.setattr(store.time, 'monotonic', lambda: 12.0)
+    store.write_jev_shadow('user', 'hash-id', {'lane': 'owner', 'p_user': 0.91}, deadline=12.4, firestore_client=client)
     ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
     record = ref.set.call_args.args[0]
     assert record['expire_at'] - record['created_at'] == timedelta(days=60)
     client.collection.assert_called_once_with('users')
     assert ref.get.call_count == 0
-    assert ref.set.call_args.kwargs == {'timeout': 2.5}
+    assert ref.set.call_args.kwargs == {'retry': None, 'timeout': pytest.approx(0.4)}
+
+
+def test_store_deadline_includes_lazy_client_setup_and_never_retries(monkeypatch):
+    tick = [10.0]
+    client = MagicMock()
+
+    def get_client():
+        tick[0] = 12.0
+        return client
+
+    monkeypatch.setattr(store, 'get_data_plane_firestore_client', get_client)
+    monkeypatch.setattr(store.time, 'monotonic', lambda: tick[0])
+    store.write_jev_shadow('user', 'hash-id', {'lane': 'owner'}, deadline=12.5)
+    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
+    assert ref.set.call_args.kwargs == {'retry': None, 'timeout': 0.5}
+
+
+def test_expired_store_budget_does_not_write(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(store.time, 'monotonic', lambda: 12.5)
+    with pytest.raises(TimeoutError):
+        store.write_jev_shadow('user', 'hash-id', {'lane': 'owner'}, deadline=12.5, firestore_client=client)
+    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
+    ref.set.assert_not_called()
+
+
+def test_worker_passes_original_deadline_to_store(harness, monkeypatch):
+    tick = [10.0]
+    monkeypatch.setattr(shadow.time, 'monotonic', lambda: tick[0])
+    answer = shadow.ask_jev
+
+    def slow_answer(*args, **kwargs):
+        tick[0] = 12.2
+        return answer(*args, **kwargs)
+
+    client = MagicMock()
+    monkeypatch.setattr(shadow, 'ask_jev', slow_answer)
+    monkeypatch.setattr(store, 'get_data_plane_firestore_client', lambda: client)
+    monkeypatch.setattr(shadow, 'write_jev_shadow', store.write_jev_shadow)
+    relevance()
+    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
+    assert ref.set.call_args.kwargs == {'retry': None, 'timeout': pytest.approx(0.3)}
+    assert harness[3] == [('relevance', 'ok')]
+
+
+@pytest.mark.parametrize('remaining', [0.08, 0.8, 2.5, 10.0])
+def test_redis_client_is_lazy_attempt_owned_and_uses_remaining_budget(monkeypatch, remaining):
+    constructor = MagicMock()
+    monkeypatch.setattr(shadow.redis, 'Redis', constructor)
+    monkeypatch.setattr(shadow.time, 'monotonic', lambda: 10.0)
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-redis')
+    monkeypatch.setenv('REDIS_DB_PORT', '6380')
+    monkeypatch.setenv('REDIS_DB_PASSWORD', 'synthetic-password')
+    constructor.assert_not_called()
+    first = GET_SHADOW_REDIS(10.0 + remaining)
+    second = GET_SHADOW_REDIS(10.0 + remaining / 2)
+    assert constructor.call_count == 2
+    assert first is constructor.return_value and second is constructor.return_value
+    for call, budget in zip(constructor.call_args_list, (remaining, remaining / 2)):
+        kwargs = call.kwargs
+        assert kwargs['host'] == 'synthetic-redis' and kwargs['port'] == 6380
+        assert kwargs['username'] == 'default' and kwargs['password'] == 'synthetic-password'
+        assert kwargs['ssl'] is False  # redis_db uses Redis's non-TLS default.
+        assert 0 < kwargs['socket_connect_timeout'] <= min(0.5, budget)
+        assert 0 < kwargs['socket_timeout'] <= min(0.5, budget)
+        assert kwargs['retry']._retries == 0 and kwargs['retry_on_timeout'] is False
+        assert kwargs['max_connections'] == 1 and kwargs['health_check_interval'] == 0
+        assert kwargs['lib_name'] == kwargs['lib_version'] == ''
+
+
+@pytest.mark.parametrize('failure', ['construct', 'close', 'expired'])
+def test_redis_client_errors_fail_closed(harness, monkeypatch, failure):
+    client = MagicMock()
+    client.__enter__.return_value = client
+    client.eval.return_value = 1
+    constructor = MagicMock(return_value=client)
+    monkeypatch.setattr(shadow.redis, 'Redis', constructor)
+    monkeypatch.setattr(shadow, '_get_shadow_redis', GET_SHADOW_REDIS)
+    if failure == 'construct':
+        constructor.side_effect = ValueError(SENTINEL)
+    elif failure == 'close':
+        client.__exit__.side_effect = RuntimeError(SENTINEL)
+    deadline = time.monotonic() + (2.5 if failure != 'expired' else -1)
+    assert shadow._admit('relevance', 'u', 'c', 'sha', 'version', deadline) == 'redis_unavailable'
+    assert not harness[1]
+    if failure == 'expired':
+        constructor.assert_not_called()
+
+
+def test_hung_redis_releases_shadow_worker_within_task_deadline(harness, monkeypatch):
+    blocked = threading.Event()
+    clients = []
+
+    class HungRedis:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.closed = False
+            clients.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.closed = True
+
+        def eval(self, *args):
+            # Simulate a stalled connect and read honoring the actual SDK bounds.
+            blocked.wait(self.kwargs['socket_connect_timeout'])
+            blocked.wait(self.kwargs['socket_timeout'])
+            raise shadow.redis.exceptions.TimeoutError(SENTINEL)
+
+    monkeypatch.setattr(shadow.redis, 'Redis', HungRedis)
+    monkeypatch.setattr(shadow, '_get_shadow_redis', GET_SHADOW_REDIS)
+    monkeypatch.setattr(shadow, 'DEADLINE_SECONDS', 0.5)
+    futures = []
+
+    def submit(executor, fn, *args):
+        future = executors.submit_with_context(executor, fn, *args)
+        futures.append(future)
+        return future
+
+    monkeypatch.setattr(shadow, 'submit_with_context', submit)
+    with executors.MonitoredThreadPoolExecutor(
+        name='test-shadow', max_workers=4, thread_name_prefix='jev-shadow'
+    ) as pool:
+        monkeypatch.setattr(shadow, 'get_jev_shadow_executor', lambda: pool)
+        started = time.monotonic()
+        relevance()
+        futures[0].result(timeout=0.5)
+        assert time.monotonic() - started < 0.5
+        assert shadow._slots['relevance'].acquire(blocking=False)
+        assert shadow._slots['relevance'].acquire(blocking=False)
+    assert clients[0].closed
+    assert not harness[1] and not harness[2]
+    assert harness[3] == [('relevance', 'redis_unavailable')]
+
+
+def test_both_shadow_lanes_use_dedicated_pool_without_touching_llm_executor(harness, monkeypatch):
+    monkeypatch.setattr(executors, '_jev_shadow_executor', None)
+    monkeypatch.setattr(executors, '_ALL_EXECUTORS', list(executors._ALL_EXECUTORS))
+    foreground = MagicMock(side_effect=AssertionError('foreground LLM pool touched'))
+    monkeypatch.setattr(executors.llm_executor, 'submit', foreground)
+    monkeypatch.setattr(shadow, 'get_jev_shadow_executor', executors.get_jev_shadow_executor)
+    futures, threads = [], []
+    answer = shadow.ask_jev
+
+    def ask(*args, **kwargs):
+        threads.append(threading.current_thread().name)
+        return answer(*args, **kwargs)
+
+    def submit(executor, fn, *args):
+        future = executors.submit_with_context(executor, fn, *args)
+        futures.append(future)
+        return future
+
+    monkeypatch.setattr(shadow, 'ask_jev', ask)
+    monkeypatch.setattr(shadow, 'submit_with_context', submit)
+    try:
+        relevance()
+        owner()
+        for future in futures:
+            future.result(timeout=2)
+        assert len(threads) == 2 and all(thread.startswith('jev-shadow') for thread in threads)
+        assert sorted(harness[3]) == [('owner', 'ok'), ('relevance', 'ok')]
+        foreground.assert_not_called()
+    finally:
+        executors.get_jev_shadow_executor().shutdown(wait=True)
 
 
 def test_metric_labels_are_bounded_and_never_raise(monkeypatch):
