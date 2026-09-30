@@ -7,7 +7,7 @@ import logging
 import math
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, cast
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
@@ -21,27 +21,28 @@ BATCH_LIMIT = 500  # Firestore hard limit
 
 
 def _validate_uid(uid: str) -> str:
-    if not isinstance(uid, str) or not uid.strip():
+    if not uid or not uid.strip():
         raise ValueError("uid must be a non-empty string")
     return uid.strip()
 
 
 def _validate_advice_id(advice_id: str) -> str:
-    if not isinstance(advice_id, str) or not advice_id.strip():
+    if not advice_id or not advice_id.strip():
         raise ValueError("advice_id must be a non-empty string")
     return advice_id.strip()
 
 
 def _sanitize_content(content: str) -> str:
-    if not isinstance(content, str) or not content.strip():
+    if not content or not content.strip():
         raise ValueError("content must be a non-empty string")
     return content.strip()
 
 
 def _sanitize_category(category: Optional[str]) -> str:
-    if not isinstance(category, str) or not category.strip():
+    if not category or not category.strip():
         return 'other'
     return category.strip()
+
 
 
 def _sanitize_confidence(value: Any) -> float:
