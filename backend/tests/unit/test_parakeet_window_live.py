@@ -1320,14 +1320,19 @@ async def test_replay_lag_scenarios_preserve_answered_audio_and_explain_overflow
 
 
 @pytest.mark.asyncio
-async def test_sparse_healthy_speech_idle_flushes_without_replay_pressure(monkeypatch):
+@pytest.mark.parametrize('empty_after_first', [False, True])
+async def test_sparse_speech_with_long_idle_gaps_does_not_overflow_replay(monkeypatch, empty_after_first):
     pump_release = asyncio.Event()
 
     async def parked_pump(_self):
         await pump_release.wait()
 
     monkeypatch.setattr(window.WindowedParakeetSocket, '_pump', parked_pump)
-    client = UnpunctuatedClient()
+    client = (
+        SeqClient([{'segments': [{'text': 'Initial.', 'start': 0.0, 'end': 0.5}]}, {'text': ''}])
+        if empty_after_first
+        else UnpunctuatedClient()
+    )
     actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
     clock = [window.time.monotonic()]
     monkeypatch.setattr(window.time, 'monotonic', lambda: clock[0])
@@ -1345,8 +1350,16 @@ async def test_sparse_healthy_speech_idle_flushes_without_replay_pressure(monkey
         await previous.raw._run_job(job)
         clock[0] += 28
         assert actual.stt_socket is previous and not previous.is_connection_dead
-        assert actual._window_ring().buffered_bytes <= 30 * 16000 * 2
-    assert len(base.emitted) == 10 and len(client.requests) == 10
+        assert actual._window_ring().buffered_bytes <= 90 * 16000 * 2
+        assert not previous.raw.has_untranscribed_speech()
+    assert len(base.emitted) == (1 if empty_after_first else 10)
+    assert len(client.requests) == 10
+    if empty_after_first:
+        # Existing idle force consumes the POST span even when answered empty;
+        # the predicate is false, so existing speech-free ring trimming applies.
+        # It is not an exhaustive ledger of everything behind the replay floor.
+        assert previous.raw._empty_posts_since_anchor == 9
+        assert previous.raw._empty_streak == 9
     assert not replayed and not callbacks
     pump_release.set()
     await actual._drain_stt_sockets()
