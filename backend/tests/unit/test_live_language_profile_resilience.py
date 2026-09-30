@@ -72,13 +72,16 @@ def test_clean_sessions_edge_cases():
     assert cleaned[-1] == {"en": 30}
 
 
-def test_resolve_client_precedence():
+def test_resolve_client_precedence_and_isolation(monkeypatch: pytest.MonkeyPatch):
     mock_client = SimpleNamespace(name="mock")
     assert _resolve_client(mock_client) is mock_client
 
-    # When None is passed, fallback should not raise
-    client = _resolve_client(None)
-    # Could be None or db or data plane client, but must not raise
+    # Verify data-plane boundary: when get_data_plane_firestore_client raises, returns None (no db fallback)
+    monkeypatch.setattr(
+        "database.live_language_profile.get_data_plane_firestore_client",
+        lambda: (_ for _ in ()).throw(RuntimeError("Missing OMI_FIRESTORE_DATA_PLANE_PROJECT")),
+    )
+    assert _resolve_client(None) is None
 
 
 def test_get_live_language_sessions_invalid_uid():
@@ -93,6 +96,7 @@ def test_get_live_language_sessions_firestore_exception_resilience():
         def collection(self, _):
             raise RuntimeError("Firestore down")
 
+    # Fails open returning empty list without crashing caller
     assert get_live_language_sessions("valid_uid", firestore_client=BrokenClient()) == []
 
 

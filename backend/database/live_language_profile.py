@@ -7,7 +7,7 @@ from typing import Any
 
 from google.cloud.firestore_v1 import transactional
 
-from database._client import db, get_data_plane_firestore_client
+from database._client import get_data_plane_firestore_client
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 
 FIELD = 'live_stt_language_sessions'
@@ -19,6 +19,7 @@ _CACHE = CachePolicy(namespace='live_stt_language_sessions', version=1, ttl_seco
 
 
 def _clean_id(value: Any) -> str | None:
+    """Validate and sanitize user identifier for document lookup."""
     if not isinstance(value, str):
         return None
     cleaned = value.strip()
@@ -30,6 +31,7 @@ def _clean_id(value: Any) -> str | None:
 
 
 def _clean_counts(value: Any) -> dict[str, int]:
+    """Validate and normalize language code counts dictionary."""
     if not isinstance(value, dict):
         return {}
     counts: dict[str, int] = {}
@@ -42,6 +44,7 @@ def _clean_counts(value: Any) -> dict[str, int]:
 
 
 def _clean_sessions(value: Any) -> list[dict[str, int]]:
+    """Clean and bound a list of session dictionaries."""
     if not isinstance(value, list):
         return []
     cleaned_sessions: list[dict[str, int]] = []
@@ -54,21 +57,17 @@ def _clean_sessions(value: Any) -> list[dict[str, int]]:
 
 
 def _resolve_client(firestore_client: Any = None) -> Any:
+    """Resolve the data-plane Firestore client strictly adhering to data-plane boundary."""
     if firestore_client is not None:
         return firestore_client
     try:
-        client = get_data_plane_firestore_client()
-        if client is not None:
-            return client
-    except Exception:
-        pass
-    try:
-        return db
+        return get_data_plane_firestore_client()
     except Exception:
         return None
 
 
 def invalidate_live_language_sessions_cache(uid: str) -> None:
+    """Safely invalidate the cache for a given user id."""
     clean_uid = _clean_id(uid)
     if not clean_uid:
         return
@@ -79,6 +78,7 @@ def invalidate_live_language_sessions_cache(uid: str) -> None:
 
 
 def get_live_language_sessions(uid: str, *, firestore_client: Any = None) -> list[dict[str, int]]:
+    """Retrieve rolling live language sessions for a user, failing gracefully without caching errors."""
     clean_uid = _clean_id(uid)
     if not clean_uid:
         return []
@@ -86,31 +86,31 @@ def get_live_language_sessions(uid: str, *, firestore_client: Any = None) -> lis
     def fetch() -> list[dict[str, int]]:
         client = _resolve_client(firestore_client)
         if client is None:
+            raise RuntimeError("No data-plane Firestore client available")
+        snapshot = client.collection('users').document(clean_uid).get([FIELD])
+        if not snapshot or getattr(snapshot, 'exists', None) is False:
             return []
-        try:
-            snapshot = client.collection('users').document(clean_uid).get([FIELD])
-            if not snapshot or not getattr(snapshot, 'exists', True):
-                return []
-            data = snapshot.to_dict()
-            return _clean_sessions((data or {}).get(FIELD))
-        except Exception:
-            return []
+        data = snapshot.to_dict() if callable(getattr(snapshot, 'to_dict', None)) else None
+        return _clean_sessions((data or {}).get(FIELD))
 
     if firestore_client is not None:
-        return fetch()
+        try:
+            return fetch()
+        except Exception:
+            return []
     try:
         return get_or_fetch(_CACHE, clean_uid, fetch)
     except Exception:
-        return fetch()
+        return []
 
 
 @transactional
 def _append_transaction(transaction: Any, user_ref: Any, counts: dict[str, int]) -> bool:
     try:
         snapshot = user_ref.get(transaction=transaction)
-        if not snapshot or not getattr(snapshot, 'exists', False):
+        if not snapshot or getattr(snapshot, 'exists', None) is False:
             return False
-        data = snapshot.to_dict()
+        data = snapshot.to_dict() if callable(getattr(snapshot, 'to_dict', None)) else None
         sessions = _clean_sessions((data or {}).get(FIELD))
         transaction.update(user_ref, {FIELD: (sessions + [counts])[-MAX_SESSIONS:]})
         return True
@@ -119,6 +119,7 @@ def _append_transaction(transaction: Any, user_ref: Any, counts: dict[str, int])
 
 
 def append_live_language_session(uid: str, counts: dict[str, int], *, firestore_client: Any = None) -> bool:
+    """Append a session counts dictionary to the rolling window in Firestore."""
     clean_uid = _clean_id(uid)
     if not clean_uid:
         return False
@@ -134,6 +135,7 @@ def append_live_language_session(uid: str, counts: dict[str, int], *, firestore_
         if txn is not None:
             updated = _append_transaction(txn, user_ref, clean)
         else:
+            # Fallback for mock test doubles that do not provide transactional decorator wrappers
             snapshot = user_ref.get()
             if not snapshot or not getattr(snapshot, 'exists', False):
                 return False
