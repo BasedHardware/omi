@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 BATCH_LIMIT = 500  # Firestore hard limit
 
 
+MAX_QUERY_LIMIT = 1000  # Aligned with GET /v1/advice route upper bound
+
+
 def _validate_uid(uid: str) -> str:
     if not uid or not uid.strip():
         raise ValueError("uid must be a non-empty string")
@@ -90,7 +93,7 @@ def get_advice(
     uid: str, category: Optional[str] = None, limit: int = 50, offset: int = 0, include_dismissed: bool = False
 ) -> List[Dict[str, Any]]:
     uid = _validate_uid(uid)
-    bounded_limit = min(max(1, int(limit or 50)), BATCH_LIMIT)
+    bounded_limit = min(max(1, int(limit or 50)), MAX_QUERY_LIMIT)
     bounded_offset = max(0, int(offset or 0))
     category_clean = category.strip() if isinstance(category, str) and category.strip() else None
 
@@ -152,6 +155,14 @@ def delete_advice(uid: str, advice_id: str) -> bool:
 
 
 def mark_all_advice_read(uid: str) -> int:
+    """Mark all unread advice documents as read for a given user.
+
+    Note on Batch Atomicity & Chunking:
+    Performs updates in sequential Firestore write batches of up to 500 documents (BATCH_LIMIT).
+    Each 500-document batch is committed atomically, but operations across multiple batches are
+    non-transactional. If an exception occurs mid-execution, previously committed batches remain
+    applied while subsequent batches are aborted.
+    """
     uid = _validate_uid(uid)
     col = _user_col(uid, 'advice')
     query = col.where(filter=FieldFilter('is_read', '==', False))
