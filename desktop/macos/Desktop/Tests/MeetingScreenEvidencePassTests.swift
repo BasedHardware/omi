@@ -388,6 +388,26 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     }
   }
 
+  /// Bodies serialized by the merged backend model (`ConversationScreenFrameSet.model_dump_json()`
+  /// with `trusted_selection_fingerprint` set, and null when the transcript fixes no window yet).
+  func testDecodesTheOwnerRoutesTrustedSelectionFingerprint() throws {
+    let trusted = Data(
+      #"{"revision":0,"banner":null,"strip":[],"adjudicated_at":null,"selection_fingerprint":null,"trusted_selection_fingerprint":"meeting-content-v1:1783418401623:1783418458373"}"#
+        .utf8)
+    let untrusted = Data(
+      #"{"revision":0,"banner":null,"strip":[],"adjudicated_at":null,"selection_fingerprint":null,"trusted_selection_fingerprint":null}"#
+        .utf8)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+
+    let set = try decoder.decode(ConversationScreenFrameSet.self, from: trusted)
+    XCTAssertEqual(set.trustedSelectionFingerprint, "meeting-content-v1:1783418401623:1783418458373")
+    XCTAssertEqual(
+      set.trustedSelectionFingerprint.flatMap(MeetingScreenshotSelectionWindow.init(serverFingerprint:))?.fingerprint,
+      "meeting-content-v1:1783418401623:1783418458373")
+    XCTAssertNil(try decoder.decode(ConversationScreenFrameSet.self, from: untrusted).trustedSelectionFingerprint)
+  }
+
   func testAfterFinalizeFailureRecordsDegradedFallbackToNoteOpen() async {
     let fallbacks = FallbackRecorder()
     let pass = MeetingScreenEvidencePass(

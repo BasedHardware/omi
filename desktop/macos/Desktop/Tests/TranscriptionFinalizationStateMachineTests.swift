@@ -170,7 +170,7 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
       client?.urlProtocol(
         self,
         didLoad: Data(
-          #"{"revision":0,"strip":[],"trusted_selection_fingerprint":"meeting-content-v1:1783418401623:1783418458373"}"#
+          #"{"revision":0,"banner":null,"strip":[],"adjudicated_at":null,"selection_fingerprint":null,"trusted_selection_fingerprint":"meeting-content-v1:1783418401623:1783418458373"}"#
             .utf8))
     } else if path == "/v1/conversations/evidence-recording-id"
       || path == "/v1/conversations/evidence-recording-id/finalize"
