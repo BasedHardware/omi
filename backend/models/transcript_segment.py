@@ -180,6 +180,7 @@ class TranscriptSegment(BaseModel):
         delta_seconds: int = 0,
         *,
         protected_segment_ids: Optional[set[str]] = None,
+        speaker_bound_ids: Optional[set[int]] = None,
     ) -> CombineSegmentsResult:
         if not new_segments or len(new_segments) == 0:
             return CombineSegmentsResult(segments, [], [], {})
@@ -277,6 +278,14 @@ class TranscriptSegment(BaseModel):
             if not a or not b:
                 return a, b
             if protected_segment_ids and (a.id in protected_segment_ids or b.id in protected_segment_ids):
+                return a, b
+            # A speaker-wide decision covers every segment of that speaker, so its
+            # segments may merge with each other but never trade words across it.
+            if (
+                speaker_bound_ids
+                and a.speaker_id != b.speaker_id
+                and (a.speaker_id in speaker_bound_ids or b.speaker_id in speaker_bound_ids)
+            ):
                 return a, b
             if b.stt_provider != a.stt_provider:
                 return a, b
