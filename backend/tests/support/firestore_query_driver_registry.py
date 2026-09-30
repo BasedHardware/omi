@@ -2140,3 +2140,50 @@ _add(
         body_digest=BODY_DIGEST['database.firestore_query_types.FirestoreQuerySpec.build'],
     )
 )
+
+_add(
+    DriverEntry(
+        'database.sync_recording_lineage.get_recording_generations',
+        base={'uid': UID, 'origin_id': 'recording-1', 'started_before': T1, 'finished_after': T0},
+        neutrals={'limit': _LIMIT},
+    )
+)
+_add(
+    DriverEntry(
+        'database.sync_recording_lineage.get_origin_generation',
+        base={'uid': UID, 'origin_id': 'recording-1'},
+        neutrals={'limit': _LIMIT},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.sync_recording_lineage._rows',
+        covered_by=(
+            'database.sync_recording_lineage.get_recording_generations',
+            'database.sync_recording_lineage.get_origin_generation',
+        ),
+        reason='list-materializing helper; its query.stream() terminal is observed for both lineage readers',
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.conversation_terminal_title.dead_letter_conversation_updates',
+        base={
+            'uid': UID,
+            'conversation': {'transcript_segments': []},
+            'conversation_ref': ref_document(f'users/{UID}/conversations/conv-1'),
+            'transaction': ref_transaction(),
+            'failure_code': 'processing_failed',
+            'time_zone_for_uid': None,
+        },
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_terminal_title._has_described_photo',
+        covered_by=('database.conversation_terminal_title.dead_letter_conversation_updates',),
+        reason='photo-description probe streams the photos subcollection inside the caller transaction '
+        'when a retryable failure row has no transcript text',
+    )
+)
