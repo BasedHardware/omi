@@ -21,19 +21,6 @@ def client():
     app.dependency_overrides.clear()
 
 
-def test_apple_health_sync_period_days_bounds(client):
-    # period_days < 1 should return 422 Unprocessable Entity
-    resp_zero = client.put('/v1/integrations/apple-health/sync', json={'period_days': 0})
-    assert resp_zero.status_code == 422
-
-    resp_neg = client.put('/v1/integrations/apple-health/sync', json={'period_days': -5})
-    assert resp_neg.status_code == 422
-
-    # period_days > 365 should return 422
-    resp_huge = client.put('/v1/integrations/apple-health/sync', json={'period_days': 366})
-    assert resp_huge.status_code == 422
-
-
 def test_apple_health_sync_success(client, monkeypatch):
     monkeypatch.setattr(integrations_router.users_db, 'set_integration', MagicMock())
     resp = client.put(

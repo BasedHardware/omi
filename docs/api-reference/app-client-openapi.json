@@ -3647,8 +3647,6 @@
           "period_days": {
             "default": 7,
             "description": "Number of days of data",
-            "maximum": 365.0,
-            "minimum": 1.0,
             "title": "Period Days",
             "type": "integer"
           },

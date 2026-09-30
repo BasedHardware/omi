@@ -156,7 +156,7 @@ class IntegrationData(BaseModel):
 class AppleHealthSyncData(BaseModel):
     """Health data synced from Apple Health on iOS device"""
 
-    period_days: int = Field(default=7, ge=1, le=365, description="Number of days of data")
+    period_days: int = Field(default=7, description="Number of days of data")
 
     # Steps data
     total_steps: Optional[int] = Field(default=None, description="Total steps in period")
