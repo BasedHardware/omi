@@ -82,35 +82,88 @@ final class MeetingScreenshotsStore: ObservableObject {
   /// means the second view awaits the first result rather than repeating it.
   private static var inFlight: [String: Task<Void, Never>] = [:]
 
+  /// Forget the session cache, as an app relaunch does, so a test can prove the persisted set is
+  /// what a later note reads.
+  static func resetSessionCacheForTesting() {
+    cache.removeAll()
+  }
+
   private var conversationID = ""
   private var cacheKey = ""
   private var selectionWindow: MeetingScreenshotSelectionWindow?
   private var task: Task<Void, Never>?
   private let featureEnabled: () -> Bool
   private let selectCandidates: (MeetingScreenshotSelectionWindow) async -> MeetingFrameSelector.Outcome
+  private let captureAuthorization: () -> MeetingEvidenceAuthorization?
   private let adjudicateAndCommit:
-    @Sendable ([MeetingFrameCandidate], String) async throws -> ConversationScreenFrameSet
+    @Sendable ([MeetingFrameCandidate], String, MeetingEvidenceAuthorization) async throws
+      -> ConversationScreenFrameSet
   private let fetchPersistedSet: @Sendable (String) async throws -> ConversationScreenFrameSet
   private let deleteFrameRemote: @Sendable (String, String) async throws -> Void
+  private let sealActiveRecording: @Sendable () async -> Void
+  private let now: @Sendable () -> Date
+  private var isRefreshingAfterUnavailableContent = false
+
+  /// A cached set whose signed URLs expire within this margin is refetched rather than rendered.
+  /// The finalization pass fills the cache long before a note is opened, and the server reports
+  /// each signature's true remaining lifetime, which can be well under an hour.
+  nonisolated static let signedURLRefreshMargin: TimeInterval = 5 * 60
+
+  /// Whether every signed URL in a cached result outlives `now` by the refresh margin.
+  nonisolated static func signedURLsAreFresh(
+    frames: [ConversationScreenFrame], banner: ConversationScreenFrame?, now: Date
+  ) -> Bool {
+    (frames + (banner.map { [$0] } ?? [])).allSatisfy {
+      $0.urlExpiresAt.timeIntervalSince(now) > signedURLRefreshMargin
+    }
+  }
+
+  /// Phase detail when the meeting's last frames are still in Rewind's unsealed chunk and sealing
+  /// it did not release them. Not cached and nothing uploaded, so the next load selects again.
+  nonisolated static let activeChunkRetryDetail = "meeting frames still being recorded"
+  /// Phase detail when the local Rewind store could not be read at all.
+  nonisolated static let screenHistoryUnavailableDetail = "screen history unavailable"
+  /// Phase detail when no owner could be bound, or the owner changed before the upload.
+  nonisolated static let ownerChangedDetail = "signed-in account changed"
+
+  /// A bounded phase detail: an owner change keeps its own label so telemetry can bucket it.
+  nonisolated static func failureDetail(_ error: Error) -> String {
+    if error is MeetingEvidenceAuthorizationError { return ownerChangedDetail }
+    if error is MeetingFramePixelsError { return screenHistoryUnavailableDetail }
+    if case AuthError.userChangedDuringRequest = error { return ownerChangedDetail }
+    return error.localizedDescription
+  }
 
   init(
+    captureAuthorization: @escaping () -> MeetingEvidenceAuthorization? = {
+      MeetingEvidenceAuthorization.captureCurrentOwner()
+    },
     featureEnabled: @escaping () -> Bool = { MeetingNoteScreenshotsFeature.isEnabled },
     selectCandidates: @escaping (MeetingScreenshotSelectionWindow) async -> MeetingFrameSelector.Outcome = {
       await MeetingFrameSelector.selectCandidates(in: $0)
     },
     adjudicateAndCommit:
       @escaping @Sendable (
-        [MeetingFrameCandidate], String
+        [MeetingFrameCandidate], String, MeetingEvidenceAuthorization
       ) async throws -> ConversationScreenFrameSet = {
-        try await MeetingFrameJudge.shared.adjudicateAndCommit(candidates: $0, subjectID: $1)
+        try await MeetingFrameJudge.shared.adjudicateAndCommit(candidates: $0, subjectID: $1, authorization: $2)
       },
     fetchPersistedSet: @escaping @Sendable (String) async throws -> ConversationScreenFrameSet = {
       try await APIClient.shared.getConversationScreenFrames(conversationID: $0)
     },
     deleteFrameRemote: @escaping @Sendable (String, String) async throws -> Void = {
       try await APIClient.shared.deleteConversationScreenFrame(conversationID: $0, frameID: $1)
+    },
+    now: @escaping @Sendable () -> Date = { Date() },
+    sealActiveRecording: @escaping @Sendable () async -> Void = {
+      // The same finalize-and-continue flush Rewind uses for power and memory transitions; the
+      // next captured frame opens a fresh chunk.
+      _ = try? await RewindStorage.shared.flushCurrentVideoChunk()
     }
   ) {
+    self.captureAuthorization = captureAuthorization
+    self.sealActiveRecording = sealActiveRecording
+    self.now = now
     self.featureEnabled = featureEnabled
     self.selectCandidates = selectCandidates
     self.adjudicateAndCommit = adjudicateAndCommit
@@ -163,6 +216,14 @@ final class MeetingScreenshotsStore: ObservableObject {
     log(
       "MeetingScreenshots: load requested for \(conversationID), selection "
         + selectionWindow.fingerprint)
+    if let hit = Self.cache[requestedCacheKey],
+      !Self.signedURLsAreFresh(frames: hit.frames, banner: hit.banner, now: now())
+    {
+      // Expired or about to: drop it, and let the run below re-read the persisted set (it is the
+      // server's `GET`, and it only re-selects if that set was judged for a different window).
+      log("MeetingScreenshots: cached signed URLs for \(conversationID) expired; refetching")
+      Self.cache[requestedCacheKey] = nil
+    }
     if let hit = Self.cache[requestedCacheKey] {
       frames = hit.frames
       banner = hit.banner
@@ -194,6 +255,16 @@ final class MeetingScreenshotsStore: ObservableObject {
         self?.task = nil
       }
     }
+  }
+
+  /// `load`, then wait for it to settle. The finalization pass uses this so the one run it starts
+  /// is the same shared, de-duplicated run a note opened mid-flight joins, and its result lands in
+  /// the same session cache the note reads.
+  @discardableResult
+  func loadAndWait(conversationID: String, selectionWindow: MeetingScreenshotSelectionWindow) async -> Phase {
+    load(conversationID: conversationID, selectionWindow: selectionWindow)
+    if let task { await task.value }
+    return phase
   }
 
   // MARK: - Full size
@@ -230,6 +301,15 @@ final class MeetingScreenshotsStore: ObservableObject {
       // Leave whatever is currently displayed in place. A transient refresh failure must not
       // blank out screenshots that were already showing correctly.
     }
+  }
+
+  /// A thumbnail failed to load — most often an expired signature. Every visible tile may report at
+  /// once, so concurrent reports coalesce into one refetch.
+  func refreshAfterContentUnavailable() async {
+    guard !isRefreshingAfterUnavailableContent else { return }
+    isRefreshingAfterUnavailableContent = true
+    defer { isRefreshingAfterUnavailableContent = false }
+    await refreshPersistedSet()
   }
 
   /// Delete one persisted frame. The caller (the lightbox) confirms the destructive action before
@@ -301,13 +381,38 @@ final class MeetingScreenshotsStore: ObservableObject {
       return
     }
 
+    // Bind this run to one owner before reading any of that owner's screen history. Every upload
+    // below re-checks it and carries it into transport auth.
+    guard let authorization = captureAuthorization() else {
+      log("MeetingScreenshots: no signed-in owner to bind for \(conversationID); not selecting")
+      phase = .failed(Self.ownerChangedDetail)
+      return
+    }
     phase = .selecting
     log(
       "MeetingScreenshots: selecting for \(conversationID) trusted window "
         + "\(selectionWindow.start) -> \(selectionWindow.end)")
 
-    let outcome = await selectCandidates(selectionWindow)
+    var outcome = await selectCandidates(selectionWindow)
     guard self.selectionWindow == selectionWindow else { return }
+    if outcome.drops[MeetingFrameSelector.activeChunkDropReason, default: 0] > 0 {
+      // The end of the meeting is still in the chunk being written. Seal it and select once more,
+      // rather than judge — and have the server stamp as final — a set missing the last minute.
+      // The recorder belongs to the signed-in owner: never seal a replacement owner's chunk.
+      guard authorization.isCurrent else {
+        phase = .failed(Self.ownerChangedDetail)
+        return
+      }
+      await sealActiveRecording()
+      outcome = await selectCandidates(selectionWindow)
+      guard self.selectionWindow == selectionWindow else { return }
+      if outcome.drops[MeetingFrameSelector.activeChunkDropReason, default: 0] > 0 {
+        log("MeetingScreenshots: active chunk still unsealed for \(conversationID); will retry")
+        publish(notes: ["the meeting's last frames are still being recorded"])
+        phase = .failed(Self.activeChunkRetryDetail)
+        return
+      }
+    }
     var notes: [String] = []
     notes.append("\(outcome.framesInWindow) frame(s) captured during this conversation")
     for (reason, count) in outcome.drops.sorted(by: { $0.value > $1.value }) {
@@ -318,10 +423,38 @@ final class MeetingScreenshotsStore: ObservableObject {
       "MeetingScreenshots: \(outcome.framesInWindow) frame(s) in window, "
         + "\(outcome.candidates.count) candidate(s), drops=\(outcome.drops)")
 
+    guard authorization.isCurrent else {
+      // What was just read belongs to an owner who is no longer signed in: upload none of it.
+      log("MeetingScreenshots: signed-in account changed during selection for \(conversationID)")
+      publish(notes: ["the signed-in account changed"])
+      phase = .failed(Self.ownerChangedDetail)
+      return
+    }
+
+    if outcome.localReadFailed {
+      // Could not look is not "found nothing": never stamp it as final. Uncached, so the next load
+      // (or the post-finalize retry) selects again; the server's bounded wait covers the notes.
+      log("MeetingScreenshots: screen history unavailable for \(conversationID); will retry")
+      publish(notes: ["screen history could not be read"])
+      phase = .failed(Self.screenHistoryUnavailableDetail)
+      return
+    }
+
     guard !outcome.candidates.isEmpty else {
-      publish(notes: notes)
-      phase = .noCapture
-      Self.cache[cacheKey] = ([], nil, notes)
+      // Nothing to offer, but the pass is done: send the empty stamp (no bytes, no judging). It is
+      // what the backend's notes admission waits for, and it records this window as looked at.
+      do {
+        let stamped = try await adjudicateAndCommit([], conversationID, authorization)
+        guard self.selectionWindow == selectionWindow else { return }
+        apply(frameSet: stamped, within: selectionWindow, notes: notes)
+      } catch {
+        guard self.selectionWindow == selectionWindow else { return }
+        log("MeetingScreenshots: empty evidence stamp failed for \(conversationID) — \(error.localizedDescription)")
+        // Uncached failure, like any other adjudication failure: the retry and the next open
+        // must be able to stamp again, and the pass records the degraded fallback.
+        publish(notes: notes)
+        phase = .failed(Self.failureDetail(error))
+      }
       return
     }
 
@@ -329,7 +462,7 @@ final class MeetingScreenshotsStore: ObservableObject {
 
     let frameSet: ConversationScreenFrameSet
     do {
-      frameSet = try await adjudicateAndCommit(outcome.candidates, conversationID)
+      frameSet = try await adjudicateAndCommit(outcome.candidates, conversationID, authorization)
     } catch {
       guard self.selectionWindow == selectionWindow else { return }
       // No network, a 4xx/5xx, a timeout — all of it fails the same way: the view for `.failed`
@@ -337,7 +470,7 @@ final class MeetingScreenshotsStore: ObservableObject {
       // looks like a note with no screenshots.
       log("MeetingScreenshots: adjudication failed for \(conversationID) — \(error.localizedDescription)")
       publish(notes: notes)
-      phase = .failed(error.localizedDescription)
+      phase = .failed(Self.failureDetail(error))
       return
     }
 
