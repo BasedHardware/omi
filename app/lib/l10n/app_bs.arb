@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "Označi i kasniji govor ovog govornika",
     "updateSummaryWithNewNames": "Ažuriraj sažetak s novim imenima",
     "syncStatusUnsupportedAudio": "Zvuk se ne može pročitati — sinkronizacija nije moguća",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Šta možeš učiniti za mene?} goal{Pomozi mi da postavim cilj} activity{Sažmi moje nedavne aktivnosti} improve{Kako mogu napredovati?} other{}}",
     "nextWeek": "Sljedeće sedmice",
     "clearSearch": "Očisti pretragu",
@@ -11221,5 +11219,6 @@
     "meetingScreenshotsTitle": "Šta je bilo na ekranu",
     "meetingScreenshotFallbackCaption": "Snimak ekrana sa ovog sastanka",
     "deleteMeetingScreenshotTitle": "Izbrisati snimak ekrana?",
-    "deleteMeetingScreenshotMessage": "Ovo uklanja snimak ekrana iz bilješke ovog sastanka. Ne može se poništiti."
+    "deleteMeetingScreenshotMessage": "Ovo uklanja snimak ekrana iz bilješke ovog sastanka. Ne može se poništiti.",
+    "conversationSummaryFailed": "Sažetak nije uspio"
 }

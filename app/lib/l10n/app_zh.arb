@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "同时标记该说话人之后的发言",
     "updateSummaryWithNewNames": "用新名字更新摘要",
     "syncStatusUnsupportedAudio": "无法读取音频，无法同步",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{你能为我做些什么？} goal{帮我设定一个目标} activity{总结我最近的活动} improve{我该如何改进？} other{}}",
     "nextWeek": "下周",
     "clearSearch": "清除搜索",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "屏幕上显示的内容",
     "meetingScreenshotFallbackCaption": "本次会议的屏幕截图",
     "deleteMeetingScreenshotTitle": "删除屏幕截图？",
-    "deleteMeetingScreenshotMessage": "这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。"
+    "deleteMeetingScreenshotMessage": "这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。",
+    "conversationSummaryFailed": "摘要生成失败"
 }

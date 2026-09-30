@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Також позначити пізніше мовлення цього мовця",
     "updateSummaryWithNewNames": "Оновити підсумок з новими іменами",
     "syncStatusUnsupportedAudio": "Не вдалося прочитати аудіо — синхронізація неможлива",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Що ти можеш для мене зробити?} goal{Допоможи мені поставити мету} activity{Підсумуй мою нещодавню діяльність} improve{Як я можу покращитися?} other{}}",
     "nextWeek": "Наступного тижня",
     "clearSearch": "Очистити пошук",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "Що було на екрані",
     "meetingScreenshotFallbackCaption": "Знімок екрана з цієї зустрічі",
     "deleteMeetingScreenshotTitle": "Видалити знімок екрана?",
-    "deleteMeetingScreenshotMessage": "Знімок екрана буде видалено з нотатки цієї зустрічі. Цю дію не можна скасувати."
+    "deleteMeetingScreenshotMessage": "Знімок екрана буде видалено з нотатки цієї зустрічі. Цю дію не можна скасувати.",
+    "conversationSummaryFailed": "Не вдалося створити підсумок"
 }

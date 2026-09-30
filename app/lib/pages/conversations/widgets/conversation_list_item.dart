@@ -18,15 +18,18 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
-/// The row title for a conversation (hub audit #21): its title, "Untitled Conversation" when the
-/// title is blank, and "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
+/// The row title for a conversation (hub audit #21): its title, else its transcript text (legacy
+/// rows the server left untitled), "Untitled Conversation" only when neither exists, and
+/// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
   if (conversation.discarded) {
@@ -34,8 +37,12 @@ String conversationRowTitle(BuildContext context, ServerConversation conversatio
     if (seconds <= 0) return l10n.discardedConversation;
     return l10n.discardedConversationTitle(OmiDuration.compact(seconds, l10n));
   }
-  final title = conversation.structured.title.decodeString.trim();
-  return title.isEmpty ? l10n.untitledConversation : title;
+  return conversationDisplayTitle(
+    conversation,
+    l10n,
+    surface: ConversationUntitledRenderedSurface.list,
+    title: conversation.structured.title.decodeString,
+  );
 }
 
 /// A plain-text preview of what was said: the transcript words without timestamps or speaker
@@ -95,6 +102,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.transcriptSegments.length,
         conversation.captureGroup?.id,
         conversation.captureGroup?.revision,
+        conversation.summaryRetryable,
       );
 
   @override
@@ -124,13 +132,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
   }
 
-  Widget _buildFailedTitleRecovery(BuildContext context) {
+  /// "Summary failed · Retry": shown only when the server says a reprocess can succeed.
+  Widget _buildSummaryRetry(BuildContext context) {
     return Row(
       children: [
         Flexible(
           child: Text(
-            context.l10n.conversationTitleDidntGenerate,
-            key: const Key('conversation_failed_title_indicator'),
+            context.l10n.conversationSummaryFailed,
+            key: const Key('conversation_summary_failed_indicator'),
             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -139,7 +148,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         GestureDetector(
           onTap: () {}, // absorb so the card's open-on-tap does not fire
           child: TextButton(
-            key: const Key('conversation_failed_title_reprocess_button'),
+            key: const Key('conversation_summary_retry_button'),
             onPressed: _reprocessing ? null : _onReprocess,
             style: TextButton.styleFrom(
               foregroundColor: OmiColors.textPrimary,
@@ -147,8 +156,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
               minimumSize: const Size(44, 44),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child:
-                _reprocessing ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.conversationReprocess),
+            child: _reprocessing ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.retry),
           ),
         ),
       ],
@@ -500,9 +508,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ],
                       const SizedBox(height: 3),
                       _buildMetaRow(context),
-                      if (widget.conversation.isFailedTitleRecoverable) ...[
+                      if (widget.conversation.showsSummaryRetry) ...[
                         const SizedBox(height: 8),
-                        _buildFailedTitleRecovery(context),
+                        _buildSummaryRetry(context),
                       ],
                       if (_searchSnippetText() != null) ...[
                         const SizedBox(height: 10),

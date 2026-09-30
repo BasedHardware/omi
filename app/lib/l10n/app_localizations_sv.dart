@@ -10107,12 +10107,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Ljudet kunde inte läsas — kan inte synkroniseras';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11643,4 +11637,7 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get deleteMeetingScreenshotMessage =>
       'Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra.';
+
+  @override
+  String get conversationSummaryFailed => 'Sammanfattningen misslyckades';
 }

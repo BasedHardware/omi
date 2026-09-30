@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Pažymėti ir vėlesnę šio kalbėtojo kalbą",
     "updateSummaryWithNewNames": "Atnaujinti santrauką su naujais vardais",
     "syncStatusUnsupportedAudio": "Nepavyko nuskaityti garso — sinchronizuoti negalima",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ką gali dėl manęs padaryti?} goal{Padėk man išsikelti tikslą} activity{Apibendrink mano naujausią veiklą} improve{Kaip galiu tobulėti?} other{}}",
     "nextWeek": "Kitą savaitę",
     "clearSearch": "Išvalyti paiešką",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "Kas buvo ekrane",
     "meetingScreenshotFallbackCaption": "Šio susitikimo ekrano kopija",
     "deleteMeetingScreenshotTitle": "Ištrinti ekrano kopiją?",
-    "deleteMeetingScreenshotMessage": "Ekrano kopija bus pašalinta iš šio susitikimo užrašo. Šio veiksmo anuliuoti negalima."
+    "deleteMeetingScreenshotMessage": "Ekrano kopija bus pašalinta iš šio susitikimo užrašo. Šio veiksmo anuliuoti negalima.",
+    "conversationSummaryFailed": "Santrauka nepavyko"
 }

@@ -1707,3 +1707,33 @@ final class SiriIndexRebuilt extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"platform": platform.wireName, "entity_counts": entityCounts, "duration_ms": durationMs, "outcome": outcome.wireName};
 }
+
+enum ConversationUntitledRenderedSurface {
+  list("list"),
+  map("map"),
+  actions("actions"),
+  homeWidget("home_widget");
+  const ConversationUntitledRenderedSurface(this.wireName);
+  final String wireName;
+}
+
+enum ConversationUntitledRenderedAgeBucket {
+  under1h("under_1h"),
+  under1d("under_1d"),
+  under7d("under_7d"),
+  under30d("under_30d"),
+  over30d("over_30d");
+  const ConversationUntitledRenderedAgeBucket(this.wireName);
+  final String wireName;
+}
+
+final class ConversationUntitledRendered extends RegisteredEvent {
+  const ConversationUntitledRendered({required this.surface, required this.ageBucket, required this.summaryRetryable});
+  final ConversationUntitledRenderedSurface surface;
+  final ConversationUntitledRenderedAgeBucket ageBucket;
+  final bool summaryRetryable;
+  @override
+  String get wireName => "Conversation Untitled Rendered";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName, "age_bucket": ageBucket.wireName, "summary_retryable": summaryRetryable};
+}

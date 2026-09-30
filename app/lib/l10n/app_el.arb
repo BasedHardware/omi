@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Επισήμανε και τη μετέπειτα ομιλία αυτού του ομιλητή",
     "updateSummaryWithNewNames": "Ενημέρωση περίληψης με τα νέα ονόματα",
     "syncStatusUnsupportedAudio": "Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Τι μπορείς να κάνεις για μένα;} goal{Βοήθησέ με να θέσω έναν στόχο} activity{Σύνοψε την πρόσφατη δραστηριότητά μου} improve{Πώς μπορώ να βελτιωθώ;} other{}}",
     "nextWeek": "Επόμενη εβδομάδα",
     "clearSearch": "Εκκαθάριση αναζήτησης",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "Τι υπήρχε στην οθόνη",
     "meetingScreenshotFallbackCaption": "Στιγμιότυπο οθόνης από αυτή τη σύσκεψη",
     "deleteMeetingScreenshotTitle": "Διαγραφή στιγμιότυπου οθόνης;",
-    "deleteMeetingScreenshotMessage": "Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση."
+    "deleteMeetingScreenshotMessage": "Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση.",
+    "conversationSummaryFailed": "Η σύνοψη απέτυχε"
 }

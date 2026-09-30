@@ -260,6 +260,11 @@ def _decode_transcript_segments_strict(
     raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
 
 
+def decode_transcript_segments_verified(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
+    """Strict decode for callers outside this module: raises unless the blob decodes and decrypts."""
+    return _decode_transcript_segments_strict(uid, raw_segments, compressed, require_decryption=True)
+
+
 def _decode_public_transcript_segments_bounded(
     uid: str,
     raw_segments: Any,
@@ -366,6 +371,18 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
     return bool(segments)
 
 
+def effective_user_title(user_title: Any) -> Optional[str]:
+    """The user's title override, or ``None`` when there is none.
+
+    A blank string is no override: applying it would erase the generated (or
+    deterministic) title and render the row "Untitled". Readers and the
+    processing persists that re-apply the override resolve ``user_title``
+    through this one rule, so the stored ``structured.title`` shows. The
+    user-facing title writes (PATCH, ``set_title``) are unchanged.
+    """
+    return user_title if isinstance(user_title, str) and user_title.strip() else None
+
+
 def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
@@ -373,8 +390,8 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
     data = copy.deepcopy(conversation_data)
     # User titles are durable overrides. Conversation processing owns the
     # generated title, but must never erase an explicit user edit.
-    user_title = data.get('user_title')
-    if isinstance(user_title, str):
+    user_title = effective_user_title(data.get('user_title'))
+    if user_title is not None:
         structured = data.get('structured')
         if not isinstance(structured, dict):
             structured = {}
@@ -713,8 +730,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             if existing.get('folder_user_set'):
                 write_data['folder_id'] = existing.get('folder_id')
 
-            user_title = existing.get('user_title')
-            if isinstance(user_title, str):
+            user_title = effective_user_title(existing.get('user_title'))
+            if user_title is not None:
                 structured = write_data.get('structured')
                 if not isinstance(structured, dict):
                     structured = {}
@@ -870,8 +887,8 @@ def persist_processing_result_with_lifecycle(
         if existing.get('folder_user_set'):
             write_data['folder_id'] = existing.get('folder_id')
 
-        user_title = existing.get('user_title')
-        if isinstance(user_title, str):
+        user_title = effective_user_title(existing.get('user_title'))
+        if user_title is not None:
             structured = write_data.get('structured')
             if not isinstance(structured, dict):
                 structured = {}

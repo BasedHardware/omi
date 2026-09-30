@@ -458,6 +458,11 @@ class ServerConversation {
   /// Whether and which speaker ids are people; null on conversations processed before it existed.
   final ConversationSpeakers? speakerResolution;
 
+  /// Server-authored: summarization failed on a transient error after its retries and a
+  /// reprocess can still succeed. Absent (false) on every other row, including rows where the
+  /// model ran and found nothing to summarize.
+  final bool summaryRetryable;
+
   // local label
   bool isNew = false;
 
@@ -489,6 +494,7 @@ class ServerConversation {
     this.matchSnippets = const [],
     this.captureGroup,
     this.speakerResolution,
+    this.summaryRetryable = false,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -574,6 +580,7 @@ class ServerConversation {
       captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
       speakerResolution:
           generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
+      summaryRetryable: generated.summaryRetryable == true,
     );
   }
 
@@ -608,6 +615,7 @@ class ServerConversation {
       if (!siriVisibilityValid) 'siri_visibility_valid': false,
       'capture_group': captureGroup?.toJson(),
       'speaker_resolution': speakerResolution?.toJson(),
+      if (summaryRetryable) 'summary_retryable': true,
     };
   }
 
@@ -639,6 +647,7 @@ class ServerConversation {
       visibility: visibility.value,
       captureGroup: captureGroup?.toGenerated(),
       speakerResolution: speakerResolution?.toGenerated(),
+      summaryRetryable: summaryRetryable ? true : null,
     );
   }
 
@@ -734,22 +743,12 @@ class ServerConversation {
     return duration > 0 ? duration.toInt() : 0;
   }
 
-  /// Matches desktop's recoverable-content heuristic: one transcript segment
-  /// with at least this many words is treated as real speech, not ambient noise.
-  static const int substantialTranscriptMinWords = 5;
-
-  /// True when any transcript segment is long enough to plausibly deserve a title.
-  bool get hasSubstantialTranscriptSegment =>
-      transcriptSegments.any((segment) => segment.wordCount >= substantialTranscriptMinWords);
-
-  /// Completed processing, empty title, and a substantial transcript — a silent
-  /// title-pass failure the user can recover with Reprocess. Discarded, locked,
-  /// in-flight, and ambient/short captures stay quiet.
-  bool get isFailedTitleRecoverable {
+  /// Show "Summary failed · Retry" only when the server says a reprocess can succeed
+  /// ([summaryRetryable]). Discarded, locked and in-flight rows stay quiet.
+  bool get showsSummaryRetry {
     if (discarded || isLocked) return false;
     if (status != ConversationStatus.completed) return false;
-    if (structured.title.trim().isNotEmpty) return false;
-    return hasSubstantialTranscriptSegment;
+    return summaryRetryable;
   }
 
   /// Check if this conversation has audio files available
