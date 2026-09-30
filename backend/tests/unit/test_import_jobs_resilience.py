@@ -181,10 +181,14 @@ def test_update_import_job_valid_flow():
 
 def test_update_import_job_invalid_id_or_empty_updates():
     client = FakeFirestoreClient()
-    assert update_import_job("", {"status": "failed"}, client=client) is False
-    assert update_import_job("../bad", {"status": "failed"}, client=client) is False
-    assert update_import_job(None, {"status": "failed"}, client=client) is False  # type: ignore[arg-type]
-    assert update_import_job("job_1", "not_a_dict", client=client) is False  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="Invalid or missing 'job_id'"):
+        update_import_job("", {"status": "failed"}, client=client)
+    with pytest.raises(ValueError, match="Invalid or missing 'job_id'"):
+        update_import_job("../bad", {"status": "failed"}, client=client)
+    with pytest.raises(ValueError, match="Invalid or missing 'job_id'"):
+        update_import_job(None, {"status": "failed"}, client=client)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="Invalid updates payload"):
+        update_import_job("job_1", "not_a_dict", client=client)  # type: ignore[arg-type]
     assert update_import_job("job_1", {}, client=client) is True
 
 
@@ -263,10 +267,13 @@ def test_delete_import_job_valid_and_invalid():
     assert delete_import_job("job_to_del", client=client) is True
     assert get_import_job("job_to_del", client=client) is None
 
-    # Invalid id
-    assert delete_import_job("", client=client) is False
-    assert delete_import_job(None, client=client) is False  # type: ignore[arg-type]
-    assert delete_import_job("../bad", client=client) is False
+    # Invalid id raises ValueError
+    with pytest.raises(ValueError, match="Invalid or missing 'job_id'"):
+        delete_import_job("", client=client)
+    with pytest.raises(ValueError, match="Invalid or missing 'job_id'"):
+        delete_import_job(None, client=client)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="Invalid or missing 'job_id'"):
+        delete_import_job("../bad", client=client)
 
 
 def test_delete_import_job_handles_transport_error():

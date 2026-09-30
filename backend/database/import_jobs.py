@@ -73,15 +73,13 @@ def create_import_job(job_data: Dict[str, Any], client: Optional[Any] = None) ->
 
 
 def update_import_job(job_id: str, updates: Dict[str, Any], client: Optional[Any] = None) -> bool:
-    """Update an existing import job with error handling."""
+    """Update an existing import job in Firestore."""
     cleaned_id = _clean_id(job_id)
     if not cleaned_id:
-        logger.warning("Attempted to update import job with invalid ID: %r", job_id)
-        return False
+        raise ValueError(f"Invalid or missing 'job_id': {job_id!r}")
 
     if not isinstance(updates, dict):  # pyright: ignore[reportUnnecessaryIsInstance]
-        logger.warning("Invalid updates payload for job %s: expected dict, got %s", cleaned_id, type(updates).__name__)
-        return False
+        raise ValueError(f"Invalid updates payload for job {cleaned_id}: expected dict, got {type(updates).__name__}")
 
     if not updates:
         return True
@@ -149,10 +147,10 @@ def get_import_jobs(
 
 
 def delete_import_job(job_id: str, client: Optional[Any] = None) -> bool:
-    """Delete an import job."""
+    """Delete an import job in Firestore."""
     cleaned_id = _clean_id(job_id)
     if not cleaned_id:
-        return False
+        raise ValueError(f"Invalid or missing 'job_id': {job_id!r}")
 
     fs = _resolve_client(client)
     try:
