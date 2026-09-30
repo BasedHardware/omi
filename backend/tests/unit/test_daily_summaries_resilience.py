@@ -1,24 +1,24 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import date
+from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
-from backend.database.daily_summaries import (
+import database.daily_summaries as daily_summaries_db
+from database.daily_summaries import (
     upsert_desktop_daily_usage,
     get_desktop_daily_usage,
     create_daily_summary,
     get_daily_summary,
+    get_daily_summary_by_date,
+    get_daily_summaries,
+    update_daily_summary,
+    delete_daily_summary,
+    set_daily_summary_visibility,
+    get_summaries_count,
     _validate_identifier,
     _validate_and_get_counter,
     DESKTOP_DAILY_USAGE_COUNTER_FIELDS,
 )
-
-
-@pytest.fixture
-def mock_firestore():
-    with patch("backend.database.daily_summaries._get_firestore") as mock:
-        db = MagicMock()
-        mock.return_value = db
-        yield db
 
 
 class TestValidateIdentifier:
@@ -40,9 +40,13 @@ class TestValidateIdentifier:
         with pytest.raises(ValueError, match="test_field must be a string"):
             _validate_identifier(123, "test_field")
 
-    def test_path_separator_raises(self):
+    def test_path_separator_slash_raises(self):
         with pytest.raises(ValueError, match="test_field cannot contain path separators"):
             _validate_identifier("invalid/id", "test_field")
+
+    def test_path_separator_backslash_raises(self):
+        with pytest.raises(ValueError, match="test_field cannot contain path separators"):
+            _validate_identifier("invalid\\id", "test_field")
 
 
 class TestValidateAndGetCounter:
@@ -68,115 +72,138 @@ class TestValidateAndGetCounter:
         assert _validate_and_get_counter(None, "test_field") == 0
 
 
-@pytest.mark.asyncio
-async def test_upsert_desktop_daily_usage_partial_counters(mock_firestore):
-    mock_transaction = MagicMock()
-    mock_firestore.transaction.return_value = mock_transaction
-
-    doc_ref = MagicMock()
-    mock_firestore.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-        doc_ref
-    )
-
+def _mock_usage_db(existing=None):
+    fake_db = MagicMock()
+    user_ref = fake_db.collection.return_value.document.return_value
+    collection_ref = user_ref.collection.return_value
+    usage_ref = collection_ref.document.return_value
     snapshot = MagicMock()
-    snapshot.exists = False
-    doc_ref.get.return_value = snapshot
+    snapshot.exists = existing is not None
+    snapshot.to_dict.return_value = existing
+    usage_ref.get.return_value = snapshot
+    return fake_db, collection_ref, usage_ref
 
-    await upsert_desktop_daily_usage(
-        uid="test_uid",
-        date="2026-09-30",
-        client_device_id="device_1",
-        counters={"total_active_time": 100},
+
+def test_upsert_desktop_daily_usage_partial_counters_prevents_keyerror():
+    """Verify partial counter dictionary does not crash with KeyError (#19955)."""
+    fake_db, collection_ref, usage_ref = _mock_usage_db(
+        {
+            'watching_seconds': 100,
+            'listening_seconds': 50,
+        }
     )
+    transaction = fake_db.transaction.return_value
 
-    mock_firestore.transaction.assert_called_once()
-    doc_ref.set.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_upsert_desktop_daily_usage_invalid_identifier(mock_firestore):
-    with pytest.raises(ValueError, match="uid cannot be empty"):
-        await upsert_desktop_daily_usage(
-            uid="",
-            date="2026-09-30",
-            client_device_id="device_1",
-            counters={},
+    with patch.object(daily_summaries_db, 'db', fake_db), patch.object(
+        daily_summaries_db.firestore, 'transactional', side_effect=lambda fn: fn
+    ):
+        # Only pass watching_seconds, omitting all other 4 counter fields
+        daily_summaries_db.upsert_desktop_daily_usage(
+            'uid_user',
+            '2026-09-30',
+            'UTC',
+            'device_123',
+            {'watching_seconds': 250},
         )
 
-
-@pytest.mark.asyncio
-async def test_get_desktop_daily_usage_invalid_identifier(mock_firestore):
-    result = await get_desktop_daily_usage(
-        uid="",
-        date="2026-09-30",
-        client_device_id="device_1",
-    )
-    assert result is None
-
-
-@pytest.mark.asyncio
-async def test_get_desktop_daily_usage_not_found(mock_firestore):
-    doc_ref = MagicMock()
-    mock_firestore.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-        doc_ref
-    )
-
-    snapshot = MagicMock()
-    snapshot.exists = False
-    doc_ref.get.return_value = snapshot
-
-    result = await get_desktop_daily_usage(
-        uid="test_uid",
-        date="2026-09-30",
-        client_device_id="device_1",
-    )
-    assert result is None
+    collection_ref.document.assert_called_once_with('2026-09-30__device_123')
+    payload = transaction.set.call_args.args[1]
+    assert payload['watching_seconds'] == 250
+    assert payload['listening_seconds'] == 50  # preserved from existing
+    assert payload['proactive_cards_shown'] == 0  # defaulted safely
+    assert payload['proactive_cards_acted'] == 0
+    assert payload['ptt_turns'] == 0
+    assert payload['date'] == '2026-09-30'
+    assert payload['timezone'] == 'UTC'
+    assert payload['client_device_id'] == 'device_123'
+    assert payload['updated_at'].tzinfo is not None
 
 
-@pytest.mark.asyncio
-async def test_create_daily_summary_invalid_summary_data(mock_firestore):
-    with pytest.raises(ValueError, match="summary_data must be a dictionary"):
-        await create_daily_summary(
-            uid="test_uid",
-            date="2026-09-30",
-            summary_data="not_a_dict",
-        )
+def test_upsert_desktop_daily_usage_invalid_identifiers_raise():
+    fake_db, _, _ = _mock_usage_db()
+    with patch.object(daily_summaries_db, 'db', fake_db):
+        with pytest.raises(ValueError, match="uid cannot be empty"):
+            daily_summaries_db.upsert_desktop_daily_usage(
+                "", "2026-09-30", "UTC", "dev1", {}
+            )
+        with pytest.raises(ValueError, match="date cannot be empty"):
+            daily_summaries_db.upsert_desktop_daily_usage(
+                "uid1", "   ", "UTC", "dev1", {}
+            )
+        with pytest.raises(ValueError, match="client_device_id cannot be empty"):
+            daily_summaries_db.upsert_desktop_daily_usage(
+                "uid1", "2026-09-30", "UTC", "", {}
+            )
 
 
-@pytest.mark.asyncio
-async def test_create_daily_summary_missing_id(mock_firestore):
-    with pytest.raises(ValueError, match="summary_data must contain an 'id' field"):
-        await create_daily_summary(
-            uid="test_uid",
-            date="2026-09-30",
-            summary_data={"other_field": "value"},
-        )
+def test_get_desktop_daily_usage_handles_malformed_docs():
+    fake_db, collection_ref, _ = _mock_usage_db()
+    query = collection_ref.where.return_value
+    query.stream.return_value = [
+        SimpleNamespace(to_dict=lambda: "not_a_dict"),
+        SimpleNamespace(
+            to_dict=lambda: {
+                'watching_seconds': 100,
+                'listening_seconds': -5,  # negative should be 0
+                'proactive_cards_shown': True,  # bool should be 0
+                'proactive_cards_acted': 'invalid',  # non-int should be 0
+                'ptt_turns': 5,
+            }
+        ),
+    ]
+
+    with patch.object(daily_summaries_db, 'db', fake_db):
+        totals = daily_summaries_db.get_desktop_daily_usage('uid1', '2026-09-30')
+
+    assert totals == {
+        'watching_seconds': 100,
+        'listening_seconds': 0,
+        'proactive_cards_shown': 0,
+        'proactive_cards_acted': 0,
+        'ptt_turns': 5,
+    }
 
 
-@pytest.mark.asyncio
-async def test_get_daily_summary_invalid_identifier(mock_firestore):
-    result = await get_daily_summary(
-        uid="",
-        date="2026-09-30",
-        summary_id="summary_1",
-    )
-    assert result is None
+def test_public_summary_crud_operations():
+    fake_db = MagicMock()
+    user_ref = fake_db.collection.return_value.document.return_value
+    summaries_col = user_ref.collection.return_value
+    summary_doc = summaries_col.document.return_value
 
+    with patch.object(daily_summaries_db, 'db', fake_db), patch.object(
+        daily_summaries_db.redis_db, 'remove_daily_summary_to_uid'
+    ) as mock_redis:
+        # 1. create_daily_summary
+        sid = daily_summaries_db.create_daily_summary('uid1', {'id': 'sum_123', 'headline': 'Great Day'})
+        assert sid == 'sum_123'
+        summary_doc.set.assert_called_with({'id': 'sum_123', 'headline': 'Great Day'})
 
-@pytest.mark.asyncio
-async def test_get_daily_summary_not_found(mock_firestore):
-    doc_ref = MagicMock()
-    mock_firestore.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-        doc_ref
-    )
+        # 2. get_daily_summary (found)
+        mock_doc = MagicMock()
+        mock_doc.exists = True
+        mock_doc.to_dict.return_value = {'id': 'sum_123', 'headline': 'Great Day'}
+        summary_doc.get.return_value = mock_doc
+        res = daily_summaries_db.get_daily_summary('uid1', 'sum_123')
+        assert res == {'id': 'sum_123', 'headline': 'Great Day'}
 
-    snapshot = MagicMock()
-    snapshot.exists = False
-    doc_ref.get.return_value = snapshot
+        # 3. update_daily_summary (preserves id)
+        daily_summaries_db.update_daily_summary('uid1', 'sum_123', {'headline': 'Updated'})
+        summary_doc.set.assert_called_with({'headline': 'Updated', 'id': 'sum_123'})
 
-    result = await get_daily_summary(
-        uid="test_uid",
-        date="2026-09-30",
-        summary_id="summary_1",
-    )
-    assert result is None
+        # 4. delete_daily_summary (calls redis)
+        del_res = daily_summaries_db.delete_daily_summary('uid1', 'sum_123')
+        assert del_res is True
+        summary_doc.delete.assert_called_once()
+        mock_redis.assert_called_once_with('sum_123')
+
+        # 5. set_daily_summary_visibility
+        daily_summaries_db.set_daily_summary_visibility('uid1', 'sum_123', 'private')
+        summary_doc.update.assert_called_once_with({'visibility': 'private'})
+
+        # 6. get_summaries_count
+        count_mock = summaries_col.count.return_value
+        count_res_item = MagicMock()
+        count_res_item.value = 7
+        count_mock.get.return_value = [[count_res_item]]
+        count = daily_summaries_db.get_summaries_count('uid1')
+        assert count == 7
