@@ -3766,6 +3766,6 @@
     "collapseAction": "Dölj",
     "speakerTagPromptNotMeAction": "Inte jag",
     "confidenceNextLabels": "{count, plural, =1{Märk dem i 1 konversation till.} other{Märk dem i {count} konversationer till.}}",
-    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
-    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
+    "siriShortcutsSetupHint": "Slå på Omi i Genvägar → Siri. Säg ”{askPhrase}” eller ”{questionPhrase}” och ställ sedan din fråga.",
+    "siriShortcutsSearchHint": " Du kan också säga ”{searchPhrase} for what I did today”."
 }

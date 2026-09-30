@@ -12861,11 +12861,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
-    return 'Turn on Omi in Shortcuts → Siri. Say “$askPhrase” or “$questionPhrase,” then speak your question.';
+    return 'ஷார்ட்கட்ஸ் → Siri-இல் Omi-ஐ இயக்கவும். “$askPhrase” அல்லது “$questionPhrase” என்று சொல்லி, பிறகு உங்கள் கேள்வியைக் கேளுங்கள்.';
   }
 
   @override
   String siriShortcutsSearchHint(String searchPhrase) {
-    return ' You can also say “$searchPhrase for what I did today.”';
+    return ' நீங்கள் “$searchPhrase for what I did today” என்றும் சொல்லலாம்.';
   }
 }

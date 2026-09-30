@@ -12765,11 +12765,11 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
-    return 'Turn on Omi in Shortcuts → Siri. Say “$askPhrase” or “$questionPhrase,” then speak your question.';
+    return 'Activa Omi a Dreceres → Siri. Digueu «$askPhrase» o «$questionPhrase» i feu la vostra pregunta.';
   }
 
   @override
   String siriShortcutsSearchHint(String searchPhrase) {
-    return ' You can also say “$searchPhrase for what I did today.”';
+    return ' També podeu dir «$searchPhrase for what I did today».';
   }
 }

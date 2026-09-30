@@ -12722,11 +12722,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
-    return 'Turn on Omi in Shortcuts → Siri. Say “$askPhrase” or “$questionPhrase,” then speak your question.';
+    return 'Kapcsolja be az Omi alkalmazást a Parancsikonok → Siri menüben. Mondja ki: „$askPhrase” vagy „$questionPhrase”, majd tegye fel kérdését.';
   }
 
   @override
   String siriShortcutsSearchHint(String searchPhrase) {
-    return ' You can also say “$searchPhrase for what I did today.”';
+    return ' Elmondhatja azt is: „$searchPhrase for what I did today”.';
   }
 }

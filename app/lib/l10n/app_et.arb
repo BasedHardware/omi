@@ -3766,6 +3766,6 @@
     "collapseAction": "Ahenda",
     "speakerTagPromptNotMeAction": "Pole mina",
     "confidenceNextLabels": "{count, plural, =1{Märgi nad veel 1 vestluses.} other{Märgi nad veel {count} vestluses.}}",
-    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
-    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
+    "siriShortcutsSetupHint": "Lülitage Omi sisse jaotises Otseteed → Siri. Ütlege „{askPhrase}“ või „{questionPhrase}“ ja seejärel esitage oma küsimus.",
+    "siriShortcutsSearchHint": " Saate öelda ka „{searchPhrase} for what I did today“."
 }

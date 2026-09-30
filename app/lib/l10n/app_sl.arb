@@ -11326,6 +11326,6 @@
     "collapseAction": "Strni",
     "speakerTagPromptNotMeAction": "Nisem jaz",
     "confidenceNextLabels": "{count, plural, =1{Označite jih še v 1 pogovoru.} other{Označite jih še v {count} pogovorih.}}",
-    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
-    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
+    "siriShortcutsSetupHint": "Vklopite Omi v Bližnjice → Siri. Recite «{askPhrase}» ali «{questionPhrase}» in nato postavite svoje vprašanje.",
+    "siriShortcutsSearchHint": " Lahko rečete tudi «{searchPhrase} for what I did today»."
 }

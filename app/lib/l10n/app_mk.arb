@@ -11326,6 +11326,6 @@
     "collapseAction": "Собери",
     "speakerTagPromptNotMeAction": "Не сум јас",
     "confidenceNextLabels": "{count, plural, =1{Означете ги во уште 1 разговор.} other{Означете ги во уште {count} разговори.}}",
-    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
-    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
+    "siriShortcutsSetupHint": "Вклучете Omi во Кратенки → Siri. Кажете „{askPhrase}“ или „{questionPhrase}“, а потоа поставете го вашето прашање.",
+    "siriShortcutsSearchHint": " Може да кажете и „{searchPhrase} for what I did today“."
 }

@@ -3766,6 +3766,6 @@
     "collapseAction": "Skjul",
     "speakerTagPromptNotMeAction": "Ikke meg",
     "confidenceNextLabels": "{count, plural, =1{Merk dem i 1 samtale til.} other{Merk dem i {count} samtaler til.}}",
-    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
-    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
+    "siriShortcutsSetupHint": "Slå på Omi i Snarveier → Siri. Si «{askPhrase}» eller «{questionPhrase}», og still deretter spørsmålet ditt.",
+    "siriShortcutsSearchHint": " Du kan også si «{searchPhrase} for what I did today»."
 }

@@ -3766,6 +3766,6 @@
     "collapseAction": "Σύμπτυξη",
     "speakerTagPromptNotMeAction": "Δεν είμαι εγώ",
     "confidenceNextLabels": "{count, plural, =1{Επισημάνετέ τους σε 1 ακόμη συνομιλία.} other{Επισημάνετέ τους σε {count} ακόμη συνομιλίες.}}",
-    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
-    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
+    "siriShortcutsSetupHint": "Ενεργοποιήστε το Omi στις Συντομεύσεις → Siri. Πείτε «{askPhrase}» ή «{questionPhrase}» και μετά κάντε την ερώτησή σας.",
+    "siriShortcutsSearchHint": " Μπορείτε επίσης να πείτε «{searchPhrase} for what I did today»."
 }

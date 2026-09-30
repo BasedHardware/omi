@@ -3766,6 +3766,6 @@
     "collapseAction": "ย่อ",
     "speakerTagPromptNotMeAction": "ไม่ใช่ฉัน",
     "confidenceNextLabels": "{count, plural, =1{ติดป้ายชื่อคนนี้ในการสนทนาอีก 1 รายการ} other{ติดป้ายชื่อคนนี้ในการสนทนาอีก {count} รายการ}}",
-    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
-    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
+    "siriShortcutsSetupHint": "เปิด Omi ใน คำสั่งลัด → Siri พูดว่า “{askPhrase}” หรือ “{questionPhrase}” แล้วพูดคำถามของคุณ",
+    "siriShortcutsSearchHint": " คุณยังสามารถพูดว่า “{searchPhrase} for what I did today” ได้อีกด้วย"
 }

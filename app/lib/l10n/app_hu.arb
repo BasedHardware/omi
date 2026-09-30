@@ -3862,6 +3862,6 @@
     "collapseAction": "Összecsukás",
     "speakerTagPromptNotMeAction": "Nem én vagyok",
     "confidenceNextLabels": "{count, plural, =1{Címkézd meg őket még 1 beszélgetésben.} other{Címkézd meg őket még {count} beszélgetésben.}}",
-    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
-    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
+    "siriShortcutsSetupHint": "Kapcsolja be az Omi alkalmazást a Parancsikonok → Siri menüben. Mondja ki: „{askPhrase}” vagy „{questionPhrase}”, majd tegye fel kérdését.",
+    "siriShortcutsSearchHint": " Elmondhatja azt is: „{searchPhrase} for what I did today”."
 }

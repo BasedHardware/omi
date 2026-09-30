@@ -11326,6 +11326,6 @@
     "collapseAction": "جمع کردن",
     "speakerTagPromptNotMeAction": "من نیستم",
     "confidenceNextLabels": "{count, plural, =1{آن‌ها را در 1 گفتگوی دیگر برچسب بزنید.} other{آن‌ها را در {count} گفتگوی دیگر برچسب بزنید.}}",
-    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
-    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
+    "siriShortcutsSetupHint": "Omi را در میان‌برها ← Siri روشن کنید. «{askPhrase}» یا «{questionPhrase}» بگویید و سپس سؤال خود را بپرسید.",
+    "siriShortcutsSearchHint": " همچنین می‌توانید بگویید «{searchPhrase} for what I did today»."
 }
