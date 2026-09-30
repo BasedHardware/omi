@@ -400,10 +400,8 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     playingPromptId = null;
     answeredCount += 1;
     notifyListeners();
-    return switch (result) {
-      ApiSuccess(:final data) => data,
-      ApiFailure() => null,
-    };
+    // Promoted: `succeeded` above is exactly `result is ApiSuccess`.
+    return result.data;
   }
 
   void _advance() {
