@@ -11648,10 +11648,22 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Otrā ierīce';
+  String get meetingScreenshotsTitle => 'Kas bija ekrānā';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ekrānuzņēmums no šīs sapulces';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Dzēst ekrānuzņēmumu?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt.';
 
   @override
   String get pairSecondDevice => 'Savienot pārī otro ierīci';
+
+  @override
+  String get secondDevice => 'Otrā ierīce';
 
   @override
   String get pairSecondDeviceDescription =>

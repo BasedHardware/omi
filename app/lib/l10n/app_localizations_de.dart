@@ -11717,10 +11717,23 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Zweites Gerät';
+  String get meetingScreenshotsTitle => 'Was auf dem Bildschirm war';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Bildschirmfoto aus diesem Meeting';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Bildschirmfoto löschen?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Das Bildschirmfoto wird aus der Notiz dieses Meetings entfernt. Dies kann nicht rückgängig gemacht werden.';
 
   @override
   String get pairSecondDevice => 'Zweites Gerät koppeln';
+
+  @override
+  String get secondDevice => 'Zweites Gerät';
 
   @override
   String get pairSecondDeviceDescription =>

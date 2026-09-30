@@ -11532,10 +11532,22 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'מכשיר שני';
+  String get meetingScreenshotsTitle => 'מה היה על המסך';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'צילום מסך מהפגישה הזו';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'למחוק את צילום המסך?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו.';
 
   @override
   String get pairSecondDevice => 'צימוד מכשיר שני';
+
+  @override
+  String get secondDevice => 'מכשיר שני';
 
   @override
   String get pairSecondDeviceDescription => 'חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.';

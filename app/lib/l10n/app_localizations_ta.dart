@@ -11701,10 +11701,23 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'இரண்டாவது சாதனம்';
+  String get meetingScreenshotsTitle => 'திரையில் இருந்தவை';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'இந்தக் கூட்டத்தின் திரைப்பிடிப்பு';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'திரைப்பிடிப்பை நீக்கவா?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'இது இந்தக் கூட்டத்தின் குறிப்பிலிருந்து திரைப்பிடிப்பை நீக்கும். இதைச் செயல்தவிர்க்க முடியாது.';
 
   @override
   String get pairSecondDevice => 'இரண்டாவது சாதனத்தை இணைக்கவும்';
+
+  @override
+  String get secondDevice => 'இரண்டாவது சாதனம்';
 
   @override
   String get pairSecondDeviceDescription =>

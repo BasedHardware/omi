@@ -11724,10 +11724,23 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Ikalawang device';
+  String get meetingScreenshotsTitle => 'Ano ang nasa screen';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Screenshot mula sa meeting na ito';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Burahin ang Screenshot?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik.';
 
   @override
   String get pairSecondDevice => 'Ipares ang ikalawang device';
+
+  @override
+  String get secondDevice => 'Ikalawang device';
 
   @override
   String get pairSecondDeviceDescription =>

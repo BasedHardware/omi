@@ -3658,8 +3658,12 @@
     "deleteChat": "Chat verwijderen",
     "appsAskWith": "Omi vragen met",
     "conversationsTodayCount": "{count, plural, =0{Vandaag geen gesprekken.} =1{1 gesprek vandaag.} other{{count} gesprekken vandaag.}}",
-    "secondDevice": "Tweede apparaat",
-    "pairSecondDevice": "Tweede apparaat koppelen",
+    "meetingScreenshotsTitle": "Wat er op het scherm stond",
+    "meetingScreenshotFallbackCaption": "Schermafbeelding van deze vergadering",
+    "deleteMeetingScreenshotTitle": "Schermafbeelding verwijderen?",
+    "deleteMeetingScreenshotMessage": "Hiermee wordt de schermafbeelding uit de notitie van deze vergadering verwijderd. Dit kan niet ongedaan worden gemaakt.",
     "pairSecondDeviceDescription": "Verbind OmiGlass naast je Omi zodat foto's en audio in hetzelfde gesprek terechtkomen.",
+    "pairSecondDevice": "Tweede apparaat koppelen",
+    "secondDevice": "Tweede apparaat",
     "forgetSecondDevice": "Tweede apparaat vergeten"
 }

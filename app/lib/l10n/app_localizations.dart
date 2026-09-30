@@ -21135,17 +21135,41 @@ abstract class AppLocalizations {
   /// **'{count, plural, =0{No conversations today.} =1{1 conversation today.} other{{count} conversations today.}}'**
   String conversationsTodayCount(int count);
 
-  /// Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)
+  /// Heading of the strip of meeting screenshots in a conversation summary
   ///
   /// In en, this message translates to:
-  /// **'Second device'**
-  String get secondDevice;
+  /// **'What was on screen'**
+  String get meetingScreenshotsTitle;
+
+  /// Caption and accessibility label for a meeting screenshot that has no caption
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot from this meeting'**
+  String get meetingScreenshotFallbackCaption;
+
+  /// Title of the dialog confirming deletion of one meeting screenshot
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Screenshot?'**
+  String get deleteMeetingScreenshotTitle;
+
+  /// Body of the dialog confirming deletion of one meeting screenshot
+  ///
+  /// In en, this message translates to:
+  /// **'This removes the screenshot from this meeting\'s note. It can\'t be undone.'**
+  String get deleteMeetingScreenshotMessage;
 
   /// Action on the device page that opens the device picker to pair an OmiGlass next to an Omi (or vice versa)
   ///
   /// In en, this message translates to:
   /// **'Pair a second device'**
   String get pairSecondDevice;
+
+  /// Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)
+  ///
+  /// In en, this message translates to:
+  /// **'Second device'**
+  String get secondDevice;
 
   /// Explains what pairing a second device does; product names Omi and OmiGlass stay untranslated
   ///

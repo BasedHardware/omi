@@ -11623,10 +11623,23 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'দ্বিতীয় ডিভাইস';
+  String get meetingScreenshotsTitle => 'স্ক্রিনে যা ছিল';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'এই মিটিংয়ের স্ক্রিনশট';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'স্ক্রিনশট মুছবেন?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'এটি এই মিটিংয়ের নোট থেকে স্ক্রিনশটটি সরিয়ে দেবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।';
 
   @override
   String get pairSecondDevice => 'দ্বিতীয় ডিভাইস যুক্ত করুন';
+
+  @override
+  String get secondDevice => 'দ্বিতীয় ডিভাইস';
 
   @override
   String get pairSecondDeviceDescription =>

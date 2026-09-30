@@ -11557,10 +11557,23 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'อุปกรณ์เครื่องที่สอง';
+  String get meetingScreenshotsTitle => 'สิ่งที่อยู่บนหน้าจอ';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'ภาพหน้าจอจากการประชุมนี้';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'ลบภาพหน้าจอหรือไม่';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้';
 
   @override
   String get pairSecondDevice => 'จับคู่อุปกรณ์เครื่องที่สอง';
+
+  @override
+  String get secondDevice => 'อุปกรณ์เครื่องที่สอง';
 
   @override
   String get pairSecondDeviceDescription =>

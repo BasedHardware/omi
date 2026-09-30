@@ -3658,8 +3658,12 @@
     "deleteChat": "Poista keskustelu",
     "appsAskWith": "Kysy Omilta käyttäen",
     "conversationsTodayCount": "{count, plural, =0{Ei keskusteluja tänään.} =1{1 keskustelu tänään.} other{{count} keskustelua tänään.}}",
-    "secondDevice": "Toinen laite",
-    "pairSecondDevice": "Yhdistä toinen laite",
+    "meetingScreenshotsTitle": "Mitä näytöllä oli",
+    "meetingScreenshotFallbackCaption": "Kuvakaappaus tästä kokouksesta",
+    "deleteMeetingScreenshotTitle": "Poistetaanko kuvakaappaus?",
+    "deleteMeetingScreenshotMessage": "Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.",
     "pairSecondDeviceDescription": "Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.",
+    "pairSecondDevice": "Yhdistä toinen laite",
+    "secondDevice": "Toinen laite",
     "forgetSecondDevice": "Unohda toinen laite"
 }

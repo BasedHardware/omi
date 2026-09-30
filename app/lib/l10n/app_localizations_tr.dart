@@ -11635,10 +11635,23 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'İkinci cihaz';
+  String get meetingScreenshotsTitle => 'Ekranda olanlar';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Bu toplantıdan ekran görüntüsü';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Ekran görüntüsü silinsin mi?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Bu işlem ekran görüntüsünü bu toplantının notundan kaldırır. Geri alınamaz.';
 
   @override
   String get pairSecondDevice => 'İkinci cihazı eşleştir';
+
+  @override
+  String get secondDevice => 'İkinci cihaz';
 
   @override
   String get pairSecondDeviceDescription =>

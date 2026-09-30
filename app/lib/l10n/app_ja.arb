@@ -3658,8 +3658,12 @@
     "deleteChat": "チャットを削除",
     "appsAskWith": "Omiに聞くときに使う",
     "conversationsTodayCount": "{count, plural, =0{今日の会話はまだありません。} =1{今日の会話は1件。} other{今日の会話は{count}件。}}",
-    "secondDevice": "2台目のデバイス",
-    "pairSecondDevice": "2台目のデバイスをペアリング",
+    "meetingScreenshotsTitle": "画面に表示されていた内容",
+    "meetingScreenshotFallbackCaption": "このミーティングのスクリーンショット",
+    "deleteMeetingScreenshotTitle": "スクリーンショットを削除しますか？",
+    "deleteMeetingScreenshotMessage": "このミーティングのメモからスクリーンショットを削除します。この操作は取り消せません。",
     "pairSecondDeviceDescription": "Omi と一緒に OmiGlass を接続すると、写真と音声が同じ会話にまとまります。",
+    "pairSecondDevice": "2台目のデバイスをペアリング",
+    "secondDevice": "2台目のデバイス",
     "forgetSecondDevice": "2台目のデバイスを忘れる"
 }

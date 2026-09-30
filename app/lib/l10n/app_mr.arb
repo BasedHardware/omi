@@ -11218,8 +11218,12 @@
     "deleteChat": "चॅट हटवा",
     "appsAskWith": "यासह Omi ला विचारा",
     "conversationsTodayCount": "{count, plural, =0{आज कोणतेही संभाषण नाही.} =1{आज 1 संभाषण.} other{आज {count} संभाषणे.}}",
-    "secondDevice": "दुसरे डिव्हाइस",
+    "meetingScreenshotsTitle": "स्क्रीनवर काय होते",
+    "meetingScreenshotFallbackCaption": "या मीटिंगचा स्क्रीनशॉट",
+    "deleteMeetingScreenshotTitle": "स्क्रीनशॉट हटवायचा?",
+    "deleteMeetingScreenshotMessage": "यामुळे या मीटिंगच्या नोटमधून स्क्रीनशॉट काढला जाईल. हे पूर्ववत करता येणार नाही.",
     "pairSecondDevice": "दुसरे डिव्हाइस जोडा",
+    "secondDevice": "दुसरे डिव्हाइस",
     "pairSecondDeviceDescription": "फोटो आणि ऑडिओ एकाच संभाषणात जाण्यासाठी तुमच्या Omi सोबत OmiGlass कनेक्ट करा.",
     "forgetSecondDevice": "दुसरे डिव्हाइस विसरा"
 }

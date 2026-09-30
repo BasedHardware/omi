@@ -3658,8 +3658,12 @@
     "deleteChat": "Kustuta vestlus",
     "appsAskWith": "Küsi Omilt koos",
     "conversationsTodayCount": "{count, plural, =0{Täna vestlusi pole.} =1{1 vestlus täna.} other{{count} vestlust täna.}}",
-    "secondDevice": "Teine seade",
-    "pairSecondDevice": "Seo teine seade",
+    "meetingScreenshotsTitle": "Mis oli ekraanil",
+    "meetingScreenshotFallbackCaption": "Ekraanipilt sellelt koosolekult",
+    "deleteMeetingScreenshotTitle": "Kas kustutada ekraanipilt?",
+    "deleteMeetingScreenshotMessage": "See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta.",
     "pairSecondDeviceDescription": "Ühenda OmiGlass oma Omi kõrvale, et fotod ja heli jõuaksid samasse vestlusse.",
+    "pairSecondDevice": "Seo teine seade",
+    "secondDevice": "Teine seade",
     "forgetSecondDevice": "Unusta teine seade"
 }

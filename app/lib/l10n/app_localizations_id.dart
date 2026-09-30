@@ -11634,10 +11634,23 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Perangkat kedua';
+  String get meetingScreenshotsTitle => 'Yang ada di layar';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Tangkapan layar dari rapat ini';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Hapus tangkapan layar?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ini akan menghapus tangkapan layar dari catatan rapat ini. Tindakan ini tidak dapat dibatalkan.';
 
   @override
   String get pairSecondDevice => 'Pasangkan perangkat kedua';
+
+  @override
+  String get secondDevice => 'Perangkat kedua';
 
   @override
   String get pairSecondDeviceDescription =>

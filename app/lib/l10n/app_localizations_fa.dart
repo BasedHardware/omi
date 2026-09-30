@@ -11619,10 +11619,23 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'دستگاه دوم';
+  String get meetingScreenshotsTitle => 'آنچه روی صفحه بود';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'اسکرین‌شات از این جلسه';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'اسکرین‌شات حذف شود؟';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'این کار اسکرین‌شات را از یادداشت این جلسه حذف می‌کند. قابل بازگشت نیست.';
 
   @override
   String get pairSecondDevice => 'جفت‌کردن دستگاه دوم';
+
+  @override
+  String get secondDevice => 'دستگاه دوم';
 
   @override
   String get pairSecondDeviceDescription =>

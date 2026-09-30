@@ -11659,10 +11659,23 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'ಎರಡನೇ ಸಾಧನ';
+  String get meetingScreenshotsTitle => 'ಪರದೆಯ ಮೇಲೆ ಏನಿತ್ತು';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'ಈ ಸಭೆಯ ಸ್ಕ್ರೀನ್‌ಶಾಟ್';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅಳಿಸುವುದೇ?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'ಇದು ಈ ಸಭೆಯ ಟಿಪ್ಪಣಿಯಿಂದ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
 
   @override
   String get pairSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಜೋಡಿಸಿ';
+
+  @override
+  String get secondDevice => 'ಎರಡನೇ ಸಾಧನ';
 
   @override
   String get pairSecondDeviceDescription =>

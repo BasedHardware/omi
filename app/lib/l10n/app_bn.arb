@@ -11218,8 +11218,12 @@
     "deleteChat": "চ্যাট মুছুন",
     "appsAskWith": "যার সঙ্গে Omi-কে জিজ্ঞাসা করবেন",
     "conversationsTodayCount": "{count, plural, =0{আজ কোনো কথোপকথন নেই।} =1{আজ ১টি কথোপকথন।} other{আজ {count}টি কথোপকথন।}}",
-    "secondDevice": "দ্বিতীয় ডিভাইস",
+    "meetingScreenshotsTitle": "স্ক্রিনে যা ছিল",
+    "meetingScreenshotFallbackCaption": "এই মিটিংয়ের স্ক্রিনশট",
+    "deleteMeetingScreenshotTitle": "স্ক্রিনশট মুছবেন?",
+    "deleteMeetingScreenshotMessage": "এটি এই মিটিংয়ের নোট থেকে স্ক্রিনশটটি সরিয়ে দেবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।",
     "pairSecondDevice": "দ্বিতীয় ডিভাইস যুক্ত করুন",
+    "secondDevice": "দ্বিতীয় ডিভাইস",
     "pairSecondDeviceDescription": "আপনার Omi-এর পাশে OmiGlass সংযুক্ত করুন, যাতে ছবি ও অডিও একই কথোপকথনে যায়।",
     "forgetSecondDevice": "দ্বিতীয় ডিভাইস ভুলে যান"
 }

@@ -11218,8 +11218,12 @@
     "deleteChat": "அரட்டையை நீக்கு",
     "appsAskWith": "இதனுடன் Omi-யிடம் கேளுங்கள்",
     "conversationsTodayCount": "{count, plural, =0{இன்று உரையாடல்கள் இல்லை.} =1{இன்று 1 உரையாடல்.} other{இன்று {count} உரையாடல்கள்.}}",
-    "secondDevice": "இரண்டாவது சாதனம்",
+    "meetingScreenshotsTitle": "திரையில் இருந்தவை",
+    "meetingScreenshotFallbackCaption": "இந்தக் கூட்டத்தின் திரைப்பிடிப்பு",
+    "deleteMeetingScreenshotTitle": "திரைப்பிடிப்பை நீக்கவா?",
+    "deleteMeetingScreenshotMessage": "இது இந்தக் கூட்டத்தின் குறிப்பிலிருந்து திரைப்பிடிப்பை நீக்கும். இதைச் செயல்தவிர்க்க முடியாது.",
     "pairSecondDevice": "இரண்டாவது சாதனத்தை இணைக்கவும்",
+    "secondDevice": "இரண்டாவது சாதனம்",
     "pairSecondDeviceDescription": "புகைப்படங்களும் ஒலியும் ஒரே உரையாடலுக்குச் செல்ல, உங்கள் Omi உடன் OmiGlass ஐ இணைக்கவும்.",
     "forgetSecondDevice": "இரண்டாவது சாதனத்தை மறக்கவும்"
 }

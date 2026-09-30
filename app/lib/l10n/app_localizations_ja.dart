@@ -11432,10 +11432,22 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => '2台目のデバイス';
+  String get meetingScreenshotsTitle => '画面に表示されていた内容';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'このミーティングのスクリーンショット';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'スクリーンショットを削除しますか？';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'このミーティングのメモからスクリーンショットを削除します。この操作は取り消せません。';
 
   @override
   String get pairSecondDevice => '2台目のデバイスをペアリング';
+
+  @override
+  String get secondDevice => '2台目のデバイス';
 
   @override
   String get pairSecondDeviceDescription => 'Omi と一緒に OmiGlass を接続すると、写真と音声が同じ会話にまとまります。';

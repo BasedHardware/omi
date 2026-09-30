@@ -11623,10 +11623,23 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Andre enhet';
+  String get meetingScreenshotsTitle => 'Hva som var på skjermen';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Skjermbilde fra dette møtet';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Slette skjermbildet?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Dette fjerner skjermbildet fra notatet for dette møtet. Det kan ikke angres.';
 
   @override
   String get pairSecondDevice => 'Par en annen enhet';
+
+  @override
+  String get secondDevice => 'Andre enhet';
 
   @override
   String get pairSecondDeviceDescription =>

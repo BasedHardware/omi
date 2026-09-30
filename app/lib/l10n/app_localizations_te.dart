@@ -11671,10 +11671,23 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'రెండవ పరికరం';
+  String get meetingScreenshotsTitle => 'స్క్రీన్‌పై ఏముంది';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'ఈ సమావేశం నుండి స్క్రీన్‌షాట్';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'స్క్రీన్‌షాట్‌ను తొలగించాలా?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'ఇది ఈ సమావేశం నోట్ నుండి స్క్రీన్‌షాట్‌ను తీసివేస్తుంది. దీన్ని రద్దు చేయలేరు.';
 
   @override
   String get pairSecondDevice => 'రెండవ పరికరాన్ని జోడించండి';
+
+  @override
+  String get secondDevice => 'రెండవ పరికరం';
 
   @override
   String get pairSecondDeviceDescription =>

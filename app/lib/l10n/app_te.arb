@@ -11218,8 +11218,12 @@
     "deleteChat": "చాట్ తొలగించండి",
     "appsAskWith": "వీటితో Omi ని అడగండి",
     "conversationsTodayCount": "{count, plural, =0{ఈరోజు సంభాషణలు లేవు.} =1{ఈరోజు 1 సంభాషణ.} other{ఈరోజు {count} సంభాషణలు.}}",
-    "secondDevice": "రెండవ పరికరం",
+    "meetingScreenshotsTitle": "స్క్రీన్‌పై ఏముంది",
+    "meetingScreenshotFallbackCaption": "ఈ సమావేశం నుండి స్క్రీన్‌షాట్",
+    "deleteMeetingScreenshotTitle": "స్క్రీన్‌షాట్‌ను తొలగించాలా?",
+    "deleteMeetingScreenshotMessage": "ఇది ఈ సమావేశం నోట్ నుండి స్క్రీన్‌షాట్‌ను తీసివేస్తుంది. దీన్ని రద్దు చేయలేరు.",
     "pairSecondDevice": "రెండవ పరికరాన్ని జోడించండి",
+    "secondDevice": "రెండవ పరికరం",
     "pairSecondDeviceDescription": "ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.",
     "forgetSecondDevice": "రెండవ పరికరాన్ని మర్చిపోండి"
 }

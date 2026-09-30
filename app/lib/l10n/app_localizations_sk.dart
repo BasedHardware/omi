@@ -11614,10 +11614,23 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Druhé zariadenie';
+  String get meetingScreenshotsTitle => 'Čo bolo na obrazovke';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Snímka obrazovky z tejto schôdzky';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Odstrániť snímku obrazovky?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Snímka obrazovky sa odstráni z poznámky tejto schôdzky. Túto akciu nie je možné vrátiť.';
 
   @override
   String get pairSecondDevice => 'Spárovať druhé zariadenie';
+
+  @override
+  String get secondDevice => 'Druhé zariadenie';
 
   @override
   String get pairSecondDeviceDescription =>

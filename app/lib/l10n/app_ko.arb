@@ -3658,8 +3658,12 @@
     "deleteChat": "채팅 삭제",
     "appsAskWith": "이것과 함께 Omi에게 묻기",
     "conversationsTodayCount": "{count, plural, =0{오늘은 대화가 없어요.} =1{오늘 대화 1개.} other{오늘 대화 {count}개.}}",
-    "secondDevice": "두 번째 기기",
-    "pairSecondDevice": "두 번째 기기 페어링",
+    "meetingScreenshotsTitle": "화면에 표시된 내용",
+    "meetingScreenshotFallbackCaption": "이 회의의 스크린샷",
+    "deleteMeetingScreenshotTitle": "스크린샷을 삭제할까요?",
+    "deleteMeetingScreenshotMessage": "이 회의 노트에서 스크린샷이 삭제됩니다. 되돌릴 수 없습니다.",
     "pairSecondDeviceDescription": "Omi와 함께 OmiGlass를 연결하면 사진과 오디오가 같은 대화에 담깁니다.",
+    "pairSecondDevice": "두 번째 기기 페어링",
+    "secondDevice": "두 번째 기기",
     "forgetSecondDevice": "두 번째 기기 삭제"
 }

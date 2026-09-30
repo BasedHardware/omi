@@ -11218,8 +11218,12 @@
     "deleteChat": "Избриши разговор",
     "appsAskWith": "Прашај го Omi со",
     "conversationsTodayCount": "{count, plural, =0{Денес нема разговори.} =1{1 разговор денес.} other{{count} разговори денес.}}",
-    "secondDevice": "Втор уред",
+    "meetingScreenshotsTitle": "Што имаше на екранот",
+    "meetingScreenshotFallbackCaption": "Слика од екранот од овој состанок",
+    "deleteMeetingScreenshotTitle": "Да се избрише сликата од екранот?",
+    "deleteMeetingScreenshotMessage": "Ова ја отстранува сликата од екранот од белешката на овој состанок. Не може да се врати.",
     "pairSecondDevice": "Спари втор уред",
+    "secondDevice": "Втор уред",
     "pairSecondDeviceDescription": "Поврзете OmiGlass заедно со вашиот Omi за фотографиите и звукот да одат во истиот разговор.",
     "forgetSecondDevice": "Заборави го вториот уред"
 }

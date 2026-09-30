@@ -11553,10 +11553,23 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'الجهاز الثاني';
+  String get meetingScreenshotsTitle => 'ما كان على الشاشة';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'لقطة شاشة من هذا الاجتماع';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'حذف لقطة الشاشة؟';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك.';
 
   @override
   String get pairSecondDevice => 'إقران جهاز ثانٍ';
+
+  @override
+  String get secondDevice => 'الجهاز الثاني';
 
   @override
   String get pairSecondDeviceDescription => 'اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.';

@@ -13830,20 +13830,36 @@
             }
         }
     },
-    "secondDevice": "Second device",
-    "@secondDevice": {
-        "description": "Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)"
+    "meetingScreenshotsTitle": "What was on screen",
+    "@meetingScreenshotsTitle": {
+        "description": "Heading of the strip of meeting screenshots in a conversation summary"
+    },
+    "meetingScreenshotFallbackCaption": "Screenshot from this meeting",
+    "@meetingScreenshotFallbackCaption": {
+        "description": "Caption and accessibility label for a meeting screenshot that has no caption"
+    },
+    "deleteMeetingScreenshotTitle": "Delete Screenshot?",
+    "@deleteMeetingScreenshotTitle": {
+        "description": "Title of the dialog confirming deletion of one meeting screenshot"
+    },
+    "deleteMeetingScreenshotMessage": "This removes the screenshot from this meeting's note. It can't be undone.",
+    "@deleteMeetingScreenshotMessage": {
+        "description": "Body of the dialog confirming deletion of one meeting screenshot"
     },
     "pairSecondDevice": "Pair a second device",
+    "secondDevice": "Second device",
     "@pairSecondDevice": {
         "description": "Action on the device page that opens the device picker to pair an OmiGlass next to an Omi (or vice versa)"
     },
     "pairSecondDeviceDescription": "Connect OmiGlass next to your Omi so photos and audio go into the same conversation.",
-    "@pairSecondDeviceDescription": {
-        "description": "Explains what pairing a second device does; product names Omi and OmiGlass stay untranslated"
+    "@secondDevice": {
+        "description": "Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)"
     },
     "forgetSecondDevice": "Forget second device",
     "@forgetSecondDevice": {
         "description": "Action that unpairs the second (companion) device only"
+    },
+    "@pairSecondDeviceDescription": {
+        "description": "Explains what pairing a second device does; product names Omi and OmiGlass stay untranslated"
     }
 }

@@ -3658,8 +3658,12 @@
     "deleteChat": "Видалити чат",
     "appsAskWith": "Питати Omi з",
     "conversationsTodayCount": "{count, plural, =0{Сьогодні розмов немає.} =1{1 розмова сьогодні.} other{{count} розмов сьогодні.}}",
-    "secondDevice": "Другий пристрій",
-    "pairSecondDevice": "Підключити другий пристрій",
+    "meetingScreenshotsTitle": "Що було на екрані",
+    "meetingScreenshotFallbackCaption": "Знімок екрана з цієї зустрічі",
+    "deleteMeetingScreenshotTitle": "Видалити знімок екрана?",
+    "deleteMeetingScreenshotMessage": "Знімок екрана буде видалено з нотатки цієї зустрічі. Цю дію не можна скасувати.",
     "pairSecondDeviceDescription": "Підключіть OmiGlass разом з Omi, щоб фото та звук потрапляли в одну розмову.",
+    "pairSecondDevice": "Підключити другий пристрій",
+    "secondDevice": "Другий пристрій",
     "forgetSecondDevice": "Забути другий пристрій"
 }

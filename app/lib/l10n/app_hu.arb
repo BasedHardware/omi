@@ -3754,8 +3754,12 @@
     "deleteChat": "Csevegés törlése",
     "appsAskWith": "Kérdezd az Omit ezzel",
     "conversationsTodayCount": "{count, plural, =0{Ma nem volt beszélgetés.} =1{1 beszélgetés ma.} other{{count} beszélgetés ma.}}",
-    "secondDevice": "Második eszköz",
-    "pairSecondDevice": "Második eszköz párosítása",
+    "meetingScreenshotsTitle": "Mi volt a képernyőn",
+    "meetingScreenshotFallbackCaption": "Képernyőkép erről a megbeszélésről",
+    "deleteMeetingScreenshotTitle": "Törli a képernyőképet?",
+    "deleteMeetingScreenshotMessage": "A képernyőkép törlődik a megbeszélés jegyzetéből. Ez nem vonható vissza.",
     "pairSecondDeviceDescription": "Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.",
+    "pairSecondDevice": "Második eszköz párosítása",
+    "secondDevice": "Második eszköz",
     "forgetSecondDevice": "Második eszköz elfelejtése"
 }

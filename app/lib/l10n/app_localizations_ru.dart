@@ -11662,10 +11662,23 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Второе устройство';
+  String get meetingScreenshotsTitle => 'Что было на экране';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Снимок экрана с этой встречи';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Удалить снимок экрана?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Снимок экрана будет удалён из заметки этой встречи. Это действие нельзя отменить.';
 
   @override
   String get pairSecondDevice => 'Подключить второе устройство';
+
+  @override
+  String get secondDevice => 'Второе устройство';
 
   @override
   String get pairSecondDeviceDescription =>

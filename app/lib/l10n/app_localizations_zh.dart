@@ -11411,10 +11411,22 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => '第二台设备';
+  String get meetingScreenshotsTitle => '屏幕上显示的内容';
+
+  @override
+  String get meetingScreenshotFallbackCaption => '本次会议的屏幕截图';
+
+  @override
+  String get deleteMeetingScreenshotTitle => '删除屏幕截图？';
+
+  @override
+  String get deleteMeetingScreenshotMessage => '这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。';
 
   @override
   String get pairSecondDevice => '配对第二台设备';
+
+  @override
+  String get secondDevice => '第二台设备';
 
   @override
   String get pairSecondDeviceDescription => '将 OmiGlass 与你的 Omi 一起连接，让照片和音频进入同一段对话。';

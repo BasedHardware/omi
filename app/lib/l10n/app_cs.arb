@@ -3658,8 +3658,12 @@
     "deleteChat": "Smazat chat",
     "appsAskWith": "Ptejte se Omi s",
     "conversationsTodayCount": "{count, plural, =0{Dnes žádné rozhovory.} =1{1 rozhovor dnes.} other{{count} rozhovorů dnes.}}",
-    "secondDevice": "Druhé zařízení",
-    "pairSecondDevice": "Spárovat druhé zařízení",
+    "meetingScreenshotsTitle": "Co bylo na obrazovce",
+    "meetingScreenshotFallbackCaption": "Snímek obrazovky z této schůzky",
+    "deleteMeetingScreenshotTitle": "Smazat snímek obrazovky?",
+    "deleteMeetingScreenshotMessage": "Snímek obrazovky bude odebrán z poznámky této schůzky. Tuto akci nelze vrátit.",
     "pairSecondDeviceDescription": "Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.",
+    "pairSecondDevice": "Spárovat druhé zařízení",
+    "secondDevice": "Druhé zařízení",
     "forgetSecondDevice": "Zapomenout druhé zařízení"
 }

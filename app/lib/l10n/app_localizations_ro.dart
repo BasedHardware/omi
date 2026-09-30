@@ -11677,10 +11677,23 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Al doilea dispozitiv';
+  String get meetingScreenshotsTitle => 'Ce era pe ecran';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Captură de ecran din această întâlnire';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Ștergi captura de ecran?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Captura de ecran va fi eliminată din nota acestei întâlniri. Acțiunea nu poate fi anulată.';
 
   @override
   String get pairSecondDevice => 'Asociază un al doilea dispozitiv';
+
+  @override
+  String get secondDevice => 'Al doilea dispozitiv';
 
   @override
   String get pairSecondDeviceDescription =>

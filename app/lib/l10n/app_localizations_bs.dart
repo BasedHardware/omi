@@ -11653,10 +11653,23 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Drugi uređaj';
+  String get meetingScreenshotsTitle => 'Šta je bilo na ekranu';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Snimak ekrana sa ovog sastanka';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Izbrisati snimak ekrana?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ovo uklanja snimak ekrana iz bilješke ovog sastanka. Ne može se poništiti.';
 
   @override
   String get pairSecondDevice => 'Upari drugi uređaj';
+
+  @override
+  String get secondDevice => 'Drugi uređaj';
 
   @override
   String get pairSecondDeviceDescription =>

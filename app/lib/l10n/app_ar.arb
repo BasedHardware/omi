@@ -3658,8 +3658,12 @@
     "deleteChat": "حذف المحادثة",
     "appsAskWith": "اسأل Omi مع",
     "conversationsTodayCount": "{count, plural, =0{لا محادثات اليوم.} =1{محادثة واحدة اليوم.} other{{count} محادثات اليوم.}}",
-    "secondDevice": "الجهاز الثاني",
-    "pairSecondDevice": "إقران جهاز ثانٍ",
+    "meetingScreenshotsTitle": "ما كان على الشاشة",
+    "meetingScreenshotFallbackCaption": "لقطة شاشة من هذا الاجتماع",
+    "deleteMeetingScreenshotTitle": "حذف لقطة الشاشة؟",
+    "deleteMeetingScreenshotMessage": "سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك.",
     "pairSecondDeviceDescription": "اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.",
+    "pairSecondDevice": "إقران جهاز ثانٍ",
+    "secondDevice": "الجهاز الثاني",
     "forgetSecondDevice": "نسيان الجهاز الثاني"
 }

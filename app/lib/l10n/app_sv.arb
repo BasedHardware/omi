@@ -3658,8 +3658,12 @@
     "deleteChat": "Radera chatt",
     "appsAskWith": "Fråga Omi med",
     "conversationsTodayCount": "{count, plural, =0{Inga samtal i dag.} =1{1 samtal i dag.} other{{count} samtal i dag.}}",
-    "secondDevice": "Andra enhet",
-    "pairSecondDevice": "Para ihop en andra enhet",
+    "meetingScreenshotsTitle": "Vad som visades på skärmen",
+    "meetingScreenshotFallbackCaption": "Skärmbild från det här mötet",
+    "deleteMeetingScreenshotTitle": "Radera skärmbilden?",
+    "deleteMeetingScreenshotMessage": "Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra.",
     "pairSecondDeviceDescription": "Anslut OmiGlass tillsammans med din Omi så att bilder och ljud hamnar i samma konversation.",
+    "pairSecondDevice": "Para ihop en andra enhet",
+    "secondDevice": "Andra enhet",
     "forgetSecondDevice": "Glöm andra enhet"
 }

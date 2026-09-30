@@ -11632,10 +11632,23 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Andra enhet';
+  String get meetingScreenshotsTitle => 'Vad som visades på skärmen';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Skärmbild från det här mötet';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Radera skärmbilden?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra.';
 
   @override
   String get pairSecondDevice => 'Para ihop en andra enhet';
+
+  @override
+  String get secondDevice => 'Andra enhet';
 
   @override
   String get pairSecondDeviceDescription =>

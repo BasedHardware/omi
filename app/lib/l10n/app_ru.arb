@@ -3693,8 +3693,12 @@
     "deleteChat": "Удалить чат",
     "appsAskWith": "Спрашивать Omi с помощью",
     "conversationsTodayCount": "{count, plural, =0{Сегодня разговоров нет.} =1{1 разговор сегодня.} other{{count} разговоров сегодня.}}",
-    "secondDevice": "Второе устройство",
-    "pairSecondDevice": "Подключить второе устройство",
+    "meetingScreenshotsTitle": "Что было на экране",
+    "meetingScreenshotFallbackCaption": "Снимок экрана с этой встречи",
+    "deleteMeetingScreenshotTitle": "Удалить снимок экрана?",
+    "deleteMeetingScreenshotMessage": "Снимок экрана будет удалён из заметки этой встречи. Это действие нельзя отменить.",
     "pairSecondDeviceDescription": "Подключите OmiGlass вместе с Omi, чтобы фото и звук попадали в один разговор.",
+    "pairSecondDevice": "Подключить второе устройство",
+    "secondDevice": "Второе устройство",
     "forgetSecondDevice": "Забыть второе устройство"
 }

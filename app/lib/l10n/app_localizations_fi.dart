@@ -11626,10 +11626,23 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get secondDevice => 'Toinen laite';
+  String get meetingScreenshotsTitle => 'Mitä näytöllä oli';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Kuvakaappaus tästä kokouksesta';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Poistetaanko kuvakaappaus?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.';
 
   @override
   String get pairSecondDevice => 'Yhdistä toinen laite';
+
+  @override
+  String get secondDevice => 'Toinen laite';
 
   @override
   String get pairSecondDeviceDescription =>

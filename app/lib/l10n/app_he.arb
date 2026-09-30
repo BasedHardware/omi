@@ -11218,8 +11218,12 @@
     "deleteChat": "מחיקת הצ'אט",
     "appsAskWith": "לשאול את Omi עם",
     "conversationsTodayCount": "{count, plural, =0{אין שיחות היום.} =1{שיחה אחת היום.} other{{count} שיחות היום.}}",
-    "secondDevice": "מכשיר שני",
+    "meetingScreenshotsTitle": "מה היה על המסך",
+    "meetingScreenshotFallbackCaption": "צילום מסך מהפגישה הזו",
+    "deleteMeetingScreenshotTitle": "למחוק את צילום המסך?",
+    "deleteMeetingScreenshotMessage": "צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו.",
     "pairSecondDevice": "צימוד מכשיר שני",
+    "secondDevice": "מכשיר שני",
     "pairSecondDeviceDescription": "חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.",
     "forgetSecondDevice": "שכח את המכשיר השני"
 }

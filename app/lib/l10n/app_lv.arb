@@ -3658,8 +3658,12 @@
     "deleteChat": "Dzēst tērzēšanu",
     "appsAskWith": "Jautājiet Omi ar",
     "conversationsTodayCount": "{count, plural, =0{Šodien sarunu nav.} =1{1 saruna šodien.} other{{count} sarunas šodien.}}",
-    "secondDevice": "Otrā ierīce",
-    "pairSecondDevice": "Savienot pārī otro ierīci",
+    "meetingScreenshotsTitle": "Kas bija ekrānā",
+    "meetingScreenshotFallbackCaption": "Ekrānuzņēmums no šīs sapulces",
+    "deleteMeetingScreenshotTitle": "Dzēst ekrānuzņēmumu?",
+    "deleteMeetingScreenshotMessage": "Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt.",
     "pairSecondDeviceDescription": "Pievienojiet OmiGlass līdzās savam Omi, lai fotoattēli un audio nonāktu vienā sarunā.",
+    "pairSecondDevice": "Savienot pārī otro ierīci",
+    "secondDevice": "Otrā ierīce",
     "forgetSecondDevice": "Aizmirst otro ierīci"
 }
