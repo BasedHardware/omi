@@ -225,7 +225,17 @@ def _require_segment_list(parsed: Any) -> List[Any]:
     return parsed
 
 
-def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
+def _is_verified_recovery_discard(write_data: Dict[str, Any]) -> bool:
+    # Imported lazily: several unit harnesses load this module with a stubbed
+    # ``utils`` package that has no ``utils.conversations`` subpackage.
+    from utils.conversations.recovery import verified_recovery_discard
+
+    return verified_recovery_discard(write_data.get('discarded'), write_data.get('relevance_decision'))
+
+
+def _decode_transcript_segments_strict(
+    uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
+) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
 
     The read path swallows decode failures into an empty list, which is safe for
@@ -237,6 +247,10 @@ def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: 
         return raw_segments
     if isinstance(raw_segments, str):
         payload = encryption.decrypt(raw_segments, uid)
+        if require_decryption and payload == raw_segments:
+            # decrypt's display fallback returns the input on authentication
+            # failure. Even parseable plaintext is not a successful decode.
+            raise ValueError('undecodable transcript_segments: decryption failed')
         if compressed:
             parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
         else:
@@ -797,6 +811,41 @@ def persist_processing_result_with_lifecycle(
             stale_sync_revision = True
             return False
 
+        if write_data.get('discarded') is True and _is_verified_recovery_discard(write_data):
+            from utils.conversations.recovery import (
+                RecoveryStructureUnavailableError,
+                structured_has_protected_content,
+            )
+
+            try:
+                _decode_transcript_segments_strict(
+                    uid,
+                    existing.get('transcript_segments', []),
+                    bool(existing.get('transcript_segments_compressed')),
+                    require_decryption=True,
+                )
+            except (TypeError, ValueError, zlib.error) as error:
+                raise RecoveryStructureUnavailableError(
+                    'server recovery discard requires a decoded transcript'
+                ) from error
+            # Admission and processing snapshots can precede a title edit or
+            # restore. Refuse before writing any verdict/content: the existing
+            # typed-minimum terminal path preserves a visible row and selfheal
+            # reports dead_letter rather than a contradictory completed discard.
+            if existing.get('sync_relevance_user_kept') or structured_has_protected_content(
+                existing.get('structured'), existing.get('user_title')
+            ):
+                raise RecoveryStructureUnavailableError('server recovery discard lost to protected content')
+            # Recovery never owns the stored transcript. Omit both fields even
+            # though the write decorators encoded the processing snapshot; this
+            # also prevents manual-assignment reapplication from re-encoding it.
+            write_data.pop('transcript_segments', None)
+            write_data.pop('transcript_segments_compressed', None)
+            write_data.pop('data_protection_level', None)
+            # Speaker resolution ran on the processing snapshot; its ids only
+            # describe a transcript this write no longer persists.
+            write_data.pop('speaker_resolution', None)
+
         # Restoring a legacy review row is an explicit user decision. A
         # processor that started before the restore may still carry the old
         # review/discarded verdict, so preserve the server-owned marker and
@@ -885,13 +934,34 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversation(uid, conversation_id, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED):
+def get_conversation(
+    uid,
+    conversation_id,
+    *,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_transcript_decode_status: bool = False,
+):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = document_data_with_revision(conversation_ref.get())
     record_document_read(
         read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
     )
+    if conversation_data is not None and include_transcript_decode_status:
+        # Recovery needs evidence from the raw field, before the tolerant read
+        # decoder turns corruption into an empty transcript. Other readers keep
+        # their existing behavior and never receive this server-only marker.
+        try:
+            _decode_transcript_segments_strict(
+                uid,
+                conversation_data.get('transcript_segments', []),
+                bool(conversation_data.get('transcript_segments_compressed')),
+                require_decryption=True,
+            )
+            conversation_data['_recovery_transcript_decoded'] = True
+        except (TypeError, ValueError, zlib.error):
+            conversation_data['_recovery_transcript_decoded'] = False
+            conversation_data['transcript_segments'] = []
     return conversation_data
 
 
