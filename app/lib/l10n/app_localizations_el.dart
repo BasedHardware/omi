@@ -2508,12 +2508,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Λεπτομερή διαγνωστικά μηνύματα';
 
   @override
-  String get autoCreateSpeakers => 'Αυτόματη δημιουργία ομιλητών';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Αυτόματη δημιουργία όταν ανιχνευθεί όνομα';
-
-  @override
   String get followUpQuestions => 'Συμπληρωματικές ερωτήσεις';
 
   @override
@@ -10179,12 +10173,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Ο ήχος δεν διαβάστηκε — δεν μπορεί να συγχρονιστεί';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11248,10 +11236,6 @@ class AppLocalizationsEl extends AppLocalizations {
       'Οι απομαγνητοφωνήσεις δεν είναι διαθέσιμες, η ηχογράφηση συνεχίζεται στη συσκευή και θα επεξεργαστεί αργότερα';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice =>
-      'Η απομαγνητοφώνηση δεν είναι διαθέσιμη · αποθήκευση στη συσκευή';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Αναμενόμενες απομαγνητοφωνήσεις $pending/$total';
   }
@@ -11309,5 +11293,420 @@ class AppLocalizationsEl extends AppLocalizations {
   String get openCall => 'Άνοιγμα κλήσης';
 
   @override
-  String get captureRecoveryBanner => 'Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή';
+  String get captureRecoveryBanner => 'Το Omi δεν στέλνει ήχο — πατήστε για επανασύνδεση';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Σταματήστε το Transcribe Later στο κολιέ σας πριν ηχογραφήσετε με το τηλέφωνό σας.';
+
+  @override
+  String get captureNotTranscribing => 'Χωρίς μεταγραφή';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Ο ήχος αποθηκεύτηκε, μεταγραφή αργότερα';
+
+  @override
+  String get captureStillRecording => 'Η εγγραφή συνεχίζεται';
+
+  @override
+  String get captureMicInUseElsewhere => 'Το μικρόφωνο χρησιμοποιείται από άλλη εφαρμογή';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Μια κλήση ή άλλη εφαρμογή πήρε το μικρόφωνο, οπότε το Omi δεν ακούει αυτή τη στιγμή. Το Omi θα συνεχίσει μόνο του όταν ελευθερωθεί το μικρόφωνο. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Η προσαρμοσμένη υπηρεσία μετατροπής ομιλίας σε κείμενο δεν είναι προσβάσιμη. Το Omi κρατά τον ήχο σε αυτό το τηλέφωνο και θα τον στείλει όταν επανέλθει η υπηρεσία. Δεν χάνεται τίποτα.';
+
+  @override
+  String get captureStarting => 'Έναρξη…';
+
+  @override
+  String get capturePhoneStorageFull => 'Ο χώρος του τηλεφώνου γέμισε';
+
+  @override
+  String get captureStorageAlmostFull => 'Ο χώρος σχεδόν γέμισε';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name και άλλοι';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Ακούστε τις απαντήσεις του Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Έγινε. Η επόμενη συνάντησή σας ξεκινά σε είκοσι λεπτά.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Είστε έτοιμοι';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Πατήστε μια σειρά για να την ελέγξετε ή να την αλλάξετε.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Όταν ρωτάτε με το κουμπί, το Omi μπορεί να διαβάσει την απάντησή του δυνατά.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Άκου την τελευταία σου απάντηση';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Παίζει η τελευταία σας απάντηση...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Μέσω του $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Μέσω του ηχείου του τηλεφώνου';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Μέσω της τρέχουσας εξόδου ήχου';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Οι απαντήσεις παραμένουν στην οθόνη. Δεν λέγεται τίποτα.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Ιδιωτικό. Μιλάει μόνο μέσω AirPods, Bluetooth ή ενσύρματων ακουστικών.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Χρησιμοποιεί το ηχείο του τηλεφώνου όταν δεν είναι συνδεδεμένα ακουστικά.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Το Omi θα παραμείνει σιωπηλό. Οι απαντήσεις εξακολουθούν να εμφανίζονται στην εφαρμογή.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device συνδεδεμένο. Omi θα μιλήσει εδώ.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Δεν συνδέονται ακουστικά. Το Omi παραμένει σιωπηλό μέχρι να συνδέσετε μερικά.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Παίζει μέσω του $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Παίζει δυνατά από το ηχείο του τηλεφώνου.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Μπορείτε να το αλλάξετε ανά πάσα στιγμή στο $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Επαναλάβετε αυτήν την περιοδεία οποιαδήποτε στιγμή στο $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Ακουστικά';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'λεπτά';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Εργασίες';
+
+  @override
+  String get usageMonth => 'Αυτόν τον Μήνα';
+
+  @override
+  String get usageYear => 'Φέτος';
+
+  @override
+  String get usageAll => 'Συνολικά';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Εμφάνιση';
+
+  @override
+  String get appearanceSystem => 'Σύστημα';
+
+  @override
+  String get appearanceLight => 'Φωτεινό';
+
+  @override
+  String get appearanceDark => 'Σκοτεινό';
+
+  @override
+  String get chatDiscardRecording => 'Απόρριψη';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Δεν το κατάλαβα — δοκιμάστε ξανά';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Αναζήτηση ατόμων';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Προσθήκη του «$query» ως νέο άτομο';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Εμφάνιση όλων των ατόμων ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Γεια σου $name, ρώτα ό,τι θέλεις';
+  }
+
+  @override
+  String get activity => 'Δραστηριότητα';
+
+  @override
+  String get places => 'Μέρη';
+
+  @override
+  String get recaps => 'Ανασκοπήσεις';
+
+  @override
+  String get recent => 'Πρόσφατα';
+
+  @override
+  String get searchPartialFailure => 'Ορισμένα αποτελέσματα δεν φορτώθηκαν';
+
+  @override
+  String get peopleSearchPlaceholder => 'Αναζήτηση ατόμων';
+
+  @override
+  String get peopleNotHeardYet => 'Δεν έχει ακουστεί ακόμα';
+
+  @override
+  String get peopleRecent => 'Πρόσφατα';
+
+  @override
+  String get deletePeopleMessage =>
+      'Αυτό αφαιρεί τα δείγματα φωνής τους και δεν μπορεί να αναιρεθεί. Οι ατάκες τους σε παλαιότερες συζητήσεις γίνονται ανώνυμοι ομιλητές.';
+
+  @override
+  String get personTalkTime => 'Χρόνος ομιλίας';
+
+  @override
+  String get personLastHeard => 'Τελευταία φορά';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Διαγραφή $count ατόμων;',
+      one: 'Διαγραφή 1 ατόμου;',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Χρειάζεται φωνή';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count άτομα',
+      one: '1 άτομο',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Δεν Βρέθηκαν Άτομα';
+
+  @override
+  String get deselectAll => 'Αποεπιλογή Όλων';
+
+  @override
+  String get voiceRecognitionSettings => 'Αναγνώριση Φωνής';
+
+  @override
+  String get greetingMorning => 'Καλημέρα';
+
+  @override
+  String get greetingAfternoon => 'Καλό απόγευμα';
+
+  @override
+  String get greetingEvening => 'Καλησπέρα';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Τι θέλεις να μάθεις;';
+
+  @override
+  String get askSuggestDecide => 'Τι αποφάσισα σήμερα;';
+
+  @override
+  String get askSuggestOwe => 'Τι χρωστάω ακόμη σε άλλους;';
+
+  @override
+  String get askSuggestNotice => 'Τι παρατήρησε το Omi;';
+
+  @override
+  String get pastChats => 'Προηγούμενες συνομιλίες';
+
+  @override
+  String get newChat => 'Νέα συνομιλία';
+
+  @override
+  String get startFresh => 'Ξεκινήστε από την αρχή';
+
+  @override
+  String get noPastChats => 'Οι συνομιλίες σας με το Omi εμφανίζονται εδώ.';
+
+  @override
+  String get deleteChatQuestion => 'Διαγραφή αυτής της συνομιλίας;';
+
+  @override
+  String get deleteChatMessage => 'Θα φύγει οριστικά από τις προηγούμενες συνομιλίες.';
+
+  @override
+  String get deleteChat => 'Διαγραφή συνομιλίας';
+
+  @override
+  String get appsAskWith => 'Ρωτήστε το Omi με';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count συζητήσεις σήμερα.',
+      one: '1 συζήτηση σήμερα.',
+      zero: 'Καμία συζήτηση σήμερα.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Τι υπήρχε στην οθόνη';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Στιγμιότυπο οθόνης από αυτή τη σύσκεψη';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Διαγραφή στιγμιότυπου οθόνης;';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση.';
+
+  @override
+  String get conversationSummaryFailed => 'Η σύνοψη απέτυχε';
 }

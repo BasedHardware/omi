@@ -15,6 +15,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
@@ -22,6 +23,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
 import 'package:omi/services/audio_download_service.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -31,7 +33,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/share_sheet.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/widgets/home_bottom_bar.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
@@ -252,6 +254,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   @override
   void initState() {
     super.initState();
+    unawaited(
+        SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id));
+    unawaited(SiriIntegration.instance.donateUiAction('conversation', widget.conversation.id));
 
     // The supplied conversation can be a list projection whose app results
     // are hydrated after the first frame. Start on Summary, then select the
@@ -384,6 +389,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
   @override
   void dispose() {
+    unawaited(SiriIntegration.instance.setCurrentScreen("", null));
     _cancelOwnedTimers();
     _separation.dispose();
     _controller?.dispose();
@@ -760,7 +766,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         }
         provider.updateVisibilityLocally(ConversationVisibility.shared);
       }
-      PlatformManager.instance.analytics.conversationShared(conversation: conversation, shareMethod: 'url_share');
       final origin = shareSheetOrigin(_shareButtonKey);
       // The sheet is up once the call is made; the button stops spinning while it is shown.
       final result = shareConversationLink(conversation, sharePositionOrigin: origin);
@@ -870,7 +875,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       PullDownMenuItem(
         title: l10n.deleteConversation,
         isDestructive: true,
-        iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
+        iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
         onTap: () => _handleMenuSelection(context, 'delete', provider),
       ),
     ];
@@ -891,17 +896,17 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           OmiButton.toolbar(
             key: const Key('conversation_ask_omi'),
             label: l10n.askOmi,
-            // The bottom nav's two-bubbles glyph (FontAwesome comments, regular), so Ask Omi reads as
-            // the same place as the Chat tab.
+            // The two-bubbles glyph (FontAwesome comments, regular) that marks Ask Omi everywhere.
             leading: const FaIcon(kAskOmiGlyph),
             size: OmiButtonSize.compact,
             onPressed: () {
               HapticFeedback.mediumImpact();
               trackConversationAction(ConversationActionAction.askOmi, ConversationActionSurface.topBar);
               final convo = provider.conversation;
-              routeToPage(
+              openChatSheet(
                 context,
                 ChatPage(
+                  startFresh: true,
                   initialChatContext:
                       ChatPageContext(type: 'conversation', id: convo.id, title: convo.structured.title),
                 ),
@@ -1031,29 +1036,32 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                   // Title and facts, shared by every tab (#17297).
                   ConversationDetailHeader(onOpenRecordings: _openRecordings),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                    // Each tab owns the page's side margin, so a section can scroll edge to edge
+                    // (the Summary tab's screenshot strip) instead of clipping at the margin.
                     child: TabBarView(
                       controller: _controller,
                       children: [
-                        TranscriptWidgets(
-                          searchQuery: _searchQuery,
-                          currentResultIndex: getCurrentResultIndexForHighlighting(),
-                          onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                          onSegmentTap: (segment) async {
-                            if (selectedTab != ConversationTab.transcript) {
-                              setState(() {
-                                selectedTab = ConversationTab.transcript;
-                              });
-                              _controller!.animateTo(_transcriptTabIndex);
-                            }
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                          child: TranscriptWidgets(
+                            searchQuery: _searchQuery,
+                            currentResultIndex: getCurrentResultIndexForHighlighting(),
+                            onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                            onSegmentTap: (segment) async {
+                              if (selectedTab != ConversationTab.transcript) {
+                                setState(() {
+                                  selectedTab = ConversationTab.transcript;
+                                });
+                                _controller!.animateTo(_transcriptTabIndex);
+                              }
 
-                            // Seek to segment using callback (start + end for bounded play)
-                            if (_seekToSegmentCallback != null) {
-                              await _seekToSegmentCallback!(segment.start, segment.end);
-                              HapticFeedback.lightImpact();
-                            }
-                          },
+                              // Seek to segment using callback (start + end for bounded play)
+                              if (_seekToSegmentCallback != null) {
+                                await _seekToSegmentCallback!(segment.start, segment.end);
+                                HapticFeedback.lightImpact();
+                              }
+                            },
+                          ),
                         ),
                         SummaryTab(
                           reviewEnabled: !widget.isFromOnboarding &&
@@ -1068,10 +1076,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                           currentResultIndex: getCurrentResultIndexForHighlighting(),
                           onTapWhenSearchEmpty: _closeSearchIfEmpty,
                         ),
-                        if (_controller!.length > _tasksTabIndex) const ActionItemsTab(),
+                        if (_controller!.length > _tasksTabIndex)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                            child: ActionItemsTab(),
+                          ),
                       ],
                     ),
-                  )),
+                  ),
                 ],
               ),
             ),

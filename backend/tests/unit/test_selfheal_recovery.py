@@ -23,6 +23,7 @@ from utils.conversations.recovery import (
     recovery_audio_file_ids,
     structured_has_protected_content,
     structured_is_rich,
+    verified_recovery_discard,
 )
 
 
@@ -86,7 +87,7 @@ def _admit_finalization(_conversation_data: dict) -> jobs.FinalizationAdmission:
     }
 
 
-def _recover(conversation_ref: _Ref, *, cutoff=CUTOFF, jobs_collection=None):
+def _recover(conversation_ref: _Ref, *, cutoff=CUTOFF, jobs_collection=None, recording_sessions_collection=None):
     transaction = _Transaction()
     intent = jobs._create_or_get_finalization_intent_txn(
         transaction,
@@ -99,6 +100,7 @@ def _recover(conversation_ref: _Ref, *, cutoff=CUTOFF, jobs_collection=None):
         NOW,
         trigger=ProcessingTrigger.SERVER_RECOVERY,
         recovery_cutoff=cutoff,
+        recording_sessions_collection=recording_sessions_collection,
     )
     return transaction, intent
 
@@ -127,6 +129,38 @@ def test_recovery_refuses_when_finished_at_raced_inside_the_cutoff():
     assert intent['status'] == 'refused_not_stale'
     assert transaction.sets == []
     assert transaction.updates == []
+
+
+def test_live_audio_session_lease_wins_when_recovery_sweep_runs_mid_session():
+    """The sweep and lease share one transactional document conflict fence."""
+    conversation = _recovery_conversation(
+        {
+            'transcript_segments': [],
+            'audio_files': [{'id': 'live-audio'}],
+            'external_data': {'recording_session_id': 'session-live'},
+        }
+    )
+    session = _Ref(
+        'session-live',
+        {
+            'uid': 'uid-1',
+            'recording_session_id': 'session-live',
+            'conversation_id': 'conversation-1',
+            'lifecycle_phase': 'in_progress',
+            'lease_expires_at': NOW + timedelta(minutes=5),
+        },
+    )
+
+    transaction, intent = _recover(
+        conversation,
+        recording_sessions_collection=_Collection({'session-live': session}),
+    )
+
+    assert intent['status'] == 'refused_active_recording_session'
+    assert intent['created'] is False
+    assert transaction.sets == []
+    assert transaction.updates == []
+    assert conversation.data['status'] == 'in_progress'
 
 
 def test_recovery_refuses_a_rich_structured_row():
@@ -425,18 +459,71 @@ def test_recovery_minimum_structure_raises_before_persist_or_fanout(capsys):
                         derived_effects_disposition_observer=disposition_observer,
                         trigger=ProcessingTrigger.SERVER_RECOVERY,
                     )
+            from types import SimpleNamespace
+
+            decision = SimpleNamespace(
+                discard=True,
+                verdict='discard',
+                as_record=lambda: {'trigger': 'server_recovery', 'verdict': 'discard'},
+            )
+
+            def discard_structure(*args, **kwargs):
+                kwargs['relevance_observer'](decision)
+                return Structured(), True
+
+            def mark_discard(*args, **kwargs):
+                conversation.discarded = True
+                return conversation
+
+            persisted = MagicMock(return_value=True)
+            with (
+                patch.object(pc, 'is_release_probe_uid', return_value=False),
+                patch.object(pc, 'should_skip_omi_paid_postprocessing', return_value=False),
+                patch.object(pc, '_enrich_meeting_context'),
+                patch.object(pc, 'resolve_speakers_for_processing'),
+                patch.object(pc, '_get_structured', side_effect=discard_structure),
+                patch.object(pc, '_get_conversation_obj', side_effect=mark_discard),
+                patch.object(pc, '_attach_client_projection'),
+                patch.object(pc, 'record_decision'),
+                patch.object(pc.lifecycle_service, 'persist_processed_conversation', persisted),
+            ):
+                result = pc.process_conversation(
+                    'uid-recovery',
+                    'en',
+                    conversation,
+                    trigger=ProcessingTrigger.SERVER_RECOVERY,
+                    defer_derived_effects=True,
+                )
         finally:
             sys.modules.pop('utils.conversations.process_conversation', None)
 
     persistence_observer.assert_not_called()
     disposition_observer.assert_not_called()
+    assert result.status == ConversationStatus.completed
+    assert result.discarded is True
+    payload = persisted.call_args.args[1]
+    assert payload['relevance_decision'] == {'trigger': 'server_recovery', 'verdict': 'discard'}
+    assert len(payload['transcript_segments']) == 1
     events = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
-    assert [e for e in events if e.get('event') == 'selfheal_guard'] == [
+    assert [e for e in events if e.get('event') == 'selfheal_guard' and e.get('outcome') == 'refused'] == [
         {
             'event': 'selfheal_guard',
             'outcome': 'refused',
             'reason': 'empty_structured',
+            'relevance_verdict': 'missing',
             'uid': 'uid-recovery',
             'conversation_id': 'recovery-conv',
         }
     ]
+    assert [e for e in events if e.get('event') == 'selfheal_guard' and e.get('outcome') == 'accepted'] == [
+        {'event': 'selfheal_guard', 'outcome': 'accepted', 'reason': 'explicit_discard'}
+    ]
+
+
+def test_recovery_discard_requires_current_explicit_decision():
+    decision = {'trigger': 'server_recovery', 'verdict': 'discard'}
+    assert verified_recovery_discard(True, decision)
+    assert not verified_recovery_discard(False, decision)
+    assert not verified_recovery_discard(True, {'trigger': 'capture_end', 'verdict': 'discard'})
+    assert not verified_recovery_discard(True, {'trigger': 'server_recovery', 'verdict': 'keep'})
+    assert not verified_recovery_discard(True, None)

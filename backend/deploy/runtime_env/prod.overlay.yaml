@@ -8,6 +8,48 @@ overlay:
   gke:
     backend-listen:
       env:
+        LISTEN_RECONNECT_BUDGET_PER_MIN:
+          value: '6'
+          category: reliability
+        # 2026-09-26 incident: with the code-fixed order, a Modulate breaker opening sent
+        # new sessions to Deepgram (402 since 09-14) and then streaming Parakeet (no ready
+        # frame, 0 connects since 08-26), so they got no transcript. The configured order
+        # The allocated windowed TDT cohort precedes the unchanged vendor order;
+        # otherwise Soniox is second after Modulate. Canary allocation follows the
+        # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29).
+        STT_CONNECT_ORDER_FROM_CONFIG:
+          value: 'true'
+        PARAKEET_WINDOW_ALLOCATION_PERCENT:
+          value: '5'
+        PARAKEET_WINDOW_MAX_SESSIONS:
+          value: '8'
+        PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
+          value: '12'
+          category: reliability
+        PARAKEET_WINDOW_MAX_EMPTY_STREAK:
+          value: '4'
+          category: reliability
+        PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+          value: '3'
+        STT_SERVICE_MODELS:
+          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+        STT_RESILIENT_RECONNECT:
+          value: 'false'
+        STT_ROUTING_MODE:
+          value: shadow
+        SONIOX_MONTHLY_CEILING_USD:
+          value: '10000'
+        # 2026-09-28: learn each user's expected languages from observed output. About 75% of
+        # English-default sessions are mostly another language (largely Indic).
+        STT_LEARNED_LANGUAGE_PROFILE:
+          value: 'true'
+          category: rollout
+        # Soniox-first arm for non-English multi-language users (omi#19343): 25% on 2026-09-27,
+        # then 50% on 2026-09-29 together with the learned profile, then 100% on 2026-09-30 after a
+        # 14.6h readback (hintable heavy 4.7% vs control 11.8%; better in every group with n>=30).
+        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+          value: '100'
+          category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
@@ -17,13 +59,20 @@ overlay:
         FREE_TIER_EMERGENCY_STOP:
           value: 'false'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-          value: 'false'
+          value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
         MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
         MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
+        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+          value: 'true'
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-prod-screen-frames
+          category: storage_retention
+        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+          value: '25'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_PARAKEET_API_URL:
@@ -91,8 +140,38 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+        # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+        # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+        SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
     pusher:
       env:
+        TRANSCRIPTION_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        TRANSCRIPTION_SHADOW_KILL_SWITCH:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        TRANSCRIPTION_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+          value: '1'
+          category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
@@ -102,17 +181,33 @@ overlay:
         FREE_TIER_EMERGENCY_STOP:
           value: 'false'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-          value: 'false'
+          value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
         MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
         MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
+        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+          value: 'true'
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-prod-screen-frames
+          category: storage_retention
+        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+          value: '25'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           value: http://diarizer.omi.me:80
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
     config_map:
       entries:
         ACCOUNT_DELETION_HANDLER_URL:
@@ -152,7 +247,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -184,6 +279,10 @@ overlay:
         value: 'false'
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
+    secrets:
+      GEMINI_API_KEY:
+        secret: DESKTOP_GEMINI_API_KEY
+        version: latest
   cloud_run:
     network:
       flags:
@@ -203,7 +302,15 @@ overlay:
           MCP_OAUTH_CLIENTS_JSON:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
+          SCREEN_FRAME_SIGNING_SECRET:
+            secret: SCREEN_FRAME_SIGNING_SECRET
+            version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
+          SCREEN_FRAME_EGRESS_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
@@ -213,13 +320,20 @@ overlay:
           FREE_TIER_EMERGENCY_STOP:
             value: 'false'
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            value: 'false'
+            value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+            category: storage_retention
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -296,6 +410,21 @@ overlay:
           MCP_OAUTH_CLAUDE_REDIRECT_URIS:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+          # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
       backend-sync:
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -303,6 +432,14 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
+            value: 'true'
+            category: rollout
+          LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED:
+            value: 'true'
+            category: rollout
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
@@ -320,13 +457,20 @@ overlay:
           MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            value: 'false'
+            value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+            category: storage_retention
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -372,6 +516,21 @@ overlay:
             value: based-hardware
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+          # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-sync-backfill:
         forbidden_env:
@@ -380,6 +539,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
@@ -442,6 +603,21 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+          # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
       backend-integration:
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -449,6 +625,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
@@ -490,6 +668,9 @@ overlay:
             value: based-hardware
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
+            category: rollout
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
     jobs:
       notifications-job:

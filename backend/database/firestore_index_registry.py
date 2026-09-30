@@ -8,98 +8,14 @@ requirements remain explicit here until their callers are migrated.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any
 
-
-@dataclass(frozen=True)
-class FirestoreIndexField:
-    field_path: str
-    order: str | None = None
-    array_config: str | None = None
-
-    def to_manifest(self) -> dict[str, str]:
-        if self.order is not None:
-            return {'fieldPath': self.field_path, 'order': self.order}
-        if self.array_config is not None:
-            return {'fieldPath': self.field_path, 'arrayConfig': self.array_config}
-        raise ValueError(f'Firestore index field {self.field_path!r} needs order or array_config')
-
-
-@dataclass(frozen=True)
-class FirestoreIndexRequirement:
-    identifier: str
-    collection_group: str
-    query_scope: str
-    fields: tuple[FirestoreIndexField, ...]
-
-    def to_manifest(self) -> dict[str, Any]:
-        return {
-            'collectionGroup': self.collection_group,
-            'queryScope': self.query_scope,
-            'fields': [field.to_manifest() for field in self.fields],
-        }
-
-    @property
-    def signature(self) -> tuple[str, str, tuple[tuple[str, str], ...]]:
-        return (
-            self.collection_group,
-            self.query_scope,
-            tuple((field.field_path, field.order or field.array_config or '') for field in self.fields),
-        )
-
-
-@dataclass(frozen=True)
-class FirestoreQueryFilter:
-    field_path: str
-    operator: str
-    value_name: str
-
-
-@dataclass(frozen=True)
-class FirestoreQuerySpec:
-    """A serving compound query and the index requirement derived from it."""
-
-    identifier: str
-    collection_group: str
-    query_scope: str
-    filters: tuple[FirestoreQueryFilter, ...]
-    index_fields: tuple[FirestoreIndexField, ...]
-
-    @property
-    def index_requirement(self) -> FirestoreIndexRequirement:
-        return FirestoreIndexRequirement(
-            identifier=self.identifier,
-            collection_group=self.collection_group,
-            query_scope=self.query_scope,
-            fields=self.index_fields,
-        )
-
-    @property
-    def query_signature(self) -> tuple[str, str, tuple[tuple[str, str], ...]]:
-        return (
-            self.collection_group,
-            self.query_scope,
-            tuple((query_filter.field_path, query_filter.operator) for query_filter in self.filters),
-        )
-
-    def build(
-        self,
-        collection: Any,
-        values: Mapping[str, Any],
-        *,
-        field_filter_factory: Callable[[str, str, Any], Any],
-    ) -> Any:
-        """Build the actual Firestore query from declared filters and values."""
-
-        query = collection
-        for query_filter in self.filters:
-            try:
-                value = values[query_filter.value_name]
-            except KeyError as exc:
-                raise ValueError(f'{self.identifier} requires {query_filter.value_name!r}') from exc
-            query = query.where(filter=field_filter_factory(query_filter.field_path, query_filter.operator, value))
-        return query
+from .firestore_query_types import (
+    FirestoreIndexField,
+    FirestoreIndexRequirement,
+    FirestoreQueryFilter,
+    FirestoreQuerySpec,
+)
 
 
 def _asc(field_path: str) -> FirestoreIndexField:
@@ -117,6 +33,18 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    FirestoreIndexRequirement(
+        'sync_backfill_pending_uid_sort',
+        'sync_backfill_pending',
+        'COLLECTION',
+        (_asc('uid'), _asc('sort_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'sync_backfill_pending_uid_accepted',
+        'sync_backfill_pending',
+        'COLLECTION',
+        (_asc('uid'), _asc('accepted_at'), _asc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'memory_items_collection_group_uid_generation_updated',
         'memory_items',
@@ -170,9 +98,9 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('discarded'), _asc('status'), _asc('structured.category'), _desc('created_at'), _desc('__name__')),
     ),
-    # `GET /v1/conversations?sources=...` retains the legacy
-    # `include_discarded=true` default, so this is distinct from the archive
-    # query below that explicitly excludes discarded captures.
+    # Explicit `GET /v1/conversations?sources=...&include_discarded=true`
+    # remains supported, so this is distinct from the default/archive query
+    # below that excludes discarded captures.
     FirestoreIndexRequirement(
         'conversations_source_status_created',
         'conversations',
@@ -193,8 +121,8 @@ INDEX_ONLY_REQUIREMENTS = (
     ),
     # Several conversations.py serving reads filter by `status` alone and sort by
     # `created_at` descending (get_in_progress_conversation, get_action_items,
-    # get_last_completed_conversation, and the default `GET /v1/conversations`
-    # call with include_discarded=True). Production has this index only because
+    # get_last_completed_conversation, and explicit `GET /v1/conversations`
+    # calls with include_discarded=True). Production has this index only because
     # it was created by hand; a fresh self-host 400s with FailedPrecondition the
     # first time any of those paths runs.
     FirestoreIndexRequirement(
@@ -916,6 +844,26 @@ CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
 )
 
 
+# `GET /v1/conversations/count?include_discarded=false&start_date=...&end_date=...`
+# (`get_conversations_count`, added to the mobile app shell in #19730) filters
+# `discarded == False` plus a `created_at` range and runs a `count()` aggregation
+# with no ordering. Firestore serves an aggregation over a range from an index
+# whose range field is ASCENDING, so the list-side `(discarded ASC, created_at
+# DESC)` composite above does not cover it: prod returned FailedPrecondition
+# ("The query requires an index") and the route 500ed. A start-only or end-only
+# range needs the same composite (equality prefix, then the one range field).
+CONVERSATIONS_COUNT_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_count_discarded_created_range',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('created_at', '>=', 'start_date'),
+        FirestoreQueryFilter('created_at', '<=', 'end_date'),
+    ),
+    index_fields=(_asc('discarded'), _asc('created_at'), _asc('__name__')),
+)
+
 MCP_CONVERSATION_CARD_QUERY_SPECS: dict[tuple[bool, bool, bool], FirestoreQuerySpec] = {}
 for _has_categories in (False, True):
     for _has_start_date in (False, True):
@@ -944,6 +892,25 @@ for _has_categories in (False, True):
                 filters=tuple(_filters),
                 index_fields=tuple((*_index_fields, _desc('created_at'), _desc('__name__'))),
             )
+
+# Sync safety-WAL binding: the newest rollover generations of one recording that
+# started before the upload's audio ends (utils/sync/recording_lineage.py).
+SYNC_RECORDING_LINEAGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_recording_lineage',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('external_data.recording_origin_id', '==', 'recording_origin_id'),
+        FirestoreQueryFilter('started_at', '<=', 'started_before'),
+        FirestoreQueryFilter('finished_at', '>=', 'finished_after'),
+    ),
+    index_fields=(
+        _asc('external_data.recording_origin_id'),
+        _desc('started_at'),
+        _desc('finished_at'),
+        _desc('__name__'),
+    ),
+)
 
 ENTITY_TIMELINE_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='conversations_entity_timeline_completed',
@@ -1207,6 +1174,20 @@ HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+HOURLY_USAGE_UTC_DAY_QUERY = FirestoreQuerySpec(
+    identifier='hourly_usage_utc_day',
+    collection_group='hourly_usage',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('year', '==', 'year'),
+        FirestoreQueryFilter('month', '==', 'month'),
+        FirestoreQueryFilter('day', '==', 'day'),
+    ),
+    # Equality-only filters are served by Firestore's automatic index merging;
+    # the existing today path already runs this query without a composite.
+    index_fields=(),
+)
+
 FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     identifier='conversation_finalization_jobs_oldest_nonterminal',
     collection_group='conversation_finalization_jobs',
@@ -1369,6 +1350,23 @@ DAILY_SUMMARY_RECIPIENTS_QUERY = FirestoreQuerySpec(
 )
 
 
+# Smart merge (utils/conversations/smart_merge.py): the newest visible rows of one
+# source before a just-finished conversation. Same signature as the existing
+# `conversations_discarded_source_status_created` index, so nothing new is provisioned.
+CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY = FirestoreQuerySpec(
+    identifier='conversations_smart_merge_preceding',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('source', '==', 'source'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+        FirestoreQueryFilter('created_at', '<', 'created_before'),
+    ),
+    index_fields=(_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
+)
+
+
 CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     identifier='conversation_photos_name_range_export',
     collection_group='photos',
@@ -1437,11 +1435,14 @@ QUERY_SPECS = (
     MEETING_RECEIPTS_DUE_QUERY,
     NEGATIVE_FEEDBACK_EVENTS_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
+    HOURLY_USAGE_UTC_DAY_QUERY,
     FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
+    CONVERSATIONS_COUNT_CREATED_RANGE_QUERY,
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
+    SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
@@ -1451,6 +1452,7 @@ QUERY_SPECS = (
     DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
     DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
     DAILY_SUMMARY_RECIPIENTS_QUERY,
+    CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
@@ -1555,6 +1557,8 @@ INDEX_REQUIREMENTS = (
 # Exempting a field only removes single-field indexes — composite indexes declared above are
 # unaffected, so a field named in a composite index can still appear here.
 FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
+    ('sync_backfill_pending', 'payload'),
+    ('sync_backfill_sequencer', 'active_payload'),
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
 )

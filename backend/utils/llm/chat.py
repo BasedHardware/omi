@@ -197,36 +197,6 @@ def retrieve_is_an_omi_question(question: str) -> bool:
         return False
 
 
-class IsFileQuestion(BaseModel):
-    value: bool = Field(description="If the message is related to file/image")
-
-
-def retrieve_is_file_question(question: str) -> bool:
-    prompt = f'''
-    Based on the current question, your task is to determine whether the user is referring to a file or an image that was just attached or mentioned earlier in the conversation.
-
-    Examples where the answer is True:
-    - "Can you process this file?"
-    - "What do you think about the image I uploaded?"
-    - "Can you extract text from the document?"
-
-    Examples where the answer is False:
-    - "How is the weather today?"
-    - "Tell me a joke."
-    - "What is the capital of France?"
-
-    User's Question:
-    {question}
-    '''
-
-    with_parser = get_llm('chat_extraction').with_structured_output(IsFileQuestion)
-    response = cast(IsFileQuestion, with_parser.invoke(prompt))
-    try:
-        return response.value
-    except ValidationError:
-        return False
-
-
 def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
     prompt = f'''
     You MUST determine the appropriate date range in {tz} that provides context for answering the <question> provided.

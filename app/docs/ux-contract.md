@@ -37,9 +37,10 @@ There are exactly two ways out, and they mean different things.
 - Push with `routeToPage(context, page)`, or `omiPageRoute(builder)` when you need a `Route`
   (`pushReplacement`). Never `PageRouteBuilder` for a push: it has no iOS back swipe
   (`page-route-builder`).
-- **Chat is a normal pushed page everywhere** (D1): no `fullscreenDialog`, leading
-  `OmiBackButton`, from every entry point (home chat bar, mic, deep link, app detail, quick
-  action, "Ask Omi").
+- **Chat is one sheet everywhere** (D1, revised 2026-09-29): `openChatSheet(context, ChatPage(...))`
+  (`lib/pages/chat/chat_route.dart`) rises over a blurred, dimmed page, carries an
+  `OmiCloseButton`, and closes on the X, a swipe down on its header, or system back — from every
+  entry point (home chat bar, mic, deep link, app detail, quick action, "Ask Omi").
 - **Conversation detail has no body-wide horizontal swipe to another conversation** (D2).
   Transcript / Summary tabs are swipeable where that does not fight a row's `Dismissible`. No
   prev/next controls replace it.
@@ -69,12 +70,13 @@ There are exactly two ways out, and they mean different things.
 
 | Need | Use | Not |
 |---|---|---|
-| Text action | `OmiButton` — `.primary` (white fill, black label), `.secondary`, `.destructive`, `.tertiary`; size regular (48) or compact (36 visual, 44 target); `isLoading` | `ElevatedButton.styleFrom(...)` with a local colour, height or radius |
+| Text action | `OmiButton` — `.primary` (white fill and black label in dark mode; inverse in light mode), `.secondary`, `.destructive`, `.tertiary`; size regular (48) or compact (36 visual, 44 target); `isLoading` | `ElevatedButton.styleFrom(...)` with a local colour, height or radius |
 | Icon-only action | `OmiIconButton(icon, label: …)` — `label` is required and is the tooltip and the screen-reader name | a bare `GestureDetector`/`InkWell` around an `Icon`, an `IconButton` with no tooltip |
 | Header circle button | `OmiIconButton` filled-circle style (`HeaderCircleButton` is an alias) | a 36 pt circle with a 36 pt target |
 | On/off setting | `OmiSwitch` in an `OmiSettingsRow` | a checkbox, a purple/green/indigo switch |
 | Settings list | `OmiSettingsGroup` of `OmiSettingsRow`s under an `OmiSectionHeader` | a hand-built row per page |
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
+| Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
 | Loading indicator | `OmiSpinner` (small / regular / large) | `CircularProgressIndicator(` with a local colour and stroke (`raw-spinner`) |
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label
@@ -82,7 +84,7 @@ There are exactly two ways out, and they mean different things.
 - A button label is a verb in Title Case ("Save", "Delete Task", "Try Again"). A button that is
   busy keeps its size and shows a spinner in place of or beside its label.
 - A disabled control looks disabled. A Send that cannot send is not white.
-- The accent is white/neutral (INV-UI-1, no purple). Colour is for state (danger, success), not
+- The accent is neutral: white in dark mode, black in light mode (INV-UI-1, no purple). Colour is for state (danger, success), not
   decoration.
 
 ## 4. Destructive actions
@@ -143,7 +145,7 @@ One policy, and never neither:
 | progress | `OmiFeedback.progress(context, msg)` | until replaced (≤ 1 min) | ongoing work, replaced by its result |
 
 - Neutral surface with a small coloured status icon; never a red or green slab (white on red fails
-  contrast). Floating, above the home tab bar and chat bar.
+  contrast). Floating, above Home's chat bar.
 - Code without a `BuildContext` uses `AppSnackbar` (same toasts on the global navigator).
 - An informational toast has no "OK" action.
 
@@ -192,12 +194,12 @@ participant lists, the speaker filter and every copied, shared or exported trans
 
 ## 10. Tokens
 
-`lib/ui/omi_tokens.dart`, dark only. Where you touch code, replace literals with tokens
+`lib/ui/omi_tokens.dart` has light and dark palettes; System follows OS brightness. Where you touch code, replace literals with tokens
 (`color-literal`, `font-size-literal`, `radius-literal`); new code has none.
 
-- **Colour** `OmiColors`: `surface0` (page black), `surface1/2/3` (card / elevated / pressed),
+- **Colour** `OmiColors`: `surface0` (black in dark mode, grouped #F2F2F7 in light mode), `surface1/2/3` (card / elevated / pressed),
   `border`, `textPrimary` / `textSecondary` / `textTertiary` (tertiary no darker than ~#8E8E93, ≥ 4.5:1
-  on surface1), `accent` (white — INV-UI-1) / `onAccent`, `success`, `warning`, `danger`,
+  on surface1), `accent` (white in dark mode, black in light mode — INV-UI-1) / `onAccent`, `success`, `warning`, `danger`,
   `dangerSurface`. `AppStyles` and `ResponsiveHelper` palettes are legacy.
 - **Type** `OmiType`: an iOS-like ramp (11 / 13 / 15 / 17 / 20 / 24 / 28 / 34) as `TextStyle`s.
 - **Radius** `OmiRadius`: sm 8 · md 12 · lg 16 · xl 24 · pill. **Spacing** `OmiSpacing`: 4 · 8 · 12 · 16 · 20 · 24 · 32.

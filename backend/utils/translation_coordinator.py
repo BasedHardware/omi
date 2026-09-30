@@ -18,12 +18,27 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
 from models.transcript_segment import TranscriptSegment, SENTENCE_ENDERS
+from database.translation_admission import (
+    release_translation,
+    reservation_is_current,
+    reserve_translation,
+)
 from utils.translation import (
     TranslationNeed,
     TranslationStatus,
     classify_translation_need,
     TranslationService,
 )
+from utils.translation_core.metrics import get_translation_metrics
+from config.translation import (
+    resolve_ondemand_config,
+    resolve_translation_profile,
+    translation_profile_gate_enabled,
+    viewed_translation_profile,
+)
+from utils.translation_core.planner import TranslationMode
+from utils.translation_demand import DemandPolicy, TranslationDemand
+from utils.translation_language import detect_language_with_confidence, expected_foreign_language
 from utils.executors import db_executor, sync_executor, run_blocking
 from utils.translation_cache import ConversationLanguageState, should_persist_translation, _normalize_base_language  # type: ignore[reportPrivateUsage]  # internal helper, intentional cross-module use
 
@@ -127,9 +142,14 @@ class TranslationCoordinator:
         self,
         target_language: str,
         translation_service: TranslationService,
-        on_translation_ready: Callable[[str, str, str, str], Awaitable[None]],
+        on_translation_ready: Callable[[str, str, str, str], Awaitable[bool | None]],
         language_state: Optional[ConversationLanguageState] = None,
         source_language: str = "",
+        expected_languages: Tuple[str, ...] = (),
+        realtime_interpreter: bool = False,
+        uid: str = '',
+        demand: TranslationDemand | None = None,
+        spawn_task: Callable[..., asyncio.Task[None]] | None = None,
     ):
         self.target_language = target_language
         self.target_base = _normalize_base_language(target_language) or ''
@@ -137,6 +157,15 @@ class TranslationCoordinator:
         self.on_translation_ready = on_translation_ready
         self.language_state = language_state or ConversationLanguageState(target_language)
         self.source_language = source_language
+        self.expected_languages = expected_languages
+        self.realtime_interpreter = realtime_interpreter
+        self.uid = uid
+        self.demand = demand
+        self._spawn_task = spawn_task
+        self._inflight_tasks: set[asyncio.Task[None]] = set()
+        self._result_context: dict[tuple[str, str], tuple[str, str, object | None]] = {}
+        self._decision_metrics = get_translation_metrics()
+        self._conversation_id: Optional[str] = None
 
         self._segment_states: Dict[str, SegmentState] = {}
         self._version_counter = 0
@@ -166,6 +195,20 @@ class TranslationCoordinator:
             self._segment_states[segment_id] = SegmentState(segment_id=segment_id)
         return self._segment_states[segment_id]
 
+    def _admission(self) -> DemandPolicy:
+        config = resolve_ondemand_config()
+        if self.realtime_interpreter or not config.gate_enabled or not config.admits(self.uid) or self.demand is None:
+            return DemandPolicy.legacy_unknown
+        return self.demand.snapshot(lease_v1_enabled=config.lease_v1_enabled).policy
+
+    def result_context(self, segment_id: str, conversation_id: str) -> tuple[str, str, object | None] | None:
+        return self._result_context.get((conversation_id, segment_id))
+
+    def demand_changed(self) -> None:
+        if self._admission() in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
+            self._batch_buffer.clear()
+            self._cancel_batch_timer()
+
     async def observe(
         self,
         updated_segments: List[TranscriptSegment],
@@ -182,6 +225,14 @@ class TranslationCoordinator:
         if not self._active and not self._flushing:
             return
 
+        if self._conversation_id is not None and self._conversation_id != conversation_id:
+            # Prior evidence is conversation-scoped, not socket-lifetime evidence.
+            self.language_state = ConversationLanguageState(self.target_language)
+            self._segment_states.clear()
+            self._batch_buffer.clear()
+            self._cancel_batch_timer()
+            self._last_speaker_id = None
+        self._conversation_id = conversation_id
         for seg_id in removed_ids:
             self._segment_states.pop(seg_id, None)
 
@@ -200,6 +251,19 @@ class TranslationCoordinator:
             return
 
         state = self._get_or_create_state(segment.id)
+        if self._admission() in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
+            self._invalidate_segment_work(segment.id, state)
+            state.latest_text = text
+            state.last_update_at = now
+            self._decision_metrics.decision(self.target_language, 'skip', 'no_demand')
+            return
+        if not self.realtime_interpreter and not self.language_state.source_is_plausible(text, self.expected_languages):
+            self._invalidate_segment_work(segment.id, state)
+            state.latest_text = text
+            state.last_update_at = now
+            self.metrics['classify_defers'] += 1
+            self._decision_metrics.decision(self.target_language, 'defer', 'out_of_profile')
+            return
         if await self._reconcile_changed_prefix(segment.id, text, state, conversation_id, now):
             return
 
@@ -213,7 +277,16 @@ class TranslationCoordinator:
         state.latest_text = text
         state.last_update_at = now
 
-        skip_mono = self.language_state.observe(new_text, speaker_id=segment.speaker_id)
+        foreign_clause = (
+            expected_foreign_language(new_text, self.target_language, self.expected_languages)
+            if translation_profile_gate_enabled()
+            else None
+        )
+        skip_mono = (
+            self.language_state.observe_detection(foreign_clause, 1.0, speaker_id=segment.speaker_id)
+            if foreign_clause
+            else self.language_state.observe(new_text, speaker_id=segment.speaker_id)
+        )
         if skip_mono and not self.language_state.should_probe():
             await self._commit_target_language_text(state, text, 'mono_gate_skips')
             return
@@ -232,10 +305,13 @@ class TranslationCoordinator:
             is_stable=_is_text_stable(new_text, signals),
         )
 
+        if foreign_clause and _is_text_stable(new_text, signals):
+            need = TranslationNeed.TRANSLATE
         if need == TranslationNeed.SKIP:
             await self._commit_target_language_text(state, text, 'classify_skips')
         elif need == TranslationNeed.DEFER:
             self.metrics['classify_defers'] += 1
+            self._decision_metrics.decision(self.target_language, 'defer', 'uncertain')
         else:
             self._queue_translation(segment.id, text, conversation_id, state)
 
@@ -253,13 +329,24 @@ class TranslationCoordinator:
 
         # Invalidate before cache I/O so an in-flight result cannot win a stale write.
         self._invalidate_segment_work(segment_id, state)
+        version = state.version
         text_hash = hashlib.md5(text.encode()).hexdigest()
-        cached = await run_blocking(
-            db_executor,
-            self.translation_service.get_cached_translation,
-            text_hash,
-            self.target_language,
+        cached = (
+            None
+            if self._admission() == DemandPolicy.viewed and resolve_ondemand_config().gemini_enabled
+            else await run_blocking(
+                db_executor,
+                self.translation_service.get_cached_translation,
+                text_hash,
+                self.target_language,
+            )
         )
+        if (
+            self._segment_states.get(segment_id) is not state
+            or state.version != version
+            or self._conversation_id != conversation_id
+        ):
+            return True
         if cached is None:
             state.committed_text = ''
             state.assembled_translation = None
@@ -269,18 +356,30 @@ class TranslationCoordinator:
 
         translated_text = cached['text']
         detected_lang = cached.get('detected_lang', '')
-        if detected_lang:
-            self.language_state.observe_detection(detected_lang, 1.0)
-
         if not should_persist_translation(text, translated_text, detected_lang, self.target_language):
-            # Cache I/O yielded; invalidate again in case newer work arrived meanwhile.
-            self._invalidate_segment_work(segment_id, state)
-            self._adopt_cached_prefix(state, text, translated_text, detected_lang, now)
+            self._decision_metrics.decision(self.target_language, 'rejected_by_guard', 'output_guard')
+            if ' '.join(text.split()) == ' '.join(translated_text.split()):
+                # A genuine no-op cache hit can commit this exact source prefix;
+                # it cannot publish a badge or establish a foreign prior.
+                self._invalidate_segment_work(segment_id, state)
+                self._adopt_cached_prefix(state, text, text, '', now)
+                self.metrics['prefix_resets'] += 1
+                return True
+            # Re-evaluate the current source. A rejected legacy cache value must
+            # not become the committed prefix of later transcript revisions.
+            state.committed_text = ''
+            state.assembled_translation = None
+            state.detected_lang = None
             self.metrics['prefix_resets'] += 1
-            return True
+            return False
 
+        accepted = await self.on_translation_ready(segment_id, translated_text, detected_lang, conversation_id)
+        if accepted is False:
+            state.committed_text = ''
+            state.assembled_translation = None
+            state.detected_lang = None
+            return False
         self._adopt_cached_prefix(state, text, translated_text, detected_lang, now)
-        await self.on_translation_ready(segment_id, translated_text, detected_lang, conversation_id)
         return True
 
     @staticmethod
@@ -305,14 +404,26 @@ class TranslationCoordinator:
     ) -> None:
         """Commit a local skip and persist its shared negative-cache decision."""
         self.metrics[skip_metric] += 1
+        self._decision_metrics.decision(self.target_language, 'skip', 'target_language')
         state.committed_text = text
         text_hash = hashlib.md5(text.encode()).hexdigest()
-        await run_blocking(
-            db_executor,
-            self.translation_service.set_negative_cache,
-            text_hash,
-            self.target_language,
-        )
+        config = resolve_ondemand_config()
+        if self._admission() == DemandPolicy.viewed and config.gemini_enabled:
+            await run_blocking(
+                db_executor,
+                self.translation_service.set_negative_cache,
+                text_hash,
+                self.target_language,
+                profile=viewed_translation_profile(resolve_translation_profile(), config),
+                source_language=self.source_language,
+            )
+        else:
+            await run_blocking(
+                db_executor,
+                self.translation_service.set_negative_cache,
+                text_hash,
+                self.target_language,
+            )
         self.metrics['negative_cache_sets'] += 1
 
     def _queue_translation(
@@ -324,8 +435,13 @@ class TranslationCoordinator:
     ) -> None:
         """Queue full text for provider context; delta translation remains deferred by DD-008."""
         self.metrics['classify_translates'] += 1
+        self._decision_metrics.decision(self.target_language, 'translate', 'eligible')
         version = self._next_version()
         state.version = version
+        if self._admission() == DemandPolicy.viewed:
+            self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment_id]
+            if len(self._batch_buffer) >= 200:
+                self._batch_buffer.pop(0)
         self._batch_buffer.append((segment_id, text, conversation_id, version))
 
     def _invalidate_segment_work(self, segment_id: str, state: SegmentState) -> None:
@@ -338,16 +454,28 @@ class TranslationCoordinator:
             self._batch_task.cancel()
         self._batch_task = None
 
+    def _spawn(self, coro: Awaitable[None], name: str) -> asyncio.Task[None]:
+        task = self._spawn_task(coro, name=name) if self._spawn_task is not None else asyncio.ensure_future(coro)
+        self._inflight_tasks.add(task)
+        task.add_done_callback(self._inflight_tasks.discard)
+        return task
+
+    async def wait_inflight(self) -> None:
+        tasks = [task for task in self._inflight_tasks if not task.done()]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     def _restart_batch_timer(self) -> None:
         if not self._batch_buffer:
             return
         self._cancel_batch_timer()
-        self._batch_task = asyncio.ensure_future(self._flush_after_batch_window())
+        self._batch_task = self._spawn(self._flush_after_batch_window(), 'translation_batch_timer')
 
     async def _flush_after_batch_window(self) -> None:
         await asyncio.sleep(BATCH_WINDOW_SECONDS)
         # Shield provider work from timer cancellation once flushing has begun.
-        await asyncio.shield(self._flush_batch())
+        provider_task = self._spawn(self._flush_batch(), 'translation_batch_provider')
+        await asyncio.shield(provider_task)
 
     async def _flush_batch(self):
         """Translate all queued segments in a single batched API call.
@@ -373,27 +501,114 @@ class TranslationCoordinator:
         if not valid_units:
             return
 
+        admission = self._admission()
+        if admission in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
+            return
+        config = resolve_ondemand_config()
+        viewed = admission == DemandPolicy.viewed and config.gemini_enabled
+        if viewed and not config.spend_configured:
+            self._decision_metrics.decision(self.target_language, 'defer', 'budget_denied')
+            return
+        profile = viewed_translation_profile(resolve_translation_profile(), config) if viewed else None
+
+        remaining_units: List[Tuple[str, str, str, int]] = []
+        if viewed:
+            selected_units: List[Tuple[str, str, str, int]] = []
+            selected_chars = 0
+            for unit in reversed(valid_units):
+                if len(unit[1]) > config.max_chars:
+                    self._decision_metrics.decision(self.target_language, 'defer', 'oversized')
+                    continue
+                if len(selected_units) < config.max_segments and selected_chars + len(unit[1]) <= config.max_chars:
+                    selected_units.append(unit)
+                    selected_chars += len(unit[1])
+                else:
+                    remaining_units.append(unit)
+            valid_units = list(reversed(selected_units))
+            if not valid_units:
+                return
+
         # Prepare (unit_id, text) pairs for batch API
         api_units: List[Tuple[str, str]] = [(seg_id, text) for seg_id, text, _, _ in valid_units]
+
+        reservation = None
+        if viewed:
+            # Match the detail-read revision for the same canonical segment page.
+            # The generation stays on each queued work item; it is not source content.
+            revision = hashlib.sha256(repr(api_units).encode('utf-8')).hexdigest()
+            reservation, reason = await run_blocking(
+                db_executor,
+                reserve_translation,
+                self.uid,
+                valid_units[0][2],
+                self.target_language,
+                revision,
+                'viewed_v1',
+                sum(len(text) for _, text in api_units) + config.max_output_tokens * 4,
+                config.uid_daily_chars,
+                config.global_daily_chars,
+                provider_deadline_seconds=config.deadline_seconds,
+            )
+            if reservation is None:
+                self._decision_metrics.decision(self.target_language, 'defer', reason)
+                return
+            # Kill-switch + demand recheck AFTER the await (Luna R3-3): the
+            # reservation path can park this task in Redis while visibility
+            # hides/expires or the gate flips off. Never dispatch then.
+            current_config = resolve_ondemand_config()
+            if (
+                not current_config.gate_enabled
+                or not current_config.admits(self.uid)
+                or self.demand is None
+                or self.demand.snapshot(lease_v1_enabled=current_config.lease_v1_enabled).policy != DemandPolicy.viewed
+            ):
+                await run_blocking(db_executor, release_translation, reservation, 0)
+                self._decision_metrics.decision(self.target_language, 'defer', 'no_demand')
+                return
 
         self.metrics['batch_api_calls'] += 1
         logger.info(f"translate_coordinator [batch] units={len(api_units)}")
 
+        actual_chars = sum(len(text) for _, text in api_units)
+        batch_succeeded = False
         try:
             # Run the sync provider call in a thread pool to avoid blocking the event loop
-            outcomes = await run_blocking(
-                sync_executor,
-                self.translation_service.translate_outcomes,
-                self.target_language,
-                api_units,
-                source_language=self.source_language,
-            )
+            if viewed:
+                outcomes = await run_blocking(
+                    sync_executor,
+                    self.translation_service.translate_outcomes,
+                    self.target_language,
+                    api_units,
+                    source_language=self.source_language,
+                    mode=TranslationMode.whole_text,
+                    profile=profile,
+                )
+            else:
+                outcomes = await run_blocking(
+                    sync_executor,
+                    self.translation_service.translate_outcomes,
+                    self.target_language,
+                    api_units,
+                    source_language=self.source_language,
+                )
             if len(outcomes) != len(valid_units):
                 raise RuntimeError('Translation service returned the wrong number of outcomes')
+            batch_succeeded = True
+            actual_chars += sum(
+                len(outcome.text) for outcome in outcomes if outcome.status == TranslationStatus.translated
+            )
 
             for outcome, (seg_id, original_text, conv_id, version) in zip(outcomes, valid_units):
+                if reservation is not None and not await run_blocking(db_executor, reservation_is_current, reservation):
+                    break
                 state = self._segment_states.get(seg_id)
-                if not state or state.version != version:
+                if (
+                    not state
+                    or state.version != version
+                    or (self._conversation_id is not None and self._conversation_id != conv_id)
+                ):
+                    continue
+                if viewed and not resolve_ondemand_config().gate_enabled:
                     continue
                 if outcome.status == TranslationStatus.failed:
                     continue
@@ -406,49 +621,86 @@ class TranslationCoordinator:
                     outcome.detected_language,
                     target_base,
                 ):
+                    if outcome.status != TranslationStatus.unchanged:
+                        self._decision_metrics.decision(self.target_language, 'rejected_by_guard', 'output_guard')
                     detected_base = _normalize_base_language(outcome.detected_language) or ''
                     if outcome.status == TranslationStatus.unchanged:
                         if outcome.detected_language:
+                            # Legacy no-op signal can exit mono mode, but cannot establish
+                            # an unexpected language in the source-admission prior.
                             self.language_state.observe_detection(outcome.detected_language, 1.0)
-                        if detected_base == target_base:
+                        local_language, local_confidence = detect_language_with_confidence(original_text)
+                        if (
+                            detected_base == target_base
+                            and _normalize_base_language(local_language) == target_base
+                            and local_confidence >= 0.90
+                        ):
                             # Only target-language no-ops belong in the negative cache.
                             text_hash = hashlib.md5(original_text.encode()).hexdigest()
-                            await run_blocking(
-                                db_executor,
-                                self.translation_service.set_negative_cache,
-                                text_hash,
-                                self.target_language,
-                            )
+                            if viewed:
+                                await run_blocking(
+                                    db_executor,
+                                    self.translation_service.set_negative_cache,
+                                    text_hash,
+                                    self.target_language,
+                                    profile=profile,
+                                    source_language=self.source_language,
+                                )
+                            else:
+                                await run_blocking(
+                                    db_executor,
+                                    self.translation_service.set_negative_cache,
+                                    text_hash,
+                                    self.target_language,
+                                )
                             self.metrics['negative_cache_sets'] += 1
                         state.committed_text = original_text
                     continue
 
-                # Update state
-                state.committed_text = original_text
-                state.assembled_translation = outcome.text
-                state.detected_lang = outcome.detected_language
-
-                # Update language state from API response
-                if outcome.detected_language:
-                    self.language_state.observe_detection(outcome.detected_language, 1.0)
-
                 # Notify via callback
-                await self.on_translation_ready(
-                    seg_id,
-                    outcome.text,
-                    outcome.detected_language,
-                    conv_id,
+                self._result_context[(conv_id, seg_id)] = (
+                    original_text,
+                    'viewed_v1' if viewed else 'legacy',
+                    reservation,
                 )
+                try:
+                    accepted = await self.on_translation_ready(
+                        seg_id,
+                        outcome.text,
+                        outcome.detected_language,
+                        conv_id,
+                    )
+                    if accepted is not False:
+                        state.committed_text = original_text
+                        state.assembled_translation = outcome.text
+                        state.detected_lang = outcome.detected_language
+                finally:
+                    self._result_context.pop((conv_id, seg_id), None)
 
         except (RuntimeError, ValueError) as error:
             logger.error('TranslationCoordinator batch error: %s', error)
+        finally:
+            if reservation is not None:
+                await run_blocking(
+                    db_executor,
+                    release_translation,
+                    reservation,
+                    actual_chars,
+                )
+            if batch_succeeded and remaining_units and self._admission() == DemandPolicy.viewed:
+                self._batch_buffer.extend(reversed(remaining_units))
+                self._restart_batch_timer()
 
     async def flush(self):
         """Flush all pending translations before session cleanup."""
         self._flushing = True
 
         self._cancel_batch_timer()
-        await self._flush_batch()
+        await self.wait_inflight()
+        if self._admission() not in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
+            await self._flush_batch()
+        else:
+            self._batch_buffer.clear()
 
         self._segment_states.clear()
         self._flushing = False

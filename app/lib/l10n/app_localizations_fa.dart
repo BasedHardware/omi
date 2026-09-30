@@ -2493,12 +2493,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get detailedDiagnosticMessages => 'پیام‌های تشخیص تفصیلی';
 
   @override
-  String get autoCreateSpeakers => 'ایجاد خودکار سخنرانان';
-
-  @override
-  String get autoCreateWhenNameDetected => 'ایجاد خودکار هنگام تشخیص نام';
-
-  @override
   String get followUpQuestions => 'سؤالات دنبال‌کننده';
 
   @override
@@ -10107,12 +10101,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'صدا خوانده نشد — قابل همگام‌سازی نیست';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11169,9 +11157,6 @@ class AppLocalizationsFa extends AppLocalizations {
       'رونویسی‌ها در دسترس نیستند، ضبط در دستگاه ادامه دارد و بعداً پردازش می‌شود';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'رونویسی در دسترس نیست · در حال ذخیره روی دستگاه';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'رونویسی‌های در انتظار $pending/$total';
   }
@@ -11229,5 +11214,417 @@ class AppLocalizationsFa extends AppLocalizations {
   String get openCall => 'باز کردن تماس';
 
   @override
-  String get captureRecoveryBanner => 'صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید';
+  String get captureRecoveryBanner => 'Omi صدا ارسال نمی‌کند — برای اتصال دوباره ضربه بزنید';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'قبل از ضبط با گوشی، Transcribe Later را روی آویز خود متوقف کنید.';
+
+  @override
+  String get captureNotTranscribing => 'رونویسی انجام نمی‌شود';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'صدا ذخیره شد، بعداً رونویسی می‌شود';
+
+  @override
+  String get captureStillRecording => 'ضبط ادامه دارد';
+
+  @override
+  String get captureMicInUseElsewhere => 'میکروفون در اختیار برنامه دیگری است';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'یک تماس یا برنامه دیگر میکروفون را گرفته است، بنابراین Omi اکنون نمی‌شنود. وقتی میکروفون آزاد شود، Omi خودش ادامه می‌دهد. هر آنچه پیش از این ضبط شده محفوظ است.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'به سرویس سفارشی تبدیل گفتار به متن شما دسترسی نیست. Omi صدا را روی همین تلفن نگه می‌دارد و وقتی سرویس برگشت آن را ارسال می‌کند. چیزی از دست نمی‌رود.';
+
+  @override
+  String get captureStarting => 'در حال شروع…';
+
+  @override
+  String get capturePhoneStorageFull => 'حافظه تلفن پر است';
+
+  @override
+  String get captureStorageAlmostFull => 'حافظه تقریباً پر است';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name و دیگران';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'پاسخ‌های Omi را بشنوید';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'انجام شد. جلسه بعدی شما بیست دقیقه دیگر شروع می‌شود.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'همه‌چیز آماده است';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'برای بررسی یا تغییر، روی یک ردیف بزنید.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'وقتی با دکمه سوال می کنید، Omi می تواند پاسخ آن را با صدای بلند بخواند.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'آخرین پاسخ خود را بشنوید';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'در حال پخش آخرین پاسخ شما...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'از طریق $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'از طریق بلندگوی تلفن';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'از طریق خروجی صوتی فعلی';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'پاسخ ها روی صفحه می ماند. چیزی گفته نمی شود.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'خصوصی. فقط از طریق AirPods، Bluetooth یا هدفون سیمی صحبت می کند.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'هنگامی که هدفونی وصل نیست از بلندگوی تلفن استفاده می کند.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi ساکت خواهد ماند. پاسخ ها همچنان در برنامه ظاهر می شوند.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device متصل. Omi اینجا صحبت خواهد کرد.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'هدفون وصل نیست Omi بی صدا می ماند تا زمانی که تعدادی را وصل کنید.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'از طریق $device پخش می شود.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'با صدای بلند از طریق بلندگوی تلفن پخش می شود.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'شما می توانید این را در هر زمان تغییر دهید در $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'این تور را هر زمان خواستید در $settings › $deviceSettings › $deviceTutorial تکرار کنید';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'هدفون';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'دقیقه';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'وظایف';
+
+  @override
+  String get usageMonth => 'این ماه';
+
+  @override
+  String get usageYear => 'این سال';
+
+  @override
+  String get usageAll => 'همه‌زمان';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'ظاهر';
+
+  @override
+  String get appearanceSystem => 'سیستم';
+
+  @override
+  String get appearanceLight => 'روشن';
+
+  @override
+  String get appearanceDark => 'تیره';
+
+  @override
+  String get chatDiscardRecording => 'دور انداختن';
+
+  @override
+  String get voiceQuestionNoSpeech => 'متوجه نشدم — دوباره تلاش کنید';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'جستجوی افراد';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'افزودن \"$query\" به عنوان فرد جدید';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'نمایش همه افراد ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'سلام $name، هر چه می‌خواهی بپرس';
+  }
+
+  @override
+  String get activity => 'فعالیت';
+
+  @override
+  String get places => 'مکان‌ها';
+
+  @override
+  String get recaps => 'خلاصه‌ها';
+
+  @override
+  String get recent => 'اخیر';
+
+  @override
+  String get searchPartialFailure => 'برخی نتایج بارگیری نشد';
+
+  @override
+  String get peopleSearchPlaceholder => 'جستجوی افراد';
+
+  @override
+  String get peopleNotHeardYet => 'هنوز شنیده نشده';
+
+  @override
+  String get peopleRecent => 'اخیر';
+
+  @override
+  String get deletePeopleMessage =>
+      'این کار نمونه‌های صدای آن‌ها را حذف می‌کند و قابل بازگشت نیست. گفته‌های آن‌ها در گفتگوهای قبلی به گوینده‌های بی‌نام تبدیل می‌شود.';
+
+  @override
+  String get personTalkTime => 'زمان صحبت';
+
+  @override
+  String get personLastHeard => 'آخرین شنیده‌شدن';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حذف $count نفر؟',
+      one: 'حذف ۱ نفر؟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'نیاز به صدا';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count نفر',
+      one: '۱ نفر',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'فردی مطابق یافت نشد';
+
+  @override
+  String get deselectAll => 'لغو انتخاب همه';
+
+  @override
+  String get voiceRecognitionSettings => 'تشخیص صدا';
+
+  @override
+  String get greetingMorning => 'صبح بخیر';
+
+  @override
+  String get greetingAfternoon => 'بعدازظهر بخیر';
+
+  @override
+  String get greetingEvening => 'عصر بخیر';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting، $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'چه می‌خواهید بدانید؟';
+
+  @override
+  String get askSuggestDecide => 'امروز چه تصمیمی گرفتم؟';
+
+  @override
+  String get askSuggestOwe => 'هنوز به چه کسانی چه بدهکارم؟';
+
+  @override
+  String get askSuggestNotice => 'Omi متوجه چه شد؟';
+
+  @override
+  String get pastChats => 'گفتگوهای قبلی';
+
+  @override
+  String get newChat => 'گفتگوی جدید';
+
+  @override
+  String get startFresh => 'از نو شروع کنید';
+
+  @override
+  String get noPastChats => 'گفتگوهای شما با Omi اینجا نشان داده می‌شود.';
+
+  @override
+  String get deleteChatQuestion => 'این گفتگو حذف شود؟';
+
+  @override
+  String get deleteChatMessage => 'برای همیشه از گفتگوهای قبلی حذف می‌شود.';
+
+  @override
+  String get deleteChat => 'حذف گفتگو';
+
+  @override
+  String get appsAskWith => 'از Omi بپرسید با';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گفتگو امروز.',
+      one: '۱ گفتگو امروز.',
+      zero: 'امروز گفتگویی نبوده.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'آنچه روی صفحه بود';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'اسکرین‌شات از این جلسه';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'اسکرین‌شات حذف شود؟';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'این کار اسکرین‌شات را از یادداشت این جلسه حذف می‌کند. قابل بازگشت نیست.';
+
+  @override
+  String get conversationSummaryFailed => 'خلاصه ایجاد نشد';
 }

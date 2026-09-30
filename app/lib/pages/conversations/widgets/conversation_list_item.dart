@@ -18,16 +18,18 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
-/// The row title for a conversation (hub audit #21): its title, "Untitled Conversation" when the
-/// title is blank, and "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
+/// The row title for a conversation (hub audit #21): its title, else its transcript text (legacy
+/// rows the server left untitled), "Untitled Conversation" only when neither exists, and
+/// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
   if (conversation.discarded) {
@@ -35,8 +37,12 @@ String conversationRowTitle(BuildContext context, ServerConversation conversatio
     if (seconds <= 0) return l10n.discardedConversation;
     return l10n.discardedConversationTitle(OmiDuration.compact(seconds, l10n));
   }
-  final title = conversation.structured.title.decodeString.trim();
-  return title.isEmpty ? l10n.untitledConversation : title;
+  return conversationDisplayTitle(
+    conversation,
+    l10n,
+    surface: ConversationUntitledRenderedSurface.list,
+    title: conversation.structured.title.decodeString,
+  );
 }
 
 /// A plain-text preview of what was said: the transcript words without timestamps or speaker
@@ -96,6 +102,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.transcriptSegments.length,
         conversation.captureGroup?.id,
         conversation.captureGroup?.revision,
+        conversation.summaryRetryable,
       );
 
   @override
@@ -125,13 +132,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
   }
 
-  Widget _buildFailedTitleRecovery(BuildContext context) {
+  /// "Summary failed · Retry": shown only when the server says a reprocess can succeed.
+  Widget _buildSummaryRetry(BuildContext context) {
     return Row(
       children: [
         Flexible(
           child: Text(
-            context.l10n.conversationTitleDidntGenerate,
-            key: const Key('conversation_failed_title_indicator'),
+            context.l10n.conversationSummaryFailed,
+            key: const Key('conversation_summary_failed_indicator'),
             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -140,16 +148,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
         GestureDetector(
           onTap: () {}, // absorb so the card's open-on-tap does not fire
           child: TextButton(
-            key: const Key('conversation_failed_title_reprocess_button'),
+            key: const Key('conversation_summary_retry_button'),
             onPressed: _reprocessing ? null : _onReprocess,
             style: TextButton.styleFrom(
-              foregroundColor: Colors.white,
+              foregroundColor: OmiColors.textPrimary,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               minimumSize: const Size(44, 44),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child:
-                _reprocessing ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.conversationReprocess),
+            child: _reprocessing ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.retry),
           ),
         ),
       ],
@@ -336,7 +343,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
               children: [
                 Padding(
                   padding: EdgeInsets.only(
-                    top: 12,
+                    top: 8,
                     left: widget.isFromOnboarding ? 0 : 16,
                     right: widget.isFromOnboarding ? 0 : 16,
                   ),
@@ -389,24 +396,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               unawaited(deleteConversationsWithUndo(context, [conversation]));
                             },
                             child: Padding(
-                              padding: PlatformService.isMobile
-                                  ? const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 20)
-                                  : const EdgeInsetsDirectional.all(16),
-                              child: PlatformService.isMobile
-                                  ? _buildMobileLayout(context)
-                                  : Column(
-                                      mainAxisSize: MainAxisSize.max,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        _getConversationHeader(),
-                                        const SizedBox(height: 16),
-                                        _buildConversationBody(context),
-                                        if (widget.conversation.isFailedTitleRecoverable) ...[
-                                          const SizedBox(height: 10),
-                                          _buildFailedTitleRecovery(context),
-                                        ],
-                                      ],
-                                    ),
+                              padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+                              child: _buildMobileLayout(context),
                             ),
                           ),
                         ),
@@ -419,7 +410,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   Positioned.fill(
                     child: Padding(
                       padding: EdgeInsets.only(
-                        top: 12,
+                        top: 8,
                         left: widget.isFromOnboarding ? 0 : 16,
                         right: widget.isFromOnboarding ? 0 : 16,
                       ),
@@ -434,7 +425,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  static const _metaStyle = TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+  static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
 
   /// Time and length, with the New badge beside them (hub audit #16) and the star.
   Widget _buildMetaRow(BuildContext context) {
@@ -447,12 +438,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
           maxLines: 1,
         ),
         if (duration.isNotEmpty) ...[
-          const Text(' • ', style: _metaStyle),
+          Text(' • ', style: _metaStyle),
           Text(duration, style: _metaStyle, maxLines: 1),
         ],
         // One row stands for an event several devices recorded.
         if (_captureSources.length > 1) ...[
-          const Text(' • ', style: _metaStyle),
+          Text(' • ', style: _metaStyle),
           CaptureSourceIcons(sources: _captureSources),
         ],
         if (isNew) ...[
@@ -486,13 +477,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
               children: [
                 if (!discarded)
                   Container(
-                    width: 40,
-                    height: 40,
-                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                     alignment: Alignment.center,
                     child: Text(
                       widget.conversation.structured.getEmoji(),
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
                     ),
                   ),
                 if (!discarded) const SizedBox(width: 12),
@@ -515,20 +506,20 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 3),
                       _buildMetaRow(context),
-                      if (widget.conversation.isFailedTitleRecoverable) ...[
+                      if (widget.conversation.showsSummaryRetry) ...[
                         const SizedBox(height: 8),
-                        _buildFailedTitleRecovery(context),
+                        _buildSummaryRetry(context),
                       ],
                       if (_searchSnippetText() != null) ...[
                         const SizedBox(height: 10),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Padding(
-                              padding: EdgeInsets.only(top: 2),
-                              child: Icon(Icons.graphic_eq, size: 14, color: Colors.white70),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Icon(Icons.graphic_eq, size: 14, color: OmiColors.textSecondary),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
@@ -577,56 +568,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  Widget _buildConversationBody(BuildContext context) {
-    if (widget.conversation.discarded) {
-      return Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.conversation.photos.isNotEmpty) ...[
-                Row(
-                  children: [
-                    Icon(Icons.photo_library, color: Colors.grey.shade400, size: 18),
-                    const SizedBox(width: 12),
-                    Text(
-                      context.l10n.conversationPhotosCount(widget.conversation.photos.length),
-                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-              ],
-              Text(
-                conversationSnippet(widget.conversation),
-                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-              ),
-            ],
-          ),
-          if (widget.conversation.isLocked) _buildLockedOverlay(),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(conversationRowTitle(context, widget.conversation), style: Theme.of(context).textTheme.titleLarge),
-        if (_searchSnippetText() != null) ...[
-          const SizedBox(height: 10),
-          Text(
-            _searchSnippetText()!,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade400, height: 1.35, fontStyle: FontStyle.italic),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ],
-    );
-  }
-
   Widget _buildLockedOverlay() {
     return Positioned.fill(
       child: ClipRRect(
@@ -644,84 +585,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
             style: OmiType.callout.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
-      ),
-    );
-  }
-
-  _getConversationHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 🧠 Emoji + Tag
-          Flexible(
-            fit: FlexFit.tight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!widget.conversation.discarded)
-                  Text(
-                    widget.conversation.structured.getEmoji(),
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
-                  ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
-                  const SizedBox(width: 8),
-                if (widget.conversation.structured.category.isNotEmpty)
-                  Flexible(
-                    child: Container(
-                      decoration:
-                          BoxDecoration(color: widget.conversation.getTagColor(), borderRadius: OmiRadius.lgAll),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        widget.conversation.getTag(),
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // 🕒 Timestamp + Duration, New badge beside them, Starred
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-                  style: _metaStyle,
-                  maxLines: 1,
-                ),
-                if (_getConversationDuration(context).isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                      child: Text(_getConversationDuration(context), style: OmiType.caption, maxLines: 1),
-                    ),
-                  ),
-                if (isNew) ...[
-                  const SizedBox(width: 8),
-                  ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
-                ],
-                if (widget.conversation.starred)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 8.0),
-                    child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
-                  ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

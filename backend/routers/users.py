@@ -89,8 +89,10 @@ from models.users import (
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    DESKTOP_CHAT_BYOK_PROVIDER,
     resolve_transcription_allowance,
     request_has_llm_byok_key,
+    request_has_byok_provider,
     enforce_chat_quota,
     get_chat_quota_snapshot,
     get_basic_plan_limits,
@@ -132,6 +134,7 @@ from utils.other.notifications import (
 )
 from models.notification_message import NotificationMessage
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -620,7 +623,12 @@ def get_single_person(
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
-    person = Person(**person)
+    # A malformed/legacy doc (e.g. missing the required name) must read as not-found, not 500:
+    # the list endpoint already skips these via Person.deserialize_many_safe (#8264).
+    people = Person.deserialize_many_safe([person])
+    if not people:
+        raise HTTPException(status_code=404, detail="Person not found")
+    person = people[0]
     if include_speech_samples:
         # Convert stored GCS paths to signed URLs
         stored_paths = person.speech_samples
@@ -629,9 +637,24 @@ def get_single_person(
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
+def get_all_people(
+    include_speech_samples: bool = True,
+    include_stats: bool = False,
+    uid: str = Depends(auth.get_current_user_uid),
+):
     logger.info(f'get_all_people {include_speech_samples}')
     people = Person.deserialize_many_safe(get_people(uid))
+    if include_stats and people:
+        from utils.people_stats import collect_people_stats
+
+        stats = collect_people_stats(
+            lambda limit, offset: conversations_db.get_conversations_without_photos(uid, limit=limit, offset=offset)
+        )
+        for person in people:
+            entry = stats.get(person.id)
+            person.conversation_count = entry['conversation_count'] if entry else 0
+            person.last_heard_at = entry['last_heard_at'] if entry else None
+            person.talk_seconds = entry['talk_seconds'] if entry else 0.0
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):
@@ -924,19 +947,22 @@ def handle_migration_requests(
                 conversations_db.migrate_conversations_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}: {e}")
+                logger.error(f"Failed to migrate conversation {request.id}: {sanitize(str(e))}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Failed to migrate conversation {request.id}")
         elif request.type == 'memory':
             try:
                 memories_db.migrate_memories_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to migrate memory {request.id}: {e}")
+                logger.error(f"Failed to migrate memory {request.id}: {sanitize(str(e))}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Failed to migrate memory {request.id}")
         elif request.type == 'chat':
             try:
                 chat_db.migrate_chats_level_batch(uid, [request.id], request.target_level)
                 return {'status': 'ok'}
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to migrate chat message {request.id}: {e}")
+                logger.error(f"Failed to migrate chat message {request.id}: {sanitize(str(e))}", exc_info=True)
+                raise HTTPException(status_code=500, detail=f"Failed to migrate chat message {request.id}")
         else:
             raise HTTPException(status_code=400, detail=f"Unknown object type for migration: {request.type}")
     elif isinstance(request, MigrationTargetRequest):
@@ -989,9 +1015,8 @@ def handle_batch_migration_requests(
             else:
                 errors.append(f"Unknown object type for migration: {req_type}")
         except Exception as e:
-            error_detail = f"Failed to migrate batch of type {req_type}: {e}"
-            logger.info(error_detail)
-            errors.append(error_detail)
+            logger.error(f"Failed to migrate batch of type {req_type}: {sanitize(str(e))}", exc_info=True)
+            errors.append(f"Failed to migrate batch of type {req_type}")
 
     if errors:
         raise HTTPException(status_code=500, detail={"message": "Some objects failed to migrate.", "errors": errors})
@@ -1089,9 +1114,21 @@ def set_location_context_consent(update: LocationContextConsentUpdate, uid: str 
 def get_user_usage_stats_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
     period: UsagePeriod = UsagePeriod.TODAY,
+    time_zone: str | None = None,
 ):
     """Gets daily and monthly usage stats for the authenticated user."""
-    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=notification_db.get_user_time_zone(uid))
+
+    def valid_zone(value: str | None) -> str | None:
+        if not value:
+            return None
+        try:
+            pytz.timezone(value)
+        except (pytz.UnknownTimeZoneError, ValueError):
+            return None
+        return value
+
+    zone = valid_zone(time_zone) or valid_zone(notification_db.get_user_time_zone(uid)) or 'UTC'
+    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=zone)
     return stats
 
 
@@ -1450,10 +1487,12 @@ def get_user_chat_usage_quota(
 
     Used by the desktop app. Mobile uses the subscription endpoint instead.
     """
-    # BYOK free plan: user brings their own keys, so there's no Omi-side cost
-    # to meter. Only return unlimited when BYOK headers are on the request (desktop).
-    # Mobile (no headers) should see real quota.
-    if users_db.is_byok_active(uid) and request_has_llm_byok_key():
+    # Match enforce_desktop_chat_quota: only the provider actually used by
+    # desktop chat can exempt it. Other enrolled keys still use managed chat.
+    customer_client = get_customer_firestore_client()
+    if users_db.is_byok_active(uid, firestore_client=customer_client) and request_has_byok_provider(
+        DESKTOP_CHAT_BYOK_PROVIDER
+    ):
         return ChatUsageQuota(
             plan='Free (BYOK)',
             plan_type=PlanType.unlimited.value,
@@ -1472,7 +1511,11 @@ def get_user_chat_usage_quota(
     # here while /v2/chat/completions gates on the customer project's, and the
     # two disagree for the same uid (#11199).
     snapshot = get_chat_quota_snapshot(
-        uid, platform=x_app_platform, firestore_client=get_customer_firestore_client(), provision=False
+        uid,
+        platform=x_app_platform,
+        firestore_client=customer_client,
+        provision=False,
+        required_llm_provider=DESKTOP_CHAT_BYOK_PROVIDER,
     )
     plan = snapshot['plan']
 
@@ -1591,7 +1634,8 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
         try:
             notification_db.set_daily_summary_hour_local(uid, data.hour)
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            logger.error(f"Failed to set daily summary hour: {sanitize(str(e))}", exc_info=True)
+            raise HTTPException(status_code=400, detail="Invalid hour. Must be between 0 and 23.")
 
     return {'status': 'ok'}
 
@@ -1666,7 +1710,10 @@ def test_daily_summary(
             start_date_utc = start_of_day.astimezone(pytz.utc)
             end_date_utc = end_of_day.astimezone(pytz.utc)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+            logger.error(
+                f"Failed to resolve user timezone for daily summary (uid={uid}): {sanitize(str(e))}", exc_info=True
+            )
+            raise HTTPException(status_code=500, detail='Failed to resolve user timezone.')
     else:
         now_utc = datetime.now(pytz.utc)
         if target_date:
@@ -1876,7 +1923,11 @@ def create_user_daily_summary(
         try:
             today = datetime.now(pytz.timezone(time_zone_name)).date()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+            logger.error(
+                f"Failed to resolve user timezone for daily summary recap (uid={uid}): {sanitize(str(e))}",
+                exc_info=True,
+            )
+            raise HTTPException(status_code=500, detail='Failed to resolve user timezone.')
     else:
         today = datetime.now(pytz.utc).date()
     if target_date > today:
@@ -1909,6 +1960,25 @@ def create_user_daily_summary(
         # empty at the exact moment it was being summarized.
         raise HTTPException(status_code=409, detail='This recap is already being generated. Try again in a moment.')
     raise HTTPException(status_code=400, detail=f'Nothing to summarize for {date_str}')
+
+
+# Declared before `/v1/users/daily-summaries/{summary_id}` so `search` is not captured as an id.
+@router.get('/v1/users/daily-summaries/search', tags=['v1'], response_model=DailySummariesResponse)
+def search_daily_summaries(
+    query: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Search the user's recent daily summaries, newest first.
+
+    Case-insensitive substring match: every whitespace-separated term must appear
+    in the recap's readable text (headline, overview, highlights, action items,
+    questions, decisions, knowledge nuggets, learned memories, place addresses).
+    Only the latest 365 summaries are scanned.
+    """
+    summaries = daily_summaries_db.get_daily_summaries(uid, limit=DAILY_SUMMARY_SEARCH_WINDOW, offset=0)
+    return {'summaries': filter_daily_summaries(summaries, query, limit)}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
@@ -2006,7 +2076,10 @@ def regenerate_daily_summary(
             start_date_utc = start_of_day.astimezone(pytz.utc)
             end_date_utc = end_of_day.astimezone(pytz.utc)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+            logger.error(
+                f"Failed to resolve user timezone for day conversations (uid={uid}): {sanitize(str(e))}", exc_info=True
+            )
+            raise HTTPException(status_code=500, detail='Failed to resolve user timezone.')
     else:
         start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
         end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
@@ -2120,7 +2193,8 @@ def update_mentor_notification_settings(
     try:
         notification_db.set_mentor_notification_frequency(uid, data.frequency)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Failed to set mentor notification frequency: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=400, detail="Invalid frequency. Must be between 0 and 5.")
 
     return {'status': 'ok'}
 

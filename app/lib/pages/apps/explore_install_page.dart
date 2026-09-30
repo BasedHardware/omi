@@ -23,7 +23,7 @@ import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/widgets/home_bottom_bar.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
@@ -38,7 +38,11 @@ String filterValueToString(dynamic value) {
 
 class ExploreInstallPage extends StatefulWidget {
   final ScrollController? scrollController;
-  const ExploreInstallPage({super.key, this.scrollController});
+
+  /// Slivers shown above the catalog's search bar in the same scroll view (Integrations puts the
+  /// connected services there).
+  final List<Widget> leadingSlivers;
+  const ExploreInstallPage({super.key, this.scrollController, this.leadingSlivers = const []});
 
   @override
   State<ExploreInstallPage> createState() => ExploreInstallPageState();
@@ -98,7 +102,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         }
 
         return SliverPadding(
-          padding: EdgeInsets.only(bottom: bottomNavBarClearance(context), left: 20, right: 20, top: 20),
+          padding: EdgeInsets.only(bottom: homeBottomClearance(context), left: 20, right: 20, top: 20),
           sliver: SliverList.separated(
             itemCount: filteredApps.length,
             separatorBuilder: (context, index) => const SizedBox(height: 8),
@@ -133,7 +137,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         }).toList();
 
         return SliverPadding(
-          padding: EdgeInsets.only(top: 8, bottom: bottomNavBarClearance(context)),
+          padding: EdgeInsets.only(top: 8, bottom: homeBottomClearance(context)),
           sliver: SliverList.builder(
             itemCount: filteredGroups.length,
             itemBuilder: (context, index) {
@@ -213,26 +217,26 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             Expanded(
               child: Container(
                 height: 48,
-                decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
               ),
             ),
             const SizedBox(width: OmiSpacing.xs),
             Container(
               width: 44,
               height: 48,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             ),
             const SizedBox(width: OmiSpacing.xs),
             Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             ),
             const SizedBox(width: OmiSpacing.xs),
             Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             ),
           ],
         ),
@@ -257,13 +261,13 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                   Container(
                     width: 140,
                     height: 20,
-                    decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+                    decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
                   ),
                   const Spacer(),
                   Container(
                     width: 60,
                     height: 20,
-                    decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+                    decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
                   ),
                 ],
               ),
@@ -289,7 +293,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                       Container(
                         width: 60,
                         height: 60,
-                        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+                        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
                       ),
                       const SizedBox(width: OmiSpacing.sm),
                       Expanded(
@@ -300,13 +304,13 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                             Container(
                               width: double.infinity,
                               height: 16,
-                              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+                              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
                             ),
                             const SizedBox(height: OmiSpacing.xxs),
                             Container(
                               width: 80,
                               height: 12,
-                              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+                              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
                             ),
                           ],
                         ),
@@ -315,7 +319,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                       Container(
                         width: 60,
                         height: 28,
-                        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
                       ),
                     ],
                   ),
@@ -338,7 +342,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         _buildShimmerCategorySection(),
         _buildShimmerCategorySection(),
         _buildShimmerCategorySection(),
-        SizedBox(height: bottomNavBarClearance(context)),
+        SizedBox(height: homeBottomClearance(context)),
       ],
     );
   }
@@ -395,6 +399,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
               controller: widget.scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
+                ...widget.leadingSlivers,
                 const SliverToBoxAdapter(child: SizedBox(height: 4)),
 
                 // Top bar with search and filters - show shimmer when loading
@@ -419,8 +424,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                     ? SizedBox(
                                         height: kOmiMinTapTarget,
                                         child: Container(
-                                          decoration: const BoxDecoration(
-                                              color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                                          decoration:
+                                              BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
                                           child: OmiIconButton(
                                             icon: const Icon(Icons.search, size: 20),
                                             color: OmiColors.textSecondary,
@@ -453,8 +458,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               height: 44,
                                               child: SearchBar(
                                                 hintText: context.l10n.searchAppsPlaceholder,
-                                                leading: const Padding(
-                                                  padding: EdgeInsets.only(left: OmiSpacing.xs),
+                                                leading: Padding(
+                                                  padding: const EdgeInsets.only(left: OmiSpacing.xs),
                                                   child: Icon(Icons.search, color: OmiColors.textSecondary, size: 20),
                                                 ),
                                                 backgroundColor: WidgetStateProperty.all(OmiColors.surface1),
@@ -522,7 +527,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: const FaIcon(
+                                          icon: FaIcon(
                                             FontAwesomeIcons.download,
                                             size: 16,
                                             color: OmiColors.textPrimary,
@@ -545,8 +550,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                       child: AnimatedContainer(
                                         duration: const Duration(milliseconds: 200),
                                         curve: Curves.easeInOut,
-                                        decoration: const BoxDecoration(
-                                            color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                                        decoration:
+                                            BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
                                         child: OmiIconButton(
                                           icon: const FaIcon(FontAwesomeIcons.download, size: 16),
                                           label: context.l10n.installedApps,
@@ -583,7 +588,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             HapticFeedback.mediumImpact();
                                             FilterBottomSheet.show(context);
                                           },
-                                          icon: const FaIcon(
+                                          icon: FaIcon(
                                             FontAwesomeIcons.filter,
                                             size: 16,
                                             color: OmiColors.textPrimary,

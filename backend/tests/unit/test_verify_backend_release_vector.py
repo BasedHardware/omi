@@ -544,7 +544,10 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert '--dry-run' in plan
     assert '--dry-run' in plan
     assert '--dry-run' not in apply
-    assert '--timeout-seconds 3600' in apply
+    assert 'timeout-minutes: 240' in composite
+    assert 'timeout-minutes: 240' in development
+    assert '--timeout-seconds 10800' in apply
+    assert '--timeout-seconds 10800' in development
 
     # Firestore documents `gcloud firestore indexes fields update --disable-indexes`
     # as an explicit field override that does not affect composites. Keep that

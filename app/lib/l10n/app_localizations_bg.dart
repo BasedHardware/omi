@@ -2494,12 +2494,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Подробни диагностични съобщения';
 
   @override
-  String get autoCreateSpeakers => 'Автоматично създаване на говорители';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Автоматично създаване при откриване на име';
-
-  @override
   String get followUpQuestions => 'Последващи въпроси';
 
   @override
@@ -10146,12 +10140,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Звукът не може да се прочете — синхронизирането е невъзможно';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11214,9 +11202,6 @@ class AppLocalizationsBg extends AppLocalizations {
       'Транскрипциите са недостъпни, записването продължава на устройството и ще бъде обработено по-късно';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Транскрипцията е недостъпна · записва се на устройството';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Чакащи транскрипции $pending/$total';
   }
@@ -11274,5 +11259,419 @@ class AppLocalizationsBg extends AppLocalizations {
   String get openCall => 'Отвори обаждането';
 
   @override
-  String get captureRecoveryBanner => 'Звукът от висулката не достига до приложението — докоснете, за да поправите';
+  String get captureRecoveryBanner => 'Omi не изпраща аудио — докоснете, за да се свържете отново';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Спрете Transcribe Later на висулката си, преди да записвате с телефона.';
+
+  @override
+  String get captureNotTranscribing => 'Без транскрипция';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Аудиото е запазено, транскрипция по-късно';
+
+  @override
+  String get captureStillRecording => 'Записът продължава';
+
+  @override
+  String get captureMicInUseElsewhere => 'Микрофонът се използва от друго приложение';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Обаждане или друго приложение зае микрофона, затова Omi не може да чува в момента. Omi ще продължи сам, когато микрофонът се освободи. Всичко записано дотук е запазено.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Вашата собствена услуга за преобразуване на реч в текст е недостъпна. Omi пази аудиото на този телефон и ще го изпрати, когато услугата се върне. Нищо не се губи.';
+
+  @override
+  String get captureStarting => 'Стартиране…';
+
+  @override
+  String get capturePhoneStorageFull => 'Паметта на телефона е пълна';
+
+  @override
+  String get captureStorageAlmostFull => 'Паметта е почти пълна';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name и други';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Чуйте отговорите на Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Готово. Следващата ви среща започва след двадесет минути.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Всичко е готово';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Докоснете ред, за да го прегледате или промените.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Когато питате с бутона, Omi може да прочете отговора си на глас.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Чуйте последния си отговор';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Пускане на последния ви отговор...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Чрез $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'През високоговорителя на телефона';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Чрез текущия аудио изход';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Отговорите остават на екрана. Нищо не се говори.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Частно. Говори само чрез AirPods, Bluetooth или кабелни слушалки.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Използва високоговорителя на телефона, когато няма свързани слушалки.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi ще мълчи. Отговорите все още се показват в приложението.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device свързан. Omi ще говори тук.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Няма свързани слушалки. Omi мълчи, докато не свържете някои.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Играе през $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Възпроизвежда на висок глас през високоговорителя на телефона.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Можете да промените това по всяко време в $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Повторете тази обиколка по всяко време в $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Слушалки';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'минути';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Задачи';
+
+  @override
+  String get usageMonth => 'Този месец';
+
+  @override
+  String get usageYear => 'Тази година';
+
+  @override
+  String get usageAll => 'Цялото време';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Облик';
+
+  @override
+  String get appearanceSystem => 'Система';
+
+  @override
+  String get appearanceLight => 'Светла';
+
+  @override
+  String get appearanceDark => 'Тъмна';
+
+  @override
+  String get chatDiscardRecording => 'Отхвърляне';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Не разбрах — опитайте отново';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Търсене на хора';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Добавяне на „$query“ като нов човек';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Показване на всички хора ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Здравей, $name, питай каквото искаш';
+  }
+
+  @override
+  String get activity => 'Активност';
+
+  @override
+  String get places => 'Места';
+
+  @override
+  String get recaps => 'Обобщения';
+
+  @override
+  String get recent => 'Скорошни';
+
+  @override
+  String get searchPartialFailure => 'Някои резултати не можаха да се заредят';
+
+  @override
+  String get peopleSearchPlaceholder => 'Търсене на хора';
+
+  @override
+  String get peopleNotHeardYet => 'Все още не са чути';
+
+  @override
+  String get peopleRecent => 'Скорошни';
+
+  @override
+  String get deletePeopleMessage =>
+      'Това премахва гласовите им проби и не може да бъде отменено. Репликите им в минали разговори стават безименни говорители.';
+
+  @override
+  String get personTalkTime => 'Време за говорене';
+
+  @override
+  String get personLastHeard => 'Последно чут';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Изтриване на $count души?',
+      one: 'Изтриване на 1 човек?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Нужен глас';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count души',
+      one: '1 човек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Няма съвпадащи хора';
+
+  @override
+  String get deselectAll => 'Размаркирай всички';
+
+  @override
+  String get voiceRecognitionSettings => 'Разпознаване на глас';
+
+  @override
+  String get greetingMorning => 'Добро утро';
+
+  @override
+  String get greetingAfternoon => 'Добър ден';
+
+  @override
+  String get greetingEvening => 'Добър вечер';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Какво искате да знаете?';
+
+  @override
+  String get askSuggestDecide => 'Какво реших днес?';
+
+  @override
+  String get askSuggestOwe => 'Какво още дължа на хората?';
+
+  @override
+  String get askSuggestNotice => 'Какво забеляза Omi?';
+
+  @override
+  String get pastChats => 'Предишни чатове';
+
+  @override
+  String get newChat => 'Нов чат';
+
+  @override
+  String get startFresh => 'Започнете отначало';
+
+  @override
+  String get noPastChats => 'Чатовете ви с Omi се показват тук.';
+
+  @override
+  String get deleteChatQuestion => 'Да се изтрие ли този чат?';
+
+  @override
+  String get deleteChatMessage => 'Ще изчезне от предишните чатове завинаги.';
+
+  @override
+  String get deleteChat => 'Изтрий чата';
+
+  @override
+  String get appsAskWith => 'Питай Omi с';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговора днес.',
+      one: '1 разговор днес.',
+      zero: 'Днес няма разговори.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Какво имаше на екрана';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Екранна снимка от тази среща';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Изтриване на екранната снимка?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Екранната снимка ще бъде премахната от бележката за тази среща. Това не може да бъде отменено.';
+
+  @override
+  String get conversationSummaryFailed => 'Резюмето не бе създадено';
 }

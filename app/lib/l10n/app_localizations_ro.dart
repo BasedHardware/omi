@@ -2500,12 +2500,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Mesaje de diagnostic detaliate';
 
   @override
-  String get autoCreateSpeakers => 'Creați automat vorbitori';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Creare automată când se detectează un nume';
-
-  @override
   String get followUpQuestions => 'Întrebări de urmărire';
 
   @override
@@ -10155,12 +10149,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio nu a putut fi citit — nu poate fi sincronizat';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11224,9 +11212,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Transcrierile nu sunt disponibile, înregistrarea continuă pe dispozitiv și va fi procesată mai târziu';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transcriere indisponibilă · se salvează pe dispozitiv';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transcrieri în așteptare $pending/$total';
   }
@@ -11284,5 +11269,420 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openCall => 'Deschide apelul';
 
   @override
-  String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
+  String get captureRecoveryBanner => 'Omi nu trimite audio — atinge pentru a reconecta';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Opriți Transcribe Later pe pandantiv înainte de a înregistra cu telefonul.';
+
+  @override
+  String get captureNotTranscribing => 'Fără transcriere';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio salvat, transcris mai târziu';
+
+  @override
+  String get captureStillRecording => 'Înregistrarea continuă';
+
+  @override
+  String get captureMicInUseElsewhere => 'Microfonul e folosit de altă aplicație';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Un apel sau altă aplicație a preluat microfonul, așa că Omi nu poate asculta acum. Omi va relua singur când microfonul devine liber. Tot ce s-a înregistrat înainte este în siguranță.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Serviciul tău personalizat de transformare a vorbirii în text nu poate fi accesat. Omi păstrează sunetul pe acest telefon și îl trimite când serviciul revine. Nu se pierde nimic.';
+
+  @override
+  String get captureStarting => 'Se pornește…';
+
+  @override
+  String get capturePhoneStorageFull => 'Spațiul telefonului e plin';
+
+  @override
+  String get captureStorageAlmostFull => 'Spațiul e aproape plin';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name și alții';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Ascultă răspunsurile Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Am înțeles. Următoarea întâlnire începe peste douăzeci de minute.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Totul este pregătit';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Atinge un rând pentru a-l verifica sau modifica.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Când întrebați cu butonul, Omi își poate citi răspunsul cu voce tare.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Ascultă ultimul tău răspuns';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Redac ultimul răspuns...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Prin $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Prin difuzorul telefonului';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Prin ieșirea audio curentă';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Răspunsurile rămân pe ecran. Nu se vorbeste nimic.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privat. Vorbește doar prin AirPods, Bluetooth sau căști cu fir.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Utilizează difuzorul telefonului când nu sunt conectate căști.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi va rămâne tăcut. Răspunsurile apar în continuare în aplicație.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device conectat. Omi va vorbi aici.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nu există căști conectate. Omi rămâne tăcut până când conectați unele.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Redă prin $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Redă cu voce tare prin difuzorul telefonului.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Puteți schimba oricând acest lucru în $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Reluați acest tur oricând în $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Căști';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minute';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Sarcini';
+
+  @override
+  String get usageMonth => 'Luna aceasta';
+
+  @override
+  String get usageYear => 'Anul acesta';
+
+  @override
+  String get usageAll => 'Toate timpurile';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Aspect';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Luminos';
+
+  @override
+  String get appearanceDark => 'Întunecat';
+
+  @override
+  String get chatDiscardRecording => 'Renunță';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nu am înțeles — încearcă din nou';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Caută persoane';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Adaugă \"$query\" ca persoană nouă';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Afișează toate cele $count persoane';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Salut $name, întreabă orice';
+  }
+
+  @override
+  String get activity => 'Activitate';
+
+  @override
+  String get places => 'Locuri';
+
+  @override
+  String get recaps => 'Rezumate';
+
+  @override
+  String get recent => 'Recente';
+
+  @override
+  String get searchPartialFailure => 'Unele rezultate nu au putut fi încărcate';
+
+  @override
+  String get peopleSearchPlaceholder => 'Caută persoane';
+
+  @override
+  String get peopleNotHeardYet => 'Încă neauzit';
+
+  @override
+  String get peopleRecent => 'Recente';
+
+  @override
+  String get deletePeopleMessage =>
+      'Aceasta le elimină mostrele vocale și nu poate fi anulată. Replicile lor din conversațiile trecute devin vorbitori fără nume.';
+
+  @override
+  String get personTalkTime => 'Timp de vorbire';
+
+  @override
+  String get personLastHeard => 'Ultima ascultare';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ștergi persoane: $count?',
+      one: 'Ștergi 1 persoană?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Necesită voce';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Persoane: $count',
+      one: '1 persoană',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nicio persoană potrivită';
+
+  @override
+  String get deselectAll => 'Deselectează tot';
+
+  @override
+  String get voiceRecognitionSettings => 'Recunoaștere vocală';
+
+  @override
+  String get greetingMorning => 'Bună dimineața';
+
+  @override
+  String get greetingAfternoon => 'Bună ziua';
+
+  @override
+  String get greetingEvening => 'Bună seara';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ce vrei să afli?';
+
+  @override
+  String get askSuggestDecide => 'Ce am decis azi?';
+
+  @override
+  String get askSuggestOwe => 'Ce le mai datorez oamenilor?';
+
+  @override
+  String get askSuggestNotice => 'Ce a observat Omi?';
+
+  @override
+  String get pastChats => 'Conversații anterioare';
+
+  @override
+  String get newChat => 'Conversație nouă';
+
+  @override
+  String get startFresh => 'Începe de la capăt';
+
+  @override
+  String get noPastChats => 'Conversațiile tale cu Omi apar aici.';
+
+  @override
+  String get deleteChatQuestion => 'Ștergi această conversație?';
+
+  @override
+  String get deleteChatMessage => 'Dispare definitiv din conversațiile anterioare.';
+
+  @override
+  String get deleteChat => 'Șterge conversația';
+
+  @override
+  String get appsAskWith => 'Întreabă Omi cu';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversații azi.',
+      one: '1 conversație azi.',
+      zero: 'Nicio conversație azi.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Ce era pe ecran';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Captură de ecran din această întâlnire';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Ștergi captura de ecran?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Captura de ecran va fi eliminată din nota acestei întâlniri. Acțiunea nu poate fi anulată.';
+
+  @override
+  String get conversationSummaryFailed => 'Rezumatul a eșuat';
 }

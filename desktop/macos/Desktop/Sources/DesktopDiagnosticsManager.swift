@@ -1438,6 +1438,7 @@ final class DesktopDiagnosticsManager {
     "ptt_input_routing",
     "account_cutover",
     "voice_typing",
+    "rewind_database", "meeting_screen_evidence",
     "other",
   ]
 

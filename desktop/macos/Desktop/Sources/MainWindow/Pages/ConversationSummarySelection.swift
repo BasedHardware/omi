@@ -91,6 +91,70 @@ enum ConversationSummarySelection {
     return ids.filter { valid.contains($0) && seen.insert($0).inserted }
   }
 
+  /// Read-time compatibility for older summaries that rendered evidence IDs as Markdown links.
+  /// Only citation-only syntax made entirely from known transcript IDs is removed. Ordinary prose
+  /// and unknown UUID-like text remain untouched, and the stored conversation is never rewritten.
+  static func presentableSection(_ section: SummarySection, segments: [TranscriptSegment]) -> SummarySection {
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } })
+    guard !valid.isEmpty else { return section }
+
+    var body = section.bodyMarkdown
+    var recovered = section.sourceSegmentIDs
+    var didRecover = false
+    let removalMarker = "\u{E000}"
+    let parenthetical = try? NSRegularExpression(pattern: #"(?<!\])\(((?:[^()\n]|\([^()\n]*\))+?)\)"#)
+    let wholeRange = NSRange(body.startIndex..<body.endIndex, in: body)
+    let matches = parenthetical?.matches(in: body, range: wholeRange) ?? []
+    for match in matches.reversed() {
+      guard let groupRange = Range(match.range(at: 1), in: body),
+        let matchRange = Range(match.range(at: 0), in: body)
+      else { continue }
+      let tokens = body[groupRange].split(whereSeparator: { $0 == ";" || $0 == "," })
+      let ids = tokens.compactMap { citationTokenID(String($0), valid: valid) }
+      guard !tokens.isEmpty, ids.count == tokens.count else { continue }
+      recovered.append(contentsOf: ids)
+      body.replaceSubrange(matchRange, with: removalMarker)
+      didRecover = true
+    }
+
+    for sourceID in valid.sorted(by: { $0.count > $1.count }) {
+      let escaped = NSRegularExpression.escapedPattern(for: sourceID)
+      let pattern = #"\["# + escaped + #"\]\([^\n)]*\)"#
+      guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+      let range = NSRange(body.startIndex..<body.endIndex, in: body)
+      if regex.firstMatch(in: body, range: range) != nil {
+        recovered.append(sourceID)
+        body = regex.stringByReplacingMatches(in: body, range: range, withTemplate: removalMarker)
+        didRecover = true
+      }
+    }
+
+    guard didRecover else { return section }
+    let escapedRemovalMarker = NSRegularExpression.escapedPattern(for: removalMarker)
+    body =
+      body
+      .replacingOccurrences(of: #"[ \t]+"# + escapedRemovalMarker + #"[ \t]+"#, with: " ", options: .regularExpression)
+      .replacingOccurrences(
+        of: #"[ \t]+"# + escapedRemovalMarker + #"(?=[,.;:]|\n|$)"#, with: "", options: .regularExpression
+      )
+      .replacingOccurrences(of: escapedRemovalMarker + #"[ \t]+"#, with: "", options: .regularExpression)
+      .replacingOccurrences(of: removalMarker, with: "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let sourceIDs = resolvableSourceIDs(recovered, segments: segments)
+    return SummarySection(heading: section.heading, bodyMarkdown: body, sourceSegmentIDs: sourceIDs)
+  }
+
+  private static func citationTokenID(_ token: String, valid: Set<String>) -> String? {
+    let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+    if valid.contains(trimmed) { return trimmed }
+    guard let regex = try? NSRegularExpression(pattern: #"^\[([^\]]+)\]\([^\n)]*\)$"#),
+      let match = regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+      let labelRange = Range(match.range(at: 1), in: trimmed)
+    else { return nil }
+    let label = String(trimmed[labelRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+    return valid.contains(label) ? label : nil
+  }
+
   /// Suggested "Try with Apps" rows: memories-capable apps that have not
   /// produced a result for this conversation yet.
   ///

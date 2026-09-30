@@ -2443,12 +2443,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get detailedDiagnosticMessages => '详细诊断消息';
 
   @override
-  String get autoCreateSpeakers => '自动创建说话者';
-
-  @override
-  String get autoCreateWhenNameDetected => '检测到名称时自动创建';
-
-  @override
   String get followUpQuestions => '后续问题';
 
   @override
@@ -9917,12 +9911,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusUnsupportedAudio => '无法读取音频，无法同步';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -10968,9 +10956,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => '转录不可用 · 正在设备上保存';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return '待处理转录 $pending/$total';
   }
@@ -11028,5 +11013,409 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openCall => '打开通话';
 
   @override
-  String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
+  String get captureRecoveryBanner => 'Omi 未发送音频 — 轻点以重新连接';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
+
+  @override
+  String get captureNotTranscribing => '未在转录';
+
+  @override
+  String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
+
+  @override
+  String get captureStillRecording => '仍在录音';
+
+  @override
+  String get captureMicInUseElsewhere => '麦克风被其他应用占用';
+
+  @override
+  String get captureMicInterruptedDetail => '通话或其他应用占用了麦克风，因此 Omi 现在无法收音。麦克风空闲后 Omi 会自动继续。此前录下的内容都已保存。';
+
+  @override
+  String get captureCustomSttUnreachableDetail => '无法连接到你的自定义语音转文字服务。Omi 会把音频保存在这部手机上，服务恢复后再发送。不会丢失任何内容。';
+
+  @override
+  String get captureStarting => '正在启动…';
+
+  @override
+  String get capturePhoneStorageFull => '手机存储空间已满';
+
+  @override
+  String get captureStorageAlmostFull => '存储空间即将用完';
+
+  @override
+  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name等人';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => '聆听 Omi 的回答';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => '明白了。你的下一场会议将在二十分钟后开始。';
+
+  @override
+  String get deviceOnboardingAllSetTitle => '一切准备就绪';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => '轻点一行即可查看或更改。';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => '当您使用按钮询问时，Omi 可以大声读出答案。';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => '听听你最后的回答';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => '正在播放您的最后一个答案...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '通过$device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => '通过手机扬声器';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => '通过当前音频输出';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => '答案保留在屏幕上。什么也没说。';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription => '私人的。仅通过 AirPods、Bluetooth 或有线耳机通话。';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => '未连接耳机时使用手机扬声器。';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi将保持沉默。答案仍然出现在应用程序中。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device已连接。 Omi 在此发言。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => '未连接耳机。 Omi 保持沉默，直到您接通一些。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '播放至 $device。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => '通过手机扬声器大声播放。';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return '您可以随时在 $settings › $voiceResponse 中更改此设置';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return '随时重播此导览 $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => '耳机';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => '分钟';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => '任务';
+
+  @override
+  String get usageMonth => '本月';
+
+  @override
+  String get usageYear => '今年';
+
+  @override
+  String get usageAll => '全部时间';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => '外观';
+
+  @override
+  String get appearanceSystem => '系统';
+
+  @override
+  String get appearanceLight => '浅色';
+
+  @override
+  String get appearanceDark => '深色';
+
+  @override
+  String get chatDiscardRecording => '放弃';
+
+  @override
+  String get voiceQuestionNoSpeech => '没听清楚 — 请再试一次';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => '提供反馈';
+
+  @override
+  String get feedbackAllGood => '一切正常';
+
+  @override
+  String get feedbackChatWithUs => '想补充细节？和我们聊聊';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '不准确';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '不完整';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '不相关';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '语境不对';
+
+  @override
+  String get feedbackReasonSummaryOther => '其他问题';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '缺少音频';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '转写质量差';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '说话人错误';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '延迟或卡住';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '断断续续或重复';
+
+  @override
+  String get feedbackReasonRecordingOther => '其他问题';
+
+  @override
+  String get searchPeople => '搜索人员';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '将“$query”添加为新人员';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '显示全部 $count 人';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return '你好，$name，随便问吧';
+  }
+
+  @override
+  String get activity => '活动';
+
+  @override
+  String get places => '地点';
+
+  @override
+  String get recaps => '回顾';
+
+  @override
+  String get recent => '最近';
+
+  @override
+  String get searchPartialFailure => '部分结果无法加载';
+
+  @override
+  String get peopleSearchPlaceholder => '搜索人物';
+
+  @override
+  String get peopleNotHeardYet => '尚未听过';
+
+  @override
+  String get peopleRecent => '最近';
+
+  @override
+  String get deletePeopleMessage => '这将删除他们的声音样本，且无法撤销。他们在过往对话中的发言将变为未命名的说话人。';
+
+  @override
+  String get personTalkTime => '说话时长';
+
+  @override
+  String get personLastHeard => '最近一次听到';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 个人？',
+      one: '删除 1 个人？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => '需要声音';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 人',
+      one: '1 人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '没有匹配的人';
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
+  String get voiceRecognitionSettings => '声音识别';
+
+  @override
+  String get greetingMorning => '早上好';
+
+  @override
+  String get greetingAfternoon => '下午好';
+
+  @override
+  String get greetingEvening => '晚上好';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting，$name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => '你想知道什么？';
+
+  @override
+  String get askSuggestDecide => '我今天决定了什么？';
+
+  @override
+  String get askSuggestOwe => '我还欠别人什么？';
+
+  @override
+  String get askSuggestNotice => 'Omi 注意到了什么？';
+
+  @override
+  String get pastChats => '过往聊天';
+
+  @override
+  String get newChat => '新聊天';
+
+  @override
+  String get startFresh => '重新开始';
+
+  @override
+  String get noPastChats => '你和 Omi 的聊天会显示在这里。';
+
+  @override
+  String get deleteChatQuestion => '删除这个聊天？';
+
+  @override
+  String get deleteChatMessage => '它会从过往聊天中永久消失。';
+
+  @override
+  String get deleteChat => '删除聊天';
+
+  @override
+  String get appsAskWith => '用这些向 Omi 提问';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '今天有 $count 段对话。',
+      one: '今天有 1 段对话。',
+      zero: '今天还没有对话。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => '屏幕上显示的内容';
+
+  @override
+  String get meetingScreenshotFallbackCaption => '本次会议的屏幕截图';
+
+  @override
+  String get deleteMeetingScreenshotTitle => '删除屏幕截图？';
+
+  @override
+  String get deleteMeetingScreenshotMessage => '这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。';
+
+  @override
+  String get conversationSummaryFailed => '摘要生成失败';
 }

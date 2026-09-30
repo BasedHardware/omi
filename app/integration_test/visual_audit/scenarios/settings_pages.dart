@@ -8,6 +8,9 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/pages/goals/goals_page.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/payments/payments_page.dart';
@@ -18,6 +21,7 @@ import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/notifications_settings_page.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/pages/settings/person_detail_page.dart';
 import 'package:omi/pages/settings/phone_call_settings_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -27,11 +31,29 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 
+import '../fakes.dart';
 import '../harness.dart';
 
 const _account = 'Signed-in fixture account; no device connected';
 
 final settingsPagesScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'settings-goals',
+    title: 'Settings › Goals',
+    page: 'lib/pages/goals/goals_page.dart (GoalsPage)',
+    state: 'Two goals: one halfway, one just started',
+    run: (a) async {
+      final goals = GoalsProvider(
+          goalsFetcher: () async => [
+                Goal.fromJson({'id': 'g1', 'title': 'Read 12 books', 'current_value': 6, 'target_value': 12}),
+                Goal.fromJson({'id': 'g2', 'title': 'Run 100 km', 'current_value': 12, 'target_value': 100}),
+              ]);
+      await a.tester.runAsync(goals.init);
+      await a.pump(const GoalsPage(),
+          scaffold: false, providers: [ChangeNotifierProvider<GoalsProvider>.value(value: goals)]);
+      await a.shot('Open Settings › Goals');
+    },
+  ),
   AuditScenario(
     id: 'settings-developer',
     title: 'Developer settings',
@@ -135,23 +157,35 @@ final settingsPagesScenarios = <AuditScenario>[
   ),
   AuditScenario(
     id: 'settings-people',
-    title: 'People with one enrolled person',
+    title: 'People with stats: recent and not-heard groups, filters',
     page: 'lib/pages/settings/people.dart (UserPeoplePage)',
-    state: 'PeopleProvider holding one person (Alex) with one speech sample',
+    state: 'PeopleProvider holding six people with conversation stats and mixed voice readiness',
     run: (a) async {
-      final people = PeopleProvider(
-          loadPeople: () async => [
-                Person(
-                  id: 'p1',
-                  name: 'Alex',
-                  createdAt: DateTime.utc(2026, 9, 1),
-                  updatedAt: DateTime.utc(2026, 9, 1),
-                  speechSamples: const ['https://example.invalid/sample-0.wav'],
-                  speechSampleTranscripts: const ['Hello there'],
-                ),
-              ]);
+      final people = _auditPeople();
       await a.pump(const UserPeoplePage(), providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
-      await a.shot('Open People with one enrolled person');
+      expect(find.text('Recent'), findsOneWidget);
+      await a.shot('Open People');
+      await a.tap(find.byKey(const Key('people_select')));
+      await a.tap(find.text('Maya Chen'));
+      await a.tap(find.text('Jordan Lee'));
+      await a.shot('Tap Select, then two people', step: 'select');
+    },
+  ),
+  AuditScenario(
+    id: 'settings-person-detail',
+    title: 'One person: header, stats, voice samples, conversations',
+    page: 'lib/pages/settings/person_detail_page.dart (PersonDetailPage)',
+    state: 'Maya (voice ready, one sample) with two seeded conversations',
+    run: (a) async {
+      a.server.conversations
+        ..add(auditConversation('pd-1', title: 'Roadmap review').toJson())
+        ..add(auditConversation('pd-2', title: 'Coffee catch-up').toJson());
+      final people = _auditPeople();
+      await people.refresh();
+      await a.pump(const PersonDetailPage(personId: 'p-maya'),
+          providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
+      expect(find.text('Roadmap review'), findsOneWidget);
+      await a.shot('Open Maya from People');
     },
   ),
   AuditScenario(
@@ -266,4 +300,31 @@ class _PlansHostState extends State<_PlansHost> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) => PlansSheet(
       waveController: _wave, notesController: _notes, arrowController: _arrow, arrowAnimation: _arrowAnimation);
+}
+
+PeopleProvider _auditPeople() {
+  final now = DateTime.now();
+  Person person(String id, String name, {int? count, int? daysAgo, String voice = 'not_learned', int samples = 0}) =>
+      Person(
+        id: id,
+        name: name,
+        createdAt: DateTime.utc(2026, 9, 1),
+        updatedAt: DateTime.utc(2026, 9, 1),
+        voiceReadiness: voice,
+        speechSamples: [for (var i = 0; i < samples; i++) 'https://example.invalid/sample-$i.wav'],
+        speechSampleTranscripts: [for (var i = 0; i < samples; i++) 'Let us move the review to Thursday'],
+        conversationCount: count,
+        lastHeardAt: daysAgo == null ? null : now.subtract(Duration(days: daysAgo)),
+        talkSeconds: count == null ? null : count * 245.0,
+      );
+  return PeopleProvider(
+    loadPeople: () async => [
+      person('p-maya', 'Maya Chen', count: 24, daysAgo: 0, voice: 'ready', samples: 1),
+      person('p-jordan', 'Jordan Lee', count: 9, daysAgo: 1, voice: 'ready', samples: 2),
+      person('p-sam', 'Sam Okafor', count: 5, daysAgo: 6, voice: 'saved_sample_awaiting_embedding', samples: 1),
+      person('p-priya', 'Priya Natarajan', count: 2, daysAgo: 30),
+      person('p-leo', 'Leo', count: 0),
+      person('p-ines', 'Inês Moreira', count: 0),
+    ],
+  );
 }

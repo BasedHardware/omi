@@ -7,7 +7,6 @@
 # amortizes that process's module import (FastAPI app / router / database graph) into its call.
 # This is structural, not a per-test regression. They STAY in the PR unit lane; this file only
 # suppresses the duration guard for these baseline node IDs. NEW slow tests are still flagged.
-#
 # To shrink this list: (a) migrate the runner to a single pytest session (BACKEND_PYTEST_FILE_ISOLATION=0)
 # so imports are paid once per worker instead of per file, or (b) raise BACKEND_FAST_UNIT_FAIL_SECONDS.
 # Genuinely non-unit tests (real asyncio sleeps, network, stress, codebase greps, full-app wiring,
@@ -361,4 +360,15 @@ tests/unit/test_daily_summary_generation.py::test_create_route_happy_path
 tests/unit/test_plan_quota_env_retirement.py::test_deploy_actions_strip_the_overlays_from_every_cloud_run_service[dev]
 tests/unit/test_plan_quota_env_retirement.py::test_deploy_actions_strip_the_overlays_from_every_cloud_run_service[prod]
 tests/unit/test_verify_backend_release_vector.py::test_legacy_binding_migration_rejects_multi_container_services_without_mutation
+tests/unit/test_windows_rest_inventory.py::test_every_in_scope_windows_rest_route_exists_in_app_client_openapi
+tests/unit/test_windows_rest_inventory.py::test_known_missing_routes_do_not_rot
+tests/unit/test_windows_rest_inventory.py::test_windows_sources_exist_and_declare_backend_routes
+tests/unit/test_windows_rest_inventory.py::test_out_of_scope_prefixes_match_at_least_one_route
+tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_enabled_surface_without_enabled_job
 tests/unit/test_selfheal_recovery.py::test_recovery_minimum_structure_raises_before_persist_or_fanout
+# First await of terminate_live_stt_session pays the lazy provider/telemetry import; measured 0.16-0.57s CPU
+# locally under full-suite load (2026-09-28, flaked pre-push on main-based branches), <0.30s when warm.
+tests/unit/test_live_stt_failure.py::test_terminal_live_failure_still_closes_when_status_delivery_fails
+# First test of the file amortizes the coordinator/translation import graph into its call;
+# measured 0.49s CPU in the pre-push isolated-file runner (2026-09-29), <0.3s when warm.
+tests/unit/test_translation_coordinator_demand.py::test_demand_hidden_during_reservation_blocks_dispatch

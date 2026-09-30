@@ -36,10 +36,10 @@ import 'package:omi/pages/conversations/capture_state_labels.dart';
 
 import 'capture_state_header.dart';
 
-/// Switch the home IndexedStack to Conversations *before* popping the capturing
-/// route so the user lands on that tab with no flash of the previous page.
+/// Switch the home IndexedStack to Home (the conversation list) *before* popping the capturing
+/// route so the user lands there with no flash of the previous page.
 void switchHomeToConversationsTab(BuildContext context) {
-  context.read<HomeProvider>().setIndex(1);
+  context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
 }
 
 class ConversationCapturingPage extends StatefulWidget {
@@ -75,7 +75,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       final phone = provider.liveCaptureSource == 'phone';
       if (provider.isPaused) {
         await provider.resumeCapture();
-        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
+        if (phone && !provider.isPaused) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
         await provider.pauseCapture();
         if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
@@ -105,12 +105,19 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     Navigator.of(context).pop();
   }
 
-  /// The live page's state, resolved exactly as the conversation list's capture card resolves it
-  /// (`liveCaptureDisplayState`): an audio interruption, a mute or a call is Paused, a terminal
-  /// transcription failure or offline buffering is named as such, otherwise Listening.
+  /// The live page's state, resolved exactly as the Home capture card resolves it
+  /// (`captureInterruption` + `liveCaptureDisplayState`): the OS holding the mic, a mute or a call
+  /// is Paused, capture recovering on its own (a dropped socket, a mic stall) is Reconnecting, a
+  /// terminal transcription failure or offline buffering is named as such, otherwise Listening.
   CaptureDisplayState _displayState(CaptureProvider provider, {required bool capturingPhotos}) {
+    final interruption = captureInterruption(
+      interrupted: provider.recordingState == RecordingState.interrupted,
+      readerPaused: provider.isPaused,
+      osHoldsMic: provider.isCallActive,
+    );
     return liveCaptureDisplayState(
-      audioInterrupted: provider.recordingState == RecordingState.interrupted,
+      audioInterrupted: interruption == CaptureInterruption.micTaken,
+      reconnecting: interruption == CaptureInterruption.recovering,
       paused: provider.isPaused || provider.isCallActive,
       transcriptionUnavailable: provider.terminalTranscriptionFailure != null,
       bufferingFor: provider.customSttBufferingDuration,
@@ -284,14 +291,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Camera icon avatar
-          const Column(
+          Column(
             children: [
               CircleAvatar(
                 radius: 16,
                 backgroundColor: OmiColors.surface2,
                 child: Icon(Icons.camera_alt, size: 16, color: OmiColors.textSecondary),
               ),
-              SizedBox(height: 2),
+              const SizedBox(height: 2),
             ],
           ),
           const SizedBox(width: 8),
@@ -331,7 +338,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.camera_alt, size: 12, color: OmiColors.textTertiary),
+                        Icon(Icons.camera_alt, size: 12, color: OmiColors.textTertiary),
                         const SizedBox(width: 4),
                         Text(
                           group.length > 1
@@ -457,14 +464,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           onTap: () => _editSegmentSpeaker(segment, provider),
           child: GestureDetector(
             onTap: () => _editSegmentSpeaker(segment, provider),
-            child: const Column(
+            child: Column(
               children: [
                 CircleAvatar(
                   radius: 16,
                   backgroundColor: OmiColors.surface2,
                   child: Icon(Icons.person, size: 16, color: OmiColors.textSecondary),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
               ],
             ),
           ),
@@ -611,7 +618,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
               ),
               if (!failed && !retrying && uploading) ...[
                 const SizedBox(width: 8),
-                const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
+                OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
               ],
             ],
           ),
@@ -649,5 +656,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       state == WalSyncDisplayState.failed ||
       state == WalSyncDisplayState.corrupted ||
       state == WalSyncDisplayState.outsideRecoveryWindow ||
-      state == WalSyncDisplayState.unsupportedAudio;
+      state == WalSyncDisplayState.unsupportedAudio ||
+      state == WalSyncDisplayState.uploadRejected;
 }

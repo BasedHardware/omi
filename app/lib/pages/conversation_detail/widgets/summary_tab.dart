@@ -12,15 +12,15 @@ import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
-import 'package:omi/services/experiments/experiment_registry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/widgets/experiments/experiment_builder.dart';
 import 'package:omi/widgets/app_review_prompt.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:uuid/uuid.dart';
 
+import 'conversation_screenshots_section.dart';
 import 'feedback_prompt_policy.dart';
+import 'feedback_sheet.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
@@ -92,50 +92,70 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
               children: [
                 CustomScrollView(
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+                  // The page leaves the side margin to each tab; everything here sits inside it
+                  // except the screenshot strip, which scrolls edge to edge.
                   slivers: [
-                    // Title and facts live in the page header, shared by every tab.
-                    const SliverToBoxAdapter(child: SizedBox(height: 4)),
-                    discarded
-                        ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
-                        : GetAppsWidgets(
-                            searchQuery: widget.searchQuery,
-                            currentResultIndex: widget.currentResultIndex,
-                            canStartEditing: () {
-                              final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                              if (!connectivityProvider.isConnected) {
-                                ConnectivityProvider.showNoInternetDialog(context);
-                                return false;
-                              }
-                              return true;
-                            },
-                            onEditStarted: (_) {
-                              setState(() => _isEditing = true);
-                              PlatformManager.instance.analytics.editSummaryStarted();
-                            },
-                            onEditCancelled: (_) {
-                              setState(() => _isEditing = false);
-                              PlatformManager.instance.analytics.editSummaryCancelled();
-                            },
-                            onSaveSummarySelection: (selection, newContent) {
-                              PlatformManager.instance.analytics.editSummarySaved();
-                              context.read<ConversationDetailProvider>().saveEditingSummarySelection(
-                                    selection,
-                                    newContent,
-                                  );
-                            },
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                      sliver: SliverMainAxisGroup(slivers: [
+                        // Title and facts live in the page header, shared by every tab.
+                        const SliverToBoxAdapter(child: SizedBox(height: 4)),
+                        discarded
+                            ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
+                            : GetAppsWidgets(
+                                searchQuery: widget.searchQuery,
+                                currentResultIndex: widget.currentResultIndex,
+                                canStartEditing: () {
+                                  final connectivityProvider =
+                                      Provider.of<ConnectivityProvider>(context, listen: false);
+                                  if (!connectivityProvider.isConnected) {
+                                    ConnectivityProvider.showNoInternetDialog(context);
+                                    return false;
+                                  }
+                                  return true;
+                                },
+                                onEditStarted: (_) {
+                                  setState(() => _isEditing = true);
+                                  PlatformManager.instance.analytics.editSummaryStarted();
+                                },
+                                onEditCancelled: (_) {
+                                  setState(() => _isEditing = false);
+                                  PlatformManager.instance.analytics.editSummaryCancelled();
+                                },
+                                onSaveSummarySelection: (selection, newContent) {
+                                  PlatformManager.instance.analytics.editSummarySaved();
+                                  context.read<ConversationDetailProvider>().saveEditingSummarySelection(
+                                        selection,
+                                        newContent,
+                                      );
+                                },
+                              ),
+                      ]),
+                    ),
+                    // Where the Mac puts its strip: after the note's own sections. Only a completed
+                    // conversation can have adjudicated screenshots.
+                    if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
+                      ConversationScreenshotsSection(
+                        key: ValueKey('conversation-screenshots-${conversation.id}'),
+                        conversationId: conversation.id,
+                      ),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                      sliver: SliverMainAxisGroup(slivers: [
+                        if (feedbackKind == FeedbackPromptKind.summary)
+                          SummaryFeedbackPrompt(
+                            key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
+                            conversationId: conversation?.id,
                           ),
-                    if (feedbackKind == FeedbackPromptKind.summary)
-                      SummaryFeedbackPrompt(
-                        key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
-                        conversationId: conversation?.id,
-                      ),
-                    if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
-                      RecordingQualityFeedbackPrompt(
-                        key: ValueKey('recording-feedback-${conversation.id}'),
-                        recordingId: conversation.id,
-                      ),
-                    const SliverToBoxAdapter(child: GetGeolocationWidgets()),
-                    const SliverToBoxAdapter(child: SizedBox(height: 150)),
+                        if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
+                          RecordingQualityFeedbackPrompt(
+                            key: ValueKey('recording-feedback-${conversation.id}'),
+                            recordingId: conversation.id,
+                          ),
+                        const SliverToBoxAdapter(child: GetGeolocationWidgets()),
+                        const SliverToBoxAdapter(child: SizedBox(height: 150)),
+                      ]),
+                    ),
                   ],
                 ),
               ],
@@ -153,7 +173,11 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
 class SummaryFeedbackPrompt extends StatefulWidget {
   final String? conversationId;
 
-  const SummaryFeedbackPrompt({super.key, required this.conversationId});
+  /// Test seam for the [submitMobileFeedback] request path; production leaves
+  /// this null and submits through the real ledger API.
+  final MobileFeedbackSubmit? submitFeedback;
+
+  const SummaryFeedbackPrompt({super.key, required this.conversationId, this.submitFeedback});
 
   @override
   State<SummaryFeedbackPrompt> createState() => _SummaryFeedbackPromptState();
@@ -165,7 +189,11 @@ class SummaryFeedbackPrompt extends StatefulWidget {
 class RecordingQualityFeedbackPrompt extends StatefulWidget {
   final String? recordingId;
 
-  const RecordingQualityFeedbackPrompt({super.key, required this.recordingId});
+  /// Test seam for the [submitMobileFeedback] request path; production leaves
+  /// this null and submits through the real ledger API.
+  final MobileFeedbackSubmit? submitFeedback;
+
+  const RecordingQualityFeedbackPrompt({super.key, required this.recordingId, this.submitFeedback});
 
   @override
   State<RecordingQualityFeedbackPrompt> createState() => _RecordingQualityFeedbackPromptState();
@@ -182,6 +210,7 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
   Future<void>? _claimFuture;
   String? _feedbackId;
   int? _pendingValue;
+  MobileFeedbackReason? _pendingReason;
 
   @override
   void initState() {
@@ -240,7 +269,7 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
     );
   }
 
-  Future<void> _submit(int value) async {
+  Future<void> _submit(int value, {MobileFeedbackReason? reason}) async {
     if (_saving || _responded) return;
     final id = widget.recordingId;
     if (id == null || id.isEmpty) return;
@@ -249,20 +278,22 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
     if (!mounted || id != widget.recordingId || identityEpoch != AnalyticsManager.identityEpoch) return;
     _ensureExposed();
     if (_attempt == null) return;
-    if (_pendingValue != value) {
+    if (_pendingValue != value || _pendingReason != reason) {
       _feedbackId = const Uuid().v4();
       _pendingValue = value;
+      _pendingReason = reason;
     }
     final feedbackId = _feedbackId;
     final attempt = _attempt;
     setState(() => _saving = true);
     MobileFeedbackReceipt? receipt;
     try {
-      receipt = await submitMobileFeedback(
+      receipt = await (widget.submitFeedback ?? submitMobileFeedback)(
         kind: MobileFeedbackKind.recordingQuality,
         targetKind: MobileFeedbackTargetKind.conversation,
         targetId: id,
         value: value,
+        reason: reason,
         feedbackId: feedbackId,
         correlationId: _attempt?.correlationId,
       );
@@ -305,6 +336,18 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
     setState(() => _dismissed = true);
   }
 
+  /// Opens the quick feedback sheet. Picking an option there submits through
+  /// [_submit]; closing the sheet without a choice leaves the prompt as-is.
+  Future<void> _openFeedbackSheet() async {
+    if (_saving || !_policyClaimed) return;
+    await showFeedbackReasonSheet(
+      context,
+      title: context.l10n.feedbackTitleAudioQuality,
+      population: FeedbackReasonPopulation.recording,
+      onSubmit: (value, reason) => _submit(value, reason: reason),
+    );
+  }
+
   @override
   void dispose() {
     if (!_responded && !_dismissed && _attempt != null) {
@@ -331,7 +374,7 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             child: Row(
               children: [
                 Expanded(
@@ -350,23 +393,19 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: context.l10n.wasThisHelpful,
-                  onPressed: _saving || !_policyClaimed ? null : () => _submit(1),
-                  icon: const Icon(Icons.thumb_up_alt_outlined, size: 19),
-                  color: Colors.white70,
-                ),
-                IconButton(
-                  tooltip: context.l10n.notHelpful,
-                  onPressed: _saving || !_policyClaimed ? null : () => _submit(-1),
-                  icon: const Icon(Icons.thumb_down_alt_outlined, size: 19),
-                  color: Colors.white70,
+                OmiButton.secondary(
+                  key: const ValueKey('recording_feedback_give_feedback'),
+                  label: context.l10n.feedbackGiveFeedback,
+                  size: OmiButtonSize.compact,
+                  // The sheet is a chooser, not work: don't hand its future to
+                  // OmiButton or the button would spin for as long as it's open.
+                  onPressed: _saving || !_policyClaimed ? null : () => unawaited(_openFeedbackSheet()),
                 ),
                 IconButton(
                   tooltip: context.l10n.close,
                   onPressed: _saving || !_policyClaimed ? null : _dismiss,
                   icon: const Icon(Icons.close, size: 18),
-                  color: Colors.white54,
+                  color: OmiColors.textPrimary.withValues(alpha: 0.54),
                 ),
               ],
             ),
@@ -388,6 +427,7 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
   Future<void>? _claimFuture;
   String? _feedbackId;
   int? _pendingValue;
+  MobileFeedbackReason? _pendingReason;
 
   @override
   void initState() {
@@ -410,6 +450,7 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
       _claimFuture = null;
       _feedbackId = null;
       _pendingValue = null;
+      _pendingReason = null;
       _loadEligibility();
     }
   }
@@ -451,9 +492,7 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
       return;
     }
     setState(() => _policyClaimed = true);
-    // ExperimentBuilder owns the exposure ordering when a lease is present;
-    // its selected builder starts the attempt after the lease paints.
-    if (AnalyticsManager().experiments == null) _ensureExposed();
+    _ensureExposed();
   }
 
   void _ensureExposed() {
@@ -467,7 +506,7 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
     );
   }
 
-  Future<void> _submit(int value) async {
+  Future<void> _submit(int value, {MobileFeedbackReason? reason}) async {
     if (_saving || _responded) return;
     final id = widget.conversationId;
     if (id == null || id.isEmpty) return;
@@ -476,20 +515,22 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
     if (!mounted || id != widget.conversationId || identityEpoch != AnalyticsManager.identityEpoch) return;
     _ensureExposed();
     if (_attempt == null) return;
-    if (_pendingValue != value) {
+    if (_pendingValue != value || _pendingReason != reason) {
       _feedbackId = const Uuid().v4();
       _pendingValue = value;
+      _pendingReason = reason;
     }
     final feedbackId = _feedbackId;
     final attempt = _attempt;
     setState(() => _saving = true);
     MobileFeedbackReceipt? receipt;
     try {
-      receipt = await submitMobileFeedback(
+      receipt = await (widget.submitFeedback ?? submitMobileFeedback)(
         kind: MobileFeedbackKind.summaryHelpfulness,
         targetKind: MobileFeedbackTargetKind.conversation,
         targetId: id,
         value: value,
+        reason: reason,
         feedbackId: feedbackId,
         correlationId: _attempt?.correlationId,
       );
@@ -539,6 +580,18 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
     setState(() => _dismissed = true);
   }
 
+  /// Opens the quick feedback sheet. Picking an option there submits through
+  /// [_submit]; closing the sheet without a choice leaves the prompt as-is.
+  Future<void> _openFeedbackSheet() async {
+    if (_saving || !_policyClaimed) return;
+    await showFeedbackReasonSheet(
+      context,
+      title: context.l10n.wasThisHelpful,
+      population: FeedbackReasonPopulation.summary,
+      onSubmit: (value, reason) => _submit(value, reason: reason),
+    );
+  }
+
   @override
   void dispose() {
     if (!_responded && !_dismissed && _attempt != null) {
@@ -556,21 +609,6 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
         _eligible != true) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
-    final experiments = AnalyticsManager().experiments;
-    final prompt = experiments == null
-        ? _buildPrompt(context, compact: false, waitForExperimentExposure: false)
-        : ExperimentBuilder<SummaryFeedbackLayout>(
-            service: experiments,
-            definition: MobileExperiments.summaryFeedbackLayout,
-            surface: 'summary-feedback',
-            visible: _visible && _policyClaimed,
-            loadingBuilder: _buildLoadingPrompt,
-            builder: (context, layout, child) => _buildPrompt(
-              context,
-              compact: layout == SummaryFeedbackLayout.compact,
-              waitForExperimentExposure: true,
-            ),
-          );
     return SliverToBoxAdapter(
       child: VisibilityDetector(
         key: ValueKey('summary-feedback-visibility-${widget.conversationId}'),
@@ -580,62 +618,42 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
           setState(() => _visible = visible);
           if (visible) unawaited(_claimIfVisible());
         },
-        child: prompt,
+        child: _buildPrompt(context),
       ),
     );
   }
 
-  Widget _buildLoadingPrompt(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
-      child: SizedBox(
-        height: 48,
-        child: DecoratedBox(
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPrompt(BuildContext context, {required bool compact, required bool waitForExperimentExposure}) {
-    if (waitForExperimentExposure) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _visible && _policyClaimed) _ensureExposed();
-      });
-    }
+  Widget _buildPrompt(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, compact ? 8 : 12, 20, compact ? 4 : 8),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 16, vertical: compact ? 6 : 12),
-        decoration: BoxDecoration(
-          color: OmiColors.surface1,
-          borderRadius: BorderRadius.circular(compact ? 12 : 16),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 context.l10n.wasThisHelpful,
-                style: TextStyle(color: Colors.white, fontSize: compact ? 13 : 14, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                  color: OmiColors.textPrimary,
+                  fontSize: 14, // omi-ux-allow: font-size-literal -- pre-existing label style; no 14pt OmiType token
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-            IconButton(
-              tooltip: context.l10n.wasThisHelpful,
-              onPressed: _saving || !_policyClaimed ? null : () => _submit(1),
-              icon: Icon(Icons.thumb_up_alt_outlined, size: compact ? 18 : 19),
-              color: Colors.white70,
-            ),
-            IconButton(
-              tooltip: context.l10n.notHelpful,
-              onPressed: _saving || !_policyClaimed ? null : () => _submit(-1),
-              icon: Icon(Icons.thumb_down_alt_outlined, size: compact ? 18 : 19),
-              color: Colors.white70,
+            OmiButton.secondary(
+              key: const ValueKey('summary_feedback_give_feedback'),
+              label: context.l10n.feedbackGiveFeedback,
+              size: OmiButtonSize.compact,
+              // The sheet is a chooser, not work: don't hand its future to
+              // OmiButton or the button would spin for as long as it's open.
+              onPressed: _saving || !_policyClaimed ? null : () => unawaited(_openFeedbackSheet()),
             ),
             IconButton(
               tooltip: context.l10n.close,
               onPressed: _saving || !_policyClaimed ? null : _dismiss,
-              icon: Icon(Icons.close, size: compact ? 17 : 18),
-              color: Colors.white54,
+              icon: const Icon(Icons.close, size: 18),
+              color: OmiColors.textPrimary.withValues(alpha: 0.54),
             ),
           ],
         ),

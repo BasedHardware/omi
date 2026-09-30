@@ -8,9 +8,10 @@ import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 
 const _mapClusterDistanceMeters = 100.0;
@@ -116,15 +117,13 @@ class ConversationMapPage extends StatelessWidget {
             ListTile(
               key: ValueKey('conversation_map_cluster_row_${conversation.id}'),
               title: Text(
-                conversation.structured.title.isEmpty
-                    ? context.l10n.untitledConversation
-                    : conversation.structured.title,
+                conversationDisplayTitle(conversation, context.l10n, surface: ConversationUntitledRenderedSurface.map),
               ),
               subtitle: Text(
                 dates.dateTime(conversation.startedAt ?? conversation.createdAt),
-                style: const TextStyle(color: OmiColors.textSecondary),
+                style: TextStyle(color: OmiColors.textSecondary),
               ),
-              trailing: const Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+              trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 _openConversation(context, conversation);
@@ -138,7 +137,7 @@ class ConversationMapPage extends StatelessWidget {
   String _groupLabel(BuildContext context, ConversationMapGroup group) {
     if (group.conversations.length == 1) {
       final conversation = group.conversations.single;
-      return conversation.structured.title.isEmpty ? context.l10n.untitledConversation : conversation.structured.title;
+      return conversationDisplayTitle(conversation, context.l10n, surface: ConversationUntitledRenderedSurface.map);
     }
     return context.l10n.conversationCount(group.conversations.length);
   }
@@ -147,7 +146,7 @@ class ConversationMapPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final groups = buildConversationMapGroups(conversations);
     return Scaffold(
-      backgroundColor: AppStyles.backgroundPrimary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.conversationMap)),
       body: groups.isEmpty
           ? OmiEmptyState(
@@ -172,7 +171,7 @@ class ConversationMapPage extends StatelessWidget {
                           pins: [
                             for (final group in groups) OmiMapPin(latitude: group.latitude, longitude: group.longitude),
                           ],
-                          backgroundColor: AppStyles.backgroundPrimary,
+                          backgroundColor: OmiColors.surface0,
                         ),
                       ),
                     ),
@@ -194,7 +193,7 @@ class ConversationMapPage extends StatelessWidget {
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: AppStyles.backgroundSecondary,
+                          color: OmiColors.surface1,
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(
@@ -202,14 +201,14 @@ class ConversationMapPage extends StatelessWidget {
                             Container(
                               width: 36,
                               height: 36,
-                              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                              decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
                               child: Center(
                                 child: group.conversations.length == 1
-                                    ? const Icon(Icons.location_on, color: Colors.black, size: 20)
+                                    ? Icon(Icons.location_on, color: OmiColors.onAccent, size: 20)
                                     : Text(
                                         '${group.conversations.length}',
-                                        style: const TextStyle(
-                                          color: Colors.black,
+                                        style: TextStyle(
+                                          color: OmiColors.onAccent,
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
@@ -221,10 +220,11 @@ class ConversationMapPage extends StatelessWidget {
                                 _groupLabel(context, group),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                                style:
+                                    TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                               ),
                             ),
-                            const Icon(Icons.chevron_right, color: Colors.white70),
+                            Icon(Icons.chevron_right, color: OmiColors.textSecondary),
                           ],
                         ),
                       ),

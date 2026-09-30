@@ -2489,12 +2489,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Üksikasjalikud diagnostikasõnumid';
 
   @override
-  String get autoCreateSpeakers => 'Loo kõnelejad automaatselt';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Loo automaatselt nime tuvastamisel';
-
-  @override
   String get followUpQuestions => 'Järgmised küsimused';
 
   @override
@@ -10103,12 +10097,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Heli ei õnnestunud lugeda — sünkroonimine pole võimalik';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11169,9 +11157,6 @@ class AppLocalizationsEt extends AppLocalizations {
       'Transkriptsioonid pole saadaval, salvestamine jätkub seadmel ja töödeldakse hiljem';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkriptsioon pole saadaval · salvestatakse seadmesse';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Ootel transkriptsioonid $pending/$total';
   }
@@ -11229,5 +11214,417 @@ class AppLocalizationsEt extends AppLocalizations {
   String get openCall => 'Ava kõne';
 
   @override
-  String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
+  String get captureRecoveryBanner => 'Omi ei saada heli — puudutage uuesti ühendamiseks';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Peata ripatsi režiim Transcribe Later enne telefoniga salvestamist.';
+
+  @override
+  String get captureNotTranscribing => 'Transkriptsioon puudub';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Heli salvestatud, transkribeeritakse hiljem';
+
+  @override
+  String get captureStillRecording => 'Salvestamine jätkub';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofoni kasutab teine rakendus';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Kõne või mõni teine rakendus võttis mikrofoni, seega Omi praegu ei kuule. Omi jätkab ise, kui mikrofon vabaneb. Kõik varem salvestatu on alles.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Sinu kohandatud kõnetuvastusteenus pole kättesaadav. Omi hoiab heli selles telefonis ja saadab selle, kui teenus taastub. Midagi ei lähe kaduma.';
+
+  @override
+  String get captureStarting => 'Käivitamine…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefoni mälu on täis';
+
+  @override
+  String get captureStorageAlmostFull => 'Mälu on peaaegu täis';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ja teised';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Kuula Omi vastuseid';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Selge. Sinu järgmine kohtumine algab kahekümne minuti pärast.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Kõik on valmis';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Puuduta rida, et seda üle vaadata või muuta.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Kui küsite nupuga, saab Omi oma vastuse valjusti lugeda.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Kuulake oma viimast vastust';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Teie viimase vastuse esitamine...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device kaudu';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Läbi telefoni kõlari';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Läbi praeguse heliväljundi';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Vastused jäävad ekraanile. Midagi ei räägita.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privaatne. Räägib ainult AirPods, Bluetooth või juhtmega kõrvaklappide kaudu.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Kasutab telefoni kõlarit, kui kõrvaklappe pole ühendatud.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi vaikib. Vastused kuvatakse endiselt rakenduses.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device ühendatud. Siin räägib Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Kõrvaklappe pole ühendatud. Omi vaikib, kuni ühendate mõne.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Mängib läbi numbri $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Mängib valjult läbi telefoni kõlari.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Saate seda igal ajal muuta numbril $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Esitage seda ringkäiku igal ajal uuesti numbril $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kõrvaklapid';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutit';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Ülesanded';
+
+  @override
+  String get usageMonth => 'See kuu';
+
+  @override
+  String get usageYear => 'See aasta';
+
+  @override
+  String get usageAll => 'Kogu aeg';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Välimus';
+
+  @override
+  String get appearanceSystem => 'Süsteem';
+
+  @override
+  String get appearanceLight => 'Hele';
+
+  @override
+  String get appearanceDark => 'Tume';
+
+  @override
+  String get chatDiscardRecording => 'Loobu';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Ma ei saanud aru — proovige uuesti';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Otsi inimesi';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Lisa \"$query\" uue inimesena';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Kuva kõik inimesed ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Tere, $name, küsi mida tahes';
+  }
+
+  @override
+  String get activity => 'Tegevus';
+
+  @override
+  String get places => 'Kohad';
+
+  @override
+  String get recaps => 'Kokkuvõtted';
+
+  @override
+  String get recent => 'Hiljutised';
+
+  @override
+  String get searchPartialFailure => 'Mõnda tulemust ei õnnestunud laadida';
+
+  @override
+  String get peopleSearchPlaceholder => 'Otsi inimesi';
+
+  @override
+  String get peopleNotHeardYet => 'Pole veel kuulnud';
+
+  @override
+  String get peopleRecent => 'Hiljutised';
+
+  @override
+  String get deletePeopleMessage =>
+      'See eemaldab nende häälenäidised ja seda ei saa tagasi võtta. Nende read varasemates vestlustes muutuvad nimetuteks kõnelejateks.';
+
+  @override
+  String get personTalkTime => 'Rääkimisaeg';
+
+  @override
+  String get personLastHeard => 'Viimati kuuldud';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kustuta $count inimest?',
+      one: 'Kustuta 1 inimene?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Hääl puudub';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inimest',
+      one: '1 inimene',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Sobivaid inimesi pole';
+
+  @override
+  String get deselectAll => 'Tühista kõik valikud';
+
+  @override
+  String get voiceRecognitionSettings => 'Häältuvastus';
+
+  @override
+  String get greetingMorning => 'Tere hommikust';
+
+  @override
+  String get greetingAfternoon => 'Tere päevast';
+
+  @override
+  String get greetingEvening => 'Tere õhtust';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Mida sa tahad teada?';
+
+  @override
+  String get askSuggestDecide => 'Mida ma täna otsustasin?';
+
+  @override
+  String get askSuggestOwe => 'Mida ma inimestele veel võlgnen?';
+
+  @override
+  String get askSuggestNotice => 'Mida Omi märkas?';
+
+  @override
+  String get pastChats => 'Varasemad vestlused';
+
+  @override
+  String get newChat => 'Uus vestlus';
+
+  @override
+  String get startFresh => 'Alusta otsast';
+
+  @override
+  String get noPastChats => 'Sinu vestlused Omiga ilmuvad siia.';
+
+  @override
+  String get deleteChatQuestion => 'Kas kustutada see vestlus?';
+
+  @override
+  String get deleteChatMessage => 'See kaob varasematest vestlustest jäädavalt.';
+
+  @override
+  String get deleteChat => 'Kustuta vestlus';
+
+  @override
+  String get appsAskWith => 'Küsi Omilt koos';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust täna.',
+      one: '1 vestlus täna.',
+      zero: 'Täna vestlusi pole.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Mis oli ekraanil';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ekraanipilt sellelt koosolekult';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Kas kustutada ekraanipilt?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta.';
+
+  @override
+  String get conversationSummaryFailed => 'Kokkuvõtte loomine ebaõnnestus';
 }

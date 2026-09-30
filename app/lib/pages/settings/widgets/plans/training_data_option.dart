@@ -68,7 +68,7 @@ class TrainingDataOptionCard extends StatelessWidget {
                 if (!approved && !pending && isLoading)
                   const OmiSpinner(size: OmiSpinnerSize.small)
                 else
-                  const ExcludeSemantics(child: Icon(Icons.chevron_right, color: OmiColors.textSecondary)),
+                  ExcludeSemantics(child: Icon(Icons.chevron_right, color: OmiColors.textSecondary)),
               ],
             ),
           ),

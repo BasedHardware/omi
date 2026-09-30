@@ -203,7 +203,7 @@ def test_typed_unchanged_outcome_maps_to_legacy_tuple_only_at_facade():
     ('source', 'translated', 'detected', 'target', 'expected'),
     [
         ('Hello', ' Hello ', 'en-US', 'en', False),
-        ('Hello', 'HELLO', 'en', 'en', True),
+        ('Hello', 'HELLO', 'en', 'en', False),
         ('Hello', 'Bonjour', 'en', 'fr', True),
         ('hola', 'hello', 'es', 'en', True),
         ('hola', 'hola', 'es', 'en', False),

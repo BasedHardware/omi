@@ -1,6 +1,6 @@
 from datetime import datetime
 from collections.abc import Mapping
-from typing import Annotated, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
@@ -28,6 +28,7 @@ from models.transcript_segment import legacy_conversation_segment_id, Transcript
 #   models.conversation_enums, models.structured, models.audio_file, etc.
 __all__ = [
     'AppResult',
+    'AudioTimelineProvenance',
     'BulkAssignSegmentsRequest',
     'CalendarEventLink',
     'Conversation',
@@ -114,6 +115,7 @@ class SharedConversationChatResponse(BaseModel):
     model_config = {'extra': 'forbid'}
 
     message: str = Field(min_length=1, strict=True)
+    remaining_free_questions: int | None = Field(default=None, ge=0)
 
 
 class SharedActionItem(BaseModel):
@@ -299,6 +301,20 @@ class ConversationAudioSpan(BaseModel):
     len: float
 
 
+class AudioTimelineProvenance(BaseModel):
+    """Audio-timeline v2 provenance marker on eligible conversation rows.
+
+    Present only on single-channel, server-STT live captures admitted under
+    AUDIO_TIMELINE_V2: both transcript segment offsets and audio chunk starts
+    are projections of one capture sample cursor anchored at the conversation's
+    first accepted audio sample (started_at is that origin, pinned once).
+    Absent on legacy, resumed-v1, multi-channel, custom-STT, sync-merged or
+    mixed-source rows.
+    """
+
+    version: int
+
+
 class ConversationAudio(BaseModel):
     """Stamp for the conversation-level playback artifact (playback/{uid}/{conv}/conversation.mp3).
 
@@ -349,6 +365,41 @@ class CaptureGroup(BaseModel):
     members: List[CaptureGroupMember] = []
 
 
+class ConversationSpeakers(BaseModel):
+    """Server-authored meaning of this conversation's ``speaker_id`` values.
+
+    ``resolved``: re-diarized from the stored audio, so each ``speaker_id`` is one
+    voice for the whole conversation. ``capture``: one uninterrupted capture
+    diarized it, so capture's ids are that diarization. ``unavailable``: capture
+    restarted its numbering (reconnects, failovers, uploaded chunks) and no
+    stored audio could resolve it, so ids are not people and must not be counted.
+    ``participant_speaker_ids`` lists the voices that spoke enough to count as
+    participants; it is empty when the status is ``unavailable``.
+    """
+
+    status: Literal['resolved', 'capture', 'unavailable']
+    version: int = 1
+    participant_speaker_ids: List[int] = []
+
+
+class CaptureEvidenceMetadata(BaseModel):
+    """Internal S1 receipt. Missing source positions are explicitly unknown."""
+
+    version: Literal[1] = 1
+    capability: Literal['source_position', 'stable_artifact', 'unknown']
+    coverage: Optional[Literal['unknown', 'incomplete', 'mapped']] = None
+    origin: Optional[str] = None
+    reason: Optional[str] = None
+    capture_root: Optional[str] = None
+    channel: Optional[str] = None
+    clock_epoch: Optional[str] = None
+    source_start: Optional[int] = None
+    source_end: Optional[int] = None
+    runs: Optional[List[Dict[str, Any]]] = None
+    receipts: Optional[List[Dict[str, Any]]] = None
+    conflicts: Optional[int] = None
+
+
 class Conversation(BaseModel):
     sync_content_revision: Optional[int] = None
     sync_relevance: Optional[Literal['keep', 'review']] = None
@@ -378,6 +429,14 @@ class Conversation(BaseModel):
     # enriched summary. Server-authored; absent on every enriched conversation.
     # Clients read `client_processing` first — see the enum's docstring.
     processing_state: Optional[ConversationProcessingState] = None
+    # Server-authored. True only when durable finalization exhausted its retry
+    # budget on a transient provider/parser/worker failure and the row has
+    # transcript or photos, so ``POST /v1/conversations/{id}/reprocess`` can
+    # still produce a summary. ``structured.title`` then holds the
+    # deterministic title. Never set when the model ran and found nothing to
+    # summarize. Successful enrichment clears it. A separate field rather than
+    # a ``processing_state`` value: released clients decode that enum strictly.
+    summary_retryable: Optional[bool] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -385,6 +444,12 @@ class Conversation(BaseModel):
     audio_files: List[AudioFile] = []
     conversation_audio: Optional[ConversationAudio] = None
     private_cloud_sync_enabled: bool = False
+    # Audio-timeline v2 provenance (absent on legacy and ineligible rows).
+    audio_timeline: Optional[AudioTimelineProvenance] = None
+    # S1 internal receipt is written explicitly at existing persistence seams.
+    capture_evidence: Optional[CaptureEvidenceMetadata] = Field(default=None, exclude=True)
+    # Absent on conversations processed before speakers were resolved: count no ids as people.
+    speaker_resolution: Optional[ConversationSpeakers] = None
 
     # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
     # fresh 60-minute signed URLs for every persisted frame, which no ordinary conversation read

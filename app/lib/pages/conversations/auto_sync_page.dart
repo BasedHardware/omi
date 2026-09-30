@@ -181,7 +181,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
     String title;
     String? progressText;
-    Color titleColor = Colors.white;
+    Color titleColor = OmiColors.textPrimary;
     Widget? action;
 
     if (isActive) {
@@ -241,16 +241,16 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       });
     } else if (hasAnyRecording) {
       title = l.syncCardAllBackedUp;
-      titleColor = Colors.grey.shade400;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     } else {
       // No recordings — same calm baseline; the card never pops in/out.
       title = l.syncCardAllBackedUp;
-      titleColor = Colors.grey.shade400;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -295,7 +295,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       onTap: () => routeToPage(context, const SyncedConversationsPage()),
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
         child: Row(
           children: [
             Container(
@@ -308,7 +308,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             Expanded(
               child: Text(
                 context.l10n.nConversationsCreated(count),
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
               ),
             ),
             FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
@@ -381,7 +381,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           ),
         ),
         Container(
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
           child: Column(
             children: [
               _settingRow(
@@ -390,7 +390,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 isOn: isPhoneOn,
                 onTap: () => routeToPage(context, const LocalStoragePage()).then((_) => setState(() {})),
               ),
-              const Divider(height: 1, color: Color(0xFF3C3C43), indent: 52),
+              Divider(height: 1, color: OmiColors.border, indent: 52),
               _settingRow(
                 icon: FontAwesomeIcons.cloud,
                 label: context.l10n.storeAudioOnCloud,
@@ -422,7 +422,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
+                style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w400),
               ),
             ),
             Text(
@@ -474,13 +474,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+              color: selected ? OmiColors.textPrimary.withValues(alpha: 0.08) : Colors.transparent,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               label,
               style: TextStyle(
-                color: selected ? Colors.white : Colors.grey.shade500,
+                color: selected ? OmiColors.textPrimary : Colors.grey.shade500,
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
               ),
@@ -492,7 +492,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
     return Container(
       padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
           chip(WalDisplayFilter.all, context.l10n.all),
@@ -522,7 +522,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         sliver: SliverToBoxAdapter(
           child: Container(
             padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
             child: Center(
               child: Text(emptyMsg, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
             ),
@@ -547,7 +547,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final isLast = i == wals.length - 1;
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
+        color: OmiColors.surface1,
         borderRadius: BorderRadius.vertical(
           top: isFirst ? const Radius.circular(20) : Radius.zero,
           bottom: isLast ? const Radius.circular(20) : Radius.zero,
@@ -630,7 +630,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                   Text(
                     '$dateStr \u00b7 $timeStr${duration != null ? ' \u00b7 $duration' : ''}',
                     style: TextStyle(
-                      color: isSynced ? Colors.grey.shade500 : Colors.white,
+                      color: isSynced ? Colors.grey.shade500 : OmiColors.textPrimary,
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                     ),
@@ -683,7 +683,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   static bool _isUnsyncableState(WalSyncDisplayState state) =>
       state == WalSyncDisplayState.corrupted ||
       state == WalSyncDisplayState.outsideRecoveryWindow ||
-      state == WalSyncDisplayState.unsupportedAudio;
+      state == WalSyncDisplayState.unsupportedAudio ||
+      state == WalSyncDisplayState.uploadRejected;
 
   Future<void> _confirmDeleteWal(Wal wal) async {
     final syncProvider = context.read<SyncProvider>();
@@ -720,6 +721,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         return (Colors.redAccent, FontAwesomeIcons.clockRotateLeft, context.l10n.syncStatusTooOld);
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, FontAwesomeIcons.fileCircleExclamation, context.l10n.syncStatusUnsupportedAudio);
+      case WalSyncDisplayState.uploadRejected:
+        return (Colors.redAccent, FontAwesomeIcons.circleExclamation, context.l10n.failedStatus);
     }
   }
 
@@ -773,7 +776,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             children: [
               Text(
                 title,
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 3),
               Text(desc, style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.45)),
@@ -974,16 +977,22 @@ class _StorageRow extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                      style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: OmiColors.textPrimary.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text('$count', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                      child: Text(
+                        '$count',
+                        style: TextStyle(
+                          color: OmiColors.active == OmiPalette.light ? OmiColors.textSecondary : Colors.grey.shade400,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ],
                 ),

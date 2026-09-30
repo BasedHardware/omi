@@ -73,6 +73,7 @@ from routers import (
     knowledge_graph,
     wrapped,
     folders,
+    search,
     goals,
     workstreams,
     announcements,
@@ -111,6 +112,7 @@ from routers import (
     jit_rollout,
     email_preferences,
     mobile_feedback,
+    device_diagnostics,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -130,10 +132,14 @@ from utils.executors import (
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.stt.streaming import validate_streaming_stt_env
+from utils.stt.soniox_runway import poll_forever
+from utils.stt.live_health import health as live_stt_health
+from utils.stt.parakeet_window import batch_pressure
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
+from services.conversation_finalization import reconcile_stale_in_progress_conversations
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
@@ -235,6 +241,7 @@ app.include_router(csat.router)
 app.include_router(feedback_admin.router)
 app.include_router(email_preferences.router)
 app.include_router(mobile_feedback.router)
+app.include_router(device_diagnostics.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
@@ -262,6 +269,7 @@ app.include_router(developer.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 app.include_router(folders.router)
+app.include_router(search.router)
 app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
 app.include_router(workstreams.router)
@@ -309,6 +317,7 @@ methods_timeout = {
 # lock TTL (1800s) so a lock can never expire under a live run.
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
+    "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
@@ -332,6 +341,10 @@ app.add_middleware(FirestoreTierMiddleware)
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     start_metrics_sidecar_server()
+    start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
+    batch_pressure.start_from_env()
+    if os.getenv('SONIOX_MONTHLY_CEILING_USD', '0') not in ('', '0'):
+        start_background_task(poll_forever(), name='soniox_runway')
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
     start_background_task(log_executor_health(), name='executor_health')
@@ -351,6 +364,10 @@ async def startup_event():
     start_background_task(
         run_blocking(db_executor, _drain_stale_processing_conversations),
         name='startup_stale_processing_reconcile',
+    )
+    start_background_task(
+        run_blocking(db_executor, _drain_stale_in_progress_conversations),
+        name='startup_stale_in_progress_reconcile',
     )
     start_background_task(
         run_blocking(db_executor, _drain_abandoned_byok_finalization_jobs),
@@ -413,6 +430,16 @@ def _drain_stale_processing_conversations():
         logger.error(f"Startup stale-processing reconciliation failed: {e}")
 
 
+def _drain_stale_in_progress_conversations():
+    """Best-effort durable admission of content-bearing listen zombies."""
+    try:
+        result = reconcile_stale_in_progress_conversations()
+        if result.get('enqueued') or result.get('verified'):
+            logger.info(f"Startup stale-in-progress reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup stale-in-progress reconciliation failed: {e}")
+
+
 def _drain_abandoned_byok_finalization_jobs():
     """Best-effort disposition of BYOK finalization jobs no live session can claim."""
     try:
@@ -461,6 +488,12 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
         except Exception as e:
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")
         try:
+            in_progress_result = await run_blocking(db_executor, reconcile_stale_in_progress_conversations)
+            if in_progress_result.get('enqueued') or in_progress_result.get('verified'):
+                logger.info(f"Periodic stale-in-progress reconciliation: {in_progress_result}")
+        except Exception as e:
+            logger.error(f"Periodic stale-in-progress reconciliation failed: {e}")
+        try:
             byok_result = await run_blocking(db_executor, reconcile_abandoned_byok_finalization_jobs)
             if byok_result.get('abandoned'):
                 logger.info(f"Periodic byok-abandonment reconciliation: {byok_result}")
@@ -480,6 +513,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
+    await batch_pressure.stop()
     await drain_background_tasks(timeout=10.0)
     await shutdown_managed_spend_ledger()
     await close_all_clients()

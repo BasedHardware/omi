@@ -870,6 +870,40 @@ def test_processor_projected_store_on_existing_conversation_omits_field(stack) -
     assert _nested(payload, 'structured', 'overview') == ''
 
 
+# red-proof: return the payload without `clear_summary_retryable` from either processing persist
+def test_processing_persists_clear_a_dead_letter_retry_marker_with_an_explicit_null(stack) -> None:
+    """A new processing pass answers the dead-letter's retry affordance.
+
+    merge=True keeps an omitted key, so a set marker must be cleared with an
+    explicit null, while an unset marker is never stamped as a new key.
+    """
+    pc, _dev = stack
+    retried = _conversation()
+    retried.summary_retryable = True
+    assert pc._normal_persist_payload(retried, clear_terminal_marker=False)['summary_retryable'] is None
+    assert 'summary_retryable' in pc._normal_persist_payload(retried, clear_terminal_marker=False)
+    assert pc._terminal_persist_payload(retried)['summary_retryable'] is None
+    assert 'summary_retryable' in pc._terminal_persist_payload(retried)
+    untouched = _conversation()
+    assert 'summary_retryable' not in pc._normal_persist_payload(untouched, clear_terminal_marker=False)
+    assert 'summary_retryable' not in pc._terminal_persist_payload(untouched)
+    assert 'summary_retryable' not in pc.omit_null_processing_state(untouched.dict())
+
+
+# red-proof: drop `conversation.summary_retryable = None` after `_terminal_persist_payload`
+def test_free_tier_retry_answers_the_dead_letter_marker_in_payload_and_response(stack) -> None:
+    pc, _dev = stack
+    persisted = pc.lifecycle_service.persist_processed_conversation
+    persisted.reset_mock()
+    conversation = _conversation()
+    conversation.summary_retryable = True
+    stored, ok = pc._store_deterministic_minimum(_UID, conversation, _minimum_plan(pc))
+    assert ok is True
+    assert stored.summary_retryable is None
+    payload = _persisted_payload(persisted)
+    assert 'summary_retryable' in payload and payload['summary_retryable'] is None
+
+
 # red-proof: `payload.update(client_processing_mutation(_projection()))` on the no-projection minimum persist
 def test_store_deterministic_minimum_without_projection_omits_field(stack) -> None:
     pc, _dev = stack

@@ -35,6 +35,15 @@ SCHEMA_GROUPS = {
             'ScreenActivitySyncResponse',
         ),
     },
+    'screen_frames': {
+        'output': DEFAULT_OUTPUT_DIR / 'screen_frames_wire.g.dart',
+        'schemas': (
+            'NormalizedRect',
+            'ScreenFrameGround',
+            'ConversationScreenFrame',
+            'ConversationScreenFrameSet',
+        ),
+    },
     'conversation': {
         'output': DEFAULT_OUTPUT_DIR / 'conversation_wire.g.dart',
         'schemas': (
@@ -50,6 +59,7 @@ SCHEMA_GROUPS = {
             'Structured',
             'Geolocation',
             'ConversationPhoto',
+            'ChunkSpan',
             'AudioFile',
             'ConversationAudioSpan',
             'ConversationAudio',
@@ -58,6 +68,8 @@ SCHEMA_GROUPS = {
             'TranscriptMatchSnippet',
             'CaptureGroupMember',
             'CaptureGroup',
+            'ConversationSpeakers',
+            'AudioTimelineProvenance',
             'Conversation',
             'ProjectedActionItem',
             'ProjectedSection',
@@ -77,6 +89,10 @@ SCHEMA_GROUPS = {
             'SyncCaptureManifestRequest',
             'SyncCaptureManifestResponse',
         ),
+    },
+    'chat_sessions': {
+        'output': DEFAULT_OUTPUT_DIR / 'chat_sessions_wire.g.dart',
+        'schemas': ('ChatSessionResponse',),
     },
     'messages': {
         'output': DEFAULT_OUTPUT_DIR / 'messages_wire.g.dart',
@@ -219,6 +235,19 @@ SCHEMA_GROUPS = {
             'SpeakerTagPromptClip',
             'VoiceProfileSettings',
             'VoiceProfileSettingsUpdate',
+        ),
+    },
+    'search': {
+        'output': DEFAULT_OUTPUT_DIR / 'search_wire.g.dart',
+        'schemas': (
+            'SearchOverviewFolder',
+            'SearchOverviewResponse',
+            'ProductMemorySearchItem',
+            'MemorySearchPolicyPayload',
+            'MemoryGlobalReadGateObservability',
+            'ReadRolloutCapabilities',
+            'ProductRolloutObservability',
+            'ProductMemorySearchResponse',
         ),
     },
     'imports_integrations': {

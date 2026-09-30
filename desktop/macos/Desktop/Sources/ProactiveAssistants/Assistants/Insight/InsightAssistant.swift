@@ -751,19 +751,8 @@ actor InsightAssistant: ProactiveAssistant {
         let query = toolCall.arguments["query"] as? String ?? ""
         sqlCount += 1
         log("Insight: P1 execute_sql iter \(iteration): \(query)")
-        let privacyEnabled = await MainActor.run { ContextBucketsFeature.isEnabled }
         let excluded = await MainActor.run { RewindSettings.shared.excludedApps }
-        var sqlArguments: [String: Any] = ["query": query]
-        if privacyEnabled {
-          sqlArguments = [
-            "query": InsightSQLPrivacy.filtered(query, excludedApps: excluded),
-            "read_only": true,
-          ]
-        }
-        let sqlToolCall = ToolCall(
-          name: "execute_sql",
-          arguments: sqlArguments, thoughtSignature: nil)
-        let resultStr = await ChatToolExecutor.execute(sqlToolCall)
+        let resultStr = await Self.executeInvestigationSQL(query, excludedApps: excluded)
         let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
         log("Insight: P1 sql result (\(resultStr.count) chars): \(truncated)")
 
@@ -926,19 +915,8 @@ actor InsightAssistant: ProactiveAssistant {
         let query = toolCall.arguments["query"] as? String ?? ""
         sqlCount += 1
         log("Insight: P2 execute_sql iter \(p2Iteration): \(query)")
-        let privacyEnabled = await MainActor.run { ContextBucketsFeature.isEnabled }
         let excluded = await MainActor.run { RewindSettings.shared.excludedApps }
-        var sqlArguments: [String: Any] = ["query": query]
-        if privacyEnabled {
-          sqlArguments = [
-            "query": InsightSQLPrivacy.filtered(query, excludedApps: excluded),
-            "read_only": true,
-          ]
-        }
-        let sqlToolCall = ToolCall(
-          name: "execute_sql",
-          arguments: sqlArguments, thoughtSignature: nil)
-        let resultStr = await ChatToolExecutor.execute(sqlToolCall)
+        let resultStr = await Self.executeInvestigationSQL(query, excludedApps: excluded)
         let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
         log("Insight: P2 sql result (\(resultStr.count) chars): \(truncated)")
 
@@ -1057,6 +1035,36 @@ actor InsightAssistant: ProactiveAssistant {
       logError("Insight: Failed to build activity summary", error: error)
       return ""
     }
+  }
+
+  // MARK: - Investigation SQL
+
+  /// Runs one model-chosen `execute_sql` call from the investigation loop.
+  ///
+  /// The query is steered by on-screen OCR text, so it is untrusted input. Every call is
+  /// read-only and excluded-app filtered regardless of which proactive engine is active:
+  /// `read_only` keeps the executor on its SELECT-only path (a read-only pool reader), and
+  /// the privacy rewrite keeps excluded apps' OCR out of the model's context.
+  ///
+  /// `ChatToolExecutor.execute` is MainActor-isolated. That closure cannot be a default
+  /// argument on the seam below: Swift 6 rejects a main-actor default value in a
+  /// nonisolated context. Production calls this overload; tests pass `execute`.
+  /// The seam is `nonisolated(nonsending)` so the closure stays on the caller's actor
+  /// instead of being sent into a `@concurrent` method.
+  @MainActor
+  static func executeInvestigationSQL(
+    _ query: String,
+    excludedApps: Set<String>
+  ) async -> String {
+    await executeInvestigationSQL(query, excludedApps: excludedApps) { await ChatToolExecutor.execute($0) }
+  }
+
+  nonisolated(nonsending) static func executeInvestigationSQL(
+    _ query: String,
+    excludedApps: Set<String>,
+    execute: (ToolCall) async -> String
+  ) async -> String {
+    await execute(InsightSQLPrivacy.investigationToolCall(query: query, excludedApps: excludedApps))
   }
 
   // MARK: - Tool Definitions

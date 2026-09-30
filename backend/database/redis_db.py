@@ -450,6 +450,12 @@ def get_cached_signed_url(blob_path: str) -> str:
     return signed_url.decode()
 
 
+def get_cached_signed_url_ttl(blob_path: str) -> int:
+    """Seconds the cached signed URL has left (0 when absent); the cache entry expires just before the signature."""
+    ttl = r.ttl(f'urls:{blob_path}')
+    return ttl if isinstance(ttl, int) and ttl > 0 else 0
+
+
 def delete_cached_signed_url(blob_path: str) -> None:
     """Evict a cached signed URL. Callers deleting the underlying blob must call
     this too — a delete that leaves a still-live cached signed URL handing out
@@ -747,23 +753,30 @@ async def get_async_redis_client() -> Any:
     return _async_redis_client
 
 
-@try_catch_decorator
-def incr_daily_notification_count(uid: str) -> int:
-    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
+def _daily_notification_key(uid: str, tz: Optional[Any] = None) -> str:
+    """Bucket the count by the user's own calendar day, not UTC's.
+
+    A UTC bucket rolls over mid-afternoon west of UTC, which hands the user a
+    second full allotment inside one of their days.
+    """
     from datetime import datetime, timezone
 
-    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    return f'{uid}:daily_noti_count:{datetime.now(tz or timezone.utc).strftime("%Y-%m-%d")}'
+
+
+@try_catch_decorator
+def incr_daily_notification_count(uid: str, tz: Optional[Any] = None) -> int:
+    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
+    key = _daily_notification_key(uid, tz)
     count = r.incr(key)
-    r.expire(key, 90000)  # 25 hours TTL
+    r.expire(key, 172800)  # 48 hours TTL: a local day can start up to 14 hours before the UTC one
     return count
 
 
 @try_catch_decorator
-def get_daily_notification_count(uid: str) -> int:
+def get_daily_notification_count(uid: str, tz: Optional[Any] = None) -> int:
     """Get the current daily proactive-notification count for a user (mentor + third-party apps)."""
-    from datetime import datetime, timezone
-
-    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    key = _daily_notification_key(uid, tz)
     val = r.get(key)
     if not val:
         return 0

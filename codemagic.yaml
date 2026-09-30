@@ -24,7 +24,7 @@ workflows:
       vars:
         APP_ID: 6502156163
       flutter: 3.44.5
-      xcode: 26.0.1
+      xcode: 27.0
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -396,10 +396,11 @@ workflows:
         - app_env
         - firebase
         - shorebird
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for collect_mobile_release_admission.py
       vars:
         APP_ID: 6502156163
       flutter: 3.44.5
-      xcode: 26.0.1
+      xcode: 27.0
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -762,6 +763,7 @@ workflows:
         - firebase
         - google_play
         - shorebird
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for collect_mobile_release_admission.py
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
@@ -967,7 +969,7 @@ workflows:
       vars:
         APP_ID: 6502156163
       flutter: 3.44.5
-      xcode: 26.0.1
+      xcode: 27.0
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -1780,10 +1782,10 @@ workflows:
         BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
         GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
         DMGBUILD_VERSION: "1.6.7"
-      # Desktop Swift ship/CI toolchain pin. Keep in sync with
-      # desktop/macos/ci/xcode-pin.json (enforced by the
-      # desktop-swift-ci-contract check); never `latest` or `edge`.
-      xcode: 26.6
+      # Siri release toolchain. Required GitHub CI intentionally pins 26.6;
+      # this signed release must use Xcode 27 to embed App Intents metadata.
+      # The desktop-swift-ci-contract check enforces this split.
+      xcode: 27.0
     # API-dispatched by desktop_auto_release.yml after its exact tag is pushed.
     # Keeping this workflow manual prevents a webhook/API race from creating
     # duplicate builds for one immutable candidate.
@@ -2108,30 +2110,34 @@ workflows:
 
       - name: Build Swift app (arm64 + x86_64)
         script: |
+          set -euo pipefail
           mkdir -p "$BUILD_DIR"
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
 
-          # Build arm64. Use --triple (not --arch) so binary always lands in
-          # arm64-apple-macosx/release/ regardless of the machine's native arch.
+          # Xcode 27 puts both --triple products in Products/Release. Resolve
+          # that directory from SwiftPM and stage each architecture before the
+          # next build replaces the executable in the shared products directory.
           echo "Building arm64..."
-          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values
 
-          ARM64_PATH="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
+          ARM64_PRODUCTS_DIR="$(xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx --show-bin-path)"
+          ARM64_PATH="$ARM64_PRODUCTS_DIR/$BINARY_NAME"
           if [ ! -f "$ARM64_PATH" ]; then
             echo "ERROR: arm64 binary not found at $ARM64_PATH"
-            ls "Desktop/.build/" 2>/dev/null
-            ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | head -20 || true
+            ls "$ARM64_PRODUCTS_DIR" 2>/dev/null | head -20 || true
             exit 1
           fi
+          lipo -verify_arch arm64 "$ARM64_PATH"
           cp "$ARM64_PATH" "/tmp/OmiComputer-arm64"
           echo "arm64 binary: $(file "/tmp/OmiComputer-arm64" | grep -oE 'arm64|x86_64')"
 
           # Build x86_64 (cross-compile). Use --triple for explicit arch directory.
           echo "Building x86_64..."
-          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
+          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx -Xswiftc -emit-const-values
 
-          X86_64_PATH="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
+          X86_64_PRODUCTS_DIR="$(xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx --show-bin-path)"
+          X86_64_PATH="$X86_64_PRODUCTS_DIR/$BINARY_NAME"
           # Symmetric existence check — without this, a silent x86_64 build failure
           # (exit 0 but no output) bubbles up later as "missing binary" in the
           # universal-bundle step with no traceback. Burned a build in May 2026.
@@ -2139,26 +2145,24 @@ workflows:
             echo "ERROR: x86_64 binary not found at $X86_64_PATH"
             echo "Listing $(dirname "$X86_64_PATH"):"
             ls -la "$(dirname "$X86_64_PATH")" 2>&1 | head -30 || true
-            echo "Listing Desktop/.build/:"
-            ls -la "Desktop/.build/" 2>&1 || true
             exit 1
           fi
+          lipo -verify_arch x86_64 "$X86_64_PATH"
+          cp "$X86_64_PATH" "/tmp/OmiComputer-x86_64"
+          echo "SWIFT_RELEASE_PRODUCTS_DIR=$X86_64_PRODUCTS_DIR" >> "$CM_ENV"
           echo "x86_64 binary: $(file "$X86_64_PATH" | grep -oE 'arm64|x86_64' | head -1)"
 
       - name: Create universal app bundle
         script: |
+          set -euo pipefail
           # arm64 binary was saved to /tmp in the Build Swift step
           ARM64_BINARY="/tmp/OmiComputer-arm64"
-          # x86_64 binary is in the explicit arch-specific dir
-          X86_64_BINARY="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
+          X86_64_BINARY="/tmp/OmiComputer-x86_64"
 
           if [ ! -f "$ARM64_BINARY" ] || [ ! -f "$X86_64_BINARY" ]; then
             echo "ERROR: Missing built binaries"
             echo "  arm64 ($ARM64_BINARY): $([ -f "$ARM64_BINARY" ] && echo EXISTS || echo MISSING)"
             echo "  x86_64 ($X86_64_BINARY): $([ -f "$X86_64_BINARY" ] && echo EXISTS || echo MISSING)"
-            echo ".build/ contents:" && ls "Desktop/.build/" 2>/dev/null
-            ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | grep -E "^Omi" | head -5 || true
-            ls "Desktop/.build/x86_64-apple-macosx/release/" 2>/dev/null | grep -E "^Omi" | head -5 || true
             exit 1
           fi
           echo "arm64 arch: $(file "$ARM64_BINARY" | grep -oE 'arm64|x86_64')"
@@ -2176,14 +2180,14 @@ workflows:
           }
 
           cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
+          # SwiftPM emits constant values but does not embed App Intents
+          # metadata in a bundle assembled from its executable.
+          ./scripts/embed-app-intents-metadata.sh Desktop "$APP_BUNDLE" Release arm64
 
-          # Sparkle: use x86_64 arch path; fallback to arm64
-          SPARKLE_FW="Desktop/.build/x86_64-apple-macosx/release/Sparkle.framework"
+          SWIFT_BUILD_DIR="${SWIFT_RELEASE_PRODUCTS_DIR:?SwiftPM release products directory is missing}"
+          SPARKLE_FW="$SWIFT_BUILD_DIR/Sparkle.framework"
           if [ ! -d "$SPARKLE_FW" ]; then
-            SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
-          fi
-          if [ ! -d "$SPARKLE_FW" ]; then
-            echo "ERROR: Sparkle.framework not found in either arch dir"
+            echo "ERROR: Sparkle.framework not found in $SWIFT_BUILD_DIR"
             exit 1
           fi
           cp -R "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/"
@@ -2223,11 +2227,6 @@ workflows:
           cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
 
           # Copy SPM resource bundle (app assets: permissions.gif, herologo.png, etc.)
-          # Use x86_64 arch path; fallback to arm64
-          SWIFT_BUILD_DIR="Desktop/.build/x86_64-apple-macosx/release"
-          if [ ! -d "$SWIFT_BUILD_DIR" ]; then
-            SWIFT_BUILD_DIR="Desktop/.build/arm64-apple-macosx/release"
-          fi
           RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
           if [ -d "$RESOURCE_BUNDLE" ]; then
             cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
@@ -2336,20 +2335,32 @@ workflows:
 
           xattr -cr "$APP_BUNDLE"
 
-          # Sign ffmpeg (inside SPM resource bundle)
-          FFMPEG_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/ffmpeg"
-          if [ -f "$FFMPEG_PATH" ]; then
-            codesign --force --options runtime --timestamp \
-              --sign "$SIGN_IDENTITY" "$FFMPEG_PATH"
+          # SwiftPM can place resources at the bundle root or under
+          # Contents/Resources. Sign every native payload in either layout.
+          RESOURCE_BUNDLE="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle"
+          if [ ! -d "$RESOURCE_BUNDLE" ]; then
+            echo "ERROR: SwiftPM resource bundle is missing: $RESOURCE_BUNDLE" >&2
+            exit 1
           fi
 
           # Sign node with JIT entitlements (V8 requires MAP_JIT under Hardened Runtime)
           NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
-          if [ -f "$NODE_BUNDLE_PATH" ]; then
-            codesign --force --options runtime --timestamp \
-              --sign "$SIGN_IDENTITY" \
-              --entitlements Desktop/Node.entitlements \
-              "$NODE_BUNDLE_PATH"
+          while IFS= read -r -d '' native_bin; do
+            if file "$native_bin" | grep -q 'Mach-O'; then
+              if [ "$native_bin" = "$NODE_BUNDLE_PATH" ]; then
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" \
+                  --entitlements Desktop/Node.entitlements \
+                  "$native_bin"
+              else
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" "$native_bin"
+              fi
+            fi
+          done < <(find "$RESOURCE_BUNDLE" -type f -print0)
+          if [ ! -f "$NODE_BUNDLE_PATH" ]; then
+            echo "ERROR: bundled node is missing: $NODE_BUNDLE_PATH" >&2
+            exit 1
           fi
 
           # Sign agent native binaries
@@ -2457,6 +2468,10 @@ workflows:
       - name: Notarize stable and Beta apps concurrently
         script: |
           set -euo pipefail
+          scripts/check-desktop-bundle-signatures.sh "$APP_BUNDLE"
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            scripts/check-desktop-bundle-signatures.sh "$BUILD_DIR/$BETA_APP_NAME.app"
+          fi
           NOTARIZE_ARGS=(
             --kind app
             --work-dir "$BUILD_DIR/notarization"
@@ -2789,10 +2804,10 @@ workflows:
         # This registry remains on the production control plane even when the
         # preview artifact itself is configured to use a preview backend.
         DESKTOP_PREVIEW_REGISTRY_URL: "https://api.omi.me"
-      # Desktop Swift ship/CI toolchain pin. Keep in sync with
-      # desktop/macos/ci/xcode-pin.json (enforced by the
-      # desktop-swift-ci-contract check); never `latest` or `edge`.
-      xcode: 26.6
+      # Siri release toolchain. Required GitHub CI intentionally pins 26.6;
+      # this signed release must use Xcode 27 to embed App Intents metadata.
+      # The desktop-swift-ci-contract check enforces this split.
+      xcode: 27.0
     working_directory: desktop/macos
     cache:
       cache_paths:
@@ -2899,17 +2914,35 @@ workflows:
     environment:
       groups:
         - google_play
+      # Per-run inputs, overridden by the API trigger's environment.variables (Codemagic only injects
+      # overrides for declared variables). The placeholders are rejected by mobile_store_promote.py,
+      # so a run without explicit inputs fails closed; empty-string defaults fail yaml validation.
       vars:
-        CONFIRM: ""
-        PROMOTE_PLATFORM: ""
-        PROMOTE_VERSION: ""
-        PROMOTE_IOS_BUILD: ""
-        PROMOTE_ANDROID_BUILD: ""
+        CONFIRM: "not-confirmed"
+        PROMOTE_PLATFORM: "unset"
+        PROMOTE_VERSION: "unset"
+        PROMOTE_IOS_BUILD: "0"
+        PROMOTE_ANDROID_BUILD: "0"
     working_directory: app
     scripts:
       - name: Submit explicitly selected existing builds
         script: |
           set -euo pipefail
+          # Inputs come from the API trigger's environment.variables when Codemagic injects them;
+          # when the declared placeholders are still in place, the committed request file
+          # scripts/store_promotion_request.json is the reviewed source of truth for this run.
+          REQ="scripts/store_promotion_request.json"
+          if [ "${CONFIRM:-not-confirmed}" = "not-confirmed" ] && [ -f "$REQ" ]; then
+            CONFIRM="$(jq -r '.confirm // ""' "$REQ")"
+            PROMOTE_PLATFORM="$(jq -r '.platform // ""' "$REQ")"
+            PROMOTE_VERSION="$(jq -r '.version // ""' "$REQ")"
+            PROMOTE_IOS_BUILD="$(jq -r '.ios_build // ""' "$REQ")"
+            PROMOTE_ANDROID_BUILD="$(jq -r '.android_build // ""' "$REQ")"
+          fi
+          # The declared "0" placeholders mean "not supplied".
+          [ "${PROMOTE_IOS_BUILD:-}" = "0" ] && PROMOTE_IOS_BUILD=""
+          [ "${PROMOTE_ANDROID_BUILD:-}" = "0" ] && PROMOTE_ANDROID_BUILD=""
+          echo "promotion inputs: platform=${PROMOTE_PLATFORM:-} version=${PROMOTE_VERSION:-} ios=${PROMOTE_IOS_BUILD:-} android=${PROMOTE_ANDROID_BUILD:-} confirm_set=$([ "${CONFIRM:-}" = "submit-for-review" ] && echo yes || echo no)"
           python3 scripts/mobile_store_promote.py \
             --confirm "${CONFIRM:-}" \
             --platform "${PROMOTE_PLATFORM:-}" \

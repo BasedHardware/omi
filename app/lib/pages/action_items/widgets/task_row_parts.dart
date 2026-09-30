@@ -52,56 +52,9 @@ class TaskSelectionSquare extends StatelessWidget {
         border: Border.all(color: selected ? OmiColors.accent : OmiColors.textTertiary, width: 2),
         color: selected ? OmiColors.accent : Colors.transparent,
       ),
-      child: selected ? const Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
+      child: selected ? Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
     );
   }
-}
-
-/// A goal's progress as a filled pie inside a ring.
-class GoalProgressPainter extends CustomPainter {
-  GoalProgressPainter({required this.progress, required this.color});
-
-  final double progress;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..color = color.withValues(alpha: 0.2)
-        ..style = PaintingStyle.fill,
-    );
-
-    if (progress > 0) {
-      final rect = Rect.fromCircle(center: center, radius: radius);
-      canvas.drawArc(
-        rect,
-        -math.pi / 2,
-        progress * 2 * math.pi,
-        true,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.fill,
-      );
-    }
-
-    canvas.drawCircle(
-      center,
-      radius - 1,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-  }
-
-  @override
-  bool shouldRepaint(GoalProgressPainter oldDelegate) => oldDelegate.progress != progress || oldDelegate.color != color;
 }
 
 class _DashedCirclePainter extends CustomPainter {

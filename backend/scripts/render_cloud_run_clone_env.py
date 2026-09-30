@@ -6,10 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
 _DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029'})
+# Env names that carry an exportable service-account key, or the path to one.
+KEY_CREDENTIAL_ENV_NAMES = frozenset({'SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS'})
+_DEFAULT_COMPUTE_SERVICE_ACCOUNT = re.compile(r'\d+-compute@developer\.gserviceaccount\.com')
 
 
 def _pairs(value: str) -> dict[str, str]:
@@ -68,6 +72,19 @@ def clone_environment(
     )
 
 
+def target_runs_as_attached_identity(target: dict[str, Any] | None) -> bool:
+    """True when the target service's live template runs as a dedicated (non-default) service account.
+
+    Such a runtime identity is granted only the secrets it needs and deliberately cannot read a
+    key-credential secret. Cloning the source service's key ref onto it would make the new revision
+    fail its secret access check, and gcloud applies --update-secrets after --remove-secrets.
+    """
+    if not target:
+        return False
+    service_account = str(target.get('spec', {}).get('template', {}).get('spec', {}).get('serviceAccountName') or '')
+    return bool(service_account) and not _DEFAULT_COMPUTE_SERVICE_ACCOUNT.fullmatch(service_account)
+
+
 def _escape_deploy_cloud_run_env_value(value: str) -> str:
     """Encode raw live Cloud Run literals for deploy-cloudrun's input grammar."""
     return ''.join(
@@ -86,13 +103,22 @@ def _emit(name: str, value: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-json', type=Path, required=True)
+    parser.add_argument(
+        '--target-json',
+        type=Path,
+        help='Live spec of the service being deployed; key-credential refs are dropped when it runs as its own identity.',
+    )
     args = parser.parse_args()
     service = json.loads(args.source_json.read_text(encoding='utf-8'))
+    target = json.loads(args.target_json.read_text(encoding='utf-8')) if args.target_json else None
+    remove_env_vars = os.getenv('REMOVE_ENV_VARS', '')
+    if target_runs_as_attached_identity(target):
+        remove_env_vars = ','.join(filter(None, (remove_env_vars, *sorted(KEY_CREDENTIAL_ENV_NAMES))))
     env_vars, secrets = clone_environment(
         service,
         os.getenv('ENV_OVERLAY', ''),
         os.getenv('SECRET_OVERLAY', ''),
-        os.getenv('REMOVE_ENV_VARS', ''),
+        remove_env_vars,
     )
     _emit('env_vars', env_vars)
     _emit('secrets', secrets)

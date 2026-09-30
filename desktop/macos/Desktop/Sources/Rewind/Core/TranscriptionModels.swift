@@ -144,6 +144,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var discarded: Bool
   var deleted: Bool
   var isLocked: Bool
+  var visibility: String?
   var starred: Bool
   var folderId: String?
 
@@ -195,6 +196,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     discarded: Bool = false,
     deleted: Bool = false,
     isLocked: Bool = false,
+    visibility: String? = "private",
     starred: Bool = false,
     folderId: String? = nil
   ) {
@@ -241,6 +243,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.discarded = discarded
     self.deleted = deleted
     self.isLocked = isLocked
+    self.visibility = visibility
     self.starred = starred
     self.folderId = folderId
   }
@@ -261,9 +264,26 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
 
   // MARK: - Computed Properties
 
-  /// Check if this session can be retried (under max retry count)
+  /// Strategy the canonical finalizer uses: the persisted choice, else the legacy default.
+  var effectiveFinalizationStrategy: TranscriptionFinalizationStrategy {
+    if let finalizationStrategy {
+      return finalizationStrategy
+    }
+    if backendId?.isEmpty == false {
+      return .cloudReconcile
+    }
+    return source == ConversationSource.desktop.rawValue ? .localSegments : .cloudReconcile
+  }
+
+  /// Check if this session can be retried. Local-segment uploads hold the only copy of the
+  /// transcript and are idempotent server-side, so they never exhaust.
   var canRetry: Bool {
-    retryCount < 5
+    effectiveFinalizationStrategy == .localSegments || retryCount < 5
+  }
+
+  /// The last attempt was rejected by the backend rather than failing in transit.
+  var hasPermanentFinalizationFailure: Bool {
+    lastError?.hasPrefix(FinalizationRetryPolicy.permanentFailurePrefix) == true
   }
 
   /// True once the local session has been associated with a backend conversation.
@@ -281,9 +301,10 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
 
   /// Calculate backoff delay in seconds based on retry count
   var retryBackoffSeconds: TimeInterval {
-    // Exponential backoff: 2^retryCount minutes
-    // 0 retries = 1 min, 1 = 2 min, 2 = 4 min, 3 = 8 min, 4 = 16 min
-    return pow(2.0, Double(retryCount)) * 60.0
+    FinalizationRetryPolicy.backoffSeconds(
+      retryCount: retryCount,
+      permanentFailure: hasPermanentFinalizationFailure
+    )
   }
 
   /// Check if enough time has passed since last update for retry
@@ -483,6 +504,7 @@ extension TranscriptionSessionRecord {
       discarded: conversation.discarded,
       deleted: conversation.deleted,
       isLocked: conversation.isLocked,
+      visibility: conversation.visibility,
       starred: conversation.starred,
       folderId: conversation.folderId
     )
@@ -527,6 +549,7 @@ extension TranscriptionSessionRecord {
     self.discarded = conversation.discarded
     self.deleted = conversation.deleted
     self.isLocked = conversation.isLocked
+    self.visibility = conversation.visibility
     self.starred = conversation.starred
     self.folderId = conversation.folderId
 
@@ -773,6 +796,7 @@ extension TranscriptionSessionRecord {
       discarded: discarded,
       deleted: deleted,
       isLocked: isLocked,
+      visibility: visibility ?? "private",
       starred: starred,
       folderId: folderId,
       inputDeviceName: inputDeviceName,

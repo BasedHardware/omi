@@ -30,7 +30,19 @@ const secondsPerFlashPage = 1.4;
 ///                  The same bytes produce the same verdict every time, so like
 ///                  [outsideRecoveryWindow] this is terminal rather than pending.
 ///                  The local file is kept; only deletion is offered.
-enum WalStatus { inProgress, miss, uploaded, synced, corrupted, outsideRecoveryWindow, unsupportedAudio }
+/// - [uploadRejected] — the upload endpoint definitively refused these bytes
+///                  (HTTP 400/403/413). Connectivity restoration cannot change
+///                  that response, so automatic drains must stop.
+enum WalStatus {
+  inProgress,
+  miss,
+  uploaded,
+  synced,
+  corrupted,
+  outsideRecoveryWindow,
+  unsupportedAudio,
+  uploadRejected,
+}
 
 enum WalStorage { mem, disk, sdcard, flashPage }
 
@@ -63,6 +75,7 @@ enum WalSyncDisplayState {
   corrupted,
   outsideRecoveryWindow,
   unsupportedAudio,
+  uploadRejected,
 }
 
 /// Worst user-facing sync outcome across a set of WALs, so an aggregate
@@ -93,6 +106,7 @@ int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
       WalSyncDisplayState.corrupted => 4,
       WalSyncDisplayState.outsideRecoveryWindow => 4,
       WalSyncDisplayState.unsupportedAudio => 4,
+      WalSyncDisplayState.uploadRejected => 4,
       WalSyncDisplayState.retrying => 3,
       WalSyncDisplayState.syncing => 2,
       WalSyncDisplayState.uploaded => 1,
@@ -182,12 +196,20 @@ class Wal {
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
 
+  /// Client recording id (`activeRecordingId` / `external_data.recording_session_id`).
+  /// Stamped when the WAL is created so a safety copy that misses
+  /// ConversationProcessingStarted can still bind to the live conversation.
+  String? recordingSessionId;
+
   /// The account that created this recording, stamped from the signed-in uid
   /// at creation (or back-filled at logout). Loaded records owned by another
   /// account are parked durably instead of being loaded, so a session never
   /// renders or uploads another account's recordings after an account switch.
   /// Null on records written before this field existed (pre-upgrade data).
   String? ownerUid;
+  String? captureRoot;
+  int? sourceFrameStart;
+  int? sourceClockEpoch;
 
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? geolocation;
@@ -218,6 +240,7 @@ class Wal {
     if (status == WalStatus.corrupted) return WalSyncDisplayState.corrupted;
     if (status == WalStatus.outsideRecoveryWindow) return WalSyncDisplayState.outsideRecoveryWindow;
     if (status == WalStatus.unsupportedAudio) return WalSyncDisplayState.unsupportedAudio;
+    if (status == WalStatus.uploadRejected) return WalSyncDisplayState.uploadRejected;
     if (isSyncing) return WalSyncDisplayState.syncing;
     switch (status) {
       case WalStatus.uploaded:
@@ -230,6 +253,8 @@ class Wal {
         return WalSyncDisplayState.outsideRecoveryWindow;
       case WalStatus.unsupportedAudio:
         return WalSyncDisplayState.unsupportedAudio;
+      case WalStatus.uploadRejected:
+        return WalSyncDisplayState.uploadRejected;
       case WalStatus.miss:
         if (retryCount >= walMaxAutoRetries) return WalSyncDisplayState.failed;
         if (retryCount > 0) return WalSyncDisplayState.retrying;
@@ -272,6 +297,18 @@ class Wal {
     syncSpeedKBps = null;
   }
 
+  /// Marks a definitive upload-endpoint refusal. The bytes stay available for
+  /// review/deletion and automatic connectivity wakes do not re-offer them;
+  /// an explicit manual retry may still re-submit after user intervention.
+  void markUploadRejected() {
+    status = WalStatus.uploadRejected;
+    jobId = null;
+    isSyncing = false;
+    syncStartedAt = null;
+    syncEtaSeconds = null;
+    syncSpeedKBps = null;
+  }
+
   Wal({
     required this.timerStart,
     required this.codec,
@@ -291,7 +328,11 @@ class Wal {
     this.syncedFrameOffset = 0,
     this.originalStorage,
     this.conversationId,
+    this.recordingSessionId,
     this.ownerUid,
+    this.captureRoot,
+    this.sourceFrameStart,
+    this.sourceClockEpoch,
     this.geolocation,
     this.retryCount = 0,
     this.lastRetryAt = 0,
@@ -321,7 +362,11 @@ class Wal {
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
+      recordingSessionId: json['recording_session_id'],
       ownerUid: json['owner_uid'],
+      captureRoot: json['capture_root'],
+      sourceFrameStart: json['source_frame_start'],
+      sourceClockEpoch: json['source_clock_epoch'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -351,7 +396,11 @@ class Wal {
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,
+      'recording_session_id': recordingSessionId,
       'owner_uid': ownerUid,
+      if (captureRoot != null) 'capture_root': captureRoot,
+      if (sourceFrameStart != null) 'source_frame_start': sourceFrameStart,
+      if (sourceClockEpoch != null) 'source_clock_epoch': sourceClockEpoch,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,

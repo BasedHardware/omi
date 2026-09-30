@@ -27,7 +27,12 @@ import database.conversations as conversations_db
 from services.capture_wedge import run_capture_wedge_check
 from utils.conversations import lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.recovery import raw_transcript_bytes, recovery_audio_file_ids, structured_is_rich
+from utils.conversations.recovery import (
+    raw_transcript_bytes,
+    recovery_audio_file_ids,
+    structured_is_rich,
+    verified_recovery_discard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +178,10 @@ def _verify_pending_attempts(
             raw_transcript_bytes(conversation) >= int(job.get('selfheal_transcript_bytes') or 0)
             and recorded_ids <= current_ids
         )
-        if preserved and structured_is_rich(conversation.get('structured')):
+        valid_output = structured_is_rich(conversation.get('structured')) or verified_recovery_discard(
+            conversation.get('discarded'), conversation.get('relevance_decision')
+        )
+        if preserved and valid_output:
             _log_action('verified', reason='ok', uid=uid, conversation_id=conversation_id)
             counters['verified'] += 1
         else:
@@ -241,6 +249,7 @@ def run_selfheal_tick(
     mode: str | None = None,
     dry_run: bool | None = None,
     uid_allowlist: frozenset[str] | None = None,
+    use_configured_uid_allowlist: bool = True,
     scan_fn: Callable[..., dict[str, Any]] = jobs_db.scan_in_progress_conversations,
     cursor_getter: Callable[..., dict[str, Any]] = jobs_db.get_in_progress_content_sweep_cursor,
     cursor_advancer: Callable[..., bool] = jobs_db.advance_in_progress_content_sweep_cursor,
@@ -253,7 +262,7 @@ def run_selfheal_tick(
     now = now or datetime.now(timezone.utc)
     mode = mode if mode is not None else selfheal_mode()
     dry_run = selfheal_dry_run() if dry_run is None else dry_run
-    allowlist = selfheal_uid_allowlist() if uid_allowlist is None else uid_allowlist
+    allowlist = selfheal_uid_allowlist() if uid_allowlist is None and use_configured_uid_allowlist else uid_allowlist
     wedge = wedge_runner or run_capture_wedge_check
     reader = conversation_reader or (
         lambda uid, cid: conversations_db.get_conversation_raw_snapshot(uid, cid, firestore_client=firestore_client)

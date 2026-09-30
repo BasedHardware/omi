@@ -2448,12 +2448,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get detailedDiagnosticMessages => '자세한 진단 메시지';
 
   @override
-  String get autoCreateSpeakers => '발화자 자동 생성';
-
-  @override
-  String get autoCreateWhenNameDetected => '이름 감지 시 자동 생성';
-
-  @override
   String get followUpQuestions => '후속 질문';
 
   @override
@@ -9938,12 +9932,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncStatusUnsupportedAudio => '오디오를 읽을 수 없어 동기화할 수 없습니다';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -10991,9 +10979,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptionUnavailableRecordingContinues => '전사를 이용할 수 없습니다. 기기에서 녹음이 계속되며 나중에 처리됩니다';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => '전사 불가 · 기기에 저장 중';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return '대기 중인 전사 $pending/$total';
   }
@@ -11051,5 +11036,411 @@ class AppLocalizationsKo extends AppLocalizations {
   String get openCall => '통화 열기';
 
   @override
-  String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
+  String get captureRecoveryBanner => 'Omi가 오디오를 보내지 않고 있습니다 — 탭하여 다시 연결하세요';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => '휴대폰으로 녹음하기 전에 펜던트에서 Transcribe Later를 중지하세요.';
+
+  @override
+  String get captureNotTranscribing => '받아쓰기 중단됨';
+
+  @override
+  String get captureAudioSavedTranscribesLater => '오디오 저장됨, 나중에 받아쓰기';
+
+  @override
+  String get captureStillRecording => '녹음 계속 중';
+
+  @override
+  String get captureMicInUseElsewhere => '다른 앱이 마이크 사용 중';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      '통화나 다른 앱이 마이크를 사용 중이라 지금은 Omi가 들을 수 없어요. 마이크가 비면 Omi가 자동으로 다시 시작해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      '사용자 지정 음성-텍스트 서비스에 연결할 수 없어요. Omi가 오디오를 이 휴대폰에 보관했다가 서비스가 복구되면 보내요. 잃어버리는 건 없어요.';
+
+  @override
+  String get captureStarting => '시작하는 중…';
+
+  @override
+  String get capturePhoneStorageFull => '휴대폰 저장 공간 부족';
+
+  @override
+  String get captureStorageAlmostFull => '저장 공간 거의 참';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      '펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name 외 여러 명';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omi의 답변 듣기';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => '알겠습니다. 다음 회의가 20분 후에 시작됩니다.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => '모두 준비됐어요';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => '검토하거나 변경하려면 행을 탭하세요.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => '버튼으로 질문하면 Omi가 답변을 소리내어 읽어줄 수 있습니다.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => '마지막 답변을 들어보세요';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => '마지막 답변을 재생 중입니다...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device을 통해';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => '전화 스피커를 통해';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => '현재 오디오 출력을 통해';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => '답변은 화면에 그대로 유지됩니다. 아무 말도하지 않습니다.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription => '비공개. AirPods, Bluetooth 또는 유선 헤드폰을 통해서만 말합니다.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => '헤드폰이 연결되어 있지 않을 때 휴대폰 스피커를 사용합니다.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi는 침묵할 것입니다. 답변은 여전히 ​​앱에 표시됩니다.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device 연결되었습니다. Omi가 여기서 말할 것입니다.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => '연결된 헤드폰이 없습니다. Omi는 연결될 때까지 침묵을 유지합니다.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device을 통해 재생됩니다.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => '전화 스피커를 통해 큰 소리로 재생됩니다.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return '$settings › $voiceResponse에서 언제든지 변경할 수 있습니다.';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return '$settings › $deviceSettings › $deviceTutorial에서 언제든지 이 둘러보기를 다시 재생하세요.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => '헤드폰';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => '분';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => '작업';
+
+  @override
+  String get usageMonth => '이번 달';
+
+  @override
+  String get usageYear => '올해';
+
+  @override
+  String get usageAll => '전체 기간';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => '화면 모드';
+
+  @override
+  String get appearanceSystem => '시스템';
+
+  @override
+  String get appearanceLight => '라이트';
+
+  @override
+  String get appearanceDark => '다크';
+
+  @override
+  String get chatDiscardRecording => '삭제';
+
+  @override
+  String get voiceQuestionNoSpeech => '잘 듣지 못했어요 — 다시 시도해 주세요';
+
+  @override
+  String get siriIndexSetting => 'Siri 및 Apple Intelligence와 함께 Omi 사용';
+
+  @override
+  String get siriIndexSettingDescription => 'Siri가 이 기기에서 대화, 기억, 작업을 찾도록 허용합니다. 끄면 Apple 검색에서 삭제됩니다.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => '피드백 보내기';
+
+  @override
+  String get feedbackAllGood => '문제없음';
+
+  @override
+  String get feedbackChatWithUs => '자세한 이야기가 필요한가요? 채팅으로 알려주세요';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '정확하지 않음';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '불완전함';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '관련 없음';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '잘못된 맥락';
+
+  @override
+  String get feedbackReasonSummaryOther => '기타';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '오디오 없음';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '전사 품질 낮음';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '잘못된 화자';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '지연 또는 중단';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '불완전하거나 중복됨';
+
+  @override
+  String get feedbackReasonRecordingOther => '기타';
+
+  @override
+  String get searchPeople => '사람 검색';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\"을(를) 새 사람으로 추가';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '모두 $count명 표시';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return '안녕하세요 $name님, 무엇이든 물어보세요';
+  }
+
+  @override
+  String get activity => '활동';
+
+  @override
+  String get places => '장소';
+
+  @override
+  String get recaps => '요약';
+
+  @override
+  String get recent => '최근';
+
+  @override
+  String get searchPartialFailure => '일부 결과를 불러오지 못했습니다';
+
+  @override
+  String get peopleSearchPlaceholder => '사람 검색';
+
+  @override
+  String get peopleNotHeardYet => '아직 듣지 못함';
+
+  @override
+  String get peopleRecent => '최근';
+
+  @override
+  String get deletePeopleMessage => '음성 샘플이 삭제되며 되돌릴 수 없습니다. 지난 대화에서 이 사람의 발언은 이름 없는 화자로 바뀝니다.';
+
+  @override
+  String get personTalkTime => '발화 시간';
+
+  @override
+  String get personLastHeard => '마지막으로 들은 날';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명을 삭제할까요?',
+      one: '1명을 삭제할까요?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => '음성 필요';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명',
+      one: '1명',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '일치하는 사람 없음';
+
+  @override
+  String get deselectAll => '모두 선택 해제';
+
+  @override
+  String get voiceRecognitionSettings => '음성 인식';
+
+  @override
+  String get greetingMorning => '좋은 아침이에요';
+
+  @override
+  String get greetingAfternoon => '좋은 오후예요';
+
+  @override
+  String get greetingEvening => '좋은 저녁이에요';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name님';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => '무엇이 궁금하세요?';
+
+  @override
+  String get askSuggestDecide => '오늘 무엇을 결정했지?';
+
+  @override
+  String get askSuggestOwe => '아직 사람들에게 해 줘야 할 일은?';
+
+  @override
+  String get askSuggestNotice => 'Omi가 알아챈 것은?';
+
+  @override
+  String get pastChats => '지난 채팅';
+
+  @override
+  String get newChat => '새 채팅';
+
+  @override
+  String get startFresh => '처음부터 시작';
+
+  @override
+  String get noPastChats => 'Omi와 나눈 채팅이 여기에 표시돼요.';
+
+  @override
+  String get deleteChatQuestion => '이 채팅을 삭제할까요?';
+
+  @override
+  String get deleteChatMessage => '지난 채팅에서 영구히 사라져요.';
+
+  @override
+  String get deleteChat => '채팅 삭제';
+
+  @override
+  String get appsAskWith => '이것과 함께 Omi에게 묻기';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '오늘 대화 $count개.',
+      one: '오늘 대화 1개.',
+      zero: '오늘은 대화가 없어요.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => '화면에 표시된 내용';
+
+  @override
+  String get meetingScreenshotFallbackCaption => '이 회의의 스크린샷';
+
+  @override
+  String get deleteMeetingScreenshotTitle => '스크린샷을 삭제할까요?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => '이 회의 노트에서 스크린샷이 삭제됩니다. 되돌릴 수 없습니다.';
+
+  @override
+  String get conversationSummaryFailed => '요약 실패';
 }

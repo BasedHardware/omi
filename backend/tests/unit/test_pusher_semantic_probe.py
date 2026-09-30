@@ -4,10 +4,273 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'pusher_semantic_probe.py'
+
+
+def test_alignment_probe_rejects_repeated_live_fixture(probe):
+    fixture = probe.load_fixture()
+    phrase = fixture.expected_phrase
+    observed, expected = probe._alignment_word_counts(
+        [{'text': phrase}, {'text': phrase}], phrase, probe.ALIGNMENT_AUDIO_PASSES
+    )
+    assert (observed, expected) == (34, 34)
+    assert probe._alignment_word_count_ok(observed, expected)
+    for repeats in (4, 8):
+        observed, expected = probe._alignment_word_counts(
+            [{'text': phrase}] * repeats, phrase, probe.ALIGNMENT_AUDIO_PASSES
+        )
+        assert not probe._alignment_word_count_ok(observed, expected)
+    receipt = probe._alignment_receipt(
+        status='FAIL',
+        started_at='2026-09-26T00:00:00Z',
+        failure_stage='transcript_word_count',
+        live_word_count=137,
+        expected_word_count=34,
+    )
+    assert receipt['word_counts'] == {'live': 137, 'expected': 34}
+    assert phrase not in str(receipt)
+
+
+def test_qualification_probe_bounds_one_conversation_with_eight_fixture_sends(probe):
+    phrase = probe.load_fixture().expected_phrase
+    fixture_words = len(phrase.split())
+    for passes, passed in ((1, False), (4, True), (6, True), (8, True)):
+        observed, expected = probe._alignment_word_counts(
+            [{'text': phrase}] * passes, phrase, probe.DISCARD_KEEP_AUDIO_PASSES
+        )
+        assert expected == 136
+        assert probe._base_word_count_ok(observed, expected, fixture_words) is passed
+    # The readback's phrase check proves one pass; the word-count floor
+    # requires four. The upper bound rejects duplicate transcripts.
+    assert not probe._base_word_count_ok(0, expected, fixture_words)
+    assert not probe._base_word_count_ok(272, expected, fixture_words)
+
+
+def test_paced_fixture_leaves_finalization_and_token_headroom(probe, tmp_path):
+    fixture = probe.load_fixture()
+    chunk_bytes = fixture.sample_rate * 2 * probe.CHUNK_MILLISECONDS // 1000
+    audio_seconds = (
+        (len(fixture.pcm) // chunk_bytes) * probe.CHUNK_MILLISECONDS / 1000 * probe.DISCARD_KEEP_AUDIO_PASSES
+    )
+    args = probe.parse_args(
+        [
+            '--api-url',
+            'https://example.invalid',
+            '--bearer-token-file',
+            str(tmp_path / 'token'),
+            '--deployment-receipt',
+            str(tmp_path / 'receipt'),
+            '--project',
+            'synthetic',
+            '--namespace',
+            'synthetic',
+            '--run-id',
+            '123',
+            '--output',
+            str(tmp_path / 'output'),
+        ]
+    )
+
+    # The server's minimum idle rollover is 120 s; leave 30 s for processing
+    # after real-time audio and the settle window, and 30 s for setup before
+    # the five-minute Firebase token expires.
+    assert audio_seconds + probe.TRANSCRIPT_SETTLE_SECONDS + 120 + 30 < args.finalization_timeout_seconds
+    assert args.finalization_timeout_seconds + 30 < 300
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('passes', 'passed'), [(1, False), (4, True), (6, True), (10, False)])
+async def test_base_probe_records_counts_when_rollover_or_duplication_changes_the_readback(
+    monkeypatch, probe, tmp_path, passes, passed
+):
+    phrase = probe.load_fixture().expected_phrase
+    monkeypatch.setattr(probe, '_read_token', lambda *_: 'token')
+
+    async def held_listen(*_args, hold_open, **_kwargs):
+        await hold_open.wait()
+        return True, ''
+
+    monkeypatch.setattr(probe, '_listen_sample', held_listen)
+    monkeypatch.setattr(
+        probe,
+        '_terminal_readback',
+        lambda *_a, **_k: asyncio.sleep(0, result={'transcript_segments': [{'text': phrase}] * passes}),
+    )
+    monkeypatch.setattr(probe, '_observe_candidate_pusher', lambda *_a, **_k: asyncio.sleep(0, result=1))
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text(json.dumps({'image': {'digest': 'sha256:synthetic'}}))
+    args = SimpleNamespace(
+        run_id='123',
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://example.invalid',
+        allow_local_http=False,
+        finalization_timeout_seconds=1,
+        project='synthetic',
+        namespace='synthetic',
+    )
+
+    receipt, actual_passed = await probe.run_probe(args)
+
+    assert actual_passed is passed
+    assert receipt['word_counts'] == {'live': 17 * passes, 'expected': 136}
+    assert receipt['consumer_readback'] == {'status': 'PASS'}
+    assert receipt.get('failure_stage') == (None if passed else 'transcript_word_count')
+
+
+@pytest.mark.asyncio
+async def test_base_probe_attributes_candidate_before_rejecting_durable_phrase(monkeypatch, probe, tmp_path):
+    phrase = probe.load_fixture().expected_phrase
+    monkeypatch.setattr(probe, '_read_token', lambda *_: 'token')
+
+    async def held_listen(*_args, hold_open, **_kwargs):
+        await hold_open.wait()
+        return False, ''
+
+    monkeypatch.setattr(probe, '_listen_sample', held_listen)
+    monkeypatch.setattr(
+        probe,
+        '_terminal_readback',
+        lambda *_a, **_k: asyncio.sleep(0, result={'transcript_segments': [{'text': 'unrelated ' * 68}]}),
+    )
+    observed = []
+
+    async def observe(*_args, **_kwargs):
+        observed.append(True)
+        return 1
+
+    monkeypatch.setattr(probe, '_observe_candidate_pusher', observe)
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text(json.dumps({'image': {'digest': 'sha256:synthetic'}}))
+    args = SimpleNamespace(
+        run_id='123',
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://example.invalid',
+        allow_local_http=False,
+        finalization_timeout_seconds=240,
+        project='synthetic',
+        namespace='synthetic',
+    )
+
+    receipt, passed = await probe.run_probe(args)
+
+    assert not passed
+    assert receipt['failure_stage'] == 'transcript_mismatch'
+    assert receipt['word_counts'] == {'live': 68, 'expected': len(phrase.split()) * 8}
+    assert receipt['producer_observation'] == {'status': 'PASS', 'candidate_pod_count': 1}
+    assert receipt['consumer_readback'] == {'status': 'FAIL'}
+    assert observed == [True]
+
+
+@pytest.mark.asyncio
+async def test_base_probe_rejects_unattributed_candidate_even_with_full_durable_phrase(monkeypatch, probe, tmp_path):
+    phrase = probe.load_fixture().expected_phrase
+    monkeypatch.setattr(probe, '_read_token', lambda *_: 'token')
+
+    async def held_listen(*_args, hold_open, **_kwargs):
+        await hold_open.wait()
+        return True, phrase
+
+    async def missing_candidate(*_args, **_kwargs):
+        raise probe.ProbeError('producer_observation')
+
+    monkeypatch.setattr(probe, '_listen_sample', held_listen)
+    monkeypatch.setattr(
+        probe,
+        '_terminal_readback',
+        lambda *_a, **_k: asyncio.sleep(0, result={'transcript_segments': [{'text': phrase}] * 8}),
+    )
+    monkeypatch.setattr(probe, '_observe_candidate_pusher', missing_candidate)
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text(json.dumps({'image': {'digest': 'sha256:synthetic'}}))
+    args = SimpleNamespace(
+        run_id='123',
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://example.invalid',
+        allow_local_http=False,
+        finalization_timeout_seconds=240,
+        project='synthetic',
+        namespace='synthetic',
+    )
+
+    receipt, passed = await probe.run_probe(args)
+
+    assert not passed
+    assert receipt['failure_stage'] == 'producer_observation'
+    assert receipt['producer_observation'] == {'status': 'FAIL', 'candidate_pod_count': 0}
+
+
+@pytest.mark.asyncio
+async def test_base_probe_reports_terminal_stt_socket_death_before_readback_timeout(monkeypatch, probe, tmp_path):
+    """A 1011 listen failure cannot masquerade as a finalization timeout."""
+    from websockets.frames import Close
+
+    monkeypatch.setattr(probe, '_read_token', lambda *_: 'token')
+
+    async def failed_listen(*_args, **_kwargs):
+        await asyncio.sleep(0)
+        raise probe.websockets.exceptions.ConnectionClosedError(Close(1011, 'provider details'), None)
+
+    async def waiting_readback(*_args, **_kwargs):
+        await asyncio.sleep(3600)
+        pytest.fail('readback unexpectedly finished')
+
+    monkeypatch.setattr(probe, '_listen_sample', failed_listen)
+    monkeypatch.setattr(probe, '_terminal_readback', waiting_readback)
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text(json.dumps({'image': {'digest': 'sha256:synthetic'}}))
+    args = SimpleNamespace(
+        run_id='123',
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://example.invalid',
+        allow_local_http=False,
+        finalization_timeout_seconds=180,
+        project='synthetic',
+        namespace='synthetic',
+    )
+
+    receipt, passed = await asyncio.wait_for(probe.run_probe(args), timeout=1)
+
+    assert not passed
+    assert receipt['failure_stage'] == 'stt_unavailable'
+    assert receipt['consumer_readback'] == {'status': 'FAIL'}
+    assert 'provider details' not in json.dumps(receipt)
+
+
+def test_base_probe_status_line_exposes_only_bounded_diagnostics(monkeypatch, probe, tmp_path, capsys):
+    receipt = probe._receipt(
+        status='FAIL',
+        evidence_id='pusher-dev-123-synthetic',
+        deployment_receipt={},
+        deployment_receipt_sha256='',
+        started_at='2026-09-27T00:00:00Z',
+        ended_at='2026-09-27T00:00:01Z',
+        candidate_pod_count=0,
+        failure_stage='transcript_word_count',
+        live_word_count=17,
+        expected_word_count=136,
+        consumer_readback_passed=True,
+    )
+    receipt['private_extra'] = 'secret transcript token endpoint uid'
+    monkeypatch.setattr(
+        probe, 'parse_args', lambda *_: SimpleNamespace(output=tmp_path / 'receipt.json', alignment_scenario=False)
+    )
+    monkeypatch.setattr(probe, 'run_probe', lambda *_: asyncio.sleep(0, result=(receipt, False)))
+
+    assert probe.main([]) == 1
+    line = capsys.readouterr().out.strip()
+    assert 'failure_stage=transcript_word_count' in line
+    assert 'word_counts_live=17 word_counts_expected=136' in line
+    assert 'consumer_readback=PASS candidate_pod_count=0' in line
+    assert 'secret' not in line
+    assert 'transcript token endpoint uid' not in line
 
 
 @pytest.fixture
@@ -87,6 +350,7 @@ class _FailoverListenSocket:
         ]
         self._late = {'segments': [{'text': 'complaint against the wizard'}]}
         self.closed = False
+        self.sent_at: list[float] = []
 
     async def recv(self) -> str:
         if self._early:
@@ -103,6 +367,7 @@ class _FailoverListenSocket:
         raise asyncio.TimeoutError
 
     async def send(self, _chunk: bytes) -> None:
+        self.sent_at.append(self._clock[0])
         self._stream_ended_at = self._clock[0]
 
     async def close(self, code: int = 1000, reason: str = '') -> None:
@@ -156,6 +421,11 @@ async def test_listen_sample_collects_a_final_segment_that_lands_after_one_failo
     await probe._listen_sample('https://api.example.invalid', 'token', fixture, 'conversation-1')
 
     assert socket.closed
+    assert len(socket.sent_at) == probe.DISCARD_KEEP_AUDIO_PASSES * 30
+    assert all(
+        later - earlier >= probe.CHUNK_MILLISECONDS / 1000.0 - 1e-6
+        for earlier, later in zip(socket.sent_at, socket.sent_at[1:])
+    )
 
 
 @pytest.mark.asyncio
@@ -205,6 +475,19 @@ async def test_listen_sample_still_fails_closed_when_the_phrase_never_lands(monk
         await probe._terminal_readback(
             'https://api.example.invalid', 'token', 'conversation-1', 1, expected_phrase=fixture.expected_phrase
         )
+
+
+@pytest.mark.asyncio
+async def test_listen_sample_reports_bounded_stt_failure_event(monkeypatch, probe):
+    clock = [0.0]
+    socket = _FailoverListenSocket('conversation-1', 90.0, clock)
+    socket._early.append({'type': 'service_status', 'status': 'stt_failed', 'status_text': 'provider details'})
+    _install_fake_timeline(monkeypatch, probe, clock)
+    monkeypatch.setattr(probe.websockets, 'connect', lambda *_a, **_k: _FakeConnect(socket))
+    fixture = probe.Fixture(pcm=b'\x00' * (16000 * 2), sample_rate=16000, expected_phrase='hello')
+
+    with pytest.raises(probe.ProbeError, match='^stt_unavailable$'):
+        await probe._listen_sample('https://api.example.invalid', 'token', fixture, 'conversation-1')
 
 
 @pytest.mark.asyncio
@@ -261,3 +544,93 @@ async def test_terminal_readback_enforces_the_fixture_phrase_in_the_durable_tran
                 1,
                 expected_phrase='he began a confused complaint against the wizard',
             )
+
+
+def test_alignment_coverage_compares_segments_and_spans_on_one_axis(probe):
+    origin = probe._epoch_seconds('2026-09-26T07:08:30.000000Z')
+    assert origin == probe._epoch_seconds('2026-09-26T07:08:30')  # naive ISO is UTC
+    spans = [{'start': origin, 'end': origin + 9.9}, {'start': origin + 14.086, 'end': origin + 18.986}]
+    # Segment times are seconds from started_at; spans are wall-epoch seconds.
+    assert probe._alignment_covered(spans, origin + 0.28, origin + 4.66)
+    assert probe._alignment_covered(spans, origin + 14.186, origin + 18.746)
+    assert not probe._alignment_covered(spans, origin + 10.0, origin + 12.0)
+    # The relative segment offsets alone never overlap wall-epoch spans.
+    assert not probe._alignment_covered(spans, 0.28, 4.66)
+
+
+def test_alignment_receipt_exposes_only_the_probe_conversation_id(probe):
+    conversation_id = '5df117e1-3b4b-41b2-94c6-54f3c690e811'
+    receipt = probe._alignment_receipt(
+        status='PASS',
+        started_at='2026-09-26T00:00:00Z',
+        failure_stage=None,
+        conversation_id=conversation_id,
+        coverage_ok=True,
+        candidate_pusher_observed=True,
+    )
+    assert receipt['conversation_id'] == conversation_id
+    assert receipt['checks']['span_coverage'] is True
+    assert receipt['checks']['candidate_pusher_observed'] is True
+    assert 'omi-release-probe' not in json.dumps(receipt)
+    assert 'transcript' not in json.dumps(receipt)
+
+
+@pytest.mark.asyncio
+async def test_alignment_probe_requires_private_cloud_flag_on_finalized_conversation(monkeypatch, probe, tmp_path):
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text('{"source_sha":"synthetic"}', encoding='utf-8')
+    monkeypatch.setattr(probe, '_read_token', lambda _path: 'synthetic-token')
+    monkeypatch.setattr(probe, 'load_fixture', lambda: SimpleNamespace(expected_phrase='synthetic'))
+    monkeypatch.setattr(
+        probe,
+        '_http_json_method',
+        lambda url, _token: (
+            (200, {'private_cloud_sync_enabled': True})
+            if url.endswith('/v1/users/private-cloud-sync')
+            else (200, {'id': conversation_id, 'private_cloud_sync_enabled': False})
+        ),
+    )
+
+    async def no_op(*_args, **_kwargs):
+        return []
+
+    async def observe(*_args, **_kwargs):
+        return 1
+
+    monkeypatch.setattr(probe, '_alignment_listen', no_op)
+    monkeypatch.setattr(probe, '_terminal_readback', no_op)
+    monkeypatch.setattr(probe, '_observe_candidate_pusher', observe)
+    conversation_id = '5df117e1-3b4b-41b2-94c6-54f3c690e811'
+    monkeypatch.setattr(probe.uuid, 'uuid4', lambda: conversation_id)
+    args = SimpleNamespace(
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://api.omiapi.com',
+        allow_local_http=False,
+        finalization_timeout_seconds=1,
+        project='based-hardware-dev',
+        namespace='dev-omi-backend',
+    )
+    receipt, passed = await probe.run_alignment_scenario(args)
+    assert not passed
+    assert receipt['failure_stage'] == 'private_cloud_conversation_flag'
+    assert receipt['checks']['candidate_pusher_observed'] is True
+    assert receipt['conversation_id'] == conversation_id
+
+
+@pytest.mark.asyncio
+async def test_alignment_probe_rejects_non_dev_endpoint_before_any_account_write(monkeypatch, probe, tmp_path):
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text('{"source_sha":"synthetic"}', encoding='utf-8')
+    monkeypatch.setattr(probe, '_read_token', lambda _path: 'synthetic-token')
+    monkeypatch.setattr(probe, 'load_fixture', lambda: SimpleNamespace(expected_phrase='synthetic'))
+    monkeypatch.setattr(probe, '_http_json_method', lambda *_args: pytest.fail('unexpected account request'))
+    args = SimpleNamespace(
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://api.omi.me',
+        allow_local_http=False,
+    )
+    receipt, passed = await probe.run_alignment_scenario(args)
+    assert not passed
+    assert receipt['failure_stage'] == 'dev_api_url'
