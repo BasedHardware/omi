@@ -153,7 +153,7 @@ async def root():
     <div class="container">
         <h1>Omi Nobel Prize Integration App <span class="badge">Active</span></h1>
         <p>Zero-authentication global intelligence integration bringing world-changing discoveries, scientific breakthroughs, peace milestones, and laureate biographies to the Omi AI voice wearable.</p>
-        
+
         <div class="tools">
             <h3>Registered Chat Tools:</h3>
             <div class="tool-card">
