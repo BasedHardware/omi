@@ -91,9 +91,10 @@ def _opt_out_from_token(token: Optional[str]) -> bool:
     failed unsubscribe rather than surfaced with any detail that could
     distinguish "bad token" from "valid token, write failed".
     """
-    if not token:
+    clean_token = token.strip() if isinstance(token, str) else None
+    if not clean_token:
         return False
-    uid = verify_unsubscribe_token(token)
+    uid = verify_unsubscribe_token(clean_token)
     if not uid:
         return False
     try:
@@ -111,12 +112,13 @@ def get_email_unsubscribe(token: Optional[str] = None):
     A link prefetch by a mail scanner lands here and changes nothing, which is
     the entire reason the write lives on ``POST``.
     """
-    if not token or not verify_unsubscribe_token(token):
+    clean_token = token.strip() if isinstance(token, str) else None
+    if not clean_token or not verify_unsubscribe_token(clean_token):
         return HTMLResponse(_NEUTRAL_ERROR_HTML, status_code=400)
-    return HTMLResponse(_confirm_page_html(token), status_code=200)
+    return HTMLResponse(_confirm_page_html(clean_token), status_code=200)
 
 
-@router.post('/email/unsubscribe', tags=['email'], response_class=PlainTextResponse)
+@router.post('/email/unsubscribe', tags=['email'], response_class=HTMLResponse)
 def post_email_unsubscribe(token: Optional[str] = None):
     """The writer: RFC 8058 one-click target, and the confirm page's submit.
 
