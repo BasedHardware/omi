@@ -11649,4 +11649,18 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Falha no resumo';
+
+  @override
+  String get reconnectionsRecent => 'Reconexões (últimos 7 dias)';
+
+  @override
+  String get failedConnections => 'Falhas de conexão';
+
+  @override
+  String get failedConnectionsRecent => 'Falhas de conexão(últimos 7 dias)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count desde o emparelhamento';
+  }
 }

@@ -3660,5 +3660,9 @@
     "meetingScreenshotFallbackCaption": "Captură de ecran din această întâlnire",
     "deleteMeetingScreenshotTitle": "Ștergi captura de ecran?",
     "deleteMeetingScreenshotMessage": "Captura de ecran va fi eliminată din nota acestei întâlniri. Acțiunea nu poate fi anulată.",
-    "conversationSummaryFailed": "Rezumatul a eșuat"
+    "conversationSummaryFailed": "Rezumatul a eșuat",
+    "reconnectionsRecent": "Reconectări (ultimele 7 zile)",
+    "failedConnections": "Conexiuni eșuate",
+    "failedConnectionsRecent": "Conexiuni eșuate(ultimele 7 zile)",
+    "diagnosticsCountSincePairing": "{count} de la asociere"
 }

@@ -3660,5 +3660,9 @@
     "meetingScreenshotFallbackCaption": "Στιγμιότυπο οθόνης από αυτή τη σύσκεψη",
     "deleteMeetingScreenshotTitle": "Διαγραφή στιγμιότυπου οθόνης;",
     "deleteMeetingScreenshotMessage": "Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση.",
-    "conversationSummaryFailed": "Η σύνοψη απέτυχε"
+    "conversationSummaryFailed": "Η σύνοψη απέτυχε",
+    "reconnectionsRecent": "Επανασυνδέσεις (τελευταίες 7 ημέρες)",
+    "failedConnections": "Αποτυχημένες συνδέσεις",
+    "failedConnectionsRecent": "Αποτυχημένες συνδέσεις(τελευταίες 7 ημέρες)",
+    "diagnosticsCountSincePairing": "{count} από τη σύζευξη"
 }

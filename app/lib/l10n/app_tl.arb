@@ -11220,5 +11220,9 @@
     "meetingScreenshotFallbackCaption": "Screenshot mula sa meeting na ito",
     "deleteMeetingScreenshotTitle": "Burahin ang Screenshot?",
     "deleteMeetingScreenshotMessage": "Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik.",
-    "conversationSummaryFailed": "Nabigo ang buod"
+    "conversationSummaryFailed": "Nabigo ang buod",
+    "reconnectionsRecent": "Muling pagkonekta (nakaraang 7 araw)",
+    "failedConnections": "Mga bigong koneksyon",
+    "failedConnectionsRecent": "Mga bigong koneksyon(nakaraang 7 araw)",
+    "diagnosticsCountSincePairing": "{count} mula nang ipares"
 }

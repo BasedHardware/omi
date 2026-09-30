@@ -11667,4 +11667,18 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'ಸಾರಾಂಶ ವಿಫಲವಾಗಿದೆ';
+
+  @override
+  String get reconnectionsRecent => 'ಮರುಸಂಪರ್ಕಗಳು (ಕಳೆದ 7 ದಿನಗಳು)';
+
+  @override
+  String get failedConnections => 'ವಿಫಲ ಸಂಪರ್ಕಗಳು';
+
+  @override
+  String get failedConnectionsRecent => 'ವಿಫಲ ಸಂಪರ್ಕಗಳು(ಕಳೆದ 7 ದಿನಗಳು)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return 'ಜೋಡಿಯಾದಾಗಿನಿಂದ $count';
+  }
 }

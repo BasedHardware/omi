@@ -41,6 +41,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   BleDeviceDiagnostics? _diagnostics;
   bool _isLoading = true;
   bool _isSending = false;
+
+  /// When native started counting reconnections / failed connects. Null while
+  /// extended diagnostics are unavailable; the page then shows lifetime counts.
+  int? _countersSinceMs;
   final _bleHostApi = BleHostApi();
   final GlobalKey _shareButtonKey = GlobalKey();
 
@@ -59,7 +63,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   }
 
   Future<void> _loadAll() async {
-    await Future.wait([_loadDiagnostics(), _loadBatteryHistory()]);
+    await Future.wait([_loadDiagnostics(), _loadBatteryHistory(), _loadCountersSince()]);
     if (mounted) {
       setState(() => _isLoading = false);
     }
@@ -72,6 +76,38 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         setState(() => _diagnostics = diagnostics);
       }
     } catch (_) {}
+  }
+
+  Future<void> _loadCountersSince() async {
+    num? since;
+    try {
+      final extended = jsonDecode(await _bleHostApi.getExtendedDeviceDiagnostics(widget.deviceId));
+      since = (extended as Map?)?['counters_since'] as num?;
+    } catch (_) {
+      // Extended diagnostics are best-effort; the page falls back to lifetime counts.
+    }
+    if (mounted) {
+      setState(() => _countersSinceMs = since?.toInt());
+    }
+  }
+
+  /// Recovered disconnects since [_countersSinceMs], bounded by the native
+  /// history's 7-day retention. Mirrors `reconnection_count_window` in
+  /// [_buildBundle]. Null when the window anchor is unavailable.
+  int? get _reconnectionCountWindow {
+    final since = _countersSinceMs;
+    final history = _diagnostics?.disconnectHistory;
+    if (since == null || history == null) return null;
+    return history.where((e) => e.timestamp >= since && e.timeToReconnectMs > 0).length;
+  }
+
+  /// Connect attempts that never established, since [_countersSinceMs]. Mirrors
+  /// `fail_to_connect_count_window` in [_buildBundle].
+  int? get _failToConnectCountWindow {
+    final since = _countersSinceMs;
+    final history = _diagnostics?.disconnectHistory;
+    if (since == null || history == null) return null;
+    return history.where((e) => e.timestamp >= since && e.eventType == 'fail_to_connect').length;
   }
 
   Future<void> _loadBatteryHistory() async {
@@ -333,6 +369,12 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final battery = deviceProvider.batteryLevel;
     final connectedAt = _diagnostics?.connectedAt ?? 0;
     final reconnections = _diagnostics?.reconnectionCount ?? 0;
+    final failToConnect = _diagnostics?.failToConnectCount ?? 0;
+    // Lifetime counters read catastrophic after months of pairing (10k+
+    // reconnections); the 7-day window reflects the behavior users actually
+    // experience, so it leads and the lifetime number stays as context.
+    final reconnectsWindow = _reconnectionCountWindow;
+    final failsWindow = _failToConnectCountWindow;
     final latestRssi = _rssiPoints.isNotEmpty ? _rssiPoints.last.rssi : null;
 
     return Column(
@@ -350,9 +392,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             Expanded(
               child: _statusCard(
                 icon: FontAwesomeIcons.arrowsRotate,
-                label: context.l10n.reconnections,
-                value: '$reconnections',
-                valueColor: reconnections > 5 ? OmiColors.danger : null,
+                label: reconnectsWindow != null ? context.l10n.reconnectionsRecent : context.l10n.reconnections,
+                value: '${reconnectsWindow ?? reconnections}',
+                valueColor: (reconnectsWindow ?? reconnections) > 5 ? OmiColors.danger : null,
+                subtitle: reconnectsWindow != null ? context.l10n.diagnosticsCountSincePairing(reconnections) : null,
               ),
             ),
           ],
@@ -381,6 +424,14 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
               ),
             ],
           ),
+        ),
+        const SizedBox(height: OmiSpacing.sm),
+        _statusCard(
+          icon: FontAwesomeIcons.plugCircleXmark,
+          label: failsWindow != null ? context.l10n.failedConnectionsRecent : context.l10n.failedConnections,
+          value: '${failsWindow ?? failToConnect}',
+          valueColor: (failsWindow ?? failToConnect) > 0 ? OmiColors.warning : null,
+          subtitle: failsWindow != null ? context.l10n.diagnosticsCountSincePairing(failToConnect) : null,
         ),
       ],
     );

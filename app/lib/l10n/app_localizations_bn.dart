@@ -11631,4 +11631,18 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'সারাংশ তৈরি করা যায়নি';
+
+  @override
+  String get reconnectionsRecent => 'পুনরায় সংযোগ (শেষ ৭ দিন)';
+
+  @override
+  String get failedConnections => 'ব্যর্থ সংযোগ';
+
+  @override
+  String get failedConnectionsRecent => 'ব্যর্থ সংযোগ(শেষ ৭ দিন)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return 'জোড়া হওয়ার পর থেকে $count';
+  }
 }

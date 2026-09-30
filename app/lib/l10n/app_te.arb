@@ -11220,5 +11220,9 @@
     "meetingScreenshotFallbackCaption": "ఈ సమావేశం నుండి స్క్రీన్‌షాట్",
     "deleteMeetingScreenshotTitle": "స్క్రీన్‌షాట్‌ను తొలగించాలా?",
     "deleteMeetingScreenshotMessage": "ఇది ఈ సమావేశం నోట్ నుండి స్క్రీన్‌షాట్‌ను తీసివేస్తుంది. దీన్ని రద్దు చేయలేరు.",
-    "conversationSummaryFailed": "సారాంశం విఫలమైంది"
+    "conversationSummaryFailed": "సారాంశం విఫలమైంది",
+    "reconnectionsRecent": "తిరిగి కనెక్షన్లు (గత 7 రోజులు)",
+    "failedConnections": "విఫలమైన కనెక్షన్లు",
+    "failedConnectionsRecent": "విఫలమైన కనెక్షన్లు(గత 7 రోజులు)",
+    "diagnosticsCountSincePairing": "జతచేసినప్పటినుండి {count}"
 }

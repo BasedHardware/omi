@@ -3756,5 +3756,9 @@
     "meetingScreenshotFallbackCaption": "Képernyőkép erről a megbeszélésről",
     "deleteMeetingScreenshotTitle": "Törli a képernyőképet?",
     "deleteMeetingScreenshotMessage": "A képernyőkép törlődik a megbeszélés jegyzetéből. Ez nem vonható vissza.",
-    "conversationSummaryFailed": "Az összefoglaló nem sikerült"
+    "conversationSummaryFailed": "Az összefoglaló nem sikerült",
+    "reconnectionsRecent": "Újracsatlakozások (elmúlt 7 nap)",
+    "failedConnections": "Sikertelen kapcsolatok",
+    "failedConnectionsRecent": "Sikertelen kapcsolatok(elmúlt 7 nap)",
+    "diagnosticsCountSincePairing": "{count} a párosítás óta"
 }

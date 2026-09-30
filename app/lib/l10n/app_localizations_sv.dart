@@ -11640,4 +11640,18 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Sammanfattningen misslyckades';
+
+  @override
+  String get reconnectionsRecent => 'Återanslutningar (senaste 7 dagarna)';
+
+  @override
+  String get failedConnections => 'Misslyckade anslutningar';
+
+  @override
+  String get failedConnectionsRecent => 'Misslyckade anslutningar(senaste 7 dagarna)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count sedan kopplingen';
+  }
 }

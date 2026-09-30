@@ -3660,5 +3660,9 @@
     "meetingScreenshotFallbackCaption": "इस मीटिंग का स्क्रीनशॉट",
     "deleteMeetingScreenshotTitle": "स्क्रीनशॉट हटाएं?",
     "deleteMeetingScreenshotMessage": "यह इस मीटिंग के नोट से स्क्रीनशॉट हटा देगा। इसे पूर्ववत नहीं किया जा सकता।",
-    "conversationSummaryFailed": "सारांश नहीं बन सका"
+    "conversationSummaryFailed": "सारांश नहीं बन सका",
+    "reconnectionsRecent": "पुनः कनेक्शन (पिछले 7 दिन)",
+    "failedConnections": "विफल कनेक्शन",
+    "failedConnectionsRecent": "विफल कनेक्शन(पिछले 7 दिन)",
+    "diagnosticsCountSincePairing": "पेयरिंग के बाद से {count}"
 }

@@ -11220,5 +11220,9 @@
     "meetingScreenshotFallbackCaption": "צילום מסך מהפגישה הזו",
     "deleteMeetingScreenshotTitle": "למחוק את צילום המסך?",
     "deleteMeetingScreenshotMessage": "צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו.",
-    "conversationSummaryFailed": "יצירת הסיכום נכשלה"
+    "conversationSummaryFailed": "יצירת הסיכום נכשלה",
+    "reconnectionsRecent": "חיבורים מחדש (7 הימים האחרונים)",
+    "failedConnections": "חיבורים שנכשלו",
+    "failedConnectionsRecent": "חיבורים שנכשלו(7 הימים האחרונים)",
+    "diagnosticsCountSincePairing": "{count} מאז ההתאמה"
 }

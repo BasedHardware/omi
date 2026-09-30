@@ -11220,5 +11220,9 @@
     "meetingScreenshotFallbackCaption": "اس میٹنگ کا اسکرین شاٹ",
     "deleteMeetingScreenshotTitle": "اسکرین شاٹ حذف کریں؟",
     "deleteMeetingScreenshotMessage": "یہ اس میٹنگ کے نوٹ سے اسکرین شاٹ ہٹا دے گا۔ اسے واپس نہیں کیا جا سکتا۔",
-    "conversationSummaryFailed": "خلاصہ ناکام ہو گیا"
+    "conversationSummaryFailed": "خلاصہ ناکام ہو گیا",
+    "reconnectionsRecent": "دوبارہ کنکشن (پچھلے 7 دن)",
+    "failedConnections": "ناکام کنکشن",
+    "failedConnectionsRecent": "ناکام کنکشن(پچھلے 7 دن)",
+    "diagnosticsCountSincePairing": "جوڑنے کے بعد سے {count}"
 }

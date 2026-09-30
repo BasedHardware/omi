@@ -11697,4 +11697,18 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Riepilogo non riuscito';
+
+  @override
+  String get reconnectionsRecent => 'Riconnessioni (ultimi 7 giorni)';
+
+  @override
+  String get failedConnections => 'Connessioni non riuscite';
+
+  @override
+  String get failedConnectionsRecent => 'Connessioni non riuscite(ultimi 7 giorni)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count dall\'associazione';
+  }
 }

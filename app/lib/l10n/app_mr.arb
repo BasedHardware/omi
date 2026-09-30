@@ -11220,5 +11220,9 @@
     "meetingScreenshotFallbackCaption": "या मीटिंगचा स्क्रीनशॉट",
     "deleteMeetingScreenshotTitle": "स्क्रीनशॉट हटवायचा?",
     "deleteMeetingScreenshotMessage": "यामुळे या मीटिंगच्या नोटमधून स्क्रीनशॉट काढला जाईल. हे पूर्ववत करता येणार नाही.",
-    "conversationSummaryFailed": "सारांश अयशस्वी झाला"
+    "conversationSummaryFailed": "सारांश अयशस्वी झाला",
+    "reconnectionsRecent": "पुन्हा कनेक्शन (गेल्या 7 दिवसांत)",
+    "failedConnections": "अयशस्वी कनेक्शन",
+    "failedConnectionsRecent": "अयशस्वी कनेक्शन(गेल्या 7 दिवसांत)",
+    "diagnosticsCountSincePairing": "जोडणीनंतर {count}"
 }

@@ -3660,5 +3660,9 @@
     "meetingScreenshotFallbackCaption": "Екранна снимка от тази среща",
     "deleteMeetingScreenshotTitle": "Изтриване на екранната снимка?",
     "deleteMeetingScreenshotMessage": "Екранната снимка ще бъде премахната от бележката за тази среща. Това не може да бъде отменено.",
-    "conversationSummaryFailed": "Резюмето не бе създадено"
+    "conversationSummaryFailed": "Резюмето не бе създадено",
+    "reconnectionsRecent": "Повторни свързвания (последните 7 дни)",
+    "failedConnections": "Неуспешни връзки",
+    "failedConnectionsRecent": "Неуспешни връзки(последните 7 дни)",
+    "diagnosticsCountSincePairing": "{count} от сдвояването"
 }

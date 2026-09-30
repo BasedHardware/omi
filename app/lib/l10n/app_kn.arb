@@ -11220,5 +11220,9 @@
     "meetingScreenshotFallbackCaption": "ಈ ಸಭೆಯ ಸ್ಕ್ರೀನ್‌ಶಾಟ್",
     "deleteMeetingScreenshotTitle": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅಳಿಸುವುದೇ?",
     "deleteMeetingScreenshotMessage": "ಇದು ಈ ಸಭೆಯ ಟಿಪ್ಪಣಿಯಿಂದ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.",
-    "conversationSummaryFailed": "ಸಾರಾಂಶ ವಿಫಲವಾಗಿದೆ"
+    "conversationSummaryFailed": "ಸಾರಾಂಶ ವಿಫಲವಾಗಿದೆ",
+    "reconnectionsRecent": "ಮರುಸಂಪರ್ಕಗಳು (ಕಳೆದ 7 ದಿನಗಳು)",
+    "failedConnections": "ವಿಫಲ ಸಂಪರ್ಕಗಳು",
+    "failedConnectionsRecent": "ವಿಫಲ ಸಂಪರ್ಕಗಳು(ಕಳೆದ 7 ದಿನಗಳು)",
+    "diagnosticsCountSincePairing": "ಜೋಡಿಯಾದಾಗಿನಿಂದ {count}"
 }
