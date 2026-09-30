@@ -74,20 +74,23 @@ def test_prod_enables_conversation_notes_v2_on_every_summary_pipeline_service():
         assert _value(env_maps[scope], 'CONVERSATION_NOTES_V2_ENABLED') == 'true', f'{scope}'
 
 
-def test_prod_keeps_calendar_and_ocr_context_flags_dark():
-    """Calendar context read and OCR context stay dev-only until their own bakes."""
+def test_prod_enables_meeting_context_and_screen_evidence_flags_everywhere():
+    """Graduated to prod on 2026-09-30 (David: screen evidence in one pass).
+
+    Every summary-pipeline host must agree, and the screenshot bucket must be wired on each,
+    or reprocess and live finalization would read different evidence.
+    """
     env_maps = _env_maps(_composed()['environments']['prod'])
     for scope in SUMMARY_PIPELINE_SCOPES:
-        for flag in ('CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED', 'CONVERSATION_OCR_CONTEXT_ENABLED'):
-            assert _value(env_maps[scope], flag) == 'false', f'{scope}:{flag}'
-
-
-def test_prod_keeps_rich_meeting_notes_flags_dark():
-    """Rich meeting notes and screen-text context start dev-only for their bake."""
-    env_maps = _env_maps(_composed()['environments']['prod'])
-    for scope in SUMMARY_PIPELINE_SCOPES:
-        for flag in ('MEETING_NOTES_RICH_CONTEXT_ENABLED', 'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED'):
-            assert _value(env_maps[scope], flag) == 'false', f'{scope}:{flag}'
+        for flag in (
+            'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
+            'CONVERSATION_OCR_CONTEXT_ENABLED',
+            'MEETING_NOTES_RICH_CONTEXT_ENABLED',
+            'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED',
+            'MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED',
+        ):
+            assert _value(env_maps[scope], flag) == 'true', f'{scope}:{flag}'
+        assert _value(env_maps[scope], 'BUCKET_SCREEN_FRAMES') == 'based-hardware-prod-screen-frames', scope
 
 
 def test_prod_keeps_basic_plan_eager_extraction_gate_dark():

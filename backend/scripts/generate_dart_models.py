@@ -90,6 +90,10 @@ SCHEMA_GROUPS = {
             'SyncCaptureManifestResponse',
         ),
     },
+    'chat_sessions': {
+        'output': DEFAULT_OUTPUT_DIR / 'chat_sessions_wire.g.dart',
+        'schemas': ('ChatSessionResponse',),
+    },
     'messages': {
         'output': DEFAULT_OUTPUT_DIR / 'messages_wire.g.dart',
         'schemas': (
