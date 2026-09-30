@@ -2064,18 +2064,18 @@ environments:
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
             value: '25'
@@ -2192,6 +2192,9 @@ environments:
             category: reliability
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+            category: storage_retention
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
             value: based-hardware
           ACCOUNT_DELETION_DISPATCH_MODE:
@@ -2292,18 +2295,18 @@ environments:
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
             value: '25'
@@ -2331,6 +2334,9 @@ environments:
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+            category: storage_retention
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -2493,6 +2499,9 @@ environments:
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
+            SCREEN_FRAME_SIGNING_SECRET:
+              secret: SCREEN_FRAME_SIGNING_SECRET
+              version: latest
           env:
             TRANSLATION_DEMAND_SHADOW_ENABLED:
               value: 'false'
@@ -2559,18 +2568,18 @@ environments:
               category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
               value: '25'
@@ -2664,8 +2673,14 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            SCREEN_FRAME_EGRESS_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            BUCKET_SCREEN_FRAMES:
+              value: based-hardware-prod-screen-frames
+              category: storage_retention
             ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
               value: '1'
               category: rollout
@@ -2862,18 +2877,18 @@ environments:
               category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
               value: '25'
@@ -2896,6 +2911,9 @@ environments:
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            BUCKET_SCREEN_FRAMES:
+              value: based-hardware-prod-screen-frames
+              category: storage_retention
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
