@@ -48,17 +48,20 @@ FIRMWARE_TAG_PATTERN = re.compile(
 # - Omi_CV1: Omi CV 1
 # - OMI_GLASS: OMI Glass
 def _get_device_by_model_number(device_model: str):
-    if device_model in ['Omi DevKit 2']:
+    if not isinstance(device_model, str):
+        return None
+    model_clean = device_model.strip()
+    if model_clean in ['Omi DevKit 2']:
         return DeviceModel.OMI_DEVKIT_2
-    if device_model in ['Friend DevKit 1', 'Friend']:
+    if model_clean in ['Friend DevKit 1', 'Friend']:
         return DeviceModel.OMI_DEVKIT_1
-    if device_model in ['OpenGlass']:
+    if model_clean in ['OpenGlass']:
         return DeviceModel.OPEN_GLASS
-    if device_model in ['Omi CV 1']:
+    if model_clean in ['Omi CV 1']:
         return DeviceModel.OMI_CV1
-    if device_model in ['OMI Glass', 'OmiGlass']:
+    if model_clean in ['OMI Glass', 'OmiGlass']:
         return DeviceModel.OMI_GLASS
-    if device_model in ['nrf5340']:
+    if model_clean in ['nrf5340']:
         return DeviceModel.OMI_CV1
 
     return None
@@ -241,7 +244,12 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
             detail="Could not determine current firmware version",
         )
 
-    releases = await get_omi_github_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
+    try:
+        releases = await get_omi_github_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
+    except Exception as e:
+        logger.error(f"Failed to fetch GitHub releases for latest firmware: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail="Failed to fetch firmware releases from repository")
+
     if not releases:
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
@@ -265,7 +273,12 @@ async def get_stable_version(device_model: str):
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    releases = await get_omi_github_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
+    try:
+        releases = await get_omi_github_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
+    except Exception as e:
+        logger.error(f"Failed to fetch GitHub releases for stable firmware: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail="Failed to fetch firmware releases from repository")
+
     if not releases:
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
@@ -294,7 +307,12 @@ async def get_firmware_version(device_model: str, version: str):
     if target is None:
         raise HTTPException(status_code=400, detail="Could not parse requested firmware version")
 
-    releases = await get_omi_github_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
+    try:
+        releases = await get_omi_github_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
+    except Exception as e:
+        logger.error(f"Failed to fetch GitHub releases for firmware version: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail="Failed to fetch firmware releases from repository")
+
     if not releases:
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
