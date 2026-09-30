@@ -1345,7 +1345,14 @@ floor. It retains every later capture sample during an in-flight POST and
 replays from the floor on failover; VAD-gated gaps do not move the provider
 anchor onto the wrong capture position. A 90-second ring overrun fails the
 window leg before accepting another chunk if un-emitted speech still needs
-the space. Ownership of recent
+the space. The window socket's VAD speech spans are pruned with its POST
+anchor; rapid VAD flicker coalesces adjacent spans within the 1,024-entry
+bound while retaining every speech sample. Near the PCM buffer limit, a long
+unfinished TDT tail at the context cap is forced out if an earlier tiny
+segment would advance the anchor slower than one POST pace; earlier and normally
+progressing windows keep their sentence boundary. `capacity_full` fallback logs
+carry a bounded `subtype` identifying PCM buffer, replay ring, or admission
+capacity without adding a metric label. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
 capture time (a hard run cap is a pathological bound, not the working limit),
 so a provider final trailing its audio by tens of seconds still resolves its
