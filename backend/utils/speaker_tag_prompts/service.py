@@ -544,11 +544,17 @@ def apply_answer(
             )
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='queued').inc()
             voice_sample_queued = True
-    elif clears_auto_label:
+    elif clears_auto_label or answer == SpeakerTagPromptAnswer.not_a_person:
         # The automatic label was wrong: record an explicit "not the owner / not them".
-        _assign(uid, request, is_user=False, person_id=None, train=False)
+        conversation, _resolved = _assign(uid, request, is_user=False, person_id=None, train=False)
     if answer == SpeakerTagPromptAnswer.not_a_person:
-        voice_profiles_db.record_ignored_voice(uid, request.conversation_id, request.speaker_id, now)
+        voice_profiles_db.record_ignored_voice(
+            uid,
+            request.conversation_id,
+            request.speaker_id,
+            now,
+            assignment_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation'),
+        )
 
     outcome = quality_outcome(
         request.origin,

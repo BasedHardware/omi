@@ -32,3 +32,44 @@ def test_remove_ignored_voice_forgets_its_answers_only():
     assert db.remove_ignored_voice('u', 'c1', 1, ['p1'], firestore_client=store) is True
     assert store.rows[STATE]['ignored_voices'] == {} and store.rows[STATE]['answered'] == {'keep': NOW}
     assert db.remove_ignored_voice('u', 'c1', 1, ['p1'], firestore_client=store) is False
+
+
+def test_restore_removes_only_the_ignored_decision_so_prompts_can_return():
+    from database import conversations as conversations_db
+    from utils.speaker_tag_prompts.selection import select_prompts
+
+    store = StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c1')
+    store.rows[path] = {
+        'id': 'c1',
+        'status': 'completed',
+        'started_at': NOW,
+        'audio_files': [{'chunk_timestamps': [NOW.timestamp()], 'duration': 10}],
+        'transcript_segments': [
+            {'id': 's1', 'speaker_id': 1, 'start': 0, 'end': 6, 'text': 'synthetic speech', 'is_user': False}
+        ],
+        'manual_speaker_assignments': {
+            'generation': 1,
+            'speakers': {'1': {'generation': 1, 'person_id': None, 'is_user': False}},
+        },
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, firestore_client=store)
+    store.rows[STATE]['ignored_voices']['c1:1']['assignment_generation'] = 1
+    assert db.remove_ignored_voice('u', 'c1', 1, [], firestore_client=store)
+    raw = store.rows[path]
+    raw['manual_speaker_assignments'] = conversations_db.decode_manual_speaker_assignments(
+        'u', raw['manual_speaker_assignments'], bool(raw.get('manual_speaker_assignments_compressed'))
+    )
+    assert select_prompts([raw], now=NOW, owner_has_voice=False, named_allowed=False, answered=set(), people={})
+
+
+def test_restore_cannot_replace_a_newer_label_or_another_users_marker():
+    store = StrictFirestore()
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    decision = {'generation': 2, 'person_id': 'p1', 'is_user': False}
+    path = ('users', 'u', 'conversations', 'c1')
+    store.rows[path] = {'manual_speaker_assignments': {'generation': 2, 'speakers': {'1': decision}}}
+    assert not db.remove_ignored_voice('other', 'c1', 1, [], firestore_client=store)
+    assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:1'}
+    assert db.remove_ignored_voice('u', 'c1', 1, [], firestore_client=store)
+    assert store.rows[path]['manual_speaker_assignments']['speakers']['1'] == decision

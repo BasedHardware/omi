@@ -221,7 +221,13 @@ def ignored_voice_keys(state: Dict[str, Any]) -> set:
 
 
 def record_ignored_voice(
-    uid: str, conversation_id: str, speaker_id: int, now: datetime, *, firestore_client: Any = None
+    uid: str,
+    conversation_id: str,
+    speaker_id: int,
+    now: datetime,
+    *,
+    assignment_generation: Optional[int] = None,
+    firestore_client: Any = None,
 ) -> None:
     """Remember a voice the user said is not a person (bounded, newest kept)."""
     client = _client(firestore_client)
@@ -232,6 +238,8 @@ def record_ignored_voice(
         snapshot = ref.get(transaction=transaction)
         state = snapshot.to_dict() or {}
         entry: Dict[str, Any] = {'conversation_id': conversation_id, 'speaker_id': speaker_id, 'ignored_at': now}
+        if assignment_generation is not None:
+            entry['assignment_generation'] = assignment_generation
         kept = [
             e
             for e in ignored_voices(state)
@@ -262,8 +270,39 @@ def remove_ignored_voice(
         snapshot = ref.get(transaction=transaction)
         state = snapshot.to_dict() or {}
         ignored = dict(state.get('ignored_voices') or {})
-        if ignored.pop(ignored_voice_key(conversation_id, speaker_id), None) is None:
+        marker = ignored.pop(ignored_voice_key(conversation_id, speaker_id), None)
+        if marker is None:
             return False
+        from database import conversations as conversations_db
+
+        conversation_ref = (
+            client.collection('users')
+            .document(uid)
+            .collection(conversations_db.conversations_collection)
+            .document(conversation_id)
+        )
+        raw = conversation_ref.get(transaction=transaction).to_dict() or {}
+        receipt = conversations_db.decode_manual_speaker_assignments(
+            uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
+        )
+        speakers = dict(receipt.get('speakers') or {})
+        decision = speakers.get(str(speaker_id)) or {}
+        # Restore eligibility without undoing a newer manual label or guessing
+        # which decision created a legacy marker without a generation fence.
+        if marker.get('assignment_generation') is not None and (
+            decision.get('generation') == marker['assignment_generation']
+            and not decision.get('person_id')
+            and not decision.get('is_user')
+        ):
+            speakers.pop(str(speaker_id), None)
+            receipt['speakers'] = speakers
+            receipt['generation'] = receipt.get('generation', 0) + 1
+            transaction.update(
+                conversation_ref,
+                conversations_db._prepare_conversation_for_write(
+                    {'manual_speaker_assignments': receipt}, uid, raw.get('data_protection_level', 'standard')
+                ),
+            )
         answered = {k: v for k, v in (state.get('answered') or {}).items() if k not in set(prompt_ids)}
         transaction.update(ref, {'ignored_voices': ignored, 'answered': answered})
         return True

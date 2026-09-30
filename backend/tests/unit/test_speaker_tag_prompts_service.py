@@ -681,7 +681,7 @@ def test_someone_else_with_a_person_is_the_correction_path(monkeypatch):
 def test_not_a_person_clears_an_automatic_label_and_is_remembered(monkeypatch):
     world = World(monkeypatch)
     ignored = []
-    monkeypatch.setattr(service.voice_profiles_db, 'record_ignored_voice', lambda *args: ignored.append(args))
+    monkeypatch.setattr(service.voice_profiles_db, 'record_ignored_voice', lambda *args, **kwargs: ignored.append(args))
     response = service.apply_answer('u', _request(K.confirm_person, O.auto_person, A.not_a_person), world.schedule, NOW)
     assert world.assignments == [
         {
@@ -694,16 +694,31 @@ def test_not_a_person_clears_an_automatic_label_and_is_remembered(monkeypatch):
     ]
     assert ignored == [('u', 'c1', 1, NOW)] and world.answered == ['pid']
     assert response.quality_outcome == Q.person_auto_corrected
-    # An unnamed voice has no label to clear; it is only remembered.
+    # Revalidate even unnamed prompts: the stored label may have changed since it was served.
     service.apply_answer('u', _request(K.identify, O.unnamed, A.not_a_person), world.schedule, NOW)
-    assert len(world.assignments) == 1 and len(ignored) == 2
+    assert len(world.assignments) == 2 and len(ignored) == 2
 
 
 def test_not_a_person_on_owner_check_is_free(monkeypatch):
     world = World(monkeypatch, paid=False)
-    monkeypatch.setattr(service.voice_profiles_db, 'record_ignored_voice', lambda *args: None)
+    monkeypatch.setattr(service.voice_profiles_db, 'record_ignored_voice', lambda *args, **kwargs: None)
     response = service.apply_answer('u', _request(K.owner_check, O.unnamed, A.not_a_person), world.schedule, NOW)
     assert response.quality_outcome == Q.unknown_voice
+
+
+def test_not_a_person_rejects_a_conversation_outside_the_authenticated_account(monkeypatch):
+    World(monkeypatch)
+    markers = []
+    monkeypatch.setattr(service.voice_profiles_db, 'record_ignored_voice', lambda *args, **kw: markers.append(args))
+
+    def missing(uid, conversation_id, **kwargs):
+        assert uid == 'u' and conversation_id == 'foreign'
+        raise LookupError('Conversation not found')
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', missing)
+    with pytest.raises(LookupError):
+        service.apply_answer('u', _request(K.identify, O.unnamed, A.not_a_person, conversation_id='foreign'))
+    assert markers == []
 
 
 def test_ignored_voices_list_skips_deleted_conversations_and_restore_forgets_answers(monkeypatch):
