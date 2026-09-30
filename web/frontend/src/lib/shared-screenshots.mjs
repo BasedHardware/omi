@@ -239,3 +239,21 @@ export function initialFrameState(result) {
   if (result && result.ok) return { set: result.set, retry: false };
   return { set: null, retry: Boolean(result && result.ok === false) };
 }
+
+/**
+ * Which tab-return listeners the strip needs:
+ * - 'renew': there are tiles; renew their URLs when due on return.
+ * - 'recover': the initial fetch failed and nothing has succeeded yet; retry
+ *   on return, even after the gate's automatic retries are exhausted.
+ * - 'none': a successful empty set, which is final and never polled.
+ */
+export function recoveryListenersMode({ tileCount, awaitingFirstSuccess }) {
+  if (tileCount > 0) return 'renew';
+  return awaitingFirstSuccess ? 'recover' : 'none';
+}
+
+/** The lightbox index after the set changed length: clamped, or null (close) when empty. */
+export function clampOpenIndex(index, length) {
+  if (index === null || index === undefined || !(length > 0)) return null;
+  return Math.min(index, length - 1);
+}

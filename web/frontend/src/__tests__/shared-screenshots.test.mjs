@@ -6,6 +6,7 @@ import {
   MIN_REFRESH_INTERVAL_MS,
   URL_REFRESH_MARGIN_MS,
   captureOffsetLabel,
+  clampOpenIndex,
   createRefreshGate,
   earliestExpiryMs,
   fitSize,
@@ -14,6 +15,7 @@ import {
   initialFrameState,
   withFailedAsset,
   nextFrameSet,
+  recoveryListenersMode,
   screenshotTiles,
   stepIndex,
 } from '../lib/shared-screenshots.mjs';
@@ -427,7 +429,7 @@ describe('transient refetch failures keep the set and retry', () => {
   it('remounts images after a successful refetch even when the signed URL is unchanged', () => {
     // Measured live: after a failure the backend can return the identical
     // signed URL, and an <img> whose src does not change never retries.
-    assert.match(componentSource, /if \(result\.ok\) setSetVersion\(/);
+    assert.match(componentSource, /if \(result\.ok\) \{\s*setSetVersion\(/);
     assert.match(componentSource, /key=\{`\$\{frame\.id\}:\$\{setVersion\}`\}/);
     assert.match(componentSource, /key=\{`\$\{current\.id\}:\$\{setVersion\}`\}/);
   });
@@ -464,5 +466,62 @@ describe('initial server-side fetch failure', () => {
     const gateAt = componentSource.indexOf('createRefreshGate({');
     const earlyReturn = componentSource.indexOf('if (tiles.length === 0) return null;');
     assert.ok(gateAt > 0 && earlyReturn > gateAt);
+  });
+});
+
+describe('recovery after the auto-retries are exhausted', () => {
+  it('keeps tab-return listeners while a failed initial fetch has not yet succeeded', () => {
+    assert.equal(
+      recoveryListenersMode({ tileCount: 0, awaitingFirstSuccess: true }),
+      'recover',
+    );
+    assert.equal(
+      recoveryListenersMode({ tileCount: 3, awaitingFirstSuccess: true }),
+      'renew',
+    );
+    assert.equal(
+      recoveryListenersMode({ tileCount: 3, awaitingFirstSuccess: false }),
+      'renew',
+    );
+    // A successful empty set is final: no listeners, no polling.
+    assert.equal(
+      recoveryListenersMode({ tileCount: 0, awaitingFirstSuccess: false }),
+      'none',
+    );
+  });
+
+  it('wires the recover mode to visibilitychange/pageshow and clears it on first success', () => {
+    assert.match(componentSource, /recoveryListenersMode\(\{/);
+    assert.match(componentSource, /useState\(retryInitial\)/);
+    assert.match(
+      componentSource,
+      /if \(result\.ok\) \{[^}]*setAwaitingFirstSuccess\(false\)/s,
+    );
+    const effectStart = componentSource.indexOf('recoveryListenersMode({');
+    const effectEnd = componentSource.indexOf('}, [', effectStart);
+    const effect = componentSource.slice(effectStart, effectEnd);
+    assert.match(effect, /mode === 'none'/);
+    assert.match(effect, /visibilitychange/);
+    assert.match(effect, /pageshow/);
+  });
+});
+
+describe('lightbox when a refresh shrinks or empties the set', () => {
+  it('clamps the open index to the new length, or closes when empty', () => {
+    assert.equal(clampOpenIndex(null, 5), null);
+    assert.equal(clampOpenIndex(2, 5), 2);
+    assert.equal(clampOpenIndex(6, 3), 2);
+    assert.equal(clampOpenIndex(0, 0), null);
+    assert.equal(clampOpenIndex(4, 0), null);
+  });
+
+  it('keeps the refocus target in step with the clamped index', () => {
+    assert.match(componentSource, /clampOpenIndex\(openIndex, tiles\.length\)/);
+    assert.match(componentSource, /shownIndex\.current = clamped/);
+  });
+
+  it('falls back to the active tab when the tile to refocus is gone', () => {
+    assert.match(componentSource, /isConnected/);
+    assert.match(componentSource, /\[role="tab"\]\[aria-selected="true"\]/);
   });
 });

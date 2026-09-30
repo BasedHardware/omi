@@ -7,12 +7,14 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import getSharedScreenshots from '@/src/actions/memories/get-shared-screenshots';
 import {
   captureOffsetLabel,
+  clampOpenIndex,
   createRefreshGate,
   fitSize,
   groundGradient,
   initialFrameState,
   msUntilRefresh,
   nextFrameSet,
+  recoveryListenersMode,
   withFailedAsset,
   screenshotTiles,
   stepIndex,
@@ -63,6 +65,8 @@ export default function ScreenMoments({
     initialFrameState(initial),
   );
   const [frameSet, setFrameSet] = useState<SharedScreenFrameSet | null>(initialSet);
+  // True from a failed server-side fetch until a client refetch succeeds.
+  const [awaitingFirstSuccess, setAwaitingFirstSuccess] = useState(retryInitial);
   const tiles = useMemo(
     () => screenshotTiles(frameSet) as SharedScreenFrame[],
     [frameSet],
@@ -101,8 +105,12 @@ export default function ScreenMoments({
         const result = await getSharedScreenshots(conversationId);
         if (!active) return;
         setFrameSet((previous) => nextFrameSet(previous, result));
-        if (result.ok) setSetVersion((v) => v + 1);
-        else throw new Error('screenshot refetch failed');
+        if (result.ok) {
+          setSetVersion((v) => v + 1);
+          setAwaitingFirstSuccess(false);
+        } else {
+          throw new Error('screenshot refetch failed');
+        }
       },
     });
     gateRef.current = gate;
@@ -124,37 +132,43 @@ export default function ScreenMoments({
   );
 
   useEffect(() => {
-    if (tiles.length === 0) return;
-    // The gate enforces the cooldown; this only waits for the expiry margin.
-    const delay = msUntilRefresh(tiles, Date.now());
-    const timer = window.setTimeout(refresh, delay);
+    const mode = recoveryListenersMode({
+      tileCount: tiles.length,
+      awaitingFirstSuccess,
+    });
+    if (mode === 'none') return;
+    // 'renew': the gate enforces the cooldown; this waits for the expiry
+    // margin. 'recover': no timer (the gate's own retries have a cap), but a
+    // return to the tab always tries again.
+    const timer =
+      mode === 'renew'
+        ? window.setTimeout(refresh, msUntilRefresh(tiles, Date.now()))
+        : undefined;
     // Timers stall in background tabs and bfcache; check again on return.
     const onVisible = () => {
-      if (
-        document.visibilityState === 'visible' &&
-        msUntilRefresh(tiles, Date.now()) === 0
-      ) {
-        refresh();
-      }
+      if (document.visibilityState !== 'visible') return;
+      if (mode === 'recover' || msUntilRefresh(tiles, Date.now()) === 0) refresh();
     };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('pageshow', onVisible);
     return () => {
-      window.clearTimeout(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('pageshow', onVisible);
     };
-  }, [tiles, refresh]);
+  }, [tiles, awaitingFirstSuccess, refresh]);
 
   useEffect(() => {
     setPortalEl(sectionRef.current?.closest<HTMLElement>('.share-note') ?? null);
   }, [tiles.length]);
 
-  // A refresh can shrink or empty the set while the lightbox is open.
+  // A refresh can shrink or empty the set while the lightbox is open. Clamp
+  // (or close), keeping the refocus target in step with what is shown.
   useEffect(() => {
-    if (openIndex === null) return;
-    if (tiles.length === 0) setOpenIndex(null);
-    else if (openIndex >= tiles.length) setOpenIndex(tiles.length - 1);
+    const clamped = clampOpenIndex(openIndex, tiles.length);
+    if (clamped === openIndex) return;
+    if (clamped !== null) shownIndex.current = clamped;
+    setOpenIndex(clamped);
   }, [tiles.length, openIndex]);
 
   if (tiles.length === 0) return null;
@@ -267,7 +281,15 @@ export default function ScreenMoments({
             onKeyDown={onLightboxKeyDown}
             onCloseAutoFocus={(event) => {
               event.preventDefault();
-              tileRefs.current[shownIndex.current]?.focus();
+              const tile = tileRefs.current[shownIndex.current];
+              if (tile?.isConnected) {
+                tile.focus();
+              } else {
+                // The set emptied (the strip is gone): land on the active tab.
+                portalEl
+                  ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+                  ?.focus();
+              }
             }}
           >
             {current && fit ? (
