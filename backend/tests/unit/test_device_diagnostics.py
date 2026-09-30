@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from routers.device_diagnostics import (
     MAX_BUNDLE_BYTES,
     MAX_ENCODED_BYTES,
+    MAX_REQUEST_BYTES,
     DiagnosticsUpload,
     router,
     upload_uid,
@@ -64,6 +65,15 @@ def test_upload_diagnostics_rejects_oversized_decoded(client):
     response = client.post('/v1/mobile/device-diagnostics', json={'bundle_base64': encoded})
     assert response.status_code == 413
     assert 'too large' in response.json()['detail']
+
+
+def test_upload_rejects_oversized_stream_before_json_validation(client):
+    response = client.post(
+        '/v1/mobile/device-diagnostics',
+        content=b' ' * (MAX_REQUEST_BYTES + 1),
+        headers={'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
 
 
 def test_upload_diagnostics_invalid_base64(client):
@@ -339,3 +349,57 @@ def test_storage_read_bundle_success(monkeypatch):
     monkeypatch.setattr('utils.other.storage.get_private_cloud_sync_bucket', lambda: MockBucket())
     result = device_diagnostics_storage.read_bundle('0123456789AB')
     assert result == payload_data
+
+
+def test_storage_read_bundle_propagates_storage_error(monkeypatch):
+    class BrokenBlob:
+        def exists(self):
+            raise RuntimeError('GCS transport outage')
+
+    class BrokenBucket:
+        def blob(self, path):
+            return BrokenBlob()
+
+    monkeypatch.setattr('utils.other.storage.get_private_cloud_sync_bucket', lambda: BrokenBucket())
+    with pytest.raises(RuntimeError, match='GCS transport outage'):
+        device_diagnostics_storage.read_bundle('0123456789AB')
+
+
+def test_private_storage_round_trip_and_owner_path(monkeypatch):
+    objects = {}
+
+    class Blob:
+        def __init__(self, name):
+            self.name = name
+
+        def upload_from_string(self, data, content_type=None):
+            objects[self.name] = data.encode() if isinstance(data, str) else data
+
+        def exists(self):
+            return self.name in objects
+
+        def download_as_bytes(self):
+            return objects[self.name]
+
+    class Bucket:
+        def blob(self, name):
+            return Blob(name)
+
+    class MockContext:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    mock_bucket = Bucket()
+    monkeypatch.setattr('utils.other.storage.get_private_cloud_sync_bucket', lambda: mock_bucket)
+    monkeypatch.setattr('utils.other.storage.owner_storage_write_gate', lambda uid, bucket: MockContext())
+    monkeypatch.setattr(device_diagnostics_storage.secrets, 'token_hex', lambda n: 'abcdef123456')
+
+    ticket = device_diagnostics_storage.save_bundle('owner', b'{"schema_version": 2}')
+    assert ticket == 'ABCDEF123456'
+    assert 'diagnostics/owner/ABCDEF123456.json' in objects
+    assert 'diagnostics/tickets/ABCDEF123456.json' in objects
+    assert device_diagnostics_storage.read_bundle(ticket) == {'schema_version': 2}
+    assert device_diagnostics_storage.read_bundle('FFFFFFFFFFFF') is None

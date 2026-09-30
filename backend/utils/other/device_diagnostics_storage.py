@@ -50,9 +50,6 @@ def read_bundle(ticket: Any) -> dict[str, Any] | None:
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         logger.warning("Corrupt diagnostics ticket lookup for ticket=%s: %s", clean_ticket, exc)
         return None
-    except Exception as exc:
-        logger.warning("Error reading diagnostics ticket lookup for ticket=%s: %s", clean_ticket, exc)
-        return None
 
     if not isinstance(reference, dict):
         return None
@@ -77,9 +74,6 @@ def read_bundle(ticket: Any) -> dict[str, Any] | None:
         payload = json.loads(raw_bundle)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         logger.warning("Corrupt diagnostics bundle payload for ticket=%s: %s", clean_ticket, exc)
-        return None
-    except Exception as exc:
-        logger.warning("Error reading diagnostics bundle payload for ticket=%s: %s", clean_ticket, exc)
         return None
 
     if not isinstance(payload, dict):
