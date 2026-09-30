@@ -85,8 +85,33 @@ def format_num(val: float | int | None) -> str:
     return str(val)
 
 
-def compute_progress(goal: dict) -> tuple[int, str, str]:
-    """Return (percentage, progress_cookie, 20_cell_bar)."""
+def is_qualitative_goal(goal: dict) -> bool:
+    """Return True if goal is qualitative (no user metric defined or degenerate bounds)."""
+    if "metric" in goal and goal.get("metric") is None:
+        return True
+    target = goal.get("target_value")
+    min_v = goal.get("min_value")
+    max_v = goal.get("max_value")
+    try:
+        target_f = float(target) if target is not None else 0.0
+        min_f = float(min_v) if min_v is not None else 0.0
+        max_f = float(max_v) if max_v is not None else target_f
+    except (ValueError, TypeError):
+        return True
+
+    # Degenerate bounds: max <= min, or zero/negative target without explicit unit
+    if max_f <= min_f:
+        return True
+    if target_f <= 0 and not goal.get("unit"):
+        return True
+    return False
+
+
+def compute_progress(goal: dict) -> tuple[int | None, str, str]:
+    """Return (percentage, progress_cookie, 20_cell_bar). For qualitative goals, return (None, '', '')."""
+    if is_qualitative_goal(goal):
+        return None, "", ""
+
     goal_type = str(goal.get("goal_type", "numeric")).lower()
     curr = goal.get("current_value")
     target = goal.get("target_value")
@@ -126,14 +151,14 @@ def compute_progress(goal: dict) -> tuple[int, str, str]:
     return pct, cookie, bar
 
 
-def is_goal_done(goal: dict, pct: int) -> bool:
+def is_goal_done(goal: dict, pct: int | None) -> bool:
     is_active = goal.get("is_active")
     if is_active is False or str(is_active).lower() in ("false", "0", "no"):
         return True
     status = str(goal.get("status", "")).lower()
-    if status in ("completed", "done", "achieved", "inactive", "closed"):
+    if status in ("completed", "done", "achieved", "inactive", "closed", "abandoned"):
         return True
-    if pct >= 100:
+    if pct is not None and pct >= 100:
         return True
     return False
 
@@ -163,13 +188,14 @@ def render_goal_entry(goal: dict, zone: timezone, level: int = 1) -> list[str]:
     done = is_goal_done(goal, pct)
     title = heading_text(goal.get("title") or goal.get("description"))
 
-    lines = [f"{stars} {'DONE' if done else 'TODO'} {title} {cookie}"]
+    cookie_str = f" {cookie}" if cookie else ""
+    lines = [f"{stars} {'DONE' if done else 'TODO'} {title}{cookie_str}"]
 
-    # Planning line
-    deadline_dt = local_time(goal.get("horizon_at") or goal.get("due_at"), zone)
+    # Planning line: DEADLINE from horizon_at, CLOSED from ended_at / updated_at
+    deadline_dt = local_time(goal.get("horizon_at"), zone)
     planning = []
     if done:
-        closed_dt = local_time(goal.get("updated_at") if pct >= 100 else None, zone)
+        closed_dt = local_time(goal.get("ended_at") or goal.get("updated_at"), zone)
         if closed_dt:
             planning.append("CLOSED: " + org_stamp(closed_dt, active=False))
     if deadline_dt:
@@ -182,15 +208,19 @@ def render_goal_entry(goal: dict, zone: timezone, level: int = 1) -> list[str]:
     omi_id = one_line(goal.get("id") or goal.get("goal_id"))
     if omi_id:
         lines.append(f":OMI_ID: {omi_id}")
-    lines.append(f":GOAL_TYPE: {one_line(goal.get('goal_type', 'numeric'))}")
-    lines.append(f":CURRENT_VALUE: {format_num(goal.get('current_value', 0))}")
-    lines.append(f":TARGET_VALUE: {format_num(goal.get('target_value', 0))}")
-    lines.append(f":MIN_VALUE: {format_num(goal.get('min_value', 0))}")
-    lines.append(f":MAX_VALUE: {format_num(goal.get('max_value', 0))}")
+    lines.append(f":GOAL_TYPE: {one_line(goal.get('goal_type', 'scale' if is_qualitative_goal(goal) else 'numeric'))}")
+    if not is_qualitative_goal(goal):
+        lines.append(f":CURRENT_VALUE: {format_num(goal.get('current_value', 0))}")
+        lines.append(f":TARGET_VALUE: {format_num(goal.get('target_value', 0))}")
+        lines.append(f":MIN_VALUE: {format_num(goal.get('min_value', 0))}")
+        lines.append(f":MAX_VALUE: {format_num(goal.get('max_value', 0))}")
     unit = one_line(goal.get("unit"))
     if unit:
         lines.append(f":UNIT: {unit}")
     lines.append(f":IS_ACTIVE: {str(goal.get('is_active', True))}")
+    status = one_line(goal.get("status"))
+    if status:
+        lines.append(f":STATUS: {status}")
 
     created = local_time(goal.get("created_at"), zone)
     if created:
@@ -198,10 +228,14 @@ def render_goal_entry(goal: dict, zone: timezone, level: int = 1) -> list[str]:
     updated = local_time(goal.get("updated_at"), zone)
     if updated:
         lines.append(f":UPDATED: {org_stamp(updated, active=False)}")
+    ended = local_time(goal.get("ended_at"), zone)
+    if ended:
+        lines.append(f":ENDED: {org_stamp(ended, active=False)}")
     lines.append(":END:")
 
     # Body with progress bar and details
-    lines.append(f"Progress: {bar}")
+    if bar:
+        lines.append(f"Progress: {bar}")
     if unit:
         lines.append(f"Unit: {unit}")
 

@@ -312,6 +312,56 @@ class TestGoalsToOrg(unittest.TestCase):
         with self.assertRaises(argparse.ArgumentTypeError):
             g2org.parse_offset("invalid")
 
+    def test_21_qualitative_goal_active_renders_as_todo_without_cookie_or_bar(self):
+        # Emitted by backend when omi goal create "title" is used without metric options
+        backend_shape = {
+            "id": "g-qual-1",
+            "goal_id": "g-qual-1",
+            "title": "Be more present with family",
+            "desired_outcome": "Be more present with family",
+            "goal_type": "scale",
+            "current_value": 0,
+            "target_value": 0,
+            "min_value": 0,
+            "max_value": 0,
+            "is_active": True,
+            "status": "focused",
+            "metric": None,
+            "created_at": "2026-09-29T10:00:00Z",
+            "updated_at": "2026-09-29T10:00:00Z",
+        }
+        counts, org = self.export_single([backend_shape])
+        self.assertEqual(counts, (1, 0))
+        self.assertIn("* TODO Be more present with family", org)
+        self.assertNotIn("[100%]", org)
+        self.assertNotIn("[0/0]", org)
+        self.assertNotIn("Progress:", org)
+        self.assertNotIn("CLOSED:", org)
+
+    def test_22_qualitative_goal_completed_uses_ended_at_closed_stamp(self):
+        completed_qualitative = {
+            "id": "g-qual-2",
+            "goal_id": "g-qual-2",
+            "title": "Meditate daily",
+            "goal_type": "scale",
+            "current_value": 0,
+            "target_value": 0,
+            "min_value": 0,
+            "max_value": 0,
+            "is_active": False,
+            "status": "achieved",
+            "metric": None,
+            "created_at": "2026-09-20T10:00:00Z",
+            "updated_at": "2026-09-30T10:00:00Z",
+            "ended_at": "2026-09-30T10:00:00Z",
+        }
+        counts, org = self.export_single([completed_qualitative])
+        self.assertEqual(counts, (1, 1))
+        self.assertIn("* DONE Meditate daily", org)
+        self.assertNotIn("[100%]", org)
+        self.assertNotIn("Progress:", org)
+        self.assertIn("CLOSED: [2026-09-30 Wed 19:00]", org)
+
 
 if __name__ == "__main__":
     unittest.main()
