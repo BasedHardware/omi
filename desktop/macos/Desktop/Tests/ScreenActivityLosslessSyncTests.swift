@@ -357,6 +357,13 @@ final class ScreenActivityLosslessSyncTests: XCTestCase {
     XCTAssertEqual(states, [ScreenActivitySyncState.pending.rawValue, ScreenActivitySyncState.pending.rawValue])
   }
 
+  /// An account switch during frame-request delivery could read the replacement owner's pixels
+  /// under the previous owner's headers, so the owner-bound meeting flush never delivers them.
+  func testOnlyThePeriodicSyncDeliversFrameRequests() {
+    XCTAssertFalse(ScreenActivitySyncService.deliversFrameRequests(ownerBoundPush: true))
+    XCTAssertTrue(ScreenActivitySyncService.deliversFrameRequests(ownerBoundPush: false))
+  }
+
   /// A row whose vector is still pending must not ship text-only and then ship again unchanged:
   /// the second push is a byte-identical Firestore document write plus a full index rewrite.
   func testARowWaitsForItsEmbeddingRatherThanShippingTwice() throws {

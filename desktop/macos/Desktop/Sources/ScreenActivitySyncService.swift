@@ -599,6 +599,10 @@ actor ScreenActivitySyncService {
 
   // MARK: - HTTP push
 
+  /// Whether a push continues into frame-request delivery. Only the periodic path does; the
+  /// owner-bound meeting flush leaves delivery to it.
+  static func deliversFrameRequests(ownerBoundPush: Bool) -> Bool { !ownerBoundPush }
+
   /// With `authorizationSnapshot` the push is owner-bound: headers are minted for that owner only,
   /// and the request is abandoned if the session changed while they were built.
   private func pushRows(
@@ -649,9 +653,11 @@ actor ScreenActivitySyncService {
         guard let delivered = syncResponse.frameRequests, !delivered.isEmpty else {
           return true
         }
-        if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
-          // The rows landed for their owner; a replaced session must not continue into pixel
-          // claims and uploads. The periodic path serves those requests for whoever owns them.
+        guard Self.deliversFrameRequests(ownerBoundPush: authorizationSnapshot != nil) else {
+          // The rows landed. The owner-bound meeting flush never continues into pixel claims and
+          // uploads: those read the Rewind store across further awaits, where an account switch
+          // could pair one owner's pixels with another's session. The backend returns recoverable
+          // requests on every sync response, so the periodic path delivers them.
           return true
         }
         let deviceID = ClientDeviceService.shared.clientDeviceId
