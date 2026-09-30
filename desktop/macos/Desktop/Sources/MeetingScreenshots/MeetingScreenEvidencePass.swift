@@ -42,6 +42,21 @@ struct MeetingScreenEvidencePass: Sendable {
   /// the evidence and the post-finalization retry takes over. Bounded labels only.
   struct Fallback: Equatable, Sendable {
     let reason: String
+    /// Which pass degraded, and what now covers it: before notes the post-finalize retry does;
+    /// after `/from-segments` creation only the note view's retry on open is left.
+    var from = "before_notes"
+    var to = "after_finalize"
+
+    /// The bounded fallback reason for a pass that settled in failure, or nil if it did not fail.
+    static func reason(for outcome: Outcome) -> String? {
+      switch outcome {
+      case .timedOut: return "timeout"
+      // An unsealed Rewind chunk is not an upload failure; keep the two apart in the bucket.
+      case .settled(.failed(let detail)):
+        return detail == MeetingScreenshotsStore.activeChunkRetryDetail ? "other" : "upload_failed"
+      default: return nil
+      }
+    }
   }
 
   /// Long enough for the server's serial judge over the eight-candidate ceiling on a normal link;
@@ -67,8 +82,8 @@ struct MeetingScreenEvidencePass: Sendable {
     recordFallback: { fallback in
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "meeting_screen_evidence",
-        from: "before_notes",
-        to: "after_finalize",
+        from: fallback.from,
+        to: fallback.to,
         reason: fallback.reason,
         outcome: .degraded)
     })
@@ -105,15 +120,8 @@ struct MeetingScreenEvidencePass: Sendable {
       if outcome == .timedOut { recordFallback(Fallback(reason: "timeout")) }
       return .disabled
     }
-    switch outcome {
-    case .timedOut:
-      recordFallback(Fallback(reason: "timeout"))
-    case .settled(.failed(let detail)):
-      // An unsealed Rewind chunk is not an upload failure; keep the two apart in the bucket.
-      recordFallback(
-        Fallback(reason: detail == MeetingScreenshotsStore.activeChunkRetryDetail ? "other" : "upload_failed"))
-    default:
-      break
+    if let reason = Fallback.reason(for: outcome) {
+      recordFallback(Fallback(reason: reason))
     }
     return outcome
   }
@@ -138,6 +146,10 @@ struct MeetingScreenEvidencePass: Sendable {
     guard let window = MeetingScreenshotSelectionWindow.resolve(conversation) else { return .untrustedWindow }
     let outcome = Outcome.settled(await adjudicate(conversation.id, window))
     log("MeetingScreenEvidence: after-creation pass for \(conversation.id) -> \(outcome)")
+    if let reason = Fallback.reason(for: outcome) {
+      // Nothing awaits this pass, so its failure would otherwise be silent to operators too.
+      recordFallback(Fallback(reason: reason, from: "after_creation", to: "note_open"))
+    }
     return outcome
   }
 

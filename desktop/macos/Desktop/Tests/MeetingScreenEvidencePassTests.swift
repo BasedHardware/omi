@@ -223,6 +223,28 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     XCTAssertEqual(fallbacks.reasons, ["timeout", "upload_failed"], "a settled pass records no fallback")
   }
 
+  func testAfterCreationFailureRecordsDegradedFallbackTelemetry() async throws {
+    let fallbacks = FallbackRecorder()
+    var pass = MeetingScreenEvidencePass(
+      screenshotsEnabled: { true },
+      flushScreenActivity: { _ in },
+      adjudicate: { _, _ in .failed("409 screen_frame_egress_unavailable") },
+      sleep: boundThatNeverFires,
+      recordFallback: { fallbacks.record($0) })
+    let conversation = try Self.decodeConversation(Self.serverVectors[3], id: "created")
+
+    let failed = await pass.afterCreation(conversation: conversation)
+    XCTAssertEqual(failed, .settled(.failed("409 screen_frame_egress_unavailable")))
+    pass.adjudicate = { _, _ in .ready }
+    let settled = await pass.afterCreation(conversation: conversation)
+    XCTAssertEqual(settled, .settled(.ready))
+
+    XCTAssertEqual(
+      fallbacks.recorded,
+      [.init(reason: "upload_failed", from: "after_creation", to: "note_open")],
+      "a failed post-creation pass is degraded telemetry; a settled one records nothing")
+  }
+
   @MainActor
   func testRetryAfterFinalizeJoinsTheRunTheDeadlineLeftInFlight() async throws {
     let vector = Self.serverVectors[3]
@@ -445,17 +467,19 @@ private let boundThatNeverFires: @Sendable (Duration) async -> Void = { _ in
 
 private final class FallbackRecorder: @unchecked Sendable {
   private let lock = NSLock()
-  private var recorded: [String] = []
+  private var fallbacks: [MeetingScreenEvidencePass.Fallback] = []
 
-  var reasons: [String] {
+  var recorded: [MeetingScreenEvidencePass.Fallback] {
     lock.lock()
     defer { lock.unlock() }
-    return recorded
+    return fallbacks
   }
+
+  var reasons: [String] { recorded.map(\.reason) }
 
   func record(_ fallback: MeetingScreenEvidencePass.Fallback) {
     lock.lock()
-    recorded.append(fallback.reason)
+    fallbacks.append(fallback)
     lock.unlock()
   }
 }
