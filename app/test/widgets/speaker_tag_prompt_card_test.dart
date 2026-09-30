@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,6 +65,8 @@ Future<_Harness> _pumpCard(
   bool firstTime = false,
   List<Person> people = const [],
   bool loadPeople = true,
+  double textScale = 1,
+  bool reduceMotion = false,
 }) async {
   final answers = <GeneratedSpeakerTagPromptAnswerRequest>[];
   final saves = <bool?>[];
@@ -93,10 +96,15 @@ Future<_Harness> _pumpCard(
         ChangeNotifierProvider<PeopleProvider>.value(value: peopleProvider),
         ChangeNotifierProvider.value(value: provider),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: SingleChildScrollView(child: SpeakerTagPromptCard())),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale), disableAnimations: reduceMotion),
+          child: child!,
+        ),
+        home: const Scaffold(body: SingleChildScrollView(child: SpeakerTagPromptCard())),
       ),
     ),
   );
@@ -125,6 +133,38 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
+  });
+
+  testWidgets('voice-card answers and play expose accessibility tap actions', (tester) async {
+    final handle = tester.ensureSemantics();
+    await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')]);
+    for (final key in ['speaker_tag_prompt_answer_me', 'speaker_tag_prompt_play']) {
+      final node = tester.getSemantics(find.byKey(Key(key)));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue, reason: key);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pumpCard(tester, prompts: [
+      _prompt('b', 'identify', candidates: [
+        const GeneratedSpeakerTagCandidate(personId: 'p1', name: 'Maya', matchLevel: 2),
+      ])
+    ]);
+    expect(
+        tester
+            .getSemantics(find.byKey(const Key('speaker_tag_prompt_candidate_p1')))
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isTrue);
+    handle.dispose();
+  });
+
+  testWidgets('voice-card controls support 200 percent text and Reduce Motion', (tester) async {
+    await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')], textScale: 2, reduceMotion: true);
+    expect(tester.takeException(), isNull);
+    final chip = find.byKey(const Key('speaker_tag_prompt_answer_not_a_person'));
+    expect(tester.getSize(chip).height, greaterThanOrEqualTo(44));
+    for (final widget in tester.widgetList<AnimatedOpacity>(find.byType(AnimatedOpacity))) {
+      expect(widget.duration, Duration.zero);
+    }
   });
 
   testWidgets('owner then confirm: answers send after their Undo window, then the card thanks the user',

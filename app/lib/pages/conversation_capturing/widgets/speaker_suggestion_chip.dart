@@ -21,6 +21,11 @@ class SpeakerSuggestionChip extends StatefulWidget {
 class _SpeakerSuggestionChipState extends State<SpeakerSuggestionChip> {
   bool _expanded = false;
 
+  void _toggleExpanded() {
+    OmiHaptics.selection();
+    setState(() => _expanded = !_expanded);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -31,18 +36,16 @@ class _SpeakerSuggestionChipState extends State<SpeakerSuggestionChip> {
       expanded: _expanded,
       label: l10n.speakerTagPromptIsThisPerson(person.name),
       excludeSemantics: true,
+      onTap: _toggleExpanded,
       child: GestureDetector(
         key: const Key('speaker_suggestion_chip'),
         behavior: HitTestBehavior.opaque,
-        onTap: () {
-          OmiHaptics.selection();
-          setState(() => _expanded = !_expanded);
-        },
+        onTap: _toggleExpanded,
         // A 26pt chip inside a 44pt target (contract §3).
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 9),
           child: Container(
-            height: 26,
+            constraints: const BoxConstraints(minHeight: 26),
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs),
             decoration: BoxDecoration(
               borderRadius: OmiRadius.pillAll,
@@ -55,9 +58,11 @@ class _SpeakerSuggestionChipState extends State<SpeakerSuggestionChip> {
                   Icon(Icons.push_pin, size: 11, color: OmiColors.textSecondary),
                   const SizedBox(width: 3),
                 ],
-                Text(
-                  l10n.speakerSuggestionChip(person.name),
-                  style: OmiType.footnote.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
+                Flexible(
+                  child: Text(
+                    l10n.speakerSuggestionChip(person.name),
+                    style: OmiType.footnote.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
+                  ),
                 ),
               ],
             ),

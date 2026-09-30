@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/message_event.dart';
@@ -70,5 +71,16 @@ void main() {
       'segment_id': 's1',
     });
     expect(legacy.suggestedPersonId, isNull);
+  });
+
+  testWidgets('the suggestion can be expanded through its accessibility action', (tester) async {
+    final handle = tester.ensureSemantics();
+    await pump(tester);
+    final node = tester.getSemantics(find.bySemanticsLabel('Is this Maya Chen?'));
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    tester.binding.pipelineOwner.semanticsOwner!.performAction(node.id, SemanticsAction.tap);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('speaker_suggestion_panel')), findsOneWidget);
+    handle.dispose();
   });
 }

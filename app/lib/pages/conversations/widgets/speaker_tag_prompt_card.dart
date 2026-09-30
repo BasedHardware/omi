@@ -385,6 +385,7 @@ class _Clip extends StatelessWidget {
                 button: true,
                 label: l10n.speakerTagPromptPlayClip,
                 excludeSemantics: true,
+                onTap: () => provider.togglePlay(prompt),
                 child: InkWell(
                   key: const Key('speaker_tag_prompt_play'),
                   customBorder: const CircleBorder(),
@@ -530,6 +531,8 @@ class _CandidateChip extends StatelessWidget {
     final level = candidate.matchLevel;
     return Semantics(
       button: true,
+      enabled: onPressed != null,
+      onTap: onPressed,
       label: [
         candidate.name,
         if (candidate.pinned) context.l10n.peopleFilterPinned,
@@ -550,7 +553,7 @@ class _CandidateChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(candidate.name, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
+              Flexible(child: Text(candidate.name, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500))),
               if (candidate.pinned) ...[
                 const SizedBox(width: OmiSpacing.xxs),
                 Icon(Icons.push_pin, size: 12, color: OmiColors.textTertiary),
@@ -583,6 +586,7 @@ class _AnswerChip extends StatelessWidget {
       enabled: onPressed != null,
       label: label,
       excludeSemantics: true,
+      onTap: onPressed,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onPressed,
@@ -593,7 +597,7 @@ class _AnswerChip extends StatelessWidget {
             duration: OmiMotion.of(context).quick,
             opacity: onPressed == null ? 0.4 : 1,
             child: Container(
-              height: 36,
+              constraints: const BoxConstraints(minHeight: 36),
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
                 color: primary ? OmiColors.accent : OmiColors.chipSurface,
@@ -603,10 +607,12 @@ class _AnswerChip extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (icon != null) ...[Icon(icon, size: 16, color: foreground), const SizedBox(width: 6)],
-                  Text(
-                    label,
-                    style: OmiType.subhead
-                        .copyWith(color: foreground, fontWeight: primary ? FontWeight.w600 : FontWeight.w500),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: OmiType.subhead
+                          .copyWith(color: foreground, fontWeight: primary ? FontWeight.w600 : FontWeight.w500),
+                    ),
                   ),
                 ],
               ),
