@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import pytest
 
 import utils.conversations.transcript_chunks as transcript_chunks
+from database import vector_db
 
 STARTED_AT = datetime(2026, 8, 14, 21, 30, tzinfo=timezone.utc)
 
@@ -127,3 +128,75 @@ def test_hydrate_chunk_texts_handles_iso_string_and_timestamp_in_conversation(co
     assert rows[0]['conversation_title'] == 'ISO Chat'
     assert '[Conversation on 14 Aug 2026, 21:30]' in rows[1]['text']
     assert rows[1]['conversation_title'] == 'Timestamp Chat'
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_edit_refresh_reads_committed_text_and_replaces_old_windows(monkeypatch, enabled):
+    from contextlib import nullcontext
+    from database import vector_db
+
+    class Index:
+        def __init__(self):
+            self.rows = {"uid-1-conv-a-c0": {"text": "old text"}, "uid-1-conv-a-c1": {"text": "obsolete"}}
+
+        def upsert(self, *, vectors, namespace):
+            assert namespace == vector_db.TRANSCRIPT_CHUNKS_NAMESPACE
+            for row in vectors:
+                self.rows[row["id"]] = row
+
+        def list(self, *, prefix, namespace):
+            assert prefix == "uid-1-conv-a-c"
+            assert namespace == vector_db.TRANSCRIPT_CHUNKS_NAMESPACE
+            yield list(self.rows)
+
+        def delete(self, *, ids, namespace):
+            for vector_id in ids:
+                del self.rows[vector_id]
+
+    index = Index()
+    embedded = []
+
+    def embed(texts):
+        embedded.extend(texts)
+        return [[1.0] for _ in texts]
+
+    monkeypatch.setattr(vector_db, "index", index)
+    monkeypatch.setattr(vector_db, "external_write_fence", lambda *_args, **_kwargs: nullcontext())
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(vector_db, "embeddings", SimpleNamespace(embed_documents=embed))
+    monkeypatch.setenv("TRANSCRIPT_CHUNK_INDEXING_ENABLED", str(enabled).lower())
+    monkeypatch.setattr(
+        transcript_chunks.conversations_db,
+        "get_conversation",
+        lambda *_args: _conversation(segments=[{"text": "edited release date", "is_user": True}]),
+    )
+    transcript_chunks.refresh_transcript_chunks_after_edit("uid-1", "conv-a")
+    assert set(index.rows) == ({"uid-1-conv-a-c0"} if enabled else set())
+    assert bool(embedded) is enabled
+    if enabled:
+        assert "edited release date" in embedded[0]
+        assert "old text" not in embedded[0]
+        assert "text" not in index.rows["uid-1-conv-a-c0"]["metadata"]
+
+
+def test_replacement_pruning_failure_preserves_saved_edit_and_records_degradation(monkeypatch):
+    from contextlib import nullcontext
+    from database import vector_db
+
+    class Index:
+        def list(self, **_kwargs):
+            yield ["uid-1-conv-a-c0"]
+
+        def delete(self, **_kwargs):
+            raise RuntimeError("delete failed")
+
+    monkeypatch.setattr(vector_db, "index", Index())
+    monkeypatch.setattr(vector_db, "external_write_fence", lambda *_args, **_kwargs: nullcontext())
+    monkeypatch.setenv("TRANSCRIPT_CHUNK_INDEXING_ENABLED", "false")
+    monkeypatch.setattr(transcript_chunks.conversations_db, "get_conversation", lambda *_args: _conversation())
+    fallbacks = []
+    monkeypatch.setattr(transcript_chunks, "record_fallback", lambda **kwargs: fallbacks.append(kwargs))
+    transcript_chunks.refresh_transcript_chunks_after_edit("uid-1", "conv-a")
+    assert len(fallbacks) == 1
+    assert fallbacks[0]["outcome"] == "degraded"

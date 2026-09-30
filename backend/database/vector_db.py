@@ -1116,16 +1116,22 @@ TRANSCRIPT_CHUNKS_NAMESPACE = "ns_tchunks"
 
 
 @_account_external_data_write
-def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List[Dict[str, Any]]) -> int:
-    """chunks: [{'text': str, 'created_at': int unix ts, 'chunk_index': int}]"""
+def upsert_transcript_chunk_vectors(
+    uid: str, conversation_id: str, chunks: List[Dict[str, Any]], *, replace: bool = False
+) -> int:
+    """Index chunks; replacement also removes obsolete windows after a transcript edit.
+
+    Embedding/upsert precedes pruning, keeping existing searchable
+    data when a provider fails before the replacement is ready.
+    """
     if index is None:
         logger.warning('Pinecone index not initialized, skipping transcript chunk upsert')
         return 0
     filtered: List[Dict[str, Any]] = [c for c in chunks if (c.get('text') or '').strip()]
-    if not filtered:
+    if not filtered and not replace:
         return 0
 
-    vectors: List[List[float]] = embeddings.embed_documents([c['text'] for c in filtered])
+    vectors: List[List[float]] = embeddings.embed_documents([c['text'] for c in filtered]) if filtered else []
     payload: List[VectorRecordDoc] = []
     for c, v in zip(filtered, vectors):
         metadata: VectorMetadataDoc = {
@@ -1146,6 +1152,13 @@ def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List
     for i in range(0, len(payload), 100):
         index.upsert(vectors=payload[i : i + 100], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
         upserted += len(payload[i : i + 100])
+    if replace:
+        expected_ids = {record['id'] for record in payload}
+        stale_ids: List[str] = []
+        for page in index.list(prefix=f'{uid}-{conversation_id}-c', namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
+            stale_ids.extend(vector_id for vector_id in page if vector_id not in expected_ids)
+        for i in range(0, len(stale_ids), 1000):
+            index.delete(ids=stale_ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
     logger.info(f'upsert_transcript_chunk_vectors uid={uid} conversation={conversation_id} count={upserted}')
     return upserted
 

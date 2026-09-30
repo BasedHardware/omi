@@ -530,9 +530,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
     try {
       await setConversationSegmentText(id, segmentId, text)
       invalidateConversationsCache()
-      // Spoken-word search uses backend transcript-chunk vectors (Typesense + Pinecone).
-      // PATCH …/segments/text updates Firestore only today — same as mobile — so search
-      // can lag until the backend reindexes chunks on segment edit.
+      // The shared PATCH path refreshes transcript search before acknowledging the edit.
     } catch (e) {
       setConv((c) =>
         c?.transcript_segments

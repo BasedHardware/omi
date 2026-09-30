@@ -147,6 +147,14 @@ and background processing.
   outside this package: `database/conversation_finalization_jobs.py`,
   `services/conversation_finalization.py`, and their callers own those states.
 
+Segment-text PATCH commits the edit, then synchronously refreshes transcript-chunk
+vectors through `transcript_chunks.refresh_transcript_chunks_after_edit`. Replacement
+upserts the current windows and prunes obsolete ones; disabled indexing retracts
+old windows. Provider failures record shared degraded-fallback telemetry and do
+not misreport an already-committed edit as failed (FC-post-commit-index-maintenance-terminal).
+Offline deployments without Pinecone remain a no-op. The
+durable mutation also invokes the existing Typesense projection hook.
+
 ## Data and credential safety
 
 This package receives persisted conversation data only. Request-scoped BYOK

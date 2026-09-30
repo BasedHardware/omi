@@ -1247,6 +1247,9 @@ def patch_conversation_segment_text(
         raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
     if result == 'segment_not_found':
         raise HTTPException(status_code=404, detail="Segment not found")
+    from utils.conversations.transcript_chunks import refresh_transcript_chunks_after_edit
+
+    refresh_transcript_chunks_after_edit(uid, conversation_id)
     return {'status': 'Ok'}
 
 

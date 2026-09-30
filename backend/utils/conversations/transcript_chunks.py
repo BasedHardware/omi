@@ -4,11 +4,17 @@ These chunks slice the raw transcript into overlapping windows prefixed with the
 conversation date, so semantic search can land on verbatim evidence.
 """
 
+import logging
+import os
+
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import database.conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
+from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
 
 # ~8 segments per chunk with 2-segment overlap keeps chunks small enough to embed precisely.
 CHUNK_WINDOW = 8
@@ -106,3 +112,41 @@ def hydrate_chunk_texts(uid: str, rows: List[Dict[str, Any]]) -> List[Dict[str, 
         if text and conv_id:
             hydrated.append({**r, 'text': text, **meta_by_conv.get(conv_id, {})})
     return hydrated
+
+
+def refresh_transcript_chunks_after_edit(uid: str, conversation_id: str) -> None:
+    """Converge the shared segment-edit search projection before reporting success.
+
+    Read the committed transcript, never the client's optimistic edit. Disabled
+    indexing still retracts any old vectors; offline deployments remain a no-op.
+    Provider failures are contained and recorded after the authoritative write.
+    """
+    try:
+        from database import vector_db
+
+        if vector_db.index is None:
+            return
+        conversation = conversations_db.get_conversation(uid, conversation_id)
+        chunks = []
+        if (
+            conversation
+            and not conversation.get('deleted')
+            and not conversation.get('is_locked')
+            and os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED', 'false').lower() == 'true'
+        ):
+            chunks = build_transcript_chunks(
+                conversation.get('transcript_segments') or [],
+                conversation.get('started_at') or conversation.get('created_at'),
+            )
+        vector_db.upsert_transcript_chunk_vectors(uid, conversation_id, chunks, replace=True)
+    except Exception as exc:
+        # The transcript has committed. Index outages must not turn a landed
+        # edit into a false failure or cause the client to roll its text back.
+        logger.warning('Transcript search refresh failed (%s)', type(exc).__name__)
+        record_fallback(
+            component='other',
+            from_mode='transcript_chunk_refresh',
+            to_mode='saved_transcript',
+            reason='other',
+            outcome='degraded',
+        )
