@@ -95,7 +95,10 @@ def _rich_meeting_roster(
         if calendar_context is None and not desktop_capture and not gather:
             return None, [], desktop_capture, ()
         evidence = _screen_frame_evidence(uid, conversation)
-        if meeting_notes_screen_text_context_enabled():
+        # Names the judge read off approved frames are identity evidence for either
+        # flag: with images attached, the roster must carry them too, or the notes
+        # validator strips the names the model read from those images.
+        if evidence:
             calendar_context = with_screen_frame_participants(
                 calendar_context,
                 screen_frame_names(evidence),

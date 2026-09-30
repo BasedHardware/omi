@@ -123,6 +123,21 @@ class TestRosterEnrichment:
             calendar
         )
 
+    def test_a_shared_first_name_is_not_an_email_match(self):
+        calendar = CalendarMeetingContext(
+            calendar_event_id='evt',
+            title='Sync',
+            participants=[MeetingParticipant(email='john.smith@acme.com')],
+            start_time=START,
+            duration_minutes=30,
+            calendar_source='google',
+        )
+        merged = with_screen_frame_participants(calendar, ['John Doe'], started_at=START, duration_minutes=30)
+        assert [(p.name, p.email) for p in merged.participants] == [
+            (None, 'john.smith@acme.com'),
+            ('John Doe', None),
+        ]
+
     def test_a_nameless_invitee_gets_the_tile_name_instead_of_a_twin(self):
         calendar = CalendarMeetingContext(
             calendar_event_id='evt',
@@ -221,6 +236,20 @@ class TestScreenMoments:
 
 
 class TestEnvironmentScopedReads:
+    @pytest.fixture(autouse=True)
+    def _setting_on(self, monkeypatch):
+        monkeypatch.setattr(evidence_mod, 'get_meeting_note_screenshots_enabled', lambda uid: True)
+
+    def test_account_setting_off_means_no_evidence_and_no_frame_read(self, monkeypatch):
+        monkeypatch.setenv('BUCKET_SCREEN_FRAMES', PROD)
+        monkeypatch.setattr(evidence_mod, 'get_meeting_note_screenshots_enabled', lambda uid: False)
+
+        def boom(*_):
+            raise AssertionError('hidden screenshots must not be read for notes')
+
+        monkeypatch.setattr(evidence_mod, 'get_conversation_screen_frames', boom)
+        assert load_screen_frame_evidence('u', 'c') == ()
+
     def test_only_this_environments_frames_are_evidence(self, monkeypatch):
         docs = [
             {'id': 'dev', 'captured_at': START, 'visible_participant_names': ['Dev Person'], 'screen_summary': 's'},
@@ -420,4 +449,5 @@ class TestWiringFlags:
 
     def test_frames_flag_alone_attaches_images_only(self, monkeypatch):
         names, images, moments, _loaded = self._run(monkeypatch, screen_text=False, frames=True)
-        assert names == [] and images == FRAMES and moments == ()
+        # The image-derived names still reach the roster, so the notes validator keeps them.
+        assert names == ['Jordan Rivera'] and images == FRAMES and moments == ()

@@ -126,3 +126,13 @@ class TestSignedUrlReportsTheTrueExpiry:
         assert url == "https://fresh"
         assert expires_at - before >= dt.timedelta(minutes=59)
         assert cached == [("u/c/f.jpg", "https://fresh", 3600)]
+
+
+def test_frame_download_disables_the_library_retry_so_the_caller_budget_holds(monkeypatch):
+    bucket = MagicMock()
+    storage_mod.storage_client.bucket.return_value = bucket
+    blob = bucket.blob.return_value
+    blob.download_as_bytes.return_value = b"jpeg"
+
+    assert storage_mod.download_screen_frame_bytes(UID, CONVERSATION_ID, FRAME_ID, timeout=2.5) == b"jpeg"
+    blob.download_as_bytes.assert_called_once_with(timeout=2.5, retry=None)

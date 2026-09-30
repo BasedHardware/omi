@@ -29,6 +29,7 @@ from typing import Any, Optional, Sequence
 from PIL import Image
 
 from database.screen_frames import get_conversation_screen_frames, own_frames
+from database.users import get_meeting_note_screenshots_enabled
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from utils.conversations.meeting_context import is_ai_agent_tile_name
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
@@ -65,11 +66,17 @@ def _as_utc(value: Any) -> Optional[datetime]:
 
 
 def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tuple[ScreenFrameEvidence, ...]:
-    """This environment's approved frames for the conversation, oldest first."""
+    """This environment's approved frames for the conversation, oldest first.
+
+    Nothing when the account's screenshot setting is off: hidden frames stay out
+    of every surface, notes and reprocessing included (contract §9).
+    """
     bucket = configured_screen_frames_bucket()
     if not bucket or not conversation_id:
         return ()
     try:
+        if not get_meeting_note_screenshots_enabled(uid):
+            return ()
         docs = own_frames(get_conversation_screen_frames(uid, conversation_id), bucket)
     except Exception as exc:  # noqa: BLE001 - evidence is best effort
         logger.warning('screen frame evidence read failed uid=%s: %s', uid, type(exc).__name__)
@@ -123,6 +130,17 @@ def screen_frame_names(evidence: Sequence[ScreenFrameEvidence]) -> list[str]:
     return [spelling[key] for key in ordered[:MAX_SCREEN_FRAME_NAMES]]
 
 
+def _email_spells_name(email: str, name_tokens: Sequence[str]) -> bool:
+    """Both the first and the last name token appear in the local part ("jordan.rivera").
+
+    A shared first name alone ("john.smith" vs a "John Doe" tile) is a different person.
+    """
+    if len(name_tokens) < 2:
+        return False
+    local = _tokens(email.split('@', 1)[0])
+    return name_tokens[0] in local and name_tokens[-1] in local
+
+
 def _tokens(value: str) -> set[str]:
     return {token for token in re.split(r"[\s._\-+'’]+", value.casefold()) if token}
 
@@ -165,9 +183,7 @@ def with_screen_frame_participants(
         email_only = [
             index
             for index, participant in enumerate(participants)
-            if not participant.name
-            and participant.email
-            and _tokens(participant.email.split('@', 1)[0]) & set(name_tokens)
+            if not participant.name and participant.email and _email_spells_name(participant.email, name_tokens)
         ]
         if len(email_only) == 1:
             index = email_only[0]

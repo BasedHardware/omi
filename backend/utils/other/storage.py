@@ -2018,7 +2018,8 @@ def download_screen_frame_bytes(uid: str, conversation_id: str, frame_id: str, *
     """Read one canonical frame from this environment's bucket, bounded by ``timeout`` seconds."""
     bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
     blob = bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id))
-    return blob.download_as_bytes(timeout=timeout)
+    # retry=None: the library's default retry runs to a 120 s deadline, far past the caller's budget.
+    return blob.download_as_bytes(timeout=timeout, retry=None)
 
 
 def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str, *, bucket: Optional[str] = None) -> None:
