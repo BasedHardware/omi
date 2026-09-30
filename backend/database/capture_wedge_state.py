@@ -13,19 +13,41 @@ lock screen.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from google.api_core.exceptions import GoogleAPICallError
 from google.cloud import firestore
 
 from database._client import get_firestore_client
 
 CAPTURE_WEDGE_STATE_COLLECTION = 'capture_wedge_state'
 WEDGE_NUDGE_COOLDOWN = timedelta(hours=24)
+_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
+_INFRA_ERRORS = (GoogleAPICallError, OSError, RuntimeError, ValueError)
 
 
 def _client(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
+
+
+def _clean_id(value: str) -> str:
+    if not isinstance(value, str) or not _ID_RE.match(value):
+        raise ValueError('invalid document id')
+    return value
+
+
+def _clean_day(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError('invalid day')
+    try:
+        parsed = datetime.strptime(value, '%Y-%m-%d')
+    except ValueError as exc:
+        raise ValueError('invalid day') from exc
+    if parsed.strftime('%Y-%m-%d') != value:
+        raise ValueError('invalid day')
+    return value
 
 
 def claim_wedge_first_seen(
@@ -36,6 +58,8 @@ def claim_wedge_first_seen(
     firestore_client: Any = None,
 ) -> bool:
     """Claim this uid's first-seen slot for ``day``; ``True`` only for the winner."""
+    uid = _clean_id(uid)
+    day = _clean_day(day)
     client = _client(firestore_client)
     doc_ref = client.collection(CAPTURE_WEDGE_STATE_COLLECTION).document(uid)
     stamp = now or datetime.now(timezone.utc)
@@ -48,7 +72,10 @@ def claim_wedge_first_seen(
         transaction.set(doc_ref, {'uid': uid, 'first_seen_day': day, 'updated_at': stamp}, merge=True)
         return True
 
-    return firestore.transactional(_txn)(client.transaction())
+    try:
+        return firestore.transactional(_txn)(client.transaction())
+    except _INFRA_ERRORS:
+        return False
 
 
 def claim_wedge_nudge_cooldown(
@@ -64,6 +91,7 @@ def claim_wedge_nudge_cooldown(
     the process dies between claim and send the nudge is simply missed — the
     at-most-once tradeoff documented in the module docstring.
     """
+    uid = _clean_id(uid)
     client = _client(firestore_client)
     now = now or datetime.now(timezone.utc)
     doc_ref = client.collection(CAPTURE_WEDGE_STATE_COLLECTION).document(uid)
@@ -80,4 +108,7 @@ def claim_wedge_nudge_cooldown(
         transaction.set(doc_ref, {'uid': uid, 'last_nudge_at': now, 'updated_at': now}, merge=True)
         return True
 
-    return firestore.transactional(_txn)(client.transaction())
+    try:
+        return firestore.transactional(_txn)(client.transaction())
+    except _INFRA_ERRORS:
+        return False
