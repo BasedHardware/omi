@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from models.calendar_context import CalendarMeetingContext
 from models.conversation_photo import ConversationPhoto
-from utils.conversations.meeting_participants import MeetingRoster
+from utils.conversations.meeting_participants import MeetingRoster, is_silent_recorder
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 from utils.llm.gateway_client import should_route_features_through_gateway
 from utils.llm.model_config import get_model_config, uses_explicit_cache_and_chat_sanitizer
@@ -88,8 +88,12 @@ def _bind_speakers_with_roster(
     unresolved cluster AND exactly one unbound named non-owner human AND no AI
     agent and no nameless human on the roster (either could be the cluster's
     true identity).
+
+    A silent recorder (a note-taking bot: present on the call, never a voice)
+    is not a candidate identity for any cluster, so it neither mixes the remote
+    channel nor blocks binding. Every other agent does both.
     """
-    remote = [entry for entry in roster.entries if entry.kind != 'owner']
+    remote = [entry for entry in roster.entries if entry.kind != 'owner' and not is_silent_recorder(entry)]
     if desktop_meeting_capture and len(remote) > 1:
         owner_name = next(
             (entry.display_name for entry in roster.entries if entry.kind == 'owner' and entry.display_name),
@@ -120,7 +124,7 @@ def _speaker_metadata_lines(
     desktop_meeting_capture: bool,
 ) -> List[str]:
     bound_names = {name.casefold() for name in speaker_names.values() if name}
-    remote = [entry for entry in roster.entries if entry.kind != 'owner']
+    remote = [entry for entry in roster.entries if entry.kind != 'owner' and not is_silent_recorder(entry)]
     unbound_remote_labels = [
         entry.display_name or entry.email or 'unknown'
         for entry in remote

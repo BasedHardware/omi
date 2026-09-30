@@ -3661,5 +3661,9 @@
     "deleteChatMessage": "แชตนี้จะหายไปจากแชตที่ผ่านมาถาวร",
     "deleteChat": "ลบแชต",
     "appsAskWith": "ถาม Omi ด้วย",
-    "conversationsTodayCount": "{count, plural, =0{วันนี้ยังไม่มีบทสนทนา} =1{วันนี้มี 1 บทสนทนา} other{วันนี้มี {count} บทสนทนา}}"
+    "conversationsTodayCount": "{count, plural, =0{วันนี้ยังไม่มีบทสนทนา} =1{วันนี้มี 1 บทสนทนา} other{วันนี้มี {count} บทสนทนา}}",
+    "meetingScreenshotsTitle": "สิ่งที่อยู่บนหน้าจอ",
+    "meetingScreenshotFallbackCaption": "ภาพหน้าจอจากการประชุมนี้",
+    "deleteMeetingScreenshotTitle": "ลบภาพหน้าจอหรือไม่",
+    "deleteMeetingScreenshotMessage": "การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้"
 }

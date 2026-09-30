@@ -11659,4 +11659,16 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Kas bija ekrānā';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ekrānuzņēmums no šīs sapulces';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Dzēst ekrānuzņēmumu?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt.';
 }

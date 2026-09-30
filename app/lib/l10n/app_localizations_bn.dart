@@ -11635,4 +11635,17 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'স্ক্রিনে যা ছিল';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'এই মিটিংয়ের স্ক্রিনশট';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'স্ক্রিনশট মুছবেন?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'এটি এই মিটিংয়ের নোট থেকে স্ক্রিনশটটি সরিয়ে দেবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।';
 }

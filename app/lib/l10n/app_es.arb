@@ -3661,5 +3661,9 @@
     "deleteChatMessage": "Desaparecerá de los chats anteriores para siempre.",
     "deleteChat": "Eliminar chat",
     "appsAskWith": "Pregunta a Omi con",
-    "conversationsTodayCount": "{count, plural, =0{Ninguna conversación hoy.} =1{1 conversación hoy.} other{{count} conversaciones hoy.}}"
+    "conversationsTodayCount": "{count, plural, =0{Ninguna conversación hoy.} =1{1 conversación hoy.} other{{count} conversaciones hoy.}}",
+    "meetingScreenshotsTitle": "Lo que había en pantalla",
+    "meetingScreenshotFallbackCaption": "Captura de pantalla de esta reunión",
+    "deleteMeetingScreenshotTitle": "¿Eliminar captura de pantalla?",
+    "deleteMeetingScreenshotMessage": "Esto elimina la captura de pantalla de la nota de esta reunión. No se puede deshacer."
 }

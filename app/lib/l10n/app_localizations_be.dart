@@ -11664,4 +11664,17 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Што было на экране';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Здымак экрана з гэтай сустрэчы';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Выдаліць здымак экрана?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Здымак экрана будзе выдалены з нататкі гэтай сустрэчы. Гэта нельга адрабіць.';
 }

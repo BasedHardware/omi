@@ -3661,5 +3661,9 @@
     "deleteChatMessage": "Dispare definitiv din conversațiile anterioare.",
     "deleteChat": "Șterge conversația",
     "appsAskWith": "Întreabă Omi cu",
-    "conversationsTodayCount": "{count, plural, =0{Nicio conversație azi.} =1{1 conversație azi.} other{{count} conversații azi.}}"
+    "conversationsTodayCount": "{count, plural, =0{Nicio conversație azi.} =1{1 conversație azi.} other{{count} conversații azi.}}",
+    "meetingScreenshotsTitle": "Ce era pe ecran",
+    "meetingScreenshotFallbackCaption": "Captură de ecran din această întâlnire",
+    "deleteMeetingScreenshotTitle": "Ștergi captura de ecran?",
+    "deleteMeetingScreenshotMessage": "Captura de ecran va fi eliminată din nota acestei întâlniri. Acțiunea nu poate fi anulată."
 }

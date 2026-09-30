@@ -24,6 +24,7 @@ import hashlib
 import hmac
 import logging
 from dataclasses import dataclass
+from typing import Optional
 from uuid import uuid4
 
 import database.redis_db as redis_db
@@ -48,6 +49,8 @@ class WrittenScreenFrame:
     frame_id: str
     uid: str
     conversation_id: str
+    # Recorded on the frame doc: dev and prod share Firestore, not buckets.
+    storage_bucket: Optional[str] = None
 
 
 def write_screen_frame(
@@ -84,4 +87,9 @@ def write_screen_frame(
         )
         raise ScreenFrameWriteError("upload_failed") from error
 
-    return WrittenScreenFrame(frame_id=frame_id, uid=claims.uid, conversation_id=claims.subject_id)
+    return WrittenScreenFrame(
+        frame_id=frame_id,
+        uid=claims.uid,
+        conversation_id=claims.subject_id,
+        storage_bucket=storage.configured_screen_frames_bucket(),
+    )

@@ -11678,4 +11678,17 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Mi volt a képernyőn';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Képernyőkép erről a megbeszélésről';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Törli a képernyőképet?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'A képernyőkép törlődik a megbeszélés jegyzetéből. Ez nem vonható vissza.';
 }

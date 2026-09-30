@@ -11442,4 +11442,16 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => '画面に表示されていた内容';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'このミーティングのスクリーンショット';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'スクリーンショットを削除しますか？';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'このミーティングのメモからスクリーンショットを削除します。この操作は取り消せません。';
 }

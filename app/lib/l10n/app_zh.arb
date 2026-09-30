@@ -3661,5 +3661,9 @@
     "deleteChatMessage": "它会从过往聊天中永久消失。",
     "deleteChat": "删除聊天",
     "appsAskWith": "用这些向 Omi 提问",
-    "conversationsTodayCount": "{count, plural, =0{今天还没有对话。} =1{今天有 1 段对话。} other{今天有 {count} 段对话。}}"
+    "conversationsTodayCount": "{count, plural, =0{今天还没有对话。} =1{今天有 1 段对话。} other{今天有 {count} 段对话。}}",
+    "meetingScreenshotsTitle": "屏幕上显示的内容",
+    "meetingScreenshotFallbackCaption": "本次会议的屏幕截图",
+    "deleteMeetingScreenshotTitle": "删除屏幕截图？",
+    "deleteMeetingScreenshotMessage": "这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。"
 }

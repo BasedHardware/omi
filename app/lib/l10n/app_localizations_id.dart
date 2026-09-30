@@ -11645,4 +11645,17 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Yang ada di layar';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Tangkapan layar dari rapat ini';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Hapus tangkapan layar?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ini akan menghapus tangkapan layar dari catatan rapat ini. Tindakan ini tidak dapat dibatalkan.';
 }

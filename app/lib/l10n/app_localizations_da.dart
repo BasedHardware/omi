@@ -11620,4 +11620,16 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Hvad der var på skærmen';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Skærmbillede fra dette møde';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Slet skærmbillede?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'Dette fjerner skærmbilledet fra mødets note. Det kan ikke fortrydes.';
 }

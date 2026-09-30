@@ -11634,4 +11634,17 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Hva som var på skjermen';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Skjermbilde fra dette møtet';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Slette skjermbildet?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Dette fjerner skjermbildet fra notatet for dette møtet. Det kan ikke angres.';
 }

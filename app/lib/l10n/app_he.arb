@@ -11233,5 +11233,9 @@
     "deleteChatMessage": "הוא ייעלם מהצ'אטים הקודמים לתמיד.",
     "deleteChat": "מחיקת הצ'אט",
     "appsAskWith": "לשאול את Omi עם",
-    "conversationsTodayCount": "{count, plural, =0{אין שיחות היום.} =1{שיחה אחת היום.} other{{count} שיחות היום.}}"
+    "conversationsTodayCount": "{count, plural, =0{אין שיחות היום.} =1{שיחה אחת היום.} other{{count} שיחות היום.}}",
+    "meetingScreenshotsTitle": "מה היה על המסך",
+    "meetingScreenshotFallbackCaption": "צילום מסך מהפגישה הזו",
+    "deleteMeetingScreenshotTitle": "למחוק את צילום המסך?",
+    "deleteMeetingScreenshotMessage": "צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו."
 }

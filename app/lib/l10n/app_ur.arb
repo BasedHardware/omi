@@ -11233,5 +11233,9 @@
     "deleteChatMessage": "یہ پچھلی چیٹس سے ہمیشہ کے لیے ہٹ جائے گی۔",
     "deleteChat": "چیٹ حذف کریں",
     "appsAskWith": "اس کے ساتھ Omi سے پوچھیں",
-    "conversationsTodayCount": "{count, plural, =0{آج کوئی گفتگو نہیں۔} =1{آج 1 گفتگو۔} other{آج {count} گفتگوئیں۔}}"
+    "conversationsTodayCount": "{count, plural, =0{آج کوئی گفتگو نہیں۔} =1{آج 1 گفتگو۔} other{آج {count} گفتگوئیں۔}}",
+    "meetingScreenshotsTitle": "اسکرین پر کیا تھا",
+    "meetingScreenshotFallbackCaption": "اس میٹنگ کا اسکرین شاٹ",
+    "deleteMeetingScreenshotTitle": "اسکرین شاٹ حذف کریں؟",
+    "deleteMeetingScreenshotMessage": "یہ اس میٹنگ کے نوٹ سے اسکرین شاٹ ہٹا دے گا۔ اسے واپس نہیں کیا جا سکتا۔"
 }

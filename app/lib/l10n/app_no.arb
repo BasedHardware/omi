@@ -3661,5 +3661,9 @@
     "deleteChatMessage": "Den forsvinner fra tidligere chatter for godt.",
     "deleteChat": "Slett chat",
     "appsAskWith": "Spør Omi med",
-    "conversationsTodayCount": "{count, plural, =0{Ingen samtaler i dag.} =1{1 samtale i dag.} other{{count} samtaler i dag.}}"
+    "conversationsTodayCount": "{count, plural, =0{Ingen samtaler i dag.} =1{1 samtale i dag.} other{{count} samtaler i dag.}}",
+    "meetingScreenshotsTitle": "Hva som var på skjermen",
+    "meetingScreenshotFallbackCaption": "Skjermbilde fra dette møtet",
+    "deleteMeetingScreenshotTitle": "Slette skjermbildet?",
+    "deleteMeetingScreenshotMessage": "Dette fjerner skjermbildet fra notatet for dette møtet. Det kan ikke angres."
 }

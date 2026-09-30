@@ -11233,5 +11233,9 @@
     "deleteChatMessage": "ಇದು ಹಿಂದಿನ ಚಾಟ್‌ಗಳಿಂದ ಶಾಶ್ವತವಾಗಿ ಹೋಗುತ್ತದೆ.",
     "deleteChat": "ಚಾಟ್ ಅಳಿಸಿ",
     "appsAskWith": "ಇದರೊಂದಿಗೆ Omi ಅನ್ನು ಕೇಳಿ",
-    "conversationsTodayCount": "{count, plural, =0{ಇಂದು ಯಾವುದೇ ಸಂಭಾಷಣೆ ಇಲ್ಲ.} =1{ಇಂದು 1 ಸಂಭಾಷಣೆ.} other{ಇಂದು {count} ಸಂಭಾಷಣೆಗಳು.}}"
+    "conversationsTodayCount": "{count, plural, =0{ಇಂದು ಯಾವುದೇ ಸಂಭಾಷಣೆ ಇಲ್ಲ.} =1{ಇಂದು 1 ಸಂಭಾಷಣೆ.} other{ಇಂದು {count} ಸಂಭಾಷಣೆಗಳು.}}",
+    "meetingScreenshotsTitle": "ಪರದೆಯ ಮೇಲೆ ಏನಿತ್ತು",
+    "meetingScreenshotFallbackCaption": "ಈ ಸಭೆಯ ಸ್ಕ್ರೀನ್‌ಶಾಟ್",
+    "deleteMeetingScreenshotTitle": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅಳಿಸುವುದೇ?",
+    "deleteMeetingScreenshotMessage": "ಇದು ಈ ಸಭೆಯ ಟಿಪ್ಪಣಿಯಿಂದ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ."
 }

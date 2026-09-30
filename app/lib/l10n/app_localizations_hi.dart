@@ -11615,4 +11615,17 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'स्क्रीन पर क्या था';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'इस मीटिंग का स्क्रीनशॉट';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'स्क्रीनशॉट हटाएं?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'यह इस मीटिंग के नोट से स्क्रीनशॉट हटा देगा। इसे पूर्ववत नहीं किया जा सकता।';
 }

@@ -11664,4 +11664,17 @@ class AppLocalizationsBs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Šta je bilo na ekranu';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Snimak ekrana sa ovog sastanka';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Izbrisati snimak ekrana?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ovo uklanja snimak ekrana iz bilješke ovog sastanka. Ne može se poništiti.';
 }

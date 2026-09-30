@@ -3696,5 +3696,9 @@
     "deleteChatMessage": "Он навсегда исчезнет из прошлых чатов.",
     "deleteChat": "Удалить чат",
     "appsAskWith": "Спрашивать Omi с помощью",
-    "conversationsTodayCount": "{count, plural, =0{Сегодня разговоров нет.} =1{1 разговор сегодня.} other{{count} разговоров сегодня.}}"
+    "conversationsTodayCount": "{count, plural, =0{Сегодня разговоров нет.} =1{1 разговор сегодня.} other{{count} разговоров сегодня.}}",
+    "meetingScreenshotsTitle": "Что было на экране",
+    "meetingScreenshotFallbackCaption": "Снимок экрана с этой встречи",
+    "deleteMeetingScreenshotTitle": "Удалить снимок экрана?",
+    "deleteMeetingScreenshotMessage": "Снимок экрана будет удалён из заметки этой встречи. Это действие нельзя отменить."
 }
