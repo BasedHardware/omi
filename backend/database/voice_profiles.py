@@ -202,7 +202,7 @@ def ignored_voice_key(conversation_id: str, speaker_id: int) -> str:
     return f'{conversation_id}:{speaker_id}'
 
 
-def ignored_voices(state: Dict[str, Any]) -> list:
+def ignored_voices(state: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Stored "Not a Person" markers, newest first."""
     entries = [
         entry
@@ -231,7 +231,7 @@ def record_ignored_voice(
     def record(transaction: Any) -> None:
         snapshot = ref.get(transaction=transaction)
         state = snapshot.to_dict() or {}
-        entry = {'conversation_id': conversation_id, 'speaker_id': speaker_id, 'ignored_at': now}
+        entry: Dict[str, Any] = {'conversation_id': conversation_id, 'speaker_id': speaker_id, 'ignored_at': now}
         kept = [
             e
             for e in ignored_voices(state)
