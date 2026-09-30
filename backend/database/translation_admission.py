@@ -198,8 +198,8 @@ def release_translation(reservation: TranslationReservation, actual_chars: int, 
     else:
         try:
             val = float(actual_chars)
-            safe_actual = 0 if math.isnan(val) else max(0, int(val))
-        except (TypeError, ValueError):
+            safe_actual = 0 if (math.isnan(val) or math.isinf(val)) else max(0, int(val))
+        except (TypeError, ValueError, OverflowError):
             safe_actual = 0
 
     refund = max(0, reserved - safe_actual)

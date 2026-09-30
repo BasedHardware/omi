@@ -193,6 +193,15 @@ class TestReleaseTranslationResilience:
         args = mock_client.eval.call_args[0]
         assert args[7] == 100
 
+        # Inf and -Inf actual_chars safely fall back to 0 without raising OverflowError
+        assert release_translation(res, float("inf"), client=mock_client) is True  # type: ignore[arg-type]
+        args = mock_client.eval.call_args[0]
+        assert args[7] == 100
+
+        assert release_translation(res, float("-inf"), client=mock_client) is True  # type: ignore[arg-type]
+        args = mock_client.eval.call_args[0]
+        assert args[7] == 100
+
         # Float actual_chars cast to int
         assert release_translation(res, 40.7, client=mock_client) is True  # type: ignore[arg-type]
         args = mock_client.eval.call_args[0]
