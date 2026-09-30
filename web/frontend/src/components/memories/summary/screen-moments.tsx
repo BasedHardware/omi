@@ -11,6 +11,7 @@ import {
   fitSize,
   groundGradient,
   msUntilRefresh,
+  nextFrameSet,
   screenshotTiles,
   stepIndex,
 } from '@/src/lib/shared-screenshots.mjs';
@@ -55,6 +56,16 @@ export default function ScreenMoments({
     () => screenshotTiles(frameSet) as SharedScreenFrame[],
     [frameSet],
   );
+  // Frames whose image failed to load with the current URLs. Only those are
+  // hidden (their tile keeps its gradient) while a refetch renews the URLs.
+  const [failedIds, setFailedIds] = useState<ReadonlySet<string>>(() => new Set());
+  // Bumped by every successful refetch and used in the image keys, so images
+  // remount and retry even when the backend returns the identical signed URL
+  // (an <img> whose src does not change never reloads after an error).
+  const [setVersion, setSetVersion] = useState(0);
+  useEffect(() => {
+    setFailedIds(new Set());
+  }, [setVersion]);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const [zoomed, setZoomed] = useState(false);
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
@@ -64,25 +75,40 @@ export default function ScreenMoments({
   const shownIndex = useRef(0);
   const viewport = useViewport();
 
-  // One gate per conversation: serialises refetches and defers any request
-  // made during the post-renewal cooldown to its end (never drops it).
-  // Created in an effect (not memoised) so StrictMode's mount/unmount/mount
-  // cycle cannot leave a disposed gate in use.
+  // One gate per conversation: serialises refetches, defers any request made
+  // during the post-renewal cooldown to its end (never drops it), and retries
+  // failed refetches with bounded backoff. A failure keeps the last set; only
+  // a successful (possibly empty) response replaces it. Created in an effect
+  // (not memoised) so StrictMode's mount/unmount/mount cycle cannot leave a
+  // disposed gate in use; `active` drops a response that lands after unmount.
   const gateRef = useRef<ReturnType<typeof createRefreshGate> | null>(null);
   useEffect(() => {
+    let active = true;
     const gate = createRefreshGate({
       run: async () => {
-        try {
-          setFrameSet(await getSharedScreenshots(conversationId));
-        } catch {
-          setFrameSet(null);
-        }
+        const result = await getSharedScreenshots(conversationId);
+        if (!active) return;
+        setFrameSet((previous) => nextFrameSet(previous, result));
+        if (result.ok) setSetVersion((v) => v + 1);
+        else throw new Error('screenshot refetch failed');
       },
     });
     gateRef.current = gate;
-    return () => gate.dispose();
+    return () => {
+      active = false;
+      gate.dispose();
+    };
   }, [conversationId]);
   const refresh = useCallback(() => gateRef.current?.request(), []);
+  const markFailed = useCallback(
+    (frameId: string) => {
+      setFailedIds((previous) =>
+        previous.has(frameId) ? previous : new Set(previous).add(frameId),
+      );
+      refresh();
+    },
+    [refresh],
+  );
 
   useEffect(() => {
     if (tiles.length === 0) return;
@@ -172,7 +198,10 @@ export default function ScreenMoments({
           const offset = captureOffsetLabel(frame.captured_at, startedAt);
           const label = frame.caption?.trim() || 'Screenshot';
           return (
-            <li key={frame.id} className="sn-shot">
+            <li
+              key={frame.id}
+              className={`sn-shot${failedIds.has(frame.id) ? ' sn-shot-failed' : ''}`}
+            >
               <button
                 ref={(el) => {
                   tileRefs.current[index] = el;
@@ -190,13 +219,14 @@ export default function ScreenMoments({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element -- signed, expiring GCS URLs; see get-shared-screenshots */}
                 <img
+                  key={`${frame.id}:${setVersion}`}
                   src={frame.thumbnail_url}
                   alt=""
                   width={frame.width}
                   height={frame.height}
                   loading="lazy"
                   decoding="async"
-                  onError={refresh}
+                  onError={() => markFailed(frame.id)}
                 />
                 {offset ? (
                   <span className="sn-shot-time" aria-hidden="true">
@@ -251,17 +281,17 @@ export default function ScreenMoments({
                 <div
                   className={`sn-lightbox-stage${
                     showZoomed ? ' sn-lightbox-zoomed' : ''
-                  }`}
+                  }${failedIds.has(current.id) ? ' sn-shot-failed' : ''}`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element -- signed, expiring GCS URLs */}
                   <img
-                    key={current.id}
+                    key={`${current.id}:${setVersion}`}
                     src={current.content_url}
                     alt={current.caption || 'Screenshot'}
                     width={showZoomed ? current.width : fit.width}
                     height={showZoomed ? current.height : fit.height}
                     style={{ backgroundImage: groundGradient(current) }}
-                    onError={refresh}
+                    onError={() => markFailed(current.id)}
                   />
                 </div>
                 <div className="sn-lightbox-caption">

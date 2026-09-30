@@ -83,7 +83,9 @@ export default function Summary({ memory, screenFrames = null }: SummaryProps) {
         </div>
       )}
 
+      {/* Keyed so client navigation between shares never carries state across. */}
       <ScreenMoments
+        key={memory.id}
         conversationId={memory.id}
         initialSet={screenFrames}
         startedAt={memory.started_at}

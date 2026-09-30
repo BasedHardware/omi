@@ -140,7 +140,7 @@ export default async function MemoryPage(props: MemoryPageProps) {
   const memoryId = params.id;
   // Screenshots are fetched per request, never cached: their signed URLs
   // expire after 60 minutes (see get-shared-screenshots).
-  const [memory, screenFrames] = await Promise.all([
+  const [memory, screenshots] = await Promise.all([
     getSharedMemory(memoryId),
     getSharedScreenshots(memoryId),
   ]);
@@ -162,7 +162,7 @@ export default async function MemoryPage(props: MemoryPageProps) {
           <Memory
             memory={memory}
             searchParams={searchParams}
-            screenFrames={screenFrames}
+            screenFrames={screenshots.ok ? screenshots.set : null}
           />
           <SharedConversationInstallCta openInOmiHref={openInOmiHref} />
           <p className="sn-footer">Captured and summarized by Omi</p>

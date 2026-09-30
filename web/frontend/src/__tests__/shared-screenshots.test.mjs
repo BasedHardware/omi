@@ -11,6 +11,7 @@ import {
   fitSize,
   groundGradient,
   msUntilRefresh,
+  nextFrameSet,
   screenshotTiles,
   stepIndex,
 } from '../lib/shared-screenshots.mjs';
@@ -300,5 +301,102 @@ describe('createRefreshGate', () => {
     h.gate.dispose();
     await h.advance(60_000);
     assert.equal(h.runs.length, 1);
+  });
+});
+
+describe('transient refetch failures keep the set and retry', () => {
+  function failingHarness(outcomes) {
+    let clock = 0;
+    const timers = [];
+    const runs = [];
+    const gate = createRefreshGate({
+      run: () => {
+        runs.push(clock);
+        return outcomes.shift() === 'fail'
+          ? Promise.reject(new Error('503'))
+          : Promise.resolve();
+      },
+      minIntervalMs: 30_000,
+      maxBackoffMs: 300_000,
+      now: () => clock,
+      setTimer: (fn, ms) => {
+        const t = { fn, at: clock + ms, cleared: false };
+        timers.push(t);
+        return t;
+      },
+      clearTimer: (t) => {
+        if (t) t.cleared = true;
+      },
+    });
+    const settle = () => new Promise((resolve) => setImmediate(resolve));
+    const advance = async (ms) => {
+      clock += ms;
+      for (const t of [...timers]) {
+        if (!t.cleared && t.at <= clock) {
+          t.cleared = true;
+          t.fn();
+        }
+      }
+      await settle();
+    };
+    return { gate, runs, advance, settle };
+  }
+
+  it('retries a failed refetch on its own, with growing, bounded backoff', async () => {
+    const h = failingHarness(['fail', 'fail', 'ok']);
+    await h.advance(1_000_000);
+    h.gate.request();
+    await h.settle();
+    assert.equal(h.runs.length, 1);
+    await h.advance(60_000); // first retry after 2 x base
+    assert.equal(h.runs.length, 2);
+    await h.advance(60_000); // second retry waits longer (4 x base)
+    assert.equal(h.runs.length, 2);
+    await h.advance(60_000);
+    assert.equal(h.runs.length, 3);
+    await h.advance(3_600_000); // success: no further unsolicited runs
+    assert.equal(h.runs.length, 3);
+  });
+
+  it('caps the backoff', async () => {
+    const h = failingHarness(Array(12).fill('fail'));
+    await h.advance(1_000_000);
+    h.gate.request();
+    await h.settle();
+    for (let i = 0; i < 10; i += 1) await h.advance(300_000);
+    assert.equal(h.runs.length, 11);
+  });
+
+  it('keeps the last set on failure and clears only on a successful empty response', () => {
+    const prev = { revision: 1, strip: [frame('a')] };
+    assert.equal(nextFrameSet(prev, { ok: false }), prev);
+    const empty = { revision: 2, banner: null, strip: [] };
+    assert.equal(nextFrameSet(prev, { ok: true, set: empty }), empty);
+    const renewed = { revision: 1, strip: [frame('a')] };
+    assert.equal(nextFrameSet(prev, { ok: true, set: renewed }), renewed);
+  });
+
+  it('the server action distinguishes failure from an empty set', () => {
+    assert.match(actionSource, /ok: false/);
+    assert.match(actionSource, /ok: true/);
+    assert.match(componentSource, /nextFrameSet\(/);
+    assert.doesNotMatch(componentSource, /setFrameSet\(null\)/);
+  });
+
+  it('hides only the images that failed, not the strip', () => {
+    assert.match(componentSource, /failedIds/);
+    assert.match(cssSource, /\.sn-shot-failed/);
+  });
+
+  it('remounts images after a successful refetch even when the signed URL is unchanged', () => {
+    // Measured live: after a failure the backend can return the identical
+    // signed URL, and an <img> whose src does not change never retries.
+    assert.match(componentSource, /if \(result\.ok\) setSetVersion\(/);
+    assert.match(componentSource, /key=\{`\$\{frame\.id\}:\$\{setVersion\}`\}/);
+    assert.match(componentSource, /key=\{`\$\{current\.id\}:\$\{setVersion\}`\}/);
+  });
+
+  it('remounts per conversation so state never carries across a client navigation', () => {
+    assert.match(summarySource, /<ScreenMoments\s+key=\{memory\.id\}/);
   });
 });

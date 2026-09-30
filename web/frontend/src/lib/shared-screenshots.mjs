@@ -121,26 +121,56 @@ export function groundGradient(frame) {
   return `linear-gradient(135deg, ${stops[0]}, ${stops[1]})`;
 }
 
+/** Upper bound on the wait between retries after repeated failed refetches. */
+export const MAX_REFRESH_BACKOFF_MS = 5 * 60 * 1000;
+
 /**
- * Serialises refetches of the signed-URL set. A request made during the
- * post-refetch cooldown is deferred to the cooldown's end, not dropped: an
- * image that fails right after a renewal would otherwise stay broken until
- * the next expiry timer, about an hour later. Requests during a run are
- * absorbed by that run; several cooldown requests coalesce into one.
+ * The set to show after a refetch. A failed refetch (network error, 5xx)
+ * keeps the last set: its URLs may still be valid, and clearing it would tear
+ * down the renewal that brings fresh ones. Only a successful response,
+ * including a successful empty one, replaces it.
+ */
+export function nextFrameSet(previous, result) {
+  return result && result.ok ? result.set : previous;
+}
+
+/**
+ * Serialises refetches of the signed-URL set:
+ * - a request during the cooldown after a run is deferred to its end, not
+ *   dropped (an image that fails right after a renewal would otherwise stay
+ *   broken until the next expiry timer, about an hour later);
+ * - a run that fails (its promise rejects) schedules its own retry with
+ *   exponential backoff, capped, so a transient outage heals without a reload;
+ * - requests during a run are absorbed by it; cooldown requests coalesce.
  */
 export function createRefreshGate({
   run,
   minIntervalMs = MIN_REFRESH_INTERVAL_MS,
+  maxBackoffMs = MAX_REFRESH_BACKOFF_MS,
   now = () => Date.now(),
   setTimer = (fn, ms) => setTimeout(fn, ms),
   clearTimer = (timer) => clearTimeout(timer),
 }) {
   let lastRunAt = -Infinity;
+  let failures = 0;
   let inFlight = false;
   let deferred = null;
   let disposed = false;
 
-  const start = () => {
+  const floorMs = () =>
+    Math.min(
+      minIntervalMs * 2 ** Math.min(failures, 20),
+      Math.max(maxBackoffMs, minIntervalMs),
+    );
+
+  const schedule = () => {
+    if (disposed || inFlight || deferred) return;
+    const wait = lastRunAt + floorMs() - now();
+    if (wait <= 0) start();
+    else deferred = setTimer(start, wait);
+  };
+
+  function start() {
     deferred = null;
     if (disposed || inFlight) return;
     inFlight = true;
@@ -148,23 +178,24 @@ export function createRefreshGate({
     let pending;
     try {
       pending = run();
-    } catch {
-      pending = undefined;
+    } catch (error) {
+      pending = Promise.reject(error);
     }
-    Promise.resolve(pending)
-      .catch(() => {})
-      .finally(() => {
+    Promise.resolve(pending).then(
+      () => {
+        failures = 0;
         inFlight = false;
-      });
-  };
+      },
+      () => {
+        failures += 1;
+        inFlight = false;
+        schedule();
+      },
+    );
+  }
 
   return {
-    request() {
-      if (disposed || inFlight || deferred) return;
-      const wait = lastRunAt + minIntervalMs - now();
-      if (wait <= 0) start();
-      else deferred = setTimer(start, wait);
-    },
+    request: schedule,
     /** Epoch ms of the last run start, for scheduling the next expiry refetch. */
     lastRunAt: () => lastRunAt,
     dispose() {

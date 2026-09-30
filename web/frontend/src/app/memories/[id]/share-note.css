@@ -1252,6 +1252,12 @@ html[data-share-theme='dark']:has(.share-note) body {
   object-fit: cover;
 }
 
+/* An image that failed with its current signed URL: keep the tile (its
+   gradient ground) and hide the broken image while the URLs renew. */
+.share-note .sn-shot-failed img {
+  visibility: hidden;
+}
+
 .share-note .sn-shot-time {
   position: absolute;
   left: 8px;
