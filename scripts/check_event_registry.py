@@ -214,6 +214,13 @@ def render(doc):
     review_event = next(e for e in doc['events'] if e['id'] == 'appReviewOpportunity')
     decisions = review_event['properties']['decision']['values']
     plan += ['', '## App Review Opportunity decisions', '', ', '.join(f'`{decision}`' for decision in decisions)]
+    plan += [
+        '',
+        '## Integer sentinel conventions',
+        '',
+        '- `deviceDisconnectedDetailed.reason_code` = `-1`: the disconnect reason is unknown (native sentinel absent).',
+        '- `diagnosticsSendFailed.status_code` = `0`: the failure was not an HTTP failure; otherwise the real HTTP status.',
+    ]
     return '\n'.join(dart)+'\n', '\n'.join(plan)+'\n'
 
 

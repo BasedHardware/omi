@@ -151,3 +151,8 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 ## App Review Opportunity decisions
 
 `eligible`, `not_ios_or_android`, `storage_error`, `not_familiar`, `migration_cooldown`, `cooldown`, `budget_exhausted`, `version_already_attempted`, `session_already_attempted`, `lifecycle_not_appropriate`, `lifecycle_changed`, `availability_error`, `unavailable`, `request_error`, `recent_bad_experience`
+
+## Integer sentinel conventions
+
+- `deviceDisconnectedDetailed.reason_code` = `-1`: the disconnect reason is unknown (native sentinel absent).
+- `diagnosticsSendFailed.status_code` = `0`: the failure was not an HTTP failure; otherwise the real HTTP status.
