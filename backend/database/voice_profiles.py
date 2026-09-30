@@ -21,6 +21,13 @@ def _client(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
 
 
+def _clean_uid(uid: Any) -> Optional[str]:
+    if not uid or not isinstance(uid, str):
+        return None
+    clean = uid.strip()
+    return clean if clean else None
+
+
 def as_utc(value: Any) -> Optional[datetime]:
     if isinstance(value, str) and value.strip():
         try:
@@ -37,38 +44,55 @@ def _resolve_settings(data: Dict[str, Any]) -> Dict[str, bool]:
 
 
 def get_voice_profile_settings(uid: str, *, firestore_client: Any = None) -> Dict[str, bool]:
-    data = _client(firestore_client).collection('users').document(uid).get().to_dict() or {}
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        return dict(SETTINGS_DEFAULTS)
+    data = _client(firestore_client).collection('users').document(clean_uid).get().to_dict() or {}
     return _resolve_settings(data)
 
 
 def get_voice_profile_context(uid: str, *, firestore_client: Any = None) -> Tuple[Dict[str, bool], bool]:
     """Settings plus whether the owner has a voiceprint, from one user-document read."""
-    data = _client(firestore_client).collection('users').document(uid).get().to_dict() or {}
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        return dict(SETTINGS_DEFAULTS), False
+    data = _client(firestore_client).collection('users').document(clean_uid).get().to_dict() or {}
     return _resolve_settings(data), bool(data.get('speaker_embedding'))
 
 
 def set_voice_profile_settings(uid: str, updates: Dict[str, bool], *, firestore_client: Any = None) -> None:
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        raise ValueError("uid must be a non-empty string")
+    if not isinstance(updates, dict):
+        raise ValueError("updates must be a dictionary")
     unknown = set(updates) - set(SETTINGS_DEFAULTS)
     if unknown:
         raise ValueError(f'Unknown voice profile setting(s): {", ".join(sorted(unknown))}')
     if not updates:
         return
-    ref = _client(firestore_client).collection('users').document(uid)
+    ref = _client(firestore_client).collection('users').document(clean_uid)
     ref.set({key: bool(value) for key, value in updates.items()}, merge=True)
 
 
 def _state_ref(uid: str, firestore_client: Any = None) -> Any:
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        raise ValueError("uid must be a non-empty string")
     return (
         _client(firestore_client)
         .collection('users')
-        .document(uid)
+        .document(clean_uid)
         .collection(_STATE_COLLECTION)
         .document(_STATE_DOCUMENT)
     )
 
 
 def get_tag_prompt_state(uid: str, *, firestore_client: Any = None) -> Dict[str, Any]:
-    return _state_ref(uid, firestore_client).get().to_dict() or {}
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        return {}
+    return _state_ref(clean_uid, firestore_client).get().to_dict() or {}
 
 
 def _pruned_answers(state: Dict[str, Any], now: datetime) -> Dict[str, Any]:
@@ -79,8 +103,12 @@ def _pruned_answers(state: Dict[str, Any], now: datetime) -> Dict[str, Any]:
 
 def record_tag_prompts_shown(uid: str, now: datetime, *, firestore_client: Any = None) -> bool:
     """Stamp a shown set. Returns True when this was the first set ever shown."""
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        raise ValueError("uid must be a non-empty string")
+    now_utc = as_utc(now) or datetime.now(timezone.utc)
     client = _client(firestore_client)
-    ref = _state_ref(uid, client)
+    ref = _state_ref(clean_uid, client)
 
     @firestore.transactional
     def stamp(transaction: Any) -> bool:
@@ -88,11 +116,11 @@ def record_tag_prompts_shown(uid: str, now: datetime, *, firestore_client: Any =
         state = snapshot.to_dict() or {}
         first = not state.get('first_shown_at')
         update: Dict[str, Any] = {
-            'last_shown_at': now,
+            'last_shown_at': now_utc,
             'shown_sets': int(state.get('shown_sets') or 0) + 1,
         }
         if first:
-            update['first_shown_at'] = now
+            update['first_shown_at'] = now_utc
         if snapshot.exists:
             if state.get('last_empty_check_at') is not None:
                 update['last_empty_check_at'] = firestore.DELETE_FIELD
@@ -106,20 +134,28 @@ def record_tag_prompts_shown(uid: str, now: datetime, *, firestore_client: Any =
 
 def mark_tag_prompts_empty(uid: str, now: datetime, *, firestore_client: Any = None) -> None:
     """Remember that nothing was worth asking, so repeated opens skip the 48h scan."""
-    _state_ref(uid, firestore_client).set({'last_empty_check_at': now}, merge=True)
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        raise ValueError("uid must be a non-empty string")
+    now_utc = as_utc(now) or datetime.now(timezone.utc)
+    _state_ref(clean_uid, firestore_client).set({'last_empty_check_at': now_utc}, merge=True)
 
 
 def record_tag_prompts_dismissed(uid: str, now: datetime, *, firestore_client: Any = None) -> int:
     """Count a set closed without any answer. Returns the new streak length."""
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        raise ValueError("uid must be a non-empty string")
+    now_utc = as_utc(now) or datetime.now(timezone.utc)
     client = _client(firestore_client)
-    ref = _state_ref(uid, client)
+    ref = _state_ref(clean_uid, client)
 
     @firestore.transactional
     def bump(transaction: Any) -> int:
         snapshot = ref.get(transaction=transaction)
         state = snapshot.to_dict() or {}
         streak = int(state.get('consecutive_dismissals') or 0) + 1
-        update = {'consecutive_dismissals': streak, 'last_dismissed_at': now}
+        update = {'consecutive_dismissals': streak, 'last_dismissed_at': now_utc}
         if snapshot.exists:
             transaction.update(ref, update)
         else:
@@ -130,15 +166,22 @@ def record_tag_prompts_dismissed(uid: str, now: datetime, *, firestore_client: A
 
 
 def record_tag_prompt_answered(uid: str, prompt_id: str, now: datetime, *, firestore_client: Any = None) -> None:
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        raise ValueError("uid must be a non-empty string")
+    if not prompt_id or not isinstance(prompt_id, str) or not prompt_id.strip():
+        raise ValueError("prompt_id must be a non-empty string")
+    clean_prompt_id = prompt_id.strip()
+    now_utc = as_utc(now) or datetime.now(timezone.utc)
     client = _client(firestore_client)
-    ref = _state_ref(uid, client)
+    ref = _state_ref(clean_uid, client)
 
     @firestore.transactional
     def record(transaction: Any) -> None:
         snapshot = ref.get(transaction=transaction)
-        answered = _pruned_answers(snapshot.to_dict() or {}, now)
-        answered[prompt_id] = now
-        update = {'answered': answered, 'consecutive_dismissals': 0, 'last_answered_at': now}
+        answered = _pruned_answers(snapshot.to_dict() or {}, now_utc)
+        answered[clean_prompt_id] = now_utc
+        update = {'answered': answered, 'consecutive_dismissals': 0, 'last_answered_at': now_utc}
         if snapshot.exists:
             transaction.update(ref, update)
         else:
@@ -160,8 +203,19 @@ def add_owner_voice_confirmation(
     firestore_client: Any = None,
 ) -> int:
     """Pool a confirmed owner clip into the owner's voiceprint in one transaction."""
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        raise ValueError("uid must be a non-empty string")
+    if not embedding or not isinstance(embedding, (list, tuple)):
+        raise ValueError("embedding must be a non-empty sequence of floats")
+    if not callable(pool):
+        raise ValueError("pool must be a callable")
+    if not conversation_id or not isinstance(conversation_id, str) or not conversation_id.strip():
+        raise ValueError("conversation_id must be a non-empty string")
+    clean_conv_id = conversation_id.strip()
+
     client = _client(firestore_client)
-    ref = client.collection('users').document(uid)
+    ref = client.collection('users').document(clean_uid)
 
     @firestore.transactional
     def pool_in(transaction: Any) -> int:
@@ -175,7 +229,7 @@ def add_owner_voice_confirmation(
             base = current
         now = datetime.now(timezone.utc)
         confirmations = list(data.get('owner_voice_confirmations') or [])
-        confirmations.append({'embedding': list(embedding), 'conversation_id': conversation_id, 'at': now})
+        confirmations.append({'embedding': list(embedding), 'conversation_id': clean_conv_id, 'at': now})
         confirmations = confirmations[-OWNER_VOICE_CONFIRMATIONS_MAX:]
         vectors = ([list(base)] if base else []) + [list(item['embedding']) for item in confirmations]
         update: Dict[str, Any] = {
