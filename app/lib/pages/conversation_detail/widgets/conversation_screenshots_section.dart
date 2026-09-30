@@ -72,6 +72,11 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
   /// anything was ever approved), and hiding the strip is always safe.
   int _adoptedRevision = 0;
 
+  /// Counts revision-0 sets drawn. A delete compares it across its request: if the server said
+  /// "nothing to show" (the setting was switched off elsewhere) while the delete was in flight, the
+  /// delete's own answer is not trusted over that — it is re-read with a GET instead.
+  int _gatedEmptyAdoptions = 0;
+
   /// Deletes run one at a time. The server orders them, but each response re-reads the set, so two
   /// in flight at once can answer with the same revision in either order; serialized, every delete
   /// is issued against the set its predecessor returned.
@@ -137,6 +142,7 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
     _refreshTimer?.cancel();
     _refreshTimer = null;
     if (set != null) _adoptedRevision = set.revision;
+    if (set != null && set.revision == 0) _gatedEmptyAdoptions++;
     setState(() => _set = set);
     // A set that arrives already stale (a skewed clock, a slow response) gets no error-driven
     // refresh: its replacement would arrive the same way, and that is a loop.
@@ -232,9 +238,16 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
       // The set may have moved on while this delete waited its turn (an earlier delete, a
       // refresh): a frame that is already gone needs no request, and would only 404.
       if (!mounted || !(_set?.frames.any((f) => f.id == frame.id) ?? false)) return;
+      final gatedBefore = _gatedEmptyAdoptions;
       final result = await (widget.delete ?? deleteConversationScreenshot)(widget.conversationId, frame.id);
       if (!mounted) return;
       switch (result) {
+        case ApiSuccess() when _gatedEmptyAdoptions != gatedBefore:
+          // A refresh during the delete already answered "nothing to show" (revision 0: the setting
+          // went off elsewhere). The delete route does not consult that setting, so its set could
+          // put tiles back; ask the gated read again instead.
+          _generation++;
+          unawaited(_load());
         case ApiSuccess(:final data):
           // The server's set, not a local prediction: it may have promoted another frame to banner.
           // Committing it fences off every fetch already in flight — each was asked before the

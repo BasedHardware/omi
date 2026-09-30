@@ -504,5 +504,32 @@ void main() {
       await tester.pumpAndSettle();
       expect(_section, findsNothing);
     });
+    testWidgets('setting switched off mid-delete: the delete answer cannot bring tiles back', (tester) async {
+      final fetches = <Completer<ApiResult<ConversationScreenshots>>>[];
+      final deletion = Completer<ApiResult<ConversationScreenshots>>();
+      await _pumpWith(
+        tester,
+        fetch: (_) => (fetches..add(Completer())).last.future,
+        delete: (_, __) => deletion.future,
+        now: () => _t0,
+      );
+      fetches[0].complete(ApiSuccess(_set([_frame('a', caption: 'A'), _frame('b', caption: 'B')])));
+      await tester.pumpAndSettle();
+      await confirmDelete(tester, 'a');
+      // Mid-delete, the refresh comes back gated: revision 0, empty.
+      await tester.pump(const Duration(minutes: 58, seconds: 1));
+      fetches[1].complete(const ApiSuccess(ConversationScreenshots.empty));
+      await tester.pumpAndSettle();
+      expect(_section, findsNothing);
+      // The delete route answers without checking the setting.
+      deletion.complete(ApiSuccess(_set([_frame('b', caption: 'B')], revision: 2)));
+      await tester.pumpAndSettle();
+      expect(_section, findsNothing, reason: 'the ungated delete answer must not be drawn');
+      expect(fetches, hasLength(3), reason: 'the set is re-read through the gated GET instead');
+      fetches[2].complete(const ApiSuccess(ConversationScreenshots.empty));
+      await tester.pumpAndSettle();
+      expect(_section, findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 }
