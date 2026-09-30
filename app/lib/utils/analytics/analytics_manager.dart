@@ -150,14 +150,17 @@ class AnalyticsManager {
     }
   }
 
-  void recordProductError(ProductErrorKind kind) => track('Product Error', properties: {
-        'error_kind': switch (kind) {
-          ProductErrorKind.flutterFramework => 'flutter_framework',
-          ProductErrorKind.uncaughtDart => 'uncaught_dart',
-          ProductErrorKind.startup => 'startup',
+  void recordProductError(ProductErrorKind kind) => track(
+        'Product Error',
+        properties: {
+          'error_kind': switch (kind) {
+            ProductErrorKind.flutterFramework => 'flutter_framework',
+            ProductErrorKind.uncaughtDart => 'uncaught_dart',
+            ProductErrorKind.startup => 'startup',
+          },
+          'diagnostic_source': 'crashlytics',
         },
-        'diagnostic_source': 'crashlytics',
-      });
+      );
 
   /// Periodic operational signal; does not recursively emit on queue failures.
   void recordTelemetryHealth() {
@@ -524,6 +527,26 @@ class AnalyticsManager {
       return enabled;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<Object?> getFeatureFlagPayload(String key) async {
+    final adapter = _adapter;
+    if (adapter == null ||
+        !adapter.isInitialized ||
+        !_trackingEnabled ||
+        _settledDistinctId == null ||
+        adapter is! AnalyticsFeatureFlagAdapter) {
+      return null;
+    }
+    final epoch = _identityEpoch;
+    final identity = _settledDistinctId;
+    try {
+      final payload = await (adapter as AnalyticsFeatureFlagAdapter).getFeatureFlagPayload(key).timeout(_initTimeout);
+      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
+      return payload;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -918,10 +941,10 @@ class AnalyticsManager {
   void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track('Device Connected', properties: {
-      ..._deviceConnectionEventProperties(device),
-      if (device.rssi < 0) 'rssi': device.rssi,
-    });
+    track(
+      'Device Connected',
+      properties: {..._deviceConnectionEventProperties(device), if (device.rssi < 0) 'rssi': device.rssi},
+    );
     setUserProperty('device_vendor', vendor);
     setUserProperty('hardware_family', hardwareFamily);
   }
@@ -938,7 +961,93 @@ class AnalyticsManager {
     });
   }
 
-  void deviceDisconnected() => const TypedEvents().emit(const DeviceDisconnected());
+  /// Enriched replacement for the deprecated property-less `Device Disconnected`
+  /// emission. [reason], [reasonCode] and [appState] come from the disconnect
+  /// event native persists before notifying Dart; nulls map to `unknown`/-1.
+  void deviceDisconnected({String? reason, int? reasonCode, String? appState}) {
+    const TypedEvents().emit(
+      DeviceDisconnectedDetailed(
+        reason: disconnectReasonFromNative(reason),
+        reasonCode: reasonCode ?? -1,
+        appState: disconnectAppStateFromNative(appState),
+      ),
+    );
+  }
+
+  /// Maps native disconnect reason strings onto the closed registry enum.
+  /// `gatt_error_<code>` collapses to [DeviceDisconnectedDetailedReason.gattError];
+  /// the code itself travels in `reason_code`.
+  @visibleForTesting
+  static DeviceDisconnectedDetailedReason disconnectReasonFromNative(String? reason) {
+    switch (reason) {
+      case 'clean_disconnect':
+        return DeviceDisconnectedDetailedReason.cleanDisconnect;
+      case 'connection_timeout':
+        return DeviceDisconnectedDetailedReason.connectionTimeout;
+      case 'remote_device_terminated':
+        return DeviceDisconnectedDetailedReason.remoteDeviceTerminated;
+      case 'connection_failed_instant_passed':
+        return DeviceDisconnectedDetailedReason.connectionFailedInstantPassed;
+      case 'paired_to_another_phone':
+        return DeviceDisconnectedDetailedReason.pairedToAnotherPhone;
+      case 'link_key_mismatch':
+        return DeviceDisconnectedDetailedReason.linkKeyMismatch;
+      case 'pairing_lost':
+        return DeviceDisconnectedDetailedReason.pairingLost;
+      case 'app_closed':
+        return DeviceDisconnectedDetailedReason.appClosed;
+      case 'manual':
+        return DeviceDisconnectedDetailedReason.manual;
+      default:
+        if (reason != null && reason.startsWith('gatt_error_')) {
+          return DeviceDisconnectedDetailedReason.gattError;
+        }
+        return DeviceDisconnectedDetailedReason.unknown;
+    }
+  }
+
+  @visibleForTesting
+  static DeviceDisconnectedDetailedAppState disconnectAppStateFromNative(String? appState) {
+    switch (appState) {
+      case 'foreground':
+        return DeviceDisconnectedDetailedAppState.foreground;
+      case 'background':
+        return DeviceDisconnectedDetailedAppState.background;
+      case 'inactive':
+        return DeviceDisconnectedDetailedAppState.inactive;
+      default:
+        return DeviceDisconnectedDetailedAppState.unknown;
+    }
+  }
+
+  /// Device Diagnostics bundle accepted by the support backend. Never carries
+  /// bundle content or device identifiers — only sizes and counts.
+  void diagnosticsSent({required int bundleBytes, required int disconnectCount, required int schemaVersion}) {
+    const TypedEvents().emit(
+      DiagnosticsSent(bundleBytes: bundleBytes, disconnectCount: disconnectCount, schemaVersion: schemaVersion),
+    );
+  }
+
+  /// Device Diagnostics bundle that never reached the support backend. Bundle
+  /// metrics are 0 when the failure precedes the build; [statusCode] is the HTTP
+  /// status when the failure is the upload, else 0.
+  void diagnosticsSendFailed({
+    required DiagnosticsSendFailedFailureStage failureStage,
+    int bundleBytes = 0,
+    int disconnectCount = 0,
+    int schemaVersion = 0,
+    int statusCode = 0,
+  }) {
+    const TypedEvents().emit(
+      DiagnosticsSendFailed(
+        bundleBytes: bundleBytes,
+        disconnectCount: disconnectCount,
+        schemaVersion: schemaVersion,
+        failureStage: failureStage,
+        statusCode: statusCode,
+      ),
+    );
+  }
 
   void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
     final properties = <String, Object>{
@@ -1082,7 +1191,6 @@ class AnalyticsManager {
   }
 
   void memoriesFiltered(String filter) => track('Facts Filtered', properties: {'filter': filter});
-
   void memoriesManagementSheetOpened() => const TypedEvents().emit(const MemoriesManagementSheetOpened());
 
   Map<String, dynamic> _getTranscriptProperties(String transcript) {
@@ -1431,18 +1539,20 @@ class AnalyticsManager {
     required int firstAudioLatencyMs,
     required VoiceReplyPlaybackInterruptSource interruptSource,
   }) =>
-      const TypedEvents().emit(VoiceReplyPlayback(
-        outcome: outcome,
-        skipReason: skipReason,
-        mode: mode,
-        outputRoute: outputRoute,
-        chunksRequested: chunksRequested,
-        chunksPlayed: chunksPlayed,
-        chunksDropped: chunksDropped,
-        fallbackReason: fallbackReason,
-        firstAudioLatencyMs: firstAudioLatencyMs,
-        interruptSource: interruptSource,
-      ));
+      const TypedEvents().emit(
+        VoiceReplyPlayback(
+          outcome: outcome,
+          skipReason: skipReason,
+          mode: mode,
+          outputRoute: outputRoute,
+          chunksRequested: chunksRequested,
+          chunksPlayed: chunksPlayed,
+          chunksDropped: chunksDropped,
+          fallbackReason: fallbackReason,
+          firstAudioLatencyMs: firstAudioLatencyMs,
+          interruptSource: interruptSource,
+        ),
+      );
 
   // Conversation Merge Events
   void conversationMergeSelectionModeEntered() =>
@@ -2417,7 +2527,6 @@ class AnalyticsManager {
   }
 
   void permissionsInterstitialShown() => const TypedEvents().emit(const PermissionsInterstitialShown());
-
   void permissionsInterstitialCompleted() => const TypedEvents().emit(const PermissionsInterstitialCompleted());
 
   void permissionsInterstitialSkipped() => const TypedEvents().emit(const PermissionsInterstitialSkipped());
@@ -2700,11 +2809,7 @@ class AnalyticsManager {
       if (packageInfo.buildNumber.isNotEmpty) build = packageInfo.buildNumber;
       _clientAppNamespace = packageInfo.packageName;
     } catch (_) {}
-    _globalEventProperties = {
-      'app_platform': _mobilePlatformName,
-      'app_version': version,
-      'app_build': build,
-    };
+    _globalEventProperties = {'app_platform': _mobilePlatformName, 'app_version': version, 'app_build': build};
   }
 
   static Map<String, dynamic> _searchProperties({required String query, required String surface, int? resultsCount}) {

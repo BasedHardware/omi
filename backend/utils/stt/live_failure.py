@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable, Protocol
 
 from models.message_event import MessageServiceStatusEvent
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
+from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
 from utils.observability.transcription import record_live_stt_failure, record_live_stt_pre_audio_failure
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -14,8 +15,13 @@ from utils.stt.outcomes import (
     bounded_provider,
     failure_from_exception,
 )
-from utils.observability.fallback import record_fallback
-from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED
+from utils.observability.fallback import ReplayLagDiagnostics, capacity_fallback_kwargs, record_fallback
+from utils.stt.stream_close import (
+    ACCOUNT_REJECTION_REASONS,
+    PROVIDER_AUTH_REJECTED,
+    PROVIDER_BUDGET_EXHAUSTED,
+    PROVIDER_RATE_LIMITED,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +47,13 @@ _KNOWN_FAILURE_REASONS = frozenset(
         # (utils.stt.streaming.modulate_death_reason).
         'modulate_serve_error',
         *ACCOUNT_REJECTION_REASONS,
+        PROVIDER_RATE_LIMITED,
         'soniox_idle_timeout',
         'soniox_rotation',
+        'provider_5xx',
+        'capacity_full',
+        'first_text_deadline',
+        'empty_streak',
         'soniox_invalid_hint',
     }
 )
@@ -57,8 +68,13 @@ _FAILURE_PHASE_BY_REASON = {
     'modulate_serve_error': 'connection',
     PROVIDER_BUDGET_EXHAUSTED: 'connection',
     PROVIDER_AUTH_REJECTED: 'connection',
+    PROVIDER_RATE_LIMITED: 'connection',
     'soniox_idle_timeout': 'connection',
     'soniox_rotation': 'connection',
+    'provider_5xx': 'connection',
+    'capacity_full': 'connection',
+    'first_text_deadline': 'connection',
+    'empty_streak': 'connection',
     # The config frame was rejected after the WebSocket upgrade succeeded:
     # the session died at session setup, before any audio flowed.
     'soniox_invalid_hint': 'initialization',
@@ -127,9 +143,17 @@ class PendingLiveFailover:
     """
 
     def __init__(
-        self, *, from_mode: str, to_mode: str, component: str = 'stt_live_session', reason: str = 'connection_lost'
+        self,
+        *,
+        from_mode: str,
+        to_mode: str,
+        component: str = 'stt_live_session',
+        reason: str = 'connection_lost',
+        capacity_subtype: str | None = None,
     ) -> None:
         self.component, self.reason = component, reason
+        self.capacity_subtype = capacity_subtype
+        self.replay_lag_diagnostics: ReplayLagDiagnostics | None = None
         self.from_mode = from_mode
         self.to_mode = to_mode
         self._settled = False
@@ -137,6 +161,11 @@ class PendingLiveFailover:
     @property
     def settled(self) -> bool:
         return self._settled
+
+    def capture_capacity_details(self, source: object) -> None:
+        """Carry the immutable pre-cancellation snapshot onto the hop outcome."""
+        self.capacity_subtype = getattr(source, 'capacity_subtype', None)
+        self.replay_lag_diagnostics = getattr(source, 'replay_lag_diagnostics', None)
 
     def note_transcript(self, segments: object | None = None) -> None:
         if self._settled:
@@ -150,6 +179,7 @@ class PendingLiveFailover:
             to_mode=self.to_mode,
             reason=self.reason,
             outcome='recovered',
+            **capacity_fallback_kwargs(self.capacity_subtype, self.replay_lag_diagnostics),
         )
 
     def note_failure(self, typed_reason: str | None) -> None:
@@ -177,6 +207,44 @@ class LiveSTTClientSocket(Protocol):
     async def send_json(self, data: Any) -> None: ...
 
     async def close(self, code: int = 1000, reason: str | None = None) -> None: ...
+
+
+async def terminate_live_stt_backoff(
+    websocket: LiveSTTClientSocket,
+    session: LiveSTTSession,
+    *,
+    reason: str,
+    retry_after: int,
+) -> bool:
+    """Send the existing terminal status and close before session work starts."""
+
+    if reason not in {'provider_unavailable', 'reconnect_budget'}:
+        raise ValueError('unsupported live STT backoff reason')
+    if session.stt_terminal_failure:
+        return False
+    session.stt_terminal_failure = True
+    session.active = False
+    session.close_code = LIVE_STT_FAILURE_CLOSE_CODE
+    OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason=reason).inc()
+    event = MessageServiceStatusEvent(
+        status='stt_failed',
+        status_text='Transcription temporarily unavailable',
+        outcome=TranscriptionOutcome.UPSTREAM_ERROR.value,
+        retryable=True,
+        reason=reason,
+        retry_after=max(1, min(int(retry_after), 3600)),
+    )
+    sent = False
+    try:
+        await websocket.send_json(event.to_json())
+        sent = True
+    except Exception as error:
+        logger.warning('Unable to deliver terminal live STT status error_type=%s', type(error).__name__)
+    try:
+        await websocket.close(code=LIVE_STT_FAILURE_CLOSE_CODE, reason=LIVE_STT_FAILURE_CLOSE_REASON)
+    except Exception as error:
+        logger.info('Unable to close client after terminal live STT backoff error_type=%s', type(error).__name__)
+    return sent
 
 
 def live_stt_upstream_failure(provider: str | None) -> TranscriptionFailure:

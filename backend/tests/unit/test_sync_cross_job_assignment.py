@@ -16,6 +16,7 @@ import pytest
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.sync.assignment import assign_in_transaction, needs_fragment_review
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -77,6 +78,22 @@ def test_independent_chunk_speakers_survive_merge_and_retry(reverse):
     assert all(s['speaker'] == 'SPEAKER_00' for s in result['transcript_segments'])
 
 
+def test_legacy_sync_survivor_gains_audio_aligned_scope_without_renumbering():
+    store = StrictFirestore()
+    first = chunk('old', 1000)
+    first['transcript_segments'][0].update(id='old-segment', speaker='SPEAKER_04', speaker_id=4)
+    intake(store, first)
+    second = chunk('new', 1060)
+    second['transcript_segments'][0].update(id='new-segment', speaker='SPEAKER_00', speaker_id_scope='sync:new')
+
+    result, _, _ = intake(store, second)
+
+    old = next(s for s in result['transcript_segments'] if s['id'] == 'old-segment')
+    assert old['speaker_id'] == 4
+    assert old['speaker_id_scope'] == 'legacy-conversation:old:4'
+    assert {s['speaker_id'] for s in result['transcript_segments']} == {4, 5}
+
+
 def test_sync_appended_to_live_target_does_not_reuse_live_speaker_id():
     store = StrictFirestore()
     live = chunk('live', 1000)
@@ -86,6 +103,32 @@ def test_sync_appended_to_live_target_does_not_reuse_live_speaker_id():
     wal['transcript_segments'][0].update(speaker='SPEAKER_00', speaker_id_scope='sync:content')
     result, _, _ = intake(store, wal, target_id='live')
     assert [s['speaker_id'] for s in result['transcript_segments']] == [98, 100]
+
+
+def test_assignment_retains_each_source_track_receipt_when_chunks_coalesce():
+    store = StrictFirestore()
+    first = chunk('first', 1000)
+    second = chunk('second', 1060)
+    for item, root in ((first, 'root-a'), (second, 'root-b')):
+        item['capture_evidence'] = {
+            'version': 1,
+            'capability': 'source_position',
+            'coverage': 'mapped',
+            'receipts': [
+                {
+                    'segment_id': item['id'],
+                    'capture_root': root,
+                    'clock_epoch': 0,
+                    'source_start_frame': 0,
+                    'source_end_frame': 100,
+                }
+            ],
+        }
+    intake(store, first)
+    merged, _, _ = intake(store, second)
+    assert {r['capture_root'] for r in merged['capture_evidence']['receipts']} == {'root-a', 'root-b'}
+    retried, _, _ = intake(store, second)
+    assert len(retried['capture_evidence']['receipts']) == 2
 
 
 def test_two_jobs_with_stale_empty_lookup_converge():
@@ -358,9 +401,11 @@ def test_bridge_allocates_donor_clusters_without_colliding_with_survivor():
     }
     assert mapped['sync:a'] != mapped['sync:b']
     replay, _, _ = intake(store, b)
-    assert {
+    replay_mapped = {
         s.get('speaker_id_scope'): s['speaker_id'] for s in replay['transcript_segments'] if s.get('speaker_id_scope')
-    } == mapped
+    }
+    assert all(replay_mapped[key] == value for key, value in mapped.items())
+    assert replay_mapped['legacy-conversation:a:0'] == mapped['sync:a']
 
 
 def test_labeled_sync_row_receives_later_same_capture_chunk_without_becoming_a_donor():
@@ -421,3 +466,65 @@ def test_unlabeled_explicit_target_excludes_labeled_donor_extent(donor_start, ta
     assert result['started_at'] == chunk('expected', min(target_start, 1120))['started_at']
     assert result['finished_at'] == chunk('expected', max(target_start, 1120))['finished_at']
     assert store.rows[('users', 'u', 'conversations', 'donor')] == before
+
+
+def _smart_merge_pair(store):
+    """A live survivor 'p' that absorbed live 'n' (database/smart_merge.py), as stored."""
+    survivor = chunk('p', 1000, text='We should head out for dinner soon.')
+    survivor['transcript_segments'].append(
+        {'start': 600.0, 'end': 609.5, 'text': 'The pasta place is still open.', 'speaker_id': 1, 'is_user': False}
+    )
+    survivor['finished_at'] = datetime.fromtimestamp(1609.5, timezone.utc)
+    survivor['smart_merge'] = {'role': 'survivor', 'revision': 1, 'refreshed_revision': 1}
+    donor = chunk('n', 1600, text='The pasta place is still open.')
+    donor.update(
+        deleted=True,
+        discarded=True,
+        sync_merged_into='p',
+        sync_content_revision=1,
+        smart_merge={'role': 'donor', 'survivor_id': 'p'},
+    )
+    store.rows[('users', 'u', 'conversations', 'p')] = survivor
+    store.rows[('users', 'u', 'conversations', 'n')] = donor
+
+
+def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    repeat = chunk('wal-repeat', 1600, text='The pasta place is still open.')
+    result, created, survivors = intake(store, repeat, target_id='n')
+    assert result['id'] == 'p' and not created and not survivors  # same speech, deduplicated
+    assert result['sync_live_target'] is True
+    fresh = chunk('wal-new', 1620, text='Let us order the mushroom one.')
+    result, created, survivors = intake(store, fresh, target_id='n')
+    assert result['id'] == 'p' and not created and len(survivors) == 1
+    assert ('users', 'u', 'conversations', 'wal-new') not in store.rows
+
+
+def test_repeated_late_repair_to_revisioned_smart_survivor_deduplicates():
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    store.rows[('users', 'u', 'conversations', 'p')]['sync_content_revision'] = 1
+    first = chunk('wal-repeat-1', 1600, text='The pasta place is still open.')
+    second = chunk('wal-repeat-2', 1600, text='The pasta place is still open.')
+    result, created, survivors = intake(store, first, target_id='n')
+    assert result['id'] == 'p' and not created and not survivors
+    result, created, survivors = intake(store, second, target_id='n')
+    assert result['id'] == 'p' and not created and not survivors
+    assert result['sync_live_target'] is True
+
+
+def test_repair_audio_for_a_donor_whose_survivor_was_deleted_is_superseded():
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    store.rows[('users', 'u', 'conversations', 'p')]['deleted'] = True
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('wal-late', 1620), target_id='n')
+
+
+def test_sync_bridge_donor_targets_still_fall_back_to_temporal_assignment():
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    store.rows[('users', 'u', 'conversations', 'n')].pop('smart_merge')
+    result, created, _ = intake(store, chunk('wal-other', 1620), target_id='n')
+    assert created and result['id'] == 'wal-other'

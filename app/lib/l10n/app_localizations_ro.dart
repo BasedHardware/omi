@@ -10149,12 +10149,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio nu a putut fi citit — nu poate fi sincronizat';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11275,7 +11269,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openCall => 'Deschide apelul';
 
   @override
-  String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
+  String get captureRecoveryBanner => 'Omi nu trimite audio — atinge pentru a reconecta';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11402,6 +11396,776 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Căști';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minute';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Sarcini';
+
+  @override
+  String get usageMonth => 'Luna aceasta';
+
+  @override
+  String get usageYear => 'Anul acesta';
+
+  @override
+  String get usageAll => 'Toate timpurile';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Aspect';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Luminos';
+
+  @override
+  String get appearanceDark => 'Întunecat';
+
+  @override
+  String get chatDiscardRecording => 'Renunță';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nu am înțeles — încearcă din nou';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Caută persoane';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Adaugă \"$query\" ca persoană nouă';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Afișează toate cele $count persoane';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Salut $name, întreabă orice';
+  }
+
+  @override
+  String get activity => 'Activitate';
+
+  @override
+  String get places => 'Locuri';
+
+  @override
+  String get recaps => 'Rezumate';
+
+  @override
+  String get recent => 'Recente';
+
+  @override
+  String get searchPartialFailure => 'Unele rezultate nu au putut fi încărcate';
+
+  @override
+  String get peopleSearchPlaceholder => 'Caută persoane';
+
+  @override
+  String get peopleNotHeardYet => 'Încă neauzit';
+
+  @override
+  String get peopleRecent => 'Recente';
+
+  @override
+  String get deletePeopleMessage =>
+      'Aceasta le elimină mostrele vocale și nu poate fi anulată. Replicile lor din conversațiile trecute devin vorbitori fără nume.';
+
+  @override
+  String get personTalkTime => 'Timp de vorbire';
+
+  @override
+  String get personLastHeard => 'Ultima ascultare';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ștergi persoane: $count?',
+      one: 'Ștergi 1 persoană?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Necesită voce';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Persoane: $count',
+      one: '1 persoană',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nicio persoană potrivită';
+
+  @override
+  String get deselectAll => 'Deselectează tot';
+
+  @override
+  String get voiceRecognitionSettings => 'Recunoaștere vocală';
+
+  @override
+  String get greetingMorning => 'Bună dimineața';
+
+  @override
+  String get greetingAfternoon => 'Bună ziua';
+
+  @override
+  String get greetingEvening => 'Bună seara';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ce vrei să afli?';
+
+  @override
+  String get askSuggestDecide => 'Ce am decis azi?';
+
+  @override
+  String get askSuggestOwe => 'Ce le mai datorez oamenilor?';
+
+  @override
+  String get askSuggestNotice => 'Ce a observat Omi?';
+
+  @override
+  String get pastChats => 'Conversații anterioare';
+
+  @override
+  String get newChat => 'Conversație nouă';
+
+  @override
+  String get startFresh => 'Începe de la capăt';
+
+  @override
+  String get noPastChats => 'Conversațiile tale cu Omi apar aici.';
+
+  @override
+  String get deleteChatQuestion => 'Ștergi această conversație?';
+
+  @override
+  String get deleteChatMessage => 'Dispare definitiv din conversațiile anterioare.';
+
+  @override
+  String get deleteChat => 'Șterge conversația';
+
+  @override
+  String get appsAskWith => 'Întreabă Omi cu';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversații azi.',
+      one: '1 conversație azi.',
+      zero: 'Nicio conversație azi.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Ce era pe ecran';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Captură de ecran din această întâlnire';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Ștergi captura de ecran?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Captura de ecran va fi eliminată din nota acestei întâlniri. Acțiunea nu poate fi anulată.';
+
+  @override
+  String get conversationSummaryFailed => 'Rezumatul a eșuat';
+
+  @override
+  String get reconnectionsRecent => 'Reconectări (ultimele 7 zile)';
+
+  @override
+  String get failedConnections => 'Conexiuni eșuate';
+
+  @override
+  String get failedConnectionsRecent => 'Conexiuni eșuate (ultimele 7 zile)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count de la asociere';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Încredere scăzută';
+
+  @override
+  String get peopleFilterPinned => 'Fixate';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count fixate',
+      one: '1 fixată',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Confirmat';
+
+  @override
+  String get confidenceLikely => 'Probabil';
+
+  @override
+  String get confidenceUnverified => 'Neverificat';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Încredere: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ai etichetat de $count ori',
+      one: 'Ai etichetat o dată',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ales la $count sugestii',
+      one: 'Ales la o sugestie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ai confirmat $count potriviri',
+      one: 'Ai confirmat o potrivire',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Doar potrivire automată, niciodată confirmată';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Niciodată confirmat';
+
+  @override
+  String get confidenceReasonCorrected => 'Ai corectat potrivirea';
+
+  @override
+  String get confidenceReasonVoiceReady => 'voce pregătită';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'necesită voce';
+
+  @override
+  String get confidenceReasonNotHeard => 'încă neauzit';
+
+  @override
+  String get confidenceSheetTitle => 'Încredere';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi recunoaște vocea lui $name, iar tu ai confirmat asta.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi de obicei recunoaște vocea lui $name, dar ai confirmat-o doar de câteva ori.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Nimic din ce ai făcut nu susține încă vocea lui $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Dovezi';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Etichetat de tine în $count conversații',
+      one: 'Etichetat de tine într-o conversație',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Da la $count sugestii',
+      one: 'Da la o sugestie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ales la $count sugestii',
+      one: 'Ales la o sugestie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ai confirmat $count potriviri automate',
+      one: 'Ai confirmat o potrivire automată',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count potriviri mutate la altcineva',
+      one: 'O potrivire mutată la altcineva',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count potriviri automate neconfirmate',
+      one: 'O potrivire automată neconfirmată',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Eșantion de voce pregătit';
+
+  @override
+  String get evidenceNoVoice => 'Încă nu există eșantion de voce';
+
+  @override
+  String get evidenceNotHeard => 'Încă neauzit într-o conversație';
+
+  @override
+  String get evidenceNothing => 'Nu ai etichetat sau confirmat încă această persoană';
+
+  @override
+  String get effectCountsALot => 'Contează mult';
+
+  @override
+  String get effectCounts => 'Contează';
+
+  @override
+  String get effectCountsALittle => 'Contează puțin';
+
+  @override
+  String get effectBarelyCounts => 'Abia contează';
+
+  @override
+  String get effectCountsAgainst => 'Contează în sens negativ';
+
+  @override
+  String get effectNeeded => 'Necesar pentru Confirmat';
+
+  @override
+  String get confidenceToReachConfirmed => 'Pentru a ajunge la Confirmat';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi are nevoie și de un eșantion de voce al lui $name. Etichetează persoana cu „Ține minte vocile” activat.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name este Confirmat. Omi continuă să învețe din fiecare etichetare.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Doar răspunsurile tale schimbă mult încrederea. Potrivirile automate singure abia contează.';
+
+  @override
+  String get personWhyConfidence => 'De ce?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Fixează: $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Păstrează persoana $name și așteaptă-te la ea în conversațiile tale';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi îți va cere să confirmi potrivirile apropiate, în loc să ghicească.';
+
+  @override
+  String get pinAction => 'Fixează';
+
+  @override
+  String get unpinAction => 'Desprinde';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Fixat: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Fixare eliminată: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'De ce $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Ștergi $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Persoana $name este fixată. Eșantioanele ei de voce vor fi șterse, Omi nu o va mai recunoaște, iar transcrierile anterioare o vor arăta ca vorbitor fără nume. Acțiunea nu poate fi anulată.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Șterge $name';
+  }
+
+  @override
+  String get selectPeople => 'Selectează persoane';
+
+  @override
+  String get cleanUpEllipsis => 'Curățare…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count persoane despre care Omi nu e sigur',
+      one: 'O persoană despre care Omi nu e sigur',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'Mai ales nume înțelese greșit. Revizuiește-le și șterge-le pe cele care nu sunt reale.';
+
+  @override
+  String get reviewAction => 'Revizuiește';
+
+  @override
+  String get cleanUpTitle => 'Curățare';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi nu e sigur în privința acestor persoane ($count). Cele mai multe sunt nume înțelese greșit din transcrieri. Debifează-le pe cele pe care vrei să le păstrezi.',
+      one: 'Omi nu e sigur în privința acestei persoane. Debifeaz-o ca s-o păstrezi.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Persoanele fixate nu sunt incluse niciodată în curățare.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Șterge $count persoane',
+      one: 'Șterge o persoană',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count persoane șterse',
+      one: 'O persoană ștearsă',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Nimic de curățat';
+
+  @override
+  String get cleanUpNothingMessage => 'Momentan Omi nu are dubii despre nimeni.';
+
+  @override
+  String get selectAllSkipsPinned => '„Selectează tot” omite persoanele fixate. Șterge-le pe rând din pagina lor.';
+
+  @override
+  String get pinnedNotSelectable => 'Fixată, nu poate fi selectată';
+
+  @override
+  String get ignoredVoicesTitle => 'Voci ignorate';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcasturi și alte voci marcate ca „Nu e o persoană”';
+
+  @override
+  String get ignoredVoicesEmpty => 'Nicio voce ignorată';
+
+  @override
+  String get restoreAction => 'Restaurează';
+
+  @override
+  String get voiceRestoredToast => 'Omi te poate întreba din nou despre această voce';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Altcineva…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Nu e o persoană';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Nu știu';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Sunt eu';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Cele mai apropiate voci';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Persoane cu care ai vorbit recent';
+
+  @override
+  String get voiceMatchClose => 'Potrivire apropiată';
+
+  @override
+  String get voiceMatchPossible => 'Potrivire posibilă';
+
+  @override
+  String get voiceMatchWeak => 'Potrivire slabă';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Potrivire vocală: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Fiecare răspuns învață Omi o voce și crește încrederea în acea persoană.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Da crește încrederea în $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Îți menține profilul vocal precis, ca Omi să nu te confunde niciodată cu altcineva.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Salvat ca $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Salvat ca tine';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi nu te va mai întreba despre această voce';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Etichetat ca $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Etichetat ca tine';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Marcat ca „Nu e o persoană”';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Etichetă eliminată';
+
+  @override
+  String get whoIsItTitle => 'Cine e?';
+
+  @override
+  String get newPersonEllipsis => 'Persoană nouă…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Adaugă „$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Toți';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Se aplică tuturor replicilor acestui vorbitor';
+
+  @override
+  String get collapseAction => 'Restrânge';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Nu sunt eu';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Etichetează-i în încă $count conversații.',
+      one: 'Etichetează-i în încă 1 conversație.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get showOnLockScreen => 'Afișează pe ecranul de blocare';

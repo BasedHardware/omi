@@ -8,8 +8,9 @@ pulling in the embedding client. Distances are cosine distances as produced by
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence
+from dataclasses import dataclass, replace
+from math import isfinite
+from typing import Any, Mapping, Optional, Sequence, TypeVar
 
 import numpy as np
 
@@ -53,6 +54,7 @@ class SpeakerMatchDecision:
     best_id: Optional[str]
     best_distance: float
     runner_up_distance: float
+    owner_contended: bool = False
 
     @property
     def accepted(self) -> bool:
@@ -90,6 +92,64 @@ def select_speaker_match(
     )
 
 
+SpeakerKey = TypeVar('SpeakerKey')
+
+
+def arbitrate_owner_matches(
+    distances: Mapping[SpeakerKey, Mapping[str, float]],
+    decisions: Mapping[SpeakerKey, SpeakerMatchDecision],
+    *,
+    margin: float = SPEAKER_MATCH_MARGIN,
+    owner_reserved: bool = False,
+    voice_groups: Optional[Mapping[SpeakerKey, SpeakerKey]] = None,
+) -> dict[SpeakerKey, SpeakerMatchDecision]:
+    """Require an owner claim to beat the other *voices*, not just other prints.
+
+    The single-print cold start has no enrolled runner-up. Distinct voices measured
+    at 0.631/0.645 both passed 0.65 in production. Compare all evidenced voices,
+    including ones just outside the acceptance threshold, before publishing any
+    owner decision. A lone/uncontested owner retains the calibrated operating
+    point; a tie accepts neither. A manual owner reserves the identity outright.
+
+    Callers supply one row per diarized voice with sufficient audio, retain those
+    rows for live re-arbitration, and project withdrawn accepts onto old segments.
+    This never promotes a failed voiceprint decision or guesses a second identity.
+    """
+    ranked = sorted(
+        (
+            (scores['user'], key)
+            for key, scores in distances.items()
+            if isfinite(scores.get('user', float('inf')))
+            # A voice confidently identified as someone else cannot be the
+            # owner. Unidentified voices still compete, even just over threshold.
+            and decisions[key].person_id in (None, 'user')
+        ),
+        key=lambda item: item[0],
+    )
+    winner = None
+    if ranked and not owner_reserved:
+        best, key = ranked[0]
+        competing = next(
+            (
+                distance
+                for distance, other in ranked[1:]
+                if voice_groups is None or voice_groups.get(other, other) != voice_groups.get(key, key)
+            ),
+            float('inf'),
+        )
+        if competing - best >= margin:
+            winner = voice_groups.get(key, key) if voice_groups is not None else key
+    return {
+        key: (
+            replace(decision, person_id=None, owner_contended=True)
+            if decision.person_id == 'user'
+            and (voice_groups.get(key, key) if voice_groups is not None else key) != winner
+            else decision
+        )
+        for key, decision in decisions.items()
+    }
+
+
 def mean_embedding(embeddings: Sequence[np.ndarray[Any, Any]]) -> np.ndarray[Any, Any]:
     """Length-normalised centroid of (1, D) embeddings, returned as (1, D).
 
@@ -101,3 +161,73 @@ def mean_embedding(embeddings: Sequence[np.ndarray[Any, Any]]) -> np.ndarray[Any
     centroid = stacked.mean(axis=0, keepdims=True)
     norm = float(np.linalg.norm(centroid))
     return centroid / norm if norm > 0 else centroid
+
+
+# Pinned-person prior (flag PINNED_SPEAKER_PRIOR_ENABLED). A pinned person is someone the
+# user expects in their conversations, but that never buys an automatic label: a match
+# that just misses the operating point becomes a question ("Maya Chen?") instead.
+PINNED_NEAR_MISS_DISTANCE_BAND = 0.05
+PINNED_NEAR_MISS_MARGIN_BAND = 0.04
+# Voice-match levels recorded for the suggestion card: 3 close, 2 possible, 1 weak.
+MATCH_LEVEL_STEP = 0.10
+VOICE_CANDIDATE_LIMIT = 3
+
+
+def match_level(distance: float, *, threshold: float = SPEAKER_MATCH_THRESHOLD) -> Optional[int]:
+    if distance != distance or not isfinite(distance):
+        return None
+    if distance < threshold:
+        return 3
+    if distance < threshold + MATCH_LEVEL_STEP:
+        return 2
+    if distance < threshold + 2 * MATCH_LEVEL_STEP:
+        return 1
+    return None
+
+
+def pinned_near_miss(
+    decision: SpeakerMatchDecision,
+    pinned: Any,
+    *,
+    threshold: float = SPEAKER_MATCH_THRESHOLD,
+    margin: float = SPEAKER_MATCH_MARGIN,
+) -> Optional[str]:
+    """The pinned person a rejected decision nearly accepted, else None. Accepts never change."""
+    best_id = decision.best_id
+    if decision.accepted or decision.owner_contended or best_id is None or best_id not in pinned:
+        return None
+    best, gap = decision.best_distance, decision.runner_up_distance - decision.best_distance
+    if not isfinite(best):
+        return None
+    near_distance = threshold <= best < threshold + PINNED_NEAR_MISS_DISTANCE_BAND and gap >= margin
+    near_margin = best < threshold and margin - PINNED_NEAR_MISS_MARGIN_BAND <= gap < margin
+    return best_id if near_distance or near_margin else None
+
+
+def voice_candidates(
+    distances: Mapping[str, float],
+    decision: SpeakerMatchDecision,
+    pinned: Any,
+    *,
+    exclude: Sequence[str] = (),
+) -> list[dict]:
+    """Up to three people this voice resembles, closest first and pinned first within a level.
+
+    The pinned near-miss, if any, carries ``suggest: True``. Persisted on unlabeled
+    segments for the suggestion card; never an identity decision.
+    """
+    near = pinned_near_miss(decision, pinned)
+    ranked = []
+    for person_id, distance in distances.items():
+        level = match_level(distance)
+        if level is None or person_id in exclude:
+            continue
+        ranked.append((-level, person_id not in pinned, distance, person_id, level))
+    ranked.sort()
+    candidates = []
+    for _, _, _, person_id, level in ranked[:VOICE_CANDIDATE_LIMIT]:
+        entry: dict = {'person_id': person_id, 'level': level}
+        if person_id == near:
+            entry['suggest'] = True
+        candidates.append(entry)
+    return candidates

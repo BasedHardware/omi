@@ -21,11 +21,14 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 
+from config.speaker_prior import pinned_speaker_prior_enabled
 from database import conversations as conversations_db
 from database import redis_db
 from database import users as users_db
 from database import voice_profiles as voice_profiles_db
 from models.speaker_tag_prompts import (
+    IgnoredVoice,
+    IgnoredVoicesResponse,
     SpeakerTagPromptAnswer,
     SpeakerTagPromptAnswerRequest,
     SpeakerTagPromptAnswerResponse,
@@ -35,6 +38,7 @@ from models.speaker_tag_prompts import (
     SpeakerTagPromptsResponse,
 )
 from utils.manual_speaker_assignments import teaching_segment_ids
+from models.person_confidence import SOURCE_CARD
 from utils.text_utils import compute_text_containment
 from utils.observability.speaker_tag_prompts import (
     SPEAKER_TAG_PROMPT_ANSWERS,
@@ -63,6 +67,7 @@ from utils.speaker_tag_prompts.selection import (
     MAX_CLIP_SECONDS,
     MIN_CLIP_SECONDS,
     PROMPT_WINDOW,
+    prompt_id,
     speaker_id_of,
     select_prompts,
 )
@@ -294,7 +299,9 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
         start_date=now - PROMPT_WINDOW,
         end_date=now,
     )
-    people = {person['id']: person.get('name') or '' for person in users_db.get_people(uid) if person.get('id')}
+    stored_people = [person for person in users_db.get_people(uid) if person.get('id')]
+    people = {person['id']: person.get('name') or '' for person in stored_people}
+    pinned = {person['id'] for person in stored_people if person.get('pinned') is True}
     deadline = time.monotonic() + LIST_VERIFY_BUDGET_SECONDS
     timed_out = False
 
@@ -332,6 +339,9 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
         named_allowed=named_allowed,
         answered=voice_profiles_db.answered_prompt_ids(state, now),
         people=people,
+        pinned=pinned,
+        ignored=voice_profiles_db.ignored_voice_keys(state),
+        prior_enabled=pinned_speaker_prior_enabled(),
         verify=verify_in_budget,
         on_skip=lambda reason: SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason=reason).inc(),
     )
@@ -394,6 +404,7 @@ _ALLOWED_ANSWERS = {
         SpeakerTagPromptAnswer.new_person,
         SpeakerTagPromptAnswer.someone_else,
         SpeakerTagPromptAnswer.skip,
+        SpeakerTagPromptAnswer.not_a_person,
     },
     SpeakerTagPromptKind.confirm_person: {
         SpeakerTagPromptAnswer.me,
@@ -401,6 +412,7 @@ _ALLOWED_ANSWERS = {
         SpeakerTagPromptAnswer.new_person,
         SpeakerTagPromptAnswer.someone_else,
         SpeakerTagPromptAnswer.skip,
+        SpeakerTagPromptAnswer.not_a_person,
     },
     SpeakerTagPromptKind.identify: {
         SpeakerTagPromptAnswer.me,
@@ -408,9 +420,20 @@ _ALLOWED_ANSWERS = {
         SpeakerTagPromptAnswer.new_person,
         SpeakerTagPromptAnswer.someone_else,
         SpeakerTagPromptAnswer.skip,
+        SpeakerTagPromptAnswer.not_a_person,
     },
 }
 _NAMED_ANSWERS = {SpeakerTagPromptAnswer.person, SpeakerTagPromptAnswer.new_person}
+
+
+def effective_answer(request: SpeakerTagPromptAnswerRequest) -> SpeakerTagPromptAnswer:
+    """ "Someone else" that names who it is behaves like picking that person (the correction path)."""
+    if request.answer == SpeakerTagPromptAnswer.someone_else:
+        if request.person_id:
+            return SpeakerTagPromptAnswer.person
+        if request.name:
+            return SpeakerTagPromptAnswer.new_person
+    return request.answer
 
 
 def quality_outcome(
@@ -440,8 +463,10 @@ def quality_outcome(
     return Q.unknown_voice
 
 
-def _resolve_person(uid: str, request: SpeakerTagPromptAnswerRequest) -> Tuple[str, Dict[str, Any]]:
-    if request.answer == SpeakerTagPromptAnswer.person:
+def _resolve_person(
+    uid: str, request: SpeakerTagPromptAnswerRequest, answer: SpeakerTagPromptAnswer
+) -> Tuple[str, Dict[str, Any]]:
+    if answer == SpeakerTagPromptAnswer.person:
         if not request.person_id:
             raise TagPromptInvalid('person_id is required')
         found: Optional[Dict[str, Any]] = users_db.get_person(uid, request.person_id)
@@ -469,7 +494,9 @@ def apply_answer(
 ) -> SpeakerTagPromptAnswerResponse:
     """Apply one answer. ``schedule(fn, **kwargs)`` runs slow voice work after the response."""
     now = now or datetime.now(timezone.utc)
-    answer = request.answer
+    if request.answer not in _ALLOWED_ANSWERS[request.kind]:
+        raise TagPromptInvalid(f'{request.answer.value} is not a valid answer for {request.kind.value}')
+    answer = effective_answer(request)
     if answer not in _ALLOWED_ANSWERS[request.kind]:
         raise TagPromptInvalid(f'{answer.value} is not a valid answer for {request.kind.value}')
     needs_named = request.kind != SpeakerTagPromptKind.owner_check or answer in _NAMED_ANSWERS
@@ -480,12 +507,13 @@ def apply_answer(
     person_enrolled = False
     voice_sample_queued = False
     if answer in _NAMED_ANSWERS:
-        person_id, person = _resolve_person(uid, request)
+        person_id, person = _resolve_person(uid, request, answer)
         person_enrolled = bool(person.get('speaker_embedding'))
 
     clears_auto_label = request.origin != SpeakerTagPromptOrigin.unnamed and answer in {
         SpeakerTagPromptAnswer.not_me,
         SpeakerTagPromptAnswer.someone_else,
+        SpeakerTagPromptAnswer.not_a_person,
     }
     if answer == SpeakerTagPromptAnswer.me:
         conversation, resolved = _assign(uid, request, is_user=True, person_id=None, train=False)
@@ -516,9 +544,17 @@ def apply_answer(
             )
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='queued').inc()
             voice_sample_queued = True
-    elif clears_auto_label:
+    elif clears_auto_label or answer == SpeakerTagPromptAnswer.not_a_person:
         # The automatic label was wrong: record an explicit "not the owner / not them".
-        _assign(uid, request, is_user=False, person_id=None, train=False)
+        conversation, _resolved = _assign(uid, request, is_user=False, person_id=None, train=False)
+        if answer == SpeakerTagPromptAnswer.not_a_person:
+            voice_profiles_db.record_ignored_voice(
+                uid,
+                request.conversation_id,
+                request.speaker_id,
+                now,
+                assignment_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation'),
+            )
 
     outcome = quality_outcome(
         request.origin,
@@ -563,8 +599,47 @@ def _assign(
         is_user=is_user,
         speaker_id=request.speaker_id,
         use_for_speech_training=train,
+        evidence_source=SOURCE_CARD,
     )
     return raw, resolved
+
+
+# ---------------------------------------------------------------------------
+# Ignored voices ("Not a Person")
+# ---------------------------------------------------------------------------
+
+IGNORED_VOICES_LIST_LIMIT = 50
+
+
+def list_ignored_voices(uid: str) -> IgnoredVoicesResponse:
+    entries = voice_profiles_db.ignored_voices(voice_profiles_db.get_tag_prompt_state(uid))[:IGNORED_VOICES_LIST_LIMIT]
+    ids = list(dict.fromkeys(entry['conversation_id'] for entry in entries))
+    conversations = (
+        {c.get('id'): c for c in conversations_db.get_conversations_by_id_without_photos(uid, ids) if c} if ids else {}
+    )
+    voices = []
+    for entry in entries:
+        conversation = conversations.get(entry['conversation_id'])
+        if not conversation or conversation.get('deleted'):
+            continue
+        voices.append(
+            IgnoredVoice(
+                conversation_id=entry['conversation_id'],
+                speaker_id=entry['speaker_id'],
+                ignored_at=voice_profiles_db.as_utc(entry.get('ignored_at')) or datetime.now(timezone.utc),
+                conversation_title=((conversation.get('structured') or {}).get('title') or '').strip(),
+                conversation_started_at=voice_profiles_db.as_utc(
+                    conversation.get('started_at') or conversation.get('created_at')
+                ),
+            )
+        )
+    return IgnoredVoicesResponse(voices=voices)
+
+
+def restore_ignored_voice(uid: str, conversation_id: str, speaker_id: int) -> bool:
+    """Undo "Not a Person"; Omi may ask about this voice again."""
+    prompt_ids = [prompt_id(conversation_id, speaker_id, kind) for kind in SpeakerTagPromptKind]
+    return voice_profiles_db.remove_ignored_voice(uid, conversation_id, speaker_id, prompt_ids)
 
 
 # ---------------------------------------------------------------------------

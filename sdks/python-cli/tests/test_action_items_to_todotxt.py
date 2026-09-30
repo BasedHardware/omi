@@ -76,8 +76,13 @@ class TestActionItemsToTodoTxt(unittest.TestCase):
         self.assertEqual(ai2todo.task_text("move due:2026-01-01"), f"move due{ZWSP}:2026-01-01")
         self.assertEqual(ai2todo.task_text("see https://example.com"), "see https://example.com")
         self.assertEqual(ai2todo.task_text("x marks the spot"), ZWSP + "x marks the spot")
+        self.assertEqual(ai2todo.task_text("x"), ZWSP + "x")
         self.assertEqual(ai2todo.task_text("(A) urgent"), ZWSP + "(A) urgent")
+        self.assertEqual(ai2todo.task_text("(A)"), ZWSP + "(A)")
         self.assertEqual(ai2todo.task_text("2026-10-01 launch"), ZWSP + "2026-10-01 launch")
+        self.assertEqual(ai2todo.task_text("2026-10-01"), ZWSP + "2026-10-01")
+        self.assertEqual(ai2todo.task_text("xylophone"), "xylophone")
+        self.assertEqual(ai2todo.task_text("(Action)"), "(Action)")
         self.assertEqual(ai2todo.task_text("a + b"), "a + b")
         self.assertEqual(ai2todo.task_text(None), "(no description)")
         self.assertEqual(ai2todo.task_text("会議の\n準備"), "会議の 準備")
@@ -134,6 +139,90 @@ class TestActionItemsToTodoTxt(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1)
         self.assertFalse(destination.exists())
+
+    def test_issue_19382_bare_completion_and_priority_regression(self):
+        """Regression test for Issue #19382: bare 'x' or '(A)' descriptions must not become syntax when metadata is appended."""
+        items = [
+            {"id": "open-x", "description": "x", "completed": False},
+            {"id": "open-priority", "description": "(A)", "completed": False},
+            {"id": "normal", "description": "buy milk", "completed": False},
+            {"id": "real-done", "description": "done task", "completed": True},
+        ]
+        counts, lines = self.export(items, zone=timezone.utc)
+        self.assertEqual(counts, (4, 4))
+        # open-x must NOT start with bare "x "
+        self.assertIn(f"{ZWSP}x omi:open-x", lines)
+        # open-priority must NOT start with bare "(A) "
+        self.assertIn(f"{ZWSP}(A) omi:open-priority", lines)
+        # normal control item
+        self.assertIn("buy milk omi:normal", lines)
+        # real-done control item
+        self.assertIn("x done task omi:real-done", lines)
+
+    def test_extract_action_items_envelopes(self):
+        item1 = {"id": "a1", "description": "Item 1", "completed": False}
+        item2 = {"id": "a2", "description": "Item 2", "completed": True}
+
+        # Bare list
+        self.assertEqual(ai2todo.extract_action_items([item1, item2]), [item1, item2])
+        self.assertEqual(ai2todo.extract_action_items([]), [])
+
+        # Wrapped envelopes
+        self.assertEqual(ai2todo.extract_action_items({"action_items": [item1, item2]}), [item1, item2])
+        self.assertEqual(ai2todo.extract_action_items({"items": [item1]}), [item1])
+        self.assertEqual(ai2todo.extract_action_items({"data": [item2]}), [item2])
+
+        # Precedence: action_items > items > data
+        self.assertEqual(
+            ai2todo.extract_action_items({"action_items": [item1], "items": [item2]}),
+            [item1],
+        )
+
+        # Empty envelopes
+        self.assertEqual(ai2todo.extract_action_items({"action_items": []}), [])
+        self.assertEqual(ai2todo.extract_action_items({"items": []}), [])
+        self.assertEqual(ai2todo.extract_action_items({"data": []}), [])
+
+        # Non-envelope dictionary returns None (raises ValueError on convert)
+        self.assertIsNone(ai2todo.extract_action_items(item1))
+        self.assertIsNone(ai2todo.extract_action_items({"action_items": "not-a-list"}))
+        self.assertIsNone(ai2todo.extract_action_items("not-a-dict"))
+        self.assertIsNone(ai2todo.extract_action_items(123))
+        self.assertIsNone(ai2todo.extract_action_items(None))
+
+    def test_export_wrapped_envelope(self):
+        for key in ("action_items", "items", "data"):
+            destination = self.tmp / f"todo_{key}.txt"
+            source = self.tmp / f"{key}.json"
+            source.write_text(
+                json.dumps({key: [{"id": f"task_{key}", "description": f"Test {key}", "completed": False}]}),
+                encoding="utf-8",
+            )
+            counts = ai2todo.convert(source, destination, JST)
+            lines = destination.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(counts, (1, 1))
+            self.assertEqual(lines, [f"Test {key} omi:task_{key}"])
+
+    def test_export_empty_envelope_produces_empty_file(self):
+        for key in ("action_items", "items", "data"):
+            destination = self.tmp / f"todo_empty_{key}.txt"
+            source = self.tmp / f"empty_{key}.json"
+            source.write_text(json.dumps({key: []}), encoding="utf-8")
+            counts = ai2todo.convert(source, destination, JST)
+            lines = destination.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(counts, (0, 0))
+            self.assertEqual(lines, [])
+            self.assertTrue(destination.exists())
+
+    def test_utf8_bom_handling(self):
+        destination = self.tmp / "todo_bom.txt"
+        source = self.tmp / "bom.json"
+        payload = json.dumps([{"id": "bom1", "description": "BOM test", "completed": False}]).encode("utf-8-sig")
+        source.write_bytes(payload)
+        counts = ai2todo.convert(source, destination, JST)
+        lines = destination.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(counts, (1, 1))
+        self.assertEqual(lines, ["BOM test omi:bom1"])
 
 
 if __name__ == "__main__":

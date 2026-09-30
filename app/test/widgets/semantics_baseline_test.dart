@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -15,9 +17,10 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
-import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
-import 'package:omi/pages/conversations/widgets/search_widget.dart';
-import 'package:omi/pages/home/home_content.dart';
+import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
+import 'package:omi/pages/search/global_search.dart';
+import 'package:omi/backend/http/api/search.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/settings/device_settings.dart';
@@ -34,7 +37,6 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 
@@ -292,15 +294,19 @@ Future<SurfaceSemanticsReport> _measureHome(WidgetTester tester) async {
   return _tryMeasure(
     tester,
     surface: 'home',
-    pumpedWidget: 'BottomNavBar + HomeConversationsPreview',
+    pumpedWidget: 'HomeTabSwitcher + ConversationListItem',
     notes: [
       'HomePage / HomeContentPage not pumped: HomePage owns uncancelled Timers; HomeContentPage fetches daily summaries.',
-      'Tabs are icon-only and already wrap Semantics(label) from l10n.',
+      'Home and Tasks are text buttons at the top; the bottom tab bar is gone.',
     ],
     app: _app(
       Scaffold(
-        body: CustomScrollView(slivers: [HomeConversationsPreview(conversationProvider: conversations)]),
-        bottomNavigationBar: BottomNavBar(onTabTap: (_, __) {}),
+        body: ListView(
+          children: [
+            HomeTabSwitcher(onTabTap: (_, __) {}),
+            ConversationListItem(conversation: newest, date: newest.createdAt, conversationIdx: 0),
+          ],
+        ),
       ),
       wrap: (child) => _withProviders(child, [
         ChangeNotifierProvider<HomeProvider>.value(value: home),
@@ -327,23 +333,16 @@ Future<SurfaceSemanticsReport> _measureConversations(WidgetTester tester) async 
   return _tryMeasure(
     tester,
     surface: 'conversations',
-    pumpedWidget: 'SearchWidget + FolderTabs + ConversationListItem + EmptyConversationsWidget',
+    pumpedWidget: 'GlobalSearchPage (browse tiles) + ConversationListItem + EmptyConversationsWidget',
     notes: [
-      'ConversationsPage not pumped: it reads CaptureProvider, LocalRecordingsProvider, and refreshes folders/goals on pull.',
-      'Calendar IconButton tooltip is l10n.filterByDate; Speaker already had phoneSpeaker.',
+      'ConversationsPage not pumped: it reads CaptureProvider, LocalRecordingsProvider, and refreshes recaps on pull.',
+      'Search, folders and starred moved from the list into the search overlay.',
     ],
     app: _app(
       Scaffold(
-        body: ListView(
+        body: Column(
           children: [
-            const SearchWidget(),
-            FolderTabs(
-              folders: const [],
-              selectedFolderId: null,
-              onFolderSelected: (_) {},
-              showStarredOnly: false,
-              onStarredToggle: () {},
-            ),
+            const Expanded(child: GlobalSearchPage(source: _EmptySearchSource())),
             ConversationListItem(conversation: item, date: item.createdAt, conversationIdx: 0),
             const EmptyConversationsWidget(),
           ],
@@ -610,4 +609,30 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Search that finds nothing and counts nothing: the browse tiles render with no I/O.
+class _EmptySearchSource extends GlobalSearchSource {
+  const _EmptySearchSource();
+
+  @override
+  Future<ApiResult<SearchOverview>> overview() async =>
+      const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
+
+  @override
+  Future<ConversationSearchResult> conversations(String query, {String? speakerId}) async =>
+      const ConversationSearchResult(
+          items: [], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
+
+  @override
+  Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) async => const [];
+
+  @override
+  Future<ApiResult<List<DailySummary>>> recaps(String query) async => const ApiSuccess([]);
+
+  @override
+  Future<ApiResult<List<ActionItemWithMetadata>>> tasks(String query) async => const ApiSuccess([]);
+
+  @override
+  Future<ApiResult<List<MemorySearchHit>>> memories(String query) async => const ApiSuccess([]);
 }

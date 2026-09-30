@@ -46,7 +46,8 @@
           "CRON_SECRET": "WEB_ADMIN_CRON_SECRET:latest",
           "GCP_BILLING_SA_JSON": "WEB_ADMIN_GCP_BILLING_SA_JSON:latest",
           "ADMIN_ANTHROPIC_COST_API_KEY": "WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest",
-          "ADMIN_OPENAI_COST_API_KEY": "WEB_ADMIN_OPENAI_COST_API_KEY:latest"
+          "ADMIN_OPENAI_COST_API_KEY": "WEB_ADMIN_OPENAI_COST_API_KEY:latest",
+      "RESEND_API_KEY": "WEB_ADMIN_RESEND_API_KEY:latest"
         },
         "remove_runtime_secrets": [
           "FIREBASE_PROJECT_ID",
@@ -343,6 +344,22 @@
         {
           "name": "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID",
           "required": true,
+          "source": "repository_config",
+          "allowed_scopes": [
+            "repository"
+          ]
+        },
+        {
+          "name": "NEXT_PUBLIC_POSTHOG_KEY",
+          "required": true,
+          "source": "repository_config",
+          "allowed_scopes": [
+            "repository"
+          ]
+        },
+        {
+          "name": "NEXT_PUBLIC_POSTHOG_HOST",
+          "required": false,
           "source": "repository_config",
           "allowed_scopes": [
             "repository"

@@ -11913,14 +11913,6 @@
     "@syncStatusUnsupportedAudio": {
         "description": "Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help."
     },
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "@conversationTitleDidntGenerate": {
-        "description": "Inline conversation-row hint when processing finished but the title pass produced nothing"
-    },
-    "conversationReprocess": "Reprocess",
-    "@conversationReprocess": {
-        "description": "Inline conversation-row action to rerun title and summary generation"
-    },
     "chatStarterPrompt": "{kind, select, capabilities{What can you do for me?} goal{Help me set a goal} activity{Summarize my recent activity} improve{How can I improve?} other{}}",
     "@chatStarterPrompt": {
         "description": "Editable empty-chat starter; use capabilities/goal without personal data, activity/improve with saved data.",
@@ -13332,9 +13324,9 @@
     "@openCall": {
         "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
     },
-    "captureRecoveryBanner": "Pendant audio is not reaching the app — tap to repair",
+    "captureRecoveryBanner": "Omi isn't sending audio — tap to reconnect",
     "@captureRecoveryBanner": {
-        "description": "Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings"
+        "description": "Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings"
     },
     "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later on your pendant before recording with your phone.",
     "captureNotTranscribing": "Not transcribing",
@@ -13493,6 +13485,962 @@
     "deviceOnboardingVoiceReplyGenericHeadphones": "Headphones",
     "@deviceOnboardingVoiceReplyGenericHeadphones": {
         "description": "Generic fallback name for connected headphones when the system does not provide a device name"
+    },
+    "usageListened": "Listened",
+    "@usageListened": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageWordsHeard": "Words heard",
+    "@usageWordsHeard": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageTasksNotes": "Tasks & notes",
+    "@usageTasksNotes": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usagePeakHour": "Peak hour",
+    "@usagePeakHour": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestDay": "Best day",
+    "@usageBestDay": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestMonth": "Best month",
+    "@usageBestMonth": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestYear": "Best year",
+    "@usageBestYear": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageMinutes": "Minutes",
+    "@usageMinutes": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageWords": "Words",
+    "@usageWords": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageTasks": "Tasks",
+    "@usageTasks": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageMonth": "Month",
+    "@usageMonth": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageYear": "Year",
+    "@usageYear": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageAll": "All time",
+    "@usageAll": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageNow": "now",
+    "@usageNow": {
+        "description": "Current hour marker on Plan and Usage chart"
+    },
+    "usageChatThisMonth": "Chat this month",
+    "@usageChatThisMonth": {
+        "description": "Label for monthly chat usage meter"
+    },
+    "appearance": "Appearance",
+    "appearanceSystem": "System",
+    "appearanceLight": "Light",
+    "appearanceDark": "Dark",
+    "chatDiscardRecording": "Discard",
+    "@chatDiscardRecording": {
+        "description": "Discard the current chat voice recording without transcription"
+    },
+    "voiceQuestionNoSpeech": "Didn't catch that — try again",
+    "@voiceQuestionNoSpeech": {
+        "description": "Shown in chat when a pendant voice question contains no detectable speech."
+    },
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
+    "sendToSupport": "Send to support",
+    "@sendToSupport": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "@deviceDiagnosticsUploadDescription": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "@deviceDiagnosticsTicket": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "@deviceDiagnosticsUploadFailed": {
+        "description": "Device diagnostics support upload"
+    },
+    "feedbackGiveFeedback": "Give feedback",
+    "@feedbackGiveFeedback": {
+        "description": "Button on the summary/recording feedback prompt that opens the quick feedback sheet."
+    },
+    "feedbackAllGood": "All good",
+    "@feedbackAllGood": {
+        "description": "Chip in the feedback sheet for a positive answer; submits helpful feedback."
+    },
+    "feedbackChatWithUs": "More detail? Chat with us",
+    "@feedbackChatWithUs": {
+        "description": "Secondary row in the feedback sheet that opens the support chat."
+    },
+    "feedbackReasonSummaryInaccurate": "Inaccurate",
+    "@feedbackReasonSummaryInaccurate": {
+        "description": "Quick reason chip: the summary was inaccurate."
+    },
+    "feedbackReasonSummaryIncomplete": "Incomplete",
+    "@feedbackReasonSummaryIncomplete": {
+        "description": "Quick reason chip: the summary was incomplete."
+    },
+    "feedbackReasonSummaryIrrelevant": "Not relevant",
+    "@feedbackReasonSummaryIrrelevant": {
+        "description": "Quick reason chip: the summary was not relevant."
+    },
+    "feedbackReasonSummaryWrongContext": "Wrong context",
+    "@feedbackReasonSummaryWrongContext": {
+        "description": "Quick reason chip: the summary mixed up context."
+    },
+    "feedbackReasonSummaryOther": "Something else",
+    "@feedbackReasonSummaryOther": {
+        "description": "Quick reason chip: some other summary problem."
+    },
+    "feedbackReasonRecordingMissingAudio": "Missing audio",
+    "@feedbackReasonRecordingMissingAudio": {
+        "description": "Quick reason chip: the recording is missing audio."
+    },
+    "feedbackReasonRecordingPoorTranscription": "Poor transcription",
+    "@feedbackReasonRecordingPoorTranscription": {
+        "description": "Quick reason chip: the transcription was poor."
+    },
+    "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
+    "@feedbackReasonRecordingWrongSpeaker": {
+        "description": "Quick reason chip: the speaker attribution was wrong."
+    },
+    "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
+    "@feedbackReasonRecordingDelayedOrStuck": {
+        "description": "Quick reason chip: processing was delayed or stuck."
+    },
+    "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
+    "@feedbackReasonRecordingFragmentedOrDuplicated": {
+        "description": "Quick reason chip: the recording was fragmented or duplicated."
+    },
+    "feedbackReasonRecordingOther": "Something else",
+    "@feedbackReasonRecordingOther": {
+        "description": "Quick reason chip: some other recording problem."
+    },
+    "searchPeople": "Search people",
+    "@searchPeople": {
+        "description": "Hint for the person search field in the tag-speaker sheet"
+    },
+    "addQueryAsNewPerson": "Add \"{query}\" as a new person",
+    "@addQueryAsNewPerson": {
+        "description": "Row shown in the tag-speaker sheet when no existing person matches the search query",
+        "placeholders": {
+            "query": {
+                "type": "String"
+            }
+        }
+    },
+    "showAllPeople": "Show all {count} people",
+    "@showAllPeople": {
+        "description": "Expander chip in the tag-speaker sheet that reveals the capped person grid",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "chatGreeting": "Hi {name}, ask anything",
+    "@chatGreeting": {
+        "description": "Greeting at the top of an empty chat; name is the user's first name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "activity": "Activity",
+    "@activity": {
+        "description": "Title of the sheet listing the steps Omi took to answer a chat message"
+    },
+    "places": "Places",
+    "@places": {
+        "description": "Search tile that opens conversations on a map"
+    },
+    "recaps": "Recaps",
+    "@recaps": {
+        "description": "Search tile and result section for daily recaps"
+    },
+    "recent": "Recent",
+    "@recent": {
+        "description": "Heading above recent search queries"
+    },
+    "searchPartialFailure": "Some results couldn't load",
+    "@searchPartialFailure": {
+        "description": "Shown under global search results when one kind of result (conversations, recaps, tasks or memories) failed to load"
+    },
+    "peopleSearchPlaceholder": "Search people",
+    "@peopleSearchPlaceholder": {
+        "description": "Search field placeholder on the People list"
+    },
+    "peopleNotHeardYet": "Not Heard Yet",
+    "@peopleNotHeardYet": {
+        "description": "Section header and row subtitle for a person with zero conversations"
+    },
+    "peopleRecent": "Recent",
+    "@peopleRecent": {
+        "description": "Section header for people heard recently"
+    },
+    "deletePeopleMessage": "This removes their voice samples and can't be undone. Their lines in past conversations become unnamed speakers.",
+    "@deletePeopleMessage": {
+        "description": "Delete people dialog body"
+    },
+    "personTalkTime": "Talk time",
+    "@personTalkTime": {
+        "description": "Stat label on a person's page: total time this person spoke"
+    },
+    "personLastHeard": "Last heard",
+    "@personLastHeard": {
+        "description": "Stat label on a person's page: most recent conversation date"
+    },
+    "deletePeopleTitle": "{count, plural, =1{Delete 1 Person?} other{Delete {count} People?}}",
+    "@deletePeopleTitle": {
+        "description": "Delete people dialog title",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "peopleFilterNeedsVoice": "Needs Voice",
+    "@peopleFilterNeedsVoice": {
+        "description": "Filter chip on the People list: people whose voice Omi has not learned yet"
+    },
+    "peopleCount": "{count, plural, =1{1 person} other{{count} people}}",
+    "@peopleCount": {
+        "description": "A count of people (People list filters and summary)",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "noMatchingPeople": "No Matching People",
+    "@noMatchingPeople": {
+        "description": "Empty state title when the People search or filter matches nobody"
+    },
+    "deselectAll": "Deselect All",
+    "@deselectAll": {
+        "description": "Toolbar button in select mode when every visible row is selected"
+    },
+    "voiceRecognitionSettings": "Voice Recognition",
+    "@voiceRecognitionSettings": {
+        "description": "Section header above the voice-learning switches on the People page"
+    },
+    "greetingMorning": "Morning",
+    "@greetingMorning": {
+        "description": "Home greeting (large title) for 8 AM to 10 AM; keep it short so the first name fits after it on one line"
+    },
+    "greetingAfternoon": "Afternoon",
+    "@greetingAfternoon": {
+        "description": "Home greeting (large title) for 2 PM to 4 PM; keep it short so the first name fits after it on one line"
+    },
+    "greetingEvening": "Evening",
+    "@greetingEvening": {
+        "description": "Home greeting (large title) for 6 PM to 8 PM; keep it short so the first name fits after it on one line"
+    },
+    "greetingWithName": "{greeting}, {name}",
+    "@greetingWithName": {
+        "description": "Home's greeting with the reader's first name after it, when it fits one line",
+        "placeholders": {
+            "greeting": {
+                "type": "String"
+            },
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "whatDoYouWantToKnow": "What do you want to know?",
+    "@whatDoYouWantToKnow": {
+        "description": "Ask: under the greeting"
+    },
+    "askSuggestDecide": "What did I decide today?",
+    "@askSuggestDecide": {
+        "description": "Ask suggestion"
+    },
+    "askSuggestOwe": "What do I still owe people?",
+    "@askSuggestOwe": {
+        "description": "Ask suggestion"
+    },
+    "askSuggestNotice": "What did Omi notice?",
+    "@askSuggestNotice": {
+        "description": "Ask suggestion"
+    },
+    "pastChats": "Past chats",
+    "@pastChats": {
+        "description": "Ask: the history page title and button"
+    },
+    "newChat": "New chat",
+    "@newChat": {
+        "description": "Ask: the first row of Past chats"
+    },
+    "startFresh": "Start fresh",
+    "@startFresh": {
+        "description": "Ask: under New chat"
+    },
+    "noPastChats": "Your chats with Omi show up here.",
+    "@noPastChats": {
+        "description": "Ask: Past chats when there are none"
+    },
+    "deleteChatQuestion": "Delete this chat?",
+    "@deleteChatQuestion": {
+        "description": "Ask: confirm before deleting a past chat"
+    },
+    "deleteChatMessage": "It’s gone from Past chats for good.",
+    "@deleteChatMessage": {
+        "description": "Ask: what deleting a past chat means"
+    },
+    "deleteChat": "Delete chat",
+    "@deleteChat": {
+        "description": "Ask: the confirm button"
+    },
+    "appsAskWith": "Ask Omi with",
+    "@appsAskWith": {
+        "description": "Apps: group of chat apps"
+    },
+    "conversationsTodayCount": "{count, plural, =0{No conversations today.} =1{1 conversation today.} other{{count} conversations today.}}",
+    "@conversationsTodayCount": {
+        "description": "Chat greeting: number of non-discarded conversations created today.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "meetingScreenshotsTitle": "What was on screen",
+    "@meetingScreenshotsTitle": {
+        "description": "Heading of the strip of meeting screenshots in a conversation summary"
+    },
+    "meetingScreenshotFallbackCaption": "Screenshot from this meeting",
+    "@meetingScreenshotFallbackCaption": {
+        "description": "Caption and accessibility label for a meeting screenshot that has no caption"
+    },
+    "deleteMeetingScreenshotTitle": "Delete Screenshot?",
+    "@deleteMeetingScreenshotTitle": {
+        "description": "Title of the dialog confirming deletion of one meeting screenshot"
+    },
+    "deleteMeetingScreenshotMessage": "This removes the screenshot from this meeting's note. It can't be undone.",
+    "@deleteMeetingScreenshotMessage": {
+        "description": "Body of the dialog confirming deletion of one meeting screenshot"
+    },
+    "conversationSummaryFailed": "Summary failed",
+    "@conversationSummaryFailed": {
+        "description": "Conversation list row chip: the server could not summarize this conversation after its retries, and retrying can still succeed. Shown next to a Retry button."
+    },
+    "reconnectionsRecent": "Reconnections (last 7 days)",
+    "@reconnectionsRecent": {
+        "description": "Reconnect count within the retained 7-day diagnostics window; headline value on Device Diagnostics"
+    },
+    "failedConnections": "Failed connections",
+    "@failedConnections": {
+        "description": "Lifetime count of connect attempts that never established a connection"
+    },
+    "failedConnectionsRecent": "Failed connections (last 7 days)",
+    "@failedConnectionsRecent": {
+        "description": "Connect attempts that never established a connection, within the retained 7-day diagnostics window"
+    },
+    "diagnosticsCountSincePairing": "{count} since pairing",
+    "@diagnosticsCountSincePairing": {
+        "description": "Lifetime counter shown as secondary context under a 7-day window value",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "peopleFilterLowConfidence": "Low Confidence",
+    "@peopleFilterLowConfidence": {
+        "description": "Filter chip over the People list: people Omi is unsure about (Title Case)."
+    },
+    "peopleFilterPinned": "Pinned",
+    "@peopleFilterPinned": {
+        "description": "Filter chip and group header on the People list: people the user pinned (Title Case)."
+    },
+    "peoplePinnedCount": "{count, plural, =1{1 pinned} other{{count} pinned}}",
+    "@peoplePinnedCount": {
+        "description": "Small count beside the Pinned group header.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "confidenceConfirmed": "Confirmed",
+    "@confidenceConfirmed": {
+        "description": "Confidence level for a person's voice: the user has confirmed it many times. Short label."
+    },
+    "confidenceLikely": "Likely",
+    "@confidenceLikely": {
+        "description": "Confidence level for a person's voice: the user answered for it at least once. Short label."
+    },
+    "confidenceUnverified": "Unverified",
+    "@confidenceUnverified": {
+        "description": "Confidence level for a person's voice: nothing the user did backs it up yet. Short label."
+    },
+    "confidenceMeterLabel": "Confidence: {level}",
+    "@confidenceMeterLabel": {
+        "description": "Screen-reader label for the three-step confidence meter; level is Confirmed, Likely or Unverified.",
+        "placeholders": {
+            "level": {
+                "type": "String"
+            }
+        }
+    },
+    "confidenceReasonLabeled": "{count, plural, =1{You labeled once} other{You labeled {count} times}}",
+    "@confidenceReasonLabeled": {
+        "description": "Reason line under a person's name: how many conversations the user labeled them in by hand.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "confidenceReasonPicked": "{count, plural, =1{Picked in 1 suggestion} other{Picked in {count} suggestions}}",
+    "@confidenceReasonPicked": {
+        "description": "Reason line under a person's name: how many voice suggestion cards the user answered with this person.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "confidenceReasonAutoConfirmed": "{count, plural, =1{You confirmed 1 match} other{You confirmed {count} matches}}",
+    "@confidenceReasonAutoConfirmed": {
+        "description": "Reason line under a person's name: automatic voice matches the user confirmed by hand.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "confidenceReasonAutoOnly": "Only auto-matched, never confirmed",
+    "@confidenceReasonAutoOnly": {
+        "description": "Reason line under a person's name: Omi matched this voice automatically but the user never confirmed it."
+    },
+    "confidenceReasonNeverConfirmed": "Never confirmed",
+    "@confidenceReasonNeverConfirmed": {
+        "description": "Reason line under a person's name: the user never labeled or confirmed this person."
+    },
+    "confidenceReasonCorrected": "You corrected its match",
+    "@confidenceReasonCorrected": {
+        "description": "Reason line under a person's name: the user moved an automatic match for this person to someone else."
+    },
+    "confidenceReasonVoiceReady": "voice ready",
+    "@confidenceReasonVoiceReady": {
+        "description": "Second half of a reason line, after a middle dot: Omi has a voice sample for this person. Lowercase because it follows a separator."
+    },
+    "confidenceReasonNeedsVoice": "needs voice",
+    "@confidenceReasonNeedsVoice": {
+        "description": "Second half of a reason line, after a middle dot: Omi has no voice sample for this person yet. Lowercase."
+    },
+    "confidenceReasonNotHeard": "not heard yet",
+    "@confidenceReasonNotHeard": {
+        "description": "Second half of a reason line, after a middle dot: this person has not appeared in a conversation yet. Lowercase."
+    },
+    "confidenceSheetTitle": "Confidence",
+    "@confidenceSheetTitle": {
+        "description": "Title of the sheet that explains how sure Omi is about a person's voice (Title Case)."
+    },
+    "confidenceSummaryConfirmed": "Omi recognizes {name}'s voice, and you've confirmed it.",
+    "@confidenceSummaryConfirmed": {
+        "description": "Sheet summary for a Confirmed person.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "confidenceSummaryLikely": "Omi usually recognizes {name}'s voice, but you've only confirmed it a few times.",
+    "@confidenceSummaryLikely": {
+        "description": "Sheet summary for a Likely person.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "confidenceSummaryUnverified": "Nothing you've done backs {name} up yet.",
+    "@confidenceSummaryUnverified": {
+        "description": "Sheet summary for an Unverified person: the user never labeled or confirmed them.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "confidenceEvidenceHeader": "Evidence",
+    "@confidenceEvidenceHeader": {
+        "description": "Section header in the confidence sheet listing what Omi's confidence is based on (Title Case)."
+    },
+    "evidenceManualLabels": "{count, plural, =1{Labeled by you in 1 conversation} other{Labeled by you in {count} conversations}}",
+    "@evidenceManualLabels": {
+        "description": "Evidence row: the user labeled this person by hand.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "evidenceCardConfirms": "{count, plural, =1{Yes on 1 suggestion} other{Yes on {count} suggestions}}",
+    "@evidenceCardConfirms": {
+        "description": "Evidence row: the user answered Yes when a suggestion card asked about this person.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "evidenceCardPicks": "{count, plural, =1{Picked in 1 suggestion} other{Picked in {count} suggestions}}",
+    "@evidenceCardPicks": {
+        "description": "Evidence row: the user picked this person on a suggestion card.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "evidenceAutoConfirmed": "{count, plural, =1{Confirmed 1 automatic match} other{Confirmed {count} automatic matches}}",
+    "@evidenceAutoConfirmed": {
+        "description": "Evidence row: automatic matches the user confirmed by hand.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "evidenceAutoCorrected": "{count, plural, =1{1 match moved to someone else} other{{count} matches moved to someone else}}",
+    "@evidenceAutoCorrected": {
+        "description": "Evidence row: automatic matches to this person that the user corrected to someone else.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "evidenceAutoUnconfirmed": "{count, plural, =1{1 automatic match nobody confirmed} other{{count} automatic matches nobody confirmed}}",
+    "@evidenceAutoUnconfirmed": {
+        "description": "Evidence row: conversations where Omi matched this person automatically and nobody confirmed it.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "evidenceVoiceReady": "Voice sample ready",
+    "@evidenceVoiceReady": {
+        "description": "Evidence row: Omi has a usable voice sample for this person."
+    },
+    "evidenceNoVoice": "No voice sample yet",
+    "@evidenceNoVoice": {
+        "description": "Evidence row: Omi has no usable voice sample for this person."
+    },
+    "evidenceNotHeard": "Not heard in a conversation yet",
+    "@evidenceNotHeard": {
+        "description": "Evidence row: this person has not appeared in any conversation."
+    },
+    "evidenceNothing": "You haven't labeled or confirmed them yet",
+    "@evidenceNothing": {
+        "description": "Evidence row when there is no evidence from the user at all."
+    },
+    "effectCountsALot": "Counts a lot",
+    "@effectCountsALot": {
+        "description": "How much one kind of evidence raises confidence: strongly."
+    },
+    "effectCounts": "Counts",
+    "@effectCounts": {
+        "description": "How much one kind of evidence raises confidence: moderately."
+    },
+    "effectCountsALittle": "Counts a little",
+    "@effectCountsALittle": {
+        "description": "How much one kind of evidence raises confidence: slightly."
+    },
+    "effectBarelyCounts": "Barely counts",
+    "@effectBarelyCounts": {
+        "description": "How much one kind of evidence raises confidence: almost not at all."
+    },
+    "effectCountsAgainst": "Counts against",
+    "@effectCountsAgainst": {
+        "description": "This kind of evidence lowers confidence."
+    },
+    "effectNeeded": "Needed for Confirmed",
+    "@effectNeeded": {
+        "description": "A missing piece of evidence (a voice sample) is required to reach the Confirmed level."
+    },
+    "confidenceToReachConfirmed": "To Reach Confirmed",
+    "@confidenceToReachConfirmed": {
+        "description": "Section header in the confidence sheet: what would raise this person to Confirmed (Title Case)."
+    },
+    "confidenceNextVoice": "Omi also needs a voice sample of {name}. Label them with Remember voices on.",
+    "@confidenceNextVoice": {
+        "description": "What the user can do to reach Confirmed when a voice sample is missing. 'Remember voices' refers to the setting 'Remember voices of people you name'.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "confidenceIsConfirmed": "{name} is Confirmed. Omi keeps learning from each label.",
+    "@confidenceIsConfirmed": {
+        "description": "Shown in the confidence sheet for a Confirmed person instead of next steps.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "confidenceFootnote": "Only your answers move confidence much. Automatic matches on their own barely count.",
+    "@confidenceFootnote": {
+        "description": "Footnote at the bottom of the confidence sheet."
+    },
+    "personWhyConfidence": "Why?",
+    "@personWhyConfidence": {
+        "description": "Link beside a person's confidence level that opens an explanation."
+    },
+    "pinPersonTitle": "Pin {name}",
+    "@pinPersonTitle": {
+        "description": "Switch row title on a person's page.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "pinPersonSubtitle": "Keep {name}, and expect them in your conversations",
+    "@pinPersonSubtitle": {
+        "description": "What pinning a person means, under the Pin switch.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "pinPersonHonestLine": "Omi will ask you to confirm close matches instead of guessing.",
+    "@pinPersonHonestLine": {
+        "description": "Footer under the Pin switch: pinning makes Omi ask about near matches rather than label them."
+    },
+    "pinAction": "Pin",
+    "@pinAction": {
+        "description": "Swipe action and menu item: pin this person (Title Case verb)."
+    },
+    "unpinAction": "Unpin",
+    "@unpinAction": {
+        "description": "Swipe action and menu item: unpin this person (Title Case verb)."
+    },
+    "personPinnedToast": "{name} pinned",
+    "@personPinnedToast": {
+        "description": "Toast after pinning a person.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "personUnpinnedToast": "{name} unpinned",
+    "@personUnpinnedToast": {
+        "description": "Toast after unpinning a person.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "whyConfidenceMenu": "Why {level}?",
+    "@whyConfidenceMenu": {
+        "description": "Row menu item that explains a person's confidence level; level is Confirmed, Likely or Unverified (Title Case).",
+        "placeholders": {
+            "level": {
+                "type": "String"
+            }
+        }
+    },
+    "deletePersonNamedTitle": "Delete {name}?",
+    "@deletePersonNamedTitle": {
+        "description": "Dialog title when deleting one pinned person (Title Case).",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "deletePinnedPersonMessage": "{name} is pinned. Their voice samples are removed, Omi stops recognizing them, and past transcripts show them as an unnamed speaker. This can't be undone.",
+    "@deletePinnedPersonMessage": {
+        "description": "Dialog message when deleting a pinned person.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "deleteNamedPerson": "Delete {name}",
+    "@deleteNamedPerson": {
+        "description": "Destructive dialog button that names the person being deleted (Title Case).",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "selectPeople": "Select People",
+    "@selectPeople": {
+        "description": "Menu item that starts picking people to delete (Title Case)."
+    },
+    "cleanUpEllipsis": "Clean Up…",
+    "@cleanUpEllipsis": {
+        "description": "Menu item that reviews people Omi is unsure about for deletion (Title Case, one-character ellipsis because it opens a review)."
+    },
+    "cleanUpUnsureCount": "{count, plural, =1{1 person Omi is unsure about} other{{count} people Omi is unsure about}}",
+    "@cleanUpUnsureCount": {
+        "description": "Banner title and menu subtitle: how many people have Unverified confidence.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "cleanUpBannerBody": "Mostly misheard names. Review them and remove the ones that aren't real.",
+    "@cleanUpBannerBody": {
+        "description": "Banner body on the People list offering to clean up unsure people."
+    },
+    "reviewAction": "Review",
+    "@reviewAction": {
+        "description": "Button that opens the clean-up review (Title Case)."
+    },
+    "cleanUpTitle": "Clean Up",
+    "@cleanUpTitle": {
+        "description": "Title of the page that reviews unsure people before deleting them (Title Case)."
+    },
+    "cleanUpLead": "{count, plural, =1{Omi is unsure about this person. Untick them to keep them.} other{Omi is unsure about these {count} people. Most are names misheard from transcripts. Untick anyone you want to keep.}}",
+    "@cleanUpLead": {
+        "description": "Explanation at the top of the clean-up review.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "cleanUpPinnedNote": "Pinned people are never included in Clean Up.",
+    "@cleanUpPinnedNote": {
+        "description": "Footnote under the clean-up review list."
+    },
+    "deletePeopleCountAction": "{count, plural, =1{Delete 1 Person} other{Delete {count} People}}",
+    "@deletePeopleCountAction": {
+        "description": "Destructive button at the bottom of the clean-up review (Title Case).",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "peopleDeletedToast": "{count, plural, =1{1 person deleted} other{{count} people deleted}}",
+    "@peopleDeletedToast": {
+        "description": "Toast after deleting people.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "cleanUpNothingTitle": "Nothing to Clean Up",
+    "@cleanUpNothingTitle": {
+        "description": "Empty state title when no one is unsure (Title Case)."
+    },
+    "cleanUpNothingMessage": "Omi isn't unsure about anyone right now.",
+    "@cleanUpNothingMessage": {
+        "description": "Empty state message when no one is unsure."
+    },
+    "selectAllSkipsPinned": "Select All skips pinned people. Delete them one at a time from their page.",
+    "@selectAllSkipsPinned": {
+        "description": "Footnote in select mode under the Pinned group."
+    },
+    "pinnedNotSelectable": "Pinned, not selectable",
+    "@pinnedNotSelectable": {
+        "description": "Screen-reader label for a pinned person's row in select mode."
+    },
+    "ignoredVoicesTitle": "Ignored Voices",
+    "@ignoredVoicesTitle": {
+        "description": "Settings row and sheet title: voices the user marked Not a Person (Title Case)."
+    },
+    "ignoredVoicesSubtitle": "TV, podcasts and other voices you marked Not a Person",
+    "@ignoredVoicesSubtitle": {
+        "description": "Subtitle of the Ignored Voices row."
+    },
+    "ignoredVoicesEmpty": "No ignored voices",
+    "@ignoredVoicesEmpty": {
+        "description": "Shown in the Ignored Voices sheet when there are none."
+    },
+    "restoreAction": "Restore",
+    "@restoreAction": {
+        "description": "Button that undoes Not a Person for a voice so Omi may ask about it again (Title Case)."
+    },
+    "voiceRestoredToast": "Omi may ask about this voice again",
+    "@voiceRestoredToast": {
+        "description": "Toast after restoring an ignored voice."
+    },
+    "speakerTagPromptSomeoneElse": "Someone Else…",
+    "@speakerTagPromptSomeoneElse": {
+        "description": "Answer chip on the voice suggestion card that opens a picker to choose who it is (Title Case, one-character ellipsis)."
+    },
+    "speakerTagPromptNotAPerson": "Not a Person",
+    "@speakerTagPromptNotAPerson": {
+        "description": "Answer chip on the voice suggestion card: the voice is a TV, podcast or music, not a person (Title Case)."
+    },
+    "speakerTagPromptNotSureAction": "Not Sure",
+    "@speakerTagPromptNotSureAction": {
+        "description": "Answer chip on the voice suggestion card: skip this voice (Title Case)."
+    },
+    "speakerTagPromptThatsMeAction": "That's Me",
+    "@speakerTagPromptThatsMeAction": {
+        "description": "Answer chip on the voice suggestion card: the voice is the user (Title Case)."
+    },
+    "speakerTagPromptClosestVoices": "Closest voices",
+    "@speakerTagPromptClosestVoices": {
+        "description": "Label above people ranked by how close their voice is to the clip."
+    },
+    "speakerTagPromptRecentPeople": "People you talked to recently",
+    "@speakerTagPromptRecentPeople": {
+        "description": "Label above suggested people when Omi has no voice comparison."
+    },
+    "voiceMatchClose": "Close match",
+    "@voiceMatchClose": {
+        "description": "How close a voice is to a person: very close."
+    },
+    "voiceMatchPossible": "Possible match",
+    "@voiceMatchPossible": {
+        "description": "How close a voice is to a person: somewhat close."
+    },
+    "voiceMatchWeak": "Weak match",
+    "@voiceMatchWeak": {
+        "description": "How close a voice is to a person: not very close."
+    },
+    "voiceMatchMeterLabel": "Voice match: {level}",
+    "@voiceMatchMeterLabel": {
+        "description": "Screen-reader label for the voice match meter; level is Close match, Possible match or Weak match.",
+        "placeholders": {
+            "level": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerTagPromptHintIdentify": "Each answer teaches Omi a voice and raises that person's confidence.",
+    "@speakerTagPromptHintIdentify": {
+        "description": "Hint at the bottom of the 'Who is this?' card."
+    },
+    "speakerTagPromptHintConfirm": "Yes raises {name}'s confidence.",
+    "@speakerTagPromptHintConfirm": {
+        "description": "Hint at the bottom of the 'Is this <name>?' card.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerTagPromptHintOwner": "Keeps your own voice profile sharp, so Omi never names you as someone else.",
+    "@speakerTagPromptHintOwner": {
+        "description": "Hint at the bottom of the 'Is this you?' card."
+    },
+    "speakerTagPromptSavedAs": "Saved as {name}",
+    "@speakerTagPromptSavedAs": {
+        "description": "Answered state of the voice card after the user named the voice.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerTagPromptSavedAsYou": "Saved as you",
+    "@speakerTagPromptSavedAsYou": {
+        "description": "Answered state of the voice card after the user said the voice is theirs."
+    },
+    "speakerTagPromptIgnoredNote": "Omi won't ask about this voice again",
+    "@speakerTagPromptIgnoredNote": {
+        "description": "Answered state after Not a Person."
+    },
+    "speakerTagPromptLabeledToast": "Labeled as {name}",
+    "@speakerTagPromptLabeledToast": {
+        "description": "Undo toast after answering the voice card with a person.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerTagPromptLabeledYouToast": "Labeled as you",
+    "@speakerTagPromptLabeledYouToast": {
+        "description": "Undo toast after answering the voice card with That's Me."
+    },
+    "speakerTagPromptNotAPersonToast": "Marked as not a person",
+    "@speakerTagPromptNotAPersonToast": {
+        "description": "Undo toast after answering Not a Person."
+    },
+    "speakerTagPromptRejectedToast": "Label removed",
+    "@speakerTagPromptRejectedToast": {
+        "description": "Undo toast after saying an automatic label was wrong without naming anyone."
+    },
+    "whoIsItTitle": "Who Is It?",
+    "@whoIsItTitle": {
+        "description": "Title of the picker sheet opened from Someone Else… (Title Case question)."
+    },
+    "newPersonEllipsis": "New Person…",
+    "@newPersonEllipsis": {
+        "description": "Row in the picker that creates a new person (Title Case, one-character ellipsis)."
+    },
+    "addNamedPersonAction": "Add “{name}”",
+    "@addNamedPersonAction": {
+        "description": "Row in the picker that creates a new person with the typed name.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "everyoneHeader": "Everyone",
+    "@everyoneHeader": {
+        "description": "Section header in the picker listing all people A to Z (Title Case)."
+    },
+    "speakerSuggestionChip": "{name}?",
+    "@speakerSuggestionChip": {
+        "description": "Compact chip on a transcript speaker asking whether the voice is this person.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerSuggestionAppliesToSpeaker": "Applies to every line from this speaker",
+    "@speakerSuggestionAppliesToSpeaker": {
+        "description": "Note in the expanded transcript suggestion: the answer labels the whole speaker."
+    },
+    "collapseAction": "Collapse",
+    "@collapseAction": {
+        "description": "Screen-reader label for the button that folds the transcript suggestion back into a chip."
+    },
+    "speakerTagPromptNotMeAction": "Not Me",
+    "@speakerTagPromptNotMeAction": {
+        "description": "Answer chip on the \"Is this you?\" voice card: the voice is not the user (Title Case)."
+    },
+    "confidenceNextLabels": "{count, plural, =1{Label them in 1 more conversation.} other{Label them in {count} more conversations.}}",
+    "@confidenceNextLabels": {
+        "description": "Confidence sheet: what the user can do to reach Confirmed; \"them\" is the person.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     },
     "showOnLockScreen": "Show on Lock Screen",
     "@showOnLockScreen": {

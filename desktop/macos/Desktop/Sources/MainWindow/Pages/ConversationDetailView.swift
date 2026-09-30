@@ -252,6 +252,7 @@ struct ConversationDetailView: View {
         isOpen: $showRecordings, recordings: captureRecordings, phase: separation.phase,
         onOpen: openRecording, onSeparate: separateRecording, pendingSeparation: $pendingSeparation)
     )
+    .siriConversationIdentifier(conversation.id)
     .opacity(hasAppeared ? 1 : 0)
     .offset(y: hasAppeared ? 0 : 20)
     // Esc peels one layer: the transcript back to the summary, then the summary back to the list.
@@ -749,7 +750,7 @@ struct ConversationDetailView: View {
   private var summaryContent: some View {
     if MeetingScreenshotsStore.isEnabled {
       MeetingNoteScreenshotsLayout(
-        store: screenshotsStore, conversation: displayConversation, date: displayDate
+        store: screenshotsStore, conversation: displayConversation
       ) {
         summaryBeforeScreenshots
       } afterScreenshots: {
@@ -763,12 +764,11 @@ struct ConversationDetailView: View {
 
   @ViewBuilder
   private var summaryBeforeScreenshots: some View {
-    let selection = ConversationSummarySelection.primarySummary(for: displayConversation)
-
-    // Overview section (selected app result, or the structured fallback)
-    if !selection.content.isEmpty {
-      overviewSection
-    }
+    // Overview section (selected app result, structured fallback, or the empty
+    // state) — mounted unconditionally so its "Summarize with an app" picker
+    // stays reachable even before a first summary exists. `ConversationSummaryBody`
+    // renders a dedicated empty state for `.empty`, so there is no blank gap.
+    overviewSection
 
     ConversationPhotoGallery(
       conversationID: displayConversation.id,

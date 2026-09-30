@@ -36,7 +36,12 @@ def _get_opus_decoder_class() -> Any:
 
 
 def decode_opus_file_to_wav(
-    opus_file_path: str, wav_file_path: str, sample_rate: int = 16000, channels: int = 1, frame_size: int = 160
+    opus_file_path: str,
+    wav_file_path: str,
+    sample_rate: int = 16000,
+    channels: int = 1,
+    frame_size: int = 160,
+    decoded_frame_samples: Optional[list[int]] = None,
 ) -> bool:
     """Decode an Opus file with length-prefixed frames to WAV format.
 
@@ -78,6 +83,8 @@ def decode_opus_file_to_wav(
                 try:
                     pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
                     wav_file.writeframes(pcm_frame)
+                    if decoded_frame_samples is not None:
+                        decoded_frame_samples.append(len(pcm_frame) // (2 * channels))
                     frame_count += 1
                 except Exception as e:
                     logger.warning('Opus decode: frame failed exception_type=%s', type(e).__name__)
@@ -136,7 +143,8 @@ def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
         except Exception as e:
             if os.path.exists(path):
                 os.remove(path)
-            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}: {str(e)}")
+            logger.error(f"Failed to write file {filename}: {type(e).__name__}")
+            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}") from e
     return paths
 
 
@@ -153,7 +161,12 @@ def get_wav_duration(wav_path: str) -> float:
 
 
 def decode_pcm_file_to_wav(
-    pcm_file_path: str, wav_file_path: str, sample_rate: int = 16000, channels: int = 1, sample_width: int = 2
+    pcm_file_path: str,
+    wav_file_path: str,
+    sample_rate: int = 16000,
+    channels: int = 1,
+    sample_width: int = 2,
+    decoded_frame_samples: Optional[list[int]] = None,
 ) -> bool:
     """Decode a length-prefixed PCM .bin file to WAV.
 
@@ -186,6 +199,8 @@ def decode_pcm_file_to_wav(
                     corrupt_stream = True
                     break
                 pcm_data.extend(frame_data)
+                if decoded_frame_samples is not None:
+                    decoded_frame_samples.append(frame_length // (sample_width * channels))
 
         if not pcm_data:
             logger.info('PCM decode: stream is empty or malformed')
@@ -234,7 +249,7 @@ def detect_source_from_filenames(filenames: List[Optional[str]]) -> Conversation
     return ConversationSource.omi
 
 
-def decode_files_to_wav(files_path: List[str]) -> List[str]:
+def decode_files_to_wav(files_path: List[str], decoded_frames: Optional[dict[str, list[int]]] = None) -> List[str]:
     """Decode each uploaded sync file, isolating unreadable files from their batch.
 
     A batch shares one sync job, so failing the whole batch on a single bad file
@@ -246,6 +261,7 @@ def decode_files_to_wav(files_path: List[str]) -> List[str]:
     unreadable: List[str] = []
     for path in files_path:
         wav_path = path.replace('.bin', '.wav')
+        frame_samples: Optional[list[int]] = [] if decoded_frames is not None else None
         filename = os.path.basename(path)
         frame_size = 160
         match = re.search(r'_fs(\d+)', filename)
@@ -262,9 +278,23 @@ def decode_files_to_wav(files_path: List[str]) -> List[str]:
                 int(sample_rate_match.group(1)) if sample_rate_match else (16000 if '_pcm16_' in filename else 8000)
             )
             sample_width = 1 if '_pcm8_' in filename else 2
-            success = decode_pcm_file_to_wav(path, wav_path, sample_rate=sample_rate, sample_width=sample_width)
+            success = decode_pcm_file_to_wav(
+                path,
+                wav_path,
+                sample_rate=sample_rate,
+                sample_width=sample_width,
+                decoded_frame_samples=frame_samples,
+            )
         else:
-            success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
+            success = decode_opus_file_to_wav(
+                path,
+                wav_path,
+                frame_size=frame_size,
+                decoded_frame_samples=frame_samples,
+            )
+
+        if success and decoded_frames is not None and frame_samples is not None:
+            decoded_frames[wav_path] = frame_samples
 
         if os.path.exists(path):
             os.remove(path)

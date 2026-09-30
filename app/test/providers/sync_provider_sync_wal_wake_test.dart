@@ -107,7 +107,8 @@ void main() {
 
     expect(recoveryWakes, 1);
     expect(events, contains('Capture Wedge Detected'));
-    expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerUploadSilence);
+    // Upload silence is telemetry-only; the pending-transcriptions chip is its user-facing surface.
+    expect(monitor.visiblePrompt, isNull);
     provider.dispose();
     monitor.dispose();
   });

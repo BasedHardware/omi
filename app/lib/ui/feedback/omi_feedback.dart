@@ -24,9 +24,9 @@ abstract final class OmiFeedbackTiming {
 
 enum OmiFeedbackKind { confirm, info, error, undo, progress }
 
-const Color _successIconColor = OmiColors.success;
-const Color _errorIconColor = OmiColors.danger;
-const Color _infoIconColor = OmiColors.textSecondary;
+Color get _successIconColor => OmiColors.success;
+Color get _errorIconColor => OmiColors.danger;
+Color get _infoIconColor => OmiColors.textSecondary;
 
 /// The app's one toast system: a floating, neutral snackbar with a small coloured status icon.
 ///
@@ -74,7 +74,8 @@ abstract final class OmiFeedback {
   /// when it timed out, was swiped away or was replaced — the caller commits the delete then.
   ///
   /// There is deliberately no close button: nothing on an undo toast means "destroy this sooner".
-  static Future<bool> undo(BuildContext context, String message, {required VoidCallback onUndo}) async {
+  /// [icon] replaces the delete glyph when the deferred action is not a delete (a label, a mark).
+  static Future<bool> undo(BuildContext context, String message, {required VoidCallback onUndo, IconData? icon}) async {
     final controller = _show(
       context,
       message,
@@ -82,6 +83,7 @@ abstract final class OmiFeedback {
       duration: OmiFeedbackTiming.undo,
       actionLabel: context.l10n.undo,
       onAction: onUndo,
+      icon: icon,
     );
     if (controller == null) return false;
     final reason = await controller.closed;
@@ -99,6 +101,7 @@ abstract final class OmiFeedback {
     String? actionLabel,
     VoidCallback? onAction,
     bool showClose = false,
+    IconData? icon,
   }) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return null;
@@ -112,6 +115,7 @@ abstract final class OmiFeedback {
         actionLabel: actionLabel,
         onAction: onAction,
         showClose: showClose,
+        icon: icon,
       ),
     );
   }
@@ -126,6 +130,7 @@ abstract final class OmiFeedback {
     String? actionLabel,
     VoidCallback? onAction,
     bool showClose = false,
+    IconData? icon,
   }) {
     return SnackBar(
       behavior: SnackBarBehavior.floating,
@@ -141,14 +146,14 @@ abstract final class OmiFeedback {
         liveRegion: true,
         child: Row(
           children: [
-            _icon(kind),
+            _icon(kind, icon),
             const SizedBox(width: 12),
             Expanded(child: Text(message)),
           ],
         ),
       ),
       action: actionLabel != null && onAction != null
-          ? SnackBarAction(label: actionLabel, textColor: Colors.white, onPressed: onAction)
+          ? SnackBarAction(label: actionLabel, textColor: OmiColors.accent, onPressed: onAction)
           : null,
     );
   }
@@ -161,16 +166,17 @@ abstract final class OmiFeedback {
     return clearance(navigator.context);
   }
 
-  static Widget _icon(OmiFeedbackKind kind) {
+  static Widget _icon(OmiFeedbackKind kind, IconData? icon) {
+    if (icon != null) return Icon(icon, size: 20, color: _infoIconColor);
     return switch (kind) {
-      OmiFeedbackKind.confirm => const Icon(Icons.check_circle_rounded, size: 20, color: _successIconColor),
-      OmiFeedbackKind.error => const Icon(Icons.error_rounded, size: 20, color: _errorIconColor),
-      OmiFeedbackKind.undo => const Icon(Icons.delete_outline_rounded, size: 20, color: _infoIconColor),
-      OmiFeedbackKind.info => const Icon(Icons.info_outline_rounded, size: 20, color: _infoIconColor),
-      OmiFeedbackKind.progress => const SizedBox.square(
+      OmiFeedbackKind.confirm => Icon(Icons.check_circle_rounded, size: 20, color: _successIconColor),
+      OmiFeedbackKind.error => Icon(Icons.error_rounded, size: 20, color: _errorIconColor),
+      OmiFeedbackKind.undo => Icon(Icons.delete_outline_rounded, size: 20, color: _infoIconColor),
+      OmiFeedbackKind.info => Icon(Icons.info_outline_rounded, size: 20, color: _infoIconColor),
+      OmiFeedbackKind.progress => SizedBox.square(
           dimension: 20,
           child: Padding(
-            padding: EdgeInsets.all(2),
+            padding: const EdgeInsets.all(2),
             child: CircularProgressIndicator(strokeWidth: 2, color: _infoIconColor),
           ),
         ),

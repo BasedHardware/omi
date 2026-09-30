@@ -10097,12 +10097,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Heli ei õnnestunud lugeda — sünkroonimine pole võimalik';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11220,7 +11214,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get openCall => 'Ava kõne';
 
   @override
-  String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
+  String get captureRecoveryBanner => 'Omi ei saada heli — puudutage uuesti ühendamiseks';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11344,6 +11338,776 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kõrvaklapid';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutit';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Ülesanded';
+
+  @override
+  String get usageMonth => 'See kuu';
+
+  @override
+  String get usageYear => 'See aasta';
+
+  @override
+  String get usageAll => 'Kogu aeg';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Välimus';
+
+  @override
+  String get appearanceSystem => 'Süsteem';
+
+  @override
+  String get appearanceLight => 'Hele';
+
+  @override
+  String get appearanceDark => 'Tume';
+
+  @override
+  String get chatDiscardRecording => 'Loobu';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Ma ei saanud aru — proovige uuesti';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Otsi inimesi';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Lisa \"$query\" uue inimesena';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Kuva kõik inimesed ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Tere, $name, küsi mida tahes';
+  }
+
+  @override
+  String get activity => 'Tegevus';
+
+  @override
+  String get places => 'Kohad';
+
+  @override
+  String get recaps => 'Kokkuvõtted';
+
+  @override
+  String get recent => 'Hiljutised';
+
+  @override
+  String get searchPartialFailure => 'Mõnda tulemust ei õnnestunud laadida';
+
+  @override
+  String get peopleSearchPlaceholder => 'Otsi inimesi';
+
+  @override
+  String get peopleNotHeardYet => 'Pole veel kuulnud';
+
+  @override
+  String get peopleRecent => 'Hiljutised';
+
+  @override
+  String get deletePeopleMessage =>
+      'See eemaldab nende häälenäidised ja seda ei saa tagasi võtta. Nende read varasemates vestlustes muutuvad nimetuteks kõnelejateks.';
+
+  @override
+  String get personTalkTime => 'Rääkimisaeg';
+
+  @override
+  String get personLastHeard => 'Viimati kuuldud';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kustuta $count inimest?',
+      one: 'Kustuta 1 inimene?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Hääl puudub';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inimest',
+      one: '1 inimene',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Sobivaid inimesi pole';
+
+  @override
+  String get deselectAll => 'Tühista kõik valikud';
+
+  @override
+  String get voiceRecognitionSettings => 'Häältuvastus';
+
+  @override
+  String get greetingMorning => 'Tere hommikust';
+
+  @override
+  String get greetingAfternoon => 'Tere päevast';
+
+  @override
+  String get greetingEvening => 'Tere õhtust';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Mida sa tahad teada?';
+
+  @override
+  String get askSuggestDecide => 'Mida ma täna otsustasin?';
+
+  @override
+  String get askSuggestOwe => 'Mida ma inimestele veel võlgnen?';
+
+  @override
+  String get askSuggestNotice => 'Mida Omi märkas?';
+
+  @override
+  String get pastChats => 'Varasemad vestlused';
+
+  @override
+  String get newChat => 'Uus vestlus';
+
+  @override
+  String get startFresh => 'Alusta otsast';
+
+  @override
+  String get noPastChats => 'Sinu vestlused Omiga ilmuvad siia.';
+
+  @override
+  String get deleteChatQuestion => 'Kas kustutada see vestlus?';
+
+  @override
+  String get deleteChatMessage => 'See kaob varasematest vestlustest jäädavalt.';
+
+  @override
+  String get deleteChat => 'Kustuta vestlus';
+
+  @override
+  String get appsAskWith => 'Küsi Omilt koos';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust täna.',
+      one: '1 vestlus täna.',
+      zero: 'Täna vestlusi pole.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Mis oli ekraanil';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ekraanipilt sellelt koosolekult';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Kas kustutada ekraanipilt?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta.';
+
+  @override
+  String get conversationSummaryFailed => 'Kokkuvõtte loomine ebaõnnestus';
+
+  @override
+  String get reconnectionsRecent => 'Taasühendused (viimased 7 päeva)';
+
+  @override
+  String get failedConnections => 'Ebaõnnestunud ühendused';
+
+  @override
+  String get failedConnectionsRecent => 'Ebaõnnestunud ühendused (viimased 7 päeva)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count pärast sidumist';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Väike kindlus';
+
+  @override
+  String get peopleFilterPinned => 'Esile tõstetud';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count esile tõstetud',
+      one: '1 esile tõstetud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Kinnitatud';
+
+  @override
+  String get confidenceLikely => 'Tõenäoline';
+
+  @override
+  String get confidenceUnverified => 'Kinnitamata';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Kindlus: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Märgistasid $count korda',
+      one: 'Märgistasid ühe korra',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Valitud $count soovituses',
+      one: 'Valitud 1 soovituses',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kinnitasid $count vastet',
+      one: 'Kinnitasid 1 vaste',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Ainult automaatselt tuvastatud, pole kunagi kinnitatud';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Pole kunagi kinnitatud';
+
+  @override
+  String get confidenceReasonCorrected => 'Parandasid selle vaste';
+
+  @override
+  String get confidenceReasonVoiceReady => 'hääl valmis';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'hääl puudub';
+
+  @override
+  String get confidenceReasonNotHeard => 'veel kuulmata';
+
+  @override
+  String get confidenceSheetTitle => 'Kindlus';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi tunneb inimese $name häält ja sa oled seda kinnitanud.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi tunneb inimese $name häält tavaliselt ära, kuid oled seda kinnitanud vaid paar korda.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Miski, mida oled teinud, ei toeta inimest $name veel.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Alus';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Märgistatud sinu poolt $count vestluses',
+      one: 'Märgistatud sinu poolt 1 vestluses',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Jah $count soovitusele',
+      one: 'Jah 1 soovitusele',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Valitud $count soovituses',
+      one: 'Valitud 1 soovituses',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kinnitatud $count automaatset vastet',
+      one: 'Kinnitatud 1 automaatne vaste',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vastet viidi üle kellelegi teisele',
+      one: '1 vaste viidi üle kellelegi teisele',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automaatset vastet, mida keegi pole kinnitanud',
+      one: '1 automaatne vaste, mida keegi pole kinnitanud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Hääleproov valmis';
+
+  @override
+  String get evidenceNoVoice => 'Hääleproovi veel pole';
+
+  @override
+  String get evidenceNotHeard => 'Pole veel vestluses kuuldud';
+
+  @override
+  String get evidenceNothing => 'Sa pole teda veel märgistanud ega kinnitanud';
+
+  @override
+  String get effectCountsALot => 'Loeb palju';
+
+  @override
+  String get effectCounts => 'Loeb';
+
+  @override
+  String get effectCountsALittle => 'Loeb vähe';
+
+  @override
+  String get effectBarelyCounts => 'Loeb vaevu';
+
+  @override
+  String get effectCountsAgainst => 'Loeb vastu';
+
+  @override
+  String get effectNeeded => 'Vajalik tasemeks „Kinnitatud“';
+
+  @override
+  String get confidenceToReachConfirmed => 'Kinnitatud tasemeni jõudmiseks';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi vajab ka inimese $name hääleproovi. Märgista ta, kui „Jäta hääled meelde“ on sisse lülitatud.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name on Kinnitatud. Omi õpib iga märgistuse põhjal edasi.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Kindlust muudavad märgatavalt vaid sinu vastused. Automaatsed vasted üksi loevad vaevu.';
+
+  @override
+  String get personWhyConfidence => 'Miks?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Tõsta $name esile';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Hoia $name alles ja oota teda oma vestlustes';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi palub sul lähedasi vasteid kinnitada, selle asemel et ise oletada.';
+
+  @override
+  String get pinAction => 'Tõsta esile';
+
+  @override
+  String get unpinAction => 'Eemalda esiletõstmine';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name tõsteti esile';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name esiletõstmine eemaldati';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Miks $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Kustuta $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name on esile tõstetud. Tema hääleproovid eemaldatakse, Omi lõpetab tema tuvastamise ja varasemates ärakirjades kuvatakse ta nimetu kõnelejana. Seda ei saa tagasi võtta.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Kustuta $name';
+  }
+
+  @override
+  String get selectPeople => 'Vali inimesed';
+
+  @override
+  String get cleanUpEllipsis => 'Puhasta…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inimest, kelles Omi ei ole kindel',
+      one: '1 inimene, kelles Omi ei ole kindel',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Enamasti valesti kuuldud nimed. Vaata need üle ja eemalda need, mis pole päris.';
+
+  @override
+  String get reviewAction => 'Vaata üle';
+
+  @override
+  String get cleanUpTitle => 'Puhastamine';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi ei ole nende $count inimese suhtes kindel. Enamik on ärakirjadest valesti kuuldud nimed. Eemalda märge nendelt, keda soovid alles hoida.',
+      one: 'Omi ei ole selle inimese suhtes kindel. Eemalda märge, et ta alles hoida.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Esile tõstetud inimesi ei kaasata kunagi puhastamisse.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kustuta $count inimest',
+      one: 'Kustuta 1 inimene',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inimest kustutatud',
+      one: '1 inimene kustutatud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Pole midagi puhastada';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi ei ole praegu kellegi suhtes kahtlev.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      '„Vali kõik“ jätab esile tõstetud inimesed vahele. Kustuta nad ükshaaval nende lehelt.';
+
+  @override
+  String get pinnedNotSelectable => 'Esile tõstetud, ei saa valida';
+
+  @override
+  String get ignoredVoicesTitle => 'Ignoreeritud hääled';
+
+  @override
+  String get ignoredVoicesSubtitle => 'Telekas, taskuhäälingud ja muud hääled, mille märkisid kui „Pole inimene“';
+
+  @override
+  String get ignoredVoicesEmpty => 'Ignoreeritud hääli pole';
+
+  @override
+  String get restoreAction => 'Taasta';
+
+  @override
+  String get voiceRestoredToast => 'Omi võib selle hääle kohta uuesti küsida';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Keegi teine…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Pole inimene';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Ei tea';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'See olen mina';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Lähimad hääled';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Inimesed, kellega hiljuti rääkisid';
+
+  @override
+  String get voiceMatchClose => 'Lähedane vaste';
+
+  @override
+  String get voiceMatchPossible => 'Võimalik vaste';
+
+  @override
+  String get voiceMatchWeak => 'Nõrk vaste';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Hääle vaste: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Iga vastus õpetab Omile ühe hääle ja tõstab selle inimese kindlust.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Jah tõstab inimese $name kindlust.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Hoiab sinu enda häälprofiili täpsena, et Omi ei nimetaks sind kunagi kellekski teiseks.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Salvestatud kui $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Salvestatud sinuna';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi ei küsi selle hääle kohta enam';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Märgistatud kui $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Märgistatud sinuna';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Märgitud kui mitte inimene';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Märgistus eemaldatud';
+
+  @override
+  String get whoIsItTitle => 'Kes see on?';
+
+  @override
+  String get newPersonEllipsis => 'Uus inimene…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Lisa „$name“';
+  }
+
+  @override
+  String get everyoneHeader => 'Kõik';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Kehtib kõigile selle kõneleja ridadele';
+
+  @override
+  String get collapseAction => 'Ahenda';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Pole mina';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Märgi nad veel $count vestluses.',
+      one: 'Märgi nad veel 1 vestluses.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get showOnLockScreen => 'Kuva lukustuskuval';

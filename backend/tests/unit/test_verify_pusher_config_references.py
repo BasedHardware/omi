@@ -179,10 +179,14 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
         "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
         "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_ENABLED": "true",
+        "CAPTURE_JEV_SHADOW_ENABLED": "true",
+        "CAPTURE_JEV_SHADOW_PERCENT": "0",
+        "CAPTURE_JEV_SHADOW_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED": "true",
         "FREE_TIER_LOCAL_PROCESSING": "true",
         "FREE_TIER_EMERGENCY_STOP": "false",
@@ -191,6 +195,8 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
         "MEETING_NOTES_RICH_CONTEXT_ENABLED": "true",
+        "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
+        "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED": "true",
         "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED": "true",
         "MEMORY_BELIEF_AUTOMATION_PAUSED": "false",
         "MEMORY_BELIEF_MODEL_ENABLED": "true",

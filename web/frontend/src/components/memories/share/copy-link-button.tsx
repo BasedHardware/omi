@@ -9,6 +9,7 @@ export default function CopyLinkButton() {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
+      document.dispatchEvent(new Event('omi:share-link-copied'));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

@@ -8,5 +8,7 @@ struct BatteryWidgetBundle: WidgetBundle {
         if #available(iOS 16.1, *) {
             OmiCaptureLiveActivity()
         }
+        OmiUpNextWidget()
+        OmiLatestWidget()
     }
 }

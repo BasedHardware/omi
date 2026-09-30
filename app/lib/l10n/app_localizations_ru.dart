@@ -10138,12 +10138,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Не удалось прочитать аудио — синхронизация невозможна';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11260,7 +11254,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get openCall => 'Открыть звонок';
 
   @override
-  String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
+  String get captureRecoveryBanner => 'Omi не передаёт звук — нажмите, чтобы подключиться снова';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11387,6 +11381,775 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Наушники';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'минут';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Задачи';
+
+  @override
+  String get usageMonth => 'Этот месяц';
+
+  @override
+  String get usageYear => 'Этот год';
+
+  @override
+  String get usageAll => 'Всё время';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Внешний вид';
+
+  @override
+  String get appearanceSystem => 'Система';
+
+  @override
+  String get appearanceLight => 'Светлая';
+
+  @override
+  String get appearanceDark => 'Тёмная';
+
+  @override
+  String get chatDiscardRecording => 'Отменить';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Не удалось расслышать — попробуйте ещё раз';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Отправить отзыв';
+
+  @override
+  String get feedbackAllGood => 'Всё хорошо';
+
+  @override
+  String get feedbackChatWithUs => 'Подробнее? Напишите нам';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Неточно';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Неполно';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Не по теме';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Не тот контекст';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Другое';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Нет звука';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Плохая расшифровка';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Неверный спикер';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Задержка или зависание';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Фрагментация или дублирование';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Другое';
+
+  @override
+  String get searchPeople => 'Поиск людей';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Добавить «$query» как нового человека';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Показать всех людей ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Привет, $name, спрашивай о чём угодно';
+  }
+
+  @override
+  String get activity => 'Действия';
+
+  @override
+  String get places => 'Места';
+
+  @override
+  String get recaps => 'Итоги';
+
+  @override
+  String get recent => 'Недавние';
+
+  @override
+  String get searchPartialFailure => 'Не удалось загрузить некоторые результаты';
+
+  @override
+  String get peopleSearchPlaceholder => 'Поиск людей';
+
+  @override
+  String get peopleNotHeardYet => 'Ещё не слышали';
+
+  @override
+  String get peopleRecent => 'Недавние';
+
+  @override
+  String get deletePeopleMessage =>
+      'Это удалит образцы их голоса, и отменить это нельзя. Их реплики в прошлых разговорах станут безымянными говорящими.';
+
+  @override
+  String get personTalkTime => 'Время речи';
+
+  @override
+  String get personLastHeard => 'Слышали в последний раз';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удалить людей: $count?',
+      one: 'Удалить 1 человека?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Нужен голос';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людей: $count',
+      one: '1 человек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Нет подходящих людей';
+
+  @override
+  String get deselectAll => 'Снять выбор';
+
+  @override
+  String get voiceRecognitionSettings => 'Распознавание голоса';
+
+  @override
+  String get greetingMorning => 'Доброе утро';
+
+  @override
+  String get greetingAfternoon => 'Добрый день';
+
+  @override
+  String get greetingEvening => 'Добрый вечер';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Что вы хотите узнать?';
+
+  @override
+  String get askSuggestDecide => 'Что я решил сегодня?';
+
+  @override
+  String get askSuggestOwe => 'Что я ещё должен людям?';
+
+  @override
+  String get askSuggestNotice => 'Что заметил Omi?';
+
+  @override
+  String get pastChats => 'Прошлые чаты';
+
+  @override
+  String get newChat => 'Новый чат';
+
+  @override
+  String get startFresh => 'Начать заново';
+
+  @override
+  String get noPastChats => 'Здесь появятся ваши чаты с Omi.';
+
+  @override
+  String get deleteChatQuestion => 'Удалить этот чат?';
+
+  @override
+  String get deleteChatMessage => 'Он навсегда исчезнет из прошлых чатов.';
+
+  @override
+  String get deleteChat => 'Удалить чат';
+
+  @override
+  String get appsAskWith => 'Спрашивать Omi с помощью';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговоров сегодня.',
+      one: '1 разговор сегодня.',
+      zero: 'Сегодня разговоров нет.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Что было на экране';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Снимок экрана с этой встречи';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Удалить снимок экрана?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Снимок экрана будет удалён из заметки этой встречи. Это действие нельзя отменить.';
+
+  @override
+  String get conversationSummaryFailed => 'Не удалось создать сводку';
+
+  @override
+  String get reconnectionsRecent => 'Повторные подключения (последние 7 дней)';
+
+  @override
+  String get failedConnections => 'Неудачные подключения';
+
+  @override
+  String get failedConnectionsRecent => 'Неудачные подключения (последние 7 дней)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count с момента сопряжения';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Низкая уверенность';
+
+  @override
+  String get peopleFilterPinned => 'Закреплённые';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count закреплено',
+      one: '1 закреплён',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Подтверждено';
+
+  @override
+  String get confidenceLikely => 'Вероятно';
+
+  @override
+  String get confidenceUnverified => 'Не проверено';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Уверенность: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Отмечено вами: $count',
+      one: 'Отмечено вами один раз',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выбрано в подсказках: $count',
+      one: 'Выбрано в 1 подсказке',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Подтверждённых вами совпадений: $count',
+      one: 'Вы подтвердили 1 совпадение',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Только автосовпадения, без подтверждения';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Никогда не подтверждалось';
+
+  @override
+  String get confidenceReasonCorrected => 'Вы исправили совпадение';
+
+  @override
+  String get confidenceReasonVoiceReady => 'голос готов';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'нужен голос';
+
+  @override
+  String get confidenceReasonNotHeard => 'ещё не слышали';
+
+  @override
+  String get confidenceSheetTitle => 'Уверенность';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi узнаёт голос $name, и вы это подтвердили.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi обычно узнаёт голос $name, но вы подтверждали это лишь несколько раз.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Пока ничто из ваших действий не подтверждает $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Основания';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Отмечено вами в разговорах: $count',
+      one: 'Отмечено вами в 1 разговоре',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '«Да» в подсказках: $count',
+      one: '«Да» в 1 подсказке',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выбрано в подсказках: $count',
+      one: 'Выбрано в 1 подсказке',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Подтверждено автосовпадений: $count',
+      one: 'Подтверждено 1 автосовпадение',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Совпадений, переназначенных другим: $count',
+      one: '1 совпадение переназначено другому',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Автосовпадений без подтверждения: $count',
+      one: '1 автосовпадение без подтверждения',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Образец голоса готов';
+
+  @override
+  String get evidenceNoVoice => 'Образца голоса пока нет';
+
+  @override
+  String get evidenceNotHeard => 'Пока не звучал ни в одном разговоре';
+
+  @override
+  String get evidenceNothing => 'Вы ещё не отмечали и не подтверждали этого человека';
+
+  @override
+  String get effectCountsALot => 'Сильно влияет';
+
+  @override
+  String get effectCounts => 'Влияет';
+
+  @override
+  String get effectCountsALittle => 'Слегка влияет';
+
+  @override
+  String get effectBarelyCounts => 'Почти не влияет';
+
+  @override
+  String get effectCountsAgainst => 'Влияет отрицательно';
+
+  @override
+  String get effectNeeded => 'Нужно для статуса «Подтверждено»';
+
+  @override
+  String get confidenceToReachConfirmed => 'Как получить «Подтверждено»';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi также нужен образец голоса $name. Отметьте человека при включённом «Запоминать голоса».';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name: «Подтверждено». Omi продолжает учиться на каждой отметке.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Уверенность заметно меняют только ваши ответы. Сами по себе автосовпадения почти не влияют.';
+
+  @override
+  String get personWhyConfidence => 'Почему?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Закрепить: $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Оставить $name и ждать в ваших разговорах';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi попросит вас подтвердить близкие совпадения, а не будет гадать.';
+
+  @override
+  String get pinAction => 'Закрепить';
+
+  @override
+  String get unpinAction => 'Открепить';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Закреплено: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Откреплено: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Почему «$level»?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Удалить $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Человек $name закреплён. Образцы его голоса будут удалены, Omi перестанет его узнавать, а в прошлых расшифровках он будет показан как безымянный говорящий. Это нельзя отменить.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Удалить $name';
+  }
+
+  @override
+  String get selectPeople => 'Выбрать людей';
+
+  @override
+  String get cleanUpEllipsis => 'Очистка…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людей, в которых Omi не уверен: $count',
+      one: '1 человек, в котором Omi не уверен',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'В основном неправильно услышанные имена. Просмотрите их и удалите ненастоящие.';
+
+  @override
+  String get reviewAction => 'Просмотреть';
+
+  @override
+  String get cleanUpTitle => 'Очистка';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi не уверен насчёт этих людей ($count). Чаще всего это имена, неверно услышанные в расшифровках. Снимите отметку с тех, кого хотите оставить.',
+      one: 'Omi не уверен насчёт этого человека. Снимите отметку, чтобы оставить его.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Закреплённые люди никогда не попадают в очистку.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удалить: $count',
+      one: 'Удалить 1 человека',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удалено людей: $count',
+      one: 'Удалён 1 человек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Нечего очищать';
+
+  @override
+  String get cleanUpNothingMessage => 'Сейчас Omi ни в ком не сомневается.';
+
+  @override
+  String get selectAllSkipsPinned => '«Выбрать все» пропускает закреплённых. Удаляйте их по одному на их странице.';
+
+  @override
+  String get pinnedNotSelectable => 'Закреплён, выбрать нельзя';
+
+  @override
+  String get ignoredVoicesTitle => 'Игнорируемые голоса';
+
+  @override
+  String get ignoredVoicesSubtitle => 'ТВ, подкасты и другие голоса, которые вы отметили как «Не человек»';
+
+  @override
+  String get ignoredVoicesEmpty => 'Нет игнорируемых голосов';
+
+  @override
+  String get restoreAction => 'Восстановить';
+
+  @override
+  String get voiceRestoredToast => 'Omi может снова спросить об этом голосе';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Другой человек…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Не человек';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Не знаю';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Это я';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Ближайшие голоса';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Люди, с которыми вы недавно общались';
+
+  @override
+  String get voiceMatchClose => 'Близкое совпадение';
+
+  @override
+  String get voiceMatchPossible => 'Возможное совпадение';
+
+  @override
+  String get voiceMatchWeak => 'Слабое совпадение';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Совпадение голоса: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Каждый ответ учит Omi голосу и повышает уверенность в этом человеке.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '«Да» повышает уверенность в $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Поддерживает точность вашего голосового профиля, чтобы Omi никогда не принимал вас за другого.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Сохранено как $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Сохранено как вы';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi больше не будет спрашивать об этом голосе';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Отмечено как $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Отмечено как вы';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Отмечено как «Не человек»';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Отметка удалена';
+
+  @override
+  String get whoIsItTitle => 'Кто это?';
+
+  @override
+  String get newPersonEllipsis => 'Новый человек…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Добавить «$name»';
+  }
+
+  @override
+  String get everyoneHeader => 'Все';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Относится ко всем репликам этого говорящего';
+
+  @override
+  String get collapseAction => 'Свернуть';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Не я';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Отметьте их ещё в $count разговорах.',
+      one: 'Отметьте их ещё в 1 разговоре.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get showOnLockScreen => 'Показывать на экране блокировки';

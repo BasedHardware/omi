@@ -12,6 +12,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from fastapi.websockets import WebSocketDisconnect
 
+from config.capture_evidence import capture_evidence_dark_write_enabled
+from config.translation import resolve_ondemand_config
+from utils.capture_evidence import unknown_envelope
+from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
+
+
 from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource
@@ -44,6 +50,7 @@ from utils.transcribe_store import conversations_db, user_db
 from utils.translation import TranslationService
 from utils.translation_cache import ConversationLanguageState, TranscriptSegmentLanguageCache
 from utils.translation_coordinator import TranslationCoordinator
+from utils.translation_demand import DemandPolicy
 from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
@@ -99,12 +106,19 @@ class TranscriptProcessor:
         self.translation_lock = asyncio.Lock()
         self.translation_enabled = host.translation_language is not None
         self.translation_coordinator: Optional[TranslationCoordinator] = None
+        self._last_translation_demand_generation = -1
+        self._last_translation_demand_conversation: Optional[str] = None
         if self.translation_enabled:
             self.translation_coordinator = TranslationCoordinator(
                 target_language=host.translation_language or 'en',
                 translation_service=self.translation_service,
                 on_translation_ready=self._on_translation_ready,
                 language_state=ConversationLanguageState(host.translation_language or 'en'),
+                expected_languages=getattr(getattr(host, 'language_profile', None), 'expected', ()),
+                realtime_interpreter=getattr(getattr(host, 'request', None), 'source', None) == 'phone_call',
+                uid=str(getattr(host.request, 'uid', '') or ''),
+                demand=getattr(getattr(host, 'receiver', None), 'translation_demand', None),
+                spawn_task=getattr(host, 'spawn', None),
             )
         self._flush_failures = 0
         self._flush_backoff_until = 0.0
@@ -250,25 +264,60 @@ class TranscriptProcessor:
 
     async def _on_translation_ready(
         self, segment_id: str, translated_text: str, _detected_language: str, conversation_id: str
-    ) -> None:
+    ) -> bool:
         if not self.host.translation_language:
-            return
+            return False
         if not self.host.state.active and not (
-            self.translation_coordinator and self.translation_coordinator._flushing  # type: ignore[reportPrivateUsage]
+            getattr(self, 'translation_coordinator', None)
+            and self.translation_coordinator._flushing  # type: ignore[reportPrivateUsage]
         ):
-            return
+            return False
         # TranslationCoordinator invokes this callback from a bare task and only catches
         # (RuntimeError, ValueError), so a persist failure escaping here aborts the batch loop and
         # silently drops the translations for every remaining segment. Keep the failure contained.
         try:
             async with self.translation_lock:
+                config = resolve_ondemand_config()
+                coordinator = getattr(self, 'translation_coordinator', None)
+                context = coordinator.result_context(segment_id, conversation_id) if coordinator else None
+                if context is not None and context[1] == 'viewed_v1' and not config.gate_enabled:
+                    return False
+                if config.gate_enabled and config.admits(self.host.request.uid):
+                    if context is None:
+                        current = await self.cache.get(conversation_id, force_refresh=True)
+                        source = next(
+                            (
+                                s.get('text', '')
+                                for s in (current or {}).get('transcript_segments', [])
+                                if s.get('id') == segment_id
+                            ),
+                            '',
+                        )
+                        context = (source, 'legacy', None)
+                    source_text, policy_version, reservation = context
+                    committed = await self.host.persistence.call(
+                        conversations_db.materialize_translation,
+                        self.host.request.uid,
+                        conversation_id,
+                        segment_id,
+                        source_text,
+                        self.host.translation_language,
+                        translated_text,
+                        source_hint=(coordinator.source_language if coordinator else ''),
+                        policy_version=policy_version,
+                        reservation=reservation,
+                    )
+                    if committed is not None and conversation_id == self.host.state.current_conversation_id:
+                        await self.cache.get(conversation_id, force_refresh=True)
+                        self.host.send_event(TranslationEvent(segments=[committed]))
+                    return committed is not None
                 conversation = (
                     await self.cache.get(conversation_id)
                     if conversation_id == self.host.state.current_conversation_id
                     else await self._load_conversation(conversation_id)
                 )
                 if not conversation:
-                    return
+                    return False
                 for index, segment in enumerate(conversation.get('transcript_segments', [])):
                     if segment['id'] != segment_id:
                         continue
@@ -310,7 +359,8 @@ class TranscriptProcessor:
                         accepted = next((s for s in written if s['id'] == segment_id), None)
                         if accepted is not None:
                             self.host.send_event(TranslationEvent(segments=[accepted]))
-                    return
+                        return accepted is not None
+                    return bool(written)
         except Exception as error:
             logger.error(
                 'Translation persist failed segment=%s uid=%s type=%s',
@@ -318,6 +368,7 @@ class TranscriptProcessor:
                 self.host.request.uid,
                 type(error).__name__,
             )
+        return False
 
     async def _update_live_conversation(
         self,
@@ -333,15 +384,20 @@ class TranscriptProcessor:
         removed: List[str] = []
         if segments:
             # Preserve unmerged speech until the transaction reads the current receipt.
-            fresh = [segment.model_dump() for segment in segments]
+            # Apply live identity to the fresh copy as well: the merge compares
+            # speaker_match_source, and a recognized persisted word has
+            # live_embedding while a raw provider word does not.
             speaker = self.host.speakers
+            speaker_version = getattr(self.host.state, 'speaker_map_version', 0)
+            speaker_dirty = self.host.state.speaker_map_dirty
             targets = (
                 [*conversation.transcript_segments, *segments]
-                if self.host.state.speaker_map_dirty
+                if speaker_dirty
                 else [*conversation.transcript_segments[-1:], *segments]
             )
             process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
             self._apply_speaker_identity_statuses(targets)
+            fresh = [segment.model_dump() for segment in segments]
             written = await self.host.persistence.call(
                 conversations_db.update_conversation_segments,
                 self.host.request.uid,
@@ -350,9 +406,36 @@ class TranscriptProcessor:
                 live_segments=fresh,
                 started_at=started_at,
                 audio_timeline=audio_timeline,
+                **(
+                    {
+                        'capture_evidence': (
+                            self.host.state.source_position_map.snapshot(
+                                (start, end)
+                                for start, end, owner in (self.host.state.conversation_sample_ranges or ())
+                                if owner == conversation.id
+                            )
+                            if self.host.state.source_position_map is not None
+                            else unknown_envelope(
+                                'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
+                                origin='live',
+                            )
+                        )
+                    }
+                    if capture_evidence_dark_write_enabled()
+                    else {}
+                ),
                 data_protection_level=self.cache.protection_level,
                 invalidate_client_processing=False,
             )
+            if capture_evidence_dark_write_enabled():
+                OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
+                    path='live',
+                    status=(
+                        'mapped'
+                        if self.host.state.source_position_map and self.host.state.source_position_map.runs
+                        else 'unknown'
+                    ),
+                ).inc()
             if not isinstance(written, LiveTranscriptMerge):
                 return None
             if getattr(self.host.state, 'capture_timeline_v2', False):
@@ -360,9 +443,10 @@ class TranscriptProcessor:
             serialised = written.segments
             by_id = {s['id']: TranscriptSegment(**s) for s in serialised}
             conversation.transcript_segments = list(by_id.values())
-            updated = [s for sid, s in by_id.items() if sid in written.updated_ids or self.host.state.speaker_map_dirty]
+            updated = [s for sid, s in by_id.items() if sid in written.updated_ids or speaker_dirty]
             removed = written.removed_ids
-            self.host.state.speaker_map_dirty = False
+            if speaker_dirty and getattr(self.host.state, 'speaker_map_version', 0) == speaker_version:
+                self.host.state.speaker_map_dirty = False
             self.cache.update_segments(serialised)
         if photos:
             stored = await self.host.persistence.call(
@@ -394,16 +478,20 @@ class TranscriptProcessor:
             )
         return conversation, updated, removed
 
-    async def flush_speaker_assignments(self, conversation_id: Optional[str]) -> None:
+    async def flush_speaker_assignments(self, conversation_id: Optional[str], *, _retry: int = 0) -> None:
         speaker = self.host.speakers
         if not conversation_id or not (
-            speaker.speaker_to_person or speaker.segment_assignments or speaker.segment_identity_status
+            speaker.speaker_to_person
+            or speaker.segment_assignments
+            or speaker.segment_identity_status
+            or getattr(speaker, 'voice_identity_status', None)
         ):
             return
         data = await self.cache.get(conversation_id, force_refresh=True)
         if not data:
             return
         conversation = deserialize_conversation(data)
+        speaker_version = getattr(self.host.state, 'speaker_map_version', 0)
         before = {
             cast(str, segment.id): (segment.person_id, segment.is_user, str(segment.speaker_identity_status))
             for segment in conversation.transcript_segments
@@ -424,7 +512,7 @@ class TranscriptProcessor:
             # transaction still clears a projection that is actually on the
             # document (a finalize overlapping capture).
             invalidate_client_processing=False,
-            segment_update_fields=('person_id', 'is_user', 'speaker_identity_status'),
+            segment_update_fields=('person_id', 'is_user', 'speaker_identity_status', 'speaker_match_source'),
             return_segments=True,
         )
         if not written:
@@ -435,7 +523,9 @@ class TranscriptProcessor:
         if isinstance(written, list):
             serialised = written
         self.cache.update_segments(serialised)
-        self.host.state.speaker_map_dirty = False
+        changed_while_writing = getattr(self.host.state, 'speaker_map_version', 0) != speaker_version
+        if not changed_while_writing:
+            self.host.state.speaker_map_dirty = False
         self._flush_failures = 0
         self._flush_backoff_until = 0.0
         changed = [
@@ -446,6 +536,8 @@ class TranscriptProcessor:
         ]
         if self.host.state.active and changed:
             await self._deliver_segments(changed)
+        if changed_while_writing and _retry < 1:
+            await self.flush_speaker_assignments(conversation_id, _retry=_retry + 1)
 
     def _apply_speaker_identity_statuses(self, segments: List[TranscriptSegment]) -> None:
         speaker = self.host.speakers
@@ -457,14 +549,118 @@ class TranscriptProcessor:
                 segment.speaker_identity_status = (
                     SpeakerIdentityStatus.user if is_user_self_match(person_id) else SpeakerIdentityStatus.not_user
                 )
+                if segment.id not in speaker.segment_assignments and segment.speaker_id in getattr(
+                    speaker, 'voice_identity_status', {}
+                ):
+                    segment.speaker_match_source = 'live_embedding'
                 continue
-            status = speaker.segment_identity_status.get(cast(str, segment.id))
+            status = getattr(speaker, 'voice_identity_status', {}).get(segment.speaker_id)
+            if status is None:
+                status = speaker.segment_identity_status.get(cast(str, segment.id))
+            # Pinned-speaker prior (flagged): what an unlabeled voice resembles, for the suggestion card.
+            candidates = getattr(speaker, 'voice_candidates', {}).get(segment.speaker_id)
+            if candidates is not None and not segment.is_user and not segment.person_id:
+                segment.voice_candidates = candidates
             if status is not None:
+                if status == SpeakerIdentityStatus.ambiguous:
+                    # Clear an earlier automatic accept on *every* segment of
+                    # this voice. Manual receipts are re-applied by the writer.
+                    if segment.speaker_match_source == 'live_embedding' or (
+                        not segment.is_user and not segment.person_id
+                    ):
+                        segment.is_user = False
+                        segment.person_id = None
+                        segment.speaker_match_source = 'live_embedding'
+                    else:
+                        continue
                 segment.speaker_identity_status = status
 
     async def _translate(self, segments: List[TranscriptSegment], conversation_id: str, removed: List[str]) -> None:
         if self.translation_coordinator:
             await self.translation_coordinator.observe(segments, removed, conversation_id)
+            if (
+                self._last_translation_demand_conversation != conversation_id
+                and self.translation_coordinator._admission() == DemandPolicy.viewed  # type: ignore[reportPrivateUsage]
+            ):
+                self.host.spawn(self.on_translation_demand_changed(), name='translation_demand_conversation')
+
+    async def on_translation_demand_changed(self) -> None:
+        coordinator = self.translation_coordinator
+        if coordinator is None:
+            return
+        coordinator.demand_changed()
+        config = resolve_ondemand_config()
+        if not config.gate_enabled or not config.admits(self.host.request.uid) or coordinator.realtime_interpreter:
+            return
+        demand = coordinator.demand
+        if demand is None:
+            return
+        snapshot = demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+        if snapshot.policy != DemandPolicy.viewed:
+            return
+        conversation_id = self.host.state.current_conversation_id
+        if not conversation_id:
+            return
+        if (snapshot.generation, conversation_id) == (
+            self._last_translation_demand_generation,
+            self._last_translation_demand_conversation,
+        ):
+            return
+        self._last_translation_demand_generation = snapshot.generation
+        self._last_translation_demand_conversation = conversation_id
+        conversation = await self.cache.get(conversation_id, force_refresh=True)
+        if not conversation:
+            return
+        # Install newest persisted speech first, then page older history while
+        # this socket still holds the same fresh visibility generation. Each
+        # pass is capped at `max_catchup_pages` pages; a still-fresh demand
+        # reschedules another capped pass, so no single task can page an
+        # unbounded recording (Luna R2).
+        raw_segments = conversation.get('transcript_segments', [])
+        pages_done = 0
+        end = len(raw_segments)
+        while end > 0 and pages_done < config.max_catchup_pages:
+            current = resolve_ondemand_config()
+            if (
+                not current.gate_enabled
+                or demand.snapshot(lease_v1_enabled=current.lease_v1_enabled).policy != DemandPolicy.viewed
+                or demand.snapshot(lease_v1_enabled=current.lease_v1_enabled).generation != snapshot.generation
+                or self.host.state.current_conversation_id != conversation_id
+            ):
+                return
+            page = raw_segments[max(0, end - config.max_segments) : end]
+            end -= config.max_segments
+            pages_done += 1
+            policy = 'viewed_v1' if current.gemini_enabled else 'legacy'
+            segments = [
+                TranscriptSegment(**raw)
+                for raw in page
+                if isinstance(raw, dict)
+                and raw.get('id')
+                and not conversations_db.translation_materialization_is_current(
+                    self.host.request.uid,
+                    conversation,
+                    raw,
+                    coordinator.target_language,
+                    policy,
+                    coordinator.source_language,
+                )
+            ]
+            if not segments:
+                continue
+            await coordinator.observe(segments, [], conversation_id)
+            pending = coordinator._batch_task  # type: ignore[reportPrivateUsage]
+            if pending is not None:
+                try:
+                    await pending
+                except asyncio.CancelledError:
+                    # A newer live delta superseded this timer; it owns the next dispatch.
+                    await coordinator.wait_inflight()
+        if end > 0 and pages_done >= config.max_catchup_pages:
+            # Older history remains: continue only while demand is still fresh,
+            # from the oldest unprocessed segment, again bounded.
+            self._last_translation_demand_generation = -1
+            self.host.spawn(self.on_translation_demand_changed(), name='translation_catchup_continue')
 
     async def _deliver_segments(self, client_segments: List[Dict[str, Any]]) -> bool:
         """Push live segments to the client without letting a gone client kill the loop.
@@ -1010,6 +1206,7 @@ class TranscriptProcessor:
                             'id': segment.id,
                             'conversation_id': self.host.state.current_conversation_id,
                             'speaker_id': segment.speaker_id,
+                            'speaker_id_scope': segment.speaker_id_scope,
                             'abs_start': abs_start,
                             'abs_end': abs_end,
                             'duration': segment.end - segment.start,
@@ -1056,6 +1253,7 @@ class TranscriptProcessor:
                     speaker.speaker_to_person[cast(int, segment.speaker_id)] = (person_id, name)
                 speaker.segment_assignments[segment_id] = person_id
                 self.host.state.speaker_map_dirty = True
+                self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
                 self.suggested_segments.add(segment_id)
         if queue_from_raw is not None:
             self._queue_raw_detections(queue_from_raw, capture_windows, abs_base)
@@ -1098,6 +1296,7 @@ class TranscriptProcessor:
                             'id': raw.get('id'),
                             'conversation_id': self.host.state.current_conversation_id,
                             'speaker_id': speaker_id,
+                            'speaker_id_scope': raw.get('speaker_id_scope'),
                             'abs_start': abs_start,
                             'abs_end': abs_end,
                             'duration': float(raw['end']) - float(raw['start']),

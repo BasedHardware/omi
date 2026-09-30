@@ -14,6 +14,8 @@ from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
 from utils.async_tasks import WebSocketTaskSupervisor
 from utils.listen_session_bootstrap import ListenConnectBase
+from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
+from utils.stt.live_failure import terminate_live_stt_backoff
 from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
 from utils.stt.streaming import STTService
 from starlette.websockets import WebSocketState
@@ -51,6 +53,7 @@ def _deletion_teardown_runtime(request, persistence_call):
     runtime.persistence = SimpleNamespace(call=persistence_call)
     runtime.conversations = SimpleNamespace(process_conversation=AsyncMock())
     runtime.is_multi_channel = False
+    runtime.language_observations = None
     runtime.pusher_close = None
     runtime.onboarding_handler = None
     runtime.parity_capture = SimpleNamespace(persist=MagicMock())
@@ -215,7 +218,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     )
     selected_multi_language_options = []
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None):
         selected_multi_language_options.append((language, multi_lang_enabled, preferred_service))
         return 'test-stt', 'es', 'test-model'
 
@@ -378,6 +381,7 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
 
     assert runtime.onboarding_admitted is True
+
     assert runtime.onboarding_session_id is None
     # OnboardingHandler still mints its own internal session id when none is
     # supplied (it needs one for its own question/answer bookkeeping) — this
@@ -390,6 +394,49 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     assert resolve_onboarding_provenance_marker(runtime) is None
     assert [event['type'] for event in sent_events] == ['onboarding_question']
     assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
+
+
+@pytest.mark.anyio
+async def test_reconnect_budget_returns_terminal_backoff_before_entitlement_work(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    request = ListenRequest(websocket=websocket, uid='budget-user')
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.state = SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1001)
+    monkeypatch.setattr(runtime_module.listen_reconnect_budget, 'admit', lambda *_args: (False, 17))
+    paywall = AsyncMock()
+    monkeypatch.setattr(runtime_module, 'run_blocking', paywall)
+    before = OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason='reconnect_budget')._value.get()
+
+    assert not await runtime._admit()
+
+    payload = websocket.send_json.await_args.args[0]
+    assert payload['type'] == 'service_status'
+    assert payload['status'] == 'stt_failed'
+    assert payload['reason'] == 'reconnect_budget'
+    assert payload['retry_after'] == 17
+    assert websocket.close.await_args.kwargs['code'] == 1011
+    assert paywall.await_count == 0
+    assert OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason='reconnect_budget')._value.get() == before + 1
+
+
+@pytest.mark.anyio
+async def test_provider_unavailable_uses_terminal_status_with_retry_hint():
+    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    state = SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1001)
+
+    assert await terminate_live_stt_backoff(websocket, state, reason='provider_unavailable', retry_after=45)
+
+    payload = websocket.send_json.await_args.args[0]
+    assert payload['status'] == 'stt_failed'
+    assert payload['retryable'] is True
+    assert payload['reason'] == 'provider_unavailable'
+    assert payload['retry_after'] == 45
+    assert state.active is False
+    assert state.close_code == 1011
+    assert websocket.close.await_args.kwargs['reason'] == 'transcription_service_unavailable'
 
 
 @pytest.mark.anyio
@@ -578,7 +625,7 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
         fair_use_dg_budget_exhausted=False,
     )
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None):
         assert (language, multi_lang_enabled, preferred_service) == ('es', True, 'parakeet')
         return STTService.modulate, 'multi', 'velma-2'
 
@@ -884,6 +931,19 @@ async def test_teardown_with_empty_profiles_and_no_tasks_does_not_wait_on_speake
     host.speakers.drain.assert_awaited()
     processor.flush_speaker_assignments.assert_awaited()
     assert not host.state.speaker_id_done.is_set()
+
+
+def test_phone_call_processor_preserves_realtime_interpreter_admission():
+    host = SimpleNamespace(
+        limits=SimpleNamespace(max_segment_buffer_size=8, max_photo_buffer_size=8),
+        translation_language='en',
+        language_profile=SimpleNamespace(expected=('en',)),
+        request=SimpleNamespace(source='phone_call'),
+    )
+    coordinator = TranscriptProcessor(host).translation_coordinator
+    assert coordinator is not None
+    assert coordinator.expected_languages == ('en',)
+    assert coordinator.realtime_interpreter
 
 
 class _ProductTelemetryClient:

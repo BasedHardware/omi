@@ -29,6 +29,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/firmware_update_check_session.dart';
 import 'package:omi/utils/firmware_update_prompt_coordinator.dart';
+import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -120,6 +121,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Timer? _discoveryTimer;
   Timer? _disconnectRescanTimer;
   Timer? _firmwarePromptTimer;
+  Timer? _deviceHealthTimer;
   bool _isDisposed = false;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
@@ -524,12 +526,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       isCharging = currentStatus;
       notifyListeners();
     }
+    BatteryWidgetService().updateChargingState(currentStatus);
 
     _bleChargingStatusListener = await connection.getChargingStatusListener(
       onChargingStatusChange: (bool charging) {
         if (!_isCurrent(generation)) return;
         if (isCharging != charging) {
           isCharging = charging;
+          BatteryWidgetService().updateChargingState(charging);
           if (!charging) {
             _hasFullyChargedAlerted = false;
           } else if (batteryLevel >= 100 && !_hasFullyChargedAlerted) {
@@ -715,6 +719,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _discoveryTimer?.cancel();
     _disconnectRescanTimer?.cancel();
     _firmwarePromptTimer?.cancel();
+    _deviceHealthTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
@@ -723,11 +728,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void onDeviceDisconnected() async {
     final generation = _sessionGeneration;
+    // Capture before setConnectedDevice(null) clears both device references.
+    final disconnectedDeviceId = pairedDevice?.id ?? connectedDevice?.id;
     Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     _bleChargingStatusListener?.cancel();
     isCharging = false;
+    BatteryWidgetService().updateChargingState(false);
     unawaited(setConnectedDevice(null));
     unawaited(setisDeviceStorageSupport());
     setIsConnected(false);
@@ -755,7 +763,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
 
-    PlatformManager.instance.analytics.deviceDisconnected();
+    unawaited(_trackDeviceDisconnected(disconnectedDeviceId, generation));
     BatteryWidgetService().updateBatteryInfo(
       deviceName: SharedPreferencesUtil().deviceName,
       batteryLevel: -1,
@@ -769,6 +777,32 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Notify interactive device onboarding of disconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
+  }
+
+  /// Emits the enriched Device Disconnected analytics event with the reason
+  /// native persisted for this disconnect. Both platforms persist the event
+  /// before notifying Dart, so the freshest history entry is the one that
+  /// triggered this callback; diagnostics are best-effort and degrade to
+  /// `unknown` when the read fails (non-BLE devices, early teardown).
+  Future<void> _trackDeviceDisconnected(String? deviceId, int generation) async {
+    BleDisconnectEvent? latest;
+    if (deviceId != null && deviceId.isNotEmpty) {
+      try {
+        final diagnostics = await _bleDiagnosticsLoader(deviceId);
+        if (!_isCurrent(generation)) return;
+        final history = diagnostics.disconnectHistory;
+        if (history.isNotEmpty) latest = history.last;
+      } catch (_) {
+        if (!_isCurrent(generation)) return;
+        // Native diagnostics are best-effort; emit without reason detail.
+      }
+    }
+    if (!_isCurrent(generation)) return;
+    PlatformManager.instance.analytics.deviceDisconnected(
+      reason: latest?.reason,
+      reasonCode: latest?.reasonCode,
+      appState: latest?.appState,
+    );
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
@@ -878,6 +912,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Auto-sync: check if device has offline files
     unawaited(_checkAndStartAutoSync(device, generation));
+    if (pairedDevice != null) unawaited(DeviceHealthTelemetry.maybeEmit(pairedDevice!));
+    _deviceHealthTimer ??= Timer.periodic(const Duration(hours: 1), (_) {
+      final current = pairedDevice;
+      if (current != null && isConnected) unawaited(DeviceHealthTelemetry.maybeEmit(current));
+    });
 
     notifyListeners();
 

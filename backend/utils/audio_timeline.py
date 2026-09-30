@@ -258,7 +258,7 @@ class CaptureTimeline:
         # strict readers must refuse them instead of extrapolating across the
         # dropped hiatuses.
         oldest_retained_interior = self.anchors[1][0]
-        if self.compacted_below_sample is None or self.compacted_below_sample > oldest_retained_interior:
+        if self.compacted_below_sample is None or self.compacted_below_sample < oldest_retained_interior:
             self.compacted_below_sample = oldest_retained_interior
 
     def wall(self, sample: int) -> float:
@@ -324,6 +324,10 @@ class SendMap:
         if not self._spans:
             return None
         return self._spans[-1][0] + self._spans[-1][2]
+
+    def accepted_samples_in_capture_range(self, first: int, end: int) -> int:
+        """Count accepted VAD output in a capture interval, excluding gated gaps."""
+        return sum(max(0, min(end, start + length) - max(first, start)) for _, start, length in self._spans)
 
     def point_interval(self, provider_sample: int) -> Optional[Tuple[int, int]]:
         """A one-sample interval for an in-span zero-duration provider point.
@@ -532,6 +536,27 @@ class ProviderEpochTranslator:
         self._send_owners: List[Tuple[int, int, Optional[str]]] = []
         self._only_send_owner: Optional[str] = None
         self._send_owner_ambiguous = False
+        # Set only for a same-provider replay epoch. Clock-only sessions keep
+        # provider-native timestamps normally, but a fresh socket restarts its
+        # timestamp axis at zero; replayed segments must use their original
+        # capture positions instead.
+        self.replay_origin_sample: Optional[int] = None
+
+    def stitch_replayed_timestamps(self, segments: Sequence[Dict[str, Any]]) -> None:
+        """Place replay-epoch segments on the original capture-relative axis.
+
+        ``translate`` has already attached the capture span for each segment.
+        For clock-only persistence, projecting that span to seconds avoids a
+        fresh provider socket moving visible timestamps back to zero.
+        """
+        if self._project_times or self.replay_origin_sample is None:
+            return
+        for segment in segments:
+            start = segment.get('_capture_start_sample')
+            end = segment.get('_capture_end_sample')
+            if isinstance(start, int) and isinstance(end, int) and end >= start:
+                segment['start'] = start / self.provider_sample_rate
+                segment['end'] = end / self.provider_sample_rate
 
     def set_validation_callback(self, callback: Callable[[str, Optional[Tuple[int, int]]], None]) -> None:
         self._on_validation = callback

@@ -42,7 +42,7 @@ class _GatedPhoneSync {
 
   Future<void> finalizeCurrentSession() => finalizeGate.future;
 
-  Future<void> stampConversationId(int start, String id) async {
+  Future<void> stampConversationId(int start, String id, {String? recordingSessionId}) async {
     stampCalls++;
   }
 

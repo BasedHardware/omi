@@ -114,18 +114,21 @@ class _FolderListItem extends StatelessWidget {
                         if (folder.description != null && folder.description!.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 3),
-                            child: Text(
-                              folder.description!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                            child: Tooltip(
+                              message: folder.description!,
+                              child: Text(
+                                folder.description!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                              ),
                             ),
                           ),
                       ],
                     ),
                   ),
                   if (isCurrentFolder)
-                    const ExcludeSemantics(child: Icon(Icons.check_circle, color: OmiColors.accent, size: 22)),
+                    ExcludeSemantics(child: Icon(Icons.check_circle, color: OmiColors.accent, size: 22)),
                 ],
               ),
             ),

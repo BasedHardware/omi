@@ -10113,12 +10113,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Não foi possível ler o áudio — não pode ser sincronizado';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11238,7 +11232,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get openCall => 'Abrir chamada';
 
   @override
-  String get captureRecoveryBanner => 'O áudio do pingente não chega à aplicação — toque para reparar';
+  String get captureRecoveryBanner => 'Omi não está enviando áudio — toque para reconectar';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11366,6 +11360,775 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Fones de ouvido';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutos';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tarefas';
+
+  @override
+  String get usageMonth => 'Este mês';
+
+  @override
+  String get usageYear => 'Este ano';
+
+  @override
+  String get usageAll => 'Tudo';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Aparência';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Claro';
+
+  @override
+  String get appearanceDark => 'Escuro';
+
+  @override
+  String get chatDiscardRecording => 'Descartar';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Não entendi — tente novamente';
+
+  @override
+  String get siriIndexSetting => 'Usar Omi com Siri e Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Permita que a Siri encontre suas conversas, memórias e tarefas neste dispositivo. Desativar remove esses itens da busca da Apple.';
+
+  @override
+  String get sendToSupport => 'Enviar ao suporte';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Revise o JSON de diagnóstico abaixo. Ele inclui o identificador do dispositivo, histórico de conexão, bateria, firmware e eventos Bluetooth. Não inclui áudio nem transcrições.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Código do chamado';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Não foi possível enviar o diagnóstico. Tente novamente.';
+
+  @override
+  String get feedbackGiveFeedback => 'Dar feedback';
+
+  @override
+  String get feedbackAllGood => 'Tudo certo';
+
+  @override
+  String get feedbackChatWithUs => 'Mais detalhes? Fale com a gente';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inexato';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incompleto';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Não é relevante';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Contexto errado';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Outra coisa';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Áudio ausente';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Transcrição ruim';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Orador errado';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Atrasado ou travado';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmentado ou duplicado';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Outra coisa';
+
+  @override
+  String get searchPeople => 'Pesquisar pessoas';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Adicionar \"$query\" como nova pessoa';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Mostrar todas as $count pessoas';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Olá $name, pergunte o que quiser';
+  }
+
+  @override
+  String get activity => 'Atividade';
+
+  @override
+  String get places => 'Lugares';
+
+  @override
+  String get recaps => 'Resumos';
+
+  @override
+  String get recent => 'Recentes';
+
+  @override
+  String get searchPartialFailure => 'Não foi possível carregar alguns resultados';
+
+  @override
+  String get peopleSearchPlaceholder => 'Pesquisar pessoas';
+
+  @override
+  String get peopleNotHeardYet => 'Ainda não ouvido';
+
+  @override
+  String get peopleRecent => 'Recentes';
+
+  @override
+  String get deletePeopleMessage =>
+      'Isso remove as amostras de voz e não pode ser desfeito. As falas em conversas passadas viram falantes sem nome.';
+
+  @override
+  String get personTalkTime => 'Tempo de fala';
+
+  @override
+  String get personLastHeard => 'Última escuta';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Excluir $count pessoas?',
+      one: 'Excluir 1 pessoa?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Falta a voz';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pessoas',
+      one: '1 pessoa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nenhuma Pessoa Correspondente';
+
+  @override
+  String get deselectAll => 'Desmarcar Tudo';
+
+  @override
+  String get voiceRecognitionSettings => 'Reconhecimento de Voz';
+
+  @override
+  String get greetingMorning => 'Bom dia';
+
+  @override
+  String get greetingAfternoon => 'Boa tarde';
+
+  @override
+  String get greetingEvening => 'Boa noite';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'O que você quer saber?';
+
+  @override
+  String get askSuggestDecide => 'O que eu decidi hoje?';
+
+  @override
+  String get askSuggestOwe => 'O que ainda devo às pessoas?';
+
+  @override
+  String get askSuggestNotice => 'O que o Omi notou?';
+
+  @override
+  String get pastChats => 'Conversas anteriores';
+
+  @override
+  String get newChat => 'Nova conversa';
+
+  @override
+  String get startFresh => 'Começar do zero';
+
+  @override
+  String get noPastChats => 'Suas conversas com o Omi aparecem aqui.';
+
+  @override
+  String get deleteChatQuestion => 'Apagar esta conversa?';
+
+  @override
+  String get deleteChatMessage => 'Ela sai das conversas anteriores para sempre.';
+
+  @override
+  String get deleteChat => 'Apagar conversa';
+
+  @override
+  String get appsAskWith => 'Pergunte ao Omi com';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversas hoje.',
+      one: '1 conversa hoje.',
+      zero: 'Nenhuma conversa hoje.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'O que estava na tela';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Captura de tela desta reunião';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Excluir captura de tela?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Isso remove a captura de tela da nota desta reunião. Não é possível desfazer.';
+
+  @override
+  String get conversationSummaryFailed => 'Falha no resumo';
+
+  @override
+  String get reconnectionsRecent => 'Reconexões (últimos 7 dias)';
+
+  @override
+  String get failedConnections => 'Falhas de conexão';
+
+  @override
+  String get failedConnectionsRecent => 'Falhas de conexão (últimos 7 dias)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count desde o emparelhamento';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Baixa confiança';
+
+  @override
+  String get peopleFilterPinned => 'Fixadas';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count fixadas',
+      one: '1 fixada',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Confirmado';
+
+  @override
+  String get confidenceLikely => 'Provável';
+
+  @override
+  String get confidenceUnverified => 'Não verificado';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Confiança: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Você marcou $count vezes',
+      one: 'Você marcou uma vez',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Escolhido em $count sugestões',
+      one: 'Escolhido em 1 sugestão',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Você confirmou $count correspondências',
+      one: 'Você confirmou 1 correspondência',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Só correspondência automática, nunca confirmada';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Nunca confirmado';
+
+  @override
+  String get confidenceReasonCorrected => 'Você corrigiu a correspondência';
+
+  @override
+  String get confidenceReasonVoiceReady => 'voz pronta';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'precisa de voz';
+
+  @override
+  String get confidenceReasonNotHeard => 'ainda não ouvido';
+
+  @override
+  String get confidenceSheetTitle => 'Confiança';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi reconhece a voz de $name, e você já confirmou.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi costuma reconhecer a voz de $name, mas você só confirmou algumas vezes.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Nada do que você fez confirma $name ainda.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Evidências';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Marcado por você em $count conversas',
+      one: 'Marcado por você em 1 conversa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sim em $count sugestões',
+      one: 'Sim em 1 sugestão',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Escolhido em $count sugestões',
+      one: 'Escolhido em 1 sugestão',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Confirmadas $count correspondências automáticas',
+      one: 'Confirmada 1 correspondência automática',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count correspondências movidas para outra pessoa',
+      one: '1 correspondência movida para outra pessoa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count correspondências automáticas sem confirmação',
+      one: '1 correspondência automática sem confirmação',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Amostra de voz pronta';
+
+  @override
+  String get evidenceNoVoice => 'Ainda sem amostra de voz';
+
+  @override
+  String get evidenceNotHeard => 'Ainda não ouvido em uma conversa';
+
+  @override
+  String get evidenceNothing => 'Você ainda não marcou nem confirmou essa pessoa';
+
+  @override
+  String get effectCountsALot => 'Conta muito';
+
+  @override
+  String get effectCounts => 'Conta';
+
+  @override
+  String get effectCountsALittle => 'Conta um pouco';
+
+  @override
+  String get effectBarelyCounts => 'Quase não conta';
+
+  @override
+  String get effectCountsAgainst => 'Conta contra';
+
+  @override
+  String get effectNeeded => 'Necessário para Confirmado';
+
+  @override
+  String get confidenceToReachConfirmed => 'Para chegar a Confirmado';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi também precisa de uma amostra de voz de $name. Marque a pessoa com “Lembrar vozes” ativado.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name está Confirmado. Omi continua aprendendo a cada marcação.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Só as suas respostas mudam muito a confiança. Correspondências automáticas sozinhas quase não contam.';
+
+  @override
+  String get personWhyConfidence => 'Por quê?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Fixar $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Manter $name e esperar a pessoa nas suas conversas';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi vai pedir que você confirme correspondências próximas em vez de adivinhar.';
+
+  @override
+  String get pinAction => 'Fixar';
+
+  @override
+  String get unpinAction => 'Desafixar';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Fixado: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Desafixado: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Por que $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Excluir $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'A pessoa $name está fixada. As amostras de voz serão removidas, Omi deixará de reconhecê-la e as transcrições antigas vão mostrá-la como um falante sem nome. Isso não pode ser desfeito.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Excluir $name';
+  }
+
+  @override
+  String get selectPeople => 'Selecionar pessoas';
+
+  @override
+  String get cleanUpEllipsis => 'Limpar…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pessoas sobre as quais Omi tem dúvida',
+      one: '1 pessoa sobre a qual Omi tem dúvida',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Na maioria, nomes ouvidos errado. Revise e remova os que não são reais.';
+
+  @override
+  String get reviewAction => 'Revisar';
+
+  @override
+  String get cleanUpTitle => 'Limpar';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi tem dúvida sobre estas $count pessoas. A maioria são nomes ouvidos errado nas transcrições. Desmarque quem você quiser manter.',
+      one: 'Omi tem dúvida sobre esta pessoa. Desmarque para mantê-la.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Pessoas fixadas nunca entram na limpeza.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Excluir $count pessoas',
+      one: 'Excluir 1 pessoa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pessoas excluídas',
+      one: '1 pessoa excluída',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Nada para limpar';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi não tem dúvida sobre ninguém no momento.';
+
+  @override
+  String get selectAllSkipsPinned => '“Selecionar tudo” ignora pessoas fixadas. Exclua uma por vez na página delas.';
+
+  @override
+  String get pinnedNotSelectable => 'Fixada, não selecionável';
+
+  @override
+  String get ignoredVoicesTitle => 'Vozes ignoradas';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcasts e outras vozes que você marcou como “Não é uma pessoa”';
+
+  @override
+  String get ignoredVoicesEmpty => 'Nenhuma voz ignorada';
+
+  @override
+  String get restoreAction => 'Restaurar';
+
+  @override
+  String get voiceRestoredToast => 'Omi pode perguntar sobre esta voz de novo';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Outra pessoa…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Não é uma pessoa';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Não sei';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Sou eu';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Vozes mais próximas';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Pessoas com quem você falou recentemente';
+
+  @override
+  String get voiceMatchClose => 'Correspondência próxima';
+
+  @override
+  String get voiceMatchPossible => 'Correspondência possível';
+
+  @override
+  String get voiceMatchWeak => 'Correspondência fraca';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Correspondência de voz: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Cada resposta ensina uma voz a Omi e aumenta a confiança nessa pessoa.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Sim aumenta a confiança em $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Mantém seu perfil de voz preciso, para Omi nunca chamar você de outra pessoa.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Salvo como $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Salvo como você';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi não vai perguntar sobre esta voz de novo';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Marcado como $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Marcado como você';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Marcado como “Não é uma pessoa”';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Marcação removida';
+
+  @override
+  String get whoIsItTitle => 'Quem é?';
+
+  @override
+  String get newPersonEllipsis => 'Nova pessoa…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Adicionar “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Todos';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Vale para todas as falas deste falante';
+
+  @override
+  String get collapseAction => 'Recolher';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Não sou eu';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Etiquete-os em mais $count conversas.',
+      one: 'Etiquete-os em mais 1 conversa.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get showOnLockScreen => 'Mostrar na tela de bloqueio';

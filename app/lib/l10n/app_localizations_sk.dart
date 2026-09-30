@@ -10093,12 +10093,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Zvuk sa nedá prečítať — synchronizácia nie je možná';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11214,7 +11208,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get openCall => 'Otvoriť hovor';
 
   @override
-  String get captureRecoveryBanner => 'Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím';
+  String get captureRecoveryBanner => 'Omi neposiela zvuk — klepnutím sa znova pripojte';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Pred nahrávaním telefónom zastavte Transcribe Later na prívesku.';
@@ -11339,6 +11333,777 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Slúchadlá';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minút';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Úlohy';
+
+  @override
+  String get usageMonth => 'Tento mesiac';
+
+  @override
+  String get usageYear => 'Tento rok';
+
+  @override
+  String get usageAll => 'Celkovo';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Vzhľad';
+
+  @override
+  String get appearanceSystem => 'Systém';
+
+  @override
+  String get appearanceLight => 'Svetlý';
+
+  @override
+  String get appearanceDark => 'Tmavý';
+
+  @override
+  String get chatDiscardRecording => 'Zahodiť';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nerozumel som — skúste to znova';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Hľadať osoby';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Pridať „$query“ ako novú osobu';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Zobraziť všetky osoby ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Ahoj $name, opýtaj sa na čokoľvek';
+  }
+
+  @override
+  String get activity => 'Aktivita';
+
+  @override
+  String get places => 'Miesta';
+
+  @override
+  String get recaps => 'Zhrnutia';
+
+  @override
+  String get recent => 'Nedávne';
+
+  @override
+  String get searchPartialFailure => 'Niektoré výsledky sa nepodarilo načítať';
+
+  @override
+  String get peopleSearchPlaceholder => 'Hľadať ľudí';
+
+  @override
+  String get peopleNotHeardYet => 'Zatiaľ nepočuté';
+
+  @override
+  String get peopleRecent => 'Nedávne';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tým sa odstránia ich hlasové vzorky a nedá sa to vrátiť späť. Ich repliky v minulých konverzáciách sa stanú nepomenovanými rečníkmi.';
+
+  @override
+  String get personTalkTime => 'Čas rozprávania';
+
+  @override
+  String get personLastHeard => 'Naposledy počuté';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Odstrániť osoby: $count?',
+      one: 'Odstrániť 1 osobu?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Chýba hlas';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Počet osôb: $count',
+      one: '1 osoba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Žiadne zodpovedajúce osoby';
+
+  @override
+  String get deselectAll => 'Zrušiť výber';
+
+  @override
+  String get voiceRecognitionSettings => 'Rozpoznávanie hlasu';
+
+  @override
+  String get greetingMorning => 'Dobré ráno';
+
+  @override
+  String get greetingAfternoon => 'Dobré popoludnie';
+
+  @override
+  String get greetingEvening => 'Dobrý večer';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Čo chcete vedieť?';
+
+  @override
+  String get askSuggestDecide => 'Čo som dnes rozhodol?';
+
+  @override
+  String get askSuggestOwe => 'Čo ešte dlhujem ľuďom?';
+
+  @override
+  String get askSuggestNotice => 'Čo si Omi všimol?';
+
+  @override
+  String get pastChats => 'Predchádzajúce chaty';
+
+  @override
+  String get newChat => 'Nový chat';
+
+  @override
+  String get startFresh => 'Začať odznova';
+
+  @override
+  String get noPastChats => 'Tu sa zobrazia vaše chaty s Omi.';
+
+  @override
+  String get deleteChatQuestion => 'Odstrániť tento chat?';
+
+  @override
+  String get deleteChatMessage => 'Z predchádzajúcich chatov zmizne natrvalo.';
+
+  @override
+  String get deleteChat => 'Odstrániť chat';
+
+  @override
+  String get appsAskWith => 'Pýtajte sa Omi s';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rozhovorov dnes.',
+      one: '1 rozhovor dnes.',
+      zero: 'Dnes žiadne rozhovory.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Čo bolo na obrazovke';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Snímka obrazovky z tejto schôdzky';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Odstrániť snímku obrazovky?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Snímka obrazovky sa odstráni z poznámky tejto schôdzky. Túto akciu nie je možné vrátiť.';
+
+  @override
+  String get conversationSummaryFailed => 'Zhrnutie zlyhalo';
+
+  @override
+  String get reconnectionsRecent => 'Opätovné pripojenia (posledných 7 dní)';
+
+  @override
+  String get failedConnections => 'Neúspešné pripojenia';
+
+  @override
+  String get failedConnectionsRecent => 'Neúspešné pripojenia (posledných 7 dní)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count od spárovania';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Nízka istota';
+
+  @override
+  String get peopleFilterPinned => 'Pripnuté';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pripnutých',
+      one: '1 pripnutý',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Potvrdené';
+
+  @override
+  String get confidenceLikely => 'Pravdepodobné';
+
+  @override
+  String get confidenceUnverified => 'Neoverené';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Istota: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označené vami $count-krát',
+      one: 'Označené vami raz',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vybrané v $count návrhoch',
+      one: 'Vybrané v 1 návrhu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Potvrdených vami zhôd: $count',
+      one: 'Potvrdili ste 1 zhodu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Len automaticky priradené, nikdy nepotvrdené';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Nikdy nepotvrdené';
+
+  @override
+  String get confidenceReasonCorrected => 'Zhoda opravená vami';
+
+  @override
+  String get confidenceReasonVoiceReady => 'hlas pripravený';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'potrebný hlas';
+
+  @override
+  String get confidenceReasonNotHeard => 'ešte nepočuť';
+
+  @override
+  String get confidenceSheetTitle => 'Istota';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi rozpoznáva hlas osoby $name a vy ste to potvrdili.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi zvyčajne rozpoznáva hlas osoby $name, ale potvrdili ste to len niekoľkokrát.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Zatiaľ nič z toho, čo ste urobili, nepotvrdzuje osobu $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Dôkazy';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označené vami v $count konverzáciách',
+      one: 'Označené vami v 1 konverzácii',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Áno v $count návrhoch',
+      one: 'Áno v 1 návrhu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vybrané v $count návrhoch',
+      one: 'Vybrané v 1 návrhu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Potvrdených automatických zhôd: $count',
+      one: 'Potvrdená 1 automatická zhoda',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Zhôd presunutých na niekoho iného: $count',
+      one: '1 zhoda presunutá na niekoho iného',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Automatických zhôd bez potvrdenia: $count',
+      one: '1 automatická zhoda bez potvrdenia',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Vzorka hlasu je pripravená';
+
+  @override
+  String get evidenceNoVoice => 'Zatiaľ bez vzorky hlasu';
+
+  @override
+  String get evidenceNotHeard => 'Zatiaľ nepočuť v konverzácii';
+
+  @override
+  String get evidenceNothing => 'Túto osobu ste zatiaľ neoznačili ani nepotvrdili';
+
+  @override
+  String get effectCountsALot => 'Veľmi sa počíta';
+
+  @override
+  String get effectCounts => 'Počíta sa';
+
+  @override
+  String get effectCountsALittle => 'Trochu sa počíta';
+
+  @override
+  String get effectBarelyCounts => 'Takmer sa nepočíta';
+
+  @override
+  String get effectCountsAgainst => 'Počíta sa proti';
+
+  @override
+  String get effectNeeded => 'Potrebné pre stav Potvrdené';
+
+  @override
+  String get confidenceToReachConfirmed => 'Ako dosiahnuť Potvrdené';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi potrebuje aj vzorku hlasu osoby $name. Označte ju so zapnutým „Zapamätať si hlasy“.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name: Potvrdené. Omi sa učí z každého označenia.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Istotu výrazne menia len vaše odpovede. Samotné automatické zhody sa takmer nepočítajú.';
+
+  @override
+  String get personWhyConfidence => 'Prečo?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Pripnúť: $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Ponechať osobu $name a očakávať ju vo vašich konverzáciách';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi vás požiada o potvrdenie blízkych zhôd namiesto hádania.';
+
+  @override
+  String get pinAction => 'Pripnúť';
+
+  @override
+  String get unpinAction => 'Odpnúť';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Pripnuté: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Odpnuté: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Prečo $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Odstrániť $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Osoba $name je pripnutá. Jej vzorky hlasu sa odstránia, Omi ju prestane rozpoznávať a v minulých prepisoch sa zobrazí ako nepomenovaný hovoriaci. Túto akciu nemožno vrátiť späť.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Odstrániť $name';
+  }
+
+  @override
+  String get selectPeople => 'Vybrať osoby';
+
+  @override
+  String get cleanUpEllipsis => 'Vyčistiť…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Osôb, o ktorých si Omi nie je istý: $count',
+      one: '1 osoba, o ktorej si Omi nie je istý',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'Väčšinou nesprávne rozpoznané mená. Skontrolujte ich a odstráňte tie, ktoré nie sú skutočné.';
+
+  @override
+  String get reviewAction => 'Skontrolovať';
+
+  @override
+  String get cleanUpTitle => 'Vyčistiť';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi si nie je istý týmito osobami ($count). Väčšinou ide o mená nesprávne rozpoznané v prepisoch. Zrušte začiarknutie pri tých, ktorých chcete ponechať.',
+      one: 'Omi si nie je istý touto osobou. Zrušte začiarknutie, ak ju chcete ponechať.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Pripnuté osoby sa do čistenia nikdy nezahŕňajú.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Odstrániť osoby: $count',
+      one: 'Odstrániť 1 osobu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Odstránené osoby: $count',
+      one: 'Odstránená 1 osoba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Nie je čo čistiť';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi teraz o nikom nepochybuje.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Voľba „Vybrať všetko“ preskakuje pripnuté osoby. Odstraňujte ich po jednej na ich stránke.';
+
+  @override
+  String get pinnedNotSelectable => 'Pripnutá, nedá sa vybrať';
+
+  @override
+  String get ignoredVoicesTitle => 'Ignorované hlasy';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcasty a ďalšie hlasy, ktoré ste označili ako „Nie je osoba“';
+
+  @override
+  String get ignoredVoicesEmpty => 'Žiadne ignorované hlasy';
+
+  @override
+  String get restoreAction => 'Obnoviť';
+
+  @override
+  String get voiceRestoredToast => 'Omi sa na tento hlas môže opäť opýtať';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Niekto iný…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Nie je osoba';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Neviem';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'To som ja';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Najbližšie hlasy';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Osoby, s ktorými ste nedávno hovorili';
+
+  @override
+  String get voiceMatchClose => 'Blízka zhoda';
+
+  @override
+  String get voiceMatchPossible => 'Možná zhoda';
+
+  @override
+  String get voiceMatchWeak => 'Slabá zhoda';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Zhoda hlasu: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Každá odpoveď naučí Omi hlas a zvýši istotu o tejto osobe.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Odpoveď „Áno“ zvyšuje istotu o osobe $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Udržiava váš hlasový profil presný, aby vás Omi nikdy nepomenoval ako niekoho iného.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Uložené ako $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Uložené ako vy';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi sa na tento hlas už nebude pýtať';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Označené ako $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Označené ako vy';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Označené ako „Nie je osoba“';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Označenie odstránené';
+
+  @override
+  String get whoIsItTitle => 'Kto je to?';
+
+  @override
+  String get newPersonEllipsis => 'Nová osoba…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Pridať „$name“';
+  }
+
+  @override
+  String get everyoneHeader => 'Všetci';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Platí pre všetky vety tohto hovoriaceho';
+
+  @override
+  String get collapseAction => 'Zbaliť';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Nie som to ja';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označte ich ešte v $count konverzáciách.',
+      one: 'Označte ich ešte v 1 konverzácii.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get showOnLockScreen => 'Zobraziť na zamknutej obrazovke';

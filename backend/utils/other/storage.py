@@ -23,7 +23,12 @@ else:
     _opus_import_error = None
 from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
 
-from database.redis_db import cache_signed_url, get_cached_signed_url, delete_cached_signed_url
+from database.redis_db import (
+    cache_signed_url,
+    get_cached_signed_url,
+    get_cached_signed_url_ttl,
+    delete_cached_signed_url,
+)
 from database.legal_holds import external_write_fence
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
@@ -83,6 +88,11 @@ app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
 screen_frames_bucket = os.getenv('BUCKET_SCREEN_FRAMES')
+
+
+def get_private_cloud_sync_bucket() -> Any:
+    return _get_storage_client().bucket(private_cloud_sync_bucket)
+
 
 _did_warn_missing_speech_profiles_bucket = False
 
@@ -179,7 +189,9 @@ def delete_all_user_storage_objects(uid: str) -> int:
         (speech_profiles_bucket, (f'{uid}/',)),
         (
             private_cloud_sync_bucket,
-            tuple(f'{prefix}/{uid}/' for prefix in ('chunks', 'audio', 'merged', PLAYBACK_ARTIFACT_PREFIX)),
+            tuple(
+                f'{prefix}/{uid}/' for prefix in ('chunks', 'audio', 'merged', PLAYBACK_ARTIFACT_PREFIX, 'diagnostics')
+            ),
         ),
         (syncing_local_bucket, (f'syncing/{uid}/',)),
         (chat_files_bucket, (f'{uid}/',)),
@@ -195,6 +207,15 @@ def delete_all_user_storage_objects(uid: str) -> int:
             if key in seen_buckets:
                 continue
             seen_buckets.add(key)
+            if bucket_name == private_cloud_sync_bucket and prefix == f'diagnostics/{uid}/':
+                # Remove ticket lookups alongside their owner-scoped bundles.
+                for blob in list(bucket.list_blobs(prefix=prefix)):
+                    ticket = blob.name.rsplit('/', 1)[-1].removesuffix('.json')
+                    if len(ticket) == 12 and all(c in '0123456789ABCDEF' for c in ticket):
+                        lookup = bucket.blob(f'diagnostics/tickets/{ticket}.json')
+                        if lookup.exists():
+                            lookup.delete()
+                            deleted += 1
             deleted += _delete_owner_bucket_prefix(bucket, prefix)
     return deleted
 
@@ -1927,6 +1948,23 @@ def get_desktop_update_signed_url(blob_path: str, expiration_hours: int = 1) -> 
 # deploy prerequisite; not something this change provisions).
 
 SCREEN_FRAME_SIGNED_URL_MINUTES = 60
+# A cached URL is reused only with this much life left, so a client that renews
+# at the reported expiry never holds a URL that is about to die.
+SCREEN_FRAME_MIN_REUSE_SECONDS = 15 * 60
+
+
+def _screen_frame_signed_url(blob: Any) -> Tuple[str, datetime.datetime]:
+    """A signed URL and its TRUE expiry: a cache hit reports the cached signature's remaining life."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cached = get_cached_signed_url(blob.name)
+    remaining = get_cached_signed_url_ttl(blob.name) if cached else 0
+    if cached and remaining >= SCREEN_FRAME_MIN_REUSE_SECONDS:
+        return cached, now + datetime.timedelta(seconds=remaining)
+    signer = iam_signing_kwargs(getattr(blob, "client", None))
+    lifetime = datetime.timedelta(minutes=SCREEN_FRAME_SIGNED_URL_MINUTES)
+    signed_url: str = blob.generate_signed_url(version="v4", expiration=lifetime, method="GET", **signer)
+    cache_signed_url(blob.name, signed_url, SCREEN_FRAME_SIGNED_URL_MINUTES * 60)
+    return signed_url, now + lifetime
 
 
 def _screen_frame_blob_path(uid: str, conversation_id: str, frame_id: str) -> str:
@@ -1937,10 +1975,16 @@ def _screen_frame_thumbnail_blob_path(uid: str, conversation_id: str, frame_id: 
     return f'{uid}/{conversation_id}/{frame_id}_thumb.jpg'
 
 
+def configured_screen_frames_bucket() -> Optional[str]:
+    """This environment's frame bucket; frame docs in the shared Firestore record theirs."""
+    return (os.getenv('BUCKET_SCREEN_FRAMES') or '').strip() or screen_frames_bucket or None
+
+
 def _require_screen_frames_bucket() -> str:
-    if not screen_frames_bucket:
+    bucket = configured_screen_frames_bucket()
+    if not bucket:
         raise RuntimeError('BUCKET_SCREEN_FRAMES is not configured')
-    return screen_frames_bucket
+    return bucket
 
 
 def upload_screen_frame_blobs(
@@ -1958,19 +2002,27 @@ def upload_screen_frame_blobs(
     thumb_blob.upload_from_string(thumbnail_jpeg_bytes, content_type='image/jpeg')
 
 
-def get_screen_frame_signed_url(uid: str, conversation_id: str, frame_id: str) -> str:
+def get_screen_frame_signed_url(uid: str, conversation_id: str, frame_id: str) -> Tuple[str, datetime.datetime]:
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    return _screen_frame_signed_url(bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id)))
+
+
+def get_screen_frame_thumbnail_signed_url(
+    uid: str, conversation_id: str, frame_id: str
+) -> Tuple[str, datetime.datetime]:
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    return _screen_frame_signed_url(bucket.blob(_screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id)))
+
+
+def download_screen_frame_bytes(uid: str, conversation_id: str, frame_id: str, *, timeout: float) -> bytes:
+    """Read one canonical frame from this environment's bucket, bounded by ``timeout`` seconds."""
     bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
     blob = bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id))
-    return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
+    # retry=None: the library's default retry runs to a 120 s deadline, far past the caller's budget.
+    return blob.download_as_bytes(timeout=timeout, retry=None)
 
 
-def get_screen_frame_thumbnail_signed_url(uid: str, conversation_id: str, frame_id: str) -> str:
-    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
-    blob = bucket.blob(_screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id))
-    return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
-
-
-def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str) -> None:
+def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str, *, bucket: Optional[str] = None) -> None:
     """Delete both GCS objects for a frame and their cached signed URLs.
 
     A delete that leaves bytes in the bucket, or a still-live cached signed
@@ -1980,8 +2032,18 @@ def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str) -> 
     """
     content_path = _screen_frame_blob_path(uid, conversation_id, frame_id)
     thumb_path = _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id)
-    bucket_name = _require_screen_frames_bucket()
-    delete_blob(bucket_name, content_path)
-    delete_blob(bucket_name, thumb_path)
-    delete_cached_signed_url(content_path)
-    delete_cached_signed_url(thumb_path)
+    try:
+        bucket_name = bucket or _require_screen_frames_bucket()
+        delete_blob(bucket_name, content_path)
+        delete_blob(bucket_name, thumb_path)
+    finally:
+        # A signed URL must stop being handed out even when the object delete failed.
+        delete_cached_signed_url(content_path)
+        delete_cached_signed_url(thumb_path)
+
+
+def screen_frame_object_paths(uid: str, conversation_id: str, frame_id: str) -> List[str]:
+    return [
+        _screen_frame_blob_path(uid, conversation_id, frame_id),
+        _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id),
+    ]

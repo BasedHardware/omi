@@ -8,7 +8,9 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 from copy import deepcopy
 from typing import TYPE_CHECKING, Callable, Optional
 
+from config.sync_lineage import sync_lineage_resolve_active_for
 from utils.manual_speaker_assignments import apply_manual_assignments
+from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
 from utils.conversations.relevance import sync_intake_decision
@@ -69,7 +71,8 @@ def auto_mergeable(row: dict) -> bool:
     remain intact rather than exposing private donors or orphaning user edits.
     """
     return bool(row.get('sync_content_revision')) and not (
-        row.get('sync_live_target')
+        (row.get('smart_merge') or {}).get('role') == 'survivor'
+        or row.get('sync_live_target')
         or row.get('has_photos')
         or row.get('user_title')
         or row.get('starred')
@@ -117,7 +120,7 @@ def assign_in_transaction(
         seen = set()
         while row and row.get('sync_merged_into'):
             if row['id'] in seen:
-                raise SyncAssignmentConflict('sync redirect cycle')
+                raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
             seen.add(row['id'])
             redirect_id: str = row['sync_merged_into']
             cid, row = redirect_id, load(redirect_id)
@@ -129,12 +132,17 @@ def assign_in_transaction(
     # never allow an absorbed chunk to resurrect its user-deleted survivor.
     own_id, own_anchor = resolve(incoming['id'])
     target = load(target_id) if target_id else None
+    if target and target.get('deleted') and (target.get('smart_merge') or {}).get('role') == 'donor':
+        # A live conversation folded into its predecessor (database/smart_merge.py)
+        # redirects its late repair audio to the survivor; temporal fallback would
+        # recreate the donor as a duplicate row. A deleted survivor supersedes it.
+        target_id, target = resolve(target_id)
     target_hint = target_id
     if target and not target.get('deleted'):
         # Explicit capture proof is authoritative even before live STT produced
         # words. Only timestamp hints must exclude live-owned rows.
         if not compatible_capture(target, incoming):
-            raise SyncAssignmentConflict('sync target provenance mismatch')
+            raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
     else:
         # Missing/tombstoned explicit targets fall back to temporal assignment.
         # The independent retry-lineage check above still fences user deletion.
@@ -188,18 +196,38 @@ def assign_in_transaction(
     records = [decode(raw) for _, raw in sorted(matched.items())]
     result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
     result['id'] = canonical
+    smart_live_target = bool(target and (target.get('smart_merge') or {}).get('role') == 'survivor')
     result['sync_live_target'] = bool(
-        target and (target.get('sync_live_target') or not target.get('sync_content_revision'))
+        target and (target.get('sync_live_target') or smart_live_target or not target.get('sync_content_revision'))
     )
     if not result['sync_live_target']:
         result['created_at'] = extent['started_at']
-    origin = extent['started_at'].timestamp()
+    capture_start = extent['started_at']
+    pinned_live_origin = bool(
+        result['sync_live_target']
+        and target
+        and isinstance(target.get('audio_timeline'), dict)
+        and target.get('audio_timeline')
+        and sync_lineage_resolve_active_for(user_ref.id)
+    )
+    if pinned_live_origin and target:
+        # Live keeps emitting offsets against this durable first-audio pin.
+        # Rebasing the row on an early safety WAL would move all future live
+        # words. Preserve the pin and represent buffered pre-pin speech with
+        # its exact (possibly negative) relative offset instead.
+        capture_start = target['started_at']
+    origin = capture_start.timestamp()
     existing = []
     allocator = ConversationSpeakerIdAllocator()
     allocator.hydrate(result.get('transcript_segments', []) if current else [])
     for row in sorted(records, key=lambda row: row['id'] != canonical):
         new = deepcopy(row.get('transcript_segments', []))
         for segment in new:
+            if row['id'] == canonical and not result['sync_live_target'] and not segment.get('speaker_id_scope'):
+                # A pre-scope sync survivor is still audio-aligned. Leave its
+                # visible ID intact (manual receipts may name it), but give
+                # conversation resolution the provenance it needs.
+                segment['speaker_id_scope'] = f"legacy-conversation:{row['id']}:{segment.get('speaker_id')}"
             segment['timestamp'] = row['started_at'].timestamp() + segment['start']
             duration = segment['end'] - segment['start']
             segment['start'] = segment['timestamp'] - origin
@@ -215,7 +243,14 @@ def assign_in_transaction(
     for segment in new:
         segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
     survivors = dedupe_segments_for_merge(
-        origin, existing, new, text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0
+        origin,
+        existing,
+        new,
+        text_match_slop_seconds=600 if target and (smart_live_target or not target.get('sync_content_revision')) else 0,
+        # A bound safety WAL can mix one duplicate with genuinely new speech.
+        # Near-exact text, duration, and time are enough to drop that one line;
+        # broader clock-offset matches still require the batch gate.
+        single_match_slop_seconds=2 if target and result['sync_live_target'] else 0,
     )
     for segment in survivors:
         allocator.assign(segment)
@@ -225,11 +260,30 @@ def assign_in_transaction(
         duration = segment['end'] - segment['start']
         segment['start'] = segment.pop('timestamp') - origin
         segment['end'] = segment['start'] + duration
+        if pinned_live_origin and segment['start'] < 0:
+            # Speech before the live first-audio pin stays in the transcript,
+            # but released clients cannot seek negative v2 offsets. Do not
+            # claim playback alignment for that line.
+            segment['audio_alignment'] = 'unplaced'
+            segment['audio_capture_run'] = None
     result.update(
-        started_at=extent['started_at'],
+        started_at=capture_start,
         finished_at=extent['finished_at'],
         transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
     )
+    if incoming.get('capture_evidence') is not None:
+        contributors = [row.get('capture_evidence') or {} for row in records] + [incoming['capture_evidence']]
+        mapped = [receipt for item in contributors for receipt in item.get('receipts') or []]
+        if mapped:
+            combined = merge_track_receipts([], mapped)
+            if any(
+                item.get('capability') != 'source_position' or item.get('coverage') == 'incomplete'
+                for item in contributors
+            ):
+                combined['coverage'] = 'incomplete'
+            result['capture_evidence'] = bounded_envelope(combined)
+        else:
+            result['capture_evidence'] = incoming['capture_evidence']
     result['has_content'] = bool(segments)
     result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
     result['sync_relevance'] = (

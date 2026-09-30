@@ -1,4 +1,5 @@
 import getSharedMemory from '@/src/actions/memories/get-shared-memory';
+import getSharedScreenshots from '@/src/actions/memories/get-shared-screenshots';
 import Memory from '@/src/components/memories/memory';
 import MemoryHeader from '@/src/components/memories/memory-header';
 import SharedConversationInstallCta, {
@@ -13,6 +14,10 @@ import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
 import { markdownToPlainText } from '@/src/lib/markdown-to-plain-text.mjs';
 import { getOmiInstallLink } from '@/src/lib/conversation-share-platform-link.mjs';
 import { sharedApiUrl } from '@/src/lib/shared-api-url.mjs';
+import {
+  capturePreviewRequest,
+  previewAttribution,
+} from '@/src/lib/share-preview-analytics.mjs';
 import { firstSectionBulletPlainText } from '@/src/lib/shared-note.mjs';
 import { ParamsTypes, SearchParamsTypes } from '@/src/types/params.types';
 import { Metadata, ResolvingMetadata } from 'next';
@@ -26,10 +31,20 @@ interface MemoryPageProps {
 }
 
 export async function generateMetadata(
-  props: { params: Promise<ParamsTypes> },
+  props: { params: Promise<ParamsTypes>; searchParams: Promise<SearchParamsTypes> },
   parent: ResolvingMetadata,
 ): Promise<Metadata> {
   const params = await props.params;
+  const searchParams = await props.searchParams;
+  const requestHeaders = await headers();
+  const attribution = new URLSearchParams();
+  if (typeof searchParams.s === 'string') attribution.set('s', searchParams.s);
+  if (typeof searchParams.sid === 'string') attribution.set('sid', searchParams.sid);
+  await capturePreviewRequest(
+    requestHeaders.get('user-agent') || '',
+    'metadata',
+    attribution,
+  );
   const prevData = (await parent) as Metadata;
   let memory: {
     structured?: {
@@ -77,8 +92,14 @@ export async function generateMetadata(
 
   // Per-conversation link preview, served by ./og/route.tsx through the
   // /conversations rewrite.
+  const ogImageUrl = new URL(`${ogUrl}/og`);
+  const safeAttribution = previewAttribution(attribution);
+  if (safeAttribution.s !== 'unknown')
+    ogImageUrl.searchParams.set('s', safeAttribution.s);
+  if (safeAttribution.share_id)
+    ogImageUrl.searchParams.set('sid', safeAttribution.share_id);
   const ogImage = {
-    url: `${ogUrl}/og`,
+    url: ogImageUrl.toString(),
     width: 1200,
     height: 630,
     alt: title,
@@ -117,7 +138,12 @@ export default async function MemoryPage(props: MemoryPageProps) {
   const searchParams = await props.searchParams;
   const params = await props.params;
   const memoryId = params.id;
-  const memory = await getSharedMemory(memoryId);
+  // Screenshots are fetched per request, never cached: their signed URLs
+  // expire after 60 minutes (see get-shared-screenshots).
+  const [memory, screenshots] = await Promise.all([
+    getSharedMemory(memoryId),
+    getSharedScreenshots(memoryId),
+  ]);
   if (!memory) {
     notFound();
   }
@@ -133,7 +159,7 @@ export default async function MemoryPage(props: MemoryPageProps) {
         <ShareTopbar installHref={installHref} />
         <section className="sn-page">
           <MemoryHeader />
-          <Memory memory={memory} searchParams={searchParams} />
+          <Memory memory={memory} searchParams={searchParams} screenshots={screenshots} />
           <SharedConversationInstallCta openInOmiHref={openInOmiHref} />
           <p className="sn-footer">Captured and summarized by Omi</p>
         </section>

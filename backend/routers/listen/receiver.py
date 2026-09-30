@@ -14,8 +14,13 @@ from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
+from config.translation import resolve_ondemand_config
+from config.capture_evidence import capture_evidence_dark_write_enabled
 from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+from utils.capture_evidence import SourcePositionMap, parse_live_frame
+from utils.translation_demand import TranslationDemand
+from utils.translation_core.metrics import get_translation_metrics
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -37,6 +42,7 @@ else:
 
 from fastapi.websockets import WebSocketDisconnect
 
+from models.conversation_enums import ConversationSource
 from models.conversation_photo import ConversationPhoto
 from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
 from models.transcript_segment import SpeakerIdentityStatus
@@ -54,10 +60,22 @@ from utils.stt.live_failure import (
     note_typed_provider_death,
     send_live_stt_audio,
     terminate_live_stt_session,
+    terminate_live_stt_backoff,
 )
+from utils.stt.live_chain import ProviderChainUnavailable
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.live_metrics import RECONNECT
+from utils.stt.brand_terms import normalize_brand_segments
+from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
+from utils.stt.resilient_stream import (
+    enabled as resilient_reconnect_enabled,
+    trim_window_replay_to_anchor,
+    window_replay_action,
+)
+from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
+from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
 from utils.stt.streaming import (
     STTService,
     connect_stt_socket_with_fallback,
@@ -103,6 +121,7 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL,
     OMI_AUDIO_TIMELINE_REJECTS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
+    OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL,
     audio_timeline_provider_label,
     audio_timeline_past_send_bucket,
     audio_timeline_send_path_label,
@@ -182,9 +201,11 @@ def _get_lc3() -> Any:
     return lc3
 
 
-class ListenReceiver:
+class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.host = host
+        self.translation_demand = TranslationDemand()
+        self._translation_expiry_task: asyncio.Task[Any] | None = None
         self.channel_configs = channel_configs
         self.channel_id_to_index = channel_id_to_index
         self.stt_socket: Any = None
@@ -195,6 +216,8 @@ class ListenReceiver:
         self._stt_rebuild: Optional[Tuple[Any, int]] = None
         self._stt_failover_lock = asyncio.Lock()
         self._pending_live_failover: Optional[PendingLiveFailover] = None
+        self._resilient_audio: ResilientAudio | None = None
+        self._window_replay_audio: ResilientAudio | None = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
         self.multi_opus_decoders: List[Any] = [None] * len(channel_configs)
         self.channel_mix_buffers: List[bytearray] = [bytearray() for _ in channel_configs]
@@ -205,6 +228,7 @@ class ListenReceiver:
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
         self.decode_failure_streak = 0
+        self.decode_failure_logged = False
         self.decode_stream_reported = False
         self._unknown_prefix_streak = 0
         self.speaker_provider_epoch = SpeakerProviderEpoch()
@@ -218,6 +242,7 @@ class ListenReceiver:
         # minimum available channel buffers, and custom-STT segments carry a
         # client clock; both stay without the clock entirely.
         self.capture_timeline: Any = None
+        self._pending_source_frame: dict | None = None
         self.capture_timeline_v2 = False
         if (
             not host.is_multi_channel
@@ -225,6 +250,12 @@ class ListenReceiver:
             and int(getattr(host.request, 'sample_rate', 0) or 0) > 0
         ):
             self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
+            # One 90s ring per session matches the maximum window buffer (30/15).
+            self._window_replay_audio = ResilientAudio(
+                int(host.request.sample_rate), ring_seconds=90, strict_replay=True
+            )
+            if resilient_reconnect_enabled():
+                self._resilient_audio = ResilientAudio(int(host.request.sample_rate))
             # Pin the persistence mode for the recording's life; the flag is
             # never re-read per message or per callback.
             self.capture_timeline_v2 = audio_timeline_v2_enabled()
@@ -235,6 +266,8 @@ class ListenReceiver:
             # `_note_accepted_frame`, so retention is time-based (120 s) and a
             # hard entry cap counts conversation switches, not frames.
             host.state.conversation_sample_ranges = deque(maxlen=CAPTURE_RANGE_MAX_RUNS)
+            if capture_evidence_dark_write_enabled():
+                host.state.source_position_map = SourcePositionMap()
         # The loop this receiver serves. Deepgram's SDK delivers transcripts on
         # its own thread; those callbacks hop back onto this loop (see
         # `_run_on_listen_loop`) so timeline/send-map state is only ever
@@ -346,6 +379,7 @@ class ListenReceiver:
         assigning its audio window to one conversation would guess. Its text
         is retained as explicitly unplaced under its provider SEND owner.
         """
+        segments = self._filter_replayed_segments(segments, provider)
         kept: List[Dict[str, Any]] = []
         for segment in segments:
             if segment.pop('_capture_unplaced', False):
@@ -401,27 +435,21 @@ class ListenReceiver:
         )
         return self.host.state.current_conversation_id
 
-    def _enqueue_clock_positioned_segments(self, segments: List[Dict[str, Any]]) -> None:
-        """Attach each segment's capture-projected window for speaker ID only.
+    def _enqueue_clock_positioned_segments(
+        self, segments: List[Dict[str, Any]], provider: Optional[str] = None
+    ) -> None:
+        """Attach a private capture window for speaker ID in clock-only mode.
 
-        Clock-only mode (capture clock on, v2 persistence off): the transcript
-        keeps exactly the legacy pipeline — provider-native times, current
-        conversation, no owner fencing — so persisted fields and WebSocket
-        output stay byte-identical to the flag-off baseline. The only addition
-        is the private absolute window the ring buffer can actually locate,
-        which survives provider failovers whose timestamps restart at zero.
-
-        LIVE_SPEAKER_CAPTURE_CLOCK is the runtime kill switch for that
-        addition (read here, at the call boundary): falsy reverts speaker-ID
-        windows to the legacy first-audio + provider-time formula without a
-        deploy. It never touches the transcript itself.
+        Transcript times stay provider-native; the window survives failover.
+        LIVE_SPEAKER_CAPTURE_CLOCK=false restores legacy speaker-ID timing.
         """
+        segments = self._filter_replayed_segments(segments, provider)
         if not live_speaker_capture_clock_enabled():
             for segment in segments:
                 segment.pop('_capture_start_sample', None)
                 segment.pop('_capture_end_sample', None)
                 segment['_capture_window_unavailable'] = True
-            self._enqueue_stt_segments(segments)
+            self._enqueue_stt_segments(segments, provider=provider)
             return
         for segment in segments:
             start_sample = segment.pop('_capture_start_sample', None)
@@ -434,7 +462,7 @@ class ListenReceiver:
                     segment['_capture_abs_end'] = abs_end
                     continue
             segment['_capture_window_unavailable'] = True
-        self._enqueue_stt_segments(segments)
+        self._enqueue_stt_segments(segments, provider=provider)
 
     def _run_on_listen_loop(self, action, segments: List[Dict[str, Any]]) -> None:
         """Run a provider callback on the listen event loop.
@@ -549,7 +577,7 @@ class ListenReceiver:
         if self.capture_timeline_v2:
             self._enqueue_translated_segments(segments, provider=provider)
         else:
-            self._enqueue_clock_positioned_segments(segments)
+            self._enqueue_clock_positioned_segments(segments, provider=provider)
 
     @staticmethod
     def _record_elapsed_validation(provider: str, interval: Optional[Tuple[int, int]], gate: Any) -> None:
@@ -653,9 +681,11 @@ class ListenReceiver:
                 translated = epoch.translate(segments)
                 if not translated:
                     return
-                if self.vad_gate is not None and not passthrough:
+                if epoch.replay_origin_sample is not None:
+                    epoch.stitch_replayed_timestamps(translated)
+                elif self.vad_gate is not None and not passthrough:
                     self.vad_gate.remap_segments(translated)
-                self._enqueue_clock_positioned_segments(translated)
+                self._enqueue_clock_positioned_segments(translated, provider=epoch.provider_label)
 
             return translate_remap_enqueue
 
@@ -689,25 +719,51 @@ class ListenReceiver:
         """Report an undecodable audio frame with enough detail to act on it.
 
         Dropping the frame keeps the socket alive, so an undecodable stream is a fail-open
-        branch: the user records a whole session and gets no transcript, no ring buffer, and
-        no mixed audio, while the only trace is one `type=OpusError` line per frame. That name
-        cannot tell a corrupt client stream from a decoder the receiver sized wrong (#10701),
-        so carry the codec's own message and the payload size, and once the streak proves the
-        entire stream is failing, report it as the silent mic it is.
+        branch. Count every rejected frame, but log only the first failure and one event when
+        the streak proves the whole stream is failing.
         """
         self.decode_failure_streak += 1
-        logger.warning(
-            'Listen audio frame decode failed codec=%s channel=%s type=%s bytes=%s streak=%s detail=%s',
-            codec,
-            channel,
-            type(error).__name__,
-            payload_len,
-            self.decode_failure_streak,
-            sanitize(error)[:120],
+        declared_codec = getattr(self.host, 'declared_codec', codec)
+        codec_label = declared_codec if declared_codec in {'opus', 'opus_fs320', 'aac', 'lc3', 'pcm8'} else 'other'
+        platform = (self._telemetry_platform() or '').strip().lower()
+        platform_label = (
+            platform
+            if platform in {'android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'web', 'windows'}
+            else 'unknown'
         )
+        source = getattr(self.host.request, 'source', None)
+        try:
+            source_label = ConversationSource(source).value if source else 'unknown'
+        except ValueError:
+            source_label = 'unknown'
+        OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL.labels(codec=codec_label, client_platform=platform_label).inc()
+        if not self.decode_failure_logged:
+            self.decode_failure_logged = True
+            logger.warning(
+                'Listen audio frame decode failed event=listen_audio_decode_failed codec=%s '
+                'transcription_source=%s client_platform=%s sample_rate=%s channel=%s '
+                'type=%s bytes=%s streak=%s detail=%s',
+                codec_label,
+                source_label,
+                platform_label,
+                getattr(self.host.request, 'sample_rate', 'unknown'),
+                channel,
+                type(error).__name__,
+                payload_len,
+                self.decode_failure_streak,
+                sanitize(error)[:120],
+            )
         if self.decode_stream_reported or self.decode_failure_streak < DECODE_FAILURE_STREAK_ALERT:
             return
         self.decode_stream_reported = True
+        logger.warning(
+            'Listen audio decode streak exceeded event=listen_audio_decode_streak_exceeded '
+            'codec=%s transcription_source=%s client_platform=%s failures=%s',
+            codec_label,
+            source_label,
+            platform_label,
+            self.decode_failure_streak,
+        )
         record_fallback(
             component='silent_mic',
             from_mode=codec,
@@ -722,6 +778,7 @@ class ListenReceiver:
 
     def _enqueue_stt_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Persist the provider epoch before local speaker numbers enter the conversation."""
+        observe_live_segments(self.host, normalize_brand_segments(segments), provider or self._serving_provider())
         pending = self._pending_live_failover
         if pending is not None and (provider is None or provider == pending.to_mode):
             pending.note_transcript(segments)
@@ -834,13 +891,19 @@ class ListenReceiver:
         sample_rate: int,
         modulate_callback: Any = None,
         epoch: Optional[ProviderEpochTranslator] = None,
+        same_provider: bool = False,
+        replay_start_sample: int = 0,
     ) -> Any:
         if managed_chain_enabled(self.host):
             from utils.stt.live_session import LiveChainSession
 
             if not hasattr(self, '_managed_live_chain'):
                 self._managed_live_chain = LiveChainSession(self)
-            return await self._managed_live_chain.connect(sample_rate, epoch=epoch)
+            if not same_provider:
+                return await self._managed_live_chain.connect(sample_rate, epoch=epoch)
+            return await self._managed_live_chain.connect(
+                sample_rate, epoch=epoch, same_provider=same_provider, replay_start_sample=replay_start_sample
+            )
         keywords = self.host.vocabulary[:100] if self.host.vocabulary else []
         if self.host.stt_service == STTService.parakeet:
             socket, actual_service = await connect_stt_socket_with_fallback(
@@ -866,6 +929,14 @@ class ListenReceiver:
                 self.host.stt_model = 'velma-2'
             return socket
         if self.host.stt_service == STTService.soniox:
+            if same_provider:
+                return await process_audio_soniox(
+                    modulate_callback or callback,
+                    sample_rate,
+                    self.host.stt_language,
+                    profile=self.host.language_profile,
+                    keywords=keywords,
+                )
             # Soniox identifies language itself, so no language gate on the fallbacks;
             # they inherit the same chain a Modulate primary uses.
             dg_fallback_model = deepgram_fallback_model(self.host.stt_language)
@@ -888,6 +959,8 @@ class ListenReceiver:
                     modulate_callback or callback,
                     sample_rate,
                     self.host.stt_language,
+                    profile=self.host.language_profile,
+                    keywords=keywords,
                 ),
                 connect_modulate=(
                     (
@@ -1007,10 +1080,16 @@ class ListenReceiver:
         raise RuntimeError(f'Unsupported serving STT provider {self.host.stt_service!r}')
 
     async def _drain_stt_sockets(self) -> None:
+        self._resilient_closing = True
+        if self._resilient_audio is not None:
+            self._resilient_audio.close()
+        if (ring := getattr(self, '_window_replay_audio', None)) is not None:
+            ring.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
         for socket in sockets:
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
             if target is None:
+                release_live_stt_socket(socket)
                 continue
             try:
                 drain = getattr(target, 'drain_and_close', None)
@@ -1024,6 +1103,8 @@ class ListenReceiver:
                     target.finish()
                 except Exception:
                     pass
+            finally:
+                release_live_stt_socket(socket)
         self.stt_socket = None
         self.stt_sockets_multi = [None] * len(self.channel_configs)
 
@@ -1032,13 +1113,15 @@ class ListenReceiver:
         if getattr(raw, 'manages_vad', False):
             return raw
         if self.vad_gate is None:
-            return _RecordingSTTSocket(raw, epoch) if epoch is not None else raw
-        return GatedSTTSocket(
-            raw,
-            gate=self.vad_gate,
-            passthrough_audio=self.host.stt_service == STTService.modulate,
-            send_tracker=epoch,
-        )
+            wrapped = _RecordingSTTSocket(raw, epoch) if epoch is not None else raw
+        else:
+            wrapped = GatedSTTSocket(
+                raw,
+                gate=self.vad_gate,
+                passthrough_audio=self.host.stt_service == STTService.modulate,
+                send_tracker=epoch,
+            )
+        return track_live_stt_socket(wrapped, self.host.stt_service.value)
 
     def _record_selected_epoch(self, epoch: Optional[ProviderEpochTranslator], socket: Any) -> None:
         if epoch is None:
@@ -1092,7 +1175,8 @@ class ListenReceiver:
                             platform=self.host.client_device_context.platform,
                         )
                         return False
-                    self.stt_sockets_multi[index] = socket
+                    self.stt_sockets_multi[index] = track_live_stt_socket(socket, self.host.stt_service.value)
+                    record_live_connection(self.host, self._serving_provider())
                 return True
             if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
                 override=request.vad_gate_override, global_gate_enabled=is_gate_enabled()
@@ -1129,11 +1213,21 @@ class ListenReceiver:
                 epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
             self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
             self._record_selected_epoch(epoch, self.stt_socket)
+            record_live_connection(self.host, self._serving_provider())
             # Retained so a mid-session failover can rebuild the socket against the
             # next provider without re-deriving the callbacks or the gate.
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
             return True
+        except ProviderChainUnavailable as error:
+            await self._drain_stt_sockets()
+            await terminate_live_stt_backoff(
+                request.websocket,
+                self.host.state,
+                reason='provider_unavailable',
+                retry_after=error.retry_after,
+            )
+            return False
         except Exception as error:
             await self._drain_stt_sockets()
             await terminate_live_stt_session(
@@ -1148,9 +1242,96 @@ class ListenReceiver:
     async def _failover_stt_socket(self) -> bool:
         """Serialize monitor/send-path failover so only one replacement is adopted."""
         async with self._stt_failover_lock:
+            # Soniox drain_and_close() sets this before its final flush.  Treat a
+            # finishing socket as receiver teardown even if its dead latch was
+            # already set; opening a replacement here races the zero-audio close.
+            if socket_is_finishing(self.stt_socket):
+                return False
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
                 return True
+            if await self._reconnect_stt_socket_locked():
+                return True
             return await self._rebuild_stt_socket_locked()
+
+    async def _reconnect_stt_socket_locked(self) -> bool:
+        ring = self._resilient_audio
+        socket = self.stt_socket
+        if (
+            ring is None
+            or socket is None
+            or self.host.stt_service != STTService.soniox
+            or self.host.is_multi_channel
+            or self.host.use_custom_stt
+            or not self.host.state.active
+            or self.host.state.stt_terminal_failure
+            or self._stt_rebuild is None
+            or getattr(self, '_resilient_closing', False)
+            or socket_is_finishing(socket)
+        ):
+            return False
+        reason = getattr(socket, 'typed_death_reason', None)
+        if reason not in {'soniox_rotation', 'provider_5xx', 'connection_lost'}:
+            return False
+        if reason == 'connection_lost' and not str(getattr(socket, 'death_reason', '')).startswith('ws '):
+            return False
+        if not ring.admit('soniox', reason):
+            return False
+        self._settle_pending_live_failover_failure()
+        replacement = None
+        try:
+            socket.finish()
+        except Exception:
+            pass
+        finally:
+            # Direct sockets carry a lease here; managed sockets release their
+            # own gauge in finish(), and release_live_stt_socket is idempotent.
+            release_live_stt_socket(socket)
+        await asyncio.sleep(0)  # deliver the dead socket's last finalized callback
+        if not self.host.state.active or self.host.state.stt_terminal_failure:
+            RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
+            return False
+        replay = ring.snapshot()
+        parakeet_callback, modulate_callback, epoch = self._stt_rebuild[0]()
+        if epoch is not None:
+            epoch.replay_origin_sample = replay[0][0] if replay else ring.finalized_sample
+        try:
+            raw = await self._create_stt_socket(
+                parakeet_callback,
+                self._stt_rebuild[1],
+                modulate_callback=modulate_callback,
+                epoch=epoch,
+                same_provider=True,
+                replay_start_sample=replay[0][0] if replay else ring.finalized_sample,
+            )
+            if raw is None or not await fallback_socket_is_serving(raw):
+                if raw is not None:
+                    close_rejected_socket(raw)
+                raise RuntimeError('Soniox reconnect refused')
+            replacement = self._wrap_legacy_stt_socket(raw, epoch)
+            cutoff = ring.finalized_sample
+            replay_send = getattr(replacement, 'replay_send', None)
+            for start, data in replay:
+                accepted = (
+                    replay_send(data, start) if callable(replay_send) else replacement.send(data, start_sample=start)
+                )
+                if not accepted:
+                    raise RuntimeError('Soniox replay send failed')
+                ring.record_replay('soniox', len(data) // 2)
+            if not self.host.state.active or self.host.state.stt_terminal_failure:
+                replacement.finish()
+                RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
+                return False
+        except Exception:
+            if replacement is not None:
+                replacement.finish()
+            RECONNECT.labels(provider='soniox', reason=reason, outcome='failed').inc()
+            return False
+        self._replay_cutoff_sample = cutoff
+        self.stt_socket = replacement
+        self._record_selected_epoch(epoch, replacement)
+        self._pending_live_failover = PendingLiveFailover(from_mode='soniox', to_mode='soniox', reason=reason)
+        RECONNECT.labels(provider='soniox', reason=reason, outcome='connected').inc()
+        return True
 
     async def _rebuild_stt_socket_locked(self) -> bool:
         rebuild = getattr(self, '_stt_rebuild', None)
@@ -1159,10 +1340,7 @@ class ListenReceiver:
         if not self.host.state.active or self.host.state.stt_terminal_failure:
             return False
 
-        # The hop we adopted last has now died without a transcript (or is
-        # about to be replaced). Settle it as a failed failover before the
-        # next provider is tried, otherwise connect-time recovered hid a
-        # 100% dead Soniox budget-exhaustion leg for 27.5h.
+        # Settle the previous hop before trying another provider; connect alone did not prove recovery.
         self._settle_pending_live_failover_failure()
 
         dead_provider = provider_for_service(self.host.stt_service)
@@ -1172,22 +1350,28 @@ class ListenReceiver:
             return False
         # Feed account/serve deaths even when failover prevents a terminal event.
         note_typed_provider_death(self.stt_socket, dead_provider)
-
         service, language, model = get_stt_service_for_language(
             self.host.language,
             multi_lang_enabled=self.host.multi_lang_enabled,
+            language_profile=self.host.language_profile,
             exclude=frozenset(self._stt_failed_providers),
             **window_selection_kwargs(self.host, self.host.request.uid),
         )
         if service is None:
             return False
-
         parakeet_callback, modulate_callback, epoch = rebuild[0]()
         sample_rate = rebuild[1]
         previous = self.stt_socket
         previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
+        window_ring = self._window_ring()
+        trim_window_replay_to_anchor(window_ring, previous)
+        replay = window_ring.snapshot() if window_ring is not None else ()
+        if replay and epoch is not None:
+            epoch.replay_origin_sample = replay[0][0]
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
         hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
+        hop.reason = getattr(previous, 'typed_death_reason', None) or 'connection_lost'
+        hop.capture_capacity_details(previous)
         try:
             raw = await self._create_stt_socket(
                 parakeet_callback,
@@ -1195,6 +1379,17 @@ class ListenReceiver:
                 modulate_callback=modulate_callback,
                 epoch=epoch,
             )
+        except ProviderChainUnavailable as error:
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            hop.note_failure(None)
+            await terminate_live_stt_backoff(
+                self.host.request.websocket,
+                self.host.state,
+                reason='provider_unavailable',
+                retry_after=error.retry_after,
+            )
+            return False
         except Exception:
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
@@ -1217,9 +1412,26 @@ class ListenReceiver:
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
-
+        # Replay capture positions after the last emitted segment.
+        rejected_sample = replay_chunks(
+            raw,
+            replay,
+            source=window_ring,
+            provider=dead_provider or 'parakeet',
+            soniox=self._resilient_audio if self.host.stt_service == STTService.soniox else None,
+        )
+        if rejected_sample is not None and window_ring is not None:
+            window_ring.finalize_through(rejected_sample)
+            close_rejected_socket(raw)
+            hop.note_failure('connection_lost')
+            self._stt_failed_providers.add(provider_for_service(service) or service.value)
+            self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            return await self._rebuild_stt_socket_locked()
         self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
+        if window_ring is not None:
+            window_ring.close()
         self._record_selected_epoch(epoch, self.stt_socket)
+        record_live_connection(self.host, self._serving_provider())
         self._pending_live_failover = hop
         record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
         logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
@@ -1228,6 +1440,8 @@ class ListenReceiver:
                 previous.finish()
             except Exception:
                 logger.warning('Failed to close the STT socket that died before failover')
+            finally:
+                release_live_stt_socket(previous)
         return True
 
     async def _monitor_stt_death(self) -> None:
@@ -1332,6 +1546,13 @@ class ListenReceiver:
                 self._stt_buffer_start_sample = None
                 return
             outbound_audio = bytes(buffer)
+            outbound_start_sample = self._stt_buffer_start_sample
+            window_ring = self._window_ring()
+            ring_action = window_replay_action(window_ring, self.stt_socket, outbound_audio, outbound_start_sample)
+            if ring_action == 'failover':
+                if await self._failover_stt_socket():
+                    continue
+                return
             sent = await flush_live_stt_buffer(
                 request.websocket,
                 self.host.state,
@@ -1343,6 +1564,10 @@ class ListenReceiver:
                 start_sample=self._stt_buffer_start_sample,
             )
             if sent:
+                if self._resilient_audio is not None and self.host.stt_service == STTService.soniox:
+                    self._resilient_audio.append(outbound_audio, outbound_start_sample)
+                if (ring := self._window_ring()) is not None:
+                    ring.append(outbound_audio, outbound_start_sample)
                 self._capture('capture_outbound_stt', outbound_audio)
                 self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
                 self._stt_buffer_start_sample = None
@@ -1460,6 +1685,32 @@ class ListenReceiver:
         elif kind == 'client_state':
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
+            config = resolve_ondemand_config()
+            if config.shadow_enabled or config.gate_enabled:
+                if self.translation_demand.observe(payload, lease_v1_enabled=config.lease_v1_enabled):
+                    if self._translation_expiry_task is not None:
+                        self._translation_expiry_task.cancel()
+                    snapshot = self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+                    get_translation_metrics().demand(
+                        snapshot.policy.value,
+                        'enforced' if config.gate_enabled else 'shadow',
+                        self._telemetry_platform(),
+                    )
+                    if snapshot.expires_at is not None:
+                        self._translation_expiry_task = self.host.spawn(
+                            self._expire_translation_demand(snapshot.expires_at), name='translation_demand_expiry'
+                        )
+                    if self.host.transcripts is not None:
+                        coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
+                        if coordinator is not None:
+                            coordinator.demand_changed()
+                        self.host.spawn(
+                            self.host.transcripts.on_translation_demand_changed(), name='translation_demand_reconcile'
+                        )
+        elif kind == 'capture_evidence_frame' and capture_evidence_dark_write_enabled():
+            # The next binary message alone may consume this claim. A new
+            # control message supersedes an unpaired one, never a later frame.
+            self._pending_source_frame = payload
         elif kind == 'finalization_reason':
             reason = payload.get('reason')
             if reason in {
@@ -1472,6 +1723,20 @@ class ListenReceiver:
                 'retry',
             }:
                 self.host.state.finalization_reason = reason
+
+    async def _expire_translation_demand(self, expires_at: float) -> None:
+        interrupted = await self.host.wait(max(0.0, expires_at - time.monotonic()))
+        if not interrupted and self.host.transcripts is not None:
+            config = resolve_ondemand_config()
+            get_translation_metrics().demand(
+                self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled).policy.value,
+                'enforced' if config.gate_enabled else 'shadow',
+                self._telemetry_platform(),
+            )
+            coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
+            if coordinator is not None:
+                coordinator.demand_changed()
+            self.host.spawn(self.host.transcripts.on_translation_demand_changed(), name='translation_demand_reconcile')
 
     async def _handle_speaker_assigned(self, payload: Dict[str, Any]) -> None:
         segment_ids = payload.get('segment_ids', [])
@@ -1499,6 +1764,7 @@ class ListenReceiver:
             decision = max(decisions, key=lambda value: value.get('generation', 0))
             self.host.speakers.segment_assignments[sid] = 'user' if decision['is_user'] else decision['person_id']
         self.host.state.speaker_map_dirty = True
+        self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
         person_id = payload.get('person_id')
         if (
             isinstance(person_id, str)
@@ -1537,6 +1803,8 @@ class ListenReceiver:
                     break
                 data = message.get('bytes')
                 if data is not None:
+                    source_claim = self._pending_source_frame
+                    self._pending_source_frame = None
                     if len(data) <= 2:
                         continue
                     now = time.time()
@@ -1585,6 +1853,15 @@ class ListenReceiver:
                         # (opcode-101 start) is v2-only: with the flag off the
                         # wire must stay byte-identical to the legacy session.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
+                        source_map = self.host.state.source_position_map
+                        if source_map is not None:
+                            source_map.accept(
+                                parse_live_frame(source_claim, len(data)) if source_claim else None,
+                                sample_start=start_sample,
+                                sample_count=end_sample - start_sample,
+                                rate_hz=request.sample_rate,
+                                payload=bytes(data),
+                            )
                         self._note_accepted_frame(start_sample, end_sample)
                         self._write_ring_buffer_frame(decoded, now, start_sample)
                         if not self.host.use_custom_stt:
@@ -1671,6 +1948,15 @@ class ListenReceiver:
                 await self._flush_stt_buffer(buffer, force=True)
             await self._drain_stt_sockets()
             self.host.state.active = False
+            demand = getattr(self, 'translation_demand', None)
+            if demand is not None:
+                demand.close()
+            expiry_task = getattr(self, '_translation_expiry_task', None)
+            if expiry_task is not None:
+                expiry_task.cancel()
+            coordinator = getattr(getattr(self.host, 'transcripts', None), 'translation_coordinator', None)
+            if coordinator is not None:
+                coordinator.demand_changed()
 
     async def flush_multi_channel_tail(self) -> None:
         if not should_flush_final_multi_channel_mix(
@@ -1686,9 +1972,25 @@ class ListenReceiver:
             buffer.clear()
 
     def finish(self) -> None:
+        demand = getattr(self, 'translation_demand', None)
+        if demand is not None:
+            demand.close()
+        expiry_task = getattr(self, '_translation_expiry_task', None)
+        if expiry_task is not None:
+            expiry_task.cancel()
+        self._resilient_closing = True
+        if self._resilient_audio is not None:
+            self._resilient_audio.close()
+        if (ring := getattr(self, '_window_replay_audio', None)) is not None:
+            ring.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
-                socket.finish()
+                try:
+                    socket.finish()
+                except Exception:
+                    logger.warning('Failed to close a live STT socket during receiver shutdown')
+                finally:
+                    release_live_stt_socket(socket)
 
     def clear(self) -> None:
         self.image_chunks.clear()

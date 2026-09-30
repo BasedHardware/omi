@@ -406,7 +406,7 @@ class _DeveloperTextField extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
         border: border,
         enabledBorder: border,
-        focusedBorder: const OutlineInputBorder(
+        focusedBorder: OutlineInputBorder(
           borderRadius: OmiRadius.mdAll,
           borderSide: BorderSide(color: OmiColors.textTertiary),
         ),

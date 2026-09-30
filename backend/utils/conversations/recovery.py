@@ -9,6 +9,7 @@ through the same definitions so admission and verification cannot drift.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -19,6 +20,16 @@ _PROTECTED_STRUCTURED_TEXT_FIELDS = ('title', 'overview')
 _PROTECTED_STRUCTURED_LIST_FIELDS = ('sections', 'action_items', 'events')
 
 TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
+
+
+def recovery_minimum_terminal_enabled() -> bool:
+    """Kill switch for ending a recovery whose enrichment returned only a minimum."""
+    return os.getenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'false').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+        'on',
+    }
 
 
 def _field(structured: Any, name: str) -> Any:
@@ -44,10 +55,25 @@ def structured_is_rich(structured: Any) -> bool:
     return False
 
 
+def verified_recovery_discard(discarded: Any, decision: Any) -> bool:
+    """An explicit recovery relevance discard is a valid terminal outcome.
+
+    The processor stores the decision before completing the job. Requiring its
+    trigger and verdict prevents an old discard flag or a title-only minimum
+    from passing the self-heal verifier without enrichment.
+    """
+    return (
+        discarded is True
+        and isinstance(decision, Mapping)
+        and decision.get('trigger') == 'server_recovery'
+        and decision.get('verdict') == 'discard'
+    )
+
+
 def structured_has_protected_content(structured: Any, user_title: Any = None) -> bool:
     """Whether regenerating the row could overwrite content worth keeping.
 
-    Admission-only predicate: unlike ``structured_is_rich`` (which verifies new
+    Admission and discard-commit predicate: unlike ``structured_is_rich`` (which verifies new
     enrichment actually landed), a real ``title`` — set by the user or by an
     earlier successful pass — and the user-authored ``user_title`` field each
     make the row ineligible even with no overview, so recovery never clobbers
@@ -103,7 +129,7 @@ def recovery_audio_file_ids(conversation: Mapping[str, Any]) -> list[str] | None
 
 
 class RecoveryStructureUnavailableError(RuntimeError):
-    """SERVER_RECOVERY produced only the deterministic minimum.
+    """SERVER_RECOVERY kept a row but produced only the deterministic minimum.
 
     Raised before persistence so the row keeps its in-progress content and
     lifecycle status untouched; the durable finalization workflow owns the

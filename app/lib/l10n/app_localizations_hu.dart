@@ -10141,12 +10141,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'A hang nem olvasható — nem szinkronizálható';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11266,7 +11260,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get openCall => 'Hívás megnyitása';
 
   @override
-  String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';
+  String get captureRecoveryBanner => 'Az Omi nem küld hangot — koppintson az újracsatlakozáshoz';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11392,6 +11386,777 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Fejhallgató';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'perc';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Feladatok';
+
+  @override
+  String get usageMonth => 'Ez a hónap';
+
+  @override
+  String get usageYear => 'Ez az év';
+
+  @override
+  String get usageAll => 'Minden idők';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Megjelenés';
+
+  @override
+  String get appearanceSystem => 'Rendszer';
+
+  @override
+  String get appearanceLight => 'Világos';
+
+  @override
+  String get appearanceDark => 'Sötét';
+
+  @override
+  String get chatDiscardRecording => 'Elvetés';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nem értettem — próbáld újra';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Személyek keresése';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '„$query” hozzáadása új személyként';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Az összes ($count) személy megjelenítése';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Szia $name, kérdezz bármit';
+  }
+
+  @override
+  String get activity => 'Tevékenység';
+
+  @override
+  String get places => 'Helyek';
+
+  @override
+  String get recaps => 'Összefoglalók';
+
+  @override
+  String get recent => 'Legutóbbiak';
+
+  @override
+  String get searchPartialFailure => 'Néhány találatot nem sikerült betölteni';
+
+  @override
+  String get peopleSearchPlaceholder => 'Személyek keresése';
+
+  @override
+  String get peopleNotHeardYet => 'Még nem hallott';
+
+  @override
+  String get peopleRecent => 'Legutóbbiak';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ez eltávolítja a hangmintáikat, és nem vonható vissza. A korábbi beszélgetésekben elhangzott mondataik névtelen beszélőkké válnak.';
+
+  @override
+  String get personTalkTime => 'Beszédidő';
+
+  @override
+  String get personLastHeard => 'Utoljára hallott';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy törlése?',
+      one: '1 személy törlése?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Hang szükséges';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy',
+      one: '1 személy',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nincs egyező személy';
+
+  @override
+  String get deselectAll => 'Kijelölés megszüntetése';
+
+  @override
+  String get voiceRecognitionSettings => 'Hangfelismerés';
+
+  @override
+  String get greetingMorning => 'Jó reggelt';
+
+  @override
+  String get greetingAfternoon => 'Jó napot';
+
+  @override
+  String get greetingEvening => 'Jó estét';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Mit szeretnél tudni?';
+
+  @override
+  String get askSuggestDecide => 'Mit döntöttem ma?';
+
+  @override
+  String get askSuggestOwe => 'Mivel tartozom még másoknak?';
+
+  @override
+  String get askSuggestNotice => 'Mit vett észre az Omi?';
+
+  @override
+  String get pastChats => 'Korábbi csevegések';
+
+  @override
+  String get newChat => 'Új csevegés';
+
+  @override
+  String get startFresh => 'Kezdj tiszta lappal';
+
+  @override
+  String get noPastChats => 'Az Omival folytatott csevegéseid itt jelennek meg.';
+
+  @override
+  String get deleteChatQuestion => 'Törlöd ezt a csevegést?';
+
+  @override
+  String get deleteChatMessage => 'Véglegesen eltűnik a korábbi csevegések közül.';
+
+  @override
+  String get deleteChat => 'Csevegés törlése';
+
+  @override
+  String get appsAskWith => 'Kérdezd az Omit ezzel';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés ma.',
+      one: '1 beszélgetés ma.',
+      zero: 'Ma nem volt beszélgetés.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Mi volt a képernyőn';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Képernyőkép erről a megbeszélésről';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Törli a képernyőképet?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'A képernyőkép törlődik a megbeszélés jegyzetéből. Ez nem vonható vissza.';
+
+  @override
+  String get conversationSummaryFailed => 'Az összefoglaló nem sikerült';
+
+  @override
+  String get reconnectionsRecent => 'Újracsatlakozások (elmúlt 7 nap)';
+
+  @override
+  String get failedConnections => 'Sikertelen kapcsolatok';
+
+  @override
+  String get failedConnectionsRecent => 'Sikertelen kapcsolatok (elmúlt 7 nap)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count a párosítás óta';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Alacsony megbízhatóság';
+
+  @override
+  String get peopleFilterPinned => 'Kitűzött';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kitűzött',
+      one: '1 kitűzött',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Megerősítve';
+
+  @override
+  String get confidenceLikely => 'Valószínű';
+
+  @override
+  String get confidenceUnverified => 'Ellenőrizetlen';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Megbízhatóság: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count alkalommal megcímkézted',
+      one: 'Egyszer megcímkézted',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kiválasztva $count javaslatnál',
+      one: 'Kiválasztva 1 javaslatnál',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count egyezést megerősítettél',
+      one: '1 egyezést megerősítettél',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Csak automatikusan egyeztetve, sosem megerősítve';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Sosem megerősítve';
+
+  @override
+  String get confidenceReasonCorrected => 'Javítottad az egyezését';
+
+  @override
+  String get confidenceReasonVoiceReady => 'hang kész';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'hang kell';
+
+  @override
+  String get confidenceReasonNotHeard => 'még nem hallható';
+
+  @override
+  String get confidenceSheetTitle => 'Megbízhatóság';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi felismeri $name hangját, és te megerősítetted.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi általában felismeri $name hangját, de csak néhányszor erősítetted meg.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Eddig semmit sem tettél, ami $name mellett szólna.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Bizonyíték';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Általad megcímkézve $count beszélgetésben',
+      one: 'Általad megcímkézve 1 beszélgetésben',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Igen $count javaslatnál',
+      one: 'Igen 1 javaslatnál',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kiválasztva $count javaslatnál',
+      one: 'Kiválasztva 1 javaslatnál',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automatikus egyezés megerősítve',
+      one: '1 automatikus egyezés megerősítve',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count egyezés átkerült valaki máshoz',
+      one: '1 egyezés átkerült valaki máshoz',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automatikus egyezés, amit senki sem erősített meg',
+      one: '1 automatikus egyezés, amit senki sem erősített meg',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Hangminta kész';
+
+  @override
+  String get evidenceNoVoice => 'Még nincs hangminta';
+
+  @override
+  String get evidenceNotHeard => 'Még nem szerepelt beszélgetésben';
+
+  @override
+  String get evidenceNothing => 'Még nem címkézted meg és nem erősítetted meg';
+
+  @override
+  String get effectCountsALot => 'Sokat számít';
+
+  @override
+  String get effectCounts => 'Számít';
+
+  @override
+  String get effectCountsALittle => 'Kicsit számít';
+
+  @override
+  String get effectBarelyCounts => 'Alig számít';
+
+  @override
+  String get effectCountsAgainst => 'Ellene szól';
+
+  @override
+  String get effectNeeded => 'Szükséges a Megerősítve szinthez';
+
+  @override
+  String get confidenceToReachConfirmed => 'A Megerősítve szint eléréséhez';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Ominak $name hangmintájára is szüksége van. Címkézd meg úgy, hogy a Hangok megjegyzése be van kapcsolva.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name szintje: Megerősítve. Omi minden címkéből tanul tovább.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Csak a te válaszaid változtatnak sokat a megbízhatóságon. Az automatikus egyezések önmagukban alig számítanak.';
+
+  @override
+  String get personWhyConfidence => 'Miért?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return '$name kitűzése';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name marad a lista elején, és számíthatsz rá a beszélgetéseidben';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi megkér, hogy erősítsd meg a közeli egyezéseket, ahelyett hogy találgatna.';
+
+  @override
+  String get pinAction => 'Kitűzés';
+
+  @override
+  String get unpinAction => 'Kitűzés megszüntetése';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name kitűzve';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name kitűzése megszüntetve';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Miért: $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Törlöd $name személyt?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name ki van tűzve. A hangmintái törlődnek, Omi nem ismeri fel többé, a korábbi átiratokban pedig névtelen beszélőként jelenik meg. Ez nem vonható vissza.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return '$name törlése';
+  }
+
+  @override
+  String get selectPeople => 'Személyek kiválasztása';
+
+  @override
+  String get cleanUpEllipsis => 'Takarítás…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy, akikben Omi nem biztos',
+      one: '1 személy, akiben Omi nem biztos',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Többnyire félrehallott nevek. Nézd át őket, és töröld, amelyek nem valódiak.';
+
+  @override
+  String get reviewAction => 'Áttekintés';
+
+  @override
+  String get cleanUpTitle => 'Takarítás';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi nem biztos ebben a $count személyben. A legtöbb az átiratokból félrehallott név. Vedd ki a pipát annál, akit meg akarsz tartani.',
+      one: 'Omi nem biztos ebben a személyben. Vedd ki a pipát, ha meg akarod tartani.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'A kitűzött személyek sosem kerülnek be a takarításba.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy törlése',
+      one: '1 személy törlése',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy törölve',
+      one: '1 személy törölve',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Nincs mit takarítani';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi jelenleg senkiben sem bizonytalan.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Az Összes kijelölése kihagyja a kitűzött személyeket. Töröld őket egyenként az oldalukról.';
+
+  @override
+  String get pinnedNotSelectable => 'Kitűzött, nem választható';
+
+  @override
+  String get ignoredVoicesTitle => 'Mellőzött hangok';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcastok és más hangok, amelyeket „nem személy”-ként jelöltél';
+
+  @override
+  String get ignoredVoicesEmpty => 'Nincsenek mellőzött hangok';
+
+  @override
+  String get restoreAction => 'Visszaállítás';
+
+  @override
+  String get voiceRestoredToast => 'Omi újra rákérdezhet erre a hangra';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Valaki más…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Nem személy';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Nem tudom';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Én vagyok';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Legközelebbi hangok';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Akikkel mostanában beszéltél';
+
+  @override
+  String get voiceMatchClose => 'Erős egyezés';
+
+  @override
+  String get voiceMatchPossible => 'Lehetséges egyezés';
+
+  @override
+  String get voiceMatchWeak => 'Gyenge egyezés';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Hangegyezés: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify =>
+      'Minden válasz egy hangot tanít Ominak, és növeli az illető megbízhatóságát.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Az Igen növeli $name megbízhatóságát.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Pontosan tartja a saját hangprofilodat, így Omi soha nem nevez el valaki másnak.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Mentve mint $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Mentve mint te';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi nem kérdez rá többé erre a hangra';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Címke: $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Címke: te';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Megjelölve nem személyként';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Címke eltávolítva';
+
+  @override
+  String get whoIsItTitle => 'Ki ez?';
+
+  @override
+  String get newPersonEllipsis => 'Új személy…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return '„$name” hozzáadása';
+  }
+
+  @override
+  String get everyoneHeader => 'Mindenki';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Ennek a beszélőnek minden sorára vonatkozik';
+
+  @override
+  String get collapseAction => 'Összecsukás';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Nem én vagyok';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Címkézd meg őket még $count beszélgetésben.',
+      one: 'Címkézd meg őket még 1 beszélgetésben.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get showOnLockScreen => 'Megjelenítés a zárolási képernyőn';

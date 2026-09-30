@@ -59,8 +59,44 @@ def test_reconcile_provisions_missing_indexes_and_waits_for_every_index():
 
     assert commands[0][:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'list']
     assert commands[1][:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']
+    assert '--async' in commands[1]
     assert commands[-1][:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'list']
     assert sleeps == [1]
+
+
+def test_reconcile_issues_every_async_create_before_waiting_for_the_full_manifest(capsys):
+    events = []
+    list_calls = 0
+    indexes = firebase_index_manifest()['indexes']
+
+    def runner(command, **_kwargs):
+        nonlocal list_calls
+        if command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']:
+            events.append(('create', command))
+            return SimpleNamespace(returncode=0, stdout='', stderr='')
+        events.append(('list', command))
+        list_calls += 1
+        live = indexes[:-2] if list_calls == 1 else indexes
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps([_gcloud_live_index(index) for index in live]),
+            stderr='',
+        )
+
+    reconcile_firestore_indexes.reconcile(
+        project='dev-project',
+        database='(default)',
+        manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
+        timeout_seconds=30,
+        poll_interval_seconds=1,
+        provision_missing=True,
+        runner=runner,
+        sleep=lambda _seconds: None,
+    )
+
+    assert [kind for kind, _command in events] == ['list', 'create', 'create', 'list']
+    assert all('--async' in command for kind, command in events if kind == 'create')
+    assert f'{len(indexes)} composite indexes READY' in capsys.readouterr().out
 
 
 def test_check_only_reads_the_live_inventory_without_writing(capsys, tmp_path):
@@ -424,6 +460,7 @@ def test_provision_missing_uses_gcloud_with_every_manifest_field_and_waits_for_r
     assert f"--collection-group={target['collectionGroup']}" in commands[1]
     assert len([arg for arg in commands[1] if arg.startswith('--field-config=')]) == len(target['fields'])
     assert commands[1][-1] == '--quiet'
+    assert '--async' in commands[1]
     assert commands[1] == reconcile_firestore_indexes.gcloud_create_index_command(
         project='dev-project',
         database='(default)',
@@ -539,7 +576,7 @@ def test_writer_and_check_only_share_exact_signature_matching(monkeypatch, check
 
     def runner(command, **_kwargs):
         if command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']:
-            return SimpleNamespace(returncode=0, stdout='')
+            return SimpleNamespace(returncode=0, stdout='', stderr='')
         return SimpleNamespace(returncode=0, stdout=json.dumps([live_index]))
 
     proposal_kwargs = (
@@ -596,6 +633,48 @@ def test_dev_provisioning_does_not_accept_an_implicit_document_id_alias():
 
     assert missing == expected
     assert commands[1][:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']
+
+
+@pytest.mark.parametrize('stderr', ['ALREADY_EXISTS: index exists', 'ERROR: already_exists for requested index'])
+def test_provision_missing_tolerates_already_exists_create(stderr):
+    signature = (
+        'task_attention_overrides',
+        'COLLECTION',
+        (('account_generation', 'ASCENDING'), ('expires_at', 'ASCENDING')),
+    )
+
+    def runner(command, **_kwargs):
+        if command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']:
+            return SimpleNamespace(returncode=1, stdout='', stderr=stderr)
+        return SimpleNamespace(returncode=0, stdout='[]', stderr='')
+
+    assert reconcile_firestore_indexes.provision_missing_indexes(
+        expected={signature},
+        project='dev-project',
+        database='(default)',
+        runner=runner,
+    ) == {signature}
+
+
+def test_provision_missing_raises_for_other_create_failures_and_names_index():
+    signature = (
+        'task_attention_overrides',
+        'COLLECTION',
+        (('account_generation', 'ASCENDING'), ('expires_at', 'ASCENDING')),
+    )
+
+    def runner(command, **_kwargs):
+        if command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']:
+            return SimpleNamespace(returncode=1, stdout='', stderr='permission denied')
+        return SimpleNamespace(returncode=0, stdout='[]', stderr='')
+
+    with pytest.raises(RuntimeError, match='task_attention_overrides'):
+        reconcile_firestore_indexes.provision_missing_indexes(
+            expected={signature},
+            project='dev-project',
+            database='(default)',
+            runner=runner,
+        )
 
 
 def test_live_index_from_another_resource_identity_does_not_satisfy_the_manifest():

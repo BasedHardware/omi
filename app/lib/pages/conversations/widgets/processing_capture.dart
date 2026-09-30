@@ -180,10 +180,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter
   /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
-  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 12, 8, 14);
+  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 10, 8, 12);
 
   Widget _cardShell(Widget child, {EdgeInsets? padding}) => Container(
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
         width: double.maxFinite,
         padding: padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16),
         decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),
@@ -335,7 +335,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           if (provider.isConversationMarkedForStarring) ...[
             const SizedBox(height: OmiSpacing.sm),
             Row(children: [
-              const FaIcon(FontAwesomeIcons.solidStar, size: 12, color: OmiColors.textSecondary),
+              FaIcon(FontAwesomeIcons.solidStar, size: 12, color: OmiColors.textSecondary),
               const SizedBox(width: OmiSpacing.xs),
               Text(context.l10n.starred, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ]),
@@ -607,8 +607,8 @@ getPhoneMicRecordingButton(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
         height: 24,
-        decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-        child: const Center(child: Icon(Icons.play_arrow, color: OmiColors.onAccent, size: 14)),
+        decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+        child: Center(child: Icon(Icons.play_arrow, color: OmiColors.onAccent, size: 14)),
       );
     } else {
       text = context.l10n.continueRecording;
@@ -627,7 +627,10 @@ getPhoneMicRecordingButton(
         const SizedBox(width: 4),
         Text(
           text,
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium!
+              .copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
         ),
         const SizedBox(width: 4),
       ],
@@ -791,7 +794,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                     // Processing label
                     Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF35343B),
+                        color: OmiColors.categorySurface,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -819,7 +822,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                   const SizedBox(height: 12),
                   Text(
                     context.l10n.processingTakingLonger,
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.3),
+                    style: TextStyle(color: OmiColors.textTertiary, fontSize: 13, height: 1.3),
                   ),
                   const SizedBox(height: 10),
                   Align(
@@ -830,7 +833,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                         key: const Key('processing_conversation_retry_button'),
                         onPressed: _retrying ? null : _onRetry,
                         style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
+                          foregroundColor: OmiColors.textPrimary,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           minimumSize: const Size(44, 44),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,

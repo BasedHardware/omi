@@ -4,13 +4,25 @@ import threading
 from typing import Any
 
 from fastapi import Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest, start_http_server
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    disable_created_metrics,
+    generate_latest,
+    start_http_server,
+)
 
-from utils.journey_metrics_contract import (
-    CLIENT_JOURNEY_ISSUE_CLASSES,
-    CLIENT_JOURNEY_OUTCOMES,
-    CLIENT_JOURNEYS,
-    CLIENT_KINDS,
+# All backend, backend-listen, and pusher metrics endpoints import this module.
+# The pinned prometheus_client (0.21.1) otherwise exports a second _created
+# series for every Counter and Histogram child, including idle zero children.
+disable_created_metrics()
+
+OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
+    'omi_listen_stt_unavailable_total',
+    'Listen sessions rejected before STT setup because providers or reconnect budget are unavailable',
+    ['reason'],
 )
 
 OMI_PRODUCT_EVENT_TOTAL = Counter(
@@ -105,6 +117,12 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
 # conversation id, or any transcript/audio content. mode=legacy|v2;
 # segments outcome=mapped|rejected|recovered|unplaced|straddled|late_owner_dropped;
 # coverage outcome is the 3.4 vocabulary covered|missing|pending_upload|no_audio|unsupported.
+OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL = Counter(
+    'omi_capture_evidence_envelopes_total',
+    'S1 metadata attempts on existing writes, by fixed ingest path and coverage status.',
+    ['path', 'status'],
+)
+
 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
     'omi_audio_timeline_segments_total',
     'Live transcript segments by audio-timeline mapping outcome',
@@ -209,12 +227,6 @@ OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
 )
 for _mode in ('legacy', 'v2'):
     for _provider in AUDIO_TIMELINE_PROVIDERS:
-        for _send_path in AUDIO_TIMELINE_SEND_PATHS:
-            OMI_AUDIO_TIMELINE_MAPPED_TOTAL.labels(mode=_mode, provider=_provider, send_path=_send_path)
-            for _reason in AUDIO_TIMELINE_REJECT_REASONS:
-                OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(
-                    mode=_mode, reason=_reason, provider=_provider, send_path=_send_path
-                )
         OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL.labels(mode=_mode, provider=_provider)
     for _outcome in (
         'mapped',
@@ -376,7 +388,16 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
 # and `reason="model_error"` is the model tier failing open to keep.
 CONVERSATION_RELEVANCE_LABELS = {
     'trigger': frozenset(
-        {'capture_end', 'client_finalize', 'sync_update', 'first_open', 'user_reprocess', 'merge', 'sync_intake'}
+        {
+            'capture_end',
+            'client_finalize',
+            'sync_update',
+            'first_open',
+            'user_reprocess',
+            'merge',
+            'sync_intake',
+            'smart_merge',
+        }
     ),
     'verdict': frozenset({'keep', 'discard'}),
     'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override'}),
@@ -414,7 +435,15 @@ def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str
 # decision, never a user; every non-success outcome means the caller kept its
 # safe default.
 JEV_DECISION_LABELS = {
-    'lane': frozenset({'conversation_relevance', 'memory_owner'}),
+    'lane': frozenset(
+        {
+            'conversation_relevance',
+            'memory_owner',
+            'capture_same_scene',
+            'capture_resummary',
+            'conversation_smart_merge',
+        }
+    ),
     'outcome': frozenset({'success', 'unconfigured', 'timeout', 'transport_error', 'http_error', 'malformed'}),
 }
 
@@ -430,6 +459,33 @@ JEV_DECISION_LATENCY_SECONDS = Histogram(
     'Wall time of one Jev question including its single retry, by product lane and outcome.',
     ['lane', 'outcome'],
     buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 7.5),
+)
+
+# Static labels only. The durable, per-pair evidence lives in structured logs.
+CAPTURE_JEV_SHADOW_CALLS = Counter(
+    'omi_capture_jev_shadow_calls_total', 'Completed capture shadow questions.', ['decision', 'outcome']
+)
+CAPTURE_JEV_SHADOW_SKIPS = Counter(
+    'omi_capture_jev_shadow_skips_total',
+    'Capture shadow questions skipped before a model answer.',
+    ['decision', 'reason'],
+)
+CAPTURE_JEV_SHADOW_LATENCY = Histogram(
+    'omi_capture_jev_shadow_latency_seconds',
+    'End-to-end shadow question latency.',
+    ['decision'],
+    buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5),
+)
+CAPTURE_JEV_SHADOW_SCORE = Histogram(
+    'omi_capture_jev_shadow_score',
+    'Jev noul score for capture questions.',
+    ['decision'],
+    buckets=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.675, 0.7, 0.725, 0.8, 0.9, 1),
+)
+CAPTURE_JEV_SHADOW_AGREEMENT = Counter(
+    'omi_capture_jev_shadow_agreement_total',
+    'Shipped rule versus Jev same-scene matrix.',
+    ['category', 'agreement'],
 )
 
 # Capture-time owner re-attribution (process_conversation, MEMORY_OWNER_JEV_FLIP_ENABLED).
@@ -465,10 +521,104 @@ def record_memory_owner_jev(outcome: str) -> None:
         pass
 
 
+# Folding a finished pendant conversation into its predecessor
+# (utils/conversations/smart_merge.py, CONVERSATION_SMART_MERGE_MODE). `decision`
+# is merge/keep for a Jev answer and skip when the pair never reached Jev;
+# `reason` is a bounded rule or outcome id; `gap_bucket` is the recorded gap.
+CONVERSATION_SMART_MERGE_LABELS = {
+    'mode': frozenset({'shadow', 'merge'}),
+    'decision': frozenset({'merge', 'keep', 'skip'}),
+    'gap_bucket': frozenset({'2_5m', '5_15m', '15_30m', '30_60m', 'none'}),
+}
+CONVERSATION_SMART_MERGE_REASONS = frozenset(
+    {
+        'uid_not_allowed',
+        'not_eligible_source',
+        'not_capture_end',
+        'conversation_not_eligible',
+        'user_managed',
+        'wake_word',
+        'no_predecessor',
+        'predecessor_not_completed',
+        'predecessor_user_ended',
+        'predecessor_refresh_pending',
+        'refresh_unavailable',
+        'gap_out_of_window',
+        'too_few_words',
+        'span_cap',
+        'segment_cap',
+        'fragment_cap',
+        'jev_unavailable',
+        'jev_same',
+        'jev_different',
+        'absorbed',
+        'survivor_changed',
+        'error',
+    }
+)
+CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES = frozenset({'refreshed', 'fenced', 'lease_busy', 'failed'})
+
+CONVERSATION_SMART_MERGE_DECISION_TOTAL = Counter(
+    'omi_conversation_smart_merge_decision_total',
+    'Smart-merge decisions for finished conversations by mode, decision, bounded reason and recorded-gap bucket. '
+    'Never labeled by uid. Per-pod; sum() across jobs.',
+    ['mode', 'decision', 'reason', 'gap_bucket'],
+)
+CONVERSATION_SMART_MERGE_SCORE = Histogram(
+    'omi_conversation_smart_merge_score',
+    'Jev P(same occasion) for smart-merge candidate pairs, by mode (threshold 0.35).',
+    ['mode'],
+    buckets=(0.05, 0.1, 0.2, 0.25, 0.3, 0.325, 0.35, 0.375, 0.4, 0.5, 0.7, 1),
+)
+CONVERSATION_SMART_MERGE_REFRESH_TOTAL = Counter(
+    'omi_conversation_smart_merge_refresh_total',
+    'Survivor refreshes after a smart merge by outcome. Never labeled by uid.',
+    ['outcome'],
+)
+
+
+def _smart_merge_gap_bucket(gap_seconds: float | None) -> str:
+    if gap_seconds is None or gap_seconds < 120 or gap_seconds > 3600:
+        return 'none'
+    for limit, bucket in ((300, '2_5m'), (900, '5_15m'), (1800, '15_30m')):
+        if gap_seconds < limit:
+            return bucket
+    return '30_60m'
+
+
+def record_conversation_smart_merge(
+    *, mode: str, decision: str, reason: str, gap_seconds: float | None = None, p_same: float | None = None
+) -> None:
+    """Never raises: observability must not change a finalization outcome."""
+    try:
+        labels = {
+            name: value if value in CONVERSATION_SMART_MERGE_LABELS[name] else 'other'
+            for name, value in (('mode', mode), ('decision', decision))
+        }
+        labels['reason'] = reason if reason in CONVERSATION_SMART_MERGE_REASONS else 'other'
+        labels['gap_bucket'] = _smart_merge_gap_bucket(gap_seconds)
+        CONVERSATION_SMART_MERGE_DECISION_TOTAL.labels(**labels).inc()
+        if p_same is not None:
+            CONVERSATION_SMART_MERGE_SCORE.labels(mode=labels['mode']).observe(p_same)
+    except Exception:
+        pass
+
+
+def record_conversation_smart_merge_refresh(outcome: str) -> None:
+    """Never raises: observability must not change a finalization outcome."""
+    try:
+        CONVERSATION_SMART_MERGE_REFRESH_TOTAL.labels(
+            outcome=outcome if outcome in CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES else 'other'
+        ).inc()
+    except Exception:
+        pass
+
+
 OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
     (
-        'Accepted client-segmented product journeys by bounded journey, client kind, and app build. '
+        'Accepted client-segmented product journeys by bounded journey and client kind. '
+        'app_build is a constant compatibility label, not a client-supplied build. '
         'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
     ),
     ['journey', 'client_kind', 'app_build'],
@@ -499,29 +649,9 @@ OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
 # This is a separate, versioned contract from the legacy omi_journey_* family
 # above. Keep client_kind off the histogram: its 16 bucket series per child
 # would multiply the most expensive metric without helping outcome segmentation.
-# Initialize the complete bounded product so healthy-but-idle exporters expose
-# zeros instead of making an idle process indistinguishable from a missing one.
-# Zero-initialize journey×client_kind with app_build=unknown only. Expanding
-# the app_build axis would multiply series by every historical client build.
-for _journey in CLIENT_JOURNEYS:
-    for _client_kind in CLIENT_KINDS:
-        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind, app_build='unknown')
-        for _outcome in CLIENT_JOURNEY_OUTCOMES:
-            OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
-                journey=_journey,
-                client_kind=_client_kind,
-                app_build='unknown',
-                outcome=_outcome,
-            )
-        for _issue_class in CLIENT_JOURNEY_ISSUE_CLASSES:
-            OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
-                journey=_journey,
-                client_kind=_client_kind,
-                app_build='unknown',
-                issue_class=_issue_class,
-            )
-    for _outcome in CLIENT_JOURNEY_OUTCOMES:
-        OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(journey=_journey, outcome=_outcome)
+# Emit these children only when a journey occurs. The dashboard queries use
+# rate/increase, and no alert relies on an idle child being present. An idle
+# scrape is distinguished from a failed scrape by the scrape target's `up`.
 
 # The gauges below report one GLOBAL Firestore-derived quantity, and every
 # replica publishes the same value. Aggregate them with max(), never sum(): a
@@ -568,6 +698,12 @@ LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
     'Global authoritative Firestore finalization jobs by closed durable lifecycle '
     'state; replicated per process, aggregate with max() not sum()',
     ['state'],
+)
+
+MEETING_NOTES_EVIDENCE_WAIT_TOTAL = Counter(
+    'meeting_notes_evidence_wait_total',
+    'Desktop meeting finalizations by screen-evidence admission outcome',
+    ['outcome'],
 )
 
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
@@ -851,6 +987,12 @@ OMI_STT_PROVIDER_CONNECT_TOTAL = Counter(
     ['provider', 'outcome', 'error_class'],
 )
 
+OMI_LIVE_STT_OPEN_STREAMS = Gauge(
+    'omi_live_stt_open_streams',
+    'Currently open provider sockets serving live STT, by bounded provider',
+    ['provider'],
+)
+
 # Deployment-marked retired providers (intentionally unfunded legs). Budget and
 # leg-error alerts subtract these so a provider that is dead on purpose cannot
 # page forever. Populated from STT_RETIRED_PROVIDERS (utils/stt/stream_close.py).
@@ -861,12 +1003,12 @@ OMI_STT_PROVIDER_RETIRED = Gauge(
 )
 
 # /v4/listen funnel for sources the client cannot self-report (phone_call today):
-# accepted socket -> first decoded audio -> transcript delivery. Sources and outcomes
-# are closed enums; no user, call, or session identifiers appear as labels.
+# STT-admitted session -> first decoded audio -> transcript delivery. Provider-
+# unavailable and reconnect-budget rejections are excluded. Labels are bounded.
 OMI_LISTEN_ACCEPTED_TOTAL = Counter(
     'omi_listen_accepted_total',
     (
-        'Accepted /v4/listen sessions by bounded transcription source, client platform, and app build. '
+        'STT-admitted /v4/listen sessions by bounded transcription source, client platform, and app build. '
         'WebSocket accept paths omit app_build (unknown). Counters are per-pod; alert queries must '
         'sum() across job=backend-listen-metrics.'
     ),
@@ -886,6 +1028,12 @@ OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
     'omi_listen_audio_outcome_total',
     'Per-session listen audio outcomes by bounded transcription source, outcome, and client platform',
     ['transcription_source', 'outcome', 'client_platform'],
+)
+
+OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL = Counter(
+    'omi_listen_audio_decode_failures_total',
+    'Undecodable /v4/listen audio frames by bounded declared codec and client platform',
+    ['codec', 'client_platform'],
 )
 
 OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
@@ -919,6 +1067,18 @@ OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL = Counter(
 OMI_SYNC_INTAKE_TOTAL = Counter(
     'omi_sync_intake_total',
     'Sync conversation intake outcomes (created vs merged) by bounded outcome',
+    ['outcome'],
+)
+
+# One decision per safety-WAL upload that carries a recording id and audio
+# bounds (utils/sync/recording_lineage.py). Emitted from backend-sync, so the
+# matching `event=sync_lineage_resolve` log line is the queryable backup.
+OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
+    'omi_sync_lineage_resolve_total',
+    (
+        'Sync recording-lineage binding decisions. outcome is a closed set: bound|split_across_generations|'
+        'stamp_overridden|stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted'
+    ),
     ['outcome'],
 )
 

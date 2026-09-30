@@ -16,7 +16,9 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -59,18 +61,19 @@ Future<void> deleteConversationsWithUndo(BuildContext context, List<ServerConver
   if (conversations.isEmpty) return;
   final provider = context.read<ConversationProvider>();
   final l10n = context.l10n;
-  for (final conversation in conversations) {
-    provider.deleteConversationLocally(conversation);
-  }
+  final pendingIndexDeletes = conversations.map(provider.deleteConversationLocally).toList();
+  final pendingRestores = <Future<void>>[];
   final undone = await OmiFeedback.undo(
     context,
     conversations.length == 1 ? l10n.conversationDeleted : l10n.conversationsDeletedCount(conversations.length),
     onUndo: () {
       for (final conversation in conversations) {
-        provider.undoDeletedConversation(conversation);
+        pendingRestores.add(provider.undoDeletedConversation(conversation));
       }
     },
   );
+  await Future.wait(pendingIndexDeletes);
+  await Future.wait(pendingRestores);
   if (undone) return;
   for (final conversation in conversations) {
     provider.commitPendingDelete(conversation.id);
@@ -176,7 +179,6 @@ Future<void> shareConversation(BuildContext context, ServerConversation conversa
     }
     conversation.visibility = ConversationVisibility.shared;
   }
-  PlatformManager.instance.analytics.conversationShared(conversation: conversation, shareMethod: 'url_share');
   final box = context.findRenderObject() as RenderBox?;
   final outcome = await shareConversationLink(
     conversation,
@@ -225,10 +227,9 @@ Future<ConversationRowAction?> showConversationActionsSheet(
   bool canSelect = true,
 }) {
   final l10n = context.l10n;
-  final title = conversation.structured.title.trim();
   return showOmiSheet<ConversationRowAction>(
     context: context,
-    title: title.isEmpty ? l10n.untitledConversation : title,
+    title: conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.actions),
     padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
     builder: (sheetContext) {
       // FontAwesome glyphs, the same ones the conversation page's "…" menu uses for the same actions.

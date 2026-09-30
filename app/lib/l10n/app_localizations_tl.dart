@@ -10193,12 +10193,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Hindi mabasa ang audio — hindi ma-sync';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11321,7 +11315,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get openCall => 'Buksan ang tawag';
 
   @override
-  String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
+  String get captureRecoveryBanner => 'Hindi nagpapadala ng audio ang Omi — i-tap para muling kumonekta';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11449,6 +11443,778 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Mga headphone';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutes';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Mga Gawain';
+
+  @override
+  String get usageMonth => 'Sa Buwan Na Ito';
+
+  @override
+  String get usageYear => 'Sa Taong Ito';
+
+  @override
+  String get usageAll => 'Lahat ng Panahon';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Hitsura';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Maliwanag';
+
+  @override
+  String get appearanceDark => 'Madilim';
+
+  @override
+  String get chatDiscardRecording => 'Itapon';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Hindi ko narinig iyon — subukan ulit';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Maghanap ng mga tao';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Idagdag ang \"$query\" bilang bagong tao';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Ipakita ang lahat ng $count na tao';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hi $name, magtanong ng kahit ano';
+  }
+
+  @override
+  String get activity => 'Aktibidad';
+
+  @override
+  String get places => 'Mga lugar';
+
+  @override
+  String get recaps => 'Mga buod';
+
+  @override
+  String get recent => 'Kamakailan';
+
+  @override
+  String get searchPartialFailure => 'Hindi ma-load ang ilang resulta';
+
+  @override
+  String get peopleSearchPlaceholder => 'Maghanap ng tao';
+
+  @override
+  String get peopleNotHeardYet => 'Hindi pa naririnig';
+
+  @override
+  String get peopleRecent => 'Kamakailan';
+
+  @override
+  String get deletePeopleMessage =>
+      'Aalisin nito ang kanilang mga voice sample at hindi na ito maibabalik. Ang kanilang mga sinabi sa mga nakaraang usapan ay magiging mga speaker na walang pangalan.';
+
+  @override
+  String get personTalkTime => 'Oras ng pagsasalita';
+
+  @override
+  String get personLastHeard => 'Huling narinig';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Burahin ang $count tao?',
+      one: 'Burahin ang 1 tao?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Kailangan ng Boses';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tao',
+      one: '1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Walang Tugmang Tao';
+
+  @override
+  String get deselectAll => 'Alisin ang Lahat ng Pili';
+
+  @override
+  String get voiceRecognitionSettings => 'Pagkilala sa Boses';
+
+  @override
+  String get greetingMorning => 'Magandang umaga';
+
+  @override
+  String get greetingAfternoon => 'Magandang hapon';
+
+  @override
+  String get greetingEvening => 'Magandang gabi';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ano ang gusto mong malaman?';
+
+  @override
+  String get askSuggestDecide => 'Ano ang napagpasyahan ko ngayon?';
+
+  @override
+  String get askSuggestOwe => 'Ano pa ang utang ko sa mga tao?';
+
+  @override
+  String get askSuggestNotice => 'Ano ang napansin ni Omi?';
+
+  @override
+  String get pastChats => 'Mga nakaraang chat';
+
+  @override
+  String get newChat => 'Bagong chat';
+
+  @override
+  String get startFresh => 'Magsimula ulit';
+
+  @override
+  String get noPastChats => 'Dito lumalabas ang mga chat mo kay Omi.';
+
+  @override
+  String get deleteChatQuestion => 'Burahin ang chat na ito?';
+
+  @override
+  String get deleteChatMessage => 'Mawawala ito sa mga nakaraang chat nang tuluyan.';
+
+  @override
+  String get deleteChat => 'Burahin ang chat';
+
+  @override
+  String get appsAskWith => 'Tanungin si Omi gamit ang';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count usapan ngayon.',
+      one: '1 usapan ngayon.',
+      zero: 'Walang usapan ngayon.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Ano ang nasa screen';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Screenshot mula sa meeting na ito';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Burahin ang Screenshot?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik.';
+
+  @override
+  String get conversationSummaryFailed => 'Nabigo ang buod';
+
+  @override
+  String get reconnectionsRecent => 'Muling pagkonekta (nakaraang 7 araw)';
+
+  @override
+  String get failedConnections => 'Mga bigong koneksyon';
+
+  @override
+  String get failedConnectionsRecent => 'Mga bigong koneksyon (nakaraang 7 araw)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count mula nang ipares';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Mababang kumpiyansa';
+
+  @override
+  String get peopleFilterPinned => 'Naka-pin';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count naka-pin',
+      one: '1 naka-pin',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Kumpirmado';
+
+  @override
+  String get confidenceLikely => 'Malamang';
+
+  @override
+  String get confidenceUnverified => 'Hindi pa kumpirmado';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Kumpiyansa: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nilagyan mo ng label nang $count beses',
+      one: 'Nilagyan mo ng label nang isang beses',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pinili sa $count mungkahi',
+      one: 'Pinili sa 1 mungkahi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kinumpirma mo ang $count tugma',
+      one: 'Kinumpirma mo ang 1 tugma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Awtomatikong itinugma lang, hindi pa nakumpirma';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Hindi pa nakumpirma';
+
+  @override
+  String get confidenceReasonCorrected => 'Itinama mo ang tugma nito';
+
+  @override
+  String get confidenceReasonVoiceReady => 'handa na ang boses';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'kailangan ng boses';
+
+  @override
+  String get confidenceReasonNotHeard => 'hindi pa naririnig';
+
+  @override
+  String get confidenceSheetTitle => 'Kumpiyansa';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Nakikilala ni Omi ang boses ni $name, at kinumpirma mo ito.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Karaniwang nakikilala ni Omi ang boses ni $name, pero ilang beses mo pa lang itong nakumpirma.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Wala ka pang ginawang nagpapatunay kay $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Ebidensya';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nilagyan mo ng label sa $count usapan',
+      one: 'Nilagyan mo ng label sa 1 usapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Oo sa $count mungkahi',
+      one: 'Oo sa 1 mungkahi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pinili sa $count mungkahi',
+      one: 'Pinili sa 1 mungkahi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nakumpirma ang $count awtomatikong tugma',
+      one: 'Nakumpirma ang 1 awtomatikong tugma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tugma ang inilipat sa iba',
+      one: '1 tugma ang inilipat sa iba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count awtomatikong tugma na walang nagkumpirma',
+      one: '1 awtomatikong tugma na walang nagkumpirma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Handa na ang sample ng boses';
+
+  @override
+  String get evidenceNoVoice => 'Wala pang sample ng boses';
+
+  @override
+  String get evidenceNotHeard => 'Hindi pa naririnig sa usapan';
+
+  @override
+  String get evidenceNothing => 'Hindi mo pa sila nilagyan ng label o kinumpirma';
+
+  @override
+  String get effectCountsALot => 'Malaki ang bigat';
+
+  @override
+  String get effectCounts => 'May bigat';
+
+  @override
+  String get effectCountsALittle => 'Kaunti ang bigat';
+
+  @override
+  String get effectBarelyCounts => 'Halos walang bigat';
+
+  @override
+  String get effectCountsAgainst => 'Nagpapababa';
+
+  @override
+  String get effectNeeded => 'Kailangan para maging Kumpirmado';
+
+  @override
+  String get confidenceToReachConfirmed => 'Para Maging Kumpirmado';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Kailangan din ni Omi ng sample ng boses ni $name. Lagyan sila ng label habang naka-on ang Tandaan ang mga boses.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return 'Kumpirmado na si $name. Patuloy na natututo si Omi sa bawat label.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Ang mga sagot mo lang ang malaki ang epekto sa kumpiyansa. Halos walang bigat ang mga awtomatikong tugma nang mag-isa.';
+
+  @override
+  String get personWhyConfidence => 'Bakit?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'I-pin si $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Panatilihin si $name at asahan sila sa mga usapan mo';
+  }
+
+  @override
+  String get pinPersonHonestLine =>
+      'Tatanungin ka ni Omi para kumpirmahin ang mga malapit na tugma sa halip na manghula.';
+
+  @override
+  String get pinAction => 'I-pin';
+
+  @override
+  String get unpinAction => 'I-unpin';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Na-pin si $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Na-unpin si $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Bakit $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'I-delete si $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Naka-pin si $name. Made-delete ang mga sample ng boses nila, hindi na sila makikilala ni Omi, at lalabas silang hindi pinangalanang speaker sa mga lumang transcript. Hindi na ito maibabalik.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'I-delete si $name';
+  }
+
+  @override
+  String get selectPeople => 'Pumili ng mga tao';
+
+  @override
+  String get cleanUpEllipsis => 'Linisin…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count taong hindi sigurado si Omi',
+      one: '1 taong hindi sigurado si Omi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Karamihan ay maling narinig na pangalan. Suriin at alisin ang mga hindi totoo.';
+
+  @override
+  String get reviewAction => 'Suriin';
+
+  @override
+  String get cleanUpTitle => 'Linisin';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Hindi sigurado si Omi sa $count taong ito. Karamihan ay mga pangalang maling narinig sa mga transcript. Alisin ang check ng sinumang gusto mong panatilihin.',
+      one: 'Hindi sigurado si Omi sa taong ito. Alisin ang check para panatilihin sila.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Hindi kailanman isinasama sa Paglilinis ang mga naka-pin na tao.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'I-delete ang $count tao',
+      one: 'I-delete ang 1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Na-delete ang $count tao',
+      one: 'Na-delete ang 1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Walang Lilinisin';
+
+  @override
+  String get cleanUpNothingMessage => 'Sa ngayon, sigurado si Omi sa lahat.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Nilalaktawan ng Piliin Lahat ang mga naka-pin na tao. I-delete sila nang isa-isa mula sa page nila.';
+
+  @override
+  String get pinnedNotSelectable => 'Naka-pin, hindi mapipili';
+
+  @override
+  String get ignoredVoicesTitle => 'Mga Binalewalang Boses';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcast, at iba pang boses na minarkahan mong Hindi Tao';
+
+  @override
+  String get ignoredVoicesEmpty => 'Walang binalewalang boses';
+
+  @override
+  String get restoreAction => 'Ibalik';
+
+  @override
+  String get voiceRestoredToast => 'Maaaring magtanong ulit si Omi tungkol sa boses na ito';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Iba Pa…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Hindi Tao';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Hindi Sigurado';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Ako Ito';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Pinakamalapit na boses';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Mga taong kausap mo kamakailan';
+
+  @override
+  String get voiceMatchClose => 'Malapit na tugma';
+
+  @override
+  String get voiceMatchPossible => 'Posibleng tugma';
+
+  @override
+  String get voiceMatchWeak => 'Mahinang tugma';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Tugma ng boses: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify =>
+      'Bawat sagot ay nagtuturo kay Omi ng boses at nagpapataas ng kumpiyansa sa taong iyon.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ang Oo ay nagpapataas ng kumpiyansa kay $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Pinapanatiling tumpak ang sarili mong voice profile, para hindi ka kailanman mapangalanan ni Omi bilang ibang tao.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Na-save bilang $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Na-save bilang ikaw';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Hindi na magtatanong si Omi tungkol sa boses na ito';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Nilagyan ng label bilang $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Nilagyan ng label bilang ikaw';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Minarkahang hindi tao';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Inalis ang label';
+
+  @override
+  String get whoIsItTitle => 'Sino Ito?';
+
+  @override
+  String get newPersonEllipsis => 'Bagong Tao…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Idagdag ang “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Lahat';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Nalalapat sa bawat linya mula sa speaker na ito';
+
+  @override
+  String get collapseAction => 'I-collapse';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Hindi ako';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'I-label sila sa $count pang usapan.',
+      one: 'I-label sila sa 1 pang usapan.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get showOnLockScreen => 'Ipakita sa lock screen';

@@ -89,8 +89,10 @@ from models.users import (
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    DESKTOP_CHAT_BYOK_PROVIDER,
     resolve_transcription_allowance,
     request_has_llm_byok_key,
+    request_has_byok_provider,
     enforce_chat_quota,
     get_chat_quota_snapshot,
     get_basic_plan_limits,
@@ -132,6 +134,7 @@ from utils.other.notifications import (
 )
 from models.notification_message import NotificationMessage
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -620,7 +623,12 @@ def get_single_person(
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
-    person = Person(**person)
+    # A malformed/legacy doc (e.g. missing the required name) must read as not-found, not 500:
+    # the list endpoint already skips these via Person.deserialize_many_safe (#8264).
+    people = Person.deserialize_many_safe([person])
+    if not people:
+        raise HTTPException(status_code=404, detail="Person not found")
+    person = people[0]
     if include_speech_samples:
         # Convert stored GCS paths to signed URLs
         stored_paths = person.speech_samples
@@ -629,9 +637,20 @@ def get_single_person(
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
+def get_all_people(
+    include_speech_samples: bool = True,
+    include_stats: bool = False,
+    uid: str = Depends(auth.get_current_user_uid),
+):
     logger.info(f'get_all_people {include_speech_samples}')
     people = Person.deserialize_many_safe(get_people(uid))
+    if include_stats and people:
+        from utils.people_stats import apply_people_stats, collect_people_stats
+
+        stats = collect_people_stats(
+            lambda limit, offset: conversations_db.get_conversations_without_photos(uid, limit=limit, offset=offset)
+        )
+        apply_people_stats(people, stats)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):
@@ -1091,9 +1110,21 @@ def set_location_context_consent(update: LocationContextConsentUpdate, uid: str 
 def get_user_usage_stats_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
     period: UsagePeriod = UsagePeriod.TODAY,
+    time_zone: str | None = None,
 ):
     """Gets daily and monthly usage stats for the authenticated user."""
-    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=notification_db.get_user_time_zone(uid))
+
+    def valid_zone(value: str | None) -> str | None:
+        if not value:
+            return None
+        try:
+            pytz.timezone(value)
+        except (pytz.UnknownTimeZoneError, ValueError):
+            return None
+        return value
+
+    zone = valid_zone(time_zone) or valid_zone(notification_db.get_user_time_zone(uid)) or 'UTC'
+    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=zone)
     return stats
 
 
@@ -1452,10 +1483,12 @@ def get_user_chat_usage_quota(
 
     Used by the desktop app. Mobile uses the subscription endpoint instead.
     """
-    # BYOK free plan: user brings their own keys, so there's no Omi-side cost
-    # to meter. Only return unlimited when BYOK headers are on the request (desktop).
-    # Mobile (no headers) should see real quota.
-    if users_db.is_byok_active(uid) and request_has_llm_byok_key():
+    # Match enforce_desktop_chat_quota: only the provider actually used by
+    # desktop chat can exempt it. Other enrolled keys still use managed chat.
+    customer_client = get_customer_firestore_client()
+    if users_db.is_byok_active(uid, firestore_client=customer_client) and request_has_byok_provider(
+        DESKTOP_CHAT_BYOK_PROVIDER
+    ):
         return ChatUsageQuota(
             plan='Free (BYOK)',
             plan_type=PlanType.unlimited.value,
@@ -1474,7 +1507,11 @@ def get_user_chat_usage_quota(
     # here while /v2/chat/completions gates on the customer project's, and the
     # two disagree for the same uid (#11199).
     snapshot = get_chat_quota_snapshot(
-        uid, platform=x_app_platform, firestore_client=get_customer_firestore_client(), provision=False
+        uid,
+        platform=x_app_platform,
+        firestore_client=customer_client,
+        provision=False,
+        required_llm_provider=DESKTOP_CHAT_BYOK_PROVIDER,
     )
     plan = snapshot['plan']
 
@@ -1919,6 +1956,25 @@ def create_user_daily_summary(
         # empty at the exact moment it was being summarized.
         raise HTTPException(status_code=409, detail='This recap is already being generated. Try again in a moment.')
     raise HTTPException(status_code=400, detail=f'Nothing to summarize for {date_str}')
+
+
+# Declared before `/v1/users/daily-summaries/{summary_id}` so `search` is not captured as an id.
+@router.get('/v1/users/daily-summaries/search', tags=['v1'], response_model=DailySummariesResponse)
+def search_daily_summaries(
+    query: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Search the user's recent daily summaries, newest first.
+
+    Case-insensitive substring match: every whitespace-separated term must appear
+    in the recap's readable text (headline, overview, highlights, action items,
+    questions, decisions, knowledge nuggets, learned memories, place addresses).
+    Only the latest 365 summaries are scanned.
+    """
+    summaries = daily_summaries_db.get_daily_summaries(uid, limit=DAILY_SUMMARY_SEARCH_WINDOW, offset=0)
+    return {'summaries': filter_daily_summaries(summaries, query, limit)}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)

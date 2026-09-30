@@ -21,7 +21,7 @@ class NotificationsSettingsLoadingShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const placeholderColor = OmiColors.surface2;
+    final placeholderColor = OmiColors.surface2;
 
     Widget placeholder({required double height, double? width, BorderRadius radius = OmiRadius.smAll}) {
       return Container(
@@ -199,7 +199,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
           SizedBox(
             height: 216,
             child: CupertinoTheme(
-              data: const CupertinoThemeData(brightness: Brightness.dark),
+              data: CupertinoThemeData(brightness: Theme.of(sheetContext).brightness),
               child: CupertinoPicker(
                 scrollController: FixedExtentScrollController(initialItem: tempHour),
                 itemExtent: 44,
@@ -249,7 +249,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     final isOff = _notificationFrequency == 0;
     return Container(
       padding: const EdgeInsets.all(OmiSpacing.lg),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         children: [
           // Current value display

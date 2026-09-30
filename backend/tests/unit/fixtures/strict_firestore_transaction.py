@@ -7,6 +7,9 @@ transactional read must occur before the first transactional write.
 It also supports the direct-document is_locked projection used at dispatch,
 and equality-only, document-id projections with a positive limit,
 proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
+Projected client BatchGet of folder membership is covered by
+test_folder_delete_concurrency_emulator.py; all of its reads obey the same
+read-before-write rule. BatchGet does not promise request-order results.
 It deliberately does not model other queries, deletes, commit/rollback visibility,
 or retry and contention semantics. Extend it only when an incident proves that
 one of those boundaries needs a hermetic guard.
@@ -36,7 +39,8 @@ class UnsupportedFirestoreOperationError(NotImplementedError):
 
 
 _SUPPORTED_OPERATIONS = (
-    'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries'
+    'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries, '
+    'projected client folder-membership BatchGet'
 )
 
 
@@ -55,6 +59,11 @@ class StrictFirestoreDocument:
         self._database = database
         self.path = path
 
+    @property
+    def id(self) -> str:
+        """The document's own id, as ``DocumentReference.id`` (e.g. the uid of ``users/{uid}``)."""
+        return self.path[-1]
+
     def collection(self, name: str) -> StrictFirestoreCollection:
         return StrictFirestoreCollection(self._database, (*self.path, name))
 
@@ -66,8 +75,8 @@ class StrictFirestoreDocument:
             transaction._assert_read_allowed()
         data = self._database.rows.get(self.path)
         if field_paths is not None and data is not None:
-            if field_paths != ["is_locked"]:
-                raise UnsupportedFirestoreOperationError("only the sweep privacy projection is supported")
+            if field_paths not in (["is_locked"], ["folder_id"]):
+                raise UnsupportedFirestoreOperationError("only privacy and folder membership projections are supported")
             data = {key: value for key, value in data.items() if key in field_paths}
         return StrictFirestoreSnapshot(data)
 
@@ -255,3 +264,21 @@ class StrictFirestore:
         transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
         self.transactions.append(transaction)
         return transaction
+
+    def get_all(
+        self,
+        references: list[StrictFirestoreDocument],
+        *,
+        field_paths: list[str],
+        transaction: StrictFirestoreTransaction,
+    ) -> list[StrictFirestoreSnapshot]:
+        if field_paths != ['folder_id']:
+            raise UnsupportedFirestoreOperationError('only folder membership BatchGet is supported')
+        snapshots = []
+        for reference in reversed(references):
+            if reference._database is not self:
+                raise ForeignTransactionError('BatchGet and document reference must belong to the same store')
+            snapshot = reference.get(transaction=transaction, field_paths=field_paths)
+            snapshot.reference = reference
+            snapshots.append(snapshot)
+        return snapshots

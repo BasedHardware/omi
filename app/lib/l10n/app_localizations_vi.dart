@@ -10096,12 +10096,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Không đọc được âm thanh — không thể đồng bộ';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11218,7 +11212,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openCall => 'Mở cuộc gọi';
 
   @override
-  String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
+  String get captureRecoveryBanner => 'Omi không gửi âm thanh — chạm để kết nối lại';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11343,6 +11337,774 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Tai nghe';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'phút';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Nhiệm vụ';
+
+  @override
+  String get usageMonth => 'Tháng này';
+
+  @override
+  String get usageYear => 'Năm nay';
+
+  @override
+  String get usageAll => 'Tất cả thời gian';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Giao diện';
+
+  @override
+  String get appearanceSystem => 'Hệ thống';
+
+  @override
+  String get appearanceLight => 'Sáng';
+
+  @override
+  String get appearanceDark => 'Tối';
+
+  @override
+  String get chatDiscardRecording => 'Hủy bỏ';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Không nghe rõ — hãy thử lại';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Gửi cho bộ phận hỗ trợ';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Xem lại dữ liệu chẩn đoán JSON bên dưới. Dữ liệu gồm mã thiết bị, lịch sử kết nối, pin, firmware và sự kiện Bluetooth. Không có âm thanh hay bản chép lời.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Mã hỗ trợ';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Không thể gửi dữ liệu chẩn đoán. Vui lòng thử lại.';
+
+  @override
+  String get feedbackGiveFeedback => 'Gửi phản hồi';
+
+  @override
+  String get feedbackAllGood => 'Mọi thứ đều ổn';
+
+  @override
+  String get feedbackChatWithUs => 'Thêm chi tiết? Nhắn tin với chúng tôi';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Không chính xác';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Chưa đầy đủ';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Không liên quan';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Sai ngữ cảnh';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Vấn đề khác';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Thiếu âm thanh';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Chuyển ngữ kém';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Sai người nói';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Bị chậm hoặc treo';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Đứt đoạn hoặc trùng lặp';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Vấn đề khác';
+
+  @override
+  String get searchPeople => 'Tìm kiếm người';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Thêm \"$query\" như một người mới';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Hiển thị tất cả $count người';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Chào $name, hỏi bất cứ điều gì';
+  }
+
+  @override
+  String get activity => 'Hoạt động';
+
+  @override
+  String get places => 'Địa điểm';
+
+  @override
+  String get recaps => 'Tóm tắt';
+
+  @override
+  String get recent => 'Gần đây';
+
+  @override
+  String get searchPartialFailure => 'Không thể tải một số kết quả';
+
+  @override
+  String get peopleSearchPlaceholder => 'Tìm người';
+
+  @override
+  String get peopleNotHeardYet => 'Chưa nghe';
+
+  @override
+  String get peopleRecent => 'Gần đây';
+
+  @override
+  String get deletePeopleMessage =>
+      'Thao tác này sẽ xóa các mẫu giọng nói của họ và không thể hoàn tác. Lời họ nói trong các cuộc trò chuyện trước sẽ thành người nói không tên.';
+
+  @override
+  String get personTalkTime => 'Thời gian nói';
+
+  @override
+  String get personLastHeard => 'Nghe gần nhất';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Xóa $count người?',
+      one: 'Xóa 1 người?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Cần giọng nói';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count người',
+      one: '1 người',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Không có người phù hợp';
+
+  @override
+  String get deselectAll => 'Bỏ chọn tất cả';
+
+  @override
+  String get voiceRecognitionSettings => 'Nhận dạng giọng nói';
+
+  @override
+  String get greetingMorning => 'Chào buổi sáng';
+
+  @override
+  String get greetingAfternoon => 'Chào buổi chiều';
+
+  @override
+  String get greetingEvening => 'Chào buổi tối';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Bạn muốn biết điều gì?';
+
+  @override
+  String get askSuggestDecide => 'Hôm nay tôi đã quyết định gì?';
+
+  @override
+  String get askSuggestOwe => 'Tôi còn nợ ai điều gì?';
+
+  @override
+  String get askSuggestNotice => 'Omi nhận thấy điều gì?';
+
+  @override
+  String get pastChats => 'Các cuộc trò chuyện trước';
+
+  @override
+  String get newChat => 'Cuộc trò chuyện mới';
+
+  @override
+  String get startFresh => 'Bắt đầu lại';
+
+  @override
+  String get noPastChats => 'Các cuộc trò chuyện của bạn với Omi xuất hiện ở đây.';
+
+  @override
+  String get deleteChatQuestion => 'Xóa cuộc trò chuyện này?';
+
+  @override
+  String get deleteChatMessage => 'Nó sẽ biến mất khỏi các cuộc trò chuyện trước vĩnh viễn.';
+
+  @override
+  String get deleteChat => 'Xóa cuộc trò chuyện';
+
+  @override
+  String get appsAskWith => 'Hỏi Omi bằng';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hôm nay có $count cuộc trò chuyện.',
+      one: 'Hôm nay có 1 cuộc trò chuyện.',
+      zero: 'Hôm nay chưa có cuộc trò chuyện.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Nội dung trên màn hình';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ảnh chụp màn hình từ cuộc họp này';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Xóa ảnh chụp màn hình?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Thao tác này sẽ xóa ảnh chụp màn hình khỏi ghi chú của cuộc họp này. Không thể hoàn tác.';
+
+  @override
+  String get conversationSummaryFailed => 'Tạo tóm tắt thất bại';
+
+  @override
+  String get reconnectionsRecent => 'Kết nối lại (7 ngày qua)';
+
+  @override
+  String get failedConnections => 'Kết nối thất bại';
+
+  @override
+  String get failedConnectionsRecent => 'Kết nối thất bại (7 ngày qua)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count kể từ khi ghép đôi';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Độ tin cậy thấp';
+
+  @override
+  String get peopleFilterPinned => 'Đã ghim';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count đã ghim',
+      one: '1 đã ghim',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Đã xác nhận';
+
+  @override
+  String get confidenceLikely => 'Có thể đúng';
+
+  @override
+  String get confidenceUnverified => 'Chưa xác minh';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Độ tin cậy: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Bạn đã gắn nhãn $count lần',
+      one: 'Bạn đã gắn nhãn 1 lần',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Được chọn trong $count gợi ý',
+      one: 'Được chọn trong 1 gợi ý',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Bạn đã xác nhận $count kết quả khớp',
+      one: 'Bạn đã xác nhận 1 kết quả khớp',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Chỉ khớp tự động, chưa từng xác nhận';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Chưa từng xác nhận';
+
+  @override
+  String get confidenceReasonCorrected => 'Bạn đã sửa kết quả khớp';
+
+  @override
+  String get confidenceReasonVoiceReady => 'đã có giọng nói';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'cần giọng nói';
+
+  @override
+  String get confidenceReasonNotHeard => 'chưa nghe thấy';
+
+  @override
+  String get confidenceSheetTitle => 'Độ tin cậy';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi nhận ra giọng của $name và bạn đã xác nhận điều đó.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi thường nhận ra giọng của $name, nhưng bạn mới xác nhận vài lần.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Bạn chưa làm gì để xác thực $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Bằng chứng';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Bạn đã gắn nhãn trong $count cuộc trò chuyện',
+      one: 'Bạn đã gắn nhãn trong 1 cuộc trò chuyện',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Trả lời Có ở $count gợi ý',
+      one: 'Trả lời Có ở 1 gợi ý',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Được chọn trong $count gợi ý',
+      one: 'Được chọn trong 1 gợi ý',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã xác nhận $count kết quả khớp tự động',
+      one: 'Đã xác nhận 1 kết quả khớp tự động',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kết quả khớp đã chuyển cho người khác',
+      one: '1 kết quả khớp đã chuyển cho người khác',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kết quả khớp tự động chưa ai xác nhận',
+      one: '1 kết quả khớp tự động chưa ai xác nhận',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Đã có mẫu giọng nói';
+
+  @override
+  String get evidenceNoVoice => 'Chưa có mẫu giọng nói';
+
+  @override
+  String get evidenceNotHeard => 'Chưa xuất hiện trong cuộc trò chuyện nào';
+
+  @override
+  String get evidenceNothing => 'Bạn chưa gắn nhãn hoặc xác nhận người này';
+
+  @override
+  String get effectCountsALot => 'Rất quan trọng';
+
+  @override
+  String get effectCounts => 'Có giá trị';
+
+  @override
+  String get effectCountsALittle => 'Ít giá trị';
+
+  @override
+  String get effectBarelyCounts => 'Gần như không đáng kể';
+
+  @override
+  String get effectCountsAgainst => 'Làm giảm';
+
+  @override
+  String get effectNeeded => 'Cần để đạt Đã xác nhận';
+
+  @override
+  String get confidenceToReachConfirmed => 'Để đạt Đã xác nhận';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi cũng cần mẫu giọng nói của $name. Hãy gắn nhãn khi bật Ghi nhớ giọng nói.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name đã ở mức Đã xác nhận. Omi tiếp tục học từ mỗi nhãn.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Chỉ câu trả lời của bạn mới thay đổi độ tin cậy đáng kể. Riêng kết quả khớp tự động gần như không đáng kể.';
+
+  @override
+  String get personWhyConfidence => 'Tại sao?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Ghim $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Giữ $name và mong họ xuất hiện trong các cuộc trò chuyện của bạn';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi sẽ nhờ bạn xác nhận các kết quả gần giống thay vì đoán.';
+
+  @override
+  String get pinAction => 'Ghim';
+
+  @override
+  String get unpinAction => 'Bỏ ghim';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Đã ghim $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Đã bỏ ghim $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Tại sao $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Xóa $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name đang được ghim. Các mẫu giọng nói của họ sẽ bị xóa, Omi sẽ không còn nhận ra họ, và các bản ghi cũ sẽ hiển thị họ là người nói không tên. Không thể hoàn tác.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Xóa $name';
+  }
+
+  @override
+  String get selectPeople => 'Chọn người';
+
+  @override
+  String get cleanUpEllipsis => 'Dọn dẹp…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count người Omi chưa chắc chắn',
+      one: '1 người Omi chưa chắc chắn',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Phần lớn là tên nghe nhầm. Hãy xem lại và xóa những tên không có thật.';
+
+  @override
+  String get reviewAction => 'Xem lại';
+
+  @override
+  String get cleanUpTitle => 'Dọn dẹp';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omi chưa chắc về $count người này. Phần lớn là tên nghe nhầm từ bản ghi. Bỏ chọn bất kỳ ai bạn muốn giữ.',
+      one: 'Omi chưa chắc về người này. Bỏ chọn để giữ lại.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Người đã ghim không bao giờ nằm trong Dọn dẹp.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Xóa $count người',
+      one: 'Xóa 1 người',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã xóa $count người',
+      one: 'Đã xóa 1 người',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Không có gì để dọn dẹp';
+
+  @override
+  String get cleanUpNothingMessage => 'Hiện Omi không có ai chưa chắc chắn.';
+
+  @override
+  String get selectAllSkipsPinned => 'Chọn tất cả sẽ bỏ qua người đã ghim. Hãy xóa từng người từ trang của họ.';
+
+  @override
+  String get pinnedNotSelectable => 'Đã ghim, không thể chọn';
+
+  @override
+  String get ignoredVoicesTitle => 'Giọng nói bị bỏ qua';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcast và các giọng khác bạn đã đánh dấu là Không phải người';
+
+  @override
+  String get ignoredVoicesEmpty => 'Không có giọng nói bị bỏ qua';
+
+  @override
+  String get restoreAction => 'Khôi phục';
+
+  @override
+  String get voiceRestoredToast => 'Omi có thể hỏi lại về giọng nói này';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Người khác…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Không phải người';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Không chắc';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Là tôi';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Giọng nói gần nhất';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Những người bạn trò chuyện gần đây';
+
+  @override
+  String get voiceMatchClose => 'Khớp gần';
+
+  @override
+  String get voiceMatchPossible => 'Có thể khớp';
+
+  @override
+  String get voiceMatchWeak => 'Khớp yếu';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Khớp giọng nói: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Mỗi câu trả lời dạy Omi một giọng nói và tăng độ tin cậy của người đó.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Chọn Có sẽ tăng độ tin cậy của $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Giữ hồ sơ giọng nói của bạn chính xác, để Omi không bao giờ gọi bạn là người khác.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Đã lưu là $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Đã lưu là bạn';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi sẽ không hỏi lại về giọng nói này';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Đã gắn nhãn là $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Đã gắn nhãn là bạn';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Đã đánh dấu là không phải người';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Đã xóa nhãn';
+
+  @override
+  String get whoIsItTitle => 'Đây là ai?';
+
+  @override
+  String get newPersonEllipsis => 'Người mới…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Thêm “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Tất cả';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Áp dụng cho mọi dòng của người nói này';
+
+  @override
+  String get collapseAction => 'Thu gọn';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Không phải tôi';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hãy gắn nhãn họ trong $count cuộc trò chuyện nữa.',
+      one: 'Hãy gắn nhãn họ trong 1 cuộc trò chuyện nữa.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get showOnLockScreen => 'Hiển thị trên màn hình khóa';

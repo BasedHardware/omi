@@ -10126,12 +10126,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Neizdevās nolasīt audio — nevar sinhronizēt';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11250,7 +11244,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get openCall => 'Atvērt zvanu';
 
   @override
-  String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
+  String get captureRecoveryBanner => 'Omi nesūta audio — pieskarieties, lai atkārtoti izveidotu savienojumu';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.';
@@ -11373,6 +11367,776 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Austiņas';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minūtes';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Uzdevumi';
+
+  @override
+  String get usageMonth => 'Šomēnes';
+
+  @override
+  String get usageYear => 'Šogad';
+
+  @override
+  String get usageAll => 'Visu laiku';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Izskats';
+
+  @override
+  String get appearanceSystem => 'Sistēma';
+
+  @override
+  String get appearanceLight => 'Gaišs';
+
+  @override
+  String get appearanceDark => 'Tumšs';
+
+  @override
+  String get chatDiscardRecording => 'Atmest';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nesadzirdēju — mēģiniet vēlreiz';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Meklēt cilvēkus';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Pievienot \"$query\" kā jaunu personu';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Rādīt visas personas ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Sveiks, $name, jautā jebko';
+  }
+
+  @override
+  String get activity => 'Darbības';
+
+  @override
+  String get places => 'Vietas';
+
+  @override
+  String get recaps => 'Kopsavilkumi';
+
+  @override
+  String get recent => 'Nesenie';
+
+  @override
+  String get searchPartialFailure => 'Dažus rezultātus neizdevās ielādēt';
+
+  @override
+  String get peopleSearchPlaceholder => 'Meklēt cilvēkus';
+
+  @override
+  String get peopleNotHeardYet => 'Vēl nav dzirdēts';
+
+  @override
+  String get peopleRecent => 'Nesenie';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tas noņem viņu balss paraugus, un to nevar atsaukt. Viņu replikas iepriekšējās sarunās kļūs par bezvārda runātājiem.';
+
+  @override
+  String get personTalkTime => 'Runas laiks';
+
+  @override
+  String get personLastHeard => 'Pēdējo reizi dzirdēts';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dzēst $count cilvēku?',
+      one: 'Dzēst 1 cilvēku?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Nepieciešama balss';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Personas: $count',
+      one: '1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nav atbilstošu personu';
+
+  @override
+  String get deselectAll => 'Noņemt visu atlasi';
+
+  @override
+  String get voiceRecognitionSettings => 'Balss atpazīšana';
+
+  @override
+  String get greetingMorning => 'Labrīt';
+
+  @override
+  String get greetingAfternoon => 'Labdien';
+
+  @override
+  String get greetingEvening => 'Labvakar';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ko vēlaties uzzināt?';
+
+  @override
+  String get askSuggestDecide => 'Ko es šodien izlēmu?';
+
+  @override
+  String get askSuggestOwe => 'Ko es vēl esmu parādā citiem?';
+
+  @override
+  String get askSuggestNotice => 'Ko pamanīja Omi?';
+
+  @override
+  String get pastChats => 'Iepriekšējās tērzēšanas';
+
+  @override
+  String get newChat => 'Jauna tērzēšana';
+
+  @override
+  String get startFresh => 'Sākt no jauna';
+
+  @override
+  String get noPastChats => 'Jūsu tērzēšanas ar Omi parādās šeit.';
+
+  @override
+  String get deleteChatQuestion => 'Dzēst šo tērzēšanu?';
+
+  @override
+  String get deleteChatMessage => 'Tā uz visiem laikiem pazudīs no iepriekšējām tērzēšanām.';
+
+  @override
+  String get deleteChat => 'Dzēst tērzēšanu';
+
+  @override
+  String get appsAskWith => 'Jautājiet Omi ar';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sarunas šodien.',
+      one: '1 saruna šodien.',
+      zero: 'Šodien sarunu nav.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Kas bija ekrānā';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ekrānuzņēmums no šīs sapulces';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Dzēst ekrānuzņēmumu?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt.';
+
+  @override
+  String get conversationSummaryFailed => 'Kopsavilkums neizdevās';
+
+  @override
+  String get reconnectionsRecent => 'Atkārtoti savienojumi (pēdējās 7 dienas)';
+
+  @override
+  String get failedConnections => 'Neveiksmīgi savienojumi';
+
+  @override
+  String get failedConnectionsRecent => 'Neveiksmīgi savienojumi (pēdējās 7 dienas)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count kopš savienošanas pārī';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Zema pārliecība';
+
+  @override
+  String get peopleFilterPinned => 'Piespraustie';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Piesprausti: $count',
+      one: '1 piesprausts',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Apstiprināts';
+
+  @override
+  String get confidenceLikely => 'Iespējams';
+
+  @override
+  String get confidenceUnverified => 'Neapstiprināts';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Pārliecība: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Jūs atzīmējāt $count reizes',
+      one: 'Jūs atzīmējāt vienu reizi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Izvēlēts $count ieteikumos',
+      one: 'Izvēlēts 1 ieteikumā',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Jūs apstiprinājāt $count atbilstības',
+      one: 'Jūs apstiprinājāt 1 atbilstību',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Tikai automātiski saskaņots, nekad neapstiprināts';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Nekad neapstiprināts';
+
+  @override
+  String get confidenceReasonCorrected => 'Jūs izlabojāt tā atbilstību';
+
+  @override
+  String get confidenceReasonVoiceReady => 'balss gatava';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'vajadzīga balss';
+
+  @override
+  String get confidenceReasonNotHeard => 'vēl nav dzirdēts';
+
+  @override
+  String get confidenceSheetTitle => 'Pārliecība';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi atpazīst $name balsi, un jūs to esat apstiprinājis.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi parasti atpazīst $name balsi, bet jūs to esat apstiprinājis tikai dažas reizes.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Nekas, ko esat darījis, vēl neapstiprina $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Pamatojums';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Jūs atzīmējāt $count sarunās',
+      one: 'Jūs atzīmējāt 1 sarunā',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Jā $count ieteikumos',
+      one: 'Jā 1 ieteikumā',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Izvēlēts $count ieteikumos',
+      one: 'Izvēlēts 1 ieteikumā',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Apstiprinātas $count automātiskās atbilstības',
+      one: 'Apstiprināta 1 automātiskā atbilstība',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count atbilstības pārvietotas citiem',
+      one: '1 atbilstība pārvietota citam',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automātiskas atbilstības, ko neviens neapstiprināja',
+      one: '1 automātiska atbilstība, ko neviens neapstiprināja',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Balss paraugs gatavs';
+
+  @override
+  String get evidenceNoVoice => 'Balss parauga vēl nav';
+
+  @override
+  String get evidenceNotHeard => 'Vēl nav dzirdēts sarunā';
+
+  @override
+  String get evidenceNothing => 'Jūs vēl neesat atzīmējis vai apstiprinājis';
+
+  @override
+  String get effectCountsALot => 'Ļoti ietekmē';
+
+  @override
+  String get effectCounts => 'Ietekmē';
+
+  @override
+  String get effectCountsALittle => 'Mazliet ietekmē';
+
+  @override
+  String get effectBarelyCounts => 'Gandrīz neietekmē';
+
+  @override
+  String get effectCountsAgainst => 'Ietekmē negatīvi';
+
+  @override
+  String get effectNeeded => 'Nepieciešams, lai būtu apstiprināts';
+
+  @override
+  String get confidenceToReachConfirmed => 'Lai būtu apstiprināts';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi vajadzīgs arī $name balss paraugs. Atzīmējiet, kamēr ir ieslēgta opcija “Atcerēties balsis”.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name ir apstiprināts. Omi turpina mācīties no katras atzīmes.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Pārliecību būtiski maina tikai jūsu atbildes. Automātiskas atbilstības vien gandrīz neko nenozīmē.';
+
+  @override
+  String get personWhyConfidence => 'Kāpēc?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Piespraust $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Paturēt $name un sagaidīt šo personu jūsu sarunās';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi lūgs jums apstiprināt tuvas atbilstības, nevis minēs.';
+
+  @override
+  String get pinAction => 'Piespraust';
+
+  @override
+  String get unpinAction => 'Atspraust';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Piesprausts: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Atsprausts: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Kāpēc $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Dzēst $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Piesprausts: $name. Balss paraugi tiks noņemti, Omi pārstās atpazīt šo personu, un iepriekšējos transkriptos tā tiks rādīta kā bezvārda runātājs. Šo darbību nevar atsaukt.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Dzēst $name';
+  }
+
+  @override
+  String get selectPeople => 'Atlasīt cilvēkus';
+
+  @override
+  String get cleanUpEllipsis => 'Sakopt…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omi nav pārliecības par $count personām',
+      one: 'Omi nav pārliecības par 1 personu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'Galvenokārt nepareizi sadzirdēti vārdi. Pārskatiet tos un noņemiet tos, kas nav īsti.';
+
+  @override
+  String get reviewAction => 'Pārskatīt';
+
+  @override
+  String get cleanUpTitle => 'Sakopšana';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi nav pārliecības par šīm $count personām. Lielākā daļa ir nepareizi sadzirdēti vārdi no transkriptiem. Noņemiet atzīmi tiem, ko vēlaties paturēt.',
+      one: 'Omi nav pārliecības par šo personu. Noņemiet atzīmi, lai to paturētu.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Piespraustie cilvēki sakopšanā nekad netiek iekļauti.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dzēst $count personas',
+      one: 'Dzēst 1 personu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Izdzēstas $count personas',
+      one: 'Izdzēsta 1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Nav ko sakopt';
+
+  @override
+  String get cleanUpNothingMessage => 'Pašlaik Omi nav šaubu ne par vienu.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Atlasot visus, piespraustie cilvēki tiek izlaisti. Dzēsiet tos pa vienam no viņu lapas.';
+
+  @override
+  String get pinnedNotSelectable => 'Piesprausts, nav atlasāms';
+
+  @override
+  String get ignoredVoicesTitle => 'Ignorētās balsis';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, aplādes un citas balsis, ko atzīmējāt kā “Nav persona”';
+
+  @override
+  String get ignoredVoicesEmpty => 'Nav ignorētu balsu';
+
+  @override
+  String get restoreAction => 'Atjaunot';
+
+  @override
+  String get voiceRestoredToast => 'Omi var atkal pajautāt par šo balsi';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Kāds cits…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Nav persona';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Nezinu';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Tas esmu es';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Tuvākās balsis';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Cilvēki, ar kuriem nesen runājāt';
+
+  @override
+  String get voiceMatchClose => 'Cieša atbilstība';
+
+  @override
+  String get voiceMatchPossible => 'Iespējama atbilstība';
+
+  @override
+  String get voiceMatchWeak => 'Vāja atbilstība';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Balss atbilstība: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Katra atbilde māca Omi balsi un palielina šīs personas pārliecību.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Jā palielina pārliecību par $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Uztur jūsu balss profilu precīzu, lai Omi nekad nenosauktu jūs par kādu citu.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Saglabāts kā $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Saglabāts kā jūs';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi vairs nejautās par šo balsi';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Atzīmēts kā $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Atzīmēts kā jūs';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Atzīmēts kā nav persona';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Atzīme noņemta';
+
+  @override
+  String get whoIsItTitle => 'Kas tas ir?';
+
+  @override
+  String get newPersonEllipsis => 'Jauna persona…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Pievienot „$name“';
+  }
+
+  @override
+  String get everyoneHeader => 'Visi';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Attiecas uz katru šī runātāja rindu';
+
+  @override
+  String get collapseAction => 'Sakļaut';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Ne es';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Atzīmējiet viņus vēl $count sarunās.',
+      one: 'Atzīmējiet viņus vēl 1 sarunā.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get showOnLockScreen => 'Rādīt bloķēšanas ekrānā';

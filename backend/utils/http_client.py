@@ -487,7 +487,7 @@ def get_stt_proxy_client() -> httpx.AsyncClient:
 
 
 def get_tts_client() -> httpx.AsyncClient:
-    """Return a shared async HTTP client for TTS streaming (ElevenLabs).
+    """Return a shared async HTTP client for Gemini/legacy TTS streaming.
 
     Keep-alive is disabled (`max_keepalive_connections=0`) because in Cloud
     Run we observed stale keep-alive sockets being reused after the remote

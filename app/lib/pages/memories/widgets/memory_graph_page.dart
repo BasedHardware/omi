@@ -222,6 +222,10 @@ class ForceDirectedSimulation3D {
 
 class MemoryGraphPage extends StatefulWidget {
   final bool embedded;
+
+  /// A non-interactive card (the Memories page header): card surface, and no retry button on
+  /// failure because the card itself opens the full graph.
+  final bool preview;
   final bool showAppBar;
   final bool showShareButton;
   final bool trackOpenEvent;
@@ -232,6 +236,7 @@ class MemoryGraphPage extends StatefulWidget {
   const MemoryGraphPage({
     super.key,
     this.embedded = false,
+    this.preview = false,
     this.showAppBar = true,
     this.showShareButton = true,
     this.trackOpenEvent = true,
@@ -426,7 +431,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         id: nodeId,
         label: label,
         nodeType: nodeType,
-        baseColor: isUser ? Colors.white : _colorForType(nodeType),
+        baseColor: isUser ? OmiColors.accent : _colorForType(nodeType),
         initialPosition: isUser ? v.Vector3.zero() : _randomPos3D(),
         isFixed: isUser,
       );
@@ -441,7 +446,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         id: primaryUserId,
         label: userLabel,
         nodeType: 'person',
-        baseColor: Colors.white,
+        baseColor: OmiColors.accent,
         initialPosition: v.Vector3.zero(),
         isFixed: true,
       );
@@ -553,7 +558,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     if (widget.embedded) {
-      return ColoredBox(color: OmiColors.surface0, child: _buildBody());
+      return ColoredBox(color: widget.preview ? OmiColors.surface1 : OmiColors.surface0, child: _buildBody());
     }
 
     return Scaffold(
@@ -586,6 +591,27 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     if (_error != null) {
+      if (widget.preview) {
+        // The preview ignores pointers, so it cannot offer a retry; tapping the card opens the full
+        // graph, which loads (and retries) on its own.
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(OmiSpacing.md),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.hub_outlined, size: 28, color: OmiColors.textTertiary),
+                const SizedBox(height: OmiSpacing.xs),
+                Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
       return SafeArea(
         child: SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph)),
       );
@@ -876,7 +902,8 @@ class GraphPainter3D extends CustomPainter {
       final alpha = ((p1.alpha + p2.alpha) / 2.0 * 0.10).clamp(0.0, 1.0);
       if (alpha < 0.05) continue;
 
-      _edgePaint.color = Colors.white.withValues(alpha: alpha);
+      final light = OmiColors.active == OmiPalette.light;
+      _edgePaint.color = (light ? OmiColors.border : Colors.white).withValues(alpha: alpha);
       _edgePaint.strokeWidth = 0.8 * ((p1.scale + p2.scale) / 2);
 
       // Drawn above with logic
@@ -891,7 +918,7 @@ class GraphPainter3D extends CustomPainter {
       if (isDimmed) {
         _edgePaint.color = _edgePaint.color.withValues(alpha: alpha * 0.1);
       } else if (isHighlightedEdge) {
-        _edgePaint.color = Colors.white.withValues(alpha: max(alpha, 0.8)); // Pop
+        _edgePaint.color = (light ? OmiColors.accent : Colors.white).withValues(alpha: max(alpha, 0.8)); // Pop
       }
 
       canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
@@ -902,12 +929,19 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: edge.label,
           style: TextStyle(
-            color: Colors.white54.withValues(alpha: alpha * 2),
+            color: (light ? OmiColors.textPrimary : Colors.white54).withValues(alpha: alpha * 2),
             fontSize: (9 * avgScale).clamp(7, 11),
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
+        if (light) {
+          final labelRect = Rect.fromCenter(center: Offset(midX, midY - 8), width: tp.width + 8, height: tp.height + 4);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
+            Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
+          );
+        }
         tp.paint(canvas, Offset(midX - tp.width / 2, midY - tp.height / 2 - 8));
       }
     }
@@ -933,8 +967,9 @@ class GraphPainter3D extends CustomPainter {
         centerOffset + Offset(-radius * 0.25, -radius * 0.25),
         radius * 1.2,
         [
-          Colors.white.withValues(alpha: p.alpha * 0.9),
-          Color.lerp(Colors.white, node.baseColor, 0.5)!.withValues(alpha: p.alpha),
+          (OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white).withValues(alpha: p.alpha * 0.9),
+          Color.lerp(OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white, node.baseColor, 0.5)!
+              .withValues(alpha: p.alpha),
           node.baseColor.withValues(alpha: p.alpha),
         ],
         [0.0, 0.3, 1.0],
@@ -948,13 +983,22 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
+            color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white)
+                .withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
             fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
             fontWeight: FontWeight.w600,
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
+        if (OmiColors.active == OmiPalette.light) {
+          final labelRect =
+              Rect.fromLTWH(centerOffset.dx - tp.width / 2 - 4, centerOffset.dy + radius, tp.width + 8, tp.height + 6);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
+            Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
+          );
+        }
         tp.paint(canvas, centerOffset + Offset(-tp.width / 2, radius + 3));
       }
     }

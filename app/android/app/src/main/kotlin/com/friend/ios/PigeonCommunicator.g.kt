@@ -193,7 +193,7 @@ data class BleDisconnectEvent (
    * RSSI trajectory over the ~15s before this event. One of:
    *   "fading"  — signal declined ≥10 dB before the drop (walk-away)
    *   "sudden"  — signal stable then link died (interference/stall/device off)
-   *   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+   *   "gap"     — no recent RSSI samples (radio read unavailable)
    *   "unknown" — insufficient samples to classify
    * Empty string on legacy records written before this field existed.
    */
@@ -290,8 +290,10 @@ data class BleDeviceDiagnostics (
    * silent-failure path separately from established-then-dropped disconnects.
    */
   val failToConnectCount: Long,
-  /** BLE bytes consumed by native offline writers since the app most recently
-   * entered the background. These packets intentionally never reach Dart. */
+  /**
+   * BLE bytes consumed by native offline writers since the app most recently
+   * entered the background. These packets intentionally never reach Dart.
+   */
   val nativeBackgroundBytesConsumed: Long,
   /** BLE notification packets represented by [nativeBackgroundBytesConsumed]. */
   val nativeBackgroundPacketsConsumed: Long
@@ -915,6 +917,8 @@ interface BleHostApi {
   fun startRssiStreaming(uuid: String)
   fun stopRssiStreaming(uuid: String)
   fun getDeviceDiagnostics(uuid: String, callback: (Result<BleDeviceDiagnostics>) -> Unit)
+  /** Bounded native BLE-only diagnostics as JSON. No audio or transcript payloads. */
+  fun getExtendedDeviceDiagnostics(uuid: String, callback: (Result<String>) -> Unit)
   fun getBatteryHistory(uuid: String, callback: (Result<List<BleBatteryPoint>>) -> Unit)
   /** (Android only) Check if any CompanionDeviceManager association exists. */
   fun hasCompanionDeviceAssociation(): Boolean
@@ -1199,6 +1203,26 @@ interface BleHostApi {
             val args = message as List<Any?>
             val uuidArg = args[0] as String
             api.getDeviceDiagnostics(uuidArg) { result: Result<BleDeviceDiagnostics> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.getExtendedDeviceDiagnostics$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val uuidArg = args[0] as String
+            api.getExtendedDeviceDiagnostics(uuidArg) { result: Result<String> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))

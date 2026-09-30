@@ -35,11 +35,12 @@ import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 
 import 'capture_state_header.dart';
+import 'widgets/speaker_suggestion_chip.dart';
 
-/// Switch the home IndexedStack to Conversations *before* popping the capturing
-/// route so the user lands on that tab with no flash of the previous page.
+/// Switch the home IndexedStack to Home (the conversation list) *before* popping the capturing
+/// route so the user lands there with no flash of the previous page.
 void switchHomeToConversationsTab(BuildContext context) {
-  context.read<HomeProvider>().setIndex(1);
+  context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
 }
 
 class ConversationCapturingPage extends StatefulWidget {
@@ -291,14 +292,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Camera icon avatar
-          const Column(
+          Column(
             children: [
               CircleAvatar(
                 radius: 16,
                 backgroundColor: OmiColors.surface2,
                 child: Icon(Icons.camera_alt, size: 16, color: OmiColors.textSecondary),
               ),
-              SizedBox(height: 2),
+              const SizedBox(height: 2),
             ],
           ),
           const SizedBox(width: 8),
@@ -338,7 +339,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.camera_alt, size: 12, color: OmiColors.textTertiary),
+                        Icon(Icons.camera_alt, size: 12, color: OmiColors.textTertiary),
                         const SizedBox(width: 4),
                         Text(
                           group.length > 1
@@ -453,6 +454,26 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   void _editSegmentSpeaker(TranscriptSegment segment, CaptureProvider provider) =>
       _nameSpeaker(segment.id, segment.speakerId, provider);
 
+  /// A pinned near-miss the backend asked about for this unlabeled segment, if its person is known.
+  Person? _pinnedSuggestion(TranscriptSegment segment, CaptureProvider provider, List<Person> people) {
+    if (segment.isUser || segment.personId != null) return null;
+    final suggestedId = provider.suggestionsBySegmentId[segment.id]?.suggestedPersonId;
+    return suggestedId == null ? null : personById(people, suggestedId);
+  }
+
+  /// "Yes" on the inline suggestion labels every unlabeled line from this speaker.
+  Future<void> _acceptSuggestion(TranscriptSegment segment, Person person, CaptureProvider provider) async {
+    final ids = [
+      for (final s in provider.segments)
+        if (s.speakerId == segment.speakerId && !s.isUser && s.personId == null) s.id,
+    ];
+    OmiHaptics.light();
+    final ok = await provider.assignSpeakerToConversation(segment.speakerId, person.id, person.name, ids,
+        applyToSpeaker: true);
+    if (!mounted) return;
+    ok ? OmiHaptics.success() : OmiFeedback.error(context, context.l10n.somethingWentWrongTryAgain);
+  }
+
   Widget _buildTranscriptTimelineItem(
       TranscriptSegment segment, CaptureProvider provider, List<Person> people, SpeakerNames names) {
     final bool isUser = segment.isUser;
@@ -464,14 +485,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           onTap: () => _editSegmentSpeaker(segment, provider),
           child: GestureDetector(
             onTap: () => _editSegmentSpeaker(segment, provider),
-            child: const Column(
+            child: Column(
               children: [
                 CircleAvatar(
                   radius: 16,
                   backgroundColor: OmiColors.surface2,
                   child: Icon(Icons.person, size: 16, color: OmiColors.textSecondary),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
               ],
             ),
           ),
@@ -503,6 +524,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(name, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
+                    if (_pinnedSuggestion(segment, provider, people) case final suggested?)
+                      SpeakerSuggestionChip(
+                        key: ValueKey('suggestion_${segment.id}'),
+                        person: suggested,
+                        onYes: () => _acceptSuggestion(segment, suggested, provider),
+                        onSomeoneElse: () => _editSegmentSpeaker(segment, provider),
+                      ),
                     const SizedBox(height: 4),
                     Text(segment.text, style: OmiType.subhead.copyWith(height: 1.4)),
                   ],
@@ -618,7 +646,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
               ),
               if (!failed && !retrying && uploading) ...[
                 const SizedBox(width: 8),
-                const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
+                OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
               ],
             ],
           ),
