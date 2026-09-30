@@ -11200,5 +11200,22 @@
     "peopleCount": "{count, plural, =1{1 особа} other{Особа: {count}}}",
     "noMatchingPeople": "Нема одговарајућих особа",
     "deselectAll": "Поништи избор свих",
-    "voiceRecognitionSettings": "Препознавање гласа"
+    "voiceRecognitionSettings": "Препознавање гласа",
+    "greetingMorning": "Добро јутро",
+    "greetingAfternoon": "Добар дан",
+    "greetingEvening": "Добро вече",
+    "greetingWithName": "{greeting}, {name}",
+    "whatDoYouWantToKnow": "Šta želite da znate?",
+    "askSuggestDecide": "Šta sam danas odlučio?",
+    "askSuggestOwe": "Šta još dugujem ljudima?",
+    "askSuggestNotice": "Šta je Omi primetio?",
+    "pastChats": "Prethodni razgovori",
+    "newChat": "Novi razgovor",
+    "startFresh": "Počni ispočetka",
+    "noPastChats": "Vaši razgovori sa Omijem pojavljuju se ovde.",
+    "deleteChatQuestion": "Izbrisati ovaj razgovor?",
+    "deleteChatMessage": "Trajno nestaje iz prethodnih razgovora.",
+    "deleteChat": "Izbriši razgovor",
+    "appsAskWith": "Pitaj Omi uz",
+    "conversationsTodayCount": "{count, plural, =0{Danas nema razgovora.} =1{1 razgovor danas.} other{{count} razgovora danas.}}"
 }

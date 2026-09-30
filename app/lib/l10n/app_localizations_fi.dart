@@ -11562,4 +11562,66 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Äänentunnistus';
+
+  @override
+  String get greetingMorning => 'Hyvää huomenta';
+
+  @override
+  String get greetingAfternoon => 'Hyvää iltapäivää';
+
+  @override
+  String get greetingEvening => 'Hyvää iltaa';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Mitä haluat tietää?';
+
+  @override
+  String get askSuggestDecide => 'Mitä päätin tänään?';
+
+  @override
+  String get askSuggestOwe => 'Mitä olen vielä velkaa muille?';
+
+  @override
+  String get askSuggestNotice => 'Mitä Omi huomasi?';
+
+  @override
+  String get pastChats => 'Aiemmat keskustelut';
+
+  @override
+  String get newChat => 'Uusi keskustelu';
+
+  @override
+  String get startFresh => 'Aloita alusta';
+
+  @override
+  String get noPastChats => 'Keskustelusi Omin kanssa näkyvät täällä.';
+
+  @override
+  String get deleteChatQuestion => 'Poistetaanko tämä keskustelu?';
+
+  @override
+  String get deleteChatMessage => 'Se poistuu aiemmista keskusteluista pysyvästi.';
+
+  @override
+  String get deleteChat => 'Poista keskustelu';
+
+  @override
+  String get appsAskWith => 'Kysy Omilta käyttäen';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count keskustelua tänään.',
+      one: '1 keskustelu tänään.',
+      zero: 'Ei keskusteluja tänään.',
+    );
+    return '$_temp0';
+  }
 }
