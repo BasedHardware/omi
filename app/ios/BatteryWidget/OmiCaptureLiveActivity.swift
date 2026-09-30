@@ -331,13 +331,9 @@ struct CapturePendant: View {
     }
 }
 
-/// omi-home-v4 `.wave`: 2 pt bars 2.2 pt apart in the design's fixed level pattern, each
-/// breathing between full and 45 % height, the breath rippling leftward every 13 bars.
-/// The OS cannot loop animations in a Live Activity, so the app's updates step the loop:
-/// while voice is heard the app updates about once a second, each update flips the breath,
-/// and every bar animates to it after a delay set by its place in the ripple. Without voice
-/// the strip settles at its low height. Its color stays constant during Start/Stop.
-/// Custom timing curves keep motion local; reduced motion and Always On keep it still.
+/// omi-liquid-dock2.html: fixed 2 pt bars, 2.2 pt gaps, a 1.6 s breath and
+/// 0.13 s phase offsets repeating every 13 bars. Activity updates advance the
+/// phase; stopping leaves the same full-height pattern frozen, without dimming.
 @available(iOS 16.1, *)
 private struct CaptureWaveform: View {
     let snapshot: CaptureSnapshot
@@ -349,6 +345,8 @@ private struct CaptureWaveform: View {
     /// `@keyframes lvl{50%{transform:scaleY(.45)}}`.
     private static let exhaled: CGFloat = 0.45
     private static let ripple = 13
+    private static let period = 1.6
+    private static let phaseOffset = 0.13
     /// The design's `lv` list: bar heights as a share of the strip.
     private static let levels: [CGFloat] = [
         0.22, 0.35, 0.5, 0.3, 0.62, 0.8, 0.45, 0.28, 0.55, 0.9, 0.7, 0.38, 0.25, 0.42, 0.66, 0.52, 0.3,
@@ -356,40 +354,37 @@ private struct CaptureWaveform: View {
         0.52, 0.72, 0.56, 0.36, 0.28, 0.44, 0.6, 0.8, 0.64, 0.4, 0.3, 0.5, 0.66, 0.42, 0.3, 0.26,
     ]
 
-    /// Voice is heard, so updates arrive about once a second.
     private var breathing: Bool {
-        snapshot.isReceivingAudio && snapshot.state.metered && snapshot.state.voice
+        snapshot.isReceivingAudio && snapshot.state.metered && snapshot.state.voice &&
+            !reduceMotion && !luminanceReduced
     }
 
-    /// Flips on every update: `levelsEnd` counts 125 ms bins of wall clock, 8 per update.
-    private var exhale: Bool {
-        breathing && (snapshot.state.levelsEnd + 4) / 8 % 2 == 1
-    }
-
-    private var scale: CGFloat {
-        guard snapshot.isReceivingAudio else { return Self.exhaled }
-        // Unmetered sources cannot report voice; retain their steady active indicator.
-        if !snapshot.state.metered { return 1 }
-        guard breathing else { return Self.exhaled }
-        return reduceMotion || luminanceReduced || !exhale ? 1 : Self.exhaled
+    private func scale(for index: Int) -> CGFloat {
+        guard breathing else { return 1 }
+        // CSS's negative delays start neighboring bars at different phases.
+        let seconds = Double(snapshot.state.levelsEnd) * 0.125
+        let phase = (seconds + Double(index % Self.ripple) * Self.phaseOffset)
+            .truncatingRemainder(dividingBy: Self.period) / Self.period
+        let breath = (1 - cos(phase * 2 * .pi)) / 2
+        return 1 - (1 - Self.exhaled) * CGFloat(breath)
     }
 
     var body: some View {
-        let scale = self.scale
         GeometryReader { geometry in
             // Never derive layout from an unbounded proposal; it cannot be placed.
             let width = geometry.size.width.isFinite ? max(0, geometry.size.width) : 0
             let count = max(1, Int((width + Self.gap) / (Self.barWidth + Self.gap)))
             HStack(alignment: .center, spacing: Self.gap) {
                 ForEach(0..<count, id: \.self) { index in
+                    let scale = scale(for: index)
                     Capsule()
                         .frame(width: Self.barWidth,
                                height: max(3, height * Self.levels[index % Self.levels.count]))
                         .scaleEffect(x: 1, y: scale)
-                        // Settle together on Stop; stagger only the active breathing wave.
+                        // The producer sends a voice update each second; interpolate between
+                        // phase samples rather than adding delayed, overlapping bar animations.
                         .animation(reduceMotion || luminanceReduced ? nil :
-                            .timingCurve(0.42, 0, 0.58, 1, duration: breathing ? 0.5 : 0.25)
-                                .delay(breathing ? Double(Self.ripple - 1 - index % Self.ripple) * 0.02 : 0),
+                            .timingCurve(0.42, 0, 0.58, 1, duration: breathing ? 1 : 0.25),
                             value: scale)
                 }
             }
@@ -397,7 +392,7 @@ private struct CaptureWaveform: View {
             .clipped()
         }
         .frame(height: height)
-        .foregroundStyle(CapturePalette.label.opacity(0.75))
+        .foregroundStyle(CapturePalette.label)
         .accessibilityHidden(true)
     }
 }
