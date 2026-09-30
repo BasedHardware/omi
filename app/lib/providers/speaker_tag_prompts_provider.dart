@@ -141,6 +141,16 @@ class SpeakerTagPromptsProvider extends BaseProvider {
 
   /// The answer on screen during its Undo window (and briefly after it commits).
   PendingSpeakerTagAnswer? pending;
+  Timer? _answeredHoldTimer;
+  Completer<void>? _answeredHoldDone;
+
+  void _cancelAnsweredHold() {
+    _answeredHoldTimer?.cancel();
+    _answeredHoldTimer = null;
+    final done = _answeredHoldDone;
+    _answeredHoldDone = null;
+    if (done != null && !done.isCompleted) done.complete();
+  }
 
   /// The decoded clip once it has been played, for drawing its waveform.
   Uint8List? clipFor(String promptId) => _clips[promptId];
@@ -330,7 +340,16 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     pending = staged.asCommitted(personId: saved.personId);
     notifyListeners();
     await onSaved?.call(pending?.personId);
-    if (answeredHold > Duration.zero) await Future<void>.delayed(answeredHold);
+    if (!_isCurrent(generation)) return true;
+    if (answeredHold > Duration.zero) {
+      final done = _answeredHoldDone = Completer<void>();
+      _answeredHoldTimer = Timer(answeredHold, () {
+        _answeredHoldTimer = null;
+        _answeredHoldDone = null;
+        done.complete();
+      });
+      await done.future;
+    }
     if (!_isCurrent(generation)) return true;
     pending = null;
     _advance();
@@ -529,6 +548,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
 
   void clearUserData() {
     _sessionGeneration++;
+    _cancelAnsweredHold();
     _playbackTicket++;
     prompts = [];
     index = 0;
@@ -557,6 +577,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   @override
   void dispose() {
     _isDisposed = true;
+    _cancelAnsweredHold();
     _sessionGeneration++;
     _playbackTicket++;
     _player?.dispose();

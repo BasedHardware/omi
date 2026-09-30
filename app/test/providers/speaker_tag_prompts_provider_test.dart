@@ -134,6 +134,32 @@ class Harness {
 }
 
 void main() {
+  testWidgets('disposing after commit cancels the answered-state timer', (tester) async {
+    final h = Harness(answeredHold: const Duration(minutes: 1));
+    await h.provider.loadIfDue();
+    h.provider.stage(SpeakerTagAnswer.me);
+    var completed = false;
+    unawaited(h.provider.commitPending().then((_) => completed = true));
+    await tester.pump();
+    expect(h.provider.pending?.committed, isTrue);
+    h.provider.dispose();
+    await tester.pump();
+    expect(completed, isTrue);
+  });
+
+  testWidgets('a late refresh cannot arm an answered-state timer after disposal', (tester) async {
+    final h = Harness(answeredHold: const Duration(minutes: 1));
+    await h.provider.loadIfDue();
+    h.provider.stage(SpeakerTagAnswer.me);
+    final saved = Completer<void>();
+    var completed = false;
+    unawaited(h.provider.commitPending(onSaved: (_) => saved.future).then((_) => completed = true));
+    await tester.pump();
+    h.provider.dispose();
+    saved.complete();
+    await tester.pump();
+    expect(completed, isTrue);
+  });
   test('loads a set, reports it once, and throttles refetches', () async {
     final h = Harness();
     await h.provider.loadIfDue();
