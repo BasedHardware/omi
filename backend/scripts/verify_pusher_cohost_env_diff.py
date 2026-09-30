@@ -198,6 +198,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_LEARNED_LANGUAGE_PROFILE",
             "STT_MULTI_LANGUAGE_HINTS",
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
+            # Staged sync-lineage rollout: the live revision fence runs in listen
+            # transcript writes; pusher reaches no sync intake or live-write site.
+            "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST",
             # Fleet live routing and runway polling run on backend-listen only.
             "STT_NO_TEXT_SECONDS",
             "STT_ROUTING_MODE",
