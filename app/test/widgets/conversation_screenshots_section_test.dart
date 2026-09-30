@@ -409,4 +409,100 @@ void main() {
     expect(tester.getTopLeft(_tile('a')).dx, 16, reason: 'first tile lines up with the page margin');
     expect(tester.getTopLeft(find.text('What was on screen')).dx, greaterThanOrEqualTo(16));
   });
+
+  // Re-review of #19887: responses are ordered by the server's revision, not by arrival.
+  group('response ordering by revision', () {
+    Future<void> confirmDelete(WidgetTester tester, String id) async {
+      await tester.longPress(_tile(id));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete').last);
+      await tester.pump();
+    }
+
+    testWidgets('two deletes in a row: an earlier answer arriving last cannot restore a later delete', (tester) async {
+      final calls = <String, Completer<ApiResult<ConversationScreenshots>>>{};
+      await _pumpWith(
+        tester,
+        fetch: (_) async => ApiSuccess(_set([_frame('a', caption: 'A'), _frame('b', caption: 'B'), _frame('c')])),
+        delete: (_, frameId) => (calls[frameId] = Completer()).future,
+      );
+      await confirmDelete(tester, 'a');
+      await confirmDelete(tester, 'b');
+      // Server commits A (rev 2) then B (rev 3); B's answer reaches the phone first.
+      if (calls.containsKey('b')) {
+        calls['b']!.complete(ApiSuccess(_set([_frame('c')], revision: 3)));
+        await tester.pumpAndSettle();
+      }
+      calls['a']!.complete(ApiSuccess(_set([_frame('b', caption: 'B'), _frame('c')], revision: 2)));
+      await tester.pumpAndSettle();
+      if (!calls['b']!.isCompleted) {
+        calls['b']!.complete(ApiSuccess(_set([_frame('c')], revision: 3)));
+        await tester.pumpAndSettle();
+      }
+      expect(_tile('a'), findsNothing);
+      expect(_tile('b'), findsNothing, reason: 'the older rev-2 answer must not bring B back');
+      expect(_tile('c'), findsOneWidget);
+    });
+
+    testWidgets('deletes are serialized: the second is sent only after the first answers', (tester) async {
+      final calls = <String, Completer<ApiResult<ConversationScreenshots>>>{};
+      await _pumpWith(
+        tester,
+        fetch: (_) async => ApiSuccess(_set([_frame('a', caption: 'A'), _frame('b', caption: 'B'), _frame('c')])),
+        delete: (_, frameId) => (calls[frameId] = Completer()).future,
+      );
+      await confirmDelete(tester, 'a');
+      await confirmDelete(tester, 'b');
+      expect(calls.keys, ['a']);
+      calls['a']!.complete(ApiSuccess(_set([_frame('b', caption: 'B'), _frame('c')], revision: 2)));
+      await tester.pumpAndSettle();
+      expect(calls.keys, ['a', 'b']);
+      calls['b']!.complete(ApiSuccess(_set([_frame('c')], revision: 3)));
+      await tester.pumpAndSettle();
+      expect(_tile('c'), findsOneWidget);
+      expect(_tile('b'), findsNothing);
+    });
+
+    testWidgets('a delete answer older than a refresh that already landed is not drawn', (tester) async {
+      final fetches = <Completer<ApiResult<ConversationScreenshots>>>[];
+      final deletion = Completer<ApiResult<ConversationScreenshots>>();
+      await _pumpWith(
+        tester,
+        fetch: (_) => (fetches..add(Completer())).last.future,
+        delete: (_, __) => deletion.future,
+        now: () => _t0,
+      );
+      fetches[0].complete(ApiSuccess(_set([_frame('a', caption: 'A'), _frame('b', caption: 'B'), _frame('c')])));
+      await tester.pumpAndSettle();
+      await confirmDelete(tester, 'a');
+      // The expiry refresh goes out mid-delete and comes back first, already past a second change
+      // made elsewhere (desktop deleted C): rev 3.
+      await tester.pump(const Duration(minutes: 58, seconds: 1));
+      fetches[1].complete(ApiSuccess(_set([_frame('b', caption: 'B')], revision: 3)));
+      await tester.pumpAndSettle();
+      deletion.complete(ApiSuccess(_set([_frame('b', caption: 'B'), _frame('c')], revision: 2)));
+      await tester.pumpAndSettle();
+      expect(_tile('c'), findsNothing, reason: 'the rev-2 delete answer predates the rev-3 refresh');
+      expect(_tile('b'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('an empty revision-0 set (setting turned off) always hides the strip', (tester) async {
+      final fetches = <Completer<ApiResult<ConversationScreenshots>>>[];
+      await _pumpWith(
+        tester,
+        fetch: (_) => (fetches..add(Completer())).last.future,
+        delete: (_, __) async => const ApiSuccess(ConversationScreenshots.empty),
+        now: () => _t0,
+      );
+      fetches[0].complete(ApiSuccess(_set([_frame('a')], revision: 4)));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(minutes: 58, seconds: 1));
+      fetches[1].complete(const ApiSuccess(ConversationScreenshots.empty));
+      await tester.pumpAndSettle();
+      expect(_section, findsNothing);
+    });
+  });
 }

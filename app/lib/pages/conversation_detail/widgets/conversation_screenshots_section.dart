@@ -64,6 +64,19 @@ class ConversationScreenshotsSection extends StatefulWidget {
 
 class _ConversationScreenshotsSectionState extends State<ConversationScreenshotsSection> {
   ConversationScreenshots? _set;
+
+  /// The server `revision` of the last set drawn. The server bumps it on every change (adjudication,
+  /// each delete), so any response carrying a lower one — whichever request it answers and however
+  /// late it lands — describes a set that has since been superseded and is never drawn. Revision 0
+  /// is the exception: it is what the server answers once the account setting is off (or before
+  /// anything was ever approved), and hiding the strip is always safe.
+  int _adoptedRevision = 0;
+
+  /// Deletes run one at a time. The server orders them, but each response re-reads the set, so two
+  /// in flight at once can answer with the same revision in either order; serialized, every delete
+  /// is issued against the set its predecessor returned.
+  Future<void> _deleteQueue = Future<void>.value();
+
   Future<void>? _inflight;
   Timer? _refreshTimer;
 
@@ -110,7 +123,7 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
     if (!mounted || generation != _generation) return;
     switch (result) {
       case ApiSuccess(:final data):
-        _adopt(data);
+        if (_supersedes(data)) _adopt(data);
       case ApiFailure():
         // A failed fetch leaves nothing trustworthy to draw: the previous set's URLs are either
         // about to die or already dead. Hide rather than show broken tiles or an error.
@@ -118,9 +131,12 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
     }
   }
 
+  bool _supersedes(ConversationScreenshots set) => set.revision == 0 || set.revision >= _adoptedRevision;
+
   void _adopt(ConversationScreenshots? set) {
     _refreshTimer?.cancel();
     _refreshTimer = null;
+    if (set != null) _adoptedRevision = set.revision;
     setState(() => _set = set);
     // A set that arrives already stale (a skewed clock, a slow response) gets no error-driven
     // refresh: its replacement would arrive the same way, and that is a loop.
@@ -208,17 +224,28 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
       destructive: true,
     );
     if (!confirmed || !mounted) return;
-    final result = await (widget.delete ?? deleteConversationScreenshot)(widget.conversationId, frame.id);
-    if (!mounted) return;
-    switch (result) {
-      case ApiSuccess(:final data):
-        // The server's set, not a local prediction: it may have promoted another frame to banner.
-        // Committing it fences off every fetch already in flight — each was asked before the
-        // delete landed and would bring the frame back.
-        _generation++;
-        _adopt(data);
-      case ApiFailure():
-        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    final previous = _deleteQueue;
+    final turn = Completer<void>();
+    _deleteQueue = turn.future;
+    try {
+      await previous;
+      // The set may have moved on while this delete waited its turn (an earlier delete, a
+      // refresh): a frame that is already gone needs no request, and would only 404.
+      if (!mounted || !(_set?.frames.any((f) => f.id == frame.id) ?? false)) return;
+      final result = await (widget.delete ?? deleteConversationScreenshot)(widget.conversationId, frame.id);
+      if (!mounted) return;
+      switch (result) {
+        case ApiSuccess(:final data):
+          // The server's set, not a local prediction: it may have promoted another frame to banner.
+          // Committing it fences off every fetch already in flight — each was asked before the
+          // delete landed and would bring the frame back.
+          _generation++;
+          if (_supersedes(data)) _adopt(data);
+        case ApiFailure():
+          OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      }
+    } finally {
+      turn.complete();
     }
   }
 
