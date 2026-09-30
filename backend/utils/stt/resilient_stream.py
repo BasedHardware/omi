@@ -35,6 +35,11 @@ class ResilientAudio:
     def buffered_bytes(self) -> int:
         return sum(len(data) for _, data in self._chunks)
 
+    @property
+    def capture_bounds(self) -> tuple[int, int]:
+        """Retained capture interval; an empty ring has equal boundaries."""
+        return (self._chunks[0][0] if self._chunks else self._end_sample, self._end_sample)
+
     def projected_span_samples(self, data: bytes, start_sample: int | None) -> int:
         """Capture-time span after a send, including VAD-gated gaps."""
         if start_sample is None or not data:
@@ -139,6 +144,10 @@ def window_replay_action(
             WINDOW_REPLAY_SAFE_TRIMS.inc()
         return 'trim'
     if raw is not None:
+        snapshot = getattr(socket, 'window_replay_diagnostics', None)
+        if callable(snapshot):
+            first, end = ring.capture_bounds
+            raw.replay_lag_diagnostics = snapshot(first, end, ring.projected_span_samples(data, start_sample))
         raw.fail('capacity_full', capacity_subtype='replay_ring_cap')
     return 'failover'
 
