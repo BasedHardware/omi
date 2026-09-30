@@ -114,15 +114,17 @@ async def await_meeting_evidence(
         outcome = 'timed_out'  # a read that outlived the bound: proceed without evidence
     except Exception as error:  # noqa: BLE001 - evidence is optional; notes must proceed
         logger.warning('meeting notes evidence wait failed uid=%s error_type=%s', uid, type(error).__name__)
+        outcome = 'error'
+    if outcome in ('timed_out', 'error'):
+        # Either way the notes are written without the evidence the client declared.
         record_fallback(
             component='conversation_finalization',
             from_mode='screen_evidence',
             to_mode='notes_without_evidence',
-            reason='other',
+            reason='timeout' if outcome == 'timed_out' else 'other',
             outcome='degraded',
             log=logger,
         )
-        outcome = 'error'
     waited = monotonic() - started
     MEETING_NOTES_EVIDENCE_WAIT_TOTAL.labels(outcome=outcome).inc()
     logger.info(

@@ -51,6 +51,13 @@ def _environment(monkeypatch):
     monkeypatch.setattr(admission, 'run_blocking', inline)
 
 
+@pytest.fixture(autouse=True)
+def fallbacks(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(admission, 'record_fallback', lambda **kw: recorded.append(kw))
+    return recorded
+
+
 def _marker(monkeypatch, stamps):
     """Adjudication marker reads return successive values (None = not yet)."""
     reads = []
@@ -82,10 +89,17 @@ def test_evidence_arriving_mid_wait_proceeds_as_soon_as_it_lands(monkeypatch, cl
     assert clock.now == pytest.approx(2 * admission.EVIDENCE_POLL_SECONDS)
 
 
-def test_no_evidence_proceeds_at_the_bound(monkeypatch, clock):
+def test_no_evidence_proceeds_at_the_bound_degraded(monkeypatch, clock, fallbacks):
     _marker(monkeypatch, [None])
     assert _run(clock) == 'timed_out'
     assert clock.now == pytest.approx(25.0)
+    assert [(f['reason'], f['outcome']) for f in fallbacks] == [('timeout', 'degraded')]
+
+
+def test_evidence_in_time_records_no_fallback(monkeypatch, clock, fallbacks):
+    _marker(monkeypatch, [None, STAMP])
+    assert _run(clock) == 'arrived'
+    assert fallbacks == []
 
 
 @pytest.mark.parametrize(
@@ -138,19 +152,17 @@ def test_screenshot_setting_off_never_waits(monkeypatch, clock):
     assert reads == []
 
 
-def test_a_read_failure_proceeds_degraded_instead_of_failing_finalization(monkeypatch, clock):
+def test_a_read_failure_proceeds_degraded_instead_of_failing_finalization(monkeypatch, clock, fallbacks):
     def boom(*_args, **_kwargs):
         raise RuntimeError('firestore unavailable')
 
-    fallbacks = []
     monkeypatch.setattr(admission, 'get_conversation_screen_frames_adjudicated_at', boom)
-    monkeypatch.setattr(admission, 'record_fallback', lambda **kw: fallbacks.append(kw))
     assert _run(clock) == 'error'
     assert fallbacks and fallbacks[0]['outcome'] == 'degraded'
     assert fallbacks[0]['component'] == 'conversation_finalization'
 
 
-def test_a_hung_read_cannot_outlive_the_bound(monkeypatch):
+def test_a_hung_read_cannot_outlive_the_bound(monkeypatch, fallbacks):
     """The await is cut at the remaining budget even when the RPC never returns."""
     monkeypatch.setenv('MEETING_NOTES_EVIDENCE_WAIT_SECONDS', '0.2')
     seen_timeouts = []
@@ -174,6 +186,7 @@ def test_a_hung_read_cannot_outlive_the_bound(monkeypatch):
     finally:
         started.close()
     assert outcome == 'timed_out'
+    assert [(f['reason'], f['outcome']) for f in fallbacks] == [('timeout', 'degraded')]
     assert elapsed < 1.0
     assert all(timeout is not None and timeout <= 0.2 for timeout in seen_timeouts)
 

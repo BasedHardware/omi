@@ -365,17 +365,18 @@ def adjudicate_screen_frames(
     # is exactly the case this exists for. `revision` cannot record it, because nothing was
     # approved to bump it, so without this the client cannot tell that it already offered these
     # frames and had them refused, and re-uploads them on every reopen.
-    frame_set, committed = enforcement.enforce_and_persist(uid, request.subject.id, policy.max_persisted, new_frames)
-    # Stamped only after the frame docs are persisted: the notes finalizer treats this marker
-    # as "the evidence is readable" (utils/conversations/meeting_evidence_admission.py), so it
-    # must never precede the docs. The response carries the stamp so the client sees it now.
-    stamp = screen_frames_db.mark_conversation_screen_frames_adjudicated(
+    committed = enforcement.persist_enforced_frames(uid, request.subject.id, policy.max_persisted, new_frames)
+    # Stamped after the frame docs are persisted and before the response is built: the notes
+    # finalizer treats this marker as "the evidence is readable"
+    # (utils/conversations/meeting_evidence_admission.py), so it must never precede the docs,
+    # and a failure building the response (URL signing) must not leave the pass unmarked.
+    screen_frames_db.mark_conversation_screen_frames_adjudicated(
         uid,
         request.subject.id,
         selection_fingerprint=selection_fingerprint,
         bucket=bucket,
     )
-    frame_set = frame_set.model_copy(update={'adjudicated_at': stamp, 'selection_fingerprint': selection_fingerprint})
+    frame_set = enforcement.build_frame_set_response(uid, request.subject.id)
     response = ScreenFrameAdjudicationResponse(
         attempt_id=request.attempt_id,
         outcome="committed" if committed else "no_approved_frames",
