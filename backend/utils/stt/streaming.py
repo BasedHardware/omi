@@ -526,7 +526,7 @@ async def connect_stt_socket_with_fallback(
                 to_mode=service.value,
                 reason=reason,
                 outcome='exhausted',
-                **({'capacity_subtype': capacity_subtype} if capacity_subtype is not None else {}),
+                capacity_subtype=capacity_subtype,
             )
             if service == candidates[-1][0]:
                 raise
@@ -540,7 +540,7 @@ async def connect_stt_socket_with_fallback(
                 to_mode=service.value,
                 reason=reason,
                 outcome='exhausted',
-                **({'capacity_subtype': capacity_subtype} if capacity_subtype is not None else {}),
+                capacity_subtype=capacity_subtype,
             )
             if service == candidates[-1][0]:
                 raise
@@ -555,7 +555,7 @@ async def connect_stt_socket_with_fallback(
             to_mode=service.value,
             reason=reason,
             outcome='recovered',
-            **({'capacity_subtype': capacity_subtype} if capacity_subtype is not None else {}),
+            capacity_subtype=capacity_subtype,
         )
         return fallback_socket, service
 

@@ -220,7 +220,7 @@ async def connect_configured_chain(
                     to_mode=service.value,
                     reason=fallback_reason,
                     outcome='degraded',
-                    **({'capacity_subtype': capacity_subtype} if capacity_subtype is not None else {}),
+                    capacity_subtype=capacity_subtype,
                 )
             origin, prior_reason, prior_capacity_subtype = service.value, fallback_reason, capacity_subtype
             return None
@@ -250,7 +250,7 @@ async def connect_configured_chain(
                     to_mode=service.value,
                     reason=prior_reason,
                     outcome='recovered',
-                    **({'capacity_subtype': prior_capacity_subtype} if prior_capacity_subtype is not None else {}),
+                    capacity_subtype=prior_capacity_subtype,
                 )
         return socket, service
 
@@ -318,6 +318,6 @@ async def connect_configured_chain(
         to_mode='unavailable',
         reason=prior_reason,
         outcome='exhausted',
-        **({'capacity_subtype': prior_capacity_subtype} if prior_capacity_subtype is not None else {}),
+        capacity_subtype=prior_capacity_subtype,
     )
     raise RuntimeError('Configured STT chain exhausted')

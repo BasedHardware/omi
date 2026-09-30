@@ -173,7 +173,7 @@ class PendingLiveFailover:
             to_mode=self.to_mode,
             reason=self.reason,
             outcome='recovered',
-            **({'capacity_subtype': self.capacity_subtype} if self.capacity_subtype is not None else {}),
+            capacity_subtype=self.capacity_subtype,
         )
 
     def note_failure(self, typed_reason: str | None) -> None:
