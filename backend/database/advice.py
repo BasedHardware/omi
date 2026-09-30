@@ -21,19 +21,37 @@ BATCH_LIMIT = 500  # Firestore hard limit
 
 def _user_col(uid: str, collection: str) -> Any:
     """Shorthand for users/{uid}/{collection}."""
-    return db.collection('users').document(uid).collection(collection)
+    normalized_uid = str(uid or '').strip()
+    if not normalized_uid:
+        raise ValueError('uid must be a non-empty string')
+    return db.collection('users').document(normalized_uid).collection(collection)
 
 
 def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any) -> Dict[str, Any]:
+    normalized_uid = str(uid or '').strip()
+    if not normalized_uid:
+        raise ValueError('uid must be a non-empty string')
+    normalized_content = str(content or '').strip()
+    if not normalized_content:
+        raise ValueError('content must be a non-empty string')
+    normalized_category = str(category or 'other').strip() or 'other'
+
+    raw_confidence = kwargs.get('confidence', 0.5)
+    try:
+        confidence = float(raw_confidence)
+    except (TypeError, ValueError):
+        confidence = 0.5
+    confidence = max(0.0, min(1.0, confidence))
+
     advice_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     doc: Dict[str, Any] = {
         'id': advice_id,
-        'content': content,
-        'category': category,
+        'content': normalized_content,
+        'category': normalized_category,
         'reasoning': kwargs.get('reasoning'),
         'source_app': kwargs.get('source_app'),
-        'confidence': kwargs.get('confidence', 0.5),
+        'confidence': confidence,
         'context_summary': kwargs.get('context_summary'),
         'current_activity': kwargs.get('current_activity'),
         'created_at': now,
@@ -41,22 +59,31 @@ def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any
         'is_read': False,
         'is_dismissed': False,
     }
-    _user_col(uid, 'advice').document(advice_id).set(doc)
+    _user_col(normalized_uid, 'advice').document(advice_id).set(doc)
     return doc
 
 
 def get_advice(
     uid: str, category: Optional[str] = None, limit: int = 50, offset: int = 0, include_dismissed: bool = False
 ) -> List[Dict[str, Any]]:
-    col = _user_col(uid, 'advice')
+    normalized_uid = str(uid or '').strip()
+    if not normalized_uid:
+        return []
+    if limit is not None and limit <= 0:
+        return []
+
+    safe_limit = min(limit, 1000) if limit is not None else 50
+    safe_offset = max(0, offset) if offset is not None else 0
+
+    col = _user_col(normalized_uid, 'advice')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
-    if category:
-        query = query.where(filter=FieldFilter('category', '==', category))
+    if category and str(category).strip():
+        query = query.where(filter=FieldFilter('category', '==', str(category).strip()))
     if not include_dismissed:
         query = query.where(filter=FieldFilter('is_dismissed', '==', False))
-    if offset > 0:
-        query = query.offset(offset)
-    query = query.limit(limit)
+    if safe_offset > 0:
+        query = query.offset(safe_offset)
+    query = query.limit(safe_limit)
 
     items: List[Dict[str, Any]] = []
     for doc in query.stream():
@@ -70,15 +97,19 @@ def get_advice(
 def update_advice(
     uid: str, advice_id: str, is_read: Optional[bool] = None, is_dismissed: Optional[bool] = None
 ) -> Optional[Dict[str, Any]]:
-    ref = _user_col(uid, 'advice').document(advice_id)
+    normalized_uid = str(uid or '').strip()
+    normalized_advice_id = str(advice_id or '').strip()
+    if not normalized_uid or not normalized_advice_id:
+        return None
+    ref = _user_col(normalized_uid, 'advice').document(normalized_advice_id)
     snap = ref.get()
     if not getattr(snap, "exists", False):
         return None
     updates: Dict[str, Any] = {'updated_at': datetime.now(timezone.utc)}
     if is_read is not None:
-        updates['is_read'] = is_read
+        updates['is_read'] = bool(is_read)
     if is_dismissed is not None:
-        updates['is_dismissed'] = is_dismissed
+        updates['is_dismissed'] = bool(is_dismissed)
     try:
         ref.update(updates)
     except NotFound:
@@ -89,12 +120,16 @@ def update_advice(
         # The advice was deleted between the update and the re-read.
         return None
     result: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-    result['id'] = advice_id
+    result['id'] = normalized_advice_id
     return result
 
 
 def delete_advice(uid: str, advice_id: str) -> bool:
-    ref = _user_col(uid, 'advice').document(advice_id)
+    normalized_uid = str(uid or '').strip()
+    normalized_advice_id = str(advice_id or '').strip()
+    if not normalized_uid or not normalized_advice_id:
+        return False
+    ref = _user_col(normalized_uid, 'advice').document(normalized_advice_id)
     if not getattr(ref.get(), "exists", False):
         return False
     ref.delete()
@@ -102,7 +137,16 @@ def delete_advice(uid: str, advice_id: str) -> bool:
 
 
 def mark_all_advice_read(uid: str) -> int:
-    col = _user_col(uid, 'advice')
+    """Mark all unread advice items as read for a given user.
+
+    Batches updates in chunks of BATCH_LIMIT (500) to adhere to Firestore limits.
+    Note: Chunked commits break all-or-nothing multi-chunk atomicity if a failure
+    occurs after the first chunk commits; previously committed chunks persist.
+    """
+    normalized_uid = str(uid or '').strip()
+    if not normalized_uid:
+        return 0
+    col = _user_col(normalized_uid, 'advice')
     query = col.where(filter=FieldFilter('is_read', '==', False))
     batch = db.batch()
     total = 0
