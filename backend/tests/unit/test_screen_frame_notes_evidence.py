@@ -44,6 +44,7 @@ from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, screen_frames_
 
 START = datetime(2026, 9, 30, 17, 0, tzinfo=timezone.utc)
 _GATEWAY_CONFIG: list = []
+_CLIENTS: dict = {}
 PROD = 'based-hardware-prod-screen-frames'
 DEV = 'based-hardware-dev-screen-frames'
 
@@ -60,7 +61,15 @@ def isolated_imports():
         import utils.llm.gateway_client  # noqa: F401
         from llm_gateway.gateway.config_loader import load_gateway_config
 
+        from langchain_openai import ChatOpenAI
+        from utils.llm.gateway_client import GatewayContextChatOpenAI
+
         _GATEWAY_CONFIG.append(load_gateway_config(prod_mode=True))
+        _CLIENTS['direct'] = ChatOpenAI(model='gpt-6-luna', api_key='sk-test')
+        _CLIENTS['gateway'] = GatewayContextChatOpenAI(
+            model='omi:auto:conv-structure', api_key='svc-test', base_url='http://gateway.invalid/v1'
+        )
+        _wire_messages_for(_CLIENTS['direct'])  # warm the payload path outside test timing
         yield
 
 
@@ -282,6 +291,13 @@ FRAMES = (
 )
 
 
+def _wire_messages_for(client) -> list[dict]:
+    from langchain_core.messages import SystemMessage
+
+    payload = client._get_request_payload([SystemMessage(content='static'), screen_frames_message(FRAMES)])
+    return payload['messages']
+
+
 def _image_urls(message) -> list[str]:
     content = message['content'] if isinstance(message, dict) else message.content
     return [part['image_url']['url'] for part in content if isinstance(part, dict) and part.get('type') == 'image_url']
@@ -336,27 +352,18 @@ class TestImagesReachTheProvider:
         assert all(not _image_urls(message) for message in messages)
 
     def _wire_messages(self, client) -> list[dict]:
-        from langchain_core.messages import SystemMessage
-
-        payload = client._get_request_payload([SystemMessage(content='static'), screen_frames_message(FRAMES)])
-        return payload['messages']
+        return _wire_messages_for(client)
 
     def test_direct_openai_payload_keeps_the_image_parts(self):
-        from langchain_openai import ChatOpenAI
-
-        wire = self._wire_messages(ChatOpenAI(model='gpt-6-luna', api_key='sk-test'))
+        wire = self._wire_messages(_CLIENTS['direct'])
         assert wire[-1]['role'] == 'user'
         assert _image_urls(wire[-1]) == [frame.data_url for frame in FRAMES]
 
     def test_gateway_hop_keeps_the_image_parts_to_the_provider(self):
         from llm_gateway.gateway.executor import provider_request_for
         from llm_gateway.gateway.resolver import resolve_chat_completion_route
-        from utils.llm.gateway_client import GatewayContextChatOpenAI
 
-        client = GatewayContextChatOpenAI(
-            model='omi:auto:conv-structure', api_key='svc-test', base_url='http://gateway.invalid/v1'
-        )
-        wire = self._wire_messages(client)
+        wire = self._wire_messages(_CLIENTS['gateway'])
         assert _image_urls(wire[-1]) == [frame.data_url for frame in FRAMES]
 
         config = _GATEWAY_CONFIG[0]
