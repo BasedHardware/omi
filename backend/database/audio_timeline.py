@@ -20,6 +20,8 @@ COVERAGE_TOLERANCE_SECONDS = 0.001
 
 def chunk_span(chunk: Mapping) -> Optional[Dict]:
     """Validated v2 span metadata ('start', 'samples', 'sample_rate') or None."""
+    if not isinstance(chunk, Mapping):
+        return None
     span = chunk.get('span') if isinstance(chunk, dict) else None
     if not isinstance(span, dict):
         return None
@@ -29,17 +31,27 @@ def chunk_span(chunk: Mapping) -> Optional[Dict]:
         rate = int(span['sample_rate'])
     except (KeyError, TypeError, ValueError):
         return None
-    if samples <= 0 or rate <= 0:
+    if samples <= 0 or rate <= 0 or not math.isfinite(start):
         return None
     return {'start': start, 'samples': samples, 'sample_rate': rate}
 
 
 def span_blob_metadata(span: Dict) -> Dict[str, str]:
     """Blob metadata keys carrying one authoritative v2 span."""
+    if not isinstance(span, Mapping):
+        raise ValueError('span must be a mapping')
+    try:
+        start = float(span['start'])
+        samples = int(span['samples'])
+        rate = int(span['sample_rate'])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError('span must contain numeric start, samples, and sample_rate') from exc
+    if not math.isfinite(start) or samples <= 0 or rate <= 0:
+        raise ValueError('span values must be finite and positive')
     return {
-        'v2_start': repr(span['start']),
-        'v2_samples': str(span['samples']),
-        'v2_sample_rate': str(span['sample_rate']),
+        'v2_start': repr(start),
+        'v2_samples': str(samples),
+        'v2_sample_rate': str(rate),
     }
 
 
@@ -58,7 +70,7 @@ def parse_span_blob_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
         rate = int(metadata['v2_sample_rate'])
     except (KeyError, TypeError, ValueError):
         return None
-    if samples <= 0 or rate <= 0:
+    if samples <= 0 or rate <= 0 or not math.isfinite(start):
         return None
     return {'start': start, 'samples': samples, 'sample_rate': rate}
 
@@ -106,8 +118,18 @@ def group_chunks_by_coverage(
     ends or overlaps — not just start-to-start differences; a single spanless
     chunk keeps the whole listing legacy so no false coverage is claimed.
     """
+    if not chunks or not isinstance(chunks, list):
+        return []
+    if not math.isfinite(gap_threshold) or gap_threshold < 0:
+        gap_threshold = 0.0
+    if not math.isfinite(tolerance) or tolerance < 0:
+        tolerance = COVERAGE_TOLERANCE_SECONDS
+
     spans: List[Optional[Tuple[float, float]]] = []
     for chunk in chunks:
+        if not isinstance(chunk, dict):
+            spans.append(None)
+            continue
         span = chunk.get('span')
         if not isinstance(span, dict):
             spans.append(None)
@@ -123,13 +145,21 @@ def group_chunks_by_coverage(
 
     groups: List[List[Dict]] = []
     for index, chunk in enumerate(chunks):
+        if not isinstance(chunk, dict):
+            continue
         split = False
         if groups and v2_listing:
             prev_end = spans[index - 1]
             this_start = spans[index]
             split = prev_end is not None and this_start is not None and abs(this_start[0] - prev_end[1]) > tolerance
         if not split and groups:
-            split = chunk['timestamp'] - groups[-1][-1]['timestamp'] > gap_threshold
+            prev_chunk = groups[-1][-1]
+            try:
+                curr_ts = float(chunk['timestamp'])
+                prev_ts = float(prev_chunk['timestamp'])
+                split = (curr_ts - prev_ts) > gap_threshold
+            except (KeyError, TypeError, ValueError):
+                split = True
         if split or not groups:
             groups.append([chunk])
         else:
