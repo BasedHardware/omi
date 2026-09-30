@@ -58,8 +58,9 @@ def create_import_job(job_data: Dict[str, Any], client: Optional[Any] = None) ->
     payload = dict(job_data)
     if "uid" in payload:
         clean_uid = _clean_id(payload.get("uid"))
-        if clean_uid:
-            payload["uid"] = clean_uid
+        if not clean_uid:
+            raise ValueError("Invalid or missing 'uid' in job_data")
+        payload["uid"] = clean_uid
 
     fs = _resolve_client(client)
     try:
@@ -91,8 +92,8 @@ def update_import_job(job_id: str, updates: Dict[str, Any], client: Optional[Any
         job_ref.update(updates)
         return True
     except Exception as e:
-        logger.warning("Failed to update import job %s: %s", cleaned_id, e)
-        return False
+        logger.error("Failed to update import job %s: %s", cleaned_id, e)
+        raise
 
 
 def get_import_job(job_id: str, client: Optional[Any] = None) -> Optional[Dict[str, Any]]:
@@ -159,5 +160,5 @@ def delete_import_job(job_id: str, client: Optional[Any] = None) -> bool:
         job_ref.delete()
         return True
     except Exception as e:
-        logger.warning("Failed to delete import job %s: %s", cleaned_id, e)
-        return False
+        logger.error("Failed to delete import job %s: %s", cleaned_id, e)
+        raise

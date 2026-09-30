@@ -125,7 +125,7 @@ def test_clean_id_validates_and_normalizes():
     assert _clean_id("") == ""
     assert _clean_id("   ") == ""
     assert _clean_id(None) == ""
-    assert _clean_id(12345) == ""
+    assert _clean_id(12345) == ""  # type: ignore[arg-type]
     # Path traversal rejection
     assert _clean_id("../evil") == ""
     assert _clean_id("dir/job_1") == ""
@@ -149,13 +149,16 @@ def test_create_import_job_valid_flow():
 def test_create_import_job_rejects_missing_or_invalid_id():
     client = FakeFirestoreClient()
     with pytest.raises(ValueError, match="job_data must be a dictionary"):
-        create_import_job("not a dict", client=client)
+        create_import_job("not a dict", client=client)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="Invalid or missing 'id'"):
         create_import_job({}, client=client)
     with pytest.raises(ValueError, match="Invalid or missing 'id'"):
         create_import_job({"id": ""}, client=client)
     with pytest.raises(ValueError, match="Invalid or missing 'id'"):
         create_import_job({"id": "../malicious"}, client=client)
+    for bad_uid in ["", "   ", "../bad", "dir/uid", "a" * (MAX_ID_LENGTH + 1)]:
+        with pytest.raises(ValueError, match="Invalid or missing 'uid'"):
+            create_import_job({"id": "valid_job", "uid": bad_uid}, client=client)
 
 
 def test_create_import_job_handles_transport_error():
@@ -180,14 +183,15 @@ def test_update_import_job_invalid_id_or_empty_updates():
     client = FakeFirestoreClient()
     assert update_import_job("", {"status": "failed"}, client=client) is False
     assert update_import_job("../bad", {"status": "failed"}, client=client) is False
-    assert update_import_job(None, {"status": "failed"}, client=client) is False
-    assert update_import_job("job_1", "not_a_dict", client=client) is False
+    assert update_import_job(None, {"status": "failed"}, client=client) is False  # type: ignore[arg-type]
+    assert update_import_job("job_1", "not_a_dict", client=client) is False  # type: ignore[arg-type]
     assert update_import_job("job_1", {}, client=client) is True
 
 
 def test_update_import_job_handles_firestore_error():
     client = FakeFirestoreClient()
-    assert update_import_job("nonexistent_job", {"status": "failed"}, client=client) is False
+    with pytest.raises(Exception, match="Document not found"):
+        update_import_job("nonexistent_job", {"status": "failed"}, client=client)
 
 
 def test_get_import_job_valid_and_missing():
@@ -203,7 +207,7 @@ def test_get_import_job_invalid_id_short_circuits():
     client = MagicMock()
     assert get_import_job("", client=client) is None
     assert get_import_job("../traversal", client=client) is None
-    assert get_import_job(None, client=client) is None
+    assert get_import_job(None, client=client) is None  # type: ignore[arg-type]
     client.collection.assert_not_called()
 
 
@@ -241,7 +245,7 @@ def test_get_import_jobs_invalid_uid_returns_empty():
     client = MagicMock()
     assert get_import_jobs("", client=client) == []
     assert get_import_jobs("   ", client=client) == []
-    assert get_import_jobs(None, client=client) == []
+    assert get_import_jobs(None, client=client) == []  # type: ignore[arg-type]
     assert get_import_jobs("../traversal", client=client) == []
     client.collection.assert_not_called()
 
@@ -261,14 +265,15 @@ def test_delete_import_job_valid_and_invalid():
 
     # Invalid id
     assert delete_import_job("", client=client) is False
-    assert delete_import_job(None, client=client) is False
+    assert delete_import_job(None, client=client) is False  # type: ignore[arg-type]
     assert delete_import_job("../bad", client=client) is False
 
 
 def test_delete_import_job_handles_transport_error():
     client = MagicMock()
     client.collection.side_effect = Exception("Firestore error")
-    assert delete_import_job("job_err", client=client) is False
+    with pytest.raises(Exception, match="Firestore error"):
+        delete_import_job("job_err", client=client)
 
 
 def test_resolve_client_fallback():
