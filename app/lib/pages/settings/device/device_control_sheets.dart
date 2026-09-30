@@ -80,7 +80,7 @@ Future<int?> showButtonActionSheet(
             child: OmiSettingsRow(
               title: opt.$2,
               showChevron: false,
-              trailing: opt.$1 == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+              trailing: opt.$1 == current ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
               onTap: () => Navigator.of(sheetContext).pop(opt.$1),
             ),
           ),
