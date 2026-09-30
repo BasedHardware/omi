@@ -11368,4 +11368,66 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => '音声認識';
+
+  @override
+  String get greetingMorning => 'おはよう';
+
+  @override
+  String get greetingAfternoon => 'こんにちは';
+
+  @override
+  String get greetingEvening => 'こんばんは';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting、$nameさん';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => '何を知りたいですか？';
+
+  @override
+  String get askSuggestDecide => '今日は何を決めた？';
+
+  @override
+  String get askSuggestOwe => 'まだ誰かに対応すべきことは？';
+
+  @override
+  String get askSuggestNotice => 'Omiが気づいたことは？';
+
+  @override
+  String get pastChats => '過去のチャット';
+
+  @override
+  String get newChat => '新しいチャット';
+
+  @override
+  String get startFresh => '新しく始める';
+
+  @override
+  String get noPastChats => 'Omiとのチャットはここに表示されます。';
+
+  @override
+  String get deleteChatQuestion => 'このチャットを削除しますか？';
+
+  @override
+  String get deleteChatMessage => '過去のチャットから完全に消えます。';
+
+  @override
+  String get deleteChat => 'チャットを削除';
+
+  @override
+  String get appsAskWith => 'Omiに聞くときに使う';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '今日の会話は$count件。',
+      one: '今日の会話は1件。',
+      zero: '今日の会話はまだありません。',
+    );
+    return '$_temp0';
+  }
 }

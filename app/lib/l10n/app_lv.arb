@@ -3640,5 +3640,22 @@
     "peopleCount": "{count, plural, =1{1 persona} other{Personas: {count}}}",
     "noMatchingPeople": "Nav atbilstošu personu",
     "deselectAll": "Noņemt visu atlasi",
-    "voiceRecognitionSettings": "Balss atpazīšana"
+    "voiceRecognitionSettings": "Balss atpazīšana",
+    "greetingMorning": "Labrīt",
+    "greetingAfternoon": "Labdien",
+    "greetingEvening": "Labvakar",
+    "greetingWithName": "{greeting}, {name}",
+    "whatDoYouWantToKnow": "Ko vēlaties uzzināt?",
+    "askSuggestDecide": "Ko es šodien izlēmu?",
+    "askSuggestOwe": "Ko es vēl esmu parādā citiem?",
+    "askSuggestNotice": "Ko pamanīja Omi?",
+    "pastChats": "Iepriekšējās tērzēšanas",
+    "newChat": "Jauna tērzēšana",
+    "startFresh": "Sākt no jauna",
+    "noPastChats": "Jūsu tērzēšanas ar Omi parādās šeit.",
+    "deleteChatQuestion": "Dzēst šo tērzēšanu?",
+    "deleteChatMessage": "Tā uz visiem laikiem pazudīs no iepriekšējām tērzēšanām.",
+    "deleteChat": "Dzēst tērzēšanu",
+    "appsAskWith": "Jautājiet Omi ar",
+    "conversationsTodayCount": "{count, plural, =0{Šodien sarunu nav.} =1{1 saruna šodien.} other{{count} sarunas šodien.}}"
 }
