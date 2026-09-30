@@ -13,7 +13,7 @@ from models.person_confidence import (
     Band,
     person_confidence,
 )
-from utils.person_evidence import apply_evidence, assignment_evidence, merge_backfill, receipt_person_ids
+from utils.person_evidence import assignment_evidence, reconcile_evidence, receipt_person_ids
 
 NOW = datetime(2026, 9, 30, 12, tzinfo=timezone.utc)
 READY = dict(speech_samples=['s'], speech_samples_version=3, speaker_embedding=[0.1, 0.2])
@@ -105,22 +105,19 @@ def test_assignment_evidence_by_source_and_prior_label():
     assert assignment_evidence([{'person_id': 'p'}], person_id='p', source=SOURCE_MANUAL) == {}
 
 
-def test_apply_evidence_counts_each_conversation_once():
-    first = apply_evidence(None, MANUAL_LABELS, 'c1', NOW)
-    assert first[MANUAL_LABELS] == 1 and first['last_labeled_at'] == NOW
-    assert apply_evidence(first, MANUAL_LABELS, 'c1', NOW) is None
-    second = apply_evidence(first, CARD_PICKS, 'c1', NOW)
-    assert second[CARD_PICKS] == 1 and second[MANUAL_LABELS] == 1
-    corrected = apply_evidence({}, AUTO_CORRECTED, 'c2', NOW)
-    assert corrected[AUTO_CORRECTED] == 1 and 'last_labeled_at' not in corrected
-
-
-def test_counted_keys_are_bounded():
-    evidence = None
+def test_durable_ledger_survives_the_bounded_key_cache():
+    first, ledger = reconcile_evidence(None, None, 'c1', MANUAL_LABELS, True, 1, NOW)
+    evidence = first
     for index in range(COUNTED_KEYS_LIMIT + 5):
-        evidence = apply_evidence(evidence, MANUAL_LABELS, f'c{index}', NOW)
+        evidence, _ = reconcile_evidence(evidence, None, f'other{index}', MANUAL_LABELS, True, 1, NOW)
     assert len(evidence['counted']) == COUNTED_KEYS_LIMIT
-    assert evidence[MANUAL_LABELS] == COUNTED_KEYS_LIMIT + 5
+    assert 'manual_labels:c1' not in evidence['counted']
+    assert reconcile_evidence(evidence, ledger, 'c1', MANUAL_LABELS, True, 2, NOW)[0] is None
+
+
+def test_reconciliation_fences_stale_generations():
+    first, ledger = reconcile_evidence(None, None, 'c1', MANUAL_LABELS, True, 2, NOW)
+    assert reconcile_evidence(first, ledger, 'c1', None, False, 1, NOW) == (None, ledger)
 
 
 def test_receipt_person_ids_skips_owner_and_malformed_entries():
@@ -130,12 +127,3 @@ def test_receipt_person_ids_skips_owner_and_malformed_entries():
     }
     assert receipt_person_ids(receipt) == ['p', 'q']
     assert receipt_person_ids(None) == [] and receipt_person_ids({'speakers': []}) == []
-
-
-def test_merge_backfill_is_idempotent_and_respects_live_counts():
-    live = apply_evidence(None, MANUAL_LABELS, 'c1', NOW)
-    merged = merge_backfill(live, ['c1', 'c2'], NOW)
-    assert merged[MANUAL_LABELS] == 2 and merged['last_labeled_at'] == NOW
-    assert merge_backfill(merged, ['c1', 'c2'], NOW) is None
-    fresh = merge_backfill(None, ['c9'], NOW)
-    assert fresh[MANUAL_LABELS] == 1 and 'last_labeled_at' not in fresh

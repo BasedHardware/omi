@@ -27,8 +27,8 @@ WEIGHTS = {MANUAL_LABELS: 3, CARD_CONFIRMS: 2, CARD_PICKS: 2, AUTO_CONFIRMED: 1,
 VOICE_READY_POINTS = 1
 LIKELY_POINTS = 2
 CONFIRMED_POINTS = 6
-# Each counted event is keyed ``kind:conversation_id`` so a retried or repeated
-# assignment in one conversation counts once. Newest last; bounded.
+# Recent diagnostic keys only. Durable deduplication and generation fences live
+# in each conversation's encrypted manual-assignment receipt.
 COUNTED_KEYS_LIMIT = 200
 
 

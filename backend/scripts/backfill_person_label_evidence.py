@@ -34,7 +34,7 @@ def _pages(client, uid: str, start_after: str | None):
     while True:
         query = collection.select(RECEIPT_FIELDS).order_by('__name__').limit(PAGE_SIZE)
         if cursor:
-            query = query.start_after(collection.document(cursor))
+            query = query.start_after({'__name__': collection.document(cursor)})
         page = [(doc.id, doc.to_dict() or {}) for doc in query.stream()]
         if not page:
             return

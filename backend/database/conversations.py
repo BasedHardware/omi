@@ -2652,7 +2652,7 @@ def assign_conversation_speaker(
             raise LookupError('Person not found')
         docs, now = {pid: doc for pid, (_, doc) in people.items()}, datetime.now(timezone.utc)
         updates, removed = person_updates_for_assignment(
-            docs, previous, person_id, relabeled, evidence_source, current_id, resolved, now
+            docs, previous, person_id, relabeled, evidence_source, current_id, resolved, now, receipt, segments
         )
         for pid, update in updates.items():
             transaction.update(people[pid][0], update)

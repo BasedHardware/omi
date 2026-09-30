@@ -12,9 +12,11 @@ from models.person_confidence import (
     AUTO_CORRECTED,
     CARD_CONFIRMS,
     CARD_PICKS,
+    COUNTERS,
     COUNTED_KEYS_LIMIT,
     MANUAL_LABELS,
     SOURCE_CARD,
+    WEIGHTS,
     evidence_count,
 )
 
@@ -51,46 +53,54 @@ def assignment_evidence(
     return earned
 
 
-def apply_evidence(
+def reconcile_evidence(
     evidence: Optional[Mapping[str, Any]],
-    kind: str,
+    ledger: Optional[Mapping[str, Any]],
     conversation_id: str,
+    kind: Optional[str],
+    still_labeled: bool,
+    generation: int,
     now: datetime,
-) -> Optional[Dict[str, Any]]:
-    """The updated tally, or None when this conversation already counted for ``kind`` (idempotent)."""
+) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+    """Reconcile one conversation's contribution, fenced by its assignment generation.
+
+    The durable ledger lives in the encrypted manual-assignment receipt, not the
+    person's bounded diagnostic key cache. One positive contribution per person
+    per conversation uses the strongest observed source; it is retracted when
+    no reviewed segment remains. Automatic corrections remain negative history.
+    """
     current = dict(evidence) if isinstance(evidence, Mapping) else {}
     counted = [key for key in current.get('counted') or [] if isinstance(key, str)]
-    key = f'{kind}:{conversation_id}'
-    if key in counted:
-        return None
-    counted.append(key)
-    current['counted'] = counted[-COUNTED_KEYS_LIMIT:]
-    current[kind] = evidence_count(current, kind) + 1
-    if kind != AUTO_CORRECTED:
+    previous = (
+        set(ledger.get('kinds', [])) & set(COUNTERS)
+        if ledger is not None
+        else {key for key in COUNTERS if f'{key}:{conversation_id}' in counted}
+    )
+    if ledger and generation < ledger.get('generation', 0):
+        return None, dict(ledger)
+    following = previous & {AUTO_CORRECTED}
+    if kind == AUTO_CORRECTED:
+        following.add(kind)
+    if still_labeled:
+        positive = previous - {AUTO_CORRECTED}
+        if kind and kind != AUTO_CORRECTED:
+            positive.add(kind)
+        if positive:
+            following.add(max(positive, key=lambda key: WEIGHTS[key]))
+    updated_ledger = {'kinds': sorted(following), 'generation': generation}
+    if previous == following:
+        return None, updated_ledger
+    for key in previous - following:
+        current[key] = max(0, evidence_count(current, key) - 1)
+    for key in following - previous:
+        current[key] = evidence_count(current, key) + 1
+    keys = {f'{key}:{conversation_id}' for key in COUNTERS}
+    current['counted'] = (
+        [key for key in counted if key not in keys] + [f'{key}:{conversation_id}' for key in sorted(following)]
+    )[-COUNTED_KEYS_LIMIT:]
+    if following - previous - {AUTO_CORRECTED}:
         current['last_labeled_at'] = now
-    return current
-
-
-def merge_backfill(
-    evidence: Optional[Mapping[str, Any]],
-    conversation_ids: Iterable[str],
-    now: datetime,
-) -> Optional[Dict[str, Any]]:
-    """Add one hand label per receipt conversation not yet counted. None when nothing changes."""
-    current: Optional[Dict[str, Any]] = dict(evidence) if isinstance(evidence, Mapping) else {}
-    changed = False
-    for conversation_id in conversation_ids:
-        updated = apply_evidence(current, MANUAL_LABELS, conversation_id, now)
-        if updated is not None:
-            current, changed = updated, True
-    if not changed:
-        return None
-    # A backfill does not know when the user labeled; keep any real timestamp.
-    if evidence and evidence.get('last_labeled_at'):
-        current['last_labeled_at'] = evidence['last_labeled_at']
-    else:
-        current.pop('last_labeled_at', None)
-    return current
+    return current, updated_ledger
 
 
 def receipt_person_ids(receipt: Optional[Mapping[str, Any]]) -> List[str]:
@@ -120,6 +130,8 @@ def person_updates_for_assignment(
     conversation_id: str,
     resolved: Sequence[str],
     now: datetime,
+    receipt: Dict[str, Any],
+    after: Sequence[Mapping[str, Any]],
 ) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
     """Every person-document write one manual assignment makes, and the sample paths it retires.
 
@@ -128,6 +140,8 @@ def person_updates_for_assignment(
     fenced off; every person the assignment earns evidence for gets its new tally.
     """
     updates: Dict[str, Dict[str, Any]] = {}
+    if len(people) > 499:
+        raise ValueError('Assignment affects too many people for one transaction')
     removed: List[str] = []
     for pid in previous:
         person = people.get(pid)
@@ -141,11 +155,23 @@ def person_updates_for_assignment(
                 speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
             )
         updates[pid] = update
-    for pid, kind in assignment_evidence(before, person_id=person_id, source=source).items():
-        person = people.get(pid)
+    earned = assignment_evidence(before, person_id=person_id, source=source)
+    ledger = dict(receipt.get('label_evidence') or {})
+    for pid, person in people.items():
         if not person:
             continue
-        tally = apply_evidence(person.get('label_evidence'), kind, conversation_id, now)
+        still_labeled = any(s.get('person_id') == pid and not _auto(s) and not s.get('is_user') for s in after)
+        tally, contribution = reconcile_evidence(
+            person.get('label_evidence'),
+            ledger.get(pid),
+            conversation_id,
+            earned.get(pid),
+            still_labeled,
+            receipt.get('generation', 0),
+            now,
+        )
+        ledger[pid] = contribution
         if tally is not None:
             updates.setdefault(pid, {})['label_evidence'] = tally
+    receipt['label_evidence'] = ledger
     return updates, removed

@@ -539,3 +539,22 @@ def test_card_answer_confirming_an_automatic_match_is_a_card_confirm(world):
     store.rows[path]['transcript_segments'][1]['speaker_match_source'] = 'sync_embedding'
     db.assign_conversation_speaker('u', 'c', person_id='old', segment_ids=['s1'], evidence_source='card')
     assert store.rows[('users', 'u', 'people', 'old')]['label_evidence']['card_confirms'] == 1
+
+
+def test_relabeling_away_retracts_the_conversations_positive_evidence(world):
+    store, _, _ = world
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+    db.assign_conversation_speaker('u', 'c', person_id='old', segment_ids=['s1'])
+    assert store.rows[('users', 'u', 'people', 'new')]['label_evidence']['manual_labels'] == 0
+    assert store.rows[('users', 'u', 'people', 'old')]['label_evidence']['manual_labels'] == 1
+
+
+def test_card_and_manual_labels_in_one_conversation_do_not_double_count(world):
+    store, path, segments = world
+    segments.append(dict(segments[1], id='s2', speaker_id=5, person_id=None))
+    store.rows[path]['transcript_segments'] = segments
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'], evidence_source='card')
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s2'])
+    evidence = store.rows[('users', 'u', 'people', 'new')]['label_evidence']
+    assert evidence.get('manual_labels') == 1
+    assert evidence.get('card_picks', 0) == 0
