@@ -34,6 +34,10 @@ def _required(value: object, field: str) -> str:
 
 
 def _request(request: dict[str, Any], operation: str) -> dict[str, Any]:
+    if not isinstance(request, dict):
+        raise ValueError("request must be a dictionary")
+    if operation not in ("rollback", "rollout"):
+        raise ValueError(f"unsupported breakglass operation: {operation}")
     current = _required(request.get("current_release_id"), "current_release_id")
     target = _required(request.get("target_release_id"), "target_release_id")
     actor = _required(request.get("actor"), "actor")
@@ -45,11 +49,13 @@ def _request(request: dict[str, Any], operation: str) -> dict[str, Any]:
         raise ValueError("incident_url must identify an Omi GitHub incident")
     if not _REQUEST_ID.fullmatch(request_id):
         raise ValueError("request_id must identify this GitHub Actions attempt")
-    if type(generation) is not int or generation < 0:
+    if type(generation) is not int or isinstance(generation, bool) or generation < 0:
         raise ValueError("expected_generation is invalid")
     normal_path = request.get("normal_path_unavailable")
     if operation == "rollout":
         normal_path = _required(normal_path, "normal_path_unavailable")
+    elif normal_path is not None and not isinstance(normal_path, str):
+        raise ValueError("normal_path_unavailable must be a string or None")
     return {
         "current_release_id": current,
         "target_release_id": target,
@@ -166,12 +172,19 @@ def _execute(
     firestore_client: Any = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    if not isinstance(request, dict):
+        raise ValueError("request must be a dictionary")
     validated = _request(request, operation)
+    if operation == "rollout" and (emergency_manifest is None or not isinstance(emergency_manifest, dict)):
+        raise ValueError("emergency manifest is required")
     manifest = normalize_release_manifest(emergency_manifest) if emergency_manifest is not None else None
     if manifest is not None and manifest["release_id"] != validated["target_release_id"]:
         raise ValueError("emergency target identity mismatch")
     client = firestore_client or get_firestore_client()
     audit_id = hashlib.sha256(validated["request_id"].encode()).hexdigest()
+    effective_now = now or datetime.now(timezone.utc)
+    if effective_now.tzinfo is None:
+        effective_now = effective_now.replace(tzinfo=timezone.utc)
     return _commit(
         client.transaction(),
         client.collection(BETA_ADMISSION_COLLECTION).document(BETA_ADMISSION_DOCUMENT),
@@ -181,7 +194,7 @@ def _execute(
         validated,
         operation,
         manifest,
-        now or datetime.now(timezone.utc),
+        effective_now,
     )
 
 
