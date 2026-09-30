@@ -365,7 +365,13 @@ def test_contended_owner_is_an_unnamed_free_owner_check_even_with_a_stale_projec
 
 def _select_with(conversations, **extra):
     return selection.select_prompts(
-        conversations, now=NOW, owner_has_voice=True, named_allowed=True, answered=set(), **extra
+        conversations,
+        now=NOW,
+        owner_has_voice=True,
+        named_allowed=True,
+        answered=set(),
+        prior_enabled=extra.pop('prior_enabled', True),
+        **extra,
     )
 
 
@@ -415,3 +421,16 @@ def test_malformed_voice_candidates_are_ignored():
         ['a', 'b', 'c'],
     )
     assert merged == {'p1': {'level': 2, 'suggest': True}}
+
+
+def test_flag_off_ignores_persisted_pinned_candidates(monkeypatch):
+    monkeypatch.setenv('PINNED_SPEAKER_PRIOR_ENABLED', 'false')
+    conversation = _conversation(
+        segments=[
+            _segment('a', 0, 0, 3, is_user=True),
+            _segment('b', 1, 3, 11, voice_candidates=[{'person_id': 'p2', 'level': 2, 'suggest': True}]),
+        ]
+    )
+    prompt = _select_with([conversation], people={'p2': 'Maya'}, pinned={'p2'}, prior_enabled=False)[0]
+    assert prompt.kind == SpeakerTagPromptKind.identify
+    assert prompt.suggested_person_id is None

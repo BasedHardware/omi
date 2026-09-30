@@ -425,6 +425,7 @@ class SpeakerMatcher:
             # decision based on a stale set of owner claims.
             prior = pinned_speaker_prior_enabled()
             pinned = {pid for pid, value in self.person_embeddings.items() if value.get('pinned')}
+            assigned = {result.person_id for result in decisions.values() if result.person_id is not None}
             for voice, result in decisions.items():
                 segment_id = self._voice_segments[voice]
                 if result.person_id is not None:
@@ -450,7 +451,7 @@ class SpeakerMatcher:
                         SpeakerIdentityStatus.ambiguous if result.owner_contended else SpeakerIdentityStatus.no_match
                     )
                     if prior:
-                        self._offer_pinned_suggestion(voice, result, pinned, segment_id)
+                        self._offer_pinned_suggestion(voice, result, pinned, segment_id, assigned)
                 self.voice_identity_status[voice] = status
                 self.segment_identity_status[segment_id] = status
             self.host.state.speaker_map_dirty = True
@@ -463,14 +464,19 @@ class SpeakerMatcher:
                 self._session_log_id(),
             )
 
-    def _offer_pinned_suggestion(self, voice: int, result: SpeakerMatchDecision, pinned: set, segment_id: str) -> None:
+    def _offer_pinned_suggestion(
+        self, voice: int, result: SpeakerMatchDecision, pinned: set, segment_id: str, assigned: set
+    ) -> None:
         """Pinned prior: record what this unmatched voice resembles; ask about a pinned near-miss.
 
         Never labels: the event carries an empty person_id, which every client treats as a
         suggestion only, plus ``suggested_person_id`` for clients that can show who.
         """
+        excluded = (
+            assigned | set(self.segment_assignments.values()) | {pid for pid, _ in self.speaker_to_person.values()}
+        )
         candidates = voice_candidates(
-            self._voice_distances.get(voice, {}), result, pinned, exclude=(USER_SELF_PERSON_ID,)
+            self._voice_distances.get(voice, {}), result, pinned, exclude=tuple(excluded | {USER_SELF_PERSON_ID})
         )
         self.voice_candidates[voice] = candidates
         near = next((entry['person_id'] for entry in candidates if entry.get('suggest')), None)

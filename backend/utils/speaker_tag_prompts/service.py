@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 
+from config.speaker_prior import pinned_speaker_prior_enabled
 from database import conversations as conversations_db
 from database import redis_db
 from database import users as users_db
@@ -340,6 +341,7 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
         people=people,
         pinned=pinned,
         ignored=voice_profiles_db.ignored_voice_keys(state),
+        prior_enabled=pinned_speaker_prior_enabled(),
         verify=verify_in_budget,
         on_skip=lambda reason: SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason=reason).inc(),
     )

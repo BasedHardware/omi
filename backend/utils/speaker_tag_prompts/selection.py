@@ -256,6 +256,7 @@ def select_prompts(
     limit: int = DEFAULT_LIMIT,
     pinned: AbstractSet[str] = frozenset(),
     ignored: AbstractSet[str] = frozenset(),
+    prior_enabled: bool = False,
     verify: Optional[Callable[[Mapping[str, Any], SpeakerTagPrompt, str], bool]] = None,
     max_verifications: int = 4,
     on_skip: Optional[Callable[[str], None]] = None,
@@ -359,7 +360,7 @@ def select_prompts(
                     )
 
         for rank, run in enumerate(unnamed):
-            voice = run_voice_candidates(segments, run.segment_ids)
+            voice = run_voice_candidates(segments, run.segment_ids) if prior_enabled else {}
             near = next(
                 (pid for pid, entry in voice.items() if entry['suggest'] and pid in pinned and pid in people), None
             )

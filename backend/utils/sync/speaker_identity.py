@@ -131,6 +131,7 @@ def identify_speakers_for_segments(
     # Track matched person_ids so each person is only assigned to one speaker
     # (diarization tells us speakers are distinct — no person can be two speakers).
     matched_person_ids: set = set()
+    prior = False
 
     if audio_bytes and person_embeddings_cache and speaker_embedding_configured():
         # Collect every voice before reserving the owner. Longest-first remains
@@ -305,3 +306,12 @@ def identify_speakers_for_segments(
             segment.speaker_identity_status = (
                 SpeakerIdentityStatus.user if person_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
             )
+    if prior:
+        # Filter after voice, manual and text assignments, including voices visited
+        # later in the matching loop. This never changes an identity decision.
+        assigned = {s.person_id for s in transcript_segments if s.person_id} | {USER_SELF_PERSON_ID}
+        for segment in transcript_segments:
+            if segment.is_user or segment.person_id:
+                segment.voice_candidates = None
+            elif segment.voice_candidates is not None:
+                segment.voice_candidates = [c for c in segment.voice_candidates if c['person_id'] not in assigned]

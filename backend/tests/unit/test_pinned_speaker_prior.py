@@ -166,3 +166,29 @@ def test_live_candidates_are_stamped_only_on_unlabeled_segments():
         SimpleNamespace(host=SimpleNamespace(speakers=speakers)), [unlabeled, manual]
     )
     assert unlabeled.voice_candidates == candidates and manual.voice_candidates is None
+
+
+def test_live_near_miss_excludes_a_person_already_assigned_to_another_voice(monkeypatch):
+    matcher, emitted = _live(monkeypatch, pinned=True, enabled=True)
+    matcher.speaker_to_person[9] = ('p1', 'Maya')
+    asyncio.run(matcher.match(3, _clip('s1')))
+    assert emitted == []
+    assert matcher.voice_candidates[3] == []
+
+
+def test_sync_candidates_exclude_a_person_already_manually_assigned(monkeypatch):
+    monkeypatch.setenv('PINNED_SPEAKER_PRIOR_ENABLED', 'true')
+    deps = sync_mod.SpeakerIdentityDependencies(
+        speaker_embedding_configured=lambda: True,
+        extract_embedding_from_bytes=lambda _audio, _name: NEAR,
+        collect_speaker_audio=lambda _audio, spans: SimpleNamespace(clips=[(b'wav', 6.0)], available_seconds=6.0),
+        detect_speaker_from_text=lambda *args, **kwargs: None,
+    )
+    cache = {'p1': {'embedding': np.array([[0.0, 1.0, 0.0]], dtype=np.float32), 'name': 'Maya', 'pinned': True}}
+    segments = [
+        TranscriptSegment(id='manual', text='Maya', speaker_id=1, is_user=False, person_id='p1', start=0, end=7),
+        TranscriptSegment(id='unknown', text='someone', speaker_id=2, is_user=False, start=7, end=13),
+    ]
+    sync_mod.identify_speakers_for_segments(segments, b'audio', cache, 'u', dependencies=deps)
+    assert segments[0].person_id == 'p1'
+    assert segments[1].person_id is None and segments[1].voice_candidates == []
