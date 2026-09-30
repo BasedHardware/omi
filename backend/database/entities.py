@@ -12,14 +12,21 @@ USER_ENTITY_ID = 'user'
 
 
 def person_entity_id(person_id: str) -> str:
-    if not person_id or not isinstance(person_id, str) or not person_id.strip():
+    try:
+        clean = person_id.strip()
+    except (AttributeError, TypeError):
         raise ValueError("person_id must be a non-empty string")
-    return f"person:{person_id.strip()}"
+    if not clean:
+        raise ValueError("person_id must be a non-empty string")
+    return f"person:{clean}"
 
 
 def stable_entity_id(label: str, entity_type: str = 'concept') -> str:
-    clean_label = (label or '').strip().lower()
-    clean_type = (entity_type or 'concept').strip().lower()
+    try:
+        clean_label = (label or '').strip().lower()
+        clean_type = (entity_type or 'concept').strip().lower()
+    except (AttributeError, TypeError):
+        raise ValueError("label must be a non-empty string")
     if not clean_label:
         raise ValueError("label must be a non-empty string")
     normalized = f"{clean_type}:{clean_label}"
@@ -33,18 +40,22 @@ def resolve_entity_id(
     label: Optional[str] = None,
     entity_type: str = 'person',
 ) -> Optional[str]:
-    if not uid or not isinstance(uid, str) or not uid.strip():
+    try:
+        clean_uid = uid.strip()
+    except (AttributeError, TypeError):
         return None
-    clean_uid = uid.strip()
+    if not clean_uid:
+        return None
 
-    if person_id and isinstance(person_id, str) and person_id.strip():
-        entity_id = person_entity_id(person_id.strip())
-        clean_label = (label or '').strip() or entity_id
+    clean_person_id = person_id.strip() if person_id and hasattr(person_id, 'strip') else None
+    if clean_person_id:
+        entity_id = person_entity_id(clean_person_id)
+        clean_label = (label or '').strip() if label and hasattr(label, 'strip') else entity_id
         kg_db.upsert_knowledge_node(
             clean_uid,
             {
                 'id': entity_id,
-                'label': clean_label,
+                'label': clean_label or entity_id,
                 'node_type': entity_type,
                 'aliases': [clean_label] if clean_label else [],
                 'memory_ids': [],
@@ -52,12 +63,12 @@ def resolve_entity_id(
         )
         return entity_id
 
-    if not label or not isinstance(label, str) or not label.strip():
+    clean_label = label.strip() if label and hasattr(label, 'strip') else None
+    if not clean_label:
         return None
-    clean_label = label.strip()
 
     existing = kg_db.find_node_by_label_or_alias(clean_uid, clean_label)
-    if existing and isinstance(existing, dict) and existing.get('id'):
+    if existing and hasattr(existing, 'get') and existing.get('id'):
         return existing['id']
 
     entity_id = stable_entity_id(clean_label, entity_type)
@@ -77,13 +88,13 @@ def resolve_entity_id(
 def apply_entity_mutations(
     entities: Dict[str, Dict[str, Any]], mutations: List[Dict[str, Any]]
 ) -> Dict[str, Dict[str, Any]]:
-    if not isinstance(entities, dict):
+    if not entities or not hasattr(entities, 'items'):
         return {}
     state = copy.deepcopy(entities)
-    if not isinstance(mutations, (list, tuple)):
+    if not mutations or not hasattr(mutations, '__iter__') or hasattr(mutations, 'items'):
         return state
     for item in mutations:
-        if not isinstance(item, dict):
+        if not item or not hasattr(item, 'get'):
             continue
         mutation_type = item.get('type')
         if mutation_type == 'merge_entities':
@@ -101,30 +112,36 @@ def _apply_merge(state: Dict[str, Dict[str, Any]], item: Dict[str, Any]):
 
     primary = state[entity_a]
     secondary = state.pop(entity_b)
-    if not isinstance(primary, dict):
+    if not primary or not hasattr(primary, 'get'):
         primary = {}
         state[entity_a] = primary
-    if not isinstance(secondary, dict):
+    if not secondary or not hasattr(secondary, 'get'):
         secondary = {}
 
-    primary_aliases = set(primary.get('aliases', [])) if isinstance(primary.get('aliases'), (list, set, tuple)) else set()
+    primary_aliases = set(primary.get('aliases', [])) if hasattr(primary.get('aliases'), '__iter__') else set()
     if secondary.get('label'):
         primary_aliases.add(secondary.get('label'))
-    if isinstance(secondary.get('aliases'), (list, set, tuple)):
+    if hasattr(secondary.get('aliases'), '__iter__'):
         primary_aliases.update(secondary.get('aliases', []))
     primary['aliases'] = sorted(alias for alias in primary_aliases if alias)
 
-    current_merged = set(primary.get('merged_entity_ids', [])) if isinstance(primary.get('merged_entity_ids'), (list, set, tuple)) else set()
+    current_merged = (
+        set(primary.get('merged_entity_ids', [])) if hasattr(primary.get('merged_entity_ids'), '__iter__') else set()
+    )
     primary['merged_entity_ids'] = sorted(current_merged | {entity_b})
     primary['updated_at'] = datetime.now(timezone.utc)
 
 
 def _apply_split(state: Dict[str, Dict[str, Any]], item: Dict[str, Any]):
     entity_id = item.get('entity_id')
-    into: List[Dict[str, Any]] = item.get('into') or []
-    if not entity_id or not into or not isinstance(into, (list, tuple)):
+    into = item.get('into')
+    if not entity_id or not into:
         return
-    valid_into = [e for e in into if isinstance(e, dict) and e.get('id')]
+    valid_into = (
+        [e for e in into if hasattr(e, 'get') and e.get('id')]
+        if hasattr(into, '__iter__') and not hasattr(into, 'items')
+        else []
+    )
     if not valid_into:
         return
     if entity_id in state:
@@ -141,15 +158,27 @@ def merge_entities(
     evidence: Optional[Dict[str, Any]] = None,
     confidence: float = 0.5,
 ):
-    if not uid or not isinstance(uid, str) or not uid.strip():
+    try:
+        clean_uid = uid.strip()
+    except (AttributeError, TypeError):
+        clean_uid = ''
+    if not clean_uid:
         raise ValueError("uid must be a non-empty string")
-    if not entity_a or not isinstance(entity_a, str) or not entity_a.strip():
+
+    try:
+        clean_a = entity_a.strip()
+    except (AttributeError, TypeError):
+        clean_a = ''
+    if not clean_a:
         raise ValueError("entity_a must be a non-empty string")
-    if not entity_b or not isinstance(entity_b, str) or not entity_b.strip():
+
+    try:
+        clean_b = entity_b.strip()
+    except (AttributeError, TypeError):
+        clean_b = ''
+    if not clean_b:
         raise ValueError("entity_b must be a non-empty string")
-    clean_uid = uid.strip()
-    clean_a = entity_a.strip()
-    clean_b = entity_b.strip()
+
     if clean_a == clean_b:
         raise ValueError("Cannot merge an entity into itself")
 
@@ -162,7 +191,7 @@ def merge_entities(
     except (ValueError, TypeError):
         conf_val = 0.5
 
-    clean_evidence = evidence if isinstance(evidence, dict) else None
+    clean_evidence = evidence if evidence and hasattr(evidence, 'items') else None
 
     user_ref = kg_db.db.collection(kg_db.users_collection).document(clean_uid)
     nodes_ref = user_ref.collection(kg_db.knowledge_nodes_collection)
@@ -194,15 +223,23 @@ def merge_entities(
 
 
 def split_entity(uid: str, entity_id: str, into: List[Dict[str, Any]], *, reason: str = ''):
-    if not uid or not isinstance(uid, str) or not uid.strip():
+    try:
+        clean_uid = uid.strip()
+    except (AttributeError, TypeError):
+        clean_uid = ''
+    if not clean_uid:
         raise ValueError("uid must be a non-empty string")
-    if not entity_id or not isinstance(entity_id, str) or not entity_id.strip():
+
+    try:
+        clean_id = entity_id.strip()
+    except (AttributeError, TypeError):
+        clean_id = ''
+    if not clean_id:
         raise ValueError("entity_id must be a non-empty string")
-    if not into or not isinstance(into, (list, tuple)):
+
+    if not into or not hasattr(into, '__iter__') or hasattr(into, 'items'):
         raise ValueError("into must be a non-empty list of entity dicts")
-    clean_uid = uid.strip()
-    clean_id = entity_id.strip()
-    valid_into = [e for e in into if isinstance(e, dict) and e.get('id')]
+    valid_into = [e for e in into if hasattr(e, 'get') and e.get('id')]
     if not valid_into:
         raise ValueError("into must contain at least one valid entity dict with an 'id'")
 
@@ -225,16 +262,26 @@ def split_entity(uid: str, entity_id: str, into: List[Dict[str, Any]], *, reason
 
 
 def reassign_fact_subject(uid: str, fact_id: str, old: Optional[str], new: Optional[str]):
-    if not uid or not isinstance(uid, str) or not uid.strip():
+    try:
+        clean_uid = uid.strip()
+    except (AttributeError, TypeError):
+        clean_uid = ''
+    if not clean_uid:
         raise ValueError("uid must be a non-empty string")
-    if not fact_id or not isinstance(fact_id, str) or not fact_id.strip():
-        raise ValueError("fact_id must be a non-empty string")
-    clean_uid = uid.strip()
-    clean_fact_id = fact_id.strip()
-    clean_old = old.strip() if isinstance(old, str) and old.strip() else None
-    clean_new = new.strip() if isinstance(new, str) and new.strip() else None
 
-    memory_ref = kg_db.db.collection(kg_db.users_collection).document(clean_uid).collection('memories').document(clean_fact_id)
+    try:
+        clean_fact_id = fact_id.strip()
+    except (AttributeError, TypeError):
+        clean_fact_id = ''
+    if not clean_fact_id:
+        raise ValueError("fact_id must be a non-empty string")
+
+    clean_old = old.strip() if old and hasattr(old, 'strip') and old.strip() else None
+    clean_new = new.strip() if new and hasattr(new, 'strip') and new.strip() else None
+
+    memory_ref = (
+        kg_db.db.collection(kg_db.users_collection).document(clean_uid).collection('memories').document(clean_fact_id)
+    )
     if clean_new == USER_ENTITY_ID:
         attribution = SubjectAttribution.user
     elif clean_new and clean_new.startswith('person:'):

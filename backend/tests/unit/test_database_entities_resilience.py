@@ -108,9 +108,7 @@ class TestApplyEntityMutations:
             "e1": {"id": "e1", "label": "Entity 1", "aliases": ["E1"]},
             "e2": {"id": "e2", "label": "Entity 2", "aliases": ["E2"]},
         }
-        mutations = [
-            {"type": "merge_entities", "entity_a": "e1", "entity_b": "e2"}
-        ]
+        mutations = [{"type": "merge_entities", "entity_a": "e1", "entity_b": "e2"}]
         result = apply_entity_mutations(initial, mutations)
         assert "e2" not in result
         assert "e1" in result
@@ -122,9 +120,7 @@ class TestApplyEntityMutations:
         initial = {
             "e1": {"id": "e1", "label": "Entity 1", "aliases": ["E1"]},
         }
-        mutations = [
-            {"type": "merge_entities", "entity_a": "e1", "entity_b": "e1"}
-        ]
+        mutations = [{"type": "merge_entities", "entity_a": "e1", "entity_b": "e1"}]
         result = apply_entity_mutations(initial, mutations)
         assert "e1" in result
         assert result["e1"]["aliases"] == ["E1"]
@@ -152,9 +148,7 @@ class TestApplyEntityMutations:
         initial = {
             "parent": {"id": "parent", "label": "Parent"},
         }
-        mutations = [
-            {"type": "split_entity", "entity_id": "parent", "into": []}
-        ]
+        mutations = [{"type": "split_entity", "entity_id": "parent", "into": []}]
         result = apply_entity_mutations(initial, mutations)
         assert "parent" in result
 
