@@ -21,6 +21,7 @@ from database.firestore_index_registry import (
     CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
+    CONVERSATIONS_COUNT_CREATED_RANGE_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     DAILY_SWEEP_ONBOARDING_CONVERSATIONS_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
@@ -703,6 +704,66 @@ def test_conversations_status_ordered_reads_have_a_declared_composite_index(monk
 def test_conversations_active_ordered_query_is_registered_for_the_conversations_collection():
     assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.collection_group == 'conversations'
     assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
+
+
+class _CountRecordingQuery(_StreamRecordingQuery):
+    """Also records `count()` aggregations, which never stream."""
+
+    def where(self, *, filter):
+        return _CountRecordingQuery(
+            self._recorder, (*self._filters, (filter.field_path, filter.op_string)), self._orders
+        )
+
+    def count(self):
+        recorder, filters = self._recorder, self._filters
+        return SimpleNamespace(
+            get=lambda: recorder.append(('count', filters)) or [[SimpleNamespace(value=0)]],
+        )
+
+
+def _count_recording_firestore(recorder):
+    return SimpleNamespace(
+        collection=lambda _name: SimpleNamespace(
+            document=lambda _uid: SimpleNamespace(collection=lambda _c: _CountRecordingQuery(recorder))
+        )
+    )
+
+
+def test_conversations_count_date_range_has_an_ascending_range_composite(monkeypatch):
+    """`GET /v1/conversations/count` with a date range needs (discarded ASC, created_at ASC).
+
+    Regression for the prod FailedPrecondition 500 after #19730: the count aggregation
+    filters `discarded == False` and a `created_at` range with no ordering. Only the
+    list-side (discarded ASC, created_at DESC) composite was declared, which does not
+    serve an aggregation over an ascending range.
+    """
+    recorder = []
+    monkeypatch.setattr(conversations_db, 'db', _count_recording_firestore(recorder))
+
+    start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 9, 29, tzinfo=timezone.utc)
+    conversations_db.get_conversations_count(
+        'index-contract-user', include_discarded=False, start_date=start, end_date=end
+    )
+
+    counts = [filters for kind, filters in recorder if kind == 'count']
+    assert counts == [(('discarded', '=='), ('created_at', '>='), ('created_at', '<='))]
+    equalities = [path for path, op in counts[0] if op == '==']
+    ranges = {path for path, op in counts[0] if op != '=='}
+    assert ranges == {'created_at'}
+    signature = (
+        'conversations',
+        'COLLECTION',
+        tuple([(path, 'ASCENDING') for path in equalities] + [('created_at', 'ASCENDING'), ('__name__', 'ASCENDING')]),
+    )
+    assert signature in _declared_index_signatures()
+    assert CONVERSATIONS_COUNT_CREATED_RANGE_QUERY in QUERY_SPECS
+    assert CONVERSATIONS_COUNT_CREATED_RANGE_QUERY.index_requirement.signature == signature
+    assert signature == (
+        'conversations',
+        'COLLECTION',
+        (('discarded', 'ASCENDING'), ('created_at', 'ASCENDING'), ('__name__', 'ASCENDING')),
+    )
 
 
 def test_default_memories_list_read_has_a_declared_composite_index():
