@@ -32,6 +32,8 @@ The bounded lookup filters by both start and finish so an old stamp-extended
 row cannot hide behind newer generations; a truncated overlap set proves no
 binding. With lineage enabled, sync defers enrichment for an open live row,
 and fresh live speech advances the revision fence after sync has enriched it.
+Sync preserves a pinned live origin when the WAL begins earlier; pre-pin
+speech is retained but marked unplaced for playback.
 The index must include `finished_at` as well as `started_at` before this query
 can serve. A missing index degrades to the origin-row lookup plus stamp fallback.
 

@@ -242,6 +242,45 @@ def test_retry_binds_the_same_rows_and_appends_nothing_new():
     }
 
 
+@pytest.mark.parametrize('flag', ['', 'off'])
+def test_early_sync_append_preserves_a_pinned_live_clock(monkeypatch, flag):
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
+    store = seeded_store([generation(L, audio_timeline={'version': 2})])
+    origin = gen_start(L)
+    chunk = sync_chunk(origin - 1, origin + 9, 'Synthetic buffered speech before live connected.')
+    result, _, _ = intake(store, chunk, target_id=gen_id(L))
+    # The live host continues to emit offsets against the pinned origin.
+    # Moving it on sync intake shifts every later live line by one second.
+    assert result['started_at'] == at(origin if flag == '' else origin - 1)
+    live = next(s for s in result['transcript_segments'] if s['text'] == live_text(L, 0))
+    assert result['started_at'].timestamp() + live['start'] == origin + 1
+    incoming = next(s for s in result['transcript_segments'] if s['text'] == chunk['transcript_segments'][0]['text'])
+    assert result['started_at'].timestamp() + incoming['start'] == origin - 1
+    if flag == '':
+        assert incoming['audio_alignment'] == 'unplaced'
+    from database import conversations as db
+
+    written = db.update_conversation_segments(
+        'u',
+        gen_id(L),
+        [],
+        firestore_client=store,
+        live_segments=[
+            {
+                'id': 'LIVE-FRESH',
+                'start': 20.0,
+                'end': 21.0,
+                'text': 'Synthetic later live speech.',
+                'speaker': 'SPEAKER_04',
+                'speaker_id': 4,
+                'is_user': False,
+            }
+        ],
+    )
+    fresh = next(s for s in written.segments if s.get('id') == 'LIVE-FRESH')
+    assert result['started_at'].timestamp() + fresh['start'] == origin + (20 if flag == '' else 19)
+
+
 @pytest.mark.asyncio
 async def test_kill_switch_off_reproduces_the_whole_batch_outcome(monkeypatch, dependencies):
     """Today's behavior: only the origin-id row is a candidate, so the batch loses its stamp."""
