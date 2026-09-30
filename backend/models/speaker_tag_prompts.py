@@ -29,8 +29,9 @@ class SpeakerTagPromptAnswer(str, Enum):
     not_me = 'not_me'  # Not me
     person = 'person'  # An existing person (also "Yes" on confirm_person)
     new_person = 'new_person'  # A new name typed by the user
-    someone_else = 'someone_else'  # Someone I don't know / not them
+    someone_else = 'someone_else'  # Someone I don't know / not them (with person_id or name: who it is)
     skip = 'skip'  # Not sure
+    not_a_person = 'not_a_person'  # TV, podcast, music: stop asking about this voice
 
 
 class SpeakerTagPromptQualityOutcome(str, Enum):
@@ -52,6 +53,16 @@ class SpeakerTagPromptQualityOutcome(str, Enum):
     skipped = 'skipped'
 
 
+class SpeakerTagCandidate(BaseModel):
+    """A person the card offers for this voice, best first."""
+
+    person_id: str
+    name: str
+    # 3 close, 2 possible, 1 weak voice match; None when Omi has no voice comparison.
+    match_level: Optional[int] = Field(default=None, ge=1, le=3)
+    pinned: bool = False
+
+
 class SpeakerTagPrompt(BaseModel):
     id: str
     kind: SpeakerTagPromptKind
@@ -67,6 +78,8 @@ class SpeakerTagPrompt(BaseModel):
     suggested_person_id: Optional[str] = None
     suggested_person_name: Optional[str] = None
     suggested_person_ids: List[str] = Field(default_factory=list)
+    # Ranked by voice match when available (pinned first within a level), else by recency.
+    candidates: List[SpeakerTagCandidate] = Field(default_factory=list)
 
 
 class SpeakerTagPromptsResponse(BaseModel):
@@ -109,6 +122,20 @@ class SpeakerTagPromptAnswerResponse(BaseModel):
     person_id: Optional[str] = None
     quality_outcome: SpeakerTagPromptQualityOutcome
     voice_sample_queued: bool = False
+
+
+class IgnoredVoice(BaseModel):
+    """A voice the user marked Not a Person; Omi does not ask about it again."""
+
+    conversation_id: str
+    speaker_id: int
+    ignored_at: datetime
+    conversation_title: str = ''
+    conversation_started_at: Optional[datetime] = None
+
+
+class IgnoredVoicesResponse(BaseModel):
+    voices: List[IgnoredVoice] = Field(default_factory=list)
 
 
 class SpeakerTagPromptClip(BaseModel):

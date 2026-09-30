@@ -186,11 +186,15 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
     person_id: str
     person_name: str
     segment_id: str
+    # Set only with an empty person_id: a pinned person this voice nearly matched (a question, never a label).
+    suggested_person_id: Optional[str] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")
         j["type"] = self.event_type
         del j["event_type"]
+        if j.get("suggested_person_id") is None:
+            j.pop("suggested_person_id", None)
         return j
 
 

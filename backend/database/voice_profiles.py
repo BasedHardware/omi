@@ -193,3 +193,77 @@ def add_owner_voice_confirmation(
         return len(confirmations)
 
     return run_transactional(client, pool_in)
+
+
+IGNORED_VOICES_LIMIT = 200
+
+
+def ignored_voice_key(conversation_id: str, speaker_id: int) -> str:
+    return f'{conversation_id}:{speaker_id}'
+
+
+def ignored_voices(state: Dict[str, Any]) -> list:
+    """Stored "Not a Person" markers, newest first."""
+    entries = [
+        entry
+        for entry in (state.get('ignored_voices') or {}).values()
+        if isinstance(entry, dict) and entry.get('conversation_id') and isinstance(entry.get('speaker_id'), int)
+    ]
+    return sorted(
+        entries,
+        key=lambda entry: as_utc(entry.get('ignored_at')) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+
+
+def ignored_voice_keys(state: Dict[str, Any]) -> set:
+    return {ignored_voice_key(entry['conversation_id'], entry['speaker_id']) for entry in ignored_voices(state)}
+
+
+def record_ignored_voice(
+    uid: str, conversation_id: str, speaker_id: int, now: datetime, *, firestore_client: Any = None
+) -> None:
+    """Remember a voice the user said is not a person (bounded, newest kept)."""
+    client = _client(firestore_client)
+    ref = _state_ref(uid, client)
+
+    @firestore.transactional
+    def record(transaction: Any) -> None:
+        snapshot = ref.get(transaction=transaction)
+        state = snapshot.to_dict() or {}
+        entry = {'conversation_id': conversation_id, 'speaker_id': speaker_id, 'ignored_at': now}
+        kept = [
+            e
+            for e in ignored_voices(state)
+            if ignored_voice_key(e['conversation_id'], e['speaker_id'])
+            != ignored_voice_key(conversation_id, speaker_id)
+        ]
+        kept = [entry, *kept][:IGNORED_VOICES_LIMIT]
+        update = {'ignored_voices': {ignored_voice_key(e['conversation_id'], e['speaker_id']): e for e in kept}}
+        if snapshot.exists:
+            transaction.update(ref, update)
+        else:
+            transaction.create(ref, update)
+
+    run_transactional(client, record)
+
+
+def remove_ignored_voice(
+    uid: str, conversation_id: str, speaker_id: int, prompt_ids: list, *, firestore_client: Any = None
+) -> bool:
+    """Undo "Not a Person": drop the marker and forget those answered prompts so Omi may ask again."""
+    client = _client(firestore_client)
+    ref = _state_ref(uid, client)
+
+    @firestore.transactional
+    def remove(transaction: Any) -> bool:
+        snapshot = ref.get(transaction=transaction)
+        state = snapshot.to_dict() or {}
+        ignored = dict(state.get('ignored_voices') or {})
+        if ignored.pop(ignored_voice_key(conversation_id, speaker_id), None) is None:
+            return False
+        answered = {k: v for k, v in (state.get('answered') or {}).items() if k not in set(prompt_ids)}
+        transaction.update(ref, {'ignored_voices': ignored, 'answered': answered})
+        return True
+
+    return run_transactional(client, remove)

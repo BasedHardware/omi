@@ -11,6 +11,7 @@ from typing import Any, Deque, Dict, Optional, Tuple, cast
 import av
 import numpy as np
 
+from config.speaker_prior import pinned_speaker_prior_enabled
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.audio import AudioRingBuffer
 from utils.executors import storage_executor, sync_executor, run_blocking
@@ -27,6 +28,7 @@ from utils.stt.speaker_match import (
     arbitrate_owner_matches,
     mean_embedding,
     select_speaker_match,
+    voice_candidates,
 )
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
 from utils.transcribe_store import conversations_db, get_user_name, user_db
@@ -73,6 +75,10 @@ class SpeakerMatcher:
         self._voice_segments: Dict[int, str] = {}
         self._voice_centroids: Dict[int, Any] = {}
         self._voice_scopes: Dict[int, str] = {}
+        # Pinned-speaker prior (flagged): people an unmatched voice resembles, and the
+        # pinned near-miss already offered as a suggestion, per diarized speaker.
+        self.voice_candidates: Dict[int, list] = {}
+        self._suggested_person: Dict[int, str] = {}
         # Recent (embedding, clip seconds) per diarized speaker. A decision is made on
         # the centroid once enough audio has accumulated, instead of letting the first
         # clip that happens to land under the threshold stick for the whole session.
@@ -160,7 +166,11 @@ class SpeakerMatcher:
                     else:
                         vector = await self._recover_person_embedding(person)
                 if vector is not None:
-                    self.person_embeddings[person['id']] = {'embedding': vector, 'name': person['name']}
+                    self.person_embeddings[person['id']] = {
+                        'embedding': vector,
+                        'name': person['name'],
+                        'pinned': person.get('pinned') is True,
+                    }
         except Exception as error:
             logger.error('Speaker ID embeddings load failed type=%s', type(error).__name__)
             return
@@ -413,6 +423,8 @@ class SpeakerMatcher:
             # No awaits between arbitration and publishing the maps: another
             # speaker may finish embedding concurrently, but cannot publish a
             # decision based on a stale set of owner claims.
+            prior = pinned_speaker_prior_enabled()
+            pinned = {pid for pid, value in self.person_embeddings.items() if value.get('pinned')}
             for voice, result in decisions.items():
                 segment_id = self._voice_segments[voice]
                 if result.person_id is not None:
@@ -437,6 +449,8 @@ class SpeakerMatcher:
                     status = (
                         SpeakerIdentityStatus.ambiguous if result.owner_contended else SpeakerIdentityStatus.no_match
                     )
+                    if prior:
+                        self._offer_pinned_suggestion(voice, result, pinned, segment_id)
                 self.voice_identity_status[voice] = status
                 self.segment_identity_status[segment_id] = status
             self.host.state.speaker_map_dirty = True
@@ -448,6 +462,24 @@ class SpeakerMatcher:
                 type(error).__name__,
                 self._session_log_id(),
             )
+
+    def _offer_pinned_suggestion(self, voice: int, result: SpeakerMatchDecision, pinned: set, segment_id: str) -> None:
+        """Pinned prior: record what this unmatched voice resembles; ask about a pinned near-miss.
+
+        Never labels: the event carries an empty person_id, which every client treats as a
+        suggestion only, plus ``suggested_person_id`` for clients that can show who.
+        """
+        candidates = voice_candidates(
+            self._voice_distances.get(voice, {}), result, pinned, exclude=(USER_SELF_PERSON_ID,)
+        )
+        self.voice_candidates[voice] = candidates
+        near = next((entry['person_id'] for entry in candidates if entry.get('suggest')), None)
+        if near is None or self._suggested_person.get(voice) == near:
+            return
+        self._suggested_person[voice] = near
+        self.host.emit_speaker_suggestion(
+            voice, '', self.person_embeddings[near]['name'], segment_id, suggested_person_id=near
+        )
 
     def _provider_epoch_voice_groups(self) -> Dict[int, int]:
         """Reconcile a voice only across stamped provider epochs with close audio."""
@@ -489,3 +521,5 @@ class SpeakerMatcher:
         self._voice_segments.clear()
         self._voice_centroids.clear()
         self._voice_scopes.clear()
+        self.voice_candidates.clear()
+        self._suggested_person.clear()

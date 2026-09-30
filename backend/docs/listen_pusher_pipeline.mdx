@@ -1250,7 +1250,31 @@ for 2 h so repeated app opens do not rescan 30 conversations.
 Answers apply through the same `assign_conversation_speaker` transaction as the
 transcript tag sheet (scope: that diarized speaker in that conversation), so a
 prompt answer is an ordinary manual receipt. Rejecting an automatic label writes
-an explicit unknown decision. Voice learning stays behind existing gates:
+an explicit unknown decision. `someone_else` with a `person_id` or `name` is the correction
+path and labels that person. `not_a_person` (TV, podcast) clears an automatic
+label and stores an ignored-voice marker (`ignored_voices` in the prompt state,
+newest 200) so that conversation speaker is never asked about again;
+`GET /v1/speaker-tag-prompts/ignored-voices` lists markers and `DELETE
+.../ignored-voices/{conversation_id}/{speaker_id}` undoes one (and forgets its
+answered prompt ids).
+
+The same transaction keeps each person's `label_evidence` tally
+(`models/person_confidence.py`, `utils/person_evidence.py`): hand labels, card confirms and picks,
+hand-confirmed automatic matches, and corrections of an automatic match to that
+person, each counted once per conversation. `GET /v1/users/people` derives the
+person's `confidence` band (confirmed / likely / unverified) and reasons from it;
+automatic matches alone never raise the band. `scripts/backfill_person_label_evidence.py`
+seeds the tally from existing receipts (dry run by default, resumable, idempotent).
+
+**Pinned-speaker prior** (`PINNED_SPEAKER_PRIOR_ENABLED`, default off). People
+can be pinned (`PATCH /v1/users/people/{person_id}/pinned`). With the flag on,
+live (`routers/listen/speakers.py`) and sync (`utils/sync/speaker_identity.py`)
+matching record up to three `voice_candidates` (close / possible / weak) on
+unlabeled segments, and a rejected decision whose best candidate is pinned and
+within 0.05 above the threshold (margin met) or 0.04 short of the margin (under
+the threshold) is flagged `suggest`. Live emits it as a suggestion event; selection
+turns it into an "Is this <name>?" prompt and ranks "Who is this?" candidates by
+voice match, pinned first within a level. Auto-label threshold and margin never change. Voice learning stays behind existing gates:
 
 - **Other people**: `extract_speaker_samples` (unchanged quality gates) — and
   that function now returns early when the user turned off
@@ -1662,7 +1686,7 @@ existing counter.
 | `conversation_session` | `{type, conversation_id, recording_session_id?, status}` | Exact recording-to-conversation binding; identified clients require IDs to match |
 | `memory_processing_started` | `{type, recording_session_id?, memory: {id, ...}}` | Conversation sent to pusher for LLM; only emitted for the listen session's current conversation |
 | `memory_created` | `{type, recording_session_id?, memory: {id, structured: {title, overview, ...}}}` | LLM processing complete; only emitted for the listen session's current conversation |
-| `speaker_label_suggestion` | `{type, speaker_id, person_id, person_name, segment_id}` | Speaker matched via embedding |
+| `speaker_label_suggestion` | `{type, speaker_id, person_id, person_name, segment_id, suggested_person_id?}` | Speaker matched via embedding. With `PINNED_SPEAKER_PRIOR_ENABLED`, a pinned near-miss arrives with an empty `person_id` (a suggestion, never a label) and `suggested_person_id` naming the pinned person; the field is omitted otherwise |
 
 ### Client → Server
 

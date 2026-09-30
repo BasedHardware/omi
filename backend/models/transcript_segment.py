@@ -90,6 +90,9 @@ class TranscriptSegment(BaseModel):
     # V2 accepted-send run start in capture samples. Stops live text merging
     # from turning two valid windows across a VAD skip into one false window.
     audio_capture_run: SkipJsonSchema[Optional[int]] = Field(default=None, exclude=True)
+    # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
+    # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
+    voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
@@ -106,6 +109,8 @@ class TranscriptSegment(BaseModel):
             data['audio_alignment'] = self.audio_alignment
         if self.audio_capture_run is not None:
             data['audio_capture_run'] = self.audio_capture_run
+        if self.voice_candidates is not None:
+            data['voice_candidates'] = self.voice_candidates
         return data
 
     def __init__(self, **data: Any):

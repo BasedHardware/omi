@@ -361,3 +361,57 @@ def test_contended_owner_is_an_unnamed_free_owner_check_even_with_a_stale_projec
     assert prompts[0].kind == SpeakerTagPromptKind.owner_check
     assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed
     assert prompts[0].suggested_person_id is None
+
+
+def _select_with(conversations, **extra):
+    return selection.select_prompts(
+        conversations, now=NOW, owner_has_voice=True, named_allowed=True, answered=set(), **extra
+    )
+
+
+def test_ignored_voice_is_never_asked_again():
+    conversation = _conversation(segments=[_segment('a', 0, 0, 3, is_user=True), _segment('b', 1, 3, 11)])
+    assert _select_with([conversation], people={})
+    assert _select_with([conversation], people={}, ignored={'c1:1'}) == []
+
+
+def test_pinned_near_miss_on_unnamed_voice_asks_about_that_person():
+    candidates = [{'person_id': 'p2', 'level': 2, 'suggest': True}, {'person_id': 'p1', 'level': 1}]
+    conversation = _conversation(
+        segments=[_segment('a', 0, 0, 3, is_user=True), _segment('b', 1, 3, 11, voice_candidates=candidates)]
+    )
+    prompts = _select_with([conversation], people={'p1': 'Sam', 'p2': 'Maya'}, pinned={'p2'})
+    assert prompts[0].kind == SpeakerTagPromptKind.confirm_person
+    assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed
+    assert prompts[0].suggested_person_id == 'p2' and prompts[0].suggested_person_name == 'Maya'
+    # A suggestion for someone no longer pinned falls back to "Who is this?".
+    fallback = _select_with([conversation], people={'p1': 'Sam', 'p2': 'Maya'}, pinned=set())
+    assert fallback[0].kind == SpeakerTagPromptKind.identify
+
+
+def test_identify_candidates_rank_by_voice_match_pinned_first_then_recency():
+    recent = _conversation('c0', hours_ago=5, segments=[_segment('z', 0, 0, 2, person_id='p4')])
+    voice = [{'person_id': 'p1', 'level': 2}, {'person_id': 'p2', 'level': 2}, {'person_id': 'p3', 'level': 3}]
+    conversation = _conversation(
+        segments=[_segment('a', 0, 0, 3, is_user=True), _segment('b', 1, 3, 11, voice_candidates=voice)]
+    )
+    people = {'p1': 'Sam', 'p2': 'Jordan', 'p3': 'Alex', 'p4': 'Priya'}
+    prompts = _select_with([conversation, recent], people=people, pinned={'p2'})
+    identify = next(p for p in prompts if p.kind == SpeakerTagPromptKind.identify)
+    assert [c.person_id for c in identify.candidates] == ['p3', 'p2', 'p1', 'p4']
+    assert [c.match_level for c in identify.candidates] == [3, 2, 2, None]
+    assert [c.pinned for c in identify.candidates] == [False, True, False, False]
+    assert identify.suggested_person_ids == ['p3', 'p2', 'p1', 'p4']
+
+
+def test_malformed_voice_candidates_are_ignored():
+    merged = selection.run_voice_candidates(
+        [
+            {'id': 'a', 'voice_candidates': [{'person_id': 'p1', 'level': 1}, 'junk', {'person_id': 'p2', 'level': 9}]},
+            {'id': 'b', 'voice_candidates': [{'person_id': 'p1', 'level': 2, 'suggest': True}, {'level': 2}]},
+            {'id': 'c', 'voice_candidates': 'nope'},
+            {'id': 'x', 'voice_candidates': [{'person_id': 'p9', 'level': 3}]},
+        ],
+        ['a', 'b', 'c'],
+    )
+    assert merged == {'p1': {'level': 2, 'suggest': True}}
