@@ -7,19 +7,19 @@ import crypto from 'crypto'
 import { rendererBaseUrl, POSES_DIR } from '../rendererServer'
 
 export type SignGloss = {
-  gloss: string; // The sign language representation (e.g., "HELLO", "STORE", "GO")
-  duration: number; // How long the sign should be held (in seconds)
-  timestamp: number; // When the sign starts relative to the audio
-  swr?: string; // SignWriting representation (e.g., "SWR:...")
-};
+  gloss: string // The sign language representation (e.g., "HELLO", "STORE", "GO")
+  duration: number // How long the sign should be held (in seconds)
+  timestamp: number // When the sign starts relative to the audio
+  swr?: string // SignWriting representation (e.g., "SWR:...")
+}
 
 export type TranslationResult = {
-  originalText: string;
-  poseUrl: string; // Now contains Base64 Data URI
-  glosses: SignGloss[];
-  assetType?: 'video' | 'pose';
-  swrFull?: string;
-};
+  originalText: string
+  poseUrl: string // Now contains Base64 Data URI
+  glosses: SignGloss[]
+  assetType?: 'video' | 'pose'
+  swrFull?: string
+}
 
 /**
  * Translates spoken text into Sign Language Poses and Glosses.
@@ -31,7 +31,7 @@ async function fetchWithRetry(
   retries = 2
 ): Promise<{ data: ArrayBuffer }> {
   try {
-    return await axios.get(url, options);
+    return await axios.get(url, options)
   } catch (error: unknown) {
     const err = error as { response?: { status?: number }; code?: string }
     if (
@@ -40,11 +40,11 @@ async function fetchWithRetry(
     ) {
       console.log(
         `[sign-language] Request failed (${err.response?.status || err.code}), retrying... (${retries} left)`
-      );
-      await new Promise((res) => setTimeout(res, 1000));
-      return fetchWithRetry(url, options, retries - 1);
+      )
+      await new Promise((res) => setTimeout(res, 1000))
+      return fetchWithRetry(url, options, retries - 1)
     }
-    throw error;
+    throw error
   }
 }
 
@@ -95,18 +95,18 @@ export async function translateToGlosses(
   signedLanguage: string = 'ase',
   opts?: { baseUrl?: string | null; posesDir?: string }
 ): Promise<TranslationResult> {
-  let trimmedText = text.trim();
+  let trimmedText = text.trim()
 
   if (!trimmedText) {
     return {
       originalText: text,
       poseUrl: '',
       glosses: []
-    };
+    }
   }
 
   if (trimmedText.length > 256) {
-    trimmedText = trimmedText.slice(0, 256);
+    trimmedText = trimmedText.slice(0, 256)
   }
 
   const cacheKey = crypto
@@ -128,14 +128,17 @@ export async function translateToGlosses(
     }
   }
 
-  const apiPose = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_pose';
-  const apiVideo = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_video';
+  const apiPose = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_pose'
+  const apiVideo = 'https://us-central1-sign-mt.cloudfunctions.net/spoken_text_to_signed_video'
 
-  const poseUrl = `${apiPose}?text=${encodeURIComponent(trimmedText)}&spoken=${spokenLanguage}&signed=${signedLanguage}`;
-  const videoUrl = `${apiVideo}?text=${encodeURIComponent(trimmedText)}&spoken=${spokenLanguage}&signed=${signedLanguage}`;
+  const poseUrl = `${apiPose}?text=${encodeURIComponent(trimmedText)}&spoken=${spokenLanguage}&signed=${signedLanguage}`
+  const videoUrl = `${apiVideo}?text=${encodeURIComponent(trimmedText)}&spoken=${spokenLanguage}&signed=${signedLanguage}`
 
   const poseDir = path.join(app.getPath('temp'), 'omi-sign-poses')
-  const posePath = opts?.posesDir === undefined && opts !== undefined ? null : path.join(poseDir, `${cacheKey}.pose`)
+  const posePath =
+    opts?.posesDir === undefined && opts !== undefined
+      ? null
+      : path.join(poseDir, `${cacheKey}.pose`)
 
   try {
     await fs.mkdir(poseDir, { recursive: true })
@@ -150,8 +153,9 @@ export async function translateToGlosses(
             responseType: 'arraybuffer',
             timeout: 30000,
             headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              'Accept': '*/*',
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              Accept: '*/*'
             }
           })
           poseBytes = Buffer.from(response.data)
@@ -162,14 +166,20 @@ export async function translateToGlosses(
           responseType: 'arraybuffer',
           timeout: 30000,
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': '*/*',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            Accept: '*/*'
           }
         })
         poseBytes = Buffer.from(response.data)
       }
 
-      const { url, assetType } = await makePoseUrl(poseBytes, cacheKey, opts?.posesDir, opts?.baseUrl)
+      const { url, assetType } = await makePoseUrl(
+        poseBytes,
+        cacheKey,
+        opts?.posesDir,
+        opts?.baseUrl
+      )
       return {
         originalText: text,
         poseUrl: url,
@@ -177,18 +187,19 @@ export async function translateToGlosses(
         glosses: []
       }
     } catch (poseError) {
-      console.log('[sign-language] Pose API failed, trying video as last resort:', poseError);
+      console.log('[sign-language] Pose API failed, trying video as last resort:', poseError)
 
       try {
         const videoResponse = await fetchWithRetry(videoUrl, {
           responseType: 'arraybuffer',
           timeout: 30000,
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': '*/*',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            Accept: '*/*'
           }
-        });
-        const videoData = Buffer.from(videoResponse.data);
+        })
+        const videoData = Buffer.from(videoResponse.data)
         let videoUrl_out: string
         if (opts?.baseUrl && opts?.posesDir) {
           try {
@@ -197,7 +208,10 @@ export async function translateToGlosses(
             await fs.writeFile(vfile, videoData)
             videoUrl_out = `${opts.baseUrl}/__poses/${cacheKey}.mp4`
           } catch (e) {
-            console.warn('[sign-language] Failed to write local video file, falling back to data URI:', e)
+            console.warn(
+              '[sign-language] Failed to write local video file, falling back to data URI:',
+              e
+            )
             videoUrl_out = `data:video/mp4;base64,${videoData.toString('base64')}`
           }
         } else {
@@ -209,10 +223,10 @@ export async function translateToGlosses(
           poseUrl: videoUrl_out,
           assetType: 'video',
           glosses: []
-        };
+        }
       } catch (videoError) {
-        console.error('[sign-language] Both Pose and Video APIs failed:', videoError);
-        negativeCache.set(negativeKey, Date.now() + NEGATIVE_TTL_MS);
+        console.error('[sign-language] Both Pose and Video APIs failed:', videoError)
+        negativeCache.set(negativeKey, Date.now() + NEGATIVE_TTL_MS)
         return {
           originalText: text,
           poseUrl: '',
@@ -224,15 +238,15 @@ export async function translateToGlosses(
     }
   } catch (error) {
     console.error('[sign-language] unexpected failure in translateToGlosses:', error)
-    negativeCache.set(negativeKey, Date.now() + NEGATIVE_TTL_MS);
+    negativeCache.set(negativeKey, Date.now() + NEGATIVE_TTL_MS)
     return {
       originalText: text,
       poseUrl: '',
       assetType: 'pose',
-       swrFull: 'TRANSLATION_UNAVAILABLE',
-       glosses: []
-     }
-   }
+      swrFull: 'TRANSLATION_UNAVAILABLE',
+      glosses: []
+    }
+  }
 }
 
 export function clearNegativeCache(): void {

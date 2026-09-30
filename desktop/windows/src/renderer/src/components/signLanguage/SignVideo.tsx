@@ -16,19 +16,18 @@ export function SignVideo({ videoUrl }: SignVideoProps): React.JSX.Element {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronous setState derives resolved URL from props
       setResolvedUrl(videoUrl)
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronous setState derives resolved URL from props
       setResolvedUrl(null)
     }
-  }, [videoUrl]);
+  }, [videoUrl])
 
   useEffect(() => {
     if (videoRef.current && resolvedUrl) {
-      console.log('[SignVideo] Attempting to play video with src:', resolvedUrl);
-      videoRef.current.play().catch(e => {
-        console.error('[SignVideo] Playback failed:', e);
-      });
+      console.log('[SignVideo] Attempting to play video with src:', resolvedUrl)
+      videoRef.current.play().catch((e) => {
+        console.error('[SignVideo] Playback failed:', e)
+      })
     }
-  }, [resolvedUrl]);
+  }, [resolvedUrl])
 
   if (!videoUrl || !resolvedUrl) {
     return (

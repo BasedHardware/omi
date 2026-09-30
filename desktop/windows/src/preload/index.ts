@@ -716,10 +716,9 @@ const omi: OmiBridgeApi = {
   resetWindowSize: () => ipcRenderer.invoke('window:resetSize'),
   // --- Track 1 (agent control plane) — trusted direct control ---
   agentControlCall: (name: string, input: Record<string, unknown> = {}) =>
-    ipcRenderer.invoke('agentControl:call', name, input)
+    ipcRenderer.invoke('agentControl:call', name, input),
   // No agentControlSetOwner: the renderer must not be able to repoint the
   // kernel's active owner. See src/main/ipc/agentControl.ts.
-  ,
   agentControlTools: () => ipcRenderer.invoke('agentControl:tools')
 }
 

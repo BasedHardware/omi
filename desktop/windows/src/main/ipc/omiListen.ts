@@ -422,10 +422,15 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
           textToTranslate += (textToTranslate ? ' ' : '') + seg.text
         })
         if (textToTranslate) {
-          session.transcriptBuffer = `${session.transcriptBuffer} ${textToTranslate}`.trim().slice(-256)
+          session.transcriptBuffer = `${session.transcriptBuffer} ${textToTranslate}`
+            .trim()
+            .slice(-256)
           const now = Date.now()
           const lastTranslated = now - session.lastTranslationTime
-          if (!session.translationInFlight && (lastTranslated > 2000 || session.transcriptBuffer.length > 50)) {
+          if (
+            !session.translationInFlight &&
+            (lastTranslated > 2000 || session.transcriptBuffer.length > 50)
+          ) {
             const limitedText = session.transcriptBuffer
             session.transcriptBuffer = ''
             session.lastTranslationTime = now
