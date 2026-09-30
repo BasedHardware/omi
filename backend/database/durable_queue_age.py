@@ -5,12 +5,15 @@ tests can load policy/redrive without the Firestore SDK.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
 from utils.durable_queue_policy import oldest_ready_age_seconds
+
+logger = logging.getLogger(__name__)
 
 _STORE_WIDE_PAGE = 200
 
@@ -100,18 +103,26 @@ def _sample_status_page(client: Any, spec: Mapping[str, Any]) -> List[datetime]:
     created_ats: List[datetime] = []
     if status_field and ready_statuses:
         for status in ready_statuses:
-            query = (
-                client.collection_group(collection)
-                .where(filter=FieldFilter(status_field, '==', status))
-                .limit(_STORE_WIDE_PAGE)
-            )
-            snapshots: Iterable[Any] = query.stream()
-            created_ats.extend(
-                _created_ats_from_page(snapshots, created_at_field=created_at_field, event_type=event_type)
-            )
+            try:
+                query = (
+                    client.collection_group(collection)
+                    .where(filter=FieldFilter(status_field, '==', status))
+                    .limit(_STORE_WIDE_PAGE)
+                )
+                snapshots: Iterable[Any] = query.stream()
+                created_ats.extend(
+                    _created_ats_from_page(snapshots, created_at_field=created_at_field, event_type=event_type)
+                )
+            except Exception as e:
+                logger.warning('Failed to sample status %s for collection %s: %s', status, collection, e)
+                continue
         return created_ats
-    query = client.collection_group(collection).limit(_STORE_WIDE_PAGE)
-    return _created_ats_from_page(query.stream(), created_at_field=created_at_field, event_type=event_type)
+    try:
+        query = client.collection_group(collection).limit(_STORE_WIDE_PAGE)
+        return _created_ats_from_page(query.stream(), created_at_field=created_at_field, event_type=event_type)
+    except Exception as e:
+        logger.warning('Failed to sample collection %s: %s', collection, e)
+        return []
 
 
 def sample_store_wide_oldest_ready_ages(
@@ -135,11 +146,16 @@ def sample_store_wide_oldest_ready_ages(
             if spec.get('summary'):
                 if finalization_summary is None:
                     continue
-                ages[queue] = float(finalization_summary.get('oldest_nonterminal_age_seconds') or 0.0)
+                val = finalization_summary.get('oldest_nonterminal_age_seconds')
+                try:
+                    ages[queue] = float(val) if val is not None else 0.0
+                except (ValueError, TypeError):
+                    ages[queue] = 0.0
                 continue
             created_ats = _sample_status_page(client, spec)
             ages[queue] = oldest_ready_age_seconds(created_ats, now=observed)
-        except Exception:
+        except Exception as e:
+            logger.warning('Error sampling oldest ready age for queue %s: %s', queue, e)
             continue
     return ages
 
