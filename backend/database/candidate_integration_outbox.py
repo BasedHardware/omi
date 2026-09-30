@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
 
-from google.cloud import firestore
+from google.cloud import firestore  # pyright: ignore[reportAttributeAccessIssue]
 from google.cloud.firestore_v1 import FieldFilter
 
 try:
@@ -21,9 +21,21 @@ from models.task_intelligence import TaskWorkflowControl
 logger = logging.getLogger(__name__)
 
 CANDIDATE_INTEGRATION_OUTBOX_COLLECTION = 'candidate_integration_outbox'
+# Task intelligence control path constants (aligned with database.candidates)
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
 TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 CANDIDATE_INTEGRATION_POLICY = QueuePolicy(max_attempts=5, base_backoff_seconds=30, max_backoff_seconds=1800)
+
+try:
+    from database.candidates import (
+        TASK_INTELLIGENCE_CONTROL_COLLECTION as _TI_COLL,
+        TASK_INTELLIGENCE_CONTROL_DOCUMENT as _TI_DOC,
+    )
+
+    assert TASK_INTELLIGENCE_CONTROL_COLLECTION == _TI_COLL, 'Control collection path mismatch with database.candidates'
+    assert TASK_INTELLIGENCE_CONTROL_DOCUMENT == _TI_DOC, 'Control document path mismatch with database.candidates'
+except (ImportError, AttributeError):
+    pass
 
 MAX_ID_LENGTH = 128
 MIN_LEASE_SECONDS = 1
@@ -156,15 +168,25 @@ def claim_candidate_integration_dispatch(
             return None
         payload = _snapshot_dict(snapshot)
 
-        control = TaskWorkflowControl()
-        try:
-            control_snapshot = _task_control_ref(cleaned_uid, firestore_client=client).get(
-                transaction=write_transaction
-            )
-            if getattr(control_snapshot, 'exists', False):
+        control = None
+        control_snapshot = _task_control_ref(cleaned_uid, firestore_client=client).get(transaction=write_transaction)
+        if getattr(control_snapshot, 'exists', False):
+            try:
                 control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
-        except Exception as exc:
-            logger.warning('Failed to parse task workflow control for uid %s: %s', cleaned_uid, exc)
+            except Exception as exc:
+                logger.error('Failed to parse task workflow control for uid %s: %s', cleaned_uid, exc)
+                write_transaction.update(
+                    outbox_ref,
+                    {
+                        'status': 'dead_letter',
+                        'dead_letter_reason': 'corrupt_control_document',
+                        'last_error_text': f'Corrupt task workflow control document: {exc}'[:MAX_ERROR_TEXT_LENGTH],
+                        'updated_at': claim_time,
+                    },
+                )
+                return None
+        else:
+            control = TaskWorkflowControl()
 
         if payload.get('account_generation') != account_generation or control.account_generation != account_generation:
             write_transaction.update(
@@ -195,14 +217,11 @@ def claim_candidate_integration_dispatch(
         )
         return lease_token
 
-    if hasattr(client, 'transaction'):
-        try:
-            txn = client.transaction()
-            if hasattr(firestore, 'transactional'):
-                return firestore.transactional(apply)(txn)
-            return apply(txn)
-        except TypeError:
-            return apply(client)
+    if hasattr(client, 'transaction') and callable(getattr(client, 'transaction')):
+        txn = client.transaction()
+        if hasattr(firestore, 'transactional'):
+            return firestore.transactional(apply)(txn)
+        return apply(txn)
     return apply(client)
 
 
@@ -236,15 +255,25 @@ def complete_candidate_integration_dispatch(
             return False
         payload = _snapshot_dict(snapshot)
 
-        control = TaskWorkflowControl()
-        try:
-            control_snapshot = _task_control_ref(cleaned_uid, firestore_client=client).get(
-                transaction=write_transaction
-            )
-            if getattr(control_snapshot, 'exists', False):
+        control = None
+        control_snapshot = _task_control_ref(cleaned_uid, firestore_client=client).get(transaction=write_transaction)
+        if getattr(control_snapshot, 'exists', False):
+            try:
                 control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
-        except Exception as exc:
-            logger.warning('Failed to parse task workflow control for uid %s: %s', cleaned_uid, exc)
+            except Exception as exc:
+                logger.error('Failed to parse task workflow control for uid %s: %s', cleaned_uid, exc)
+                write_transaction.update(
+                    outbox_ref,
+                    {
+                        'status': 'dead_letter',
+                        'dead_letter_reason': 'corrupt_control_document',
+                        'last_error_text': f'Corrupt task workflow control document: {exc}'[:MAX_ERROR_TEXT_LENGTH],
+                        'updated_at': completion_time,
+                    },
+                )
+                return False
+        else:
+            control = TaskWorkflowControl()
 
         if payload.get('account_generation') != account_generation or control.account_generation != account_generation:
             write_transaction.update(
@@ -292,14 +321,11 @@ def complete_candidate_integration_dispatch(
         write_transaction.update(outbox_ref, patch)
         return True
 
-    if hasattr(client, 'transaction'):
-        try:
-            txn = client.transaction()
-            if hasattr(firestore, 'transactional'):
-                return firestore.transactional(apply)(txn)
-            return apply(txn)
-        except TypeError:
-            return apply(client)
+    if hasattr(client, 'transaction') and callable(getattr(client, 'transaction')):
+        txn = client.transaction()
+        if hasattr(firestore, 'transactional'):
+            return firestore.transactional(apply)(txn)
+        return apply(txn)
     return apply(client)
 
 
@@ -337,14 +363,11 @@ def redrive_candidate_integration_dead_letter(
         write_transaction.update(outbox_ref, redrive_patch(now=completion_time))
         return True
 
-    if hasattr(client, 'transaction'):
-        try:
-            txn = client.transaction()
-            if hasattr(firestore, 'transactional'):
-                return firestore.transactional(apply)(txn)
-            return apply(txn)
-        except TypeError:
-            return apply(client)
+    if hasattr(client, 'transaction') and callable(getattr(client, 'transaction')):
+        txn = client.transaction()
+        if hasattr(firestore, 'transactional'):
+            return firestore.transactional(apply)(txn)
+        return apply(txn)
     return apply(client)
 
 
@@ -393,14 +416,11 @@ def dead_letter_malformed_candidate_integration(
         )
         return True
 
-    if hasattr(client, 'transaction'):
-        try:
-            txn = client.transaction()
-            if hasattr(firestore, 'transactional'):
-                return firestore.transactional(apply)(txn)
-            return apply(txn)
-        except TypeError:
-            return apply(client)
+    if hasattr(client, 'transaction') and callable(getattr(client, 'transaction')):
+        txn = client.transaction()
+        if hasattr(firestore, 'transactional'):
+            return firestore.transactional(apply)(txn)
+        return apply(txn)
     return apply(client)
 
 

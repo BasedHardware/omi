@@ -492,16 +492,16 @@ def test_list_candidate_integration_dispatches():
     mock_client.outbox_coll.limit.assert_called_with(MIN_QUERY_LIMIT)
 
 
-def test_malformed_task_control_does_not_crash():
-    mock_client, _, outbox_doc, control_doc = _make_mock_client()
+def test_corrupt_task_control_in_claim_parks_dead_letter():
+    mock_client, mock_txn, outbox_doc, control_doc = _make_mock_client()
     mock_snap = MagicMock(exists=True)
     mock_snap.to_dict.return_value = {
         'status': 'pending',
-        'account_generation': 0,  # Matches default TaskWorkflowControl() generation
+        'account_generation': 1,
     }
     outbox_doc.get.return_value = mock_snap
 
-    # Control snapshot is corrupt/unparseable
+    # Control snapshot exists but is corrupt/unparseable
     mock_ctrl_snap = MagicMock(exists=True)
     mock_ctrl_snap.to_dict.side_effect = RuntimeError('Corrupt protobuf payload')
     control_doc.get.return_value = mock_ctrl_snap
@@ -509,10 +509,59 @@ def test_malformed_task_control_does_not_crash():
     token = claim_candidate_integration_dispatch(
         'u1',
         'cand1',
-        account_generation=0,
+        account_generation=1,
         firestore_client=mock_client,
     )
-    assert token is not None
+    # Must NOT claim
+    assert token is None
+    # Must park as dead_letter with dedicated corrupt_control_document reason (NOT suppressed/account_generation_mismatch)
+    mock_txn.update.assert_called_once()
+    update_arg = mock_txn.update.call_args[0][1]
+    assert update_arg['status'] == 'dead_letter'
+    assert update_arg['dead_letter_reason'] == 'corrupt_control_document'
+    assert 'Corrupt task workflow control document' in update_arg['last_error_text']
+
+
+def test_corrupt_task_control_in_complete_parks_dead_letter():
+    mock_client, mock_txn, outbox_doc, control_doc = _make_mock_client()
+    mock_snap = MagicMock(exists=True)
+    mock_snap.to_dict.return_value = {
+        'status': 'processing',
+        'account_generation': 1,
+        'lease_token': 'token123',
+    }
+    outbox_doc.get.return_value = mock_snap
+
+    mock_ctrl_snap = MagicMock(exists=True)
+    mock_ctrl_snap.to_dict.side_effect = RuntimeError('Corrupt protobuf payload')
+    control_doc.get.return_value = mock_ctrl_snap
+
+    success = complete_candidate_integration_dispatch(
+        'u1',
+        'cand1',
+        account_generation=1,
+        lease_token='token123',
+        succeeded=True,
+        firestore_client=mock_client,
+    )
+    assert success is False
+    mock_txn.update.assert_called_once()
+    update_arg = mock_txn.update.call_args[0][1]
+    assert update_arg['status'] == 'dead_letter'
+    assert update_arg['dead_letter_reason'] == 'corrupt_control_document'
+
+
+def test_transaction_propagates_exceptions_without_raw_fallback():
+    mock_client = MagicMock()
+    mock_client.transaction.side_effect = RuntimeError('Firestore transaction unavailable')
+
+    with pytest.raises(RuntimeError, match='Firestore transaction unavailable'):
+        claim_candidate_integration_dispatch(
+            'u1',
+            'cand1',
+            account_generation=1,
+            firestore_client=mock_client,
+        )
 
 
 def test_snapshot_dict_without_exists_attribute():
