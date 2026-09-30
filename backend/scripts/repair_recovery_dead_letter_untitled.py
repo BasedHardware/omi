@@ -690,7 +690,6 @@ def rollback(
                 return dict(entry, outcome='binding_missing')
             ref = runtime.client.document(f"users/{job['uid']}/conversations/{job['conversation_id']}")
 
-            @firestore.transactional
             def restore(transaction: Any) -> str:
                 current_job = job_ref.get(transaction=transaction).to_dict() or {}
                 snapshot = ref.get(transaction=transaction)
@@ -722,7 +721,7 @@ def rollback(
                 if not target.config['apply']:
                     return restore(None)
                 transaction = runtime.client.transaction(max_attempts=1)
-                outcome = restore(transaction)
+                outcome = firestore.transactional(restore)(transaction)
                 receipts = getattr(transaction, '_write_results', [])
                 entry['commit_revision'] = receipts[-1].update_time.isoformat() if receipts else None
                 return outcome
