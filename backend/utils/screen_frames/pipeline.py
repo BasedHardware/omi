@@ -142,5 +142,8 @@ def adjudicate_candidate(
             height=canonical.height,
             canonical_sha256=canonical.sha256_hex,
             ground=ground,
+            visible_participant_names=list(judgement.visible_participant_names),
+            screen_summary=judgement.screen_summary,
+            storage_bucket=written.storage_bucket,
         ),
     )

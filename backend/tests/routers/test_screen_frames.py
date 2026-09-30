@@ -368,3 +368,108 @@ class TestSharedScreenshotsRoute:
 
         result = screen_frames_mod.get_shared_conversation_screenshots(CONVERSATION_ID)
         assert result == screen_frames_mod.EMPTY_FRAME_SET
+
+
+def _live_meeting(status: str, **overrides):
+    """A cloud-listen meeting whose transcript already fixes the trusted window."""
+    started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fields = dict(
+        status=status,
+        started_at=started_at,
+        finished_at=None,
+        audio_timeline={"version": 2},
+        transcript_segments=[{"text": "hello", "start": 10, "end": 20}, {"text": "bye", "start": 300, "end": 320}],
+    )
+    fields.update(overrides)
+    return _conversation(**fields)
+
+
+class TestOnePassAdmission:
+    """The Mac adjudicates before it finalizes, so open conversations must be admitted."""
+
+    @pytest.mark.parametrize("status", [ConversationStatus.in_progress.value, ConversationStatus.processing.value])
+    def test_an_open_conversation_with_a_trusted_window_is_admitted(self, status, _stub_admission_dependencies):
+        screen_frames_mod._require_adjudication_admission(UID, _live_meeting(status))
+
+    def test_an_open_conversation_without_speech_waits_for_completion(self, _stub_admission_dependencies):
+        conversation = _live_meeting(ConversationStatus.in_progress.value, transcript_segments=[])
+        with pytest.raises(HTTPException) as exc_info:
+            screen_frames_mod._require_adjudication_admission(UID, conversation)
+        assert exc_info.value.detail["code"] == "conversation_not_completed"
+
+    def test_other_statuses_stay_refused(self, _stub_admission_dependencies):
+        for status in (ConversationStatus.failed.value, ConversationStatus.merging.value):
+            with pytest.raises(HTTPException):
+                screen_frames_mod._require_adjudication_admission(UID, _live_meeting(status))
+
+    def test_the_account_setting_still_gates_an_open_conversation(self, _stub_admission_dependencies):
+        _fake_conversations_db, fake_users_db, _fake_redis_db = _stub_admission_dependencies
+        fake_users_db.get_meeting_note_screenshots_enabled.return_value = False
+        with pytest.raises(HTTPException) as exc_info:
+            screen_frames_mod._require_adjudication_admission(UID, _live_meeting(ConversationStatus.in_progress.value))
+        assert exc_info.value.detail["code"] == "meeting_note_screenshots_disabled"
+
+    def test_finalize_does_not_move_the_fingerprint_adjudicated_before_it(self):
+        """Finalize flips status and stamps finished_at; the fingerprint is the transcript span, so it holds.
+
+        It moves only if finalize changes segment timing (a late flush extends the last
+        segment); the client then sees a different fingerprint and offers the new tail.
+        """
+        live = _live_meeting(ConversationStatus.in_progress.value)
+        candidate = [_candidate(captured_at=live["started_at"] + timedelta(seconds=60))]
+        before = screen_frames_mod._validate_capture_window(live, candidate)
+        finalized = {
+            **live,
+            "status": ConversationStatus.completed.value,
+            "finished_at": live["started_at"] + timedelta(seconds=320),
+        }
+        assert screen_frames_mod._validate_capture_window(finalized, candidate) == before
+        assert before == "meeting-content-v1:1767225610000:1767225920000"
+
+
+class TestConcurrentJudging:
+    def test_candidates_are_judged_concurrently_and_results_keep_request_order(
+        self, _stub_admission_dependencies, monkeypatch
+    ):
+        import threading
+
+        from utils.screen_frames.pipeline import CandidateOutcome
+
+        barrier = threading.Barrier(3, timeout=5)
+
+        def judged(*, candidate, **_kwargs):
+            barrier.wait()  # deadlocks (and times out) if candidates ran one at a time
+            return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=None)
+
+        monkeypatch.setattr(screen_frames_mod, "adjudicate_candidate", judged)
+        enforce = MagicMock(return_value=(screen_frames_mod.EMPTY_FRAME_SET, False))
+        monkeypatch.setattr(screen_frames_mod.enforcement, "enforce_and_persist", enforce)
+        raw = b"some fake candidate bytes"
+        candidates = [
+            _candidate(client_frame_id=f"c{i}", captured_at=datetime(2026, 1, 1, 0, i + 1, tzinfo=timezone.utc))
+            for i in range(3)
+        ]
+        assert all(c.bytes_base64 == base64.b64encode(raw).decode() for c in candidates)
+
+        response = screen_frames_mod.adjudicate_screen_frames(_request(candidates=candidates), uid=UID)
+
+        assert response.outcome == "no_approved_frames"
+        enforce.assert_called_once()
+
+    def test_a_writer_failure_on_any_candidate_is_503(self, _stub_admission_dependencies, monkeypatch):
+        from utils.screen_frames.pipeline import CandidateOutcome
+        from utils.screen_frames.writer import ScreenFrameWriteError
+
+        def judged(*, candidate, **_kwargs):
+            if candidate.client_frame_id == "c1":
+                raise ScreenFrameWriteError("upload_failed")
+            return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=None)
+
+        monkeypatch.setattr(screen_frames_mod, "adjudicate_candidate", judged)
+        candidates = [
+            _candidate(client_frame_id=f"c{i}", captured_at=datetime(2026, 1, 1, 0, i + 1, tzinfo=timezone.utc))
+            for i in range(2)
+        ]
+        with pytest.raises(HTTPException) as exc_info:
+            screen_frames_mod.adjudicate_screen_frames(_request(candidates=candidates), uid=UID)
+        assert exc_info.value.status_code == 503

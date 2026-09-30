@@ -21,7 +21,7 @@ a rolling meeting note and is flagged here for review.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +31,7 @@ import database.screen_frames as screen_frames_db
 import utils.other.storage as storage
 from models.screen_frame import ConversationScreenFrame, ConversationScreenFrameSet, ScreenFrameGround
 from utils.screen_frames import store as screen_frame_store
+from utils.screen_frames.environment import own_frames
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,14 @@ class NewPersistedFrame:
     height: int
     canonical_sha256: str
     ground: ScreenFrameGround
+    # Notes evidence from the judge; persisted server-side, never in a response model.
+    visible_participant_names: List[str] = field(default_factory=list)
+    screen_summary: str = ''
+    # The bucket the writer put the bytes in (see environment.py).
+    storage_bucket: Optional[str] = None
 
 
-def _frame_doc(frame: NewPersistedFrame) -> Dict[str, Any]:
+def _frame_doc(frame: NewPersistedFrame, bucket: Optional[str] = None) -> Dict[str, Any]:
     return {
         'id': frame.frame_id,
         'captured_at': frame.captured_at,
@@ -70,6 +76,9 @@ def _frame_doc(frame: NewPersistedFrame) -> Dict[str, Any]:
         'height': frame.height,
         'canonical_sha256': frame.canonical_sha256,
         'ground': frame.ground.model_dump(),
+        'visible_participant_names': list(frame.visible_participant_names),
+        'screen_summary': frame.screen_summary,
+        'storage_bucket': frame.storage_bucket or bucket,
         'created_at': datetime.now(timezone.utc),
     }
 
@@ -154,8 +163,11 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
     with freshly-generated signed URLs. Never recomputes role/rank/ground —
     those are only touched by enforcement / the palette module respectively.
     """
-    frames = screen_frames_db.get_conversation_screen_frames(uid, conversation_id)
-    revision = screen_frames_db.get_conversation_screen_frames_revision(uid, conversation_id)
+    bucket = storage.configured_screen_frames_bucket()
+    if not bucket:
+        return ConversationScreenFrameSet(revision=0)
+    frames = own_frames(screen_frames_db.get_conversation_screen_frames(uid, conversation_id), bucket)
+    revision = screen_frames_db.get_conversation_screen_frames_revision(uid, conversation_id, bucket=bucket)
 
     banner: Optional[ConversationScreenFrame] = None
     strip: List[ConversationScreenFrame] = []
@@ -181,8 +193,10 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
         else:
             strip.append(api_frame)
     strip.sort(key=lambda f: f.captured_at)
-    adjudicated_at = screen_frames_db.get_conversation_screen_frames_adjudicated_at(uid, conversation_id)
-    selection_fingerprint = screen_frames_db.get_conversation_screen_frames_selection_fingerprint(uid, conversation_id)
+    adjudicated_at = screen_frames_db.get_conversation_screen_frames_adjudicated_at(uid, conversation_id, bucket=bucket)
+    selection_fingerprint = screen_frames_db.get_conversation_screen_frames_selection_fingerprint(
+        uid, conversation_id, bucket=bucket
+    )
     if not isinstance(selection_fingerprint, str):
         selection_fingerprint = None
     return ConversationScreenFrameSet(
@@ -207,8 +221,10 @@ def enforce_and_persist(
     of `new_frames` survived into the persisted set (i.e. wasn't immediately
     evicted by the cap) — this drives the adjudication response's "outcome".
     """
-    existing = screen_frames_db.get_conversation_screen_frames(uid, conversation_id)
-    new_docs = [_frame_doc(f) for f in new_frames]
+    # Only this environment's frames compete for the cap and the banner.
+    bucket = storage.configured_screen_frames_bucket()
+    existing = own_frames(screen_frames_db.get_conversation_screen_frames(uid, conversation_id), bucket)
+    new_docs = [_frame_doc(f, bucket) for f in new_frames]
     new_ids = {f.frame_id for f in new_frames}
 
     survivors, evicted = _apply_cap_and_roles(existing, new_docs, max_persisted)
@@ -218,8 +234,8 @@ def enforce_and_persist(
     for doc in evicted:
         screen_frame_store.delete_screen_frame(uid, conversation_id, doc['id'])
 
-    if new_docs:
-        screen_frames_db.bump_conversation_screen_frames_revision(uid, conversation_id)
+    if new_docs and bucket:
+        screen_frames_db.bump_conversation_screen_frames_revision(uid, conversation_id, bucket=bucket)
 
     committed = any(doc['id'] in new_ids for doc in survivors)
     return build_frame_set_response(uid, conversation_id), committed
@@ -234,9 +250,11 @@ def promote_banner_after_deletion(uid: str, conversation_id: str) -> Conversatio
     smaller remaining pool with no new candidates and no cap in play (the
     pool already shrank, never grew).
     """
-    remaining = screen_frames_db.get_conversation_screen_frames(uid, conversation_id)
+    bucket = storage.configured_screen_frames_bucket()
+    remaining = own_frames(screen_frames_db.get_conversation_screen_frames(uid, conversation_id), bucket)
     if remaining:
         survivors, _evicted = _apply_cap_and_roles(remaining, [], max_persisted=len(remaining))
         screen_frame_store.persist_screen_frame_docs(uid, conversation_id, survivors)
-    screen_frames_db.bump_conversation_screen_frames_revision(uid, conversation_id)
+    if bucket:
+        screen_frames_db.bump_conversation_screen_frames_revision(uid, conversation_id, bucket=bucket)
     return build_frame_set_response(uid, conversation_id)

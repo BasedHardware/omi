@@ -1953,10 +1953,16 @@ def _screen_frame_thumbnail_blob_path(uid: str, conversation_id: str, frame_id: 
     return f'{uid}/{conversation_id}/{frame_id}_thumb.jpg'
 
 
+def configured_screen_frames_bucket() -> Optional[str]:
+    """This environment's frame bucket; frame docs in the shared Firestore record theirs."""
+    return (os.getenv('BUCKET_SCREEN_FRAMES') or '').strip() or screen_frames_bucket or None
+
+
 def _require_screen_frames_bucket() -> str:
-    if not screen_frames_bucket:
+    bucket = configured_screen_frames_bucket()
+    if not bucket:
         raise RuntimeError('BUCKET_SCREEN_FRAMES is not configured')
-    return screen_frames_bucket
+    return bucket
 
 
 def upload_screen_frame_blobs(
@@ -1986,7 +1992,14 @@ def get_screen_frame_thumbnail_signed_url(uid: str, conversation_id: str, frame_
     return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
 
 
-def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str) -> None:
+def download_screen_frame_bytes(uid: str, conversation_id: str, frame_id: str, *, timeout: float) -> bytes:
+    """Read one canonical frame from this environment's bucket, bounded by ``timeout`` seconds."""
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    blob = bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id))
+    return blob.download_as_bytes(timeout=timeout)
+
+
+def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str, *, bucket: Optional[str] = None) -> None:
     """Delete both GCS objects for a frame and their cached signed URLs.
 
     A delete that leaves bytes in the bucket, or a still-live cached signed
@@ -1996,7 +2009,7 @@ def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str) -> 
     """
     content_path = _screen_frame_blob_path(uid, conversation_id, frame_id)
     thumb_path = _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id)
-    bucket_name = _require_screen_frames_bucket()
+    bucket_name = bucket or _require_screen_frames_bucket()
     delete_blob(bucket_name, content_path)
     delete_blob(bucket_name, thumb_path)
     delete_cached_signed_url(content_path)

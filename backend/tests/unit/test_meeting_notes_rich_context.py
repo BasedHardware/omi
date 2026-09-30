@@ -1028,7 +1028,7 @@ class TestRichFailOpen:
         monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',)))
         monkeypatch.setattr(wiring, 'normalize_meeting_participants', boom)
         conversation = SimpleNamespace(source=ConversationSource.omi, external_data={})
-        roster, people_docs, desktop_capture = wiring._rich_meeting_roster('uid', conversation, None)
+        roster, people_docs, desktop_capture, _evidence = wiring._rich_meeting_roster('uid', conversation, None)
         # An empty roster — never None — keeps the strict rich speaker path.
         assert roster is not None
         assert roster.entries == ()
@@ -1046,7 +1046,7 @@ class TestRichFailOpen:
             source=ConversationSource.desktop,
             external_data={'conversation_role': 'meeting'},
         )
-        roster, _people_docs, desktop_capture = wiring._rich_meeting_roster('uid', conversation, None)
+        roster, _people_docs, desktop_capture, _evidence = wiring._rich_meeting_roster('uid', conversation, None)
         assert roster is not None
         assert roster.entries == ()
         assert desktop_capture is True

@@ -182,6 +182,8 @@ env:
     value: "false"
   - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
     value: "false"
+  - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
+    value: "false"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
   # Phase-1 final-pass shadow runs only for the owner UID on this pusher.

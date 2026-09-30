@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import math
+from concurrent.futures import wait
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
@@ -32,6 +33,8 @@ from models.screen_frame import (
     ScreenFrameSettingsUpdateRequest,
     ScreenFrameSharingUpdateRequest,
 )
+import utils.other.storage as storage
+from utils.executors import llm_executor, submit_with_context
 from utils.other import endpoints as auth
 from utils.screen_frames import enforcement, store as screen_frame_store
 from utils.screen_frames.availability import screen_frame_egress_enabled
@@ -74,13 +77,25 @@ def _get_owned_conversation(uid: str, conversation_id: str) -> Dict[str, Any]:
     return conversation
 
 
+_OPEN_ADJUDICABLE_STATUSES = {ConversationStatus.in_progress.value, ConversationStatus.processing.value}
+
+
 def _require_adjudication_admission(uid: str, conversation: Dict[str, Any]) -> None:
     """Contract §6 admission checks that apply before any judging: existence
     and ownership are already established by the caller via
     _get_owned_conversation; this covers status + the account setting.
+
+    One pass: the Mac adjudicates at meeting finalization, before it asks the
+    backend to finalize, so the notes see the frames. The conversation is then
+    still in_progress (or processing). It is admitted only when its transcript
+    already fixes a trusted content window, the same window the client derived
+    its selection fingerprint from; otherwise the client retries once completed.
     """
-    status = conversation.get('status')
-    if status != ConversationStatus.completed.value and status != ConversationStatus.completed:
+    raw_status = conversation.get('status')
+    status = getattr(raw_status, 'value', raw_status)
+    if status != ConversationStatus.completed.value and not (
+        status in _OPEN_ADJUDICABLE_STATUSES and _trusted_content_window(conversation) is not None
+    ):
         raise HTTPException(status_code=409, detail={"code": "conversation_not_completed"})
     if not users_db.get_meeting_note_screenshots_enabled(uid):
         raise HTTPException(status_code=409, detail={"code": "meeting_note_screenshots_disabled"})
@@ -229,7 +244,8 @@ def adjudicate_screen_frames(
     # conversation adjudicated while the feature was off would never be retried
     # once it is switched on. The client treats any 4xx as "render nothing, try
     # again next open", which is exactly right here.
-    if not screen_frame_egress_enabled():
+    bucket = storage.configured_screen_frames_bucket()
+    if not screen_frame_egress_enabled() or not bucket:
         raise HTTPException(status_code=409, detail={"code": "screen_frame_egress_unavailable"})
 
     policy = get_purpose_policy(request.purpose)
@@ -281,29 +297,40 @@ def adjudicate_screen_frames(
         # mid-request) — nothing safe to replay yet.
         raise HTTPException(status_code=503, detail={"code": "adjudication_in_progress_retry"})
 
+    # Candidates are judged concurrently on the bounded LLM pool: the Mac waits on
+    # this pass before finalizing a meeting, and eight serial judge calls do not fit
+    # its bound. Each candidate stays isolated (its own canonicalization, verdict,
+    # one-use approval, and writer call); results keep request order.
+    futures = [
+        submit_with_context(
+            llm_executor,
+            adjudicate_candidate,
+            uid=uid,
+            purpose=request.purpose,
+            subject_id=request.subject.id,
+            policy=policy,
+            candidate=candidate,
+            raw_bytes=decoded_by_id[candidate.client_frame_id],
+        )
+        for candidate in request.candidates
+    ]
+    wait(futures)
     try:
-        new_frames = []
-        for candidate in request.candidates:
-            outcome = adjudicate_candidate(
-                uid=uid,
-                purpose=request.purpose,
-                subject_id=request.subject.id,
-                policy=policy,
-                candidate=candidate,
-                raw_bytes=decoded_by_id[candidate.client_frame_id],
-            )
-            if outcome.written is not None:
-                new_frames.append(outcome.written)
+        outcomes = [future.result() for future in futures]
     except ScreenFrameWriteError as error:
         logger.error("screen_frame writer unavailable uid=%s error=%s", uid, error)
         raise HTTPException(status_code=503, detail={"code": "writer_unavailable"}) from error
+    new_frames = [outcome.written for outcome in outcomes if outcome.written is not None]
 
     # Mark the attempt BEFORE building the response, and unconditionally — an all-rejected pass
     # is exactly the case this exists for. `revision` cannot record it, because nothing was
     # approved to bump it, so without this the client cannot tell that it already offered these
     # frames and had them refused, and re-uploads them on every reopen.
     screen_frames_db.mark_conversation_screen_frames_adjudicated(
-        uid, request.subject.id, selection_fingerprint=selection_fingerprint
+        uid,
+        request.subject.id,
+        selection_fingerprint=selection_fingerprint,
+        bucket=bucket,
     )
 
     frame_set, committed = enforcement.enforce_and_persist(uid, request.subject.id, policy.max_persisted, new_frames)
@@ -361,7 +388,8 @@ def delete_conversation_screenshot(conversation_id: str, frame_id: str, uid: str
 def delete_all_conversation_screenshots(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_owned_conversation(uid, conversation_id)
     screen_frame_store.delete_conversation_screen_frames(uid, conversation_id)
-    screen_frames_db.bump_conversation_screen_frames_revision(uid, conversation_id)
+    if bucket := storage.configured_screen_frames_bucket():
+        screen_frames_db.bump_conversation_screen_frames_revision(uid, conversation_id, bucket=bucket)
     return enforcement.build_frame_set_response(uid, conversation_id)
 
 

@@ -468,7 +468,7 @@ def _get_structured(
                     roster: Optional[MeetingRoster] = None
                     meeting_context_block: Optional[str] = None
                     if _meeting_notes_rich_context_enabled():
-                        roster, meeting_context_block, _desktop_capture = rich_notes_inputs(
+                        roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
                             uid,
                             conversation,
                             calendar_context,
@@ -646,9 +646,9 @@ def _get_structured(
         if _conversation_notes_v2_enabled():
             roster: Optional[MeetingRoster] = None
             meeting_context_block: Optional[str] = None
-            desktop_capture = False
+            desktop_capture, screen_frames = False, ()
             if _meeting_notes_rich_context_enabled():
-                roster, meeting_context_block, desktop_capture = rich_notes_inputs(
+                roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
                     uid,
                     main_conv,
                     calendar_context,
@@ -682,6 +682,7 @@ def _get_structured(
                     meeting_context=meeting_context_block,
                     rich_context_enabled=roster is not None,
                     roster=roster,
+                    screen_frames=screen_frames,
                 )
             validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False

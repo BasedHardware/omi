@@ -173,6 +173,25 @@ class ScreenFrameAdjudicationResponse(BaseModel):
 
 _JOINERS = "\u200d\u200c\ufe0f\ufe0e"
 
+SCREEN_SUMMARY_MAX_CHARS = 280
+VISIBLE_PARTICIPANT_NAMES_MAX = 8
+VISIBLE_PARTICIPANT_NAME_MAX_CHARS = 60
+
+
+def _truncate_graphemes(value: str, limit: int) -> str:
+    """Cut to ``limit`` codepoints without leaving a dangling joiner or mark.
+
+    A plain slice can cut inside a grapheme cluster and leave a zero-width joiner
+    or combining mark, which every client then renders as a broken glyph. Back
+    off to the last codepoint that can end a string.
+    """
+    if len(value) <= limit:
+        return value
+    cut = value[:limit]
+    while cut and (unicodedata.combining(cut[-1]) or cut[-1] in _JOINERS):
+        cut = cut[:-1]
+    return cut
+
 
 class ScreenFrameJudgement(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -204,24 +223,51 @@ class ScreenFrameJudgement(BaseModel):
     labels: List[str]
     source_badge: Optional[Literal["code", "browser", "document", "slides", "product"]] = None
     banner_suitability: float = Field(ge=0, le=1)
+    # Notes evidence (server-side only, persisted for approved frames, never in a
+    # response model). Same normalise-don't-fail rule as caption: the judge's
+    # verdict must never be lost to an overlong name list or summary.
+    visible_participant_names: List[str] = Field(default_factory=list)
+    screen_summary: str = ""
 
     @field_validator("caption", mode="before")
     @classmethod
     def _truncate_caption(cls, value: object) -> object:
-        if not isinstance(value, str) or len(value) <= 160:
-            return value
-        # A plain [:160] can cut inside a grapheme cluster and leave a dangling
-        # zero-width joiner or combining mark, which every client then renders as
-        # a broken glyph. Back off to the last codepoint that can end a string.
-        cut = value[:160]
-        while cut and (unicodedata.combining(cut[-1]) or cut[-1] in _JOINERS):
-            cut = cut[:-1]
-        return cut
+        return _truncate_graphemes(value, 160) if isinstance(value, str) else value
 
     @field_validator("labels", mode="before")
     @classmethod
     def _cap_labels(cls, value: object) -> object:
         return value[:8] if isinstance(value, list) else value
+
+    @field_validator("screen_summary", mode="before")
+    @classmethod
+    def _normalize_screen_summary(cls, value: object) -> object:
+        if value is None:
+            return ""
+        if not isinstance(value, str):
+            return value
+        return _truncate_graphemes(" ".join(value.split()), SCREEN_SUMMARY_MAX_CHARS)
+
+    @field_validator("visible_participant_names", mode="before")
+    @classmethod
+    def _normalize_participant_names(cls, value: object) -> object:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            return value
+        names: List[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            if not isinstance(raw, str):
+                continue
+            name = _truncate_graphemes(" ".join(raw.split()), VISIBLE_PARTICIPANT_NAME_MAX_CHARS).strip()
+            if not name or name.casefold() in seen:
+                continue
+            seen.add(name.casefold())
+            names.append(name)
+            if len(names) >= VISIBLE_PARTICIPANT_NAMES_MAX:
+                break
+        return names
 
 
 # ---------------------------------------------------------------------------

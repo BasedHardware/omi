@@ -13,9 +13,17 @@ import pytest
 from models.screen_frame import ScreenFrameGround
 from utils.screen_frames import enforcement as enforcement_mod
 from utils.screen_frames.enforcement import NewPersistedFrame, _apply_cap_and_roles
+from utils.screen_frames.environment import LEGACY_SCREEN_FRAMES_BUCKET
 
 UID = "user-1"
 CONVERSATION_ID = "conv-1"
+
+
+@pytest.fixture(autouse=True)
+def _dev_bucket(monkeypatch):
+    # Stored docs below carry no storage_bucket: legacy docs, which belong to dev.
+    monkeypatch.setenv("BUCKET_SCREEN_FRAMES", LEGACY_SCREEN_FRAMES_BUCKET)
+
 
 _GROUND = ScreenFrameGround(stops=["#111111", "#222222"], is_neutral=True)
 
@@ -171,6 +179,7 @@ class TestBuildFrameSetResponse:
             lambda uid, cid, fid: f"https://signed/{fid}/thumb"
         )
         fake_storage.SCREEN_FRAME_SIGNED_URL_MINUTES = 60
+        fake_storage.configured_screen_frames_bucket.return_value = LEGACY_SCREEN_FRAMES_BUCKET
         monkeypatch.setattr(enforcement_mod, "storage", fake_storage)
 
         frame_set = enforcement_mod.build_frame_set_response(UID, CONVERSATION_ID)
@@ -244,9 +253,11 @@ def test_one_unrepresentable_stored_frame_does_not_break_the_whole_read(monkeypa
     }
 
     monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames", lambda *_: [good, bad])
-    monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames_revision", lambda *_: 3)
-    monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames_adjudicated_at", lambda *_: None)
-    monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames_selection_fingerprint", lambda *_: None)
+    monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames_revision", lambda *_, **__: 3)
+    monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames_adjudicated_at", lambda *_, **__: None)
+    monkeypatch.setattr(
+        enf.screen_frames_db, "get_conversation_screen_frames_selection_fingerprint", lambda *_, **__: None
+    )
     monkeypatch.setattr(enf.storage, "get_screen_frame_signed_url", lambda *_: "https://example/c")
     monkeypatch.setattr(enf.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: "https://example/t")
 
@@ -254,3 +265,107 @@ def test_one_unrepresentable_stored_frame_does_not_break_the_whole_read(monkeypa
 
     assert frame_set.banner is not None and frame_set.banner.id == "ok"
     assert [f.id for f in frame_set.strip] == []
+
+
+PROD_BUCKET = "based-hardware-prod-screen-frames"
+
+
+def _stored(frame_id: str, offset: float, *, bucket=None, suitability=0.1) -> dict:
+    doc = enforcement_mod._frame_doc(_new_frame(frame_id, offset, suitability), bucket)
+    if bucket is None:
+        doc.pop("storage_bucket")  # a doc written before buckets were recorded
+    doc["role"], doc["rank"] = "strip", 0
+    return doc
+
+
+class TestEnvironmentScoping:
+    """Dev and prod share Firestore, not buckets: each sees only its own frames."""
+
+    def _db(self, monkeypatch, docs):
+        fake_db = MagicMock()
+        fake_db.get_conversation_screen_frames.return_value = docs
+        fake_db.get_conversation_screen_frames_revision.return_value = 1
+        fake_db.get_conversation_screen_frames_adjudicated_at.return_value = None
+        fake_db.get_conversation_screen_frames_selection_fingerprint.return_value = None
+        monkeypatch.setattr(enforcement_mod, "screen_frames_db", fake_db)
+        signed: list[str] = []
+        monkeypatch.setattr(
+            enforcement_mod.storage, "get_screen_frame_signed_url", lambda uid, cid, fid: signed.append(fid) or "u"
+        )
+        monkeypatch.setattr(enforcement_mod.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: "t")
+        return fake_db, signed
+
+    def test_prod_never_signs_a_legacy_dev_frame(self, monkeypatch):
+        monkeypatch.setenv("BUCKET_SCREEN_FRAMES", PROD_BUCKET)
+        fake_db, signed = self._db(monkeypatch, [_stored("legacy", 1), _stored("prod", 2, bucket=PROD_BUCKET)])
+
+        frame_set = enforcement_mod.build_frame_set_response(UID, CONVERSATION_ID)
+
+        assert [f.id for f in frame_set.strip] == ["prod"]
+        assert signed == ["prod"]
+        fake_db.get_conversation_screen_frames_adjudicated_at.assert_called_once_with(
+            UID, CONVERSATION_ID, bucket=PROD_BUCKET
+        )
+
+    def test_dev_keeps_serving_legacy_frames(self, monkeypatch):
+        self._db(monkeypatch, [_stored("legacy", 1), _stored("prod", 2, bucket=PROD_BUCKET)])
+
+        frame_set = enforcement_mod.build_frame_set_response(UID, CONVERSATION_ID)
+
+        assert [f.id for f in frame_set.strip] == ["legacy"]
+
+    def test_no_configured_bucket_serves_nothing_and_signs_nothing(self, monkeypatch):
+        monkeypatch.delenv("BUCKET_SCREEN_FRAMES")
+        monkeypatch.setattr(enforcement_mod.storage, "screen_frames_bucket", None)
+        _fake_db, signed = self._db(monkeypatch, [_stored("legacy", 1)])
+
+        frame_set = enforcement_mod.build_frame_set_response(UID, CONVERSATION_ID)
+
+        assert frame_set.banner is None and frame_set.strip == [] and signed == []
+
+    def test_cap_and_eviction_ignore_the_other_environments_frames(self, monkeypatch):
+        monkeypatch.setenv("BUCKET_SCREEN_FRAMES", PROD_BUCKET)
+        legacy = [_stored(f"dev{i}", i) for i in range(7)]
+        fake_db, _signed = self._db(monkeypatch, legacy)
+        store = MagicMock()
+        monkeypatch.setattr(enforcement_mod, "screen_frame_store", store)
+
+        new = [_new_frame("p1", 100, 0.9)]
+        _frame_set, committed = enforcement_mod.enforce_and_persist(UID, CONVERSATION_ID, 7, new)
+
+        assert committed is True
+        store.delete_screen_frame.assert_not_called()
+        persisted = store.persist_screen_frame_docs.call_args.args[2]
+        assert [doc["id"] for doc in persisted] == ["p1"]
+        assert persisted[0]["storage_bucket"] == PROD_BUCKET
+        assert persisted[0]["role"] == "banner"
+        fake_db.bump_conversation_screen_frames_revision.assert_called_once_with(
+            UID, CONVERSATION_ID, bucket=PROD_BUCKET
+        )
+
+
+def test_frame_doc_persists_notes_evidence_and_the_writers_bucket():
+    frame = NewPersistedFrame(
+        frame_id="f",
+        captured_at=_t(0),
+        caption="c",
+        labels=[],
+        source_badge=None,
+        banner_suitability=0.5,
+        width=1,
+        height=1,
+        canonical_sha256="a" * 64,
+        ground=_GROUND,
+        visible_participant_names=["Jordan Rivera"],
+        screen_summary="Google Meet with Jordan Rivera; Q3 roadmap slide",
+        storage_bucket=PROD_BUCKET,
+    )
+
+    doc = enforcement_mod._frame_doc(frame, "ignored-when-the-writer-recorded-one")
+
+    assert doc["visible_participant_names"] == ["Jordan Rivera"]
+    assert doc["screen_summary"].startswith("Google Meet")
+    assert doc["storage_bucket"] == PROD_BUCKET
+    # Server-side only: the wire model has no field for either.
+    assert "screen_summary" not in enforcement_mod.ConversationScreenFrame.model_fields
+    assert "visible_participant_names" not in enforcement_mod.ConversationScreenFrame.model_fields

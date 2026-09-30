@@ -52,6 +52,7 @@ _CALL_CONTROL_PATTERN = re.compile(
 # A Google Meet tab is titled with the bare meeting code ("Meet - amc-iajq-asx").
 # Once the call is joined the omnibox URL is often scrolled out of the capture, so
 # the title is the only marker left. The code shape keeps this precise.
+_MEET_TAB_TITLE = re.compile(r'^meet\s*[-\u2013\u2014]\s*\S', re.IGNORECASE)
 _MEET_CODE_TITLE = re.compile(r'^meet\s*[-\u2013]\s*[a-z]{3}-[a-z]{4}-[a-z]{3}\b')
 _OCR_UI_WORDS = {
     'audio',
@@ -88,7 +89,9 @@ def is_conferencing_row(row: dict[str, Any]) -> bool:
     haystack = f'{row.get("appName", "")} {row.get("windowTitle", "")}'.casefold()
     if any(marker in haystack for marker in _CONFERENCING_MARKERS):
         return True
-    if _MEET_CODE_TITLE.match(_clean_line(str(row.get('windowTitle') or '')).casefold()):
+    title = _clean_line(str(row.get('windowTitle') or '')).casefold()
+    # A joined Meet tab is titled "Meet - <code>" or "Meet - <meeting name>".
+    if _MEET_CODE_TITLE.match(title) or _MEET_TAB_TITLE.match(title):
         return True
     # Browser-hosted meetings show up as a plain tab title ("Meet - abc-defg-hij"),
     # so the app/title pair alone misses them. Match only unambiguous join URLs in
@@ -246,14 +249,207 @@ def _select_conferencing_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
     return selected
 
 
-def participants_from_ocr(texts: Iterable[str]) -> list[MeetingParticipant]:
+# Call-tile rule. A video tile labels its person with a bare name and nothing
+# else, so no roster sentence or email ever corroborates it (conversation
+# 449565eb: a 1:1 Meet whose other participant was on screen the whole call but
+# never reached the roster). What corroborates a tile label is persistence: it
+# stays on screen across the call while tab-strip text churns. The Swift twin
+# (OnDeviceMeetingIdentityService.swift) implements the same rule; both are
+# pinned by backend/tests/fixtures/meeting_identity/call_tile_vectors.json.
+MIN_TILE_ROWS = 3
+MIN_TILE_ROW_SHARE = 0.25
+MAX_TILE_NAMES = 8
+# A label that recurs across most of the same app's non-call rows too is browser
+# chrome (bookmarks bar, tab strip, profile button), not a tile. Only judged with
+# enough such rows.
+MIN_NON_CALL_ROWS_FOR_CHROME_CHECK = 3
+MAX_NON_CALL_ROW_SHARE = 0.5
+_TILE_PARTICLES = {'al', 'bin', 'da', 'de', 'del', 'der', 'di', 'du', 'la', 'le', 'van', 'von'}
+_OWNER_TILE_MARKER = re.compile(r'\((?:[^)]*[,\s])?you(?:[,\s][^)]*)?\)\s*$', re.IGNORECASE)
+_MEET_CODE = re.compile(r'\b[a-z]{3}-[a-z]{4}-[a-z]{3}\b', re.IGNORECASE)
+_TITLE_SEPARATORS = re.compile(r'\s[-–—|:]\s')
+# Words that make a capitalised line app chrome, a calendar/meeting title, or a
+# page name rather than a person. Matched per token, case-insensitively.
+_TILE_CHROME_WORDS = frozenset(
+    (
+        'access account accounts activities admin advisories agenda allow analytics api backgrounds bank '
+        'banking billing board bookmarks calendar call camera captions channel chat chrome cloud console '
+        'controls cost dashboard dashboards demo docs document drive edit effects everyone feedback file '
+        'general github gmail google guest hand help home host inbox intro issues join keys kickoff leave '
+        'login meet meeting meetings mic microphone monitor more mute new notes notion options overview '
+        'participants pay people platform portal present presentation presenting profile project pull raise '
+        'rate reactions record recording registration report requests review roadmap screen search security '
+        'settings share sharing sheets sign slack slides standup summary sync tab tabs team teams tokens '
+        'untitled unmute update usage users view webex window workspace you zoom'
+    ).split()
+)
+# AI notetakers and assistants join calls as tiles too; they are never human
+# participants. Mirrors the agent catalog in meeting_participants.py.
+_AI_AGENT_TILE_WORDS = frozenset(
+    (
+        'agent ai assistant boardy bot chatbot companion fathom fireflies gemini granola meetbot notebot notes '
+        'notetaker otter recorder tldv'
+    ).split()
+)
+
+
+def _tile_token_ok(token: str) -> bool:
+    if token.casefold() in _TILE_PARTICLES:
+        return True
+    if not token[:1].isupper() or not all(ch.isalpha() or ch in "-'’" for ch in token):
+        return False
+    return any(ch.islower() for ch in token)
+
+
+def _tile_name(line: str) -> Optional[str]:
+    """The name a call tile shows on this line, if the line is only a name."""
+    if '@' in line or 'http' in line.casefold() or _MEET_CODE.search(line):
+        return None
+    name = _clean_line(_NAME_DECORATION.sub('', line))
+    tokens = name.split()
+    if not 2 <= len(tokens) <= 4 or len(name) > 60:
+        return None
+    if not all(_tile_token_ok(token) for token in tokens):
+        return None
+    if tokens[0].casefold() in _TILE_PARTICLES or tokens[-1].casefold() in _TILE_PARTICLES:
+        return None
+    folded = {token.casefold().strip("'’-") for token in tokens}
+    if folded & (_TILE_CHROME_WORDS | _NON_PERSON_WORDS | _JOINER_WORDS):
+        return None
+    return name
+
+
+def is_ai_agent_tile_name(name: str) -> bool:
+    tokens = [token.casefold().strip(".'’-") for token in name.split()]
+    # Whole tokens only: a suffix test would drop "James Talbot" and "Alice Abbot".
+    return any(token in _AI_AGENT_TILE_WORDS for token in tokens)
+
+
+def _is_owner_name(name: str, owner_names: set[str], owner_locals: set[str]) -> bool:
+    folded = name.casefold()
+    tokens = folded.split()
+    for owner in owner_names:
+        owner_tokens = owner.split()
+        if folded == owner or (
+            len(owner_tokens) >= 2 and tokens[0] == owner_tokens[0] and tokens[-1] == owner_tokens[-1]
+        ):
+            return True
+    joined = ''.join(tokens)
+    return any(joined == re.sub(r'[._\-+]', '', local) for local in owner_locals)
+
+
+_NATIVE_VIDEO_APPS = ('zoom', 'microsoft teams', 'webex', 'facetime')
+_UNREAD_TITLE_PREFIX = re.compile(r'^\(\d+\)\s*')
+_TITLE_TRAILING_NOISE = re.compile(r'[^\w)]+$')
+
+
+def _is_call_window_row(row: dict[str, Any]) -> bool:
+    """A row whose own window is the video call, the only place a tile label shows.
+
+    Narrower than is_conferencing_row: a row recognised only by a Meet URL in its
+    OCR is often another page (a LinkedIn profile, a tab strip), and a messaging
+    app's recurring lines are its chat list. Messaging calls keep their own
+    window-title rule (_messaging_call_participants).
+    """
+    app = str(row.get('appName') or '').casefold()
+    if _is_messaging_call_app(app):
+        return False
+    if any(marker in app for marker in _NATIVE_VIDEO_APPS):
+        return True
+    title = _clean_line(str(row.get('windowTitle') or '')).casefold()
+    return bool(_MEET_TAB_TITLE.match(title)) or any(marker in f'{app} {title}' for marker in _CONFERENCING_MARKERS)
+
+
+def _title_part(part: str) -> str:
+    """A window-title segment as it would read on screen: no unread counter, no trailing icon."""
+    cleaned = _UNREAD_TITLE_PREFIX.sub('', _clean_line(part))
+    return _TITLE_TRAILING_NOISE.sub('', cleaned).strip().casefold()
+
+
+def _row_text(row: dict[str, Any]) -> str:
+    return f'{row.get("windowTitle") or ""}\n{row.get("ocrText") or ""}'
+
+
+def call_tile_names(
+    rows: list[dict[str, Any]],
+    *,
+    owner_names: Iterable[str] = (),
+    owner_emails: Iterable[str] = (),
+) -> list[str]:
+    """Names shown as call-tile labels, by persistence across the call's rows.
+
+    A candidate is a line that is only a 2-4 token capitalised name (tile
+    decorations stripped). It is accepted when it appears in at least
+    MIN_TILE_ROWS conferencing rows and at least MIN_TILE_ROW_SHARE of them, is
+    not the owner (their tile says "(You)", or it matches a supplied owner name
+    or email), not an AI agent, not part of a conferencing window title, and
+    not chrome that recurs across the non-call rows as well.
+    """
+    call_rows = [row for row in rows if _is_call_window_row(row)]
+    if len(call_rows) < MIN_TILE_ROWS:
+        return []
+    owner_set = {_clean_line(name).casefold() for name in owner_names if name and name.strip()}
+    owner_locals = {email.strip().casefold().split('@', 1)[0] for email in owner_emails if email and '@' in email}
+    title_parts: set[str] = set()
+    counts: dict[str, int] = {}
+    spelling: dict[str, str] = {}
+    order: list[str] = []
+    for row in call_rows:
+        title = _clean_line(str(row.get('windowTitle') or ''))
+        title_parts.update(_title_part(part) for part in _TITLE_SEPARATORS.split(title) if part.strip())
+        seen: set[str] = set()
+        for raw_line in str(row.get('ocrText') or '').splitlines():
+            line = _clean_line(raw_line)
+            name = _tile_name(line)
+            if name is None:
+                continue
+            key = name.casefold()
+            if _OWNER_TILE_MARKER.search(line):
+                owner_set.add(key)
+            if key in seen:
+                continue
+            seen.add(key)
+            if key not in counts:
+                counts[key] = 0
+                spelling[key] = name
+                order.append(key)
+            counts[key] += 1
+
+    # Browser chrome (tab strip, bookmarks) recurs in the same app's other windows.
+    call_apps = {str(row.get('appName') or '').casefold() for row in call_rows}
+    non_call_rows = [
+        row for row in rows if not _is_call_window_row(row) and str(row.get('appName') or '').casefold() in call_apps
+    ]
+    minimum = max(MIN_TILE_ROWS, MIN_TILE_ROW_SHARE * len(call_rows))
+    accepted: list[str] = []
+    for key in order:
+        name = spelling[key]
+        if counts[key] < minimum or key in title_parts:
+            continue
+        if _is_owner_name(name, owner_set, owner_locals) or is_ai_agent_tile_name(name):
+            continue
+        if len(non_call_rows) >= MIN_NON_CALL_ROWS_FOR_CHROME_CHECK:
+            elsewhere = sum(
+                1
+                for row in non_call_rows
+                if any(_tile_name(_clean_line(raw)) == name for raw in _row_text(row).splitlines())
+            )
+            if elsewhere > MAX_NON_CALL_ROW_SHARE * len(non_call_rows):
+                continue
+        accepted.append(name)
+    accepted.sort(key=lambda name: (-counts[name.casefold()], order.index(name.casefold())))
+    return accepted[:MAX_TILE_NAMES]
+
+
+def participants_from_ocr(texts: Iterable[str], *, tile_names: Iterable[str] = ()) -> list[MeetingParticipant]:
     """Identity from conferencing OCR, precision first.
 
     A name is accepted only from a source that actually asserts participation:
-      1. a roster sentence ("X and Y are in this call", "Meet with X"), or
+      1. a roster sentence ("X and Y are in this call", "Meet with X"),
       2. a line whose first token matches the local part of an email address seen
          in the same window (so "Boardy Boardman" is corroborated by
-         "boardy@boardy.ai", while "Coinflow Portal" has nothing behind it).
+         "boardy@boardy.ai", while "Coinflow Portal" has nothing behind it), or
+      3. a persistent call-tile label, supplied by ``call_tile_names``.
 
     Every other line is discarded, including lines that look exactly like names.
     An empty list is the correct answer when nothing is corroborated: injecting
@@ -286,6 +482,11 @@ def participants_from_ocr(texts: Iterable[str]) -> list[MeetingParticipant]:
         tokens = {word.casefold().strip(".'\u2019-") for word in candidate.split()}
         if tokens & local_tokens:
             names.append(candidate)
+    known = {name.casefold() for name in names}
+    for tile in tile_names:
+        if tile.casefold() not in known:
+            names.append(tile)
+            known.add(tile.casefold())
 
     participants: list[MeetingParticipant] = []
     used_emails: set[str] = set()
@@ -364,19 +565,24 @@ def context_from_screen_activity(
     started_at: datetime,
     finished_at: datetime,
     duration_seconds: Optional[float] = None,
+    owner_names: Iterable[str] = (),
+    owner_emails: Iterable[str] = (),
 ) -> Optional[CalendarMeetingContext]:
     """Extract corroborated participants and a title from conferencing rows.
 
     This deliberately avoids another LLM call. OCR is used only as metadata; the
     transcript remains the authority for note claims. Returns None when no
     participant can be corroborated — a title-only context adds nothing to the
-    prompt while implying an identity match that was not made.
+    prompt while implying an identity match that was not made. Call-tile
+    persistence is judged over every row, not the character-budgeted selection:
+    three full-desktop frames exhaust that budget.
     """
     selected = _select_conferencing_rows(rows)
     if not selected:
         return None
 
-    participants = participants_from_ocr(str(row.get('ocrText') or '') for row in selected)
+    tiles = call_tile_names(rows, owner_names=owner_names, owner_emails=owner_emails)
+    participants = participants_from_ocr((str(row.get('ocrText') or '') for row in selected), tile_names=tiles)
     if not participants:
         participants = _messaging_call_participants(rows)
     if not participants:

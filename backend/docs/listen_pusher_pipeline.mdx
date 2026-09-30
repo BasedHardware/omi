@@ -803,6 +803,19 @@ best-effort and appended only to the notes volatile suffix as BACKGROUND
 CONTEXT; it never enters the shared prefix, the memory extractor, or app
 prompts, and no single source failure can block the note.
 
+Approved meeting screenshots feed the same pass. The Mac adjudicates frames
+before it finalizes (admission accepts an in_progress/processing conversation
+once its transcript fixes a trusted content window), and the judge stores
+`visible_participant_names` and `screen_summary` on approved frame docs only.
+Under `MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED`, tile names join the roster as
+`screen_activity` participants where no better source named them and each frame
+adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; under
+`MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED`, up to four frames (≤1024 px JPEG,
+6 s total GCS read budget) ride the notes call as image parts. Frame docs record
+`storage_bucket`; every host reads only docs whose bucket equals its own
+`BUCKET_SCREEN_FRAMES` (legacy docs belong to `based-hardware-dev-screen-frames`),
+so a notes host without that env reads no frame evidence at all.
+
 ### 2.1 Durable finalization ownership
 
 `conversation_finalization_jobs/{job_id}` is the finalization ledger. It is
