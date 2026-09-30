@@ -3765,5 +3765,7 @@
     "speakerSuggestionAppliesToSpeaker": "适用于该说话人的每一行",
     "collapseAction": "收起",
     "speakerTagPromptNotMeAction": "不是我",
-    "confidenceNextLabels": "{count, plural, =1{再在 1 个对话中为对方添加标签。} other{再在 {count} 个对话中为对方添加标签。}}"
+    "confidenceNextLabels": "{count, plural, =1{再在 1 个对话中为对方添加标签。} other{再在 {count} 个对话中为对方添加标签。}}",
+    "siriShortcutsSetupHint": "在快捷指令 → Siri 中开启 Omi。说“{askPhrase}”或“{questionPhrase}”，然后提出你的问题。",
+    "siriShortcutsSearchHint": " 你还可以说“{searchPhrase} for what I did today”。"
 }

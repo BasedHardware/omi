@@ -21,6 +21,10 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
   late Animation<double> _scaleAnimation;
   late Animation<double> _slideAnimation;
 
+  // App Shortcuts phrases require iOS 16; older systems have no Omi phrases.
+  late final bool _siriHintSupported =
+      Platform.isIOS && (int.tryParse(Platform.operatingSystemVersion.split('.').first) ?? 0) >= 16;
+
   @override
   void initState() {
     super.initState();
@@ -96,11 +100,10 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                         textAlign: TextAlign.center,
                         style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.5),
                       ),
-                      if (Platform.isIOS) ...[
+                      if (_siriHintSupported) ...[
                         const SizedBox(height: OmiSpacing.md),
                         Text(
-                          // omi-ux-allow: hardcoded-text -- Siri invocation phrases are registered in English only
-                          'Turn on Omi in Shortcuts → Siri. Say “Ask Omi” or “Question for Omi,” then speak your question.',
+                          context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi'),
                           key: const Key('onboarding_siri_hint'),
                           textAlign: TextAlign.center,
                           style: OmiType.body.copyWith(color: OmiColors.textSecondary),

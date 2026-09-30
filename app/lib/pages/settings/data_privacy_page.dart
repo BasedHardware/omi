@@ -27,6 +27,19 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   bool _siriEnabled = true;
   int _siriRevision = 0;
 
+  // App Shortcuts and the native Shortcuts button require iOS 16; the
+  // searchInApp schema requires iOS 27. Older systems keep the index switch.
+  late final bool _shortcutsHintSupported = _iosMajorVersion >= 16;
+  late final bool _searchHintSupported = _iosMajorVersion >= 27;
+
+  static int get _iosMajorVersion {
+    if (!Platform.isIOS) return 0;
+    final major = int.tryParse(Platform.operatingSystemVersion.split('.').first) ?? 0;
+    // A Darwin kernel version (macOS-style) never reaches 27 before iOS 27's
+    // own numbering, so misreads stay on the conservative side of both gates.
+    return major;
+  }
+
   Future<void> _loadSiriSetting() async {
     final revision = _siriRevision;
     try {
@@ -158,26 +171,30 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                         onChanged: _setSiriEnabled,
                       ),
                     ),
-                    const SizedBox(height: OmiSpacing.md),
-                    Container(
-                      key: const Key('siri_shortcuts_settings'),
-                      padding: const EdgeInsets.all(OmiSpacing.md),
-                      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(context.l10n.askOmi, style: OmiType.body),
-                          const SizedBox(height: OmiSpacing.xs),
-                          Text(
-                            // omi-ux-allow: hardcoded-text -- Siri invocation phrases are registered in English only
-                            'Turn on Omi in Shortcuts → Siri. Say “Ask Omi” or “Question for Omi,” then speak your question. You can also say “Search Omi for what I did today.”',
-                            style: OmiType.body.copyWith(color: OmiColors.textSecondary),
-                          ),
-                          const SizedBox(height: OmiSpacing.md),
-                          const SizedBox(height: 50, child: UiKitView(viewType: 'omi/shortcuts_button')),
-                        ],
+                    if (_shortcutsHintSupported) ...[
+                      const SizedBox(height: OmiSpacing.md),
+                      Container(
+                        key: const Key('siri_shortcuts_settings'),
+                        padding: const EdgeInsets.all(OmiSpacing.md),
+                        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(context.l10n.askOmi, style: OmiType.body),
+                            const SizedBox(height: OmiSpacing.xs),
+                            Text(
+                              _searchHintSupported
+                                  ? '${context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi')}'
+                                      '${context.l10n.siriShortcutsSearchHint('Search Omi')}'
+                                  : context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi'),
+                              style: OmiType.body.copyWith(color: OmiColors.textSecondary),
+                            ),
+                            const SizedBox(height: OmiSpacing.md),
+                            const SizedBox(height: 50, child: UiKitView(viewType: 'omi/shortcuts_button')),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                   const SizedBox(height: OmiSpacing.xxl),
                   Consumer<AppProvider>(

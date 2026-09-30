@@ -3765,5 +3765,7 @@
     "speakerSuggestionAppliesToSpeaker": "Vale per ogni riga di questo interlocutore",
     "collapseAction": "Comprimi",
     "speakerTagPromptNotMeAction": "Non sono io",
-    "confidenceNextLabels": "{count, plural, =1{Etichettali in 1 altra conversazione.} other{Etichettali in altre {count} conversazioni.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etichettali in 1 altra conversazione.} other{Etichettali in altre {count} conversazioni.}}",
+    "siriShortcutsSetupHint": "Attiva Omi in Comandi rapidi → Siri. Dì “{askPhrase}” o “{questionPhrase}”, poi fai la tua domanda.",
+    "siriShortcutsSearchHint": " Puoi anche dire “{searchPhrase} for what I did today”."
 }

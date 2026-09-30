@@ -3800,5 +3800,7 @@
     "speakerSuggestionAppliesToSpeaker": "Bu konuşmacının tüm satırlarına uygulanır",
     "collapseAction": "Daralt",
     "speakerTagPromptNotMeAction": "Ben değilim",
-    "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}"
+    "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}",
+    "siriShortcutsSetupHint": "Kısayollar → Siri içinde Omi’yi etkinleştirin. “{askPhrase}” veya “{questionPhrase}” deyin, sonra sorunuzu sorun.",
+    "siriShortcutsSearchHint": " Ayrıca “{searchPhrase} for what I did today” diyebilirsiniz."
 }

@@ -11325,5 +11325,7 @@
     "speakerSuggestionAppliesToSpeaker": "اس اسپیکر کی ہر سطر پر لاگو ہوتا ہے",
     "collapseAction": "سمیٹیں",
     "speakerTagPromptNotMeAction": "میں نہیں",
-    "confidenceNextLabels": "{count, plural, =1{انہیں مزید 1 گفتگو میں لیبل کریں۔} other{انہیں مزید {count} گفتگوؤں میں لیبل کریں۔}}"
+    "confidenceNextLabels": "{count, plural, =1{انہیں مزید 1 گفتگو میں لیبل کریں۔} other{انہیں مزید {count} گفتگوؤں میں لیبل کریں۔}}",
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
 }

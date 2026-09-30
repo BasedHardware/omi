@@ -11325,5 +11325,7 @@
     "speakerSuggestionAppliesToSpeaker": "Датычыцца ўсіх радкоў гэтага спікера",
     "collapseAction": "Згарнуць",
     "speakerTagPromptNotMeAction": "Не я",
-    "confidenceNextLabels": "{count, plural, =1{Пазначце яго яшчэ ў 1 размове.} other{Пазначце яго яшчэ ў {count} размовах.}}"
+    "confidenceNextLabels": "{count, plural, =1{Пазначце яго яшчэ ў 1 размове.} other{Пазначце яго яшчэ ў {count} размовах.}}",
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
 }

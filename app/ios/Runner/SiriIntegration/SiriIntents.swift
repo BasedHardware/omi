@@ -232,11 +232,19 @@ struct AskOmiIntent: AppIntent {
         let started = Date()
         var outcome = "server"
         defer { SiriTelemetry.intent("askOmi", outcome: outcome, started: started) }
+        let performed = try await performReportingOutcome()
+        outcome = performed.outcome
+        return performed.result
+    }
+
+    /// Search delegates to Ask and must report the delegated failure class, so
+    /// the flow returns its telemetry outcome alongside the spoken result.
+    fileprivate func performReportingOutcome() async throws
+        -> (result: IntentResultContainer<Never, Never, Never, IntentDialog>, outcome: String) {
         let value = cleanedSiriQuestion(question)
         let openChat = OpenOmiChatIntent()
         guard !value.isEmpty else {
-            outcome = "cancelled"
-            return .result(dialog: "What would you like to ask Omi?")
+            return (.result(dialog: "What would you like to ask Omi?"), "cancelled")
         }
         let lower = value.lowercased()
         let memoryPrefix = lower.hasPrefix("to remember ") ? "to remember " :
@@ -252,36 +260,34 @@ struct AskOmiIntent: AppIntent {
             if !memoryPrefix.isEmpty {
                 let memory = cleanedMemory(String(value.dropFirst(memoryPrefix.count)))
                 guard !memory.isEmpty else {
-                    outcome = "cancelled"
-                    return .result(dialog: "What should Omi remember?")
+                    return (.result(dialog: "What should Omi remember?"), "cancelled")
                 }
                 try await saveSiriMemory(memory, owner: owner)
-                outcome = "ok"
-                return .result(dialog: "Saved to Omi")
+                return (.result(dialog: "Saved to Omi"), "ok")
             }
             didAttemptChatPost = true
             let answer = try await OmiNativeAPI().ask(question: value, owner: owner)
-            outcome = "ok"
-            return .result(dialog: IntentDialog("\(Self.spokenAnswer(answer))"))
+            return (.result(dialog: IntentDialog("\(Self.spokenAnswer(answer))")), "ok")
         } catch SiriSession.Failure.auth {
-            outcome = "auth"
-            return await Self.offerChat(openChat, dialog: "Open Omi and sign in first.")
+            return (await Self.offerChat(openChat, dialog: "Open Omi and sign in first."), "auth")
         } catch SiriSession.Failure.network {
-            outcome = "network"
             if !memoryPrefix.isEmpty {
-                return await Self.offerChat(openChat, dialog: "I couldn't reach Omi, so nothing was saved.")
+                return (await Self.offerChat(openChat, dialog: "I couldn't reach Omi, so nothing was saved."),
+                        "network")
             }
-            return await Self.offerChat(Self.fallbackOpenChat(openChat, question: value,
+            return (await Self.offerChat(Self.fallbackOpenChat(openChat, question: value,
                                                                didAttemptChatPost: didAttemptChatPost),
-                                        dialog: "Omi couldn't confirm the answer. Open Omi chat to check before trying again.")
+                                        dialog: "Omi couldn't confirm the answer. Open Omi chat to check before trying again."),
+                    "network")
         } catch {
-            outcome = SiriTelemetry.outcome(error)
             if !memoryPrefix.isEmpty {
-                return await Self.offerChat(openChat, dialog: "Omi couldn't save that right now.")
+                return (await Self.offerChat(openChat, dialog: "Omi couldn't save that right now."),
+                        SiriTelemetry.outcome(error))
             }
-            return await Self.offerChat(Self.fallbackOpenChat(openChat, question: value,
+            return (await Self.offerChat(Self.fallbackOpenChat(openChat, question: value,
                                                                didAttemptChatPost: didAttemptChatPost),
-                                        dialog: "Omi couldn't confirm the answer. Open Omi chat to check before trying again.")
+                                        dialog: "Omi couldn't confirm the answer. Open Omi chat to check before trying again."),
+                    SiriTelemetry.outcome(error))
         }
     }
 
@@ -408,13 +414,18 @@ struct OpenOmiFolderIntent: OpenIntent {
         let started = Date()
         var outcome = "server"
         defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        try requireSignedInSiriSession()
-        guard target.id == "memories" || target.id == "conversations" else {
-            throw SiriUnsupportedInput(kind: .open)
+        do {
+            try requireSignedInSiriSession()
+            guard target.id == "memories" || target.id == "conversations" else {
+                throw SiriUnsupportedInput(kind: .open)
+            }
+            SiriBridge.shared.navigate(target.id == "memories" ? "omi://memories" : "omi://conversations")
+            outcome = "ok"
+            return .result()
+        } catch {
+            outcome = SiriTelemetry.outcome(error)
+            throw error
         }
-        SiriBridge.shared.navigate(target.id == "memories" ? "omi://memories" : "omi://conversations")
-        outcome = "ok"
-        return .result()
     }
 }
 
@@ -428,11 +439,16 @@ struct OpenOmiListIntent: OpenIntent {
         let started = Date()
         var outcome = "server"
         defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        try requireSignedInSiriSession()
-        guard target.id == "omi" else { throw SiriUnsupportedInput(kind: .open) }
-        SiriBridge.shared.navigate("omi://action-items")
-        outcome = "ok"
-        return .result()
+        do {
+            try requireSignedInSiriSession()
+            guard target.id == "omi" else { throw SiriUnsupportedInput(kind: .open) }
+            SiriBridge.shared.navigate("omi://action-items")
+            outcome = "ok"
+            return .result()
+        } catch {
+            outcome = SiriTelemetry.outcome(error)
+            throw error
+        }
     }
 }
 
@@ -450,9 +466,11 @@ struct SearchOmiIntent: ShowInAppSearchResultsIntent {
         defer { SiriTelemetry.intent("search", outcome: outcome, started: started) }
         let ask = AskOmiIntent()
         ask.question = criteria.term
-        let result = try await ask.perform()
-        outcome = "ok"
-        return result
+        // Ask catches its own failures and answers with a dialog, so the delegated
+        // outcome — not the mere absence of a throw — is the Search result.
+        let performed = try await ask.performReportingOutcome()
+        outcome = performed.outcome
+        return performed.result
     }
 }
 

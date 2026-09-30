@@ -3765,5 +3765,7 @@
     "speakerSuggestionAppliesToSpeaker": "Застосовується до кожного рядка цього мовця",
     "collapseAction": "Згорнути",
     "speakerTagPromptNotMeAction": "Не я",
-    "confidenceNextLabels": "{count, plural, =1{Позначте їх ще в 1 розмові.} other{Позначте їх ще в {count} розмовах.}}"
+    "confidenceNextLabels": "{count, plural, =1{Позначте їх ще в 1 розмові.} other{Позначте їх ще в {count} розмовах.}}",
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
 }

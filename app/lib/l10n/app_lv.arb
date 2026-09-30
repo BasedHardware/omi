@@ -3765,5 +3765,7 @@
     "speakerSuggestionAppliesToSpeaker": "Attiecas uz katru šī runātāja rindu",
     "collapseAction": "Sakļaut",
     "speakerTagPromptNotMeAction": "Ne es",
-    "confidenceNextLabels": "{count, plural, =1{Atzīmējiet viņus vēl 1 sarunā.} other{Atzīmējiet viņus vēl {count} sarunās.}}"
+    "confidenceNextLabels": "{count, plural, =1{Atzīmējiet viņus vēl 1 sarunā.} other{Atzīmējiet viņus vēl {count} sarunās.}}",
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
 }

@@ -11325,5 +11325,7 @@
     "speakerSuggestionAppliesToSpeaker": "या वक्त्याच्या प्रत्येक ओळीला लागू होते",
     "collapseAction": "आकसा",
     "speakerTagPromptNotMeAction": "मी नाही",
-    "confidenceNextLabels": "{count, plural, =1{त्यांना आणखी 1 संभाषणात लेबल करा.} other{त्यांना आणखी {count} संभाषणांमध्ये लेबल करा.}}"
+    "confidenceNextLabels": "{count, plural, =1{त्यांना आणखी 1 संभाषणात लेबल करा.} other{त्यांना आणखी {count} संभाषणांमध्ये लेबल करा.}}",
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
 }

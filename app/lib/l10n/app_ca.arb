@@ -3765,5 +3765,7 @@
     "speakerSuggestionAppliesToSpeaker": "S'aplica a totes les línies d'aquest parlant",
     "collapseAction": "Replega",
     "speakerTagPromptNotMeAction": "No sóc jo",
-    "confidenceNextLabels": "{count, plural, =1{Etiqueta'ls en 1 conversa més.} other{Etiqueta'ls en {count} converses més.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etiqueta'ls en 1 conversa més.} other{Etiqueta'ls en {count} converses més.}}",
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
 }

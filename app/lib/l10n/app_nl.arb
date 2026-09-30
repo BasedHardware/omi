@@ -3765,5 +3765,7 @@
     "speakerSuggestionAppliesToSpeaker": "Geldt voor elke regel van deze spreker",
     "collapseAction": "Samenvouwen",
     "speakerTagPromptNotMeAction": "Niet ik",
-    "confidenceNextLabels": "{count, plural, =1{Label ze in nog 1 gesprek.} other{Label ze in nog {count} gesprekken.}}"
+    "confidenceNextLabels": "{count, plural, =1{Label ze in nog 1 gesprek.} other{Label ze in nog {count} gesprekken.}}",
+    "siriShortcutsSetupHint": "Zet Omi aan in Sneltoetsen → Siri. Zeg “{askPhrase}” of “{questionPhrase}” en stel daarna je vraag.",
+    "siriShortcutsSearchHint": " Je kunt ook “{searchPhrase} for what I did today” zeggen."
 }

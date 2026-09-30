@@ -3800,5 +3800,7 @@
     "speakerSuggestionAppliesToSpeaker": "S'applique à toutes les lignes de ce locuteur",
     "collapseAction": "Réduire",
     "speakerTagPromptNotMeAction": "Ce n’est pas moi",
-    "confidenceNextLabels": "{count, plural, =1{Étiquetez-les dans 1 conversation de plus.} other{Étiquetez-les dans {count} conversations de plus.}}"
+    "confidenceNextLabels": "{count, plural, =1{Étiquetez-les dans 1 conversation de plus.} other{Étiquetez-les dans {count} conversations de plus.}}",
+    "siriShortcutsSetupHint": "Activez Omi dans Raccourcis → Siri. Dites « {askPhrase} » ou « {questionPhrase} », puis posez votre question.",
+    "siriShortcutsSearchHint": " Vous pouvez aussi dire « {searchPhrase} for what I did today »."
 }

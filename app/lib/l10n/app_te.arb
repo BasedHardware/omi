@@ -11325,5 +11325,7 @@
     "speakerSuggestionAppliesToSpeaker": "ఈ స్పీకర్ చెప్పిన ప్రతి పంక్తికి వర్తిస్తుంది",
     "collapseAction": "కుదించు",
     "speakerTagPromptNotMeAction": "నేను కాదు",
-    "confidenceNextLabels": "{count, plural, =1{ఇంకా 1 సంభాషణలో వారికి లేబుల్ చేయండి.} other{ఇంకా {count} సంభాషణల్లో వారికి లేబుల్ చేయండి.}}"
+    "confidenceNextLabels": "{count, plural, =1{ఇంకా 1 సంభాషణలో వారికి లేబుల్ చేయండి.} other{ఇంకా {count} సంభాషణల్లో వారికి లేబుల్ చేయండి.}}",
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
 }

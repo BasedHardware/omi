@@ -3765,5 +3765,7 @@
     "speakerSuggestionAppliesToSpeaker": "Важи за всеки ред от този говорител",
     "collapseAction": "Свий",
     "speakerTagPromptNotMeAction": "Не съм аз",
-    "confidenceNextLabels": "{count, plural, =1{Етикетирайте човека в още 1 разговор.} other{Етикетирайте човека в още {count} разговора.}}"
+    "confidenceNextLabels": "{count, plural, =1{Етикетирайте човека в още 1 разговор.} other{Етикетирайте човека в още {count} разговора.}}",
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
 }

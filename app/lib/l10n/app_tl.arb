@@ -11325,5 +11325,7 @@
     "speakerSuggestionAppliesToSpeaker": "Nalalapat sa bawat linya mula sa speaker na ito",
     "collapseAction": "I-collapse",
     "speakerTagPromptNotMeAction": "Hindi ako",
-    "confidenceNextLabels": "{count, plural, =1{I-label sila sa 1 pang usapan.} other{I-label sila sa {count} pang usapan.}}"
+    "confidenceNextLabels": "{count, plural, =1{I-label sila sa 1 pang usapan.} other{I-label sila sa {count} pang usapan.}}",
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
 }

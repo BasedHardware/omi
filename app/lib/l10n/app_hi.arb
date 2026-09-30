@@ -3765,5 +3765,7 @@
     "speakerSuggestionAppliesToSpeaker": "इस वक्ता की हर पंक्ति पर लागू होता है",
     "collapseAction": "समेटें",
     "speakerTagPromptNotMeAction": "मैं नहीं हूँ",
-    "confidenceNextLabels": "{count, plural, =1{उन्हें 1 और बातचीत में लेबल करें।} other{उन्हें {count} और बातचीत में लेबल करें।}}"
+    "confidenceNextLabels": "{count, plural, =1{उन्हें 1 और बातचीत में लेबल करें।} other{उन्हें {count} और बातचीत में लेबल करें।}}",
+    "siriShortcutsSetupHint": "शॉर्टकट → Siri में Omi चालू करें। “{askPhrase}” या “{questionPhrase}” कहकर अपना प्रश्न पूछें।",
+    "siriShortcutsSearchHint": " आप “{searchPhrase} for what I did today” भी कह सकते हैं।"
 }

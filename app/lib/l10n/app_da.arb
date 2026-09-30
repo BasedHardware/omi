@@ -3807,5 +3807,7 @@
     "speakerSuggestionAppliesToSpeaker": "Gælder for alle linjer fra denne taler",
     "collapseAction": "Skjul",
     "speakerTagPromptNotMeAction": "Ikke mig",
-    "confidenceNextLabels": "{count, plural, =1{Mærk dem i 1 samtale mere.} other{Mærk dem i {count} samtaler mere.}}"
+    "confidenceNextLabels": "{count, plural, =1{Mærk dem i 1 samtale mere.} other{Mærk dem i {count} samtaler mere.}}",
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”"
 }

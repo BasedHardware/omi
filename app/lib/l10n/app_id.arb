@@ -3800,5 +3800,7 @@
     "speakerSuggestionAppliesToSpeaker": "Berlaku untuk setiap baris dari pembicara ini",
     "collapseAction": "Ciutkan",
     "speakerTagPromptNotMeAction": "Bukan saya",
-    "confidenceNextLabels": "{count, plural, =1{Beri label pada 1 percakapan lagi.} other{Beri label pada {count} percakapan lagi.}}"
+    "confidenceNextLabels": "{count, plural, =1{Beri label pada 1 percakapan lagi.} other{Beri label pada {count} percakapan lagi.}}",
+    "siriShortcutsSetupHint": "Aktifkan Omi di Pintasan → Siri. Ucapkan “{askPhrase}” atau “{questionPhrase}”, lalu ajukan pertanyaan Anda.",
+    "siriShortcutsSearchHint": " Anda juga bisa mengatakan “{searchPhrase} for what I did today”."
 }
