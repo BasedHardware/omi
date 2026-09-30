@@ -19,11 +19,6 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
-from utils.conversations.recovery import (
-    RecoveryStructureUnavailableError,
-    structured_has_protected_content,
-    verified_recovery_discard,
-)
 from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
@@ -227,6 +222,14 @@ def _require_segment_list(parsed: Any) -> List[Any]:
     if not isinstance(parsed, list):
         raise ValueError(f'undecodable transcript_segments: parsed {type(parsed).__name__}')
     return parsed
+
+
+def _is_verified_recovery_discard(write_data: Dict[str, Any]) -> bool:
+    # Imported lazily: several unit harnesses load this module with a stubbed
+    # ``utils`` package that has no ``utils.conversations`` subpackage.
+    from utils.conversations.recovery import verified_recovery_discard
+
+    return verified_recovery_discard(write_data.get('discarded'), write_data.get('relevance_decision'))
 
 
 def _decode_transcript_segments_strict(
@@ -807,7 +810,12 @@ def persist_processing_result_with_lifecycle(
             stale_sync_revision = True
             return False
 
-        if verified_recovery_discard(write_data.get('discarded'), write_data.get('relevance_decision')):
+        if write_data.get('discarded') is True and _is_verified_recovery_discard(write_data):
+            from utils.conversations.recovery import (
+                RecoveryStructureUnavailableError,
+                structured_has_protected_content,
+            )
+
             try:
                 _decode_transcript_segments_strict(
                     uid,
