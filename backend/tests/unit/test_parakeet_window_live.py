@@ -1315,6 +1315,20 @@ async def _settled_fragment_silence(actual, clock, sample, frames, *, wall_secon
     return sample
 
 
+def _observe_first_text_deadline_schedule(monkeypatch, raw):
+    loop = asyncio.get_running_loop()
+    call_later = loop.call_later
+    scheduled = []
+
+    def observed(delay, callback, *args, context=None):
+        if callback == raw._expire_first_text:
+            scheduled.append(delay)
+        return call_later(delay, callback, *args, context=context)
+
+    monkeypatch.setattr(loop, 'call_later', observed)
+    return scheduled
+
+
 def _fire_first_text_deadline_at_budget(raw, clock):
     """Deliver the scheduled callback at its exact wall budget without a 12s sleep."""
     timer = raw._first_text_timer
@@ -1327,9 +1341,11 @@ def _fire_first_text_deadline_at_budget(raw, clock):
 @pytest.mark.asyncio
 async def test_answered_noise_blip_does_not_fail_at_first_text_deadline(monkeypatch):
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    scheduled = _observe_first_text_deadline_schedule(monkeypatch, previous.raw)
     sample = await _settled_fragment_silence(actual, clock, sample, 8)
     sample = await _fragment_frame(actual, clock, sample, speech=True)
     timer = previous.raw._first_text_timer
+    assert scheduled == [12]
     assert timer is not None and previous.raw._first_text_deadline == 12
     sample = await _settled_fragment_silence(actual, clock, sample, 125)
     assert len(client.requests) == 1
@@ -1355,10 +1371,12 @@ async def test_answered_noise_blip_does_not_fail_at_first_text_deadline(monkeypa
 @pytest.mark.parametrize('speech_frames', [25, 50, 150])  # exactly 1, 2 and 6 admitted seconds
 async def test_real_empty_speech_keeps_original_twelve_second_rescue(monkeypatch, speech_frames, caplog):
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    scheduled = _observe_first_text_deadline_schedule(monkeypatch, previous.raw)
     for _ in range(speech_frames):
         sample = await _fragment_frame(actual, clock, sample, speech=True, yield_pump=False)
     timer = previous.raw._first_text_timer
     started_at = previous.raw._deadline_speech_at
+    assert scheduled == [12]
     assert timer is not None and started_at == previous.raw._first_speech_at
     # Queue the long pause before pump selection so each case has exactly
     # one stranded answer, independent of host scheduling at the 6s pace.
@@ -1407,6 +1425,7 @@ async def test_real_empty_speech_keeps_original_twelve_second_rescue(monkeypatch
 @pytest.mark.asyncio
 async def test_repeated_answered_noise_does_not_accumulate_a_startup_failure(monkeypatch):
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    scheduled = _observe_first_text_deadline_schedule(monkeypatch, previous.raw)
     for cycle in range(5):  # Total >1s, but each completed noise episode is short.
         sample = await _settled_fragment_silence(actual, clock, sample, 8)
         sample = await _fragment_frame(actual, clock, sample, speech=True)
@@ -1418,6 +1437,7 @@ async def test_repeated_answered_noise_does_not_accumulate_a_startup_failure(mon
         assert previous.raw._empty_streak == 0
         assert not previous.is_connection_dead
     assert previous.raw._admitted_speech_bytes == 5 * int(0.28 * 16000) * 2
+    assert scheduled == [12] * 5
     assert previous.raw._answered_empty_stranded_flushes == 5
     assert base.emitted == [] and replayed == [] and callbacks == []
     await actual._drain_stt_sockets()
@@ -1427,6 +1447,7 @@ async def test_repeated_answered_noise_does_not_accumulate_a_startup_failure(mon
 @pytest.mark.parametrize('returns_text', [False, True])
 async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(monkeypatch, returns_text):
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    scheduled = _observe_first_text_deadline_schedule(monkeypatch, previous.raw)
     sample = await _settled_fragment_silence(actual, clock, sample, 8)
     sample = await _fragment_frame(actual, clock, sample, speech=True)
     original_first = previous.raw._first_speech_at
@@ -1440,6 +1461,7 @@ async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(mon
     for _ in range(150):
         sample = await _fragment_frame(actual, clock, sample, speech=True, yield_pump=False)
     new_started = previous.raw._deadline_speech_at
+    assert scheduled == [12, 12]
     assert new_started > original_first + 12
     assert previous.raw._first_text_timer is not None
     assert previous.raw._deadline_speech_bytes == (150 + 6) * 640 * 2  # six pre-roll frames
