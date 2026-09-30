@@ -647,8 +647,10 @@ def get_all_people(
     if include_stats and people:
         from utils.people_stats import apply_people_stats, collect_people_stats
 
-        fetch = lambda limit, offset: conversations_db.get_conversations_without_photos(uid, limit=limit, offset=offset)
-        apply_people_stats(people, collect_people_stats(fetch))
+        stats = collect_people_stats(
+            lambda limit, offset: conversations_db.get_conversations_without_photos(uid, limit=limit, offset=offset)
+        )
+        apply_people_stats(people, stats)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):
