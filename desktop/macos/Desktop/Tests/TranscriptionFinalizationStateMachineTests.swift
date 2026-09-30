@@ -162,6 +162,16 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
           """.utf8
         )
       )
+    } else if path == "/v1/conversations/evidence-recording-id/screenshots" {
+      guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) else {
+        return
+      }
+      client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+      client?.urlProtocol(
+        self,
+        didLoad: Data(
+          #"{"revision":0,"strip":[],"trusted_selection_fingerprint":"meeting-content-v1:1783418401623:1783418458373"}"#
+            .utf8))
     } else if path == "/v1/conversations/evidence-recording-id"
       || path == "/v1/conversations/evidence-recording-id/finalize"
     {
@@ -812,7 +822,10 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
       recorded.contains("adjudicate evidence-recording-id meeting-content-v1:1783418401623:1783418458373 posts=0"),
       "adjudication must run on the server's window before any finalize request: \(recorded)")
     let requests = FinalizationRecoveryURLStub.requests.map { "\($0.method) \($0.url.path)" }
-    let read = try XCTUnwrap(requests.firstIndex(of: "GET /v1/conversations/evidence-recording-id"))
+    XCTAssertFalse(
+      requests.contains("GET /v1/conversations/evidence-recording-id"),
+      "background evidence must not open the conversation: the detail route runs first-open work")
+    let read = try XCTUnwrap(requests.firstIndex(of: "GET /v1/conversations/evidence-recording-id/screenshots"))
     let finalize = try XCTUnwrap(requests.firstIndex(of: "POST /v1/conversations/evidence-recording-id/finalize"))
     XCTAssertLessThan(read, finalize, "screen evidence must be gathered before the backend is asked to write notes")
     let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)

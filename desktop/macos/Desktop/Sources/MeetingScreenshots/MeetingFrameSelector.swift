@@ -45,9 +45,30 @@ struct MeetingScreenshotSelectionWindow: Equatable, Sendable {
 
   let start: Date
   let end: Date
+  /// The server's own fingerprint, verbatim, when the window was read from it rather than derived.
+  private var serverFingerprint: String?
+
+  init(start: Date, end: Date) {
+    self.start = start
+    self.end = end
+  }
+
+  /// The window the server reports as `trusted_selection_fingerprint`. Its milliseconds are
+  /// rounded, so selection runs 1 ms inside them: a frame that rounding placed on the boundary
+  /// could fall a fraction of a millisecond outside the server's exact window, and one frame
+  /// outside rejects the whole adjudication request. The fingerprint itself is kept verbatim.
+  init?(serverFingerprint: String) {
+    let parts = serverFingerprint.split(separator: ":")
+    guard parts.count == 3, parts[0] == Self.policy, let startMs = Int64(parts[1]), let endMs = Int64(parts[2]),
+      endMs - startMs > 2
+    else { return nil }
+    start = Date(timeIntervalSince1970: Double(startMs + 1) / 1_000)
+    end = Date(timeIntervalSince1970: Double(endMs - 1) / 1_000)
+    self.serverFingerprint = serverFingerprint
+  }
 
   var fingerprint: String {
-    "\(Self.policy):\(Self.serverMilliseconds(start)):\(Self.serverMilliseconds(end))"
+    serverFingerprint ?? "\(Self.policy):\(Self.serverMilliseconds(start)):\(Self.serverMilliseconds(end))"
   }
 
   /// `round(datetime.timestamp() * 1000)` for a microsecond-precise instant.

@@ -75,11 +75,13 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
       stampedFingerprint: try XCTUnwrap(vector.fingerprint))
     let selections = SelectionCounter()
     let pass = Self.makePass(server: server, selections: selections)
+    // Finalization reads the window the server reports on its side-effect-free screenshots route.
+    let serverFingerprint = try XCTUnwrap(vector.fingerprint)
 
     let outcome = await pass.beforeNotes(
       captureInterval: DateInterval(start: Date(timeIntervalSince1970: 1_790_769_600), duration: 60),
       conversationID: conversation.id,
-      fetchConversation: { conversation })
+      fetchSelectionWindow: { MeetingScreenshotSelectionWindow(serverFingerprint: serverFingerprint) })
 
     XCTAssertEqual(outcome, .settled(.ready))
     XCTAssertEqual(selections.count, 1)
@@ -113,7 +115,7 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
       await pass.beforeNotes(
         captureInterval: DateInterval(start: window.start, end: window.end),
         conversationID: conversation.id,
-        fetchConversation: { conversation })
+        fetchSelectionWindow: { window })
     }
     await server.waitUntilAdjudicationStarts()
 
@@ -145,7 +147,7 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     let outcome = await pass.beforeNotes(
       captureInterval: DateInterval(start: Date(timeIntervalSince1970: 0), duration: 10),
       conversationID: "slow",
-      fetchConversation: { try Self.decodeConversation(Self.serverVectors[3], id: "slow") })
+      fetchSelectionWindow: { Self.sampleWindow })
 
     XCTAssertEqual(outcome, .timedOut)
     await released.set()
@@ -164,19 +166,19 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     let interval = DateInterval(start: Date(timeIntervalSince1970: 0), duration: 10)
 
     let disabled = await pass.beforeNotes(
-      captureInterval: interval, conversationID: "id", fetchConversation: { throw URLError(.timedOut) })
+      captureInterval: interval, conversationID: "id", fetchSelectionWindow: { throw URLError(.timedOut) })
     XCTAssertEqual(disabled, .disabled)
 
     pass.screenshotsEnabled = { true }
     pass.adjudicate = { _, _ in .failed("409 screen_frame_egress_unavailable") }
     let unavailable = await pass.beforeNotes(
-      captureInterval: interval, conversationID: "id", fetchConversation: { throw URLError(.timedOut) })
+      captureInterval: interval, conversationID: "id", fetchSelectionWindow: { throw URLError(.timedOut) })
     XCTAssertEqual(unavailable, .conversationUnavailable)
-    let unbound = await pass.beforeNotes(captureInterval: interval, conversationID: nil, fetchConversation: nil)
+    let unbound = await pass.beforeNotes(captureInterval: interval, conversationID: nil, fetchSelectionWindow: nil)
     XCTAssertEqual(unbound, .conversationUnavailable)
     let egressOff = await pass.beforeNotes(
       captureInterval: interval, conversationID: "id",
-      fetchConversation: { try Self.decodeConversation(Self.serverVectors[3], id: "id") })
+      fetchSelectionWindow: { Self.sampleWindow })
     XCTAssertEqual(egressOff, .settled(.failed("409 screen_frame_egress_unavailable")))
 
     let flushes = await flushed.value
@@ -192,11 +194,7 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
       sleep: { _ in },
       recordFallback: { fallbacks.record($0) })
     let interval = DateInterval(start: Date(timeIntervalSince1970: 0), duration: 10)
-    let conversation = try? Self.decodeConversation(Self.serverVectors[3], id: "telemetry")
-    let fetch: @Sendable () async throws -> ServerConversation = {
-      guard let conversation else { throw URLError(.badServerResponse) }
-      return conversation
-    }
+    let fetch: @Sendable () async throws -> MeetingScreenshotSelectionWindow? = { Self.sampleWindow }
 
     let blocked = AsyncFlag()
     pass.adjudicate = { _, _ in
@@ -204,7 +202,7 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
       return .ready
     }
     let timedOut = await pass.beforeNotes(
-      captureInterval: interval, conversationID: "telemetry", fetchConversation: fetch)
+      captureInterval: interval, conversationID: "telemetry", fetchSelectionWindow: fetch)
     XCTAssertEqual(timedOut, .timedOut)
     XCTAssertTrue(timedOut.needsRetryAfterFinalize)
     await blocked.set()
@@ -212,12 +210,12 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     pass.sleep = boundThatNeverFires
     pass.adjudicate = { _, _ in .failed("503") }
     let failed = await pass.beforeNotes(
-      captureInterval: interval, conversationID: "telemetry", fetchConversation: fetch)
+      captureInterval: interval, conversationID: "telemetry", fetchSelectionWindow: fetch)
     XCTAssertTrue(failed.needsRetryAfterFinalize)
 
     pass.adjudicate = { _, _ in .ready }
     let settled = await pass.beforeNotes(
-      captureInterval: interval, conversationID: "telemetry", fetchConversation: fetch)
+      captureInterval: interval, conversationID: "telemetry", fetchSelectionWindow: fetch)
     XCTAssertFalse(settled.needsRetryAfterFinalize)
 
     XCTAssertEqual(fallbacks.reasons, ["timeout", "upload_failed"], "a settled pass records no fallback")
@@ -258,11 +256,11 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     let before = await pass.beforeNotes(
       captureInterval: DateInterval(start: window.start, end: window.end),
       conversationID: conversation.id,
-      fetchConversation: { conversation })
+      fetchSelectionWindow: { window })
     XCTAssertEqual(before, .timedOut)
 
     let retry = Task { @MainActor in
-      await pass.afterFinalize(conversationID: conversation.id, fetchConversation: { conversation })
+      await pass.afterFinalize(conversationID: conversation.id, fetchSelectionWindow: { window })
     }
     await server.releaseAdjudication()
     let after = await retry.value
@@ -369,6 +367,40 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     _ = await (first, second)
     XCTAssertEqual(server.fetches, 3)
     XCTAssertEqual(note.frames.first?.thumbnailURL, "https://example.test/thumb-3.jpg")
+  }
+
+  private static let sampleWindow = MeetingScreenshotSelectionWindow(
+    start: Date(timeIntervalSince1970: 5_000), end: Date(timeIntervalSince1970: 5_600))
+
+  func testServerReportedWindowKeepsItsFingerprintAndSelectsInsideIt() throws {
+    for vector in Self.serverVectors {
+      guard let fingerprint = vector.fingerprint else { continue }
+      let window = try XCTUnwrap(MeetingScreenshotSelectionWindow(serverFingerprint: fingerprint), vector.name)
+      XCTAssertEqual(window.fingerprint, fingerprint, vector.name)
+      let derived = try XCTUnwrap(MeetingScreenshotSelectionWindow.resolve(Self.decodeConversation(vector)))
+      XCTAssertEqual(window.fingerprint, derived.fingerprint, "the note view derives the same key: \(vector.name)")
+      // Strictly inside the server's exact window, whichever way its milliseconds were rounded.
+      XCTAssertGreaterThan(window.start, derived.start, vector.name)
+      XCTAssertLessThan(window.end, derived.end, vector.name)
+    }
+    for malformed in ["", "meeting-lifecycle-v0:1:9", "meeting-content-v1:9:1", "meeting-content-v1:a:b"] {
+      XCTAssertNil(MeetingScreenshotSelectionWindow(serverFingerprint: malformed), malformed)
+    }
+  }
+
+  func testAfterFinalizeFailureRecordsDegradedFallbackToNoteOpen() async {
+    let fallbacks = FallbackRecorder()
+    let pass = MeetingScreenEvidencePass(
+      screenshotsEnabled: { true },
+      flushScreenActivity: { _ in },
+      adjudicate: { _, _ in .failed("503") },
+      sleep: boundThatNeverFires,
+      recordFallback: { fallbacks.record($0) })
+
+    let outcome = await pass.afterFinalize(conversationID: "finalized", fetchSelectionWindow: { Self.sampleWindow })
+
+    XCTAssertEqual(outcome, .settled(.failed("503")))
+    XCTAssertEqual(fallbacks.recorded, [.init(reason: "upload_failed", from: "after_finalize", to: "note_open")])
   }
 
   // MARK: - Helpers

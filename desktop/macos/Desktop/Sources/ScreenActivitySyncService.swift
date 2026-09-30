@@ -245,12 +245,13 @@ actor ScreenActivitySyncService {
   /// captured after the meeting ended stay pending and may later ship one more winner for that
   /// bucket; that bounded extra document is the price of notes that see the end of the call.
   /// Legacy (cursor) sync is left alone. Best effort: every failure leaves the periodic path to it.
-  func flushMeetingWindow(_ interval: DateInterval, limit: Int = 200) async {
+  func flushMeetingWindow(_ interval: DateInterval, deadline: Date) async {
     let losslessEnabled = await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
     guard losslessEnabled, let dbPool = await getDBPool() else { return }
     await Self.flushMeetingWindow(
-      interval, limit: limit, database: dbPool,
+      interval, database: dbPool,
       push: { await self.pushRows($0) },
+      shouldContinue: { Date() < deadline },
       recordFallback: { reason in
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "meeting_screen_evidence", from: "ocr_flush", to: "periodic_sync", reason: reason,
@@ -258,47 +259,62 @@ actor ScreenActivitySyncService {
       })
   }
 
+  /// `POST /v1/screen-activity/sync` rejects a body of more than 100 rows with a 400.
+  static let meetingFlushBatchSize = 100
+
   /// Result of one meeting flush, for the caller's log and for tests.
   enum MeetingFlushResult: Equatable {
     case nothingPending
     case synced(Int)
-    /// Degraded: notes are written without these rows, which the periodic path ships later.
-    case pushFailed
-    case databaseFailed
+    /// Degraded from here on: notes are written without the rest, which the periodic path ships.
+    case pushFailed(synced: Int)
+    case databaseFailed(synced: Int)
+    case deadlineReached(synced: Int)
   }
 
-  /// The flush itself, over any database and transport. A failure is a fail-open path — the notes
-  /// proceed without the end of the call's screen text — so it records degraded telemetry.
+  /// The flush itself, over any database and transport: compact once, then ship the meeting's
+  /// pending rows in batches the sync route accepts, until none remain or `shouldContinue` (the pass
+  /// deadline) says stop. Stopping early is a fail-open path — the notes proceed without the rest of
+  /// the call's screen text — so every early stop records degraded telemetry.
   @discardableResult
   static func flushMeetingWindow(
     _ interval: DateInterval,
-    limit: Int,
+    batchSize: Int = meetingFlushBatchSize,
     database: any DatabaseWriter,
     push: ([[String: Any]]) async -> Bool,
+    shouldContinue: () -> Bool,
     recordFallback: (String) -> Void,
     isolation: isolated (any Actor)? = #isolation
   ) async -> MeetingFlushResult {
+    var synced = 0
     do {
-      let candidates = try await database.write { db in
-        try compactMeetingWindow(db: db, interval: interval)
-        return try fetchMeetingWindowCandidates(db: db, interval: interval, limit: limit)
+      try await database.write { db in try compactMeetingWindow(db: db, interval: interval) }
+      while true {
+        let candidates = try await database.read { db in
+          try fetchMeetingWindowCandidates(db: db, interval: interval, limit: batchSize)
+        }
+        guard !candidates.isEmpty else { break }
+        guard shouldContinue() else {
+          log("ScreenActivitySync: meeting flush stopped at the deadline after \(synced) rows")
+          recordFallback("timeout")
+          return .deadlineReached(synced: synced)
+        }
+        guard await push(candidates.map(\.payload)) else {
+          log("ScreenActivitySync: meeting flush push failed; periodic sync will retry")
+          recordFallback("upload_failed")
+          return .pushFailed(synced: synced)
+        }
+        try await database.write { db in try markCandidatesSynced(db: db, candidates: candidates) }
+        synced += candidates.count
       }
-      guard !candidates.isEmpty else { return .nothingPending }
-      guard await push(candidates.map(\.payload)) else {
-        log("ScreenActivitySync: meeting flush push failed; periodic sync will retry")
-        recordFallback("upload_failed")
-        return .pushFailed
-      }
-      try await database.write { db in
-        try markCandidatesSynced(db: db, candidates: candidates)
-      }
-      log("ScreenActivitySync: meeting flush synced \(candidates.count) rows")
-      return .synced(candidates.count)
     } catch {
       log("ScreenActivitySync: meeting flush read/write error — \(error.localizedDescription)")
       recordFallback("other")
-      return .databaseFailed
+      return .databaseFailed(synced: synced)
     }
+    guard synced > 0 else { return .nothingPending }
+    log("ScreenActivitySync: meeting flush synced \(synced) rows")
+    return .synced(synced)
   }
 
   /// `compactClosedBuckets` restricted to one meeting interval, without waiting for the bucket to

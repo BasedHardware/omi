@@ -200,8 +200,9 @@ final class ScreenActivityLosslessSyncTests: XCTestCase {
     var reasons: [String] = []
 
     let pushFailed = await ScreenActivitySyncService.flushMeetingWindow(
-      meeting, limit: 100, database: queue, push: { _ in false }, recordFallback: { reasons.append($0) })
-    XCTAssertEqual(pushFailed, .pushFailed)
+      meeting, database: queue, push: { _ in false }, shouldContinue: { true },
+      recordFallback: { reasons.append($0) })
+    XCTAssertEqual(pushFailed, .pushFailed(synced: 0))
     let state = try await queue.read { db in
       try Int.fetchOne(db, sql: "SELECT screenActivitySyncState FROM screenshots WHERE id = 1")
     }
@@ -209,13 +210,64 @@ final class ScreenActivityLosslessSyncTests: XCTestCase {
 
     let brokenDatabase = try DatabaseQueue()  // no screenshots table
     let databaseFailed = await ScreenActivitySyncService.flushMeetingWindow(
-      meeting, limit: 100, database: brokenDatabase, push: { _ in true }, recordFallback: { reasons.append($0) })
-    XCTAssertEqual(databaseFailed, .databaseFailed)
+      meeting, database: brokenDatabase, push: { _ in true }, shouldContinue: { true },
+      recordFallback: { reasons.append($0) })
+    XCTAssertEqual(databaseFailed, .databaseFailed(synced: 0))
 
     let synced = await ScreenActivitySyncService.flushMeetingWindow(
-      meeting, limit: 100, database: queue, push: { _ in true }, recordFallback: { reasons.append($0) })
+      meeting, database: queue, push: { _ in true }, shouldContinue: { true },
+      recordFallback: { reasons.append($0) })
     XCTAssertEqual(synced, .synced(1))
     XCTAssertEqual(reasons, ["upload_failed", "other"], "a successful flush records nothing")
+  }
+
+  /// The sync route rejects more than 100 rows with a 400, so a long meeting ships in batches, and
+  /// the pass deadline stops the drain with degraded telemetry rather than holding the notes.
+  func testMeetingFlushShipsBatchesTheSyncRouteAcceptsAndStopsAtTheDeadline() async throws {
+    let queue = try makeLegacyQueue()
+    let start = Date(timeIntervalSince1970: 1_700_000_100)
+    let meeting = DateInterval(start: start, duration: 3_600)
+    try await queue.write { db in
+      try RewindDatabase.installScreenActivitySyncStateSchema(db)
+      // 250 distinct windows, so compaction keeps every row.
+      for index in 0..<250 {
+        try db.execute(
+          sql: "INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText) VALUES (?, ?, ?, ?)",
+          arguments: [start.addingTimeInterval(Double(index)), "SyntheticApp", "Window \(index)", "text \(index)"])
+      }
+    }
+    var batches: [Int] = []
+    var reasons: [String] = []
+
+    let drained = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue,
+      push: { rows in
+        batches.append(rows.count)
+        return true
+      },
+      shouldContinue: { true }, recordFallback: { reasons.append($0) })
+    XCTAssertEqual(drained, .synced(250))
+    XCTAssertEqual(batches, [100, 100, 50])
+
+    try await queue.write { db in
+      try db.execute(sql: "UPDATE screenshots SET screenActivitySyncState = 0")
+    }
+    batches = []
+    var allowed = 1
+    let stopped = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue,
+      push: { rows in
+        batches.append(rows.count)
+        return true
+      },
+      shouldContinue: {
+        allowed -= 1
+        return allowed >= 0
+      },
+      recordFallback: { reasons.append($0) })
+    XCTAssertEqual(stopped, .deadlineReached(synced: 100))
+    XCTAssertEqual(batches, [100])
+    XCTAssertEqual(reasons, ["timeout"])
   }
 
   /// A row whose vector is still pending must not ship text-only and then ship again unchanged:

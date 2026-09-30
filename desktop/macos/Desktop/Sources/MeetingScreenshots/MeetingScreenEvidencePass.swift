@@ -72,7 +72,11 @@ struct MeetingScreenEvidencePass: Sendable {
 
   static let production = MeetingScreenEvidencePass(
     screenshotsEnabled: { MeetingNoteScreenshotsFeature.isEnabled },
-    flushScreenActivity: { await ScreenActivitySyncService.shared.flushMeetingWindow($0) },
+    flushScreenActivity: {
+      // Drain within the pass bound; whatever is left ships on the periodic path.
+      let seconds = Double(defaultTimeout.components.seconds)
+      await ScreenActivitySyncService.shared.flushMeetingWindow($0, deadline: Date().addingTimeInterval(seconds))
+    },
     adjudicate: { @MainActor conversationID, window in
       // A fresh store shares the static cache and in-flight map with every note view, so this is
       // the same run a note opened mid-flight awaits, and its result is what that note renders.
@@ -93,7 +97,7 @@ struct MeetingScreenEvidencePass: Sendable {
   func beforeNotes(
     captureInterval: DateInterval,
     conversationID: String?,
-    fetchConversation: (@Sendable () async throws -> ServerConversation)?
+    fetchSelectionWindow: (@Sendable () async throws -> MeetingScreenshotSelectionWindow?)?
   ) async -> Outcome {
     let enabled = await screenshotsEnabled()
     let pass = self
@@ -103,8 +107,8 @@ struct MeetingScreenEvidencePass: Sendable {
         let outcome: Outcome
         if !enabled {
           outcome = .disabled
-        } else if let conversationID, let fetchConversation {
-          outcome = await pass.adjudicate(conversationID: conversationID, fetchConversation: fetchConversation)
+        } else if let conversationID, let fetchSelectionWindow {
+          outcome = await pass.adjudicate(conversationID: conversationID, fetchSelectionWindow: fetchSelectionWindow)
         } else {
           outcome = .conversationUnavailable
         }
@@ -131,11 +135,15 @@ struct MeetingScreenEvidencePass: Sendable {
   /// this Mac. A run the bound left in flight is joined through the store, never repeated.
   func afterFinalize(
     conversationID: String,
-    fetchConversation: @Sendable () async throws -> ServerConversation
+    fetchSelectionWindow: @Sendable () async throws -> MeetingScreenshotSelectionWindow?
   ) async -> Outcome {
     guard await screenshotsEnabled() else { return .disabled }
-    let outcome = await adjudicate(conversationID: conversationID, fetchConversation: fetchConversation)
+    let outcome = await adjudicate(conversationID: conversationID, fetchSelectionWindow: fetchSelectionWindow)
     log("MeetingScreenEvidence: after-finalize pass for \(conversationID) -> \(outcome)")
+    if let reason = Fallback.reason(for: outcome) {
+      // The last automatic attempt: only the note view's retry on open is left.
+      recordFallback(Fallback(reason: reason, from: "after_finalize", to: "note_open"))
+    }
     return outcome
   }
 
@@ -155,13 +163,27 @@ struct MeetingScreenEvidencePass: Sendable {
 
   private func adjudicate(
     conversationID: String,
-    fetchConversation: @Sendable () async throws -> ServerConversation
+    fetchSelectionWindow: @Sendable () async throws -> MeetingScreenshotSelectionWindow?
   ) async -> Outcome {
-    guard let conversation = try? await fetchConversation() else { return .conversationUnavailable }
-    // The same resolver the note view uses, over the same server document, so the fingerprint the
-    // server stamps is the one the note later asks for.
-    guard let window = MeetingScreenshotSelectionWindow.resolve(conversation) else { return .untrustedWindow }
+    // The server's own trusted window, from a side-effect-free read: this pass runs for notes
+    // nobody has opened, so it must never trigger first-open work. Nil (no trusted window yet, or a
+    // server that predates the field) leaves the note view to adjudicate on open.
+    let window: MeetingScreenshotSelectionWindow?
+    do {
+      window = try await fetchSelectionWindow()
+    } catch {
+      return .conversationUnavailable
+    }
+    guard let window else { return .untrustedWindow }
     return .settled(await adjudicate(conversationID, window))
+  }
+
+  /// The side-effect-free window read: `GET /v1/conversations/{id}/screenshots`.
+  static func serverSelectionWindow(
+    conversationID: String, client: APIClient
+  ) async throws -> MeetingScreenshotSelectionWindow? {
+    try await client.getConversationScreenFrames(conversationID: conversationID).trustedSelectionFingerprint
+      .flatMap(MeetingScreenshotSelectionWindow.init(serverFingerprint:))
   }
 
   /// The first of `work` or the bound. `work` is not cancelled when the bound wins: it runs to

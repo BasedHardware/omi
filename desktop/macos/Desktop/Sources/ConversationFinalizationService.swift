@@ -173,7 +173,7 @@ actor ConversationFinalizationService {
         if session.conversationRole == .meeting {
           // `/from-segments` writes the notes synchronously, so the OCR flush must precede it.
           _ = await screenEvidencePass.beforeNotes(
-            captureInterval: Self.captureInterval(of: session), conversationID: nil, fetchConversation: nil)
+            captureInterval: Self.captureInterval(of: session), conversationID: nil, fetchSelectionWindow: nil)
         }
         meetingTreatmentEligible = try await uploadLocalSegments(sessionId: sessionId)
       case .cloudReconcile:
@@ -439,7 +439,9 @@ actor ConversationFinalizationService {
     let before = await screenEvidencePass.beforeNotes(
       captureInterval: Self.captureInterval(of: session),
       conversationID: conversationId,
-      fetchConversation: { try await client.getConversation(id: conversationId) })
+      fetchSelectionWindow: {
+        try await MeetingScreenEvidencePass.serverSelectionWindow(conversationID: conversationId, client: client)
+      })
     let conversation = try await apiClient.finalizeConversation(id: conversationId)
     if before.needsRetryAfterFinalize {
       retryScreenEvidenceAfterFinalize(conversationID: conversation.id)
@@ -460,7 +462,9 @@ actor ConversationFinalizationService {
       if await Self.awaitTerminalFinalization(conversationID: conversationID, client: client) {
         _ = await pass.afterFinalize(
           conversationID: conversationID,
-          fetchConversation: { try await client.getConversation(id: conversationID) })
+          fetchSelectionWindow: {
+            try await MeetingScreenEvidencePass.serverSelectionWindow(conversationID: conversationID, client: client)
+          })
       }
       await self?.clearScreenEvidenceRetry(conversationID: conversationID)
     }
@@ -589,7 +593,7 @@ actor ConversationFinalizationService {
       // The conversation id is unknown until force-process answers, so only the OCR flush can
       // precede it here.
       _ = await screenEvidencePass.beforeNotes(
-        captureInterval: Self.captureInterval(of: session), conversationID: nil, fetchConversation: nil)
+        captureInterval: Self.captureInterval(of: session), conversationID: nil, fetchSelectionWindow: nil)
     }
     if allowForceProcess, let conversation = try await apiClient.forceProcessConversation() {
       if DesktopConversationMatchPolicy.matchesDesktopConversation(
