@@ -378,6 +378,7 @@ class TestNullCoercion(_BaseTest):
         )
         self.assertEqual(cleaned, {"uid": "u"})
 
+    @unittest.skipUnless(REAL_PYDANTIC, "requires real pydantic validation")
     def test_list_tastings_null_limit_takes_default(self):
         req = tasting_main.ListTastingsRequest.model_validate(
             {"uid": UID, "limit": None, "beverage_type": None}
@@ -385,6 +386,7 @@ class TestNullCoercion(_BaseTest):
         self.assertEqual(req.limit, 10)
         self.assertIsNone(req.beverage_type)
 
+    @unittest.skipUnless(REAL_PYDANTIC, "requires real pydantic validation")
     def test_log_tasting_all_optionals_null(self):
         req = tasting_main.LogTastingRequest.model_validate(
             {
@@ -399,12 +401,14 @@ class TestNullCoercion(_BaseTest):
         self.assertEqual(req.beverage_type, "wine")
         self.assertIsNone(req.score_100)
 
+    @unittest.skipUnless(REAL_PYDANTIC, "requires real pydantic validation")
     def test_list_candidates_null_limit_takes_default(self):
         req = tasting_main.ListCandidatesRequest.model_validate(
             {"uid": UID, "limit": None}
         )
         self.assertEqual(req.limit, 10)
 
+    @unittest.skipUnless(REAL_PYDANTIC, "requires real pydantic validation")
     def test_confirm_candidate_null_corrections(self):
         req = tasting_main.ConfirmCandidateRequest.model_validate(
             {

@@ -11,7 +11,7 @@ Two capture paths:
    confirm the structured fields: beverage, name, producer, vintage, region,
    varietal, nose / palate / finish notes, 0–100 score, buy / skip / cellar verdict.
 2. **Ambient webhook (implicit)** — Omi posts the finished `Conversation` to
-   `/webhook/tasting-candidate?uid=<user-id>`. The app scores the transcript
+   `/webhook/tasting-candidate` (it appends `?uid=<user-id>` itself). The app scores the transcript
    against a weighted tasting vocabulary (wine, coffee, whiskey, beer),
    extracts a normalized score ("94 points", "4.5 stars", "9/10") and a
    buy/skip verdict from explicit purchase language, and stores strong matches
@@ -67,8 +67,9 @@ uids as bearer tokens and don't share them.
 
 ## Wiring the ambient webhook
 
-Point Omi's conversation webhook at
-`https://<your-host>/webhook/tasting-candidate?uid=<omi-user-id>`.
+Point Omi's conversation webhook at the bare URL
+`https://<your-host>/webhook/tasting-candidate` — Omi appends
+`?uid=<omi-user-id>` itself, so don't add it.
 Omi posts the standard `Conversation` payload (`transcript_segments`,
 `structured`, …); the uid arrives as a query parameter, following the same
 convention as the other `omi-*-app` webhook endpoints. Only conversations

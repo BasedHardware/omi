@@ -371,10 +371,24 @@ class LogTastingRequest(_NullMeansDefault):
         return normalized
 
 
+def _coerce_limit(value: Any) -> int:
+    """Shared limit coercion: null -> default 10, numeric strings accepted,
+    enforced to 1..50 (so Field(ge/le) would be redundant)."""
+    if value is None:
+        return 10
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("limit must be an integer between 1 and 50")
+    if not 1 <= coerced <= 50:
+        raise ValueError("limit must be an integer between 1 and 50")
+    return coerced
+
+
 class ListTastingsRequest(_NullMeansDefault):
     uid: str = Field(..., min_length=1)
     beverage_type: Optional[str] = None
-    limit: Optional[int] = Field(default=10, ge=1, le=50)
+    limit: Optional[int] = 10
 
     @field_validator("beverage_type", mode="before")
     @classmethod
@@ -389,33 +403,17 @@ class ListTastingsRequest(_NullMeansDefault):
     @field_validator("limit", mode="before")
     @classmethod
     def coerce_limit(cls, value: Any) -> int:
-        if value is None:
-            return 10
-        try:
-            coerced = int(value)
-        except (TypeError, ValueError):
-            raise ValueError("limit must be an integer between 1 and 50")
-        if not 1 <= coerced <= 50:
-            raise ValueError("limit must be an integer between 1 and 50")
-        return coerced
+        return _coerce_limit(value)
 
 
 class ListCandidatesRequest(_NullMeansDefault):
     uid: str = Field(..., min_length=1)
-    limit: Optional[int] = Field(default=10, ge=1, le=50)
+    limit: Optional[int] = 10
 
     @field_validator("limit", mode="before")
     @classmethod
     def coerce_limit(cls, value: Any) -> int:
-        if value is None:
-            return 10
-        try:
-            coerced = int(value)
-        except (TypeError, ValueError):
-            raise ValueError("limit must be an integer between 1 and 50")
-        if not 1 <= coerced <= 50:
-            raise ValueError("limit must be an integer between 1 and 50")
-        return coerced
+        return _coerce_limit(value)
 
 
 class GetTastingRequest(_NullMeansDefault):
