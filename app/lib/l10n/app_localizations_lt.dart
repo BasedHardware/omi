@@ -11663,4 +11663,472 @@ class AppLocalizationsLt extends AppLocalizations {
   String diagnosticsCountSincePairing(int count) {
     return '$count nuo susiejimo';
   }
+
+  @override
+  String get peopleFilterLowConfidence => 'Mažas tikrumas';
+
+  @override
+  String get peopleFilterPinned => 'Prisegti';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Prisegta: $count',
+      one: '1 prisegtas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Patvirtintas';
+
+  @override
+  String get confidenceLikely => 'Tikėtinas';
+
+  @override
+  String get confidenceUnverified => 'Nepatvirtintas';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Tikrumas: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pažymėjote kartų: $count',
+      one: 'Pažymėjote vieną kartą',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pasirinkta pasiūlymų: $count',
+      one: 'Pasirinkta 1 pasiūlyme',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Patvirtinote atitikmenų: $count',
+      one: 'Patvirtinote 1 atitikmenį',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Tik automatiškai suderinta, niekada nepatvirtinta';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Niekada nepatvirtinta';
+
+  @override
+  String get confidenceReasonCorrected => 'Pataisėte jo atitikmenį';
+
+  @override
+  String get confidenceReasonVoiceReady => 'balsas paruoštas';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'reikia balso';
+
+  @override
+  String get confidenceReasonNotHeard => 'dar negirdėta';
+
+  @override
+  String get confidenceSheetTitle => 'Tikrumas';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi atpažįsta $name balsą, ir jūs tai patvirtinote.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi dažniausiai atpažįsta $name balsą, bet patvirtinote tik kelis kartus.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Nieko, ką padarėte, kol kas nepatvirtina $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Įrodymai';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Jūs pažymėjote pokalbiuose: $count',
+      one: 'Jūs pažymėjote 1 pokalbyje',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Taip pasiūlymuose: $count',
+      one: 'Taip 1 pasiūlyme',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pasirinkta pasiūlymų: $count',
+      one: 'Pasirinkta 1 pasiūlyme',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Patvirtinta automatinių atitikmenų: $count',
+      one: 'Patvirtintas 1 automatinis atitikmuo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Atitikmenų perkelta kitiems: $count',
+      one: '1 atitikmuo perkeltas kitam',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Automatinių atitikmenų be patvirtinimo: $count',
+      one: '1 automatinis atitikmuo, kurio niekas nepatvirtino',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Balso pavyzdys paruoštas';
+
+  @override
+  String get evidenceNoVoice => 'Balso pavyzdžio dar nėra';
+
+  @override
+  String get evidenceNotHeard => 'Dar negirdėta pokalbyje';
+
+  @override
+  String get evidenceNothing => 'Dar nepažymėjote ir nepatvirtinote';
+
+  @override
+  String get effectCountsALot => 'Daug reiškia';
+
+  @override
+  String get effectCounts => 'Reiškia';
+
+  @override
+  String get effectCountsALittle => 'Šiek tiek reiškia';
+
+  @override
+  String get effectBarelyCounts => 'Vos reiškia';
+
+  @override
+  String get effectCountsAgainst => 'Rodo priešingai';
+
+  @override
+  String get effectNeeded => 'Reikia, kad būtų patvirtintas';
+
+  @override
+  String get confidenceToReachConfirmed => 'Kad taptų patvirtintas';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi taip pat reikia $name balso pavyzdžio. Pažymėkite, kai įjungta „Prisiminti balsus“.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name yra patvirtintas. Omi mokosi iš kiekvieno pažymėjimo.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Tikrumą daug keičia tik jūsų atsakymai. Vien automatiniai atitikmenys vos ką reiškia.';
+
+  @override
+  String get personWhyConfidence => 'Kodėl?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Prisegti $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Palikti $name ir tikėtis jų jūsų pokalbiuose';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi paprašys jūsų patvirtinti artimus atitikmenis, o ne spėlios.';
+
+  @override
+  String get pinAction => 'Prisegti';
+
+  @override
+  String get unpinAction => 'Atsegti';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Prisegta: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Atsegta: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Kodėl $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Ištrinti $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Prisegta: $name. Balso pavyzdžiai bus pašalinti, Omi nustos atpažinti šį asmenį, o ankstesnėse transkripcijose jis bus rodomas kaip bevardis kalbėtojas. Šio veiksmo atšaukti negalima.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Ištrinti $name';
+  }
+
+  @override
+  String get selectPeople => 'Pasirinkti žmones';
+
+  @override
+  String get cleanUpEllipsis => 'Sutvarkyti…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omi abejoja dėl žmonių: $count',
+      one: 'Omi abejoja dėl 1 asmens',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'Dažniausiai neteisingai išgirsti vardai. Peržiūrėkite ir pašalinkite tuos, kurie nėra tikri.';
+
+  @override
+  String get reviewAction => 'Peržiūrėti';
+
+  @override
+  String get cleanUpTitle => 'Sutvarkymas';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi abejoja dėl šių žmonių: $count. Dauguma yra neteisingai išgirsti vardai iš transkripcijų. Nuimkite varnelę prie tų, kuriuos norite palikti.',
+      one: 'Omi abejoja dėl šio asmens. Nuimkite varnelę, jei norite jį palikti.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Prisegti žmonės niekada neįtraukiami į sutvarkymą.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ištrinti žmonių: $count',
+      one: 'Ištrinti 1 asmenį',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ištrinta žmonių: $count',
+      one: 'Ištrintas 1 asmuo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Nėra ką tvarkyti';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi šiuo metu dėl nieko neabejoja.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Pasirinkus viską, prisegti žmonės praleidžiami. Ištrinkite juos po vieną jų puslapyje.';
+
+  @override
+  String get pinnedNotSelectable => 'Prisegtas, negalima pasirinkti';
+
+  @override
+  String get ignoredVoicesTitle => 'Ignoruojami balsai';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, tinklalaidės ir kiti balsai, kuriuos pažymėjote kaip „Ne asmuo“';
+
+  @override
+  String get ignoredVoicesEmpty => 'Ignoruojamų balsų nėra';
+
+  @override
+  String get restoreAction => 'Atkurti';
+
+  @override
+  String get voiceRestoredToast => 'Omi gali vėl paklausti apie šį balsą';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Kažkas kitas…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Ne asmuo';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Nežinau';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Tai aš';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Artimiausi balsai';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Žmonės, su kuriais neseniai kalbėjote';
+
+  @override
+  String get voiceMatchClose => 'Artimas atitikmuo';
+
+  @override
+  String get voiceMatchPossible => 'Galimas atitikmuo';
+
+  @override
+  String get voiceMatchWeak => 'Silpnas atitikmuo';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Balso atitikimas: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Kiekvienas atsakymas moko Omi balso ir didina to žmogaus tikrumą.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Taip padidina $name tikrumą.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Palaiko jūsų balso profilį tikslų, kad Omi niekada nepavadintų jūsų kitu asmeniu.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Išsaugota kaip $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Išsaugota kaip jūs';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi daugiau nebeklaus apie šį balsą';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Pažymėta kaip $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Pažymėta kaip jūs';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Pažymėta kaip ne asmuo';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Žymė pašalinta';
+
+  @override
+  String get whoIsItTitle => 'Kas tai?';
+
+  @override
+  String get newPersonEllipsis => 'Naujas asmuo…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Pridėti „$name“';
+  }
+
+  @override
+  String get everyoneHeader => 'Visi';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Taikoma kiekvienai šio kalbėtojo eilutei';
+
+  @override
+  String get collapseAction => 'Sutraukti';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Ne aš';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pažymėkite juos dar $count pokalbiuose.',
+      one: 'Pažymėkite juos dar 1 pokalbyje.',
+    );
+    return '$_temp0';
+  }
 }

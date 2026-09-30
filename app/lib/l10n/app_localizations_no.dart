@@ -11645,4 +11645,470 @@ class AppLocalizationsNo extends AppLocalizations {
   String diagnosticsCountSincePairing(int count) {
     return '$count siden kobling';
   }
+
+  @override
+  String get peopleFilterLowConfidence => 'Lav sikkerhet';
+
+  @override
+  String get peopleFilterPinned => 'Festet';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count festet',
+      one: '1 festet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Bekreftet';
+
+  @override
+  String get confidenceLikely => 'Sannsynlig';
+
+  @override
+  String get confidenceUnverified => 'Ubekreftet';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Sikkerhet: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Merket av deg $count ganger',
+      one: 'Merket av deg én gang',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Valgt i $count forslag',
+      one: 'Valgt i 1 forslag',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Du har bekreftet $count treff',
+      one: 'Du har bekreftet 1 treff',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Bare automatisk gjenkjent, aldri bekreftet';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Aldri bekreftet';
+
+  @override
+  String get confidenceReasonCorrected => 'Du korrigerte treffet';
+
+  @override
+  String get confidenceReasonVoiceReady => 'stemme klar';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'trenger stemme';
+
+  @override
+  String get confidenceReasonNotHeard => 'ikke hørt ennå';
+
+  @override
+  String get confidenceSheetTitle => 'Sikkerhet';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi kjenner igjen stemmen til $name, og du har bekreftet det.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi kjenner vanligvis igjen stemmen til $name, men du har bare bekreftet det noen få ganger.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Ingenting du har gjort støtter opp under $name ennå.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Bevis';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Merket av deg i $count samtaler',
+      one: 'Merket av deg i 1 samtale',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ja på $count forslag',
+      one: 'Ja på 1 forslag',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Valgt i $count forslag',
+      one: 'Valgt i 1 forslag',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Bekreftet $count automatiske treff',
+      one: 'Bekreftet 1 automatisk treff',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count treff flyttet til andre',
+      one: '1 treff flyttet til noen andre',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automatiske treff ingen har bekreftet',
+      one: '1 automatisk treff ingen har bekreftet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Stemmeprøve klar';
+
+  @override
+  String get evidenceNoVoice => 'Ingen stemmeprøve ennå';
+
+  @override
+  String get evidenceNotHeard => 'Ikke hørt i en samtale ennå';
+
+  @override
+  String get evidenceNothing => 'Du har ikke merket eller bekreftet dem ennå';
+
+  @override
+  String get effectCountsALot => 'Teller mye';
+
+  @override
+  String get effectCounts => 'Teller';
+
+  @override
+  String get effectCountsALittle => 'Teller litt';
+
+  @override
+  String get effectBarelyCounts => 'Teller knapt';
+
+  @override
+  String get effectCountsAgainst => 'Teller mot';
+
+  @override
+  String get effectNeeded => 'Kreves for å bli bekreftet';
+
+  @override
+  String get confidenceToReachConfirmed => 'For å nå Bekreftet';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi trenger også en stemmeprøve av $name. Merk dem med «Husk stemmer» slått på.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name er Bekreftet. Omi lærer av hver merking.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Bare svarene dine påvirker sikkerheten særlig. Automatiske treff alene teller nesten ikke.';
+
+  @override
+  String get personWhyConfidence => 'Hvorfor?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Fest $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Behold $name og forvent dem i samtalene dine';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi ber deg bekrefte nære treff i stedet for å gjette.';
+
+  @override
+  String get pinAction => 'Fest';
+
+  @override
+  String get unpinAction => 'Løsne';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name festet';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name løsnet';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Hvorfor $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Slette $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name er festet. Stemmeprøvene fjernes, Omi slutter å kjenne dem igjen, og tidligere transkripsjoner viser dem som en navnløs taler. Dette kan ikke angres.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Slett $name';
+  }
+
+  @override
+  String get selectPeople => 'Velg personer';
+
+  @override
+  String get cleanUpEllipsis => 'Rydd opp…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personer Omi er usikker på',
+      one: '1 person Omi er usikker på',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'For det meste feilhørte navn. Se gjennom dem og fjern de som ikke er ekte.';
+
+  @override
+  String get reviewAction => 'Gjennomgå';
+
+  @override
+  String get cleanUpTitle => 'Rydd opp';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi er usikker på disse $count personene. De fleste er navn som er hørt feil i transkripsjoner. Fjern haken for alle du vil beholde.',
+      one: 'Omi er usikker på denne personen. Fjern haken for å beholde vedkommende.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Festede personer tas aldri med i Rydd opp.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slett $count personer',
+      one: 'Slett 1 person',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personer slettet',
+      one: '1 person slettet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Ingenting å rydde opp';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi er ikke usikker på noen akkurat nå.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      '«Velg alle» hopper over festede personer. Slett dem én om gangen fra siden deres.';
+
+  @override
+  String get pinnedNotSelectable => 'Festet, kan ikke velges';
+
+  @override
+  String get ignoredVoicesTitle => 'Ignorerte stemmer';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcaster og andre stemmer du har markert som «Ikke en person»';
+
+  @override
+  String get ignoredVoicesEmpty => 'Ingen ignorerte stemmer';
+
+  @override
+  String get restoreAction => 'Gjenopprett';
+
+  @override
+  String get voiceRestoredToast => 'Omi kan spørre om denne stemmen igjen';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Noen andre…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Ikke en person';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Vet ikke';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Det er meg';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Nærmeste stemmer';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Personer du har snakket med nylig';
+
+  @override
+  String get voiceMatchClose => 'Nært treff';
+
+  @override
+  String get voiceMatchPossible => 'Mulig treff';
+
+  @override
+  String get voiceMatchWeak => 'Svakt treff';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Stemmetreff: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Hvert svar lærer Omi en stemme og øker sikkerheten for den personen.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ja øker sikkerheten for $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner => 'Holder din egen stemmeprofil skarp, så Omi aldri kaller deg noen andre.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Lagret som $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Lagret som deg';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi spør ikke om denne stemmen igjen';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Merket som $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Merket som deg';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Merket som «Ikke en person»';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Merking fjernet';
+
+  @override
+  String get whoIsItTitle => 'Hvem er det?';
+
+  @override
+  String get newPersonEllipsis => 'Ny person…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Legg til «$name»';
+  }
+
+  @override
+  String get everyoneHeader => 'Alle';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Gjelder alle replikker fra denne taleren';
+
+  @override
+  String get collapseAction => 'Skjul';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Ikke meg';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Merk dem i $count samtaler til.',
+      one: 'Merk dem i 1 samtale til.',
+    );
+    return '$_temp0';
+  }
 }

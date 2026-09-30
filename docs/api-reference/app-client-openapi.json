@@ -15977,6 +15977,61 @@
         "title": "HasSpeechProfileResponse",
         "type": "object"
       },
+      "IgnoredVoice": {
+        "description": "A voice the user marked Not a Person; Omi does not ask about it again.",
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "conversation_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Started At"
+          },
+          "conversation_title": {
+            "default": "",
+            "title": "Conversation Title",
+            "type": "string"
+          },
+          "ignored_at": {
+            "format": "date-time",
+            "title": "Ignored At",
+            "type": "string"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "speaker_id",
+          "ignored_at"
+        ],
+        "title": "IgnoredVoice",
+        "type": "object"
+      },
+      "IgnoredVoicesResponse": {
+        "properties": {
+          "voices": {
+            "items": {
+              "$ref": "#/components/schemas/IgnoredVoice"
+            },
+            "title": "Voices",
+            "type": "array"
+          }
+        },
+        "title": "IgnoredVoicesResponse",
+        "type": "object"
+      },
       "ImportJobResponse": {
         "properties": {
           "conversations_created": {
@@ -21813,6 +21868,29 @@
       },
       "Person": {
         "properties": {
+          "auto_conversation_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Conversation Count"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/PersonConfidence",
+            "default": "unknown"
+          },
+          "confidence_reasons": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PersonConfidenceReason"
+            },
+            "title": "Confidence Reasons",
+            "type": "array"
+          },
           "conversation_count": {
             "anyOf": [
               {
@@ -21840,6 +21918,17 @@
             "title": "Id",
             "type": "string"
           },
+          "labels_to_confirm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels To Confirm"
+          },
           "last_heard_at": {
             "anyOf": [
               {
@@ -21852,9 +21941,38 @@
             ],
             "title": "Last Heard At"
           },
+          "last_labeled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Labeled At"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "pinned": {
+            "default": false,
+            "title": "Pinned",
+            "type": "boolean"
+          },
+          "pinned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned At"
           },
           "speech_sample_transcripts": {
             "anyOf": [
@@ -21916,6 +22034,35 @@
           "name"
         ],
         "title": "Person",
+        "type": "object"
+      },
+      "PersonConfidence": {
+        "description": "How sure Omi is about this person's voice, from the user's own answers.",
+        "enum": [
+          "unknown",
+          "confirmed",
+          "likely",
+          "unverified"
+        ],
+        "title": "PersonConfidence",
+        "type": "string"
+      },
+      "PersonConfidenceReason": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "default": 1,
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "PersonConfidenceReason",
         "type": "object"
       },
       "PhoneCallQuota": {
@@ -26235,8 +26382,52 @@
         "title": "SpeakerAnalytics",
         "type": "object"
       },
+      "SpeakerTagCandidate": {
+        "description": "A person the card offers for this voice, best first.",
+        "properties": {
+          "match_level": {
+            "anyOf": [
+              {
+                "maximum": 3.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Level"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "person_id": {
+            "title": "Person Id",
+            "type": "string"
+          },
+          "pinned": {
+            "default": false,
+            "title": "Pinned",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "person_id",
+          "name"
+        ],
+        "title": "SpeakerTagCandidate",
+        "type": "object"
+      },
       "SpeakerTagPrompt": {
         "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/SpeakerTagCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
           "clip_end": {
             "description": "Clip end, seconds from conversation start",
             "title": "Clip End",
@@ -26344,7 +26535,8 @@
           "person",
           "new_person",
           "someone_else",
-          "skip"
+          "skip",
+          "not_a_person"
         ],
         "title": "SpeakerTagPromptAnswer",
         "type": "string"
@@ -57907,6 +58099,176 @@
         ]
       }
     },
+    "/v1/speaker-tag-prompts/ignored-voices": {
+      "get": {
+        "description": "Voices the user marked Not a Person, newest first.",
+        "operationId": "get_ignored_voices_v1_speaker_tag_prompts_ignored_voices_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IgnoredVoicesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Ignored Voices",
+        "tags": [
+          "speaker-tag-prompts"
+        ]
+      }
+    },
+    "/v1/speaker-tag-prompts/ignored-voices/{conversation_id}/{speaker_id}": {
+      "delete": {
+        "description": "Undo Not a Person: Omi may ask about this voice again.",
+        "operationId": "restore_ignored_voice_v1_speaker_tag_prompts_ignored_voices__conversation_id___speaker_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "speaker_id",
+            "required": true,
+            "schema": {
+              "title": "Speaker Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Restore Ignored Voice",
+        "tags": [
+          "speaker-tag-prompts"
+        ]
+      }
+    },
     "/v1/speaker-tag-prompts/shown": {
       "post": {
         "description": "The client displayed a set; starts the once-a-day cooldown.",
@@ -65847,6 +66209,105 @@
           }
         ],
         "summary": "Update Person Name",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/people/{person_id}/pinned": {
+      "patch": {
+        "description": "Pin (keep, and expect in conversations) or unpin a person. Returns the updated person.",
+        "operationId": "set_person_pinned_v1_users_people__person_id__pinned_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value",
+            "required": true,
+            "schema": {
+              "title": "Value",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Set Person Pinned",
         "tags": [
           "v1"
         ]

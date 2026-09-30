@@ -11675,4 +11675,472 @@ class AppLocalizationsBe extends AppLocalizations {
   String diagnosticsCountSincePairing(int count) {
     return '$count з моманту спарвання';
   }
+
+  @override
+  String get peopleFilterLowConfidence => 'Нізкая ўпэўненасць';
+
+  @override
+  String get peopleFilterPinned => 'Замацаваныя';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Замацавана: $count',
+      one: 'Замацавана: 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Пацверджана';
+
+  @override
+  String get confidenceLikely => 'Верагодна';
+
+  @override
+  String get confidenceUnverified => 'Не праверана';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Упэўненасць: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Вы назвалі разоў: $count',
+      one: 'Вы назвалі адзін раз',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Абрана ў падказках: $count',
+      one: 'Абрана ў 1 падказцы',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Вы пацвердзілі супадзенняў: $count',
+      one: 'Вы пацвердзілі 1 супадзенне',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Толькі аўтаматычнае супадзенне, без пацвярджэння';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Без пацвярджэння';
+
+  @override
+  String get confidenceReasonCorrected => 'Вы выправілі супадзенне';
+
+  @override
+  String get confidenceReasonVoiceReady => 'голас гатовы';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'патрэбны голас';
+
+  @override
+  String get confidenceReasonNotHeard => 'пакуль не чуваць';
+
+  @override
+  String get confidenceSheetTitle => 'Упэўненасць';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi распазнае голас $name, і вы гэта пацвердзілі.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi звычайна распазнае голас $name, але вы пацвердзілі гэта толькі некалькі разоў.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Пакуль нішто з вашых дзеянняў не пацвярджае $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Доказы';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Вы назвалі ў размовах: $count',
+      one: 'Вы назвалі ў 1 размове',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '«Так» у падказках: $count',
+      one: '«Так» у 1 падказцы',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Абрана ў падказках: $count',
+      one: 'Абрана ў 1 падказцы',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Пацверджана аўтаматычных супадзенняў: $count',
+      one: 'Пацверджана 1 аўтаматычнае супадзенне',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Супадзенняў перанесена да іншых: $count',
+      one: '1 супадзенне перанесена да іншага чалавека',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Аўтаматычных супадзенняў без пацвярджэння: $count',
+      one: '1 аўтаматычнае супадзенне без пацвярджэння',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Узор голасу гатовы';
+
+  @override
+  String get evidenceNoVoice => 'Узору голасу пакуль няма';
+
+  @override
+  String get evidenceNotHeard => 'Яшчэ не было ў размовах';
+
+  @override
+  String get evidenceNothing => 'Вы яшчэ не называлі і не пацвярджалі';
+
+  @override
+  String get effectCountsALot => 'Вельмі важна';
+
+  @override
+  String get effectCounts => 'Важна';
+
+  @override
+  String get effectCountsALittle => 'Крыху важна';
+
+  @override
+  String get effectBarelyCounts => 'Амаль не ўлічваецца';
+
+  @override
+  String get effectCountsAgainst => 'Зніжае ўпэўненасць';
+
+  @override
+  String get effectNeeded => 'Патрэбна для «Пацверджана»';
+
+  @override
+  String get confidenceToReachConfirmed => 'Як дасягнуць «Пацверджана»';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi патрэбны яшчэ ўзор голасу $name. Назавіце чалавека пры ўключаным «Запамінаць галасы».';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return 'Статус $name: «Пацверджана». Omi працягвае вучыцца з кожнай пазнакі.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Моцна змяняюць упэўненасць толькі вашы адказы. Аўтаматычныя супадзенні самі па сабе амаль не ўлічваюцца.';
+
+  @override
+  String get personWhyConfidence => 'Чаму?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Замацаваць $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Захаваць $name і чакаць у вашых размовах';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi будзе прасіць вас пацвердзіць блізкія супадзенні, а не здагадвацца.';
+
+  @override
+  String get pinAction => 'Замацаваць';
+
+  @override
+  String get unpinAction => 'Зняць замацаванне';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Замацавана: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Замацаванне знята: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Чаму $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Выдаліць $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Замацавана: $name. Узоры голасу будуць выдалены, Omi перастане распазнаваць гэтага чалавека, а ў ранейшых расшыфроўках ён будзе безымянным спікерам. Гэта нельга адрабіць.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Выдаліць $name';
+  }
+
+  @override
+  String get selectPeople => 'Выбраць людзей';
+
+  @override
+  String get cleanUpEllipsis => 'Ачысціць…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людзей, у якіх Omi не ўпэўнены: $count',
+      one: '1 чалавек, у якім Omi не ўпэўнены',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'Часцей за ўсё гэта няправільна пачутыя імёны. Праглядзіце іх і выдаліце несапраўдныя.';
+
+  @override
+  String get reviewAction => 'Праглядзець';
+
+  @override
+  String get cleanUpTitle => 'Ачыстка';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi не ўпэўнены ў гэтых людзях: $count. Большасць — імёны, памылкова пачутыя ў расшыфроўках. Здыміце адзнаку з тых, каго хочаце пакінуць.',
+      one: 'Omi не ўпэўнены ў гэтым чалавеку. Здыміце адзнаку, каб пакінуць.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Замацаваныя людзі ніколі не трапляюць у ачыстку.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдаліць людзей: $count',
+      one: 'Выдаліць 1 чалавека',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдалена людзей: $count',
+      one: 'Выдалены 1 чалавек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Няма чаго ачышчаць';
+
+  @override
+  String get cleanUpNothingMessage => 'Цяпер Omi ва ўсіх упэўнены.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      '«Выбраць усё» прапускае замацаваных людзей. Выдаляйце іх па адным на іх старонках.';
+
+  @override
+  String get pinnedNotSelectable => 'Замацаваны, выбраць нельга';
+
+  @override
+  String get ignoredVoicesTitle => 'Ігнараваныя галасы';
+
+  @override
+  String get ignoredVoicesSubtitle => 'Тэлевізар, падкасты і іншыя галасы, пазначаныя «Не чалавек»';
+
+  @override
+  String get ignoredVoicesEmpty => 'Няма ігнараваных галасоў';
+
+  @override
+  String get restoreAction => 'Аднавіць';
+
+  @override
+  String get voiceRestoredToast => 'Omi можа зноў спытаць пра гэты голас';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Хтосьці іншы…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Не чалавек';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Не ведаю';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Гэта я';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Найбольш падобныя галасы';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Людзі, з якімі вы нядаўна размаўлялі';
+
+  @override
+  String get voiceMatchClose => 'Блізкае супадзенне';
+
+  @override
+  String get voiceMatchPossible => 'Магчымае супадзенне';
+
+  @override
+  String get voiceMatchWeak => 'Слабое супадзенне';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Супадзенне голасу: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Кожны адказ вучыць Omi голасу і павышае ўпэўненасць у гэтым чалавеку.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '«Так» павышае ўпэўненасць у $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Трымае ваш галасавы профіль дакладным, каб Omi ніколі не называў вас кімсьці іншым.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Захавана як $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Захавана як вы';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi больш не будзе пытацца пра гэты голас';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Пазначана як $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Пазначана як вы';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Пазначана як не чалавек';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Пазнаку выдалена';
+
+  @override
+  String get whoIsItTitle => 'Хто гэта?';
+
+  @override
+  String get newPersonEllipsis => 'Новы чалавек…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Дадаць “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Усе';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Датычыцца ўсіх радкоў гэтага спікера';
+
+  @override
+  String get collapseAction => 'Згарнуць';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Не я';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Пазначце яго яшчэ ў $count размовах.',
+      one: 'Пазначце яго яшчэ ў 1 размове.',
+    );
+    return '$_temp0';
+  }
 }

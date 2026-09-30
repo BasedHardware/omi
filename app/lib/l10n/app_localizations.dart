@@ -21176,6 +21176,612 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} since pairing'**
   String diagnosticsCountSincePairing(int count);
+
+  /// Filter chip over the People list: people Omi is unsure about (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Low Confidence'**
+  String get peopleFilterLowConfidence;
+
+  /// Filter chip and group header on the People list: people the user pinned (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned'**
+  String get peopleFilterPinned;
+
+  /// Small count beside the Pinned group header.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 pinned} other{{count} pinned}}'**
+  String peoplePinnedCount(int count);
+
+  /// Confidence level for a person's voice: the user has confirmed it many times. Short label.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed'**
+  String get confidenceConfirmed;
+
+  /// Confidence level for a person's voice: the user answered for it at least once. Short label.
+  ///
+  /// In en, this message translates to:
+  /// **'Likely'**
+  String get confidenceLikely;
+
+  /// Confidence level for a person's voice: nothing the user did backs it up yet. Short label.
+  ///
+  /// In en, this message translates to:
+  /// **'Unverified'**
+  String get confidenceUnverified;
+
+  /// Screen-reader label for the three-step confidence meter; level is Confirmed, Likely or Unverified.
+  ///
+  /// In en, this message translates to:
+  /// **'Confidence: {level}'**
+  String confidenceMeterLabel(String level);
+
+  /// Reason line under a person's name: how many conversations the user labeled them in by hand.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{You labeled once} other{You labeled {count} times}}'**
+  String confidenceReasonLabeled(int count);
+
+  /// Reason line under a person's name: how many voice suggestion cards the user answered with this person.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Picked in 1 suggestion} other{Picked in {count} suggestions}}'**
+  String confidenceReasonPicked(int count);
+
+  /// Reason line under a person's name: automatic voice matches the user confirmed by hand.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{You confirmed 1 match} other{You confirmed {count} matches}}'**
+  String confidenceReasonAutoConfirmed(int count);
+
+  /// Reason line under a person's name: Omi matched this voice automatically but the user never confirmed it.
+  ///
+  /// In en, this message translates to:
+  /// **'Only auto-matched, never confirmed'**
+  String get confidenceReasonAutoOnly;
+
+  /// Reason line under a person's name: the user never labeled or confirmed this person.
+  ///
+  /// In en, this message translates to:
+  /// **'Never confirmed'**
+  String get confidenceReasonNeverConfirmed;
+
+  /// Reason line under a person's name: the user moved an automatic match for this person to someone else.
+  ///
+  /// In en, this message translates to:
+  /// **'You corrected its match'**
+  String get confidenceReasonCorrected;
+
+  /// Second half of a reason line, after a middle dot: Omi has a voice sample for this person. Lowercase because it follows a separator.
+  ///
+  /// In en, this message translates to:
+  /// **'voice ready'**
+  String get confidenceReasonVoiceReady;
+
+  /// Second half of a reason line, after a middle dot: Omi has no voice sample for this person yet. Lowercase.
+  ///
+  /// In en, this message translates to:
+  /// **'needs voice'**
+  String get confidenceReasonNeedsVoice;
+
+  /// Second half of a reason line, after a middle dot: this person has not appeared in a conversation yet. Lowercase.
+  ///
+  /// In en, this message translates to:
+  /// **'not heard yet'**
+  String get confidenceReasonNotHeard;
+
+  /// Title of the sheet that explains how sure Omi is about a person's voice (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Confidence'**
+  String get confidenceSheetTitle;
+
+  /// Sheet summary for a Confirmed person.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi recognizes {name}\'s voice, and you\'ve confirmed it.'**
+  String confidenceSummaryConfirmed(String name);
+
+  /// Sheet summary for a Likely person.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi usually recognizes {name}\'s voice, but you\'ve only confirmed it a few times.'**
+  String confidenceSummaryLikely(String name);
+
+  /// Sheet summary for an Unverified person: the user never labeled or confirmed them.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing you\'ve done backs {name} up yet.'**
+  String confidenceSummaryUnverified(String name);
+
+  /// Section header in the confidence sheet listing what Omi's confidence is based on (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Evidence'**
+  String get confidenceEvidenceHeader;
+
+  /// Evidence row: the user labeled this person by hand.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Labeled by you in 1 conversation} other{Labeled by you in {count} conversations}}'**
+  String evidenceManualLabels(int count);
+
+  /// Evidence row: the user answered Yes when a suggestion card asked about this person.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Yes on 1 suggestion} other{Yes on {count} suggestions}}'**
+  String evidenceCardConfirms(int count);
+
+  /// Evidence row: the user picked this person on a suggestion card.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Picked in 1 suggestion} other{Picked in {count} suggestions}}'**
+  String evidenceCardPicks(int count);
+
+  /// Evidence row: automatic matches the user confirmed by hand.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Confirmed 1 automatic match} other{Confirmed {count} automatic matches}}'**
+  String evidenceAutoConfirmed(int count);
+
+  /// Evidence row: automatic matches to this person that the user corrected to someone else.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 match moved to someone else} other{{count} matches moved to someone else}}'**
+  String evidenceAutoCorrected(int count);
+
+  /// Evidence row: conversations where Omi matched this person automatically and nobody confirmed it.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 automatic match nobody confirmed} other{{count} automatic matches nobody confirmed}}'**
+  String evidenceAutoUnconfirmed(int count);
+
+  /// Evidence row: Omi has a usable voice sample for this person.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice sample ready'**
+  String get evidenceVoiceReady;
+
+  /// Evidence row: Omi has no usable voice sample for this person.
+  ///
+  /// In en, this message translates to:
+  /// **'No voice sample yet'**
+  String get evidenceNoVoice;
+
+  /// Evidence row: this person has not appeared in any conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Not heard in a conversation yet'**
+  String get evidenceNotHeard;
+
+  /// Evidence row when there is no evidence from the user at all.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t labeled or confirmed them yet'**
+  String get evidenceNothing;
+
+  /// How much one kind of evidence raises confidence: strongly.
+  ///
+  /// In en, this message translates to:
+  /// **'Counts a lot'**
+  String get effectCountsALot;
+
+  /// How much one kind of evidence raises confidence: moderately.
+  ///
+  /// In en, this message translates to:
+  /// **'Counts'**
+  String get effectCounts;
+
+  /// How much one kind of evidence raises confidence: slightly.
+  ///
+  /// In en, this message translates to:
+  /// **'Counts a little'**
+  String get effectCountsALittle;
+
+  /// How much one kind of evidence raises confidence: almost not at all.
+  ///
+  /// In en, this message translates to:
+  /// **'Barely counts'**
+  String get effectBarelyCounts;
+
+  /// This kind of evidence lowers confidence.
+  ///
+  /// In en, this message translates to:
+  /// **'Counts against'**
+  String get effectCountsAgainst;
+
+  /// A missing piece of evidence (a voice sample) is required to reach the Confirmed level.
+  ///
+  /// In en, this message translates to:
+  /// **'Needed for Confirmed'**
+  String get effectNeeded;
+
+  /// Section header in the confidence sheet: what would raise this person to Confirmed (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'To Reach Confirmed'**
+  String get confidenceToReachConfirmed;
+
+  /// What the user can do to reach Confirmed when a voice sample is missing. 'Remember voices' refers to the setting 'Remember voices of people you name'.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi also needs a voice sample of {name}. Label them with Remember voices on.'**
+  String confidenceNextVoice(String name);
+
+  /// Shown in the confidence sheet for a Confirmed person instead of next steps.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is Confirmed. Omi keeps learning from each label.'**
+  String confidenceIsConfirmed(String name);
+
+  /// Footnote at the bottom of the confidence sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Only your answers move confidence much. Automatic matches on their own barely count.'**
+  String get confidenceFootnote;
+
+  /// Link beside a person's confidence level that opens an explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Why?'**
+  String get personWhyConfidence;
+
+  /// Switch row title on a person's page.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin {name}'**
+  String pinPersonTitle(String name);
+
+  /// What pinning a person means, under the Pin switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep {name}, and expect them in your conversations'**
+  String pinPersonSubtitle(String name);
+
+  /// Footer under the Pin switch: pinning makes Omi ask about near matches rather than label them.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi will ask you to confirm close matches instead of guessing.'**
+  String get pinPersonHonestLine;
+
+  /// Swipe action and menu item: pin this person (Title Case verb).
+  ///
+  /// In en, this message translates to:
+  /// **'Pin'**
+  String get pinAction;
+
+  /// Swipe action and menu item: unpin this person (Title Case verb).
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin'**
+  String get unpinAction;
+
+  /// Toast after pinning a person.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} pinned'**
+  String personPinnedToast(String name);
+
+  /// Toast after unpinning a person.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} unpinned'**
+  String personUnpinnedToast(String name);
+
+  /// Row menu item that explains a person's confidence level; level is Confirmed, Likely or Unverified (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Why {level}?'**
+  String whyConfidenceMenu(String level);
+
+  /// Dialog title when deleting one pinned person (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {name}?'**
+  String deletePersonNamedTitle(String name);
+
+  /// Dialog message when deleting a pinned person.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is pinned. Their voice samples are removed, Omi stops recognizing them, and past transcripts show them as an unnamed speaker. This can\'t be undone.'**
+  String deletePinnedPersonMessage(String name);
+
+  /// Destructive dialog button that names the person being deleted (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {name}'**
+  String deleteNamedPerson(String name);
+
+  /// Menu item that starts picking people to delete (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Select People'**
+  String get selectPeople;
+
+  /// Menu item that reviews people Omi is unsure about for deletion (Title Case, one-character ellipsis because it opens a review).
+  ///
+  /// In en, this message translates to:
+  /// **'Clean Up…'**
+  String get cleanUpEllipsis;
+
+  /// Banner title and menu subtitle: how many people have Unverified confidence.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 person Omi is unsure about} other{{count} people Omi is unsure about}}'**
+  String cleanUpUnsureCount(int count);
+
+  /// Banner body on the People list offering to clean up unsure people.
+  ///
+  /// In en, this message translates to:
+  /// **'Mostly misheard names. Review them and remove the ones that aren\'t real.'**
+  String get cleanUpBannerBody;
+
+  /// Button that opens the clean-up review (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get reviewAction;
+
+  /// Title of the page that reviews unsure people before deleting them (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Clean Up'**
+  String get cleanUpTitle;
+
+  /// Explanation at the top of the clean-up review.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Omi is unsure about this person. Untick them to keep them.} other{Omi is unsure about these {count} people. Most are names misheard from transcripts. Untick anyone you want to keep.}}'**
+  String cleanUpLead(int count);
+
+  /// Footnote under the clean-up review list.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned people are never included in Clean Up.'**
+  String get cleanUpPinnedNote;
+
+  /// Destructive button at the bottom of the clean-up review (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Delete 1 Person} other{Delete {count} People}}'**
+  String deletePeopleCountAction(int count);
+
+  /// Toast after deleting people.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 person deleted} other{{count} people deleted}}'**
+  String peopleDeletedToast(int count);
+
+  /// Empty state title when no one is unsure (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to Clean Up'**
+  String get cleanUpNothingTitle;
+
+  /// Empty state message when no one is unsure.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi isn\'t unsure about anyone right now.'**
+  String get cleanUpNothingMessage;
+
+  /// Footnote in select mode under the Pinned group.
+  ///
+  /// In en, this message translates to:
+  /// **'Select All skips pinned people. Delete them one at a time from their page.'**
+  String get selectAllSkipsPinned;
+
+  /// Screen-reader label for a pinned person's row in select mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned, not selectable'**
+  String get pinnedNotSelectable;
+
+  /// Settings row and sheet title: voices the user marked Not a Person (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Ignored Voices'**
+  String get ignoredVoicesTitle;
+
+  /// Subtitle of the Ignored Voices row.
+  ///
+  /// In en, this message translates to:
+  /// **'TV, podcasts and other voices you marked Not a Person'**
+  String get ignoredVoicesSubtitle;
+
+  /// Shown in the Ignored Voices sheet when there are none.
+  ///
+  /// In en, this message translates to:
+  /// **'No ignored voices'**
+  String get ignoredVoicesEmpty;
+
+  /// Button that undoes Not a Person for a voice so Omi may ask about it again (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get restoreAction;
+
+  /// Toast after restoring an ignored voice.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi may ask about this voice again'**
+  String get voiceRestoredToast;
+
+  /// Answer chip on the voice suggestion card that opens a picker to choose who it is (Title Case, one-character ellipsis).
+  ///
+  /// In en, this message translates to:
+  /// **'Someone Else…'**
+  String get speakerTagPromptSomeoneElse;
+
+  /// Answer chip on the voice suggestion card: the voice is a TV, podcast or music, not a person (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Not a Person'**
+  String get speakerTagPromptNotAPerson;
+
+  /// Answer chip on the voice suggestion card: skip this voice (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Not Sure'**
+  String get speakerTagPromptNotSureAction;
+
+  /// Answer chip on the voice suggestion card: the voice is the user (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'That\'s Me'**
+  String get speakerTagPromptThatsMeAction;
+
+  /// Label above people ranked by how close their voice is to the clip.
+  ///
+  /// In en, this message translates to:
+  /// **'Closest voices'**
+  String get speakerTagPromptClosestVoices;
+
+  /// Label above suggested people when Omi has no voice comparison.
+  ///
+  /// In en, this message translates to:
+  /// **'People you talked to recently'**
+  String get speakerTagPromptRecentPeople;
+
+  /// How close a voice is to a person: very close.
+  ///
+  /// In en, this message translates to:
+  /// **'Close match'**
+  String get voiceMatchClose;
+
+  /// How close a voice is to a person: somewhat close.
+  ///
+  /// In en, this message translates to:
+  /// **'Possible match'**
+  String get voiceMatchPossible;
+
+  /// How close a voice is to a person: not very close.
+  ///
+  /// In en, this message translates to:
+  /// **'Weak match'**
+  String get voiceMatchWeak;
+
+  /// Screen-reader label for the voice match meter; level is Close match, Possible match or Weak match.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice match: {level}'**
+  String voiceMatchMeterLabel(String level);
+
+  /// Hint at the bottom of the 'Who is this?' card.
+  ///
+  /// In en, this message translates to:
+  /// **'Each answer teaches Omi a voice and raises that person\'s confidence.'**
+  String get speakerTagPromptHintIdentify;
+
+  /// Hint at the bottom of the 'Is this <name>?' card.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes raises {name}\'s confidence.'**
+  String speakerTagPromptHintConfirm(String name);
+
+  /// Hint at the bottom of the 'Is this you?' card.
+  ///
+  /// In en, this message translates to:
+  /// **'Keeps your own voice profile sharp, so Omi never names you as someone else.'**
+  String get speakerTagPromptHintOwner;
+
+  /// Answered state of the voice card after the user named the voice.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved as {name}'**
+  String speakerTagPromptSavedAs(String name);
+
+  /// Answered state of the voice card after the user said the voice is theirs.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved as you'**
+  String get speakerTagPromptSavedAsYou;
+
+  /// Answered state after Not a Person.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi won\'t ask about this voice again'**
+  String get speakerTagPromptIgnoredNote;
+
+  /// Undo toast after answering the voice card with a person.
+  ///
+  /// In en, this message translates to:
+  /// **'Labeled as {name}'**
+  String speakerTagPromptLabeledToast(String name);
+
+  /// Undo toast after answering the voice card with That's Me.
+  ///
+  /// In en, this message translates to:
+  /// **'Labeled as you'**
+  String get speakerTagPromptLabeledYouToast;
+
+  /// Undo toast after answering Not a Person.
+  ///
+  /// In en, this message translates to:
+  /// **'Marked as not a person'**
+  String get speakerTagPromptNotAPersonToast;
+
+  /// Undo toast after saying an automatic label was wrong without naming anyone.
+  ///
+  /// In en, this message translates to:
+  /// **'Label removed'**
+  String get speakerTagPromptRejectedToast;
+
+  /// Title of the picker sheet opened from Someone Else… (Title Case question).
+  ///
+  /// In en, this message translates to:
+  /// **'Who Is It?'**
+  String get whoIsItTitle;
+
+  /// Row in the picker that creates a new person (Title Case, one-character ellipsis).
+  ///
+  /// In en, this message translates to:
+  /// **'New Person…'**
+  String get newPersonEllipsis;
+
+  /// Row in the picker that creates a new person with the typed name.
+  ///
+  /// In en, this message translates to:
+  /// **'Add “{name}”'**
+  String addNamedPersonAction(String name);
+
+  /// Section header in the picker listing all people A to Z (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Everyone'**
+  String get everyoneHeader;
+
+  /// Compact chip on a transcript speaker asking whether the voice is this person.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}?'**
+  String speakerSuggestionChip(String name);
+
+  /// Note in the expanded transcript suggestion: the answer labels the whole speaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies to every line from this speaker'**
+  String get speakerSuggestionAppliesToSpeaker;
+
+  /// Screen-reader label for the button that folds the transcript suggestion back into a chip.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse'**
+  String get collapseAction;
+
+  /// Answer chip on the "Is this you?" voice card: the voice is not the user (Title Case).
+  ///
+  /// In en, this message translates to:
+  /// **'Not Me'**
+  String get speakerTagPromptNotMeAction;
+
+  /// Confidence sheet: what the user can do to reach Confirmed; "them" is the person.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Label them in 1 more conversation.} other{Label them in {count} more conversations.}}'**
+  String confidenceNextLabels(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

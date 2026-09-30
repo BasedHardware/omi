@@ -11,9 +11,12 @@ import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/folder.dart';
+import 'package:omi/backend/schema/gen/people_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/search/global_search.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:provider/single_child_widget.dart';
 
 import '../harness.dart';
 
@@ -98,21 +101,43 @@ class AuditSearchSource extends GlobalSearchSource {
   @override
   Future<ApiResult<List<MemorySearchHit>>> memories(String query) async => const ApiSuccess(
       [MemorySearchHit(id: 'm1', content: 'Prefers the pendant over the phone mic for long meetings')]);
-
-  @override
-  Future<List<Person>> people() async => [
-        for (final name in ['Alex', 'Tristan', 'John'])
-          Person(id: name, name: name, createdAt: DateTime(2026, 1, 1), updatedAt: DateTime(2026, 1, 1)),
-      ];
 }
 
-Future<void> _pumpSearch(AuditRun a, {String? query, AuditSearchSource source = const AuditSearchSource()}) async {
+Future<void> _pumpSearch(
+  AuditRun a, {
+  String? query,
+  AuditSearchSource source = const AuditSearchSource(),
+  List<SingleChildWidget> extraProviders = const [],
+}) async {
   await a.pump(
     GlobalSearchPage(initialQuery: query, source: source),
     scaffold: false,
-    providers: [ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[]))],
+    providers: [
+      ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
+      ...extraProviders,
+    ],
   );
 }
+
+Person _auditPerson(
+  String id,
+  String name, {
+  String confidence = 'unverified',
+  bool pinned = false,
+  Map<String, int> reasons = const {'never_confirmed': 1},
+}) =>
+    Person(
+      id: id,
+      name: name,
+      createdAt: DateTime.utc(2026, 9, 1),
+      updatedAt: DateTime.utc(2026, 9, 1),
+      voiceReadiness: confidence == 'unverified' ? 'not_learned' : 'ready',
+      confidence: confidence,
+      pinned: pinned,
+      confidenceReasons: [
+        for (final entry in reasons.entries) GeneratedPersonConfidenceReason(code: entry.key, count: entry.value),
+      ],
+    );
 
 final searchScenarios = <AuditScenario>[
   AuditScenario(
@@ -169,6 +194,33 @@ final searchScenarios = <AuditScenario>[
       await _pumpSearch(a, query: 'bluetooth', source: const AuditSearchSource(failTasks: true));
       expect(find.byKey(const ValueKey('search_partial_retry')), findsOneWidget);
       await a.shot('Type "bluetooth" while task search is down');
+    },
+  ),
+  AuditScenario(
+    id: 'search-people',
+    title: 'People opened from its tile: the shared People list, filtered by the search field',
+    page: _page,
+    state: 'The People tile tapped; five people (one pinned, three unsure), then "a" typed',
+    run: (a) async {
+      final people = PeopleProvider(
+        setPinned: (_, __) async => true,
+        loadPeople: () async => [
+          _auditPerson('p-maya', 'Maya Chen', confidence: 'confirmed', pinned: true, reasons: {'manual_labels': 6}),
+          _auditPerson('p-sam', 'Sam Okafor', confidence: 'likely', reasons: {'card_picks': 2}),
+          _auditPerson('p-because', 'Because', reasons: {'auto_unconfirmed': 3}),
+          _auditPerson('p-american', 'American', reasons: {'auto_corrected': 1}),
+          _auditPerson('p-cs', 'Cs'),
+        ],
+      );
+      await _pumpSearch(a, extraProviders: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
+      await a.tap(find.byKey(const ValueKey('search_tile_people')));
+      expect(find.byKey(const ValueKey('search_people_list')), findsOneWidget);
+      await a.shot('Tap the People tile');
+      await a.tester.enterText(
+          find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)),
+          'a');
+      await a.settle();
+      await a.shot('Type "a" into the search field', step: 'query');
     },
   ),
   AuditScenario(
