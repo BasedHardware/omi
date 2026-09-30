@@ -71,9 +71,3 @@ def trusted_content_window(conversation: Dict[str, Any]) -> tuple[datetime, date
         if difference > LEGACY_CONTENT_WINDOW_TOLERANCE_SECONDS:
             return None
     return lower, upper
-
-
-def current_selection_fingerprint(conversation: Dict[str, Any]) -> str:
-    """The fingerprint a pass over this conversation's current content would carry."""
-    window = trusted_content_window(conversation)
-    return selection_fingerprint(*window) if window else LEGACY_LIFECYCLE_FINGERPRINT

@@ -844,6 +844,26 @@ CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
 )
 
 
+# `GET /v1/conversations/count?include_discarded=false&start_date=...&end_date=...`
+# (`get_conversations_count`, added to the mobile app shell in #19730) filters
+# `discarded == False` plus a `created_at` range and runs a `count()` aggregation
+# with no ordering. Firestore serves an aggregation over a range from an index
+# whose range field is ASCENDING, so the list-side `(discarded ASC, created_at
+# DESC)` composite above does not cover it: prod returned FailedPrecondition
+# ("The query requires an index") and the route 500ed. A start-only or end-only
+# range needs the same composite (equality prefix, then the one range field).
+CONVERSATIONS_COUNT_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_count_discarded_created_range',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('created_at', '>=', 'start_date'),
+        FirestoreQueryFilter('created_at', '<=', 'end_date'),
+    ),
+    index_fields=(_asc('discarded'), _asc('created_at'), _asc('__name__')),
+)
+
 MCP_CONVERSATION_CARD_QUERY_SPECS: dict[tuple[bool, bool, bool], FirestoreQuerySpec] = {}
 for _has_categories in (False, True):
     for _has_start_date in (False, True):
@@ -1420,6 +1440,7 @@ QUERY_SPECS = (
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
+    CONVERSATIONS_COUNT_CREATED_RANGE_QUERY,
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
     SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
