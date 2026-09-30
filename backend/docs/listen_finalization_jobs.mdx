@@ -81,8 +81,13 @@ LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS=300
 configuration. The finalizer's queue deadline, HTTP timeout, and Redis run-lock
 TTL must remain compatible; the default 1,500-second handler timeout matches
 the existing durable-work contract. The production deploy creates or updates
-the dedicated queue with five attempts and four concurrent dispatches. Other
-environments remain deliberately unconfigured, so the exact-ID customer route
+the dedicated queue with five attempts and sixteen concurrent dispatches.
+Listen finalization and self-heal recovery share this queue, so its dispatch
+delay must stay below `LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS` (default
+300 s): a longer delay makes the replay reconciler re-mint generations whose
+first task has not run yet, and the queue then fills with stale-generation
+acks. Four dispatches saturated it (median delay ~6 minutes, 2026-09-26 to
+2026-09-30). Other environments remain deliberately unconfigured, so the exact-ID customer route
 fails closed with `503` there instead of executing inline.
 
 ## Customer exact-ID finalization
