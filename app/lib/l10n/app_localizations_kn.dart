@@ -11595,4 +11595,79 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ';
+
+  @override
+  String get greetingMorning => 'ಶುಭೋದಯ';
+
+  @override
+  String get greetingAfternoon => 'ಶುಭ ಮಧ್ಯಾಹ್ನ';
+
+  @override
+  String get greetingEvening => 'ಶುಭ ಸಂಜೆ';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'ನೀವು ಏನು ತಿಳಿಯಲು ಬಯಸುತ್ತೀರಿ?';
+
+  @override
+  String get askSuggestDecide => 'ಇಂದು ನಾನು ಏನು ನಿರ್ಧರಿಸಿದೆ?';
+
+  @override
+  String get askSuggestOwe => 'ಇನ್ನೂ ಜನರಿಗೆ ನಾನು ಏನು ಕೊಡಬೇಕು?';
+
+  @override
+  String get askSuggestNotice => 'Omi ಏನನ್ನು ಗಮನಿಸಿತು?';
+
+  @override
+  String get pastChats => 'ಹಿಂದಿನ ಚಾಟ್‌ಗಳು';
+
+  @override
+  String get newChat => 'ಹೊಸ ಚಾಟ್';
+
+  @override
+  String get startFresh => 'ಹೊಸದಾಗಿ ಪ್ರಾರಂಭಿಸಿ';
+
+  @override
+  String get noPastChats => 'Omi ಜೊತೆಗಿನ ನಿಮ್ಮ ಚಾಟ್‌ಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.';
+
+  @override
+  String get deleteChatQuestion => 'ಈ ಚಾಟ್ ಅಳಿಸಬೇಕೆ?';
+
+  @override
+  String get deleteChatMessage => 'ಇದು ಹಿಂದಿನ ಚಾಟ್‌ಗಳಿಂದ ಶಾಶ್ವತವಾಗಿ ಹೋಗುತ್ತದೆ.';
+
+  @override
+  String get deleteChat => 'ಚಾಟ್ ಅಳಿಸಿ';
+
+  @override
+  String get appsAskWith => 'ಇದರೊಂದಿಗೆ Omi ಅನ್ನು ಕೇಳಿ';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ಇಂದು $count ಸಂಭಾಷಣೆಗಳು.',
+      one: 'ಇಂದು 1 ಸಂಭಾಷಣೆ.',
+      zero: 'ಇಂದು ಯಾವುದೇ ಸಂಭಾಷಣೆ ಇಲ್ಲ.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'ಪರದೆಯ ಮೇಲೆ ಏನಿತ್ತು';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'ಈ ಸಭೆಯ ಸ್ಕ್ರೀನ್‌ಶಾಟ್';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅಳಿಸುವುದೇ?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'ಇದು ಈ ಸಭೆಯ ಟಿಪ್ಪಣಿಯಿಂದ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
 }

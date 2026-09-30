@@ -11580,4 +11580,79 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Розпізнавання голосу';
+
+  @override
+  String get greetingMorning => 'Доброго ранку';
+
+  @override
+  String get greetingAfternoon => 'Добрий день';
+
+  @override
+  String get greetingEvening => 'Добрий вечір';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Що ви хочете дізнатися?';
+
+  @override
+  String get askSuggestDecide => 'Що я вирішив сьогодні?';
+
+  @override
+  String get askSuggestOwe => 'Що я ще винен людям?';
+
+  @override
+  String get askSuggestNotice => 'Що помітив Omi?';
+
+  @override
+  String get pastChats => 'Попередні чати';
+
+  @override
+  String get newChat => 'Новий чат';
+
+  @override
+  String get startFresh => 'Почати заново';
+
+  @override
+  String get noPastChats => 'Тут з\'являться ваші чати з Omi.';
+
+  @override
+  String get deleteChatQuestion => 'Видалити цей чат?';
+
+  @override
+  String get deleteChatMessage => 'Він назавжди зникне з попередніх чатів.';
+
+  @override
+  String get deleteChat => 'Видалити чат';
+
+  @override
+  String get appsAskWith => 'Питати Omi з';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count розмов сьогодні.',
+      one: '1 розмова сьогодні.',
+      zero: 'Сьогодні розмов немає.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Що було на екрані';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Знімок екрана з цієї зустрічі';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Видалити знімок екрана?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Знімок екрана буде видалено з нотатки цієї зустрічі. Цю дію не можна скасувати.';
 }

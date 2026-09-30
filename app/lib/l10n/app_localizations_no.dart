@@ -11559,4 +11559,79 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Stemmegjenkjenning';
+
+  @override
+  String get greetingMorning => 'God morgen';
+
+  @override
+  String get greetingAfternoon => 'God ettermiddag';
+
+  @override
+  String get greetingEvening => 'God kveld';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Hva vil du vite?';
+
+  @override
+  String get askSuggestDecide => 'Hva bestemte jeg i dag?';
+
+  @override
+  String get askSuggestOwe => 'Hva skylder jeg fortsatt folk?';
+
+  @override
+  String get askSuggestNotice => 'Hva la Omi merke til?';
+
+  @override
+  String get pastChats => 'Tidligere chatter';
+
+  @override
+  String get newChat => 'Ny chat';
+
+  @override
+  String get startFresh => 'Start på nytt';
+
+  @override
+  String get noPastChats => 'Chattene dine med Omi vises her.';
+
+  @override
+  String get deleteChatQuestion => 'Slette denne chatten?';
+
+  @override
+  String get deleteChatMessage => 'Den forsvinner fra tidligere chatter for godt.';
+
+  @override
+  String get deleteChat => 'Slett chat';
+
+  @override
+  String get appsAskWith => 'Spør Omi med';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtaler i dag.',
+      one: '1 samtale i dag.',
+      zero: 'Ingen samtaler i dag.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Hva som var på skjermen';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Skjermbilde fra dette møtet';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Slette skjermbildet?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Dette fjerner skjermbildet fra notatet for dette møtet. Det kan ikke angres.';
 }

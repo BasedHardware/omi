@@ -15,7 +15,7 @@ from utils.stt.outcomes import (
     bounded_provider,
     failure_from_exception,
 )
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -143,9 +143,16 @@ class PendingLiveFailover:
     """
 
     def __init__(
-        self, *, from_mode: str, to_mode: str, component: str = 'stt_live_session', reason: str = 'connection_lost'
+        self,
+        *,
+        from_mode: str,
+        to_mode: str,
+        component: str = 'stt_live_session',
+        reason: str = 'connection_lost',
+        capacity_subtype: str | None = None,
     ) -> None:
         self.component, self.reason = component, reason
+        self.capacity_subtype = capacity_subtype
         self.from_mode = from_mode
         self.to_mode = to_mode
         self._settled = False
@@ -166,6 +173,7 @@ class PendingLiveFailover:
             to_mode=self.to_mode,
             reason=self.reason,
             outcome='recovered',
+            **capacity_fallback_kwargs(self.capacity_subtype),
         )
 
     def note_failure(self, typed_reason: str | None) -> None:

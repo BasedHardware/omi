@@ -803,6 +803,19 @@ best-effort and appended only to the notes volatile suffix as BACKGROUND
 CONTEXT; it never enters the shared prefix, the memory extractor, or app
 prompts, and no single source failure can block the note.
 
+Approved meeting screenshots feed the same pass. The Mac adjudicates frames
+before it finalizes (admission accepts an in_progress/processing conversation
+once its transcript fixes a trusted content window), and the judge stores
+`visible_participant_names` and `screen_summary` on approved frame docs only.
+Under `MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED`, tile names join the roster as
+`screen_activity` participants where no better source named them and each frame
+adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; under
+`MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED`, up to four frames (≤1024 px JPEG,
+6 s total GCS read budget) ride the notes call as image parts. Frame docs record
+`storage_bucket`; every host reads only docs whose bucket equals its own
+`BUCKET_SCREEN_FRAMES` (legacy docs belong to `based-hardware-dev-screen-frames`),
+so a notes host without that env reads no frame evidence at all.
+
 ### 2.1 Durable finalization ownership
 
 `conversation_finalization_jobs/{job_id}` is the finalization ledger. It is
@@ -1339,7 +1352,24 @@ socket's own stream seconds *before* the callback rewrites `start`/`end`
 onto other clocks, and TDT timestamps at/beyond the posted window duration
 or re-detections of already-emitted audio are dropped and counted in
 `omi_stt_window_emission_drops_total` rather than emitted at a fabricated
-position. Ownership of recent
+position. The window replay ring uses that emitted anchor, mapped through
+the provider epoch's accepted-send spans onto capture samples, as its trim
+floor. It retains every later capture sample during an in-flight POST and
+replays from the floor on failover; VAD-gated gaps do not move the provider
+anchor onto the wrong capture position. A 90-second ring overrun fails the
+window leg before accepting another chunk if un-emitted speech still needs
+the space. The window socket's VAD speech spans are pruned with its POST
+anchor; rapid VAD flicker coalesces adjacent spans within the 1,024-entry
+bound while retaining every speech sample. Near the PCM buffer limit, a long
+unfinished TDT tail at the context cap is forced out if an earlier tiny
+segment would advance the anchor slower than one POST pace; earlier and normally
+progressing windows keep their sentence boundary. Because VAD can admit fewer
+provider seconds than the capture ring retains, the window also cuts a held
+TDT tail when projected capture lag reaches two thirds of the 90-second ring.
+The remaining third covers another paced POST and its timeout; a stalled leg
+still fails over before replay audio is evicted. `capacity_full` fallback logs
+carry a bounded `subtype` identifying PCM buffer, replay ring, or admission
+capacity without adding a metric label. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
 capture time (a hard run cap is a pathological bound, not the working limit),
 so a provider final trailing its audio by tens of seconds still resolves its
@@ -1564,6 +1594,8 @@ existing counter.
 **Supervisor re-waits on:**
 - Finite task normal completion (e.g. `process_pending_conversations`, `speaker_identification_task`)
 
+The pending-conversation sweep (`pending_convos`) isolates each earlier conversation it finalizes: a row whose finalization raises is logged (`Listen pending finalization failed stage=...`) and left for the next session's sweep, and the remaining rows still run. It must never crash the supervisor, because a row that fails every time (for example a document at Firestore's 1 MiB limit) would otherwise end every reconnect for that user seconds after it starts.
+
 After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) before force-cancel. The connection gauge (`inc`/`dec`) is always paired in `try`/`finally`.
 
 ## Offline speech continuity
@@ -1689,3 +1721,10 @@ semantic guarantee; either flag can be disabled independently for recall rollbac
 decisions; `omi_translation_skip_total` counts skip, defer and rejection reasons. Neither
 counter measures shown badges or fleet correctness. No user text enters labels or logs.
 Historical translations, client rendering, STT routing and billing are unchanged.
+
+The backend-only [on-demand translation contract](translation-on-demand.md)
+adds socket-local `client_state` demand with an optional renewable lease,
+source-fenced display materialization, and an explicit bounded detail-read
+request. Per the owner decision of 2026-09-29 these switches ship enabled
+(default on) with kill switches back to legacy behavior. Current clients send
+visibility edges but do not renew a lease or opt into detail translation.

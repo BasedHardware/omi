@@ -11555,4 +11555,79 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Häältuvastus';
+
+  @override
+  String get greetingMorning => 'Tere hommikust';
+
+  @override
+  String get greetingAfternoon => 'Tere päevast';
+
+  @override
+  String get greetingEvening => 'Tere õhtust';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Mida sa tahad teada?';
+
+  @override
+  String get askSuggestDecide => 'Mida ma täna otsustasin?';
+
+  @override
+  String get askSuggestOwe => 'Mida ma inimestele veel võlgnen?';
+
+  @override
+  String get askSuggestNotice => 'Mida Omi märkas?';
+
+  @override
+  String get pastChats => 'Varasemad vestlused';
+
+  @override
+  String get newChat => 'Uus vestlus';
+
+  @override
+  String get startFresh => 'Alusta otsast';
+
+  @override
+  String get noPastChats => 'Sinu vestlused Omiga ilmuvad siia.';
+
+  @override
+  String get deleteChatQuestion => 'Kas kustutada see vestlus?';
+
+  @override
+  String get deleteChatMessage => 'See kaob varasematest vestlustest jäädavalt.';
+
+  @override
+  String get deleteChat => 'Kustuta vestlus';
+
+  @override
+  String get appsAskWith => 'Küsi Omilt koos';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust täna.',
+      one: '1 vestlus täna.',
+      zero: 'Täna vestlusi pole.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Mis oli ekraanil';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ekraanipilt sellelt koosolekult';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Kas kustutada ekraanipilt?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta.';
 }

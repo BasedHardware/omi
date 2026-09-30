@@ -10,6 +10,8 @@ import numpy as np
 import pytest
 
 from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
+from utils.stt.resilient_stream import trim_window_replay_to_anchor
+from utils.observability.fallback import record_fallback
 from utils.stt.live_metrics import (
     WINDOW_ADMISSION,
     WINDOW_FIRST_TEXT,
@@ -545,7 +547,7 @@ async def test_windowed_gate_keeps_the_billed_threshold_with_a_short_tail(monkey
 
 
 @pytest.mark.asyncio
-async def test_overflow_moves_to_soniox_and_releases_on_finish(monkeypatch):
+async def test_overflow_moves_to_soniox_and_releases_on_finish(monkeypatch, caplog):
     first = await LiveChainSession(receiver()).connect(16000)
     tail = SimpleNamespace(is_connection_dead=False, finish=lambda: None)
     soniox = AsyncMock(return_value=tail)
@@ -554,6 +556,9 @@ async def test_overflow_moves_to_soniox_and_releases_on_finish(monkeypatch):
     second = await LiveChainSession(recv).connect(16000)
     assert second.raw is tail
     assert recv.host.stt_service == st.STTService.soniox
+    assert second._pending_selection.capacity_subtype == 'admission'
+    second._pending_selection.note_transcript([{'text': 'test'}])
+    assert 'reason=capacity_full outcome=recovered subtype=admission' in caplog.text
     assert st._parakeet_circuit.state == 'closed'  # local admission isn't GPU failure
     first.finish()
     first.finish()
@@ -567,8 +572,9 @@ def test_eight_session_cap_is_hard_and_releases_idempotently(monkeypatch):
     admission = window.WindowAdmission()
     releases = [admission.acquire() for _ in range(8)]
     assert admission.active == 8
-    with pytest.raises(st.ParakeetConnectionError, match='capacity_full'):
+    with pytest.raises(st.ParakeetConnectionError, match='capacity_full') as overflow:
         admission.acquire()
+    assert overflow.value.capacity_subtype == 'admission'
     releases[0]()
     releases[0]()
     assert admission.active == 7
@@ -620,8 +626,31 @@ async def test_one_post_in_flight_buffer_bounded_and_cancel_releases(monkeypatch
     assert sock.is_connection_dead
     assert sock.death_reason == 'capacity_full'
     assert sock.typed_death_reason == 'capacity_full'
+    assert sock.capacity_subtype == 'buffer_cap'
     assert st._parakeet_circuit.state == 'open'
     assert window.admission.active == 0
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_fragmented_vad_speech_does_not_exhaust_span_capacity(monkeypatch):
+    sock = window.connect_window(lambda _: None, 16000)
+    # Forty-four seconds of 20 ms speech/20 ms hangover frames fits the PCM
+    # buffer, but the old one-span-per-VAD-toggle limit killed the leg at 1025.
+    frame = b'\x01\x00' * 320
+    gap = bytes(len(frame))
+    for _ in range(1100):
+        sock.mark_speech()
+        assert sock.send(frame)
+        assert sock.send(gap)
+    assert len(sock._buf) < sock._buffer_cap()
+    assert len(sock._speech_spans) <= 1024
+    assert not sock.is_connection_dead
+    anchor = sock._to_bytes(22)
+    sock._advance_anchor(anchor)
+    assert sock._speech_spans[0][0] >= anchor
+    assert len(sock._buf) == sock._received_bytes - anchor
+    sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
 
 
@@ -981,6 +1010,348 @@ async def _receiver_with_racing_window(monkeypatch, client, *, speech_seconds=6,
     await asyncio.wait_for(client.started.wait(), timeout=2)
     assert previous.raw._first_text_timer is not None
     return actual, base, previous, pcm, replayed, callbacks
+
+
+class ProgressThenHoldClient:
+    def __init__(self, *, hold_after=None):
+        self.hold_after = hold_after
+        self.requests = []
+        self.blocked = asyncio.Event()
+        self.cancelled = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        if self.hold_after is not None and len(self.requests) >= self.hold_after:
+            self.blocked.set()
+            try:
+                await self.release.wait()
+            except asyncio.CancelledError:
+                self.cancelled.set()
+                await self.release.wait()
+        duration = _wav_duration(kwargs)
+        return httpx.Response(
+            200,
+            json={'segments': [{'text': f'Part {len(self.requests)}.', 'start': 0.0, 'end': duration - 1.5}]},
+            request=httpx.Request('POST', url),
+        )
+
+
+class UnpunctuatedClient(ProgressThenHoldClient):
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        duration = _wav_duration(kwargs)
+        return httpx.Response(
+            200,
+            json={'segments': [{'text': 'ongoing speech', 'start': 0.0, 'end': duration - 0.5}]},
+            request=httpx.Request('POST', url),
+        )
+
+
+class LongTailClient(ProgressThenHoldClient):
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        duration = _wav_duration(kwargs)
+        return httpx.Response(
+            200,
+            json={
+                'segments': [
+                    {'text': 'short prefix', 'start': 0.0, 'end': 0.5},
+                    {'text': 'continuing speech', 'start': 0.5, 'end': duration - 0.1},
+                ]
+            },
+            request=httpx.Request('POST', url),
+        )
+
+
+async def _receiver_for_anchor_replay(monkeypatch, client):
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '60')
+    monkeypatch.setenv('PARAKEET_WINDOW_POST_TIMEOUT_SECONDS', '60')
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    base = receiver()
+    host = base.host
+    host.request.sample_rate = 16000
+    host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    host.state.stt_terminal_failure = False
+    host.state.fair_use_dg_budget_exhausted = False
+    host.state.fair_use_track_dg_usage = False
+    host.state.dg_usage_ms_pending = 0
+    host.client_device_context = SimpleNamespace(platform='ios')
+    host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
+    host.spawn = lambda coro, **kw: coro.close()
+    actual = ListenReceiver(host, [], {})
+    monkeypatch.setattr(actual, '_run_on_listen_loop', lambda callback, segments: callback(segments))
+    replayed = []
+    callbacks = []
+
+    async def tail(callback, *args, **kwargs):
+        callbacks.append(callback)
+        return SimpleNamespace(
+            is_connection_dead=False,
+            send=lambda data: replayed.append(data) or True,
+            finalize=lambda: None,
+            finish=lambda: None,
+        )
+
+    monkeypatch.setattr(st, 'process_audio_soniox', tail)
+    assert await actual.initialize_stt()
+    return actual, base, actual.stt_socket, replayed, callbacks
+
+
+async def _flush_capture(actual, pcm, start_sample):
+    actual.capture_timeline.accept(pcm, window.time.time(), window.time.monotonic())
+    actual._stt_buffer_start_sample = start_sample
+    await actual._flush_stt_buffer(bytearray(pcm), force=True)
+
+
+async def _wait_replay_anchor(raw, previous):
+    deadline = asyncio.get_running_loop().time() + 2
+    while raw.replay_anchor_sample() is None or raw.replay_anchor_sample() <= previous:
+        if asyncio.get_running_loop().time() >= deadline:
+            raise TimeoutError('window emit anchor did not advance')
+        await _REAL_SLEEP(0)
+
+
+@pytest.mark.asyncio
+async def test_five_minutes_of_continuous_window_speech_keeps_bounded_replay(monkeypatch):
+    client = ProgressThenHoldClient()
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    pcm = b'\x01\x00' * 16000 * 6
+    before_trims = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+    anchor = -1
+
+    for step in range(50):
+        await _flush_capture(actual, pcm, step * len(pcm) // 2)
+        await _wait_requests(client, step + 1)
+        await _wait_replay_anchor(previous.raw, anchor)
+        anchor = previous.raw.replay_anchor_sample()
+        assert actual.stt_socket is previous
+        assert not previous.is_connection_dead
+        assert ring.buffered_bytes <= 90 * 16000 * 2
+
+    assert len(client.requests) == 50
+    assert len(base.emitted) == 50
+    assert replayed == [] and callbacks == []
+    assert WINDOW_REPLAY_SAFE_TRIMS._value.get() > before_trims
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_unpunctuated_continuous_speech_forces_context_cut_before_buffer_cap(monkeypatch):
+    client = UnpunctuatedClient()
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    pcm = b'\x01\x00' * 16000 * 6
+    for step in range(50):
+        await _flush_capture(actual, pcm, step * len(pcm) // 2)
+        await _wait_requests(client, step + 1)
+        assert not previous.is_connection_dead
+        assert len(previous.raw._buf) <= previous.raw._buffer_cap()
+    assert len(base.emitted) > 0
+    assert replayed == [] and callbacks == []
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_long_unfinished_tdt_tail_cuts_at_context_cap_instead_of_filling_pcm_buffer(monkeypatch):
+    client = LongTailClient()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    emitted = []
+    sock = window.WindowedParakeetSocket(emitted.extend, 'http://tdt.invalid', 16000, lambda: None)
+    pcm = b'\x01\x00' * 16000 * 6
+    anchors = []
+    for _ in range(50):
+        sock.mark_speech()
+        assert sock.send(pcm)
+        job = sock._next_job()
+        assert job is not None
+        await sock._run_job(job)
+        anchors.append(sock._anchor_bytes)
+        assert len(sock._buf) <= sock._buffer_cap()
+    assert len(client.requests) == 50
+    assert anchors[3] < sock._pace_bytes  # early cuts keep the sentence anchor
+    assert any(right - left > sock._pace_bytes for left, right in zip(anchors, anchors[1:]))
+    assert emitted
+    assert not sock.is_connection_dead
+    sock.finish()
+
+
+@pytest.mark.asyncio
+async def test_partial_vad_admission_unfinished_tdt_tail_keeps_replay_anchor_within_ninety_seconds(monkeypatch):
+    client = LongTailClient()
+    pump_release = asyncio.Event()
+
+    async def parked_pump(_self):
+        await pump_release.wait()
+
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_pump', parked_pump)
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    pcm = b'\x01\x00' * 16000 * 6
+    assert previous.gate is not None and not previous.passthrough
+
+    def admit_half(data, _wall_time, _score_pcm, start_sample):
+        assert start_sample is not None
+        return vad_gate.GateOutput(
+            audio_to_send=data[: len(data) // 2],
+            is_speech=True,
+            send_spans=((start_sample, len(data) // 4),),
+        )
+
+    monkeypatch.setattr(previous.gate, 'process_audio', admit_half)
+    before_cuts = WINDOW_FORCED_CUTS._value.get()
+
+    for step in range(50):  # Five capture minutes, half admitted to the provider after VAD.
+        await _flush_capture(actual, pcm, step * len(pcm) // 2)
+        assert actual.stt_socket is previous, (step, previous.capacity_subtype, previous.raw.death_reason)
+        assert previous.capacity_subtype is None
+        assert ring.buffered_bytes <= 90 * 16000 * 2
+        job = previous.raw._next_job()
+        if job is not None:
+            await previous.raw._run_job(job)
+
+    assert base.emitted
+    ends = [float(item['end']) for item in base.emitted]
+    assert ends == sorted(set(ends))  # Re-posted context never duplicates emitted text.
+    assert WINDOW_FORCED_CUTS._value.get() > before_cuts
+    assert replayed == [] and callbacks == []
+    trim_window_replay_to_anchor(ring, previous)
+    replay_snapshot = ring.snapshot()
+    assert replay_snapshot and replay_snapshot[0][0] == previous.window_replay_anchor_sample()
+    previous.raw.fail('timeout')
+    assert await actual._failover_stt_socket()
+    assert b''.join(replayed) == b''.join(data for _, data in replay_snapshot)
+    assert len(callbacks) == 1
+    assert [float(item['end']) for item in base.emitted] == ends
+    pump_release.set()
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_stalled_window_post_fails_once_and_replays_exactly_from_emit_anchor(monkeypatch):
+    client = ProgressThenHoldClient(hold_after=2)
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    ring.ring_seconds = 12
+    pcm = b'\x01\x00' * 16000 * 6
+    await _flush_capture(actual, pcm, 0)
+    await _wait_replay_anchor(previous.raw, -1)
+    anchor = previous.window_replay_anchor_sample()
+    assert anchor is not None and anchor > 0
+    assert ring.snapshot()[0][0] == anchor
+
+    await _flush_capture(actual, pcm, 6 * 16000)
+    await asyncio.wait_for(client.blocked.wait(), 2)
+    assert previous.raw.has_untranscribed_speech()
+    assert not previous.raw._pump_task.done()
+    await _flush_capture(actual, pcm, 12 * 16000)
+
+    assert previous.raw.death_reason == 'capacity_full'
+    assert previous.capacity_subtype == 'replay_ring_cap'
+    assert actual._pending_live_failover.reason == 'capacity_full'
+    assert actual._pending_live_failover.capacity_subtype == 'replay_ring_cap'
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == pcm[anchor * 2 :] + pcm + pcm
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert len(base.emitted) == 1
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_stalled_window_pcm_cap_reports_buffer_subtype_and_replays(monkeypatch, caplog):
+    client = ProgressThenHoldClient(hold_after=2)
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    pcm = b'\x01\x00' * 16000 * 6
+    await _flush_capture(actual, pcm, 0)
+    await _wait_replay_anchor(previous.raw, -1)
+    anchor = previous.window_replay_anchor_sample()
+    assert anchor is not None
+    await _flush_capture(actual, pcm, 6 * 16000)
+    await asyncio.wait_for(client.blocked.wait(), 2)
+    for step in range(2, 11):
+        await _flush_capture(actual, pcm, step * 6 * 16000)
+    assert previous.raw.death_reason == 'capacity_full'
+    assert previous.capacity_subtype == 'buffer_cap'
+    assert actual._pending_live_failover.reason == 'capacity_full'
+    assert actual._pending_live_failover.capacity_subtype == 'buffer_cap'
+    actual._pending_live_failover.note_transcript([{'text': 'test'}])
+    assert 'reason=capacity_full outcome=recovered subtype=buffer_cap' in caplog.text
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == pcm[anchor * 2 :] + pcm * 10
+    assert len(base.emitted) == 1
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    await actual._drain_stt_sockets()
+
+
+def test_capacity_subtype_is_bounded_log_detail_not_a_metric_reason(caplog):
+    label = OMI_FALLBACK_TOTAL.labels(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='capacity_full',
+        outcome='recovered',
+    )
+    before = label._value.get()
+    record_fallback(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='capacity_full',
+        outcome='recovered',
+        capacity_subtype='buffer_cap',
+    )
+    assert label._value.get() == before + 1
+    assert 'reason=capacity_full outcome=recovered subtype=buffer_cap' in caplog.text
+    record_fallback(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='capacity_full',
+        outcome='recovered',
+        capacity_subtype='unbounded-user-content',
+    )
+    assert 'subtype=unknown' in caplog.text
+    assert 'unbounded-user-content' not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_trim_during_inflight_window_post_retains_its_entire_unemitted_span(monkeypatch):
+    client = ProgressThenHoldClient(hold_after=2)
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    ring.ring_seconds = 12
+    pcm = b'\x01\x00' * 16000 * 6
+    # Delay the immediate progress callback so this test trims while the next
+    # real pump POST is in flight, as can happen at a send/failover boundary.
+    previous.raw.set_replay_progress_callback(lambda: None)
+    await _flush_capture(actual, pcm, 0)
+    await _wait_replay_anchor(previous.raw, -1)
+    anchor = previous.window_replay_anchor_sample()
+    assert anchor is not None and anchor > 0
+    actual.capture_timeline.accept(pcm, window.time.time(), window.time.monotonic())
+    assert previous.send(pcm, start_sample=6 * 16000)
+    ring.append(pcm, 6 * 16000)  # preserve the pre-trim state at this race boundary
+    await asyncio.wait_for(client.blocked.wait(), 2)
+    assert ring.snapshot()[0][0] == 0
+    before = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+    trim_window_replay_to_anchor(ring, previous)
+    assert ring.snapshot()[0][0] == anchor
+    assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before + 1
+    previous.raw.fail('provider_5xx')
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == pcm[anchor * 2 :] + pcm
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert len(base.emitted) == 1
+    await actual._drain_stt_sockets()
 
 
 @pytest.mark.asyncio
@@ -1763,6 +2134,11 @@ def test_decide_window_hold_empty_trailing_complete_and_forced_cut():
     assert held_decision.emit == (first,)
     assert held_decision.new_anchor == 2.0
     assert held_decision.forced_cut is False
+    replay_cut = decide_window([first, held], 6.0, 24.0, force=False, force_replay_cut=True)
+    assert replay_cut.emit == (first, held)
+    assert replay_cut.new_anchor == 5.0
+    assert replay_cut.forced_cut is True
+    assert decide_window([], 6.0, 24.0, force=False, force_replay_cut=True).emit == ()
 
     done = RawSegment('Done.', 0.0, 4.5)
     assert is_trailing_complete(done, 6.0)
@@ -1781,6 +2157,17 @@ def test_decide_window_hold_empty_trailing_complete_and_forced_cut():
     assert cap_two.emit == (first,)
     assert cap_two.new_anchor == 2.0
     assert cap_two.forced_cut is False
+    tiny = RawSegment('short prefix', 0.0, 0.5)
+    long_tail = RawSegment('continuing speech', 0.5, 23.9)
+    stalled_cap = decide_window([tiny, long_tail], 24.0, 24.0, force=False, min_cap_progress=6.0)
+    assert stalled_cap.emit == (tiny, long_tail)
+    assert stalled_cap.new_anchor == 23.9
+    assert stalled_cap.forced_cut is True
+    progressed = RawSegment('complete prefix.', 0.0, 18.0)
+    healthy_cap = decide_window([progressed, long_tail], 24.0, 24.0, force=False, min_cap_progress=6.0)
+    assert healthy_cap.emit == (progressed,)
+    assert healthy_cap.new_anchor == 18.0
+    assert healthy_cap.forced_cut is False
     forced = decide_window([held], 24.0, 24.0, force=False)
     assert forced.emit == (held,)
     assert forced.new_anchor == 5.0

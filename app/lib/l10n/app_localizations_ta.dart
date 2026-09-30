@@ -11637,4 +11637,79 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'குரல் அடையாளம்';
+
+  @override
+  String get greetingMorning => 'காலை வணக்கம்';
+
+  @override
+  String get greetingAfternoon => 'மதிய வணக்கம்';
+
+  @override
+  String get greetingEvening => 'மாலை வணக்கம்';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'நீங்கள் என்ன தெரிந்துகொள்ள விரும்புகிறீர்கள்?';
+
+  @override
+  String get askSuggestDecide => 'இன்று நான் என்ன முடிவு செய்தேன்?';
+
+  @override
+  String get askSuggestOwe => 'இன்னும் மக்களுக்கு நான் என்ன செய்ய வேண்டும்?';
+
+  @override
+  String get askSuggestNotice => 'Omi என்ன கவனித்தது?';
+
+  @override
+  String get pastChats => 'முந்தைய அரட்டைகள்';
+
+  @override
+  String get newChat => 'புதிய அரட்டை';
+
+  @override
+  String get startFresh => 'புதிதாகத் தொடங்குங்கள்';
+
+  @override
+  String get noPastChats => 'Omi உடனான உங்கள் அரட்டைகள் இங்கே தோன்றும்.';
+
+  @override
+  String get deleteChatQuestion => 'இந்த அரட்டையை நீக்கவா?';
+
+  @override
+  String get deleteChatMessage => 'இது முந்தைய அரட்டைகளிலிருந்து நிரந்தரமாக நீங்கும்.';
+
+  @override
+  String get deleteChat => 'அரட்டையை நீக்கு';
+
+  @override
+  String get appsAskWith => 'இதனுடன் Omi-யிடம் கேளுங்கள்';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'இன்று $count உரையாடல்கள்.',
+      one: 'இன்று 1 உரையாடல்.',
+      zero: 'இன்று உரையாடல்கள் இல்லை.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'திரையில் இருந்தவை';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'இந்தக் கூட்டத்தின் திரைப்பிடிப்பு';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'திரைப்பிடிப்பை நீக்கவா?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'இது இந்தக் கூட்டத்தின் குறிப்பிலிருந்து திரைப்பிடிப்பை நீக்கும். இதைச் செயல்தவிர்க்க முடியாது.';
 }

@@ -11555,4 +11555,79 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'تشخیص صدا';
+
+  @override
+  String get greetingMorning => 'صبح بخیر';
+
+  @override
+  String get greetingAfternoon => 'بعدازظهر بخیر';
+
+  @override
+  String get greetingEvening => 'عصر بخیر';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting، $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'چه می‌خواهید بدانید؟';
+
+  @override
+  String get askSuggestDecide => 'امروز چه تصمیمی گرفتم؟';
+
+  @override
+  String get askSuggestOwe => 'هنوز به چه کسانی چه بدهکارم؟';
+
+  @override
+  String get askSuggestNotice => 'Omi متوجه چه شد؟';
+
+  @override
+  String get pastChats => 'گفتگوهای قبلی';
+
+  @override
+  String get newChat => 'گفتگوی جدید';
+
+  @override
+  String get startFresh => 'از نو شروع کنید';
+
+  @override
+  String get noPastChats => 'گفتگوهای شما با Omi اینجا نشان داده می‌شود.';
+
+  @override
+  String get deleteChatQuestion => 'این گفتگو حذف شود؟';
+
+  @override
+  String get deleteChatMessage => 'برای همیشه از گفتگوهای قبلی حذف می‌شود.';
+
+  @override
+  String get deleteChat => 'حذف گفتگو';
+
+  @override
+  String get appsAskWith => 'از Omi بپرسید با';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گفتگو امروز.',
+      one: '۱ گفتگو امروز.',
+      zero: 'امروز گفتگویی نبوده.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'آنچه روی صفحه بود';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'اسکرین‌شات از این جلسه';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'اسکرین‌شات حذف شود؟';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'این کار اسکرین‌شات را از یادداشت این جلسه حذف می‌کند. قابل بازگشت نیست.';
 }

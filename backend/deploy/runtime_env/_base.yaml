@@ -12,6 +12,20 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
+        TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
+        TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
+        TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
+        TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+        TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
+        TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+        TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
+        TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
+        TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
+        TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS: {value: '4096', category: rollout}
+        TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
+        TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
+        TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
         FREE_TIER_LOCAL_PROCESSING:
           category: rollout
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -179,6 +193,9 @@ environment_shared:
         MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'false'
           category: rollout
+        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
         WAKE_WORD_ADJUDICATION_ENABLED:
@@ -320,6 +337,9 @@ environment_shared:
         MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'false'
           category: rollout
+        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
         HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -445,6 +465,20 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
+          TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
+          TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
+          TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS: {value: '4096', category: rollout}
+          TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
+          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -471,6 +505,9 @@ environment_shared:
             value: 'false'
             category: rollout
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'false'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
@@ -682,6 +719,9 @@ environment_shared:
             value: 'false'
             category: rollout
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'false'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:

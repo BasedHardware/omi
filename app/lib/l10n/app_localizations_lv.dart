@@ -11584,4 +11584,78 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Balss atpazīšana';
+
+  @override
+  String get greetingMorning => 'Labrīt';
+
+  @override
+  String get greetingAfternoon => 'Labdien';
+
+  @override
+  String get greetingEvening => 'Labvakar';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ko vēlaties uzzināt?';
+
+  @override
+  String get askSuggestDecide => 'Ko es šodien izlēmu?';
+
+  @override
+  String get askSuggestOwe => 'Ko es vēl esmu parādā citiem?';
+
+  @override
+  String get askSuggestNotice => 'Ko pamanīja Omi?';
+
+  @override
+  String get pastChats => 'Iepriekšējās tērzēšanas';
+
+  @override
+  String get newChat => 'Jauna tērzēšana';
+
+  @override
+  String get startFresh => 'Sākt no jauna';
+
+  @override
+  String get noPastChats => 'Jūsu tērzēšanas ar Omi parādās šeit.';
+
+  @override
+  String get deleteChatQuestion => 'Dzēst šo tērzēšanu?';
+
+  @override
+  String get deleteChatMessage => 'Tā uz visiem laikiem pazudīs no iepriekšējām tērzēšanām.';
+
+  @override
+  String get deleteChat => 'Dzēst tērzēšanu';
+
+  @override
+  String get appsAskWith => 'Jautājiet Omi ar';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sarunas šodien.',
+      one: '1 saruna šodien.',
+      zero: 'Šodien sarunu nav.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Kas bija ekrānā';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ekrānuzņēmums no šīs sapulces';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Dzēst ekrānuzņēmumu?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt.';
 }

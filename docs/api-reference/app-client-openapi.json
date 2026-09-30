@@ -8658,6 +8658,17 @@
             "maxItems": 6,
             "title": "Strip",
             "type": "array"
+          },
+          "trusted_selection_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trusted Selection Fingerprint"
           }
         },
         "required": [
@@ -41511,6 +41522,32 @@
               "default": true,
               "title": "Include Discarded",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_translations",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Translations",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "translation_cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Translation Cursor"
             }
           },
           {

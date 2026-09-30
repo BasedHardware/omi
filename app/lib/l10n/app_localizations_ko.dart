@@ -11372,4 +11372,78 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => '음성 인식';
+
+  @override
+  String get greetingMorning => '좋은 아침이에요';
+
+  @override
+  String get greetingAfternoon => '좋은 오후예요';
+
+  @override
+  String get greetingEvening => '좋은 저녁이에요';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name님';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => '무엇이 궁금하세요?';
+
+  @override
+  String get askSuggestDecide => '오늘 무엇을 결정했지?';
+
+  @override
+  String get askSuggestOwe => '아직 사람들에게 해 줘야 할 일은?';
+
+  @override
+  String get askSuggestNotice => 'Omi가 알아챈 것은?';
+
+  @override
+  String get pastChats => '지난 채팅';
+
+  @override
+  String get newChat => '새 채팅';
+
+  @override
+  String get startFresh => '처음부터 시작';
+
+  @override
+  String get noPastChats => 'Omi와 나눈 채팅이 여기에 표시돼요.';
+
+  @override
+  String get deleteChatQuestion => '이 채팅을 삭제할까요?';
+
+  @override
+  String get deleteChatMessage => '지난 채팅에서 영구히 사라져요.';
+
+  @override
+  String get deleteChat => '채팅 삭제';
+
+  @override
+  String get appsAskWith => '이것과 함께 Omi에게 묻기';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '오늘 대화 $count개.',
+      one: '오늘 대화 1개.',
+      zero: '오늘은 대화가 없어요.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => '화면에 표시된 내용';
+
+  @override
+  String get meetingScreenshotFallbackCaption => '이 회의의 스크린샷';
+
+  @override
+  String get deleteMeetingScreenshotTitle => '스크린샷을 삭제할까요?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => '이 회의 노트에서 스크린샷이 삭제됩니다. 되돌릴 수 없습니다.';
 }

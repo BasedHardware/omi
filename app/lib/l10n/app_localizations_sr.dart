@@ -11573,4 +11573,79 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Препознавање гласа';
+
+  @override
+  String get greetingMorning => 'Добро јутро';
+
+  @override
+  String get greetingAfternoon => 'Добар дан';
+
+  @override
+  String get greetingEvening => 'Добро вече';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Šta želite da znate?';
+
+  @override
+  String get askSuggestDecide => 'Šta sam danas odlučio?';
+
+  @override
+  String get askSuggestOwe => 'Šta još dugujem ljudima?';
+
+  @override
+  String get askSuggestNotice => 'Šta je Omi primetio?';
+
+  @override
+  String get pastChats => 'Prethodni razgovori';
+
+  @override
+  String get newChat => 'Novi razgovor';
+
+  @override
+  String get startFresh => 'Počni ispočetka';
+
+  @override
+  String get noPastChats => 'Vaši razgovori sa Omijem pojavljuju se ovde.';
+
+  @override
+  String get deleteChatQuestion => 'Izbrisati ovaj razgovor?';
+
+  @override
+  String get deleteChatMessage => 'Trajno nestaje iz prethodnih razgovora.';
+
+  @override
+  String get deleteChat => 'Izbriši razgovor';
+
+  @override
+  String get appsAskWith => 'Pitaj Omi uz';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count razgovora danas.',
+      one: '1 razgovor danas.',
+      zero: 'Danas nema razgovora.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Шта је било на екрану';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Снимак екрана са овог састанка';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Избрисати снимак екрана?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ово уклања снимак екрана из белешке овог састанка. Не може се опозвати.';
 }

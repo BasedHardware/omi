@@ -11577,4 +11577,79 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Balso atpažinimas';
+
+  @override
+  String get greetingMorning => 'Labas rytas';
+
+  @override
+  String get greetingAfternoon => 'Laba diena';
+
+  @override
+  String get greetingEvening => 'Labas vakaras';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ką norite sužinoti?';
+
+  @override
+  String get askSuggestDecide => 'Ką šiandien nusprendžiau?';
+
+  @override
+  String get askSuggestOwe => 'Ką dar esu skolingas žmonėms?';
+
+  @override
+  String get askSuggestNotice => 'Ką pastebėjo Omi?';
+
+  @override
+  String get pastChats => 'Ankstesni pokalbiai';
+
+  @override
+  String get newChat => 'Naujas pokalbis';
+
+  @override
+  String get startFresh => 'Pradėti iš naujo';
+
+  @override
+  String get noPastChats => 'Jūsų pokalbiai su Omi rodomi čia.';
+
+  @override
+  String get deleteChatQuestion => 'Ištrinti šį pokalbį?';
+
+  @override
+  String get deleteChatMessage => 'Jis visam laikui dings iš ankstesnių pokalbių.';
+
+  @override
+  String get deleteChat => 'Ištrinti pokalbį';
+
+  @override
+  String get appsAskWith => 'Klauskite Omi su';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pokalbiai šiandien.',
+      one: '1 pokalbis šiandien.',
+      zero: 'Šiandien pokalbių nėra.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Kas buvo ekrane';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Šio susitikimo ekrano kopija';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Ištrinti ekrano kopiją?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ekrano kopija bus pašalinta iš šio susitikimo užrašo. Šio veiksmo anuliuoti negalima.';
 }

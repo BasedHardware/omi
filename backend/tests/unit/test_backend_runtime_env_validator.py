@@ -120,6 +120,7 @@ def with_conversation_notes_v2_env(payload: str) -> str:
         r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "MEETING_NOTES_RICH_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
     )
     payload = re.sub(
@@ -131,7 +132,8 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     )
     return re.sub(
         r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
-        flags,
+        # backend-sync finalizes conversations, so it reads this environment's frame docs.
+        flags + r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -368,6 +370,35 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
         payload,
         flags=re.MULTILINE,
+    )
+    # These fixtures exercise unrelated gateway and secret failures, so include
+    # the default-on translation bindings declared for the serving backend.
+    # Owner decision 2026-09-29: on-demand ships enabled; flags are kill switches.
+    translation_defaults = {
+        'TRANSLATION_DEMAND_SHADOW_ENABLED': 'false',
+        'TRANSLATION_DEMAND_GATE_ENABLED': 'true',
+        'TRANSLATION_DEMAND_LEASE_V1_ENABLED': 'true',
+        'TRANSLATION_ONDEMAND_GEMINI_ENABLED': 'true',
+        'TRANSLATION_ONOPEN_ENABLED': 'true',
+        'TRANSLATION_ONDEMAND_COHORT_PERCENT': '100',
+        'TRANSLATION_ONDEMAND_UID_ALLOWLIST': '',
+        'TRANSLATION_ONDEMAND_MAX_SEGMENTS': '50',
+        'TRANSLATION_ONDEMAND_MAX_CHARS': '12000',
+        'TRANSLATION_ONDEMAND_DEADLINE_SECONDS': '3',
+        'TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS': '4096',
+        'TRANSLATION_ONDEMAND_UID_DAILY_CHARS': '10000000',
+        'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS': '1000000000',
+        'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES': '4',
+    }
+    entries = ',\n'.join(
+        '        ' + json.dumps({'name': name, 'value': value}) for name, value in translation_defaults.items()
+    )
+    payload = re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        lambda match: match.group(1) + '\n' + entries + ',',
+        payload,
+        count=1,
+        flags=re.DOTALL,
     )
     return with_backend_integration_events_secret(payload)
 

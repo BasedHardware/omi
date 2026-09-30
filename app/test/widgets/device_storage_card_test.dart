@@ -6,6 +6,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 const int _mb = 1024 * 1024;
 
@@ -31,6 +32,8 @@ Color? _barColor(WidgetTester tester) {
 }
 
 void main() {
+  // These assertions describe the dark appearance; the app now starts light by default.
+  setUpAll(() => OmiColors.active = OmiPalette.dark);
   testWidgets('normal fill: percent, bar value and neutral color, no warning', (tester) async {
     await tester.pumpWidget(_app(DeviceStorageCard(status: _status(usedMb: 338, freeMb: 131))));
     await tester.pump();

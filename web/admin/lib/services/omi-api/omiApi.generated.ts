@@ -1362,6 +1362,7 @@ export interface ConversationScreenFrameSet {
   revision: number;
   selection_fingerprint?: string | null;
   strip?: Array<ConversationScreenFrame>;
+  trusted_selection_fingerprint?: string | null;
 }
 
 export interface ConversationSearchItem {
@@ -12597,7 +12598,7 @@ export async function generate_conversation_topic_endpoint_v1_conversations_topi
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversation_by_id_v1_conversations__conversation_id__get(path: { conversation_id: string }, query: { source?: string | null, include_discarded?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
+export async function get_conversation_by_id_v1_conversations__conversation_id__get(path: { conversation_id: string }, query: { source?: string | null, include_discarded?: boolean, include_translations?: boolean, translation_cursor?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}`;
   const _params = query ? Object.entries(query)

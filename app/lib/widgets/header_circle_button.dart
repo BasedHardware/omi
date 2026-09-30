@@ -87,7 +87,11 @@ class HeaderCountBadge extends StatelessWidget {
         label,
         key: const ValueKey('header_count_badge'),
         textScaler: TextScaler.noScaling,
-        style: OmiType.caption.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600, height: 1.0),
+        style: OmiType.caption.copyWith(
+          color: OmiColors.textTertiary,
+          fontWeight: FontWeight.w600,
+          height: 1.0,
+        ),
       );
     }
     return Container(
@@ -103,7 +107,11 @@ class HeaderCountBadge extends StatelessWidget {
       child: Text(
         label,
         textScaler: TextScaler.noScaling,
-        style: OmiType.caption.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w700, height: 1.0),
+        style: OmiType.caption.copyWith(
+          color: OmiColors.onAccent,
+          fontWeight: FontWeight.w700,
+          height: 1.0,
+        ),
       ),
     );
   }

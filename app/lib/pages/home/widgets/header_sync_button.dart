@@ -13,7 +13,11 @@ import 'package:omi/widgets/header_circle_button.dart';
 /// row on Home. It only reports; it must not invite a tap, so it is one quiet state throughout:
 /// no fill, a tertiary outline glyph, and a muted count. No status colour, syncing or waiting.
 class HeaderSyncButton extends StatelessWidget {
-  const HeaderSyncButton({super.key, required this.hasPairedDevice, required this.onTap});
+  const HeaderSyncButton({
+    super.key,
+    required this.hasPairedDevice,
+    required this.onTap,
+  });
 
   final bool hasPairedDevice;
   final VoidCallback onTap;

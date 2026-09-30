@@ -228,7 +228,7 @@ class WindowAdmission:
             WINDOW_CAP.set(cap)
             if self.active >= cap:
                 WINDOW_ADMISSION.labels(outcome='overflow').inc()
-                raise ParakeetConnectionError('capacity_full')
+                raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
             self.active += 1
             WINDOW_ACTIVE.inc()
         released = False
@@ -438,6 +438,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._anchor_bytes = 0
         self._now_bytes = 0
         self._last_emitted_end = 0.0
+        self._capacity_subtype: str | None = None
+        self._replay_cut_requested = False
+        self._on_replay_progress: Callable[[], None] = lambda: None
         # Anchor bytes of the one window whose beyond-window drops are being
         # re-posted (see `_run_job`): bounded to a single retry per anchor.
         self._beyond_window_repost: int | None = None
@@ -451,9 +454,31 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def typed_death_reason(self) -> str | None:
         return getattr(self, '_typed_death_reason', None)
 
+    @property
+    def capacity_subtype(self) -> str | None:
+        return self._capacity_subtype
+
     def has_untranscribed_speech(self) -> bool:
         """Whether replay still protects speech that this leg has not emitted."""
         return (self._first_speech_at is not None and not self._first_text_recorded) or self._has_unemitted_speech()
+
+    def replay_anchor_sample(self) -> int | None:
+        """Provider sample before which emitted text makes capture replay unnecessary."""
+        if not self._first_text_recorded:
+            return None
+        with self._lock:
+            # Empty forced cuts may slide the POST anchor without emitting text.
+            return min(self._anchor_bytes, self._to_bytes(self._last_emitted_end)) // 2
+
+    def set_replay_progress_callback(self, callback: Callable[[], None]) -> None:
+        self._on_replay_progress = callback
+
+    def request_replay_cut(self) -> None:
+        """Bound capture-ring lag on the next TDT result that contains text."""
+        if self._closed or self._dead:
+            return
+        self._replay_cut_requested = True
+        self._wake.set()
 
     def start(self) -> None:
         super().start()
@@ -504,6 +529,18 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def _buffer_cap(self) -> int:
         return int(buffer_cap_seconds(self._pace_seconds, self._max_context_seconds) * self._sample_rate) * 2
 
+    def _compact_speech_spans(self) -> None:
+        """Keep VAD flicker bounded without forgetting speech or the POST anchor."""
+        if len(self._speech_spans) <= 1024:
+            return
+        spans = list(self._speech_spans)
+        pair = min(
+            range(len(spans) - 1),
+            key=lambda index: spans[index + 1][0] - spans[index][1],
+        )
+        spans[pair : pair + 2] = [(spans[pair][0], spans[pair + 1][1])]
+        self._speech_spans = deque(spans)
+
     def send(self, data: bytes) -> bool:
         if self._closed or self._dead:
             return False
@@ -524,11 +561,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             if self._speech_spans and self._speech_spans[-1][1] == self._received_bytes:
                 start, _ = self._speech_spans.pop()
                 self._speech_spans.append((start, end))
-            elif len(self._speech_spans) < 1024:
-                self._speech_spans.append((self._received_bytes, end))
             else:
-                self.fail('capacity_full')
-                return False
+                self._speech_spans.append((self._received_bytes, end))
+                self._compact_speech_spans()
         self._next_send_speech = False
         self._received_bytes += len(data)
         accepted = super().send(data)
@@ -592,17 +627,19 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._pause_requested = True
         self._wake.set()
 
-    def fail(self, reason: str) -> None:
+    def fail(self, reason: str, *, capacity_subtype: str | None = None) -> None:
         if self._dead:
             return
         self._dead, self._dead_reason = True, reason
+        if reason == 'capacity_full':
+            self._capacity_subtype = capacity_subtype
         if reason in {'first_text_deadline', 'empty_streak', 'capacity_full'}:
             self._typed_death_reason = reason
         self.finish()
 
     def _shed_capacity(self) -> None:
         st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
-        self.fail('capacity_full')
+        self.fail('capacity_full', capacity_subtype='buffer_cap')
 
     def finish(self) -> None:
         self._closed = True
@@ -699,6 +736,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             force=job.force,
             pause=job.pause,
             empty_cap_slide=EMPTY_CAP_SLIDE_SECONDS,
+            # Preserve sentence anchoring while the buffer has room. Force
+            # the long held tail only when another pace of audio would leave
+            # too little room for the next POST to make progress.
+            min_cap_progress=(self._pace_seconds if len(self._buf) >= self._buffer_cap() - self._pace_bytes else 0.0),
+            force_replay_cut=self._replay_cut_requested,
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
@@ -747,6 +789,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._beyond_window_repost = None
         if new_anchor_bytes is not None:
             self._advance_anchor(new_anchor_bytes)
+            if emitted:
+                self._replay_cut_requested = False
 
     async def _recover_skipped_head(self, job: _WindowJob, segments: list[RawSegment]) -> list[RawSegment]:
         if not segments or segments[0].start < HEAD_RECOVERY_MIN_GAP_SECONDS:
@@ -893,6 +937,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     def _advance_anchor(self, new_anchor: int) -> None:
         with self._lock:
+            previous = self._anchor_bytes
             origin = self._origin_bytes()
             drop = new_anchor - origin
             if drop > 0:
@@ -901,6 +946,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._anchor_bytes = max(new_anchor, origin)
             while self._speech_spans and self._speech_spans[0][1] <= self._anchor_bytes:
                 self._speech_spans.popleft()
+            if self._speech_spans and self._speech_spans[0][0] < self._anchor_bytes:
+                _, end = self._speech_spans.popleft()
+                self._speech_spans.appendleft((self._anchor_bytes, end))
+        if self._anchor_bytes > previous:
+            try:
+                self._on_replay_progress()
+            except Exception:
+                # Replay telemetry/compaction cannot turn a successful POST
+                # into provider failure; the receiver checks again before send.
+                logger.warning('Parakeet window replay anchor callback failed')
 
     async def _assign_speaker(self, seg_pcm: bytes) -> int:
         if self._embedded_this_window:
@@ -1065,7 +1120,7 @@ def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate
         min_replicas,
     ):
         WINDOW_ADMISSION.labels(outcome='batch_pressure').inc()
-        raise ParakeetConnectionError('capacity_full')
+        raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
     release = admission.acquire()
     try:
         socket = WindowedParakeetSocket(callback, os.environ['HOSTED_PARAKEET_API_URL'], sample_rate, release)

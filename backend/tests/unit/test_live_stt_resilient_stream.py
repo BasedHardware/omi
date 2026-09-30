@@ -10,7 +10,7 @@ from routers.listen.receiver import ListenReceiver
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.stt.live_metrics import WINDOW_REPLAY_SAFE_TRIMS
 from utils.stt.live_failure import live_stt_terminal_reason
-from utils.stt.resilient_stream import ResilientAudio
+from utils.stt.resilient_stream import ResilientAudio, window_replay_action
 from utils.stt.soniox import soniox_death_reason
 from utils.stt.streaming import STTService
 from utils.stt import streaming as st
@@ -108,15 +108,33 @@ class WindowRaw:
         self.pending_speech = pending_speech
         self.socket = None
         self.failure = None
+        self.cut_requests = 0
 
     def has_untranscribed_speech(self):
         return self.pending_speech
 
-    def fail(self, reason):
+    def request_replay_cut(self):
+        self.cut_requests += 1
+
+    def fail(self, reason, *, capacity_subtype=None):
         self.failure = reason
         self.socket.is_connection_dead = True
         self.socket.typed_death_reason = reason
         self.socket.death_reason = reason
+        self.socket.capacity_subtype = capacity_subtype
+
+
+def test_window_replay_pressure_only_cuts_pending_speech():
+    ring = ResilientAudio(2, ring_seconds=9, strict_replay=True)
+    ring.append(b'A\x00' * 10, 0)  # Five seconds of capture; next second reaches 2/3 of the ring.
+    pending = WindowRaw(pending_speech=True)
+    assert window_replay_action(ring, Socket(raw=pending), b'B\x00' * 2, 10) == 'append'
+    assert pending.cut_requests == 1
+    assert pending.failure is None
+
+    no_speech = WindowRaw(pending_speech=False)
+    assert window_replay_action(ring, Socket(raw=no_speech), b'B\x00' * 2, 10) == 'append'
+    assert no_speech.cut_requests == 0
 
 
 def window_receiver_at_ring_limit(monkeypatch, *, pending_speech):
@@ -225,6 +243,7 @@ async def test_failed_window_replays_only_untranscribed_audio_once(monkeypatch, 
     assert listener._filter_replayed_segments(
         [{'text': 'already', '_capture_start_sample': 0, '_capture_end_sample': 2}], 'parakeet'
     )
+    ring.finalize_through(2)  # model the emitted anchor; this fake socket has no window pump
     ring.append(b'B\x00' * 2, 2)
     old = Socket(dead=True, reason=reason)
     listener.stt_socket = old

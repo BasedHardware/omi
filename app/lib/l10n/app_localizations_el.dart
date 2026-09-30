@@ -11637,4 +11637,79 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Αναγνώριση Φωνής';
+
+  @override
+  String get greetingMorning => 'Καλημέρα';
+
+  @override
+  String get greetingAfternoon => 'Καλό απόγευμα';
+
+  @override
+  String get greetingEvening => 'Καλησπέρα';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Τι θέλεις να μάθεις;';
+
+  @override
+  String get askSuggestDecide => 'Τι αποφάσισα σήμερα;';
+
+  @override
+  String get askSuggestOwe => 'Τι χρωστάω ακόμη σε άλλους;';
+
+  @override
+  String get askSuggestNotice => 'Τι παρατήρησε το Omi;';
+
+  @override
+  String get pastChats => 'Προηγούμενες συνομιλίες';
+
+  @override
+  String get newChat => 'Νέα συνομιλία';
+
+  @override
+  String get startFresh => 'Ξεκινήστε από την αρχή';
+
+  @override
+  String get noPastChats => 'Οι συνομιλίες σας με το Omi εμφανίζονται εδώ.';
+
+  @override
+  String get deleteChatQuestion => 'Διαγραφή αυτής της συνομιλίας;';
+
+  @override
+  String get deleteChatMessage => 'Θα φύγει οριστικά από τις προηγούμενες συνομιλίες.';
+
+  @override
+  String get deleteChat => 'Διαγραφή συνομιλίας';
+
+  @override
+  String get appsAskWith => 'Ρωτήστε το Omi με';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count συζητήσεις σήμερα.',
+      one: '1 συζήτηση σήμερα.',
+      zero: 'Καμία συζήτηση σήμερα.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Τι υπήρχε στην οθόνη';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Στιγμιότυπο οθόνης από αυτή τη σύσκεψη';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Διαγραφή στιγμιότυπου οθόνης;';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση.';
 }

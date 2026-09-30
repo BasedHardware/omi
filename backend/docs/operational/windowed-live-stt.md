@@ -206,12 +206,29 @@ Once text has been emitted, these startup bounds are disarmed. No sentence ancho
 or emitted text is changed. `omi_stt_window_session_outcome_total` retains
 `outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
 the matching recovered failover uses the same reason on `omi_fallback_total`.
-The replay ring keeps a hard 90-second limit while the window has untranscribed
-VAD speech. When all admitted speech has been transcribed, old capture silence
-may roll off instead of killing a healthy window leg. The current audio chunk
-must still fit in the ring. `omi_stt_window_replay_safe_trims_total` counts these
-avoided failovers; a remaining ring or window-buffer failure reports the bounded
-`capacity_full` reason rather than generic `connection_lost`.
+The 90-second replay ring follows the window's last emitted sentence anchor.
+The accepted-send map translates that provider anchor to a capture sample, so
+VAD-gated gaps cannot shift the cut. Audio before the anchor is already text;
+speech from the anchor onward stays available even while a POST is in flight.
+The ring never evicts that pending span solely because capture time passed.
+Speech-free capture can still roll off, and the current chunk must fit. The
+`omi_stt_window_replay_safe_trims_total` counter records actual anchor and
+speech-free trims. If pending audio itself exceeds the ring, the leg fails
+with `capacity_full` and replays from the anchor onto the next vendor.
+The window socket separately retains PCM from its POST anchor. Its VAD speech
+spans are pruned on each POST-anchor advance; rapid speech/silence toggles
+coalesce the closest adjacent spans at the 1,024-entry bound rather than
+ending an otherwise healthy session. Coalescing retains every speech sample
+and may conservatively include the short silence between two spans. The PCM
+buffer's 60-second bound still fails over when un-emitted audio outgrows it.
+Near the 60-second PCM buffer limit, a 24-second context with a short emitted
+prefix followed by a long unfinished TDT segment is forced out if the prefix
+would advance the anchor by less than one 6-second pace. Earlier windows keep
+their sentence boundary, and windows with enough progress still hold the last
+segment. This extends the forced cut already used for one unfinished segment.
+Fallback logs keep `reason=capacity_full` and add a bounded `subtype` of
+`buffer_cap`, `replay_ring_cap`, or `admission` (or `unknown`); the shared
+fallback metric gains no new label.
 Growing windows re-post overlapping context. A minimum 6 s interval between
 POST starts bounds sustained requests to eight per listen pod per 6 s, with
 up to 216–320 synchronized sessions fleet-wide at the current pod count.
@@ -333,7 +350,12 @@ budget/quota and authentication refusals at the provider boundary;
 `omi_stt_window_admissions_total{outcome}`, `omi_stt_window_posts_total{outcome}`
 (success/empty/error/cancelled/queue_timeout), `omi_stt_window_post_seconds`,
 `omi_stt_window_context_seconds` (posted context duration), and
-`omi_stt_window_forced_cuts_total` expose TDT load. `empty` means the posted
+`omi_stt_window_forced_cuts_total` expose TDT load. The forced-cut counter includes
+held tails cut at max context or when un-emitted capture reaches two thirds of
+the 90-second replay ring. The latter is measured on capture time: VAD can admit
+less audio to the provider while the replay ring still protects the full capture.
+If a POST stalls or returns no usable text, the ring remains strict and fails
+over before un-emitted audio is evicted. `empty` means the posted
 context contained VAD speech and the model returned no text — not "we held the
 last sentence". No UID, transcript, URL or exception text is a metric label.
 Non-terminal configured-chain skips and failed legs emit

@@ -11493,4 +11493,79 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'การจดจำเสียง';
+
+  @override
+  String get greetingMorning => 'สวัสดีตอนเช้า';
+
+  @override
+  String get greetingAfternoon => 'สวัสดีตอนบ่าย';
+
+  @override
+  String get greetingEvening => 'สวัสดีตอนเย็น';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting คุณ$name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'อยากรู้อะไร';
+
+  @override
+  String get askSuggestDecide => 'วันนี้ฉันตัดสินใจอะไรบ้าง';
+
+  @override
+  String get askSuggestOwe => 'ฉันยังค้างอะไรใครอยู่บ้าง';
+
+  @override
+  String get askSuggestNotice => 'Omi สังเกตเห็นอะไร';
+
+  @override
+  String get pastChats => 'แชตที่ผ่านมา';
+
+  @override
+  String get newChat => 'แชตใหม่';
+
+  @override
+  String get startFresh => 'เริ่มใหม่';
+
+  @override
+  String get noPastChats => 'แชตของคุณกับ Omi จะแสดงที่นี่';
+
+  @override
+  String get deleteChatQuestion => 'ลบแชตนี้ไหม';
+
+  @override
+  String get deleteChatMessage => 'แชตนี้จะหายไปจากแชตที่ผ่านมาถาวร';
+
+  @override
+  String get deleteChat => 'ลบแชต';
+
+  @override
+  String get appsAskWith => 'ถาม Omi ด้วย';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'วันนี้มี $count บทสนทนา',
+      one: 'วันนี้มี 1 บทสนทนา',
+      zero: 'วันนี้ยังไม่มีบทสนทนา',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'สิ่งที่อยู่บนหน้าจอ';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'ภาพหน้าจอจากการประชุมนี้';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'ลบภาพหน้าจอหรือไม่';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้';
 }

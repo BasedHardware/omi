@@ -11589,4 +11589,79 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Prepoznavanje glasu';
+
+  @override
+  String get greetingMorning => 'Dobro jutro';
+
+  @override
+  String get greetingAfternoon => 'Dober dan';
+
+  @override
+  String get greetingEvening => 'Dober večer';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Kaj želite izvedeti?';
+
+  @override
+  String get askSuggestDecide => 'Kaj sem danes odločil?';
+
+  @override
+  String get askSuggestOwe => 'Kaj sem ljudem še dolžan?';
+
+  @override
+  String get askSuggestNotice => 'Kaj je opazil Omi?';
+
+  @override
+  String get pastChats => 'Prejšnji klepeti';
+
+  @override
+  String get newChat => 'Nov klepet';
+
+  @override
+  String get startFresh => 'Začni znova';
+
+  @override
+  String get noPastChats => 'Tu se prikažejo vaši klepeti z Omijem.';
+
+  @override
+  String get deleteChatQuestion => 'Izbrišem ta klepet?';
+
+  @override
+  String get deleteChatMessage => 'Iz prejšnjih klepetov bo za vedno izginil.';
+
+  @override
+  String get deleteChat => 'Izbriši klepet';
+
+  @override
+  String get appsAskWith => 'Vprašajte Omi z';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pogovorov danes.',
+      one: '1 pogovor danes.',
+      zero: 'Danes ni pogovorov.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Kaj je bilo na zaslonu';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Posnetek zaslona s tega sestanka';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Izbrišem posnetek zaslona?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'S tem boste posnetek zaslona odstranili iz zapiska tega sestanka. Tega ni mogoče razveljaviti.';
 }

@@ -23,7 +23,7 @@ WINDOW_SESSION_OUTCOME = Counter(
 )
 WINDOW_REPLAY_SAFE_TRIMS = Counter(
     'omi_stt_window_replay_safe_trims_total',
-    'Window replay ring overruns trimmed after all admitted speech was transcribed',
+    'Window replay ring trims through emitted anchors or speech-free capture',
 )
 WINDOW_CANARY_OUTCOME = Counter(
     'omi_stt_window_canary_transcript_outcome_total',
@@ -37,7 +37,7 @@ WINDOW_CONTEXT = Histogram(
 )
 WINDOW_FORCED_CUTS = Counter(
     'omi_stt_window_forced_cuts_total',
-    'Window POSTs that hit max context without a sentence boundary',
+    'Window POSTs that cut an unfinished segment at max context or replay-ring pressure',
 )
 WINDOW_HEAD_RECOVERIES = Counter(
     'omi_stt_window_head_recoveries_total',
