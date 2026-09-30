@@ -130,7 +130,7 @@ def test_create_routes_map_only_typed_caller_validation_to_422(
         handler(payload, uid="user-1")
 
     assert caught.value.status_code == 422
-    assert caught.value.detail == "safe caller detail"
+    assert caught.value.detail == "Invalid API key request"
 
 
 @pytest.mark.parametrize(
