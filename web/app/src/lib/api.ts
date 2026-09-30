@@ -262,11 +262,14 @@ export async function deleteConversation(id: string): Promise<void> {
 /**
  * Get the approved screenshot set (banner + strip) for a conversation.
  * Uses the same fetch-with-cache idiom as `getConversation`; a short TTL
- * balances against the frame set's signed URLs expiring after 60 minutes.
+ * balances against the frame set's signed URLs expiring after 60 minutes;
+ * `fresh` bypasses it when those URLs are about to expire.
  */
 export async function getConversationScreenFrames(
   conversationId: string,
+  options: { fresh?: boolean } = {},
 ): Promise<ConversationScreenFrameSet> {
+  if (options.fresh) invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return fetchWithCache<ConversationScreenFrameSet>(
     cacheKeys.screenFrames(conversationId),
     () =>

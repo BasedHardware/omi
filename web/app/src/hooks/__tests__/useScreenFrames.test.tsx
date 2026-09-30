@@ -164,4 +164,43 @@ describe('useScreenFrames', () => {
     // The stale conv-2 response must not have landed once conv-3 is current.
     expect(result.current.frameSet?.strip?.map((f) => f.id)).not.toEqual(['stale']);
   });
+
+  it('silently swaps in fresh signed URLs shortly before they expire', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));
+      const renewed = frameSet({
+        strip: [
+          {
+            ...frame('a'),
+            content_url: 'https://example.com/a-renewed.jpg',
+            url_expires_at: '2026-08-24T12:00:00Z',
+          },
+        ],
+      });
+      vi.mocked(api.getConversationScreenFrames)
+        .mockReset()
+        .mockResolvedValueOnce(frameSet())
+        .mockResolvedValueOnce(renewed);
+      const { result } = renderHook(() => useScreenFrames('conv-1'));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(api.getConversationScreenFrames).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(58 * 60 * 1000);
+      });
+
+      expect(api.getConversationScreenFrames).toHaveBeenLastCalledWith('conv-1', {
+        fresh: true,
+      });
+      await waitFor(() =>
+        expect(result.current.frameSet?.strip?.[0]?.content_url).toBe(
+          'https://example.com/a-renewed.jpg',
+        ),
+      );
+      expect(result.current.loading).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

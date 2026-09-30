@@ -7,6 +7,10 @@ import {
   getConversationScreenFrames,
   patchScreenFrameSharing,
 } from '@/lib/api';
+import {
+  MIN_FRAME_REFRESH_INTERVAL_MS,
+  msUntilFrameUrlRefresh,
+} from '@/lib/screenFrames';
 import type { ConversationScreenFrameSet } from '@/types/conversation';
 
 interface UseScreenFramesOptions {
@@ -41,6 +45,7 @@ export function useScreenFrames(
 
   // So an in-flight fetch/mutation for a conversation the user has since
   // navigated away from can't clobber the newer conversation's state.
+  const lastUrlRefreshAt = useRef(0);
   const convIdRef = useRef(conversationId);
   useEffect(() => {
     convIdRef.current = conversationId;
@@ -54,6 +59,7 @@ export function useScreenFrames(
     }
 
     const requestedId = conversationId;
+    lastUrlRefreshAt.current = Date.now();
     try {
       setLoading(true);
       setError(null);
@@ -81,6 +87,28 @@ export function useScreenFrames(
   const refresh = useCallback(async () => {
     await fetchFrames();
   }, [fetchFrames]);
+
+  // Signed URLs expire after 60 minutes. Swap in fresh ones shortly before,
+  // silently (no loading flash), so a panel left open never shows dead images.
+  useEffect(() => {
+    if (!enabled || !conversationId) return;
+    const due = msUntilFrameUrlRefresh(frameSet, Date.now());
+    if (due === null) return;
+    const sinceLast = Date.now() - lastUrlRefreshAt.current;
+    const delay = Math.max(due, MIN_FRAME_REFRESH_INTERVAL_MS - sinceLast);
+    const requestedId = conversationId;
+    const timer = setTimeout(async () => {
+      lastUrlRefreshAt.current = Date.now();
+      try {
+        const data = await getConversationScreenFrames(requestedId, { fresh: true });
+        if (convIdRef.current === requestedId) setFrameSet(data);
+      } catch (err) {
+        // Keep the current set; the next mount or manual refresh retries.
+        console.error('Failed to refresh screen frame URLs:', err);
+      }
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [enabled, conversationId, frameSet]);
 
   const deleteFrame = useCallback(
     async (frameId: string): Promise<boolean> => {
