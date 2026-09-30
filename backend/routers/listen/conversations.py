@@ -436,6 +436,8 @@ class LiveConversationController:
             # Every rollover generation names the client's recording, which the
             # phone also stamps on its WALs, so sync can find them all.
             external_data['recording_origin_id'] = self.host.client_conversation_id
+        if getattr(request, 'screen_evidence_pass', False):
+            external_data['screen_evidence_pass'] = True
         onboarding_session_id = resolve_onboarding_provenance_marker(self.host)
         if onboarding_session_id:
             # This marker reflects the backend's own onboarding-admission

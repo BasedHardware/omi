@@ -15,7 +15,7 @@ from utils.stt.outcomes import (
     bounded_provider,
     failure_from_exception,
 )
-from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
+from utils.observability.fallback import ReplayLagDiagnostics, capacity_fallback_kwargs, record_fallback
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -153,6 +153,7 @@ class PendingLiveFailover:
     ) -> None:
         self.component, self.reason = component, reason
         self.capacity_subtype = capacity_subtype
+        self.replay_lag_diagnostics: ReplayLagDiagnostics | None = None
         self.from_mode = from_mode
         self.to_mode = to_mode
         self._settled = False
@@ -160,6 +161,11 @@ class PendingLiveFailover:
     @property
     def settled(self) -> bool:
         return self._settled
+
+    def capture_capacity_details(self, source: object) -> None:
+        """Carry the immutable pre-cancellation snapshot onto the hop outcome."""
+        self.capacity_subtype = getattr(source, 'capacity_subtype', None)
+        self.replay_lag_diagnostics = getattr(source, 'replay_lag_diagnostics', None)
 
     def note_transcript(self, segments: object | None = None) -> None:
         if self._settled:
@@ -173,7 +179,7 @@ class PendingLiveFailover:
             to_mode=self.to_mode,
             reason=self.reason,
             outcome='recovered',
-            **capacity_fallback_kwargs(self.capacity_subtype),
+            **capacity_fallback_kwargs(self.capacity_subtype, self.replay_lag_diagnostics),
         )
 
     def note_failure(self, typed_reason: str | None) -> None:

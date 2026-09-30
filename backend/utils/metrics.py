@@ -700,6 +700,12 @@ LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
     ['state'],
 )
 
+MEETING_NOTES_EVIDENCE_WAIT_TOTAL = Counter(
+    'meeting_notes_evidence_wait_total',
+    'Desktop meeting finalizations by screen-evidence admission outcome',
+    ['outcome'],
+)
+
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
     'listen_finalization_retries_total',
     'Durable listen finalization jobs replayed by the reconciler',
