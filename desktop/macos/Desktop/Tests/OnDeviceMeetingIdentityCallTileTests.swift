@@ -116,6 +116,21 @@ final class OnDeviceMeetingIdentityCallTileTests: XCTestCase {
     XCTAssertTrue(OnDeviceMeetingIdentityExtractor.isAIAgentTileName("Chatbot Helper"))
   }
 
+  /// Expected values are the backend's own `call_tile_names` output for these rows: keys fold like
+  /// Python's `str.casefold()`, so "Groß"/"Gross" and a final/medial sigma are the same person.
+  func testOwnerAndTileKeysUseFullUnicodeCaseFolding() {
+    let gross = (0..<4).map { meetRow("Hans Groß\nPriya Natarajan", minute: $0) }
+    XCTAssertEqual(
+      OnDeviceMeetingIdentityExtractor.callTileNames(in: gross, ownerNames: ["Hans Gross"]), ["Priya Natarajan"])
+
+    let sigma = (0..<4).map { meetRow("Νίκος Παππάς\nPriya Natarajan", minute: $0) }
+    XCTAssertEqual(
+      OnDeviceMeetingIdentityExtractor.callTileNames(in: sigma, ownerNames: ["Νίκος Παππάσ"]), ["Priya Natarajan"])
+
+    let marked = (0..<4).map { meetRow("Hans Groß (You)\nHans Gross\nPriya Natarajan", minute: $0) }
+    XCTAssertEqual(OnDeviceMeetingIdentityExtractor.callTileNames(in: marked), ["Priya Natarajan"])
+  }
+
   func testTooFewCallRowsOrTooSmallAShareYieldsNoTile() {
     XCTAssertEqual(
       OnDeviceMeetingIdentityExtractor.callTileNames(in: (0..<2).map { meetRow("Jordan Rivera", minute: $0) }), [])

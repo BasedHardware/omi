@@ -300,7 +300,9 @@ struct MeetingNoteScreenshotsSection: View {
             .foregroundColor(Ink.secondary)
           Spacer()
         }
-        MeetingScreenshotStripRow(frames: store.frames, onOpen: onOpen, onDelete: onDelete)
+        MeetingScreenshotStripRow(
+          frames: store.frames, onOpen: onOpen, onDelete: onDelete,
+          onContentUnavailable: { Task { await store.refreshAfterContentUnavailable() } })
       }
       .padding(.top, OmiSpacing.xxl)
     }
@@ -322,6 +324,8 @@ struct MeetingScreenshotStripRow: View {
   let frames: [ConversationScreenFrame]
   let onOpen: (ConversationScreenFrame) -> Void
   let onDelete: (ConversationScreenFrame) async -> Void
+  /// A tile's thumbnail failed to load, most likely an expired signed URL.
+  var onContentUnavailable: (() -> Void)?
 
   var body: some View {
     ScrollView(.horizontal, showsIndicators: false) {
@@ -330,7 +334,8 @@ struct MeetingScreenshotStripRow: View {
           MeetingScreenshotTile(
             frame: frame,
             onOpen: { onOpen(frame) },
-            onDelete: { await onDelete(frame) })
+            onDelete: { await onDelete(frame) },
+            onContentUnavailable: onContentUnavailable)
         }
       }
       .padding(.vertical, 2)
@@ -343,9 +348,8 @@ struct MeetingScreenshotStripRow: View {
 }
 
 /// One strip tile. `AsyncImage` against the signed thumbnail URL; a load failure (most often an
-/// expired URL) is treated the same as "not loaded yet" — a neutral placeholder, never a broken-
-/// image glyph — because the surrounding row cannot itself refresh the set, only the caption tells
-/// the story.
+/// expired URL) shows the same neutral placeholder as "not loaded yet", never a broken-image glyph,
+/// and asks the store once to refetch the persisted set with fresh signatures.
 struct MeetingScreenshotTile: View {
   let frame: ConversationScreenFrame
   let onOpen: () -> Void
@@ -353,7 +357,10 @@ struct MeetingScreenshotTile: View {
   /// inside the viewer: the viewer is Quick Look now, its chrome is Apple's, and a tile's context
   /// menu is where the Finder puts exactly this command anyway.
   let onDelete: () async -> Void
+  /// Reported at most once per tile, so a URL that still fails after a refresh cannot loop.
+  var onContentUnavailable: (() -> Void)?
 
+  @State private var reportedUnavailable = false
   @State private var isHovering = false
   @State private var isConfirmingDelete = false
   @State private var isDeleting = false
@@ -388,6 +395,15 @@ struct MeetingScreenshotTile: View {
                   .aspectRatio(contentMode: .fill)
                   .frame(width: SpineMetrics.thumbnailWidth, height: SpineMetrics.thumbnailHeight)
                   .clipped()
+              case .failure:
+                Image(systemName: glyphName)
+                  .scaledFont(size: 20)
+                  .foregroundColor(Ink.secondary)
+                  .onAppear {
+                    guard !reportedUnavailable else { return }
+                    reportedUnavailable = true
+                    onContentUnavailable?()
+                  }
               default:
                 Image(systemName: glyphName)
                   .scaledFont(size: 20)

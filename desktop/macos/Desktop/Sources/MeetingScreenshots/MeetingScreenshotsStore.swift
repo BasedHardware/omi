@@ -99,6 +99,22 @@ final class MeetingScreenshotsStore: ObservableObject {
   private let fetchPersistedSet: @Sendable (String) async throws -> ConversationScreenFrameSet
   private let deleteFrameRemote: @Sendable (String, String) async throws -> Void
   private let sealActiveRecording: @Sendable () async -> Void
+  private let now: @Sendable () -> Date
+  private var isRefreshingAfterUnavailableContent = false
+
+  /// A cached set whose signed URLs expire within this margin is refetched rather than rendered.
+  /// The finalization pass fills the cache long before a note is opened, and the server reports
+  /// each signature's true remaining lifetime, which can be well under an hour.
+  nonisolated static let signedURLRefreshMargin: TimeInterval = 5 * 60
+
+  /// Whether every signed URL in a cached result outlives `now` by the refresh margin.
+  nonisolated static func signedURLsAreFresh(
+    frames: [ConversationScreenFrame], banner: ConversationScreenFrame?, now: Date
+  ) -> Bool {
+    (frames + (banner.map { [$0] } ?? [])).allSatisfy {
+      $0.urlExpiresAt.timeIntervalSince(now) > signedURLRefreshMargin
+    }
+  }
 
   /// Phase detail when the meeting's last frames are still in Rewind's unsealed chunk and sealing
   /// it did not release them. Not cached and nothing uploaded, so the next load selects again.
@@ -121,6 +137,7 @@ final class MeetingScreenshotsStore: ObservableObject {
     deleteFrameRemote: @escaping @Sendable (String, String) async throws -> Void = {
       try await APIClient.shared.deleteConversationScreenFrame(conversationID: $0, frameID: $1)
     },
+    now: @escaping @Sendable () -> Date = { Date() },
     sealActiveRecording: @escaping @Sendable () async -> Void = {
       // The same finalize-and-continue flush Rewind uses for power and memory transitions; the
       // next captured frame opens a fresh chunk.
@@ -128,6 +145,7 @@ final class MeetingScreenshotsStore: ObservableObject {
     }
   ) {
     self.sealActiveRecording = sealActiveRecording
+    self.now = now
     self.featureEnabled = featureEnabled
     self.selectCandidates = selectCandidates
     self.adjudicateAndCommit = adjudicateAndCommit
@@ -180,6 +198,14 @@ final class MeetingScreenshotsStore: ObservableObject {
     log(
       "MeetingScreenshots: load requested for \(conversationID), selection "
         + selectionWindow.fingerprint)
+    if let hit = Self.cache[requestedCacheKey],
+      !Self.signedURLsAreFresh(frames: hit.frames, banner: hit.banner, now: now())
+    {
+      // Expired or about to: drop it, and let the run below re-read the persisted set (it is the
+      // server's `GET`, and it only re-selects if that set was judged for a different window).
+      log("MeetingScreenshots: cached signed URLs for \(conversationID) expired; refetching")
+      Self.cache[requestedCacheKey] = nil
+    }
     if let hit = Self.cache[requestedCacheKey] {
       frames = hit.frames
       banner = hit.banner
@@ -257,6 +283,15 @@ final class MeetingScreenshotsStore: ObservableObject {
       // Leave whatever is currently displayed in place. A transient refresh failure must not
       // blank out screenshots that were already showing correctly.
     }
+  }
+
+  /// A thumbnail failed to load — most often an expired signature. Every visible tile may report at
+  /// once, so concurrent reports coalesce into one refetch.
+  func refreshAfterContentUnavailable() async {
+    guard !isRefreshingAfterUnavailableContent else { return }
+    isRefreshingAfterUnavailableContent = true
+    defer { isRefreshingAfterUnavailableContent = false }
+    await refreshPersistedSet()
   }
 
   /// Delete one persisted frame. The caller (the lightbox) confirms the destructive action before

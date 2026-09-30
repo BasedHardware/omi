@@ -325,6 +325,52 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     XCTAssertEqual(adjudications, 1)
   }
 
+  @MainActor
+  func testCachedSetWithExpiringSignedURLsIsRefetchedBeforeRendering() async throws {
+    let window = MeetingScreenshotSelectionWindow(
+      start: Date(timeIntervalSince1970: 3_000), end: Date(timeIntervalSince1970: 3_600))
+    let clock = TestClock(Date(timeIntervalSince1970: 10_000))
+    let server = SigningServer(fingerprint: window.fingerprint, capturedAt: window.start, clock: clock)
+    let conversationID = "expiry-\(UUID().uuidString)"
+    func makeStore() -> MeetingScreenshotsStore {
+      MeetingScreenshotsStore(
+        featureEnabled: { true },
+        selectCandidates: { _ in
+          XCTFail("a persisted set for this window must be read, not re-selected")
+          return MeetingFrameSelector.Outcome()
+        },
+        fetchPersistedSet: { _ in server.persisted() },
+        deleteFrameRemote: { _, _ in },
+        now: { clock.now })
+    }
+
+    // The finalization pass fills the session cache with a signature good for 20 minutes.
+    _ = await makeStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
+    XCTAssertEqual(server.fetches, 1)
+
+    // Opened 10 minutes later: still fresh beyond the margin, so the cache is used as is.
+    clock.now = clock.now.addingTimeInterval(10 * 60)
+    let fresh = await makeStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
+    XCTAssertEqual(fresh, .ready)
+    XCTAssertEqual(server.fetches, 1)
+
+    // Opened 16 minutes after that: 4 minutes left is inside the margin, so it is re-read.
+    clock.now = clock.now.addingTimeInterval(16 * 60)
+    let note = makeStore()
+    let refreshed = await note.loadAndWait(conversationID: conversationID, selectionWindow: window)
+    XCTAssertEqual(refreshed, .ready)
+    XCTAssertEqual(server.fetches, 2)
+    XCTAssertEqual(note.frames.first?.thumbnailURL, "https://example.test/thumb-2.jpg")
+    XCTAssertGreaterThan(note.frames.first?.urlExpiresAt ?? .distantPast, clock.now.addingTimeInterval(15 * 60))
+
+    // Every tile reporting a failed thumbnail at once still costs one refetch.
+    async let first: Void = note.refreshAfterContentUnavailable()
+    async let second: Void = note.refreshAfterContentUnavailable()
+    _ = await (first, second)
+    XCTAssertEqual(server.fetches, 3)
+    XCTAssertEqual(note.frames.first?.thumbnailURL, "https://example.test/thumb-3.jpg")
+  }
+
   // MARK: - Helpers
 
   @MainActor
@@ -515,5 +561,61 @@ private actor ActiveChunk {
       outcome.drops[MeetingFrameSelector.activeChunkDropReason] = 1
     }
     return outcome
+  }
+}
+
+private final class TestClock: @unchecked Sendable {
+  private let lock = NSLock()
+  private var current: Date
+
+  init(_ start: Date) { current = start }
+
+  var now: Date {
+    get {
+      lock.lock()
+      defer { lock.unlock() }
+      return current
+    }
+    set {
+      lock.lock()
+      current = newValue
+      lock.unlock()
+    }
+  }
+}
+
+/// A persisted set whose signatures are re-minted on every `GET`, each good for 20 minutes.
+private final class SigningServer: @unchecked Sendable {
+  private let lock = NSLock()
+  private let fingerprint: String
+  private let capturedAt: Date
+  private let clock: TestClock
+  private var count = 0
+
+  init(fingerprint: String, capturedAt: Date, clock: TestClock) {
+    self.fingerprint = fingerprint
+    self.capturedAt = capturedAt
+    self.clock = clock
+  }
+
+  var fetches: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return count
+  }
+
+  func persisted() -> ConversationScreenFrameSet {
+    lock.lock()
+    count += 1
+    let generation = count
+    lock.unlock()
+    let frame = ConversationScreenFrame(
+      id: "frame-1", capturedAt: capturedAt, role: "strip", rank: 0, caption: "Roadmap", labels: [],
+      sourceBadge: nil, focalRegion: nil, width: 1280, height: 800,
+      contentURL: "https://example.test/frame-\(generation).jpg",
+      thumbnailURL: "https://example.test/thumb-\(generation).jpg",
+      urlExpiresAt: clock.now.addingTimeInterval(20 * 60), ground: nil)
+    return ConversationScreenFrameSet(
+      revision: 1, banner: nil, strip: [frame], adjudicatedAt: capturedAt, selectionFingerprint: fingerprint)
   }
 }

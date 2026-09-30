@@ -115,8 +115,8 @@ enum OnDeviceMeetingIdentityExtractor {
     for candidate in looseNames where !names.contains(candidate) {
       if !Set(nameTokens(candidate)).isDisjoint(with: localTokens) { names.append(candidate) }
     }
-    var known = Set(names.map { $0.lowercased() })
-    for tile in tileNames where known.insert(tile.lowercased()).inserted {
+    var known = Set(names.map { $0.casefolded })
+    for tile in tileNames where known.insert(tile.casefolded).inserted {
       names.append(tile)
     }
 
@@ -310,10 +310,10 @@ enum OnDeviceMeetingIdentityExtractor {
   ) -> [String] {
     let callRows = snapshots.filter(isCallWindowRow)
     guard callRows.count >= minimumTileRows else { return [] }
-    var owners = Set(ownerNames.map { cleanLine($0).lowercased() }.filter { !$0.isEmpty })
+    var owners = Set(ownerNames.map { cleanLine($0).casefolded }.filter { !$0.isEmpty })
     let ownerLocals = Set(
       ownerEmails.compactMap { email -> String? in
-        let folded = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let folded = email.trimmingCharacters(in: .whitespacesAndNewlines).casefolded
         guard folded.contains("@") else { return nil }
         return folded.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
       })
@@ -331,7 +331,7 @@ enum OnDeviceMeetingIdentityExtractor {
       for rawLine in (row.ocrText ?? "").components(separatedBy: .newlines) {
         let line = cleanLine(rawLine)
         guard let name = tileName(line) else { continue }
-        let key = name.lowercased()
+        let key = name.casefolded
         if firstMatch(ownerTileMarker, in: line) != nil { owners.insert(key) }
         guard seen.insert(key).inserted else { continue }
         if counts[key] == nil {
@@ -344,8 +344,8 @@ enum OnDeviceMeetingIdentityExtractor {
     }
 
     // Browser chrome (tab strip, bookmarks) recurs in the same app's other windows.
-    let callApps = Set(callRows.map { $0.appName.lowercased() })
-    let nonCallRows = snapshots.filter { !isCallWindowRow($0) && callApps.contains($0.appName.lowercased()) }
+    let callApps = Set(callRows.map { $0.appName.casefolded })
+    let nonCallRows = snapshots.filter { !isCallWindowRow($0) && callApps.contains($0.appName.casefolded) }
     let minimum = max(Double(minimumTileRows), minimumTileRowShare * Double(callRows.count))
     var accepted: [String] = []
     for key in order {
@@ -362,8 +362,8 @@ enum OnDeviceMeetingIdentityExtractor {
     }
     // `accepted` is already in first-appearance order, so a stable sort by count is the full order.
     let ranked = accepted.enumerated().sorted {
-      let left = counts[$0.element.lowercased()] ?? 0
-      let right = counts[$1.element.lowercased()] ?? 0
+      let left = counts[$0.element.casefolded] ?? 0
+      let right = counts[$1.element.casefolded] ?? 0
       return left == right ? $0.offset < $1.offset : left > right
     }
     accepted = ranked.map(\.element)
@@ -385,10 +385,10 @@ enum OnDeviceMeetingIdentityExtractor {
   /// (a LinkedIn profile, a tab strip), and a messaging app's recurring lines are its chat list.
   /// Messaging calls keep their own window-title rule (`messagingCallParticipants`).
   private static func isCallWindowRow(_ snapshot: MeetingScreenActivitySnapshot) -> Bool {
-    let app = snapshot.appName.lowercased()
+    let app = snapshot.appName.casefolded
     if tileMessagingApps.contains(where: app.contains) { return false }
     if nativeVideoApps.contains(where: app.contains) { return true }
-    let title = cleanLine(snapshot.windowTitle ?? "").lowercased()
+    let title = cleanLine(snapshot.windowTitle ?? "").casefolded
     return firstMatch(meetTabTitle, in: title) != nil
       || conferencingMarkers.contains(where: "\(app) \(title)".contains)
   }
@@ -397,26 +397,26 @@ enum OnDeviceMeetingIdentityExtractor {
   private static func titlePart(_ part: String) -> String {
     let cleaned = replacingMatches(unreadTitlePrefix, in: cleanLine(part), with: "")
     return replacingMatches(titleTrailingNoise, in: cleaned, with: "")
-      .trimmingCharacters(in: .whitespaces).lowercased()
+      .trimmingCharacters(in: .whitespaces).casefolded
   }
 
   static func isAIAgentTileName(_ name: String) -> Bool {
     name.split(separator: " ").contains { word in
-      let token = word.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".'’-"))
+      let token = String(word).casefolded.trimmingCharacters(in: CharacterSet(charactersIn: ".'’-"))
       return aiAgentTileWords.contains(token)
     }
   }
 
   /// The name a call tile shows on this line, if the line is only a name.
   private static func tileName(_ line: String) -> String? {
-    if line.contains("@") || line.lowercased().contains("http") || firstMatch(meetCode, in: line) != nil {
+    if line.contains("@") || line.casefolded.contains("http") || firstMatch(meetCode, in: line) != nil {
       return nil
     }
     let name = cleanLine(replacingMatches(nameDecoration, in: line, with: ""))
     let tokens = name.split(separator: " ").map(String.init)
     guard (2...4).contains(tokens.count), name.count <= 60, tokens.allSatisfy(isTileToken) else { return nil }
     if let first = tokens.first, let last = tokens.last,
-      tileParticles.contains(first.lowercased()) || tileParticles.contains(last.lowercased())
+      tileParticles.contains(first.casefolded) || tileParticles.contains(last.casefolded)
     {
       return nil
     }
@@ -430,7 +430,7 @@ enum OnDeviceMeetingIdentityExtractor {
   }
 
   private static func isTileToken(_ token: String) -> Bool {
-    if tileParticles.contains(token.lowercased()) { return true }
+    if tileParticles.contains(token.casefolded) { return true }
     guard token.first?.isUppercase == true,
       token.allSatisfy({ $0.isLetter || "-'’".contains($0) })
     else { return false }
@@ -438,7 +438,7 @@ enum OnDeviceMeetingIdentityExtractor {
   }
 
   private static func isOwnerName(_ name: String, owners: Set<String>, ownerLocals: Set<String>) -> Bool {
-    let folded = name.lowercased()
+    let folded = name.casefolded
     let tokens = folded.split(separator: " ").map(String.init)
     for owner in owners {
       let ownerTokens = owner.split(separator: " ").map(String.init)
@@ -455,7 +455,7 @@ enum OnDeviceMeetingIdentityExtractor {
   }
 
   private static func trimmedToken(_ word: String) -> String {
-    word.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "'’-"))
+    word.casefolded.trimmingCharacters(in: CharacterSet(charactersIn: "'’-"))
   }
 
   private static func rosterNames(in text: String) -> [String] {
@@ -482,13 +482,13 @@ enum OnDeviceMeetingIdentityExtractor {
   private static func looksLikePersonName(_ value: String) -> Bool {
     guard !value.isEmpty, value.count <= 60 else { return false }
     let words = value.split(separator: " ").map(String.init)
-    guard (1...4).contains(words.count), !words.contains(where: { nonPersonWords.contains($0.lowercased()) }) else {
+    guard (1...4).contains(words.count), !words.contains(where: { nonPersonWords.contains($0.casefolded) }) else {
       return false
     }
     // One person is never called "X and Y": such a line is a roster or an event title.
     guard
       !words.contains(where: {
-        joinerWords.contains($0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".'’-")))
+        joinerWords.contains($0.casefolded.trimmingCharacters(in: CharacterSet(charactersIn: ".'’-")))
       })
     else { return false }
     return words.allSatisfy { firstMatch(nameWord, in: $0) != nil }
@@ -616,4 +616,10 @@ actor OnDeviceMeetingIdentityService {
       log("OnDeviceMeetingIdentity: upload failed")
     }
   }
+}
+
+extension String {
+  /// Unicode full case folding, equal to Python's `str.casefold()` on the backend twin: "Groß" and
+  /// "Gross" fold together and a final sigma folds to σ, where `lowercased()` keeps both apart.
+  fileprivate var casefolded: String { folding(options: [.caseInsensitive], locale: nil) }
 }
