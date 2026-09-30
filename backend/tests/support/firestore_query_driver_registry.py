@@ -1900,6 +1900,24 @@ def _seed_expired_context_snapshot(client, combo, trial):
     client.documents[path] = payload
 
 
+def _seed_canonical_product_state(client, combo, trial):
+    """Trial 0 keeps the empty path; trial 1 walks one populated workstream.
+
+    A queued, generation-matched workstream row drives the per-workstream
+    ``workstreams/{id}/artifact_refs`` and ``workstreams/{id}/events``
+    (``order_by sequence DESC``) queries; the consume-once queues feed the four
+    top-level collections and both nested subcollections in call order.
+    """
+    if trial == 0:
+        return
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([client.snapshot(f'users/{UID}/workstreams/ws-1', {'account_generation': 1})])
+    client.queue_results([])
+    client.queue_results([])
+
+
 _add(
     DriverEntry(
         'database.task_recommendations.create_outcome',
@@ -1952,6 +1970,8 @@ _add(
         neutrals={
             'account_generation': (1, 'generation fence; fixed seeded scope, same filter set for any value'),
         },
+        setup=_seed_canonical_product_state,
+        trials=2,
     )
 )
 _add(
