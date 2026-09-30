@@ -16,6 +16,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -242,41 +243,95 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     }
   }
 
+  /// Failure telemetry for the support send. Sizes and counts only — never
+  /// bundle content or device identifiers.
+  void _trackSendFailed(
+    DiagnosticsSendFailedFailureStage stage,
+    String json,
+    Map<String, dynamic> bundle, {
+    int statusCode = 0,
+  }) {
+    PlatformManager.instance.analytics.diagnosticsSendFailed(
+      failureStage: stage,
+      bundleBytes: utf8.encode(json).length,
+      disconnectCount: (bundle['disconnect_history'] as List?)?.length ?? 0,
+      schemaVersion: (bundle['schema_version'] as num?)?.toInt() ?? 0,
+      statusCode: statusCode,
+    );
+  }
+
+  void _trackSent(String json, Map<String, dynamic> bundle) {
+    PlatformManager.instance.analytics.diagnosticsSent(
+      bundleBytes: utf8.encode(json).length,
+      disconnectCount: (bundle['disconnect_history'] as List?)?.length ?? 0,
+      schemaVersion: (bundle['schema_version'] as num?)?.toInt() ?? 0,
+    );
+  }
+
   Future<void> _sendToSupport() async {
     if (_isSending) return;
+    Map<String, dynamic> bundle;
+    String json;
     try {
-      final bundle = await _buildBundle();
-      if (!mounted) return;
-      final json = const JsonEncoder.withIndent('  ').convert(bundle);
-      final send = await showDialog<bool>(
-        context: context,
-        builder: (context) => OmiAlertDialog(
-          title: context.l10n.sendToSupport,
-          content: SizedBox(
-            width: 520,
-            height: 400,
-            child: Column(children: [
-              Text(context.l10n.deviceDiagnosticsUploadDescription),
-              const SizedBox(height: 12),
-              Expanded(child: SingleChildScrollView(child: SelectableText(json))),
-            ]),
-          ),
-          actions: [
-            OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),
-            OmiDialogAction(label: context.l10n.send, isDefault: true, onPressed: () => Navigator.pop(context, true)),
-          ],
+      bundle = await _buildBundle();
+      json = const JsonEncoder.withIndent('  ').convert(bundle);
+    } catch (e) {
+      Logger.debug('Failed to build diagnostics bundle: $e');
+      PlatformManager.instance.analytics
+          .diagnosticsSendFailed(failureStage: DiagnosticsSendFailedFailureStage.buildBundle);
+      if (mounted) OmiFeedback.error(context, context.l10n.deviceDiagnosticsUploadFailed);
+      return;
+    }
+    if (!mounted) return;
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (context) => OmiAlertDialog(
+        title: context.l10n.sendToSupport,
+        content: SizedBox(
+          width: 520,
+          height: 400,
+          child: Column(children: [
+            Text(context.l10n.deviceDiagnosticsUploadDescription),
+            const SizedBox(height: 12),
+            Expanded(child: SingleChildScrollView(child: SelectableText(json))),
+          ]),
         ),
-      );
-      if (send != true || !mounted) return;
-      setState(() => _isSending = true);
+        actions: [
+          OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),
+          OmiDialogAction(label: context.l10n.send, isDefault: true, onPressed: () => Navigator.pop(context, true)),
+        ],
+      ),
+    );
+    if (send != true) {
+      _trackSendFailed(DiagnosticsSendFailedFailureStage.dialogCancelled, json, bundle);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _isSending = true);
+    try {
       final response = await makeApiCall(
         url: '${Env.apiBaseUrl}v1/mobile/device-diagnostics',
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'bundle_base64': base64Encode(utf8.encode(json))}),
         method: 'POST',
       );
-      if (response?.statusCode != 201) throw StateError('Support upload failed: ${response?.statusCode}');
-      final ticket = (jsonDecode(response!.body) as Map<String, dynamic>)['ticket'] as String;
+      if (response?.statusCode != 201) {
+        _trackSendFailed(
+          DiagnosticsSendFailedFailureStage.upload,
+          json,
+          bundle,
+          statusCode: response?.statusCode ?? 0,
+        );
+        throw StateError('Support upload failed: ${response?.statusCode}');
+      }
+      String ticket;
+      try {
+        ticket = (jsonDecode(response!.body) as Map<String, dynamic>)['ticket'] as String;
+      } catch (e) {
+        _trackSendFailed(DiagnosticsSendFailedFailureStage.ticketParse, json, bundle, statusCode: response!.statusCode);
+        rethrow;
+      }
+      _trackSent(json, bundle);
       if (!mounted) return;
       await showDialog<void>(
         context: context,
