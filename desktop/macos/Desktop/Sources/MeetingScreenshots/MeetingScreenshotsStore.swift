@@ -398,6 +398,11 @@ final class MeetingScreenshotsStore: ObservableObject {
     if outcome.drops[MeetingFrameSelector.activeChunkDropReason, default: 0] > 0 {
       // The end of the meeting is still in the chunk being written. Seal it and select once more,
       // rather than judge — and have the server stamp as final — a set missing the last minute.
+      // The recorder belongs to the signed-in owner: never seal a replacement owner's chunk.
+      guard authorization.isCurrent else {
+        phase = .failed(Self.ownerChangedDetail)
+        return
+      }
       await sealActiveRecording()
       outcome = await selectCandidates(selectionWindow)
       guard self.selectionWindow == selectionWindow else { return }

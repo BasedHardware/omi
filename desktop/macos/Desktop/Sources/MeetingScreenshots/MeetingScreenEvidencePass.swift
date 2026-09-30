@@ -191,6 +191,10 @@ struct MeetingScreenEvidencePass: Sendable {
     let window: MeetingScreenshotSelectionWindow?
     do {
       window = try await fetchSelectionWindow()
+    } catch APIError.httpError(statusCode: 404, detail: _) {
+      // A candidate id the backend does not have (a client recording id probed before binding):
+      // nothing to gather for, and not a degradation.
+      return .unbound
     } catch {
       return .conversationUnavailable
     }

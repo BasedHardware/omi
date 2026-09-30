@@ -141,6 +141,9 @@ actor ConversationFinalizationService {
       guard let latestSession = try await TranscriptionStorage.shared.getSession(id: sessionId) else {
         throw TranscriptionStorageError.sessionNotFound
       }
+      // This recovery path bypasses `finalizeSession`, so the identity upload that must precede the
+      // notes (and the OCR flush inside `uploadLocalSegments`) runs here.
+      await storeMeetingContextIfEnabled(for: latestSession)
       let outcome = try await resolveExhaustedCloudReconciliation(session: latestSession, sessionId: sessionId)
       guard outcome.handled else {
         throw TranscriptionStorageError.invalidState("Exhausted cloud session has no local fallback")
@@ -440,14 +443,23 @@ actor ConversationFinalizationService {
     return DateInterval(start: session.startedAt, end: end)
   }
 
-  /// Ask the backend to process one conversation, gathering the meeting's screen evidence first so
-  /// the notes it writes can use it. Bounded and fail-open (`MeetingScreenEvidencePass`).
+  /// Finalize (or, without force-process permission, read) one bound backend conversation,
+  /// gathering the meeting's screen evidence first either way. Evidence does not depend on
+  /// force-process permission: a max-duration rotation reads a conversation the socket close
+  /// already admitted to processing, and that processing waits on this pass's marker. Bounded and
+  /// fail-open (`MeetingScreenEvidencePass`).
   private func finalizeBackendConversation(
     id conversationId: String,
-    session: TranscriptionSessionRecord
+    session: TranscriptionSessionRecord,
+    forceProcess: Bool = true
   ) async throws -> ServerConversation {
+    let finalizeOrRead: () async throws -> ServerConversation = { [apiClient] in
+      forceProcess
+        ? try await apiClient.finalizeConversation(id: conversationId)
+        : try await apiClient.getConversation(id: conversationId)
+    }
     guard session.conversationRole == .meeting else {
-      return try await apiClient.finalizeConversation(id: conversationId)
+      return try await finalizeOrRead()
     }
     let client = apiClient
     let before = await screenEvidencePass.beforeNotes(
@@ -456,7 +468,7 @@ actor ConversationFinalizationService {
       fetchSelectionWindow: {
         try await MeetingScreenEvidencePass.serverSelectionWindow(conversationID: conversationId, client: client)
       })
-    let conversation = try await apiClient.finalizeConversation(id: conversationId)
+    let conversation = try await finalizeOrRead()
     if before.needsTerminalPass {
       retryScreenEvidenceAfterFinalize(conversationID: conversation.id)
     }
@@ -569,12 +581,8 @@ actor ConversationFinalizationService {
         throw TranscriptionStorageError.invalidState(
           "Bound backend conversation conflicts with client recording identity")
       }
-      let conversation: ServerConversation
-      if allowForceProcess {
-        conversation = try await finalizeBackendConversation(id: backendId, session: session)
-      } else {
-        conversation = try await apiClient.getConversation(id: backendId)
-      }
+      let conversation = try await finalizeBackendConversation(
+        id: backendId, session: session, forceProcess: allowForceProcess)
       if DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
         id: conversation.id,
         boundBackendId: backendId,
@@ -680,6 +688,10 @@ actor ConversationFinalizationService {
       conversation = try await finalizeBackendConversation(id: match.id, session: session)
     } else {
       conversation = match
+      if session.conversationRole == .meeting {
+        // Already processed: nothing waits on a marker, but screenshots should still exist.
+        retryScreenEvidenceAfterFinalize(conversationID: match.id)
+      }
     }
 
     guard
@@ -769,11 +781,8 @@ actor ConversationFinalizationService {
     guard let sessionId = session.id else { return false }
     let conversation: ServerConversation
     do {
-      if allowForceProcess {
-        conversation = try await finalizeBackendConversation(id: conversationId, session: session)
-      } else {
-        conversation = try await apiClient.getConversation(id: conversationId)
-      }
+      conversation = try await finalizeBackendConversation(
+        id: conversationId, session: session, forceProcess: allowForceProcess)
     } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
       return false
     }

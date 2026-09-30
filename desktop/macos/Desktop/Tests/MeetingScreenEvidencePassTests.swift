@@ -428,6 +428,10 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     let failedRead = await pass.beforeNotes(
       captureInterval: interval, conversationID: "read-fails", fetchSelectionWindow: { throw URLError(.timedOut) })
     XCTAssertEqual(failedRead, .conversationUnavailable)
+    let probedMissing = await pass.beforeNotes(
+      captureInterval: interval, conversationID: "not-a-conversation",
+      fetchSelectionWindow: { throw APIError.httpError(statusCode: 404, detail: nil) })
+    XCTAssertEqual(probedMissing, .unbound, "a probed id the backend does not have is not a degradation")
     let failedRetryRead = await pass.afterFinalize(
       conversationID: "read-fails", fetchSelectionWindow: { throw URLError(.timedOut) })
     XCTAssertEqual(failedRetryRead, .conversationUnavailable)

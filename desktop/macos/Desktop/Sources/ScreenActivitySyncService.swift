@@ -257,6 +257,10 @@ actor ScreenActivitySyncService {
       interval, database: dbPool,
       push: { await self.pushRows($0, authorizationSnapshot: authorization.snapshot) },
       authorizationIsCurrent: { authorization.isCurrent },
+      // INV-AUTH-1: each sync-state write holds an owner mutation lease through its commit, and
+      // re-requires the owner inside the transaction, so a pool opened for the owner who was
+      // signed in when this began can never mutate a replacement owner's rows.
+      mutation: LocalMutationAuthorization { authorization.isCurrent },
       shouldContinue: { Date() < deadline },
       recordFallback: { reason in
         DesktopDiagnosticsManager.shared.recordFallback(
@@ -291,13 +295,27 @@ actor ScreenActivitySyncService {
     database: any DatabaseWriter,
     push: ([[String: Any]]) async -> Bool,
     authorizationIsCurrent: () -> Bool = { true },
+    mutation: LocalMutationAuthorization = .unrestricted,
     shouldContinue: () -> Bool,
     recordFallback: (String) -> Void,
     isolation: isolated (any Actor)? = #isolation
   ) async -> MeetingFlushResult {
     var synced = 0
     do {
-      try await database.write { db in try compactMeetingWindow(db: db, interval: interval) }
+      // `getDBPool()` may have suspended across an account switch: nothing is written, not even
+      // compaction, unless the captured owner is still the signed-in one.
+      guard authorizationIsCurrent() else {
+        log("ScreenActivitySync: meeting flush not started; signed-in account changed")
+        recordFallback("auth")
+        return .ownerChanged(synced: 0)
+      }
+      try await mutation.withCommitLease {
+        try await database.write { db in
+          try mutation.require()
+          try compactMeetingWindow(db: db, interval: interval)
+          try mutation.require()
+        }
+      }
       while true {
         let candidates = try await database.read { db in
           try fetchMeetingWindowCandidates(db: db, interval: interval, limit: batchSize)
@@ -328,9 +346,19 @@ actor ScreenActivitySyncService {
           recordFallback("auth")
           return .ownerChanged(synced: synced)
         }
-        try await database.write { db in try markCandidatesSynced(db: db, candidates: candidates) }
+        try await mutation.withCommitLease {
+          try await database.write { db in
+            try mutation.require()
+            try markCandidatesSynced(db: db, candidates: candidates)
+            try mutation.require()
+          }
+        }
         synced += candidates.count
       }
+    } catch LocalMutationAuthorizationError.revoked {
+      log("ScreenActivitySync: meeting flush write refused; signed-in account changed")
+      recordFallback("auth")
+      return .ownerChanged(synced: synced)
     } catch {
       log("ScreenActivitySync: meeting flush read/write error — \(error.localizedDescription)")
       recordFallback("other")

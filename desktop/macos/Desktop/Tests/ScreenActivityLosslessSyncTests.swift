@@ -320,6 +320,43 @@ final class ScreenActivityLosslessSyncTests: XCTestCase {
     XCTAssertEqual(batches, [], "a batch read for a replaced owner is never pushed")
   }
 
+  /// INV-AUTH-1: the flush's sync-state writes are commit-bound to the owner it captured, so a
+  /// replacement owner's rows are never compacted or marked, even by a pool opened before the switch.
+  func testMeetingFlushNeverMutatesRowsOnceTheOwnerLeaseIsRevoked() async throws {
+    let queue = try makeLegacyQueue()
+    let start = Date(timeIntervalSince1970: 1_700_000_100)
+    let meeting = DateInterval(start: start, duration: 200)
+    try await queue.write { db in
+      try RewindDatabase.installScreenActivitySyncStateSchema(db)
+      // Two rows in one bucket and window: compaction would mark the shorter one `compacted`.
+      for (offset, text) in [(10.0, "short"), (20.0, "the longer row")] {
+        try db.execute(
+          sql: "INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText) VALUES (?, ?, ?, ?)",
+          arguments: [start.addingTimeInterval(offset), "SyntheticApp", "SyntheticWindow", text])
+      }
+    }
+    var reasons: [String] = []
+    var pushes = 0
+
+    let result = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue,
+      push: { _ in
+        pushes += 1
+        return true
+      },
+      mutation: LocalMutationAuthorization { false },
+      shouldContinue: { true },
+      recordFallback: { reasons.append($0) })
+
+    XCTAssertEqual(result, .ownerChanged(synced: 0))
+    XCTAssertEqual(reasons, ["auth"])
+    XCTAssertEqual(pushes, 0)
+    let states = try await queue.read { db in
+      try Int.fetchAll(db, sql: "SELECT screenActivitySyncState FROM screenshots ORDER BY id")
+    }
+    XCTAssertEqual(states, [ScreenActivitySyncState.pending.rawValue, ScreenActivitySyncState.pending.rawValue])
+  }
+
   /// A row whose vector is still pending must not ship text-only and then ship again unchanged:
   /// the second push is a byte-identical Firestore document write plus a full index rewrite.
   func testARowWaitsForItsEmbeddingRatherThanShippingTwice() throws {
