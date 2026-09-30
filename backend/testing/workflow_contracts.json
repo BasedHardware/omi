@@ -215,8 +215,11 @@
         ".github/scripts/check_backend_deploy_source_admission.py"
       ],
       "tests": [
-        "tests/unit/test_reconcile_firestore_indexes.py",
         "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_firestore_index_rules.py",
+        "tests/unit/test_firestore_query_shapes.py",
+        "tests/unit/test_firestore_shape_recorder.py",
+        "tests/unit/test_reconcile_firestore_indexes.py",
         "tests/unit/test_verify_backend_release_vector.py"
       ],
       "checks": [],

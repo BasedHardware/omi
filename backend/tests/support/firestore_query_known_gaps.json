@@ -109578,6 +109578,68 @@
       }
     },
     {
+      "id": "627fc1ec6b2ee167",
+      "reason": "equality/array index merging may serve this query without the full candidate index",
+      "required_index": {
+        "collectionGroup": "action_items",
+        "composite": true,
+        "equality_fields": [
+          "account_generation",
+          "idempotency_key"
+        ],
+        "fields": [
+          {
+            "fieldPath": "account_generation",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "idempotency_key",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "ASCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION",
+        "reason": "equality/array index merging may serve this query without the full candidate index",
+        "uncertain": true
+      },
+      "shape": {
+        "aggregations": [],
+        "calling_function": "database.action_items.create_action_item.<locals>.create_in_generation",
+        "collection_group": "action_items",
+        "cursors": [],
+        "driver_function": "database.action_items.create_action_item",
+        "filter_tree": {
+          "filters": [
+            {
+              "field": "idempotency_key",
+              "operator": "=="
+            },
+            {
+              "field": "account_generation",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "filters": [
+          {
+            "field": "idempotency_key",
+            "operator": "=="
+          },
+          {
+            "field": "account_generation",
+            "operator": "=="
+          }
+        ],
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      }
+    },
+    {
       "id": "629c0dc97c0c79de",
       "reason": "equality/array index merging may serve this query without the full candidate index",
       "required_index": {

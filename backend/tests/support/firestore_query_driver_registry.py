@@ -199,14 +199,28 @@ _add(
         reason='bounded stream wrapper observed inside both listed consumers',
     )
 )
+
+
+def _seed_action_items_control(client, combo, trial):
+    """Trial 0 leaves the control document absent (generation 0).
+
+    Trial 1 seeds ``task_intelligence_control/state`` with a nonzero
+    ``account_generation`` so the idempotency lookup adds its
+    ``account_generation ==`` predicate and the two-equality shape is
+    captured instead of only the single-field ``idempotency_key`` query.
+    """
+    if trial == 1:
+        client.documents[f'users/{UID}/task_intelligence_control/state'] = {'account_generation': 2}
+
+
 _add(
     DriverEntry(
         'database.action_items.create_action_item',
         base={'uid': UID, 'action_item_data': {'description': 'shape-task'}},
-        neutrals={
-            'idempotency_key': ('shape-key', 'dedupe key; fixed, not filter-affecting'),
-            'document_id': (None, 'optional doc id; absent does not change query'),
-        },
+        domains={'idempotency_key': [None, 'shape-key']},
+        neutrals={'document_id': (None, 'optional doc id; absent does not change query')},
+        setup=_seed_action_items_control,
+        trials=2,
     )
 )
 _add(
