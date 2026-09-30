@@ -1,68 +1,69 @@
-from typing import List, Dict, Any
-from datetime import datetime
-from backend.database.conversations import ConversationsDB
+"""Per-person conversation stats for the People list.
+
+Computed on demand from the newest conversations rather than denormalized onto each conversation: the
+scan is bounded (PEOPLE_STATS_SCAN_CAP), so counts for a very long history cover the most recent
+conversations only.
+"""
+
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, Iterable, List, Optional
+
+PEOPLE_STATS_SCAN_CAP = 1000
+PEOPLE_STATS_BATCH = 100
 
 
-def aggregate_people_stats(
-    conversations_db: ConversationsDB,
-    uid: int,
-    scan_cap: int = 10000,
-    batch: int = 1000
-) -> Dict[str, Any]:
-    """
-    Aggregates people stats for a given user by scanning their conversations.
-    Uses include_discarded=True to ensure tombstone rows do not terminate pagination early.
-    """
-    rows = []
-    offset = 0
+def _as_utc(value: Any) -> Optional[datetime]:
+    if not isinstance(value, datetime):
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
-    while len(rows) < scan_cap:
-        request_size = min(batch, scan_cap - len(rows))
-        page = conversations_db.get_conversations_without_photos(
-            uid, request_size, offset, include_discarded=True
-        )
-        # Extend rows with raw page (including tombstones) to maintain offset alignment
-        rows.extend(page)
-        if len(page) < request_size:
-            break
-        offset += request_size
 
-    # Filter out discarded/tombstone rows for stats aggregation
-    visible_rows = [row for row in rows if not getattr(row, 'discarded', False)]
-
-    people_stats: Dict[int, Dict[str, Any]] = {}
-
-    for conv in visible_rows:
-        speaker_id = conv.speaker_id
-        if speaker_id not in people_stats:
-            people_stats[speaker_id] = {
-                "conversation_count": 0,
-                "last_heard_at": None,
-                "talk_seconds": 0
-            }
-
-        stats = people_stats[speaker_id]
-        stats["conversation_count"] += 1
-
-        if conv.created_at and (stats["last_heard_at"] is None or conv.created_at > stats["last_heard_at"]):
-            stats["last_heard_at"] = conv.created_at
-
-        if conv.duration:
-            stats["talk_seconds"] += conv.duration
-
-    return {
-        "people": people_stats,
-        "total_conversations": len(visible_rows)
-    }
+def aggregate_people_stats(conversations: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """person_id -> {conversation_count, last_heard_at, talk_seconds} over the given conversations."""
+    stats: Dict[str, Dict[str, Any]] = {}
+    for conversation in conversations:
+        if conversation.get('is_locked'):
+            continue
+        if conversation.get('discarded'):
+            continue
+        segments = conversation.get('transcript_segments') or []
+        if not isinstance(segments, list):
+            continue
+        heard_at = _as_utc(conversation.get('started_at')) or _as_utc(conversation.get('created_at'))
+        seen: set = set()
+        for segment in segments:
+            if not isinstance(segment, dict):
+                continue
+            person_id = segment.get('person_id')
+            if not person_id or not isinstance(person_id, str):
+                continue
+            entry = stats.setdefault(person_id, {'conversation_count': 0, 'last_heard_at': None, 'talk_seconds': 0.0})
+            if person_id not in seen:
+                seen.add(person_id)
+                entry['conversation_count'] += 1
+                if heard_at and (entry['last_heard_at'] is None or heard_at > entry['last_heard_at']):
+                    entry['last_heard_at'] = heard_at
+            start, end = segment.get('start'), segment.get('end')
+            if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
+                entry['talk_seconds'] += float(end - start)
+    return stats
 
 
 def collect_people_stats(
-    conversations_db: ConversationsDB,
-    uid: int,
-    scan_cap: int = 10000,
-    batch: int = 1000
-) -> Dict[str, Any]:
-    """
-    Legacy wrapper for aggregate_people_stats. Maintained for backward compatibility.
-    """
-    return aggregate_people_stats(conversations_db, uid, scan_cap, batch)
+    fetch_page: Callable[[int, int], List[Dict[str, Any]]],
+    scan_cap: int = PEOPLE_STATS_SCAN_CAP,
+    batch: int = PEOPLE_STATS_BATCH,
+) -> Dict[str, Dict[str, Any]]:
+    """Aggregate stats over up to ``scan_cap`` newest conversations; ``fetch_page(limit, offset)``."""
+    rows: List[Dict[str, Any]] = []
+    scanned = 0
+    while scanned < scan_cap and len(rows) < scan_cap:
+        request_size = min(batch, scan_cap - scanned)
+        page = fetch_page(request_size, scanned)
+        if not page:
+            break
+        scanned += len(page)
+        rows.extend(page)
+        if len(page) < request_size:
+            break
+    return aggregate_people_stats(rows)
