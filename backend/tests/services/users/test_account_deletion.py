@@ -3,7 +3,7 @@ import importlib.machinery
 import sys
 import types
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -56,6 +56,8 @@ sys.meta_path.insert(0, _finder)
 try:
     from services.users import agent_vm_account_cleanup  # noqa: E402
     from services.users import account_deletion  # noqa: E402
+
+    account_deletion.users_db.DELETION_WIPE_MAX_ATTEMPTS = 10
 finally:
     # Remove the meta-path finder and clear *only* the modules that the
     # stub finder actually created. Broadly deleting every module matching
@@ -127,7 +129,7 @@ def test_background_wipe_acquires_legal_hold_gate_before_running_marker(monkeypa
 
     acquire.assert_called_once()
     running_marker.assert_not_called()
-    failed_marker.assert_called_once_with('uid1')
+    failed_marker.assert_called_once_with('uid1', error=ANY)
 
 
 class _ComputeResponse:
@@ -929,7 +931,7 @@ def test_background_wipe_blocks_user_data_purge_when_agent_vm_cleanup_fails(monk
 
     delete_user_data.assert_not_called()
     account_deletion.auth.delete_account.assert_not_called()
-    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1', error=ANY)
 
 
 def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(monkeypatch):
@@ -1004,7 +1006,7 @@ def test_start_account_deletion_accepts_durable_intent_when_cloud_task_enqueue_f
 
     assert result == {'status': 'ok', 'message': 'Account deletion started'}
     account_deletion.users_db.mark_user_deletion_wipe_started.assert_not_called()
-    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1', error=ANY)
     account_deletion.auth.delete_account.assert_not_called()
     account_deletion.users_db.get_user_subscription.assert_not_called()
     submit.assert_not_called()
@@ -1393,7 +1395,7 @@ def test_background_wipe_still_fails_when_subscription_is_not_terminal(monkeypat
     account_deletion.users_db.delete_user_data.assert_not_called()
     account_deletion.auth.delete_account.assert_not_called()
     account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once()
-    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1', error=ANY)
 
 
 def test_gce_project_uses_deployed_google_cloud_project(monkeypatch):
@@ -1417,7 +1419,7 @@ def test_background_wipe_user_data_swallows_failures(monkeypatch):
     account_deletion.purge_derived_user_data.assert_not_called()
     account_deletion.users_db.delete_user_data.assert_not_called()
     # On failure, mark as failed (not completed) so a reconciliation worker can retry.
-    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1', error=ANY)
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
 
 
@@ -1436,7 +1438,7 @@ def test_background_wipe_fails_closed_when_running_marker_persist_fails(monkeypa
 
     account_deletion.delete_user_caller_ids.assert_not_called()
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
-    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1', error=ANY)
 
 
 def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(monkeypatch):
@@ -1619,7 +1621,7 @@ def test_background_wipe_user_data_does_not_complete_when_required_derived_purge
     account_deletion.background_wipe_user_data('uid1')
 
     account_deletion.users_db.delete_user_data.assert_not_called()
-    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1', error=ANY)
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
 
 
@@ -1642,7 +1644,7 @@ def test_background_wipe_user_data_does_not_complete_when_firestore_wipe_returns
 
     assert account_deletion.background_wipe_user_data('uid1') is False
 
-    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1', error=ANY)
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
 
 
@@ -1859,7 +1861,9 @@ def test_reconcile_pending_deletion_wipes_marks_failed_when_job_id_recovery_fail
     result = account_deletion.reconcile_pending_deletion_wipes()
 
     assert result == {'requeued': 0, 'skipped': 1}
-    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with(
+        'uid1', error='job id backfill down'
+    )
     enqueue.assert_not_called()
     submit.assert_not_called()
 
@@ -1879,7 +1883,7 @@ def test_reconcile_pending_deletion_wipes_skips_cloud_enqueue_failure(monkeypatc
     result = account_deletion.reconcile_pending_deletion_wipes()
 
     assert result == {'requeued': 0, 'skipped': 1}
-    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1', error='tasks down')
     submit.assert_not_called()
 
 
@@ -2008,12 +2012,14 @@ def test_reconcile_does_not_query_auth_for_legacy_durable_intent(monkeypatch):
 
 
 def test_reconcile_transitions_capped_records_to_terminal_failed(monkeypatch):
-    pending = [{
-        'uid': 'uid_capped',
-        'wipe_status': 'failed',
-        'wipe_attempts': 10,
-        'wipe_error': 'Queue 404 does not exist',
-    }]
+    pending = [
+        {
+            'uid': 'uid_capped',
+            'wipe_status': 'failed',
+            'wipe_attempts': 10,
+            'wipe_error': 'Queue 404 does not exist',
+        }
+    ]
 
     monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
     mark_terminal = MagicMock()
@@ -2029,20 +2035,25 @@ def test_reconcile_transitions_capped_records_to_terminal_failed(monkeypatch):
     assert mark_terminal.called
     assert mark_terminal.call_args[0][0] == 'uid_capped'
     assert mark_terminal.call_args[1]['reason'] == 'reconciliation_attempts_exhausted'
+    assert mark_terminal.call_args[1]['error'] == 'Queue 404 does not exist'
     assert not claim.called
 
 
 def test_reconcile_marks_terminal_when_enqueue_fails_and_hits_cap(monkeypatch):
-    pending = [{
-        'uid': 'uid_enqueue_capped',
-        'wipe_status': 'failed',
-        'wipe_attempts': 9,
-        'wipe_job_id': 'job-123',
-    }]
+    pending = [
+        {
+            'uid': 'uid_enqueue_capped',
+            'wipe_status': 'failed',
+            'wipe_attempts': 9,
+            'wipe_job_id': 'job-123',
+        }
+    ]
 
     monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
     monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
-    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', MagicMock(side_effect=Exception('404 Queue not found')))
+    monkeypatch.setattr(
+        account_deletion, 'enqueue_account_deletion_wipe', MagicMock(side_effect=Exception('404 Queue not found'))
+    )
     mark_terminal = MagicMock()
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_terminal_failed', mark_terminal)
     telemetry = MagicMock()
@@ -2054,4 +2065,3 @@ def test_reconcile_marks_terminal_when_enqueue_fails_and_hits_cap(monkeypatch):
     assert mark_terminal.called
     assert mark_terminal.call_args[0][0] == 'uid_enqueue_capped'
     assert mark_terminal.call_args[1]['reason'] == 'enqueue_attempts_exhausted'
-

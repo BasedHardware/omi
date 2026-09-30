@@ -378,16 +378,24 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
                 # never pretend a hold can be placed while deletion outcome is
                 # unknown.
                 logger.error(f'delete_account legal-hold gate finalization failed for {uid}: {sanitize(str(gate_err))}')
-        # Mark the wipe as failed so a reconciliation worker can retry. Do NOT mark
-        # completed — that would hide a partial wipe from the recovery path.
-        try:
-            users_db.mark_user_deletion_wipe_failed(uid)
-        except Exception as persist_err:
-            logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
         required_failures, best_effort_failures = _purge_failures(purge_result)
         failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures] or [
             current_operation
         ]
+        error_msg = (
+            '; '.join(
+                f"{f.get('operation')}: {f.get('error')}"
+                for f in required_failures + best_effort_failures
+                if f.get('error')
+            )
+            or f"failed operations: {', '.join(failed_operations)}"
+        )
+        # Mark the wipe as failed so a reconciliation worker can retry. Do NOT mark
+        # completed — that would hide a partial wipe from the recovery path.
+        try:
+            users_db.mark_user_deletion_wipe_failed(uid, error=error_msg)
+        except Exception as persist_err:
+            logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
         _emit_deletion_telemetry(
             uid,
             ACCOUNT_DELETION_WIPE_FAILED,
@@ -446,7 +454,7 @@ def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
 
 def _mark_wipe_failed_after_enqueue_error(uid: str, error: Exception):
     try:
-        users_db.mark_user_deletion_wipe_failed(uid)
+        users_db.mark_user_deletion_wipe_failed(uid, error=str(error))
     except Exception as persist_err:
         logger.error(
             f'delete_account enqueue failure status persist failed for {uid}: {sanitize(str(persist_err))}; '
@@ -597,9 +605,7 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
 
         raw_attempts = record.get('wipe_attempts')
         attempts = raw_attempts if isinstance(raw_attempts, int) and raw_attempts > 0 else 0
-        raw_max_attempts = getattr(users_db, 'DELETION_WIPE_MAX_ATTEMPTS', 10)
-        max_attempts = raw_max_attempts if isinstance(raw_max_attempts, int) else 10
-        if attempts >= max_attempts:
+        if attempts >= users_db.DELETION_WIPE_MAX_ATTEMPTS:
             users_db.mark_user_deletion_wipe_terminal_failed(
                 uid, reason='reconciliation_attempts_exhausted', error=str(record.get('wipe_error', ''))
             )
@@ -665,10 +671,8 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
         except Exception as e:
             logger.error(f'delete_account reconciliation enqueue failed for {uid}: {sanitize(str(e))}')
             new_attempts = attempts + 1
-            if new_attempts >= max_attempts:
-                users_db.mark_user_deletion_wipe_terminal_failed(
-                    uid, reason='enqueue_attempts_exhausted', error=str(e)
-                )
+            if new_attempts >= users_db.DELETION_WIPE_MAX_ATTEMPTS:
+                users_db.mark_user_deletion_wipe_terminal_failed(uid, reason='enqueue_attempts_exhausted', error=str(e))
                 _emit_deletion_telemetry(
                     uid,
                     ACCOUNT_DELETION_WIPE_FAILED,

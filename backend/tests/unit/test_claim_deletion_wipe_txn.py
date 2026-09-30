@@ -677,11 +677,13 @@ def test_claim_deletion_wipe_task_txn_terminal_failed_is_not_actionable():
     txn = _make_txn()
     txn_obj = users_db._claim_deletion_wipe_task_txn
     raw_fn = getattr(txn_obj, 'to_wrap', txn_obj)
-    snapshot = _make_snapshot({
-        'uid': 'terminal_uid',
-        'wipe_status': 'terminal_failed',
-        'wipe_terminal_at': datetime.now(timezone.utc),
-    })
+    snapshot = _make_snapshot(
+        {
+            'uid': 'terminal_uid',
+            'wipe_status': 'terminal_failed',
+            'wipe_terminal_at': datetime.now(timezone.utc),
+        }
+    )
 
     class FakeDocRef:
         def get(self, transaction=None):
@@ -691,12 +693,35 @@ def test_claim_deletion_wipe_task_txn_terminal_failed_is_not_actionable():
     assert outcome == 'not_actionable'
 
 
-def test_get_pending_deletion_wipes_filters_capped_attempts():
+def test_mark_user_deletion_wipe_failed_persists_error():
+    doc_ref = MagicMock()
+    with patch.object(users_db, 'account_deletion_document', return_value=doc_ref):
+        users_db.mark_user_deletion_wipe_failed('uid123', error='404 queue not found')
+
+    assert doc_ref.set.called
+    payload, kwargs = doc_ref.set.call_args[0][0], doc_ref.set.call_args[1]
+    assert kwargs == {'merge': True}
+    assert payload['wipe_status'] == 'failed'
+    assert payload['wipe_error'] == '404 queue not found'
+    assert 'wipe_attempts' in payload
+
+
+def test_get_pending_deletion_wipes_returns_capped_failed_for_dead_lettering():
     now = datetime.now(timezone.utc)
     docs_by_status = {
         'failed': [
-            {'uid': 'capped1', 'wipe_status': 'failed', 'wipe_attempts': users_db.DELETION_WIPE_MAX_ATTEMPTS + 2, 'wipe_failed_at': now - timedelta(hours=2)},
-            {'uid': 'eligible1', 'wipe_status': 'failed', 'wipe_attempts': 2, 'wipe_failed_at': now - timedelta(hours=1)},
+            {
+                'uid': 'capped1',
+                'wipe_status': 'failed',
+                'wipe_attempts': users_db.DELETION_WIPE_MAX_ATTEMPTS + 2,
+                'wipe_failed_at': now - timedelta(hours=2),
+            },
+            {
+                'uid': 'eligible1',
+                'wipe_status': 'failed',
+                'wipe_attempts': 2,
+                'wipe_failed_at': now - timedelta(hours=1),
+            },
         ],
         'pending': [],
         'running': [],
@@ -708,5 +733,4 @@ def test_get_pending_deletion_wipes_filters_capped_attempts():
 
     uids = [r['uid'] for r in result]
     assert 'eligible1' in uids
-    assert 'capped1' not in uids
-
+    assert 'capped1' in uids

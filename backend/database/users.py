@@ -51,6 +51,9 @@ DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
 DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 DELETION_WIPE_MAX_ATTEMPTS = int(os.getenv('DELETION_WIPE_MAX_ATTEMPTS', '10'))
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled', 'terminal_failed'})
+_DELETION_WIPE_ACTIVE_OR_TERMINAL_STATUSES = (
+    frozenset({'pending', 'retrying', 'running', 'failed'}) | _DELETION_WIPE_TERMINAL_STATUSES
+)
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
 ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
@@ -404,7 +407,7 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
                     {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
                 )
                 return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
-            if status in {'pending', 'retrying', 'running', 'failed', 'completed', 'terminal_failed'}:
+            if status in _DELETION_WIPE_ACTIVE_OR_TERMINAL_STATUSES:
                 return {'wipe_job_id': existing_job_id, 'dispatch_claimed': False}
     transaction.set(
         doc_ref,
@@ -472,16 +475,16 @@ def mark_user_deletion_wipe_completed(uid: str) -> bool:
     )
 
 
-def mark_user_deletion_wipe_failed(uid: str):
+def mark_user_deletion_wipe_failed(uid: str, error: str = ''):
     """Mark the background data wipe as failed so a reconciliation worker can retry."""
-    account_deletion_document(uid).set(
-        {
-            'wipe_status': 'failed',
-            'wipe_failed_at': datetime.now(timezone.utc),
-            'wipe_attempts': firestore.Increment(1),
-        },
-        merge=True,
-    )
+    payload: dict[str, Any] = {
+        'wipe_status': 'failed',
+        'wipe_failed_at': datetime.now(timezone.utc),
+        'wipe_attempts': firestore.Increment(1),
+    }
+    if error:
+        payload['wipe_error'] = str(error)
+    account_deletion_document(uid).set(payload, merge=True)
 
 
 def mark_user_deletion_wipe_terminal_failed(uid: str, reason: str = '', error: str = '') -> None:
@@ -605,7 +608,7 @@ def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subsc
     snapshot = doc_ref.get(transaction=transaction)
     if snapshot.exists:
         status = (snapshot.to_dict() or {}).get('wipe_status')
-        if status in ('pending', 'retrying', 'running', 'failed', 'completed', 'terminal_failed'):
+        if status in _DELETION_WIPE_ACTIVE_OR_TERMINAL_STATUSES:
             return False
 
     transaction.set(
@@ -700,11 +703,11 @@ def get_pending_deletion_wipes(
         data = doc.to_dict()
         raw_attempts = data.get('wipe_attempts')
         attempts = raw_attempts if isinstance(raw_attempts, int) and raw_attempts > 0 else 1
-        if attempts >= DELETION_WIPE_MAX_ATTEMPTS:
-            continue
         failed_at = data.get('wipe_failed_at')
         # A record with no ``wipe_failed_at`` predates the backoff and stays immediately
         # actionable: a missing timestamp must never be a reason to stop retrying a wipe.
+        # Backoff applies to all failed records; once elapsed, capped records are returned
+        # so reconcile_pending_deletion_wipes can transition them to terminal_failed.
         if failed_at and failed_at + deletion_wipe_retry_delay(attempts) > now:
             continue
         result.append(data | {'uid': doc.id})
@@ -902,7 +905,7 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
 
     if status == 'completed':
         return 'completed'
-    if status in ('cancelled', 'deleting_auth', 'terminal_failed'):
+    if status in _DELETION_WIPE_TERMINAL_STATUSES or status == 'deleting_auth':
         return 'not_actionable'
     if status == 'running':
         running_at = data.get('wipe_running_at')
