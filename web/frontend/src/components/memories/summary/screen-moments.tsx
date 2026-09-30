@@ -12,6 +12,7 @@ import {
   groundGradient,
   msUntilRefresh,
   nextFrameSet,
+  withFailedAsset,
   screenshotTiles,
   stepIndex,
 } from '@/src/lib/shared-screenshots.mjs';
@@ -56,15 +57,16 @@ export default function ScreenMoments({
     () => screenshotTiles(frameSet) as SharedScreenFrame[],
     [frameSet],
   );
-  // Frames whose image failed to load with the current URLs. Only those are
-  // hidden (their tile keeps its gradient) while a refetch renews the URLs.
-  const [failedIds, setFailedIds] = useState<ReadonlySet<string>>(() => new Set());
+  // Image URLs (thumbnail or full-size, tracked separately) that failed to
+  // load. Only those images are hidden (a tile keeps its gradient) while a
+  // refetch renews the URLs; a failed thumbnail never hides the full image.
+  const [failedUrls, setFailedUrls] = useState<ReadonlySet<string>>(() => new Set());
   // Bumped by every successful refetch and used in the image keys, so images
   // remount and retry even when the backend returns the identical signed URL
   // (an <img> whose src does not change never reloads after an error).
   const [setVersion, setSetVersion] = useState(0);
   useEffect(() => {
-    setFailedIds(new Set());
+    setFailedUrls(new Set());
   }, [setVersion]);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const [zoomed, setZoomed] = useState(false);
@@ -101,10 +103,8 @@ export default function ScreenMoments({
   }, [conversationId]);
   const refresh = useCallback(() => gateRef.current?.request(), []);
   const markFailed = useCallback(
-    (frameId: string) => {
-      setFailedIds((previous) =>
-        previous.has(frameId) ? previous : new Set(previous).add(frameId),
-      );
+    (url: string) => {
+      setFailedUrls((previous) => withFailedAsset(previous, url) as ReadonlySet<string>);
       refresh();
     },
     [refresh],
@@ -200,7 +200,9 @@ export default function ScreenMoments({
           return (
             <li
               key={frame.id}
-              className={`sn-shot${failedIds.has(frame.id) ? ' sn-shot-failed' : ''}`}
+              className={`sn-shot${
+                failedUrls.has(frame.thumbnail_url) ? ' sn-shot-failed' : ''
+              }`}
             >
               <button
                 ref={(el) => {
@@ -226,7 +228,7 @@ export default function ScreenMoments({
                   height={frame.height}
                   loading="lazy"
                   decoding="async"
-                  onError={() => markFailed(frame.id)}
+                  onError={() => markFailed(frame.thumbnail_url)}
                 />
                 {offset ? (
                   <span className="sn-shot-time" aria-hidden="true">
@@ -281,7 +283,7 @@ export default function ScreenMoments({
                 <div
                   className={`sn-lightbox-stage${
                     showZoomed ? ' sn-lightbox-zoomed' : ''
-                  }${failedIds.has(current.id) ? ' sn-shot-failed' : ''}`}
+                  }${failedUrls.has(current.content_url) ? ' sn-shot-failed' : ''}`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element -- signed, expiring GCS URLs */}
                   <img
@@ -291,7 +293,7 @@ export default function ScreenMoments({
                     width={showZoomed ? current.width : fit.width}
                     height={showZoomed ? current.height : fit.height}
                     style={{ backgroundImage: groundGradient(current) }}
-                    onError={() => markFailed(current.id)}
+                    onError={() => markFailed(current.content_url)}
                   />
                 </div>
                 <div className="sn-lightbox-caption">

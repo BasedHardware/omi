@@ -11,6 +11,7 @@ import {
   fitSize,
   groundGradient,
   msUntilRefresh,
+  withFailedAsset,
   nextFrameSet,
   screenshotTiles,
   stepIndex,
@@ -384,8 +385,28 @@ describe('transient refetch failures keep the set and retry', () => {
   });
 
   it('hides only the images that failed, not the strip', () => {
-    assert.match(componentSource, /failedIds/);
     assert.match(cssSource, /\.sn-shot-failed/);
+  });
+
+  it('tracks failures per image asset: a failed thumbnail never hides the full-size image', () => {
+    const f = frame('a');
+    const failed = withFailedAsset(new Set(), f.thumbnail_url);
+    assert.equal(failed.has(f.thumbnail_url), true);
+    assert.equal(failed.has(f.content_url), false);
+    // Idempotent, and never mutates the previous set (React state).
+    const before = new Set();
+    assert.equal(withFailedAsset(before, 'x').size, 1);
+    assert.equal(before.size, 0);
+    const once = withFailedAsset(before, 'x');
+    assert.equal(withFailedAsset(once, 'x'), once);
+    assert.equal(withFailedAsset(once, ''), once);
+
+    // The component checks each <img> against its own URL, never the frame id.
+    assert.doesNotMatch(componentSource, /failed\w*\.has\(\w+\.id\)/);
+    assert.match(componentSource, /failedUrls\.has\(frame\.thumbnail_url\)/);
+    assert.match(componentSource, /failedUrls\.has\(current\.content_url\)/);
+    assert.match(componentSource, /markFailed\(frame\.thumbnail_url\)/);
+    assert.match(componentSource, /markFailed\(current\.content_url\)/);
   });
 
   it('remounts images after a successful refetch even when the signed URL is unchanged', () => {

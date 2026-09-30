@@ -205,3 +205,16 @@ export function createRefreshGate({
     },
   };
 }
+
+/**
+ * Records that one image asset (a thumbnail or a full-size URL) failed to
+ * load. Keyed by URL, not frame id, so a failed thumbnail never hides the
+ * healthy full-size image of the same frame, and a renewed URL starts clean.
+ * Returns the same Set when nothing changes (safe as React state).
+ */
+export function withFailedAsset(failed, url) {
+  if (!url || failed.has(url)) return failed;
+  const next = new Set(failed);
+  next.add(url);
+  return next;
+}
