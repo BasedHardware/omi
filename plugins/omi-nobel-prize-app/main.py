@@ -5,6 +5,7 @@ and learning about seminal scientific, peace, and literary achievements using th
 official Nobel Prize API (api.nobelprize.org).
 """
 
+import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
 import httpx
@@ -40,6 +41,7 @@ except ImportError:
 BASE_API_URL = "https://api.nobelprize.org/2.1"
 API_TIMEOUT = 10.0
 USER_AGENT = "OmiNobelPrizeApp/1.0 (https://github.com/BasedHardware/omi)"
+logger = logging.getLogger(__name__)
 
 # Caching Configuration
 CACHE_TTL_SECONDS = 300.0  # 5 minutes TTL
@@ -351,13 +353,15 @@ async def get_nobel_prizes(request: NobelPrizesRequest, raw_request: Request):
         set_cached_response(cache_key, res)
         return res
 
-    except httpx.RequestError as e:
+    except httpx.RequestError:
+        logger.exception("Nobel Prize API request failed while retrieving prizes")
         return ChatToolResponse(
-            error=f"Failed to communicate with Nobel Prize API: {str(e)}"
+            error="Unable to communicate with Nobel Prize API. Please try again later."
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error while processing Nobel Prize request")
         return ChatToolResponse(
-            error=f"An unexpected error occurred while processing Nobel Prizes: {str(e)}"
+            error="Unable to process Nobel Prizes right now. Please try again later."
         )
 
 
@@ -426,13 +430,15 @@ async def search_nobel_laureates(request: SearchLaureatesRequest, raw_request: R
         set_cached_response(cache_key, res)
         return res
 
-    except httpx.RequestError as e:
+    except httpx.RequestError:
+        logger.exception("Nobel Prize API request failed while searching laureates")
         return ChatToolResponse(
-            error=f"Failed to communicate with Nobel Prize API: {str(e)}"
+            error="Unable to communicate with Nobel Prize API. Please try again later."
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error while searching Nobel laureates")
         return ChatToolResponse(
-            error=f"An unexpected error occurred while searching laureates: {str(e)}"
+            error="Unable to search Nobel laureates right now. Please try again later."
         )
 
 
@@ -487,13 +493,15 @@ async def get_nobel_prize_by_category(request: CategoryPrizesRequest, raw_reques
         set_cached_response(cache_key, res)
         return res
 
-    except httpx.RequestError as e:
+    except httpx.RequestError:
+        logger.exception("Nobel Prize API request failed while retrieving category prizes")
         return ChatToolResponse(
-            error=f"Failed to communicate with Nobel Prize API: {str(e)}"
+            error="Unable to communicate with Nobel Prize API. Please try again later."
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error while retrieving category prizes")
         return ChatToolResponse(
-            error=f"An unexpected error occurred while retrieving prizes for {cat_title}: {str(e)}"
+            error="Unable to retrieve prizes for this category right now. Please try again later."
         )
 
 
@@ -602,11 +610,13 @@ async def get_nobel_laureate_details(request: LaureateDetailsRequest, raw_reques
         set_cached_response(cache_key, res)
         return res
 
-    except httpx.RequestError as e:
+    except httpx.RequestError:
+        logger.exception("Nobel Prize API request failed while retrieving laureate details")
         return ChatToolResponse(
-            error=f"Failed to communicate with Nobel Prize API: {str(e)}"
+            error="Unable to communicate with Nobel Prize API. Please try again later."
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error while retrieving laureate details")
         return ChatToolResponse(
-            error=f"An unexpected error occurred: {str(e)}"
+            error="Unable to retrieve laureate details right now. Please try again later."
         )
