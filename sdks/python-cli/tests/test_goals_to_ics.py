@@ -13,6 +13,7 @@ Verifies:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import importlib.util
 import io
 import json
@@ -236,6 +237,64 @@ class TestGoalsToIcs(unittest.TestCase):
             sys.stdin = saved_stdin
             sys.stdout = saved_stdout
             sys.argv = saved_argv
+
+    def test_nan_and_inf_defense(self) -> None:
+        """Dirty inputs containing NaN or Inf must not raise OverflowError or ValueError."""
+        dirty_goal = {
+            "id": "nan_goal",
+            "title": "Extreme floating numbers",
+            "current_value": float("nan"),
+            "target_value": float("inf"),
+            "min_value": float("-inf"),
+        }
+        prog = g2i.calculate_progress(dirty_goal)
+        self.assertEqual(prog, 0.0)
+
+        # Progress bar must not crash on NaN or Inf
+        bar = g2i.render_progress_bar(float("nan"))
+        self.assertIn("0.0%", bar)
+        bar_inf = g2i.render_progress_bar(float("inf"))
+        self.assertIn("0.0%", bar_inf)
+
+        now = datetime.now(timezone.utc)
+        vtodo = g2i.goal_to_vtodo(dirty_goal, now)
+        self.assertTrue(any("PERCENT-COMPLETE:0" in l for l in vtodo))
+
+    def test_standalone_cr_escaping(self) -> None:
+        """Standalone CR (\r) must be escaped to \\n per RFC 5545 §3.1."""
+        text = "Line 1\rLine 2\r\nLine 3\nLine 4"
+        escaped = g2i.ics_escape(text)
+        self.assertNotIn("\r", escaped)
+        self.assertEqual(escaped, "Line 1\\nLine 2\\nLine 3\\nLine 4")
+
+    def test_mixed_slash_path_traversal(self) -> None:
+        """Mixed forward/backward slashes must not bypass directory traversal guards."""
+        with self.assertRaises(ValueError):
+            g2i.write_ics("content", "output/..\\evil.ics")
+        with self.assertRaises(ValueError):
+            g2i.write_ics("content", "subdir\\../evil.ics")
+
+    def test_date_only_iso_parsing(self) -> None:
+        """Pure date strings like YYYY-MM-DD should be parsed safely."""
+        dt = g2i.ics_datetime("2026-12-31")
+        self.assertIsNotNone(dt)
+        self.assertEqual(dt.year, 2026)
+        self.assertEqual(dt.month, 12)
+        self.assertEqual(dt.day, 31)
+
+    def test_empty_id_fallback_uid(self) -> None:
+        """Goals missing an ID must produce a valid deterministic UID and not collide."""
+        now = datetime.now(timezone.utc)
+        goal_a = {"title": "Task A", "created_at": "2026-09-01T10:00:00Z"}
+        goal_b = {"title": "Task B", "created_at": "2026-09-01T10:00:00Z"}
+        lines_a = g2i.goal_to_vtodo(goal_a, now)
+        lines_b = g2i.goal_to_vtodo(goal_b, now)
+
+        uid_a = [l for l in lines_a if l.startswith("UID:")][0]
+        uid_b = [l for l in lines_b if l.startswith("UID:")][0]
+        self.assertTrue(uid_a.startswith("UID:omi-goal-"))
+        self.assertTrue(uid_b.startswith("UID:omi-goal-"))
+        self.assertNotEqual(uid_a, uid_b)
 
 
 if __name__ == "__main__":
