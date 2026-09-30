@@ -34,6 +34,19 @@ from utils.stt.live_session import (
 from routers.listen.receiver import ListenReceiver
 
 _REAL_SLEEP = asyncio.sleep
+_REAL_WAIT_FOR_EVENT = window.wait_for_event
+
+
+def _mock_post_pacing(monkeypatch, sleep):
+    if sleep is _REAL_SLEEP:
+        monkeypatch.setattr(window, 'wait_for_event', _REAL_WAIT_FOR_EVENT)
+        return
+
+    async def wait(_event, delay):
+        await sleep(delay)
+        return False
+
+    monkeypatch.setattr(window, 'wait_for_event', wait)
 
 
 @pytest.fixture(autouse=True)
@@ -780,7 +793,7 @@ async def test_growing_windows_hold_then_emit_on_drain(monkeypatch):
     async def pacing(delay):
         delays.append(delay)
 
-    monkeypatch.setattr(window.asyncio, 'sleep', pacing)
+    _mock_post_pacing(monkeypatch, pacing)
     payloads = [
         {
             'segments': [
@@ -865,7 +878,7 @@ async def test_no_first_text_bounds_fail_over_once_and_replay_all_capture(monkey
     )
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '2')
     if reason == 'empty_streak':
-        monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+        _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = Client(data={'text': ''})
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     base = receiver()
@@ -1068,7 +1081,7 @@ class LongTailClient(ProgressThenHoldClient):
 async def _receiver_for_anchor_replay(monkeypatch, client):
     monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '60')
     monkeypatch.setenv('PARAKEET_WINDOW_POST_TIMEOUT_SECONDS', '60')
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
     base = receiver()
@@ -1528,7 +1541,7 @@ async def test_resumed_speech_after_empty_stranded_answer_posts_before_first_tex
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
     # Restore real pacing and advance the event-loop clock with capture so the
     # production 12s timer competes with the production 15s POST deadline.
-    monkeypatch.setattr(window.asyncio, 'sleep', _REAL_SLEEP)
+    _mock_post_pacing(monkeypatch, _REAL_SLEEP)
     loop = asyncio.get_running_loop()
     real_time = loop.time
     clock[0] = real_time()
@@ -1575,7 +1588,7 @@ async def test_resumed_speech_before_empty_stranded_answer_posts_before_first_te
 
     client = GateFirstClient([{'text': ''}, joined_response])
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
-    monkeypatch.setattr(window.asyncio, 'sleep', _REAL_SLEEP)
+    _mock_post_pacing(monkeypatch, _REAL_SLEEP)
     loop = asyncio.get_running_loop()
     real_time = loop.time
     clock[0] = real_time()
@@ -1625,11 +1638,85 @@ async def test_resumed_speech_before_empty_stranded_answer_posts_before_first_te
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('finalize_on_resume', [False, True])
+@pytest.mark.parametrize('silence_frames', [100, 130])
+async def test_resumed_speech_during_stranded_selection_pacing_posts_before_first_text_deadline(
+    monkeypatch, finalize_on_resume, silence_frames
+):
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '15')
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    _mock_post_pacing(monkeypatch, _REAL_SLEEP)
+    loop = asyncio.get_running_loop()
+    real_time = loop.time
+    clock[0] = real_time()
+    monkeypatch.setattr(loop, 'time', lambda: clock[0])
+    before = {
+        outcome: WINDOW_STRANDED_FLUSHES.labels(outcome=outcome)._value.get()
+        for outcome in ('performed', 'answered_empty', 'answered_text')
+    }
+    try:
+        # Hold selection behind the old POST deadline, using the real pump,
+        # VAD and receiver rather than preselecting a stranded job.
+        pending_flush = silence_frames == 130
+        post_deadline = loop.time() + (15 if pending_flush else 11)
+        previous.raw._next_post = post_deadline
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+        timer = previous.raw._first_text_timer
+        assert timer is not None
+        sample = await _settled_fragment_silence(actual, clock, sample, silence_frames)
+        assert previous.raw._pacing_wait
+        assert previous.raw._capture_silence_flush == pending_flush
+        assert not previous.raw._stranded_flush_used
+        assert not previous.raw._stranded_fragment_answered
+        assert (previous.raw._next_post > timer.when()) == pending_flush
+        assert not client.requests
+        retained_pcm = _agc(bytes(previous.raw._buf))
+
+        def joined_response(_n, kwargs):
+            return {'segments': [{'text': 'Joined.', 'start': 0.24, 'end': _wav_duration(kwargs) - 0.1}]}
+
+        client.payloads = [joined_response]
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+        assert not previous.raw._capture_silence_flush
+        if finalize_on_resume:
+            previous.raw.finalize()
+        else:
+            sample = await _settled_fragment_silence(actual, clock, sample, 130)
+        if not pending_flush:
+            # Speech before the decision must retain ordinary POST pacing;
+            # waking the pump alone must not spend another GPU request.
+            for _ in range(100):
+                await _REAL_SLEEP(0)
+            assert not client.requests
+            assert previous.raw._next_post == post_deadline
+            clock[0] = post_deadline + 0.01
+        for _ in range(100):
+            if base.emitted:
+                break
+            await _REAL_SLEEP(0)
+        assert loop.time() < timer.when()
+        assert len(client.requests) == 1
+        assert _posted_pcm(client.requests[0][1]).startswith(retained_pcm)
+        assert [item['text'] for item in base.emitted] == ['Joined.']
+        assert previous.raw._first_text_timer is None and timer.cancelled()
+        assert not previous.is_connection_dead
+        assert not replayed and not callbacks
+        sample = await _settled_fragment_silence(actual, clock, sample, 250, wall_seconds=0)
+        assert len(client.requests) == 1
+        for outcome in before:
+            expected = int(not finalize_on_resume and outcome != 'answered_empty')
+            assert WINDOW_STRANDED_FLUSHES.labels(outcome=outcome)._value.get() == before[outcome] + expected
+    finally:
+        monkeypatch.setattr(loop, 'time', real_time)
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('close_path', ['socket', 'receiver'])
 async def test_empty_stranded_answer_drains_promptly_without_post_pacing(monkeypatch, close_path):
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '15')
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
-    monkeypatch.setattr(window.asyncio, 'sleep', _REAL_SLEEP)
+    _mock_post_pacing(monkeypatch, _REAL_SLEEP)
     try:
         sample = await _fragment_frame(actual, clock, sample, speech=True)
         sample = await _settled_fragment_silence(actual, clock, sample, 130)
@@ -1929,7 +2016,7 @@ async def test_pacing_wait_with_capture_burst_reports_deferred_cut_and_exact_rep
         pacing_started.set()
         await pacing_release.wait()
 
-    monkeypatch.setattr(window.asyncio, 'sleep', hold_pacing)
+    _mock_post_pacing(monkeypatch, hold_pacing)
 
     # Only one admitted second per six capture seconds: the PCM buffer cannot
     # hit its own cap first. A catch-up burst can consume 30 capture seconds
@@ -2318,7 +2405,7 @@ async def test_hangover_only_tail_after_full_window_is_not_posted(monkeypatch):
     async def pacing(_delay):
         pass
 
-    monkeypatch.setattr(window.asyncio, 'sleep', pacing)
+    _mock_post_pacing(monkeypatch, pacing)
     sock = window.connect_window(lambda _: None, 16000)
     sock.mark_speech()
     sock.send(b'\x01\x00' * 16000 * 6)
@@ -2728,7 +2815,7 @@ def test_farfield_like_peak_gain_moves_smoothly_with_target():
 async def test_posted_pcm_is_agc_scaled_buffer_is_not(monkeypatch):
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     sock = window.connect_window(lambda _: None, 16000)
     quiet = (np.int16(1000) * np.ones(16000 * 6, dtype=np.int16)).tobytes()
     sock.mark_speech()
@@ -2782,7 +2869,7 @@ def test_session_pcm_gain_fast_attack_then_holds_running_max():
 async def test_ingest_agc_does_not_compound_posted_agc(monkeypatch):
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     monkeypatch.setattr(window, 'WINDOW_INGEST_AGC', True)
     sock = await LiveChainSession(receiver()).connect(16000)
     quiet = (np.int16(1000) * np.ones(16000 * 6, dtype=np.int16)).tobytes()
@@ -2832,7 +2919,7 @@ async def test_ingest_agc_at_ceiling_on_silence_is_not_posted(monkeypatch):
 async def test_posted_agc_still_runs_when_ingest_is_disabled(monkeypatch):
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     monkeypatch.setattr(window, 'WINDOW_INGEST_AGC', False)
     sock = await LiveChainSession(receiver()).connect(16000)
     quiet = (np.int16(1000) * np.ones(16000 * 6, dtype=np.int16)).tobytes()
@@ -2850,7 +2937,7 @@ async def test_posted_window_is_uniform_when_ingest_gain_moves(monkeypatch):
     """Quiet then loud chunks must not store a ramp; POST is one scale."""
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     monkeypatch.setattr(window, 'WINDOW_INGEST_AGC', True)
     sock = await LiveChainSession(receiver()).connect(16000)
     quiet = (np.int16(1000) * np.ones(16000 * 3, dtype=np.int16)).tobytes()
@@ -2985,7 +3072,7 @@ async def test_socket_reads_clamped_window_env(monkeypatch):
 @pytest.mark.asyncio
 async def test_trailing_complete_emits_last_sentence(monkeypatch):
     posted = []
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = SeqClient(
         [
             {'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.5}]},
@@ -3010,7 +3097,7 @@ async def test_trailing_complete_emits_last_sentence(monkeypatch):
 @pytest.mark.asyncio
 async def test_empty_response_keeps_anchor_and_later_post_recovers(monkeypatch):
     posted = []
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = SeqClient([{'text': ''}, {'segments': [{'text': 'Recovered.', 'start': 0.0, 'end': 5.0}]}])
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.connect_window(posted.extend, 16000)
@@ -3034,7 +3121,7 @@ async def test_max_context_run_on_sentence_reanchors_at_sentence_end(monkeypatch
     posted = []
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_CONTEXT_SECONDS', '6')
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     before = WINDOW_FORCED_CUTS._value.get()
     client = Client(data={'segments': [{'text': 'Still going', 'start': 0.0, 'end': 5.8}]})
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
@@ -3058,7 +3145,7 @@ async def test_max_context_run_on_sentence_reanchors_at_sentence_end(monkeypatch
 @pytest.mark.asyncio
 async def test_silence_flush_reanchors_at_next_speech_onset(monkeypatch):
     posted = []
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = SeqClient(
         [
             {'segments': [{'text': 'First.', 'start': 0.0, 'end': 1.8}]},
@@ -3085,7 +3172,7 @@ async def test_silence_flush_reanchors_at_next_speech_onset(monkeypatch):
 @pytest.mark.asyncio
 async def test_finalize_mid_sentence_holds_and_keeps_anchor(monkeypatch):
     posted = []
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = Client(data={'segments': [{'text': 'Held', 'start': 0.0, 'end': 1.6}]})
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.connect_window(posted.extend, 16000)
@@ -3113,7 +3200,7 @@ async def test_finalize_mid_sentence_holds_and_keeps_anchor(monkeypatch):
 @pytest.mark.asyncio
 async def test_finalize_after_terminal_emits_and_reanchors(monkeypatch):
     posted = []
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = Client(data={'segments': [{'text': 'Done.', 'start': 0.0, 'end': 1.6}]})
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.connect_window(posted.extend, 16000)
@@ -3139,7 +3226,7 @@ async def test_idle_flush_emits_held_sentence_once(monkeypatch):
     posted = []
     clock = {'now': 1000.0}
     monkeypatch.setattr(window.time, 'monotonic', lambda: clock['now'])
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = Client(data={'segments': [{'text': 'Held', 'start': 0.0, 'end': 1.0}]})
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.connect_window(posted.extend, 16000)
@@ -3173,7 +3260,7 @@ async def test_idle_flush_emits_held_sentence_once(monkeypatch):
 @pytest.mark.asyncio
 async def test_unchanged_context_is_not_reposted(monkeypatch):
     posted = []
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = Client(data={'segments': [{'text': 'Held', 'start': 0.0, 'end': 1.6}]})
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.connect_window(posted.extend, 16000)
@@ -3196,7 +3283,7 @@ async def test_unchanged_context_is_not_reposted(monkeypatch):
 @pytest.mark.asyncio
 async def test_many_posts_stay_monotonic_without_duplicates(monkeypatch):
     posted = []
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
 
     def payload(n, kwargs):
         dur = _wav_duration(kwargs)
@@ -3229,7 +3316,7 @@ async def test_speaker_assignment_only_for_emitted_segments(monkeypatch):
     posted = []
     assign = AsyncMock(return_value=0)
     monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', assign)
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = SeqClient(
         [
             {
@@ -3264,7 +3351,7 @@ async def test_live_posts_are_paced_and_single_flight(monkeypatch):
     async def pacing(delay):
         delays.append(delay)
 
-    monkeypatch.setattr(window.asyncio, 'sleep', pacing)
+    _mock_post_pacing(monkeypatch, pacing)
     client = Client(data={'segments': [{'text': 'Go.', 'start': 0.0, 'end': 4.5}]})
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.connect_window(lambda _: None, 16000)
@@ -3286,7 +3373,7 @@ async def test_default_pace_waits_for_fifteen_seconds_of_speech(monkeypatch):
     from utils.stt.window_anchor import DEFAULT_PACE_SECONDS
 
     monkeypatch.delenv('PARAKEET_WINDOW_PACE_SECONDS')
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = Client(data={'segments': [{'text': 'Go on', 'start': 0.0, 'end': 5.0}]})
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.connect_window(lambda _: None, 16000)
@@ -3319,7 +3406,7 @@ async def test_cap_cut_next_post_starts_at_emitted_sentence_end(monkeypatch):
     posted = []
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_CONTEXT_SECONDS', '6')
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     first, second = b'\x01\x00' * 16000 * 6, b'\x02\x00' * 16000 * 6
     client = SeqClient(
         [
@@ -3362,7 +3449,7 @@ async def test_empty_at_cap_slides_six_seconds_and_later_post_recovers(monkeypat
     # discard 15 s of speech the model returned nothing for.
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', pace)
     posted = []
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     empty, later = b'\x01\x00' * 16000 * 24, b'\x02\x00' * 16000 * 6
     before = WINDOW_FORCED_CUTS._value.get()
     client = SeqClient([{'text': ''}, {'segments': [{'text': 'Recovered.', 'start': 0.0, 'end': 4.0}]}])
@@ -3386,7 +3473,7 @@ async def test_empty_at_cap_slides_six_seconds_and_later_post_recovers(monkeypat
 
 @pytest.mark.asyncio
 async def test_catchup_burst_does_not_shed_and_posts_max_context_jobs(monkeypatch):
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = GateFirstClient()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.connect_window(lambda _: None, 16000)
@@ -3417,7 +3504,7 @@ async def test_idle_remainder_posts_without_close(monkeypatch):
     posted = []
     clock = {'now': 1000.0}
     monkeypatch.setattr(window.time, 'monotonic', lambda: clock['now'])
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = GateFirstClient()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.connect_window(posted.extend, 16000)
@@ -3448,7 +3535,7 @@ async def test_idle_remainder_posts_without_close(monkeypatch):
 
 
 def _head_socket(monkeypatch, payloads):
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     client = SeqClient(payloads)
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.connect_window(lambda _: None, 16000)
@@ -3519,7 +3606,7 @@ def test_decoder_loops_collapse_and_ordinary_repetition_survives():
 
 @pytest.mark.asyncio
 async def test_window_segments_have_decoder_loops_collapsed(monkeypatch):
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     looped = 'It went up a bit more a bit more a bit more a bit more than planned.'
     client = SeqClient([{'segments': [{'text': looped, 'start': 0.2, 'end': 5.0}]}])
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)

@@ -88,11 +88,16 @@ def runtime(monkeypatch):
         yield
 
     monkeypatch.setattr(window, 'get_stt_semaphore', semaphore)
+
     # Window scheduling uses loop-time pacing; the repro feeds audio as fast
-    # as the pump can post, so pacing sleeps collapse to a yield. The idle
+    # as the pump can post, so pacing waits collapse to a yield. The idle
     # flush is real-time based and would fire mid-feed depending on host
     # speed; pin it out so the post sequence is exactly: pace post, drain post.
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: REAL_SLEEP(0))
+    async def pacing(_event, _delay):
+        await REAL_SLEEP(0)
+        return False
+
+    monkeypatch.setattr(window, 'wait_for_event', pacing)
     monkeypatch.setattr(window, 'IDLE_FLUSH_SECONDS', 3600.0)
 
 

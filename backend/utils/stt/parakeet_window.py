@@ -17,6 +17,7 @@ from typing import Any, Callable, cast
 import httpx
 import numpy as np
 
+from utils.async_tasks import wait_for_event
 from utils.executors import start_background_task
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import ReplayLagDiagnostics, record_fallback
@@ -632,9 +633,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             # previous utterance, not this new fragment.
             self._pause_requested = False
         self._next_send_speech = True
-        if self._stranded_flush_used or self._stranded_fragment_answered:
+        if self._capture_silence_flush or self._stranded_flush_used or self._stranded_fragment_answered:
             # Re-arm within the original first-text budget even when speech
-            # resumes before the stranded POST's empty answer has landed.
+            # resumes before the stranded job is selected or answered.
             self._next_post = 0.0
         self._stranded_fragment_answered = False
 
@@ -795,15 +796,18 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 posted = False
                 # Answered-empty PCM is retained context, not another pending POST.
                 while not self._dead and not self._stranded_fragment_answered and self._has_unemitted_speech():
-                    if not self._closed:
+                    while not self._closed:
                         # Pace before selecting: a context captured before the wait would be stale.
                         delay = self._next_post - asyncio.get_running_loop().time()
-                        if delay > 0:
-                            self._pacing_wait = True
-                            try:
-                                await asyncio.sleep(delay)
-                            finally:
-                                self._pacing_wait = False
+                        if delay <= 0:
+                            break
+                        self._pacing_wait = True
+                        self._wake.clear()
+                        try:
+                            if not await wait_for_event(self._wake, delay):
+                                break
+                        finally:
+                            self._pacing_wait = False
                     job = self._next_job()
                     if job is None or self._dead:
                         break
