@@ -21667,6 +21667,17 @@
       },
       "Person": {
         "properties": {
+          "conversation_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Count"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -21682,6 +21693,18 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "last_heard_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heard At"
           },
           "name": {
             "title": "Name",
@@ -21713,6 +21736,17 @@
             "default": 3,
             "title": "Speech Samples Version",
             "type": "integer"
+          },
+          "talk_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Talk Seconds"
           },
           "updated_at": {
             "anyOf": [
@@ -41480,6 +41514,32 @@
             }
           },
           {
+            "in": "query",
+            "name": "include_translations",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Translations",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "translation_cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Translation Cursor"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -58069,7 +58129,7 @@
     },
     "/v1/stripe/return/{account_id}": {
       "get": {
-        "description": "Handle the return flow from Stripe Connect account creation",
+        "description": "Handle the return flow from Stripe Connect account creation.\nAccount onboarding status is updated via webhook and queried by authenticated\nclients at /v1/stripe/onboarded. This landing page provides user feedback without\nleaking account onboarding status to unauthenticated callers.",
         "operationId": "stripe_return_v1_stripe_return__account_id__get",
         "parameters": [
           {
@@ -65165,6 +65225,16 @@
             "schema": {
               "default": true,
               "title": "Include Speech Samples",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_stats",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Stats",
               "type": "boolean"
             }
           },
