@@ -3675,5 +3675,22 @@
     "peopleCount": "{count, plural, =1{1 человек} other{Людей: {count}}}",
     "noMatchingPeople": "Нет подходящих людей",
     "deselectAll": "Снять выбор",
-    "voiceRecognitionSettings": "Распознавание голоса"
+    "voiceRecognitionSettings": "Распознавание голоса",
+    "greetingMorning": "Доброе утро",
+    "greetingAfternoon": "Добрый день",
+    "greetingEvening": "Добрый вечер",
+    "greetingWithName": "{greeting}, {name}",
+    "whatDoYouWantToKnow": "Что вы хотите узнать?",
+    "askSuggestDecide": "Что я решил сегодня?",
+    "askSuggestOwe": "Что я ещё должен людям?",
+    "askSuggestNotice": "Что заметил Omi?",
+    "pastChats": "Прошлые чаты",
+    "newChat": "Новый чат",
+    "startFresh": "Начать заново",
+    "noPastChats": "Здесь появятся ваши чаты с Omi.",
+    "deleteChatQuestion": "Удалить этот чат?",
+    "deleteChatMessage": "Он навсегда исчезнет из прошлых чатов.",
+    "deleteChat": "Удалить чат",
+    "appsAskWith": "Спрашивать Omi с помощью",
+    "conversationsTodayCount": "{count, plural, =0{Сегодня разговоров нет.} =1{1 разговор сегодня.} other{{count} разговоров сегодня.}}"
 }

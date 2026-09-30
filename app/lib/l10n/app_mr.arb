@@ -11200,5 +11200,22 @@
     "peopleCount": "{count, plural, =1{1 व्यक्ती} other{{count} लोक}}",
     "noMatchingPeople": "जुळणारे लोक नाहीत",
     "deselectAll": "सर्व निवड रद्द करा",
-    "voiceRecognitionSettings": "आवाज ओळख"
+    "voiceRecognitionSettings": "आवाज ओळख",
+    "greetingMorning": "सुप्रभात",
+    "greetingAfternoon": "शुभ दुपार",
+    "greetingEvening": "शुभ संध्याकाळ",
+    "greetingWithName": "{greeting}, {name}",
+    "whatDoYouWantToKnow": "तुम्हाला काय जाणून घ्यायचे आहे?",
+    "askSuggestDecide": "आज मी काय ठरवले?",
+    "askSuggestOwe": "अजून लोकांना मी काय देणे आहे?",
+    "askSuggestNotice": "Omi ला काय लक्षात आले?",
+    "pastChats": "मागील चॅट्स",
+    "newChat": "नवीन चॅट",
+    "startFresh": "नव्याने सुरू करा",
+    "noPastChats": "Omi सोबतचे तुमचे चॅट्स येथे दिसतील.",
+    "deleteChatQuestion": "हे चॅट हटवायचे?",
+    "deleteChatMessage": "ते मागील चॅट्समधून कायमचे जाईल.",
+    "deleteChat": "चॅट हटवा",
+    "appsAskWith": "यासह Omi ला विचारा",
+    "conversationsTodayCount": "{count, plural, =0{आज कोणतेही संभाषण नाही.} =1{आज 1 संभाषण.} other{आज {count} संभाषणे.}}"
 }
