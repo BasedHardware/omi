@@ -3,8 +3,9 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
+import pytest
 
 import database.calendar_meetings as calendar_db
 import routers.calendar_meetings as calendar_router
@@ -47,6 +48,53 @@ def test_store_calendar_meeting_rejects_end_time_not_after_start_time():
     with pytest.raises(HTTPException) as exc_info:
         calendar_router.store_calendar_meeting(req, uid='uid-1')
     assert exc_info.value.status_code == 422
+
+
+def test_store_calendar_meeting_rejects_empty_event_id_and_source():
+    # empty calendar_event_id
+    req_empty_eid = calendar_router.StoreMeetingRequest(
+        calendar_event_id='',
+        calendar_source='google_calendar',
+        title='Test',
+        start_time=datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 9, 24, 13, 0, 0, tzinfo=timezone.utc),
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        calendar_router.store_calendar_meeting(req_empty_eid, uid='uid-1')
+    assert exc_info.value.status_code == 422
+
+    # whitespace / empty calendar_source
+    req_empty_src = calendar_router.StoreMeetingRequest(
+        calendar_event_id='evt-1',
+        calendar_source='   ',
+        title='Test',
+        start_time=datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 9, 24, 13, 0, 0, tzinfo=timezone.utc),
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        calendar_router.store_calendar_meeting(req_empty_src, uid='uid-1')
+    assert exc_info.value.status_code == 422
+
+
+def test_store_calendar_meeting_translates_value_error_to_http_400(monkeypatch):
+    monkeypatch.setattr(calendar_db, 'get_meeting_id_by_calendar_event', lambda uid, eid, src: None)
+
+    def failing_create(uid, data):
+        raise ValueError("Invalid meeting configuration")
+
+    monkeypatch.setattr(calendar_db, 'create_meeting', failing_create)
+
+    req = calendar_router.StoreMeetingRequest(
+        calendar_event_id='evt-valid',
+        calendar_source='google_calendar',
+        title='Sync Call',
+        start_time=datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 9, 24, 13, 0, 0, tzinfo=timezone.utc),
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        calendar_router.store_calendar_meeting(req, uid='uid-1')
+    assert exc_info.value.status_code == 400
+    assert "Invalid meeting configuration" in str(exc_info.value.detail)
 
 
 def test_list_meetings_applies_where_filters_in_utc_before_limit(monkeypatch):

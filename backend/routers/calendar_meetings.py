@@ -50,6 +50,8 @@ def store_calendar_meeting(
     Store or update a calendar meeting in Firestore.
     If a meeting with the same calendar_event_id and calendar_source exists, it will be updated.
     """
+    if not str(request.calendar_event_id or '').strip() or not str(request.calendar_source or '').strip():
+        raise HTTPException(status_code=422, detail="calendar_source and calendar_event_id are required")
     start_utc, end_utc = _to_utc(request.start_time), _to_utc(request.end_time)
     if end_utc <= start_utc:
         raise HTTPException(status_code=422, detail="end_time must be after start_time")
@@ -70,11 +72,14 @@ def store_calendar_meeting(
     existing_meeting_id = calendar_db.get_meeting_id_by_calendar_event(
         uid, request.calendar_event_id, request.calendar_source
     )
-    if existing_meeting_id:
-        calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
-        meeting_id = existing_meeting_id
-    else:
-        meeting_id = calendar_db.create_meeting(uid, meeting_dict)
+    try:
+        if existing_meeting_id:
+            calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
+            meeting_id = existing_meeting_id
+        else:
+            meeting_id = calendar_db.create_meeting(uid, meeting_dict)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return StoreMeetingResponse(meeting_id=meeting_id, calendar_event_id=request.calendar_event_id)
 
 
