@@ -69,6 +69,9 @@ class _CannedUpload {
   static int status = 500;
   static String body = '{}';
   static int requests = 0;
+
+  /// Simulates the network failing before any HTTP response exists.
+  static bool failOpen = false;
 }
 
 class _CannedHttpOverrides extends HttpOverrides {
@@ -78,7 +81,12 @@ class _CannedHttpOverrides extends HttpOverrides {
 
 class _CannedHttpClient implements HttpClient {
   @override
-  Future<HttpClientRequest> openUrl(String method, Uri url) async => _CannedRequest();
+  Future<HttpClientRequest> openUrl(String method, Uri url) async {
+    if (_CannedUpload.failOpen) {
+      throw const SocketException('canned network failure');
+    }
+    return _CannedRequest();
+  }
 
   // Set by HttpPoolManager's constructor.
   @override
@@ -290,6 +298,7 @@ void main() {
     _CannedUpload.status = 500;
     _CannedUpload.body = '{}';
     _CannedUpload.requests = 0;
+    _CannedUpload.failOpen = false;
     // The upload URL is never dialed: the canned client answers every request.
     Env.overrideApiBaseUrl('http://diagnostics-support.test/');
     // Construct the pooled client under the canned overrides so its IOClient
@@ -383,12 +392,36 @@ void main() {
     await tester.pumpAndSettle();
     await AnalyticsManager.flushPending(force: true);
 
+    // The HTTP call itself succeeded with 201; ticket parsing is not an HTTP
+    // failure, so the event carries the non-HTTP sentinel instead of 201.
     analytics.expectSingle('Diagnostics Send Failed', {
       'failure_stage': 'ticket_parse',
-      'status_code': 201,
+      'status_code': 0,
       'schema_version': 2,
       'disconnect_count': 1,
     });
+  });
+
+  testWidgets('a network exception during the upload tracks upload with status code 0 exactly once', (tester) async {
+    _CannedUpload.failOpen = true;
+    await pumpPage(tester);
+    await openSupportDialog(tester);
+
+    await tester.tap(find.text('Send'));
+    await tester.pumpAndSettle();
+    await AnalyticsManager.flushPending(force: true);
+
+    // The transport throws before any HTTP response exists; the send reports
+    // the non-HTTP sentinel through the single failure choke point.
+    expect(_CannedUpload.requests, 0);
+    analytics.expectSingle('Diagnostics Send Failed', {
+      'failure_stage': 'upload',
+      'status_code': 0,
+      'schema_version': 2,
+      'disconnect_count': 1,
+    });
+    expect(analytics.propertiesOf('Diagnostics Send Failed').single['bundle_bytes'] as int, greaterThan(0));
+    expect(analytics.names, isNot(contains('Diagnostics Sent')));
   });
 
   testWidgets('a successful send tracks Diagnostics Sent and shows the ticket', (tester) async {

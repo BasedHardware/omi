@@ -308,6 +308,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     }
     if (!mounted) return;
     setState(() => _isSending = true);
+    String ticket;
     try {
       final response = await makeApiCall(
         url: '${Env.apiBaseUrl}v1/mobile/device-diagnostics',
@@ -316,37 +317,40 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         method: 'POST',
       );
       if (response?.statusCode != 201) {
-        _trackSendFailed(
-          DiagnosticsSendFailedFailureStage.upload,
-          json,
-          bundle,
-          statusCode: response?.statusCode ?? 0,
-        );
-        throw StateError('Support upload failed: ${response?.statusCode}');
+        throw _SendFailure(DiagnosticsSendFailedFailureStage.upload, response?.statusCode ?? 0);
       }
-      String ticket;
       try {
         ticket = (jsonDecode(response!.body) as Map<String, dynamic>)['ticket'] as String;
-      } catch (e) {
-        _trackSendFailed(DiagnosticsSendFailedFailureStage.ticketParse, json, bundle, statusCode: response!.statusCode);
-        rethrow;
+      } catch (_) {
+        // A 201 whose body is not a ticket is not an HTTP failure.
+        throw const _SendFailure(DiagnosticsSendFailedFailureStage.ticketParse, 0);
       }
-      _trackSent(json, bundle);
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => OmiAlertDialog(
-          title: context.l10n.deviceDiagnosticsTicket,
-          content: SelectableText(ticket),
-          actions: [OmiDialogAction(label: context.l10n.ok, isDefault: true, onPressed: () => Navigator.pop(context))],
-        ),
-      );
-    } catch (e) {
-      Logger.debug('Failed to send diagnostics to support: $e');
+    } on _SendFailure catch (failure) {
+      // Single choke point: every failed send emits exactly one failure event,
+      // whichever branch discovered the failure.
+      Logger.debug('Failed to send diagnostics to support: ${failure.stage}');
+      _trackSendFailed(failure.stage, json, bundle, statusCode: failure.statusCode);
       if (mounted) OmiFeedback.error(context, context.l10n.deviceDiagnosticsUploadFailed);
+      return;
+    } catch (e) {
+      // A throw out of makeApiCall never produced an HTTP response.
+      Logger.debug('Failed to send diagnostics to support: $e');
+      _trackSendFailed(DiagnosticsSendFailedFailureStage.upload, json, bundle);
+      if (mounted) OmiFeedback.error(context, context.l10n.deviceDiagnosticsUploadFailed);
+      return;
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
+    _trackSent(json, bundle);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => OmiAlertDialog(
+        title: context.l10n.deviceDiagnosticsTicket,
+        content: SelectableText(ticket),
+        actions: [OmiDialogAction(label: context.l10n.ok, isDefault: true, onPressed: () => Navigator.pop(context))],
+      ),
+    );
   }
 
   void _onRssiUpdate(int rssi) {
@@ -949,4 +953,17 @@ class _RssiPoint {
   final int rssi;
 
   _RssiPoint(this.time, this.rssi);
+}
+
+/// A failed support send whose failure event has not been emitted yet; the
+/// single catch in `_sendToSupport` emits exactly one per failure. [statusCode]
+/// is the real HTTP status, or 0 when no HTTP response was involved.
+class _SendFailure implements Exception {
+  const _SendFailure(this.stage, this.statusCode);
+
+  final DiagnosticsSendFailedFailureStage stage;
+  final int statusCode;
+
+  @override
+  String toString() => '_SendFailure($stage, statusCode: $statusCode)';
 }
