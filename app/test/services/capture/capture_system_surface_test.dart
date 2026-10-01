@@ -141,9 +141,10 @@ void main() {
     world.emitNativeState(PhoneMicCaptureState.running);
     final session = world.hostApi.lastStartSessionId!;
     final published = sink.states.length;
+    // Audio every 2 s keeps the phone mic's 3 s stall check quiet for the hour.
     for (var frame = 40; (presentation.snapshot['elapsed'] as int) < 3630; frame += 20) {
       world.injectAudioFrames(20, sessionId: session, firstFrameIndex: frame);
-      await world.elapse(const Duration(seconds: 1));
+      await world.elapse(const Duration(seconds: 2));
     }
     expect(presentation.snapshot['paused'], false);
     final pastHour = sink.states.skip(published).firstWhere((s) => (s['elapsed'] as int) >= 3600);
