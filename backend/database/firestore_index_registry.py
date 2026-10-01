@@ -75,15 +75,9 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('is_dismissed'), _desc('created_at'), _desc('__name__')),
     ),
-    # database.folders.get_conversations_in_folder via
-    # GET /v1/folders/{folder_id}/conversations with include_discarded=true.
+    # I070 is declared by PR H as conversations (folder_id ASC, created_at DESC, __name__ DESC).
+    # database.folders.get_conversations_in_folder uses the identical COLLECTION index.
     # Reachability report 871737adf7e87104, suggestion I070.
-    FirestoreIndexRequirement(
-        'folders_conversations_folder_created_at',
-        'conversations',
-        'COLLECTION',
-        (_asc('folder_id'), _desc('created_at'), _desc('__name__')),
-    ),
     # database.frame_requests.enqueue_frame_request first transactional query via
     # POST /v1/frame-requests. Reachability report 871737adf7e87104, suggestion I141.
     FirestoreIndexRequirement(
@@ -171,6 +165,24 @@ INDEX_ONLY_REQUIREMENTS = (
         'conversations',
         'COLLECTION',
         (_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_source_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('source'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_starred_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('starred'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_folder_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('folder_id'), _desc('created_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
         'conversations_status_finished',

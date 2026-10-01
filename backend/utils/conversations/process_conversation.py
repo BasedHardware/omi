@@ -216,7 +216,7 @@ from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
-from utils.conversations.action_item_identity import plan_replacement
+from utils.conversations.action_item_identity import plan_replacement, prior_read_kwargs
 from utils.conversations.calendar_linking import get_overlapping_calendar_event
 from utils.conversations.meeting_treatment import (
     MIN_MEETING_DURATION_SECONDS,
@@ -2161,7 +2161,7 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _write_action_items(uid: str, conversation: Conversation):
+def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[ProcessingTrigger] = None):
     """Write the extracted items as tasks, replacing whatever this conversation wrote before."""
     if not conversation.structured.action_items:
         return
@@ -2183,9 +2183,9 @@ def _write_action_items(uid: str, conversation: Conversation):
         for action_item in conversation.structured.action_items
     ]
 
-    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
+    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id, **prior_read_kwargs())
     # A task that survives re-extraction keeps its id and export marker (no re-send).
-    identity = plan_replacement(conversation.id, action_items_data, old_items)
+    identity = plan_replacement(conversation.id, action_items_data, old_items, trigger)
     old_ids = [item['id'] for item in old_items]
     if old_ids:
         delete_action_item_vectors_batch(uid, old_ids)
@@ -2246,7 +2246,9 @@ def _write_action_items(uid: str, conversation: Conversation):
         submit_with_context(postprocess_executor, _run_auto_sync)
 
 
-def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
+def _save_action_items(
+    uid: str, conversation: Conversation, people: Sequence[Person] = (), trigger: Optional[ProcessingTrigger] = None
+):
     """Persist a conversation's extracted action items.
 
     Desktop conversations propose Candidates for its Suggested surface. Everywhere
@@ -2258,7 +2260,7 @@ def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Pe
         return
 
     if not _proposes_task_candidates(conversation):
-        _write_action_items(uid, conversation)
+        _write_action_items(uid, conversation, trigger)
         return
 
     try:
@@ -3290,9 +3292,9 @@ def process_conversation(
                 # Same fail-closed idea as memory source replacement: a transient
                 # destructive-op fence must be observable on the sync reprocess
                 # path instead of disappearing into postprocess_executor.
-                _save_action_items(uid, conversation, people)
+                _save_action_items(uid, conversation, people, trigger)
             else:
-                submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
+                submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
             # Automatic goal updates are excluded from the JIT featureset
             # entirely (not deferred): a JIT-admitted conversation never
             # updates goals; users update goals through explicit actions.
