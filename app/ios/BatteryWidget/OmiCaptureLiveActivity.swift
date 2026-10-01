@@ -471,8 +471,12 @@ struct CaptureFlipbook {
     private static let windowHeight: CGFloat = 400
     private let turn: any ViewModifier
 
-    static let shared: CaptureFlipbook? = CaptureClockRotation.effect(period: CaptureWaveform.period)
-        .map(CaptureFlipbook.init)
+    /// Played only where it was verified on a card (iOS 18, 26, 27); earlier
+    /// versions keep the still wave beside the ticking clock.
+    static let shared: CaptureFlipbook? = {
+        guard #available(iOS 18.0, *) else { return nil }
+        return CaptureClockRotation.effect(period: CaptureWaveform.period).map(CaptureFlipbook.init)
+    }()
 
     /// Seconds of capture that `frame` shows: the middle of its slot.
     func time(of frame: Int) -> Double {
