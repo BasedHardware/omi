@@ -44,3 +44,17 @@ def test_wrong_key_family_detail_mismatch_returns_actionable_message():
     assert detail2 is not None
     assert 'Developer API keys (omi_dev_...)' in detail2
     assert 'MCP API key' in detail2
+
+
+def test_wrong_key_family_detail_firebase_route_rejects_mcp_and_dev_keys():
+    mcp_token = f'{MCP_KEY_PREFIX}secret'
+    detail_mcp = wrong_key_family_detail(mcp_token, FIREBASE_FAMILY)
+    assert detail_mcp is not None
+    assert 'MCP API keys (omi_mcp_...)' in detail_mcp
+    assert 'This endpoint requires a Firebase ID token from a signed-in Omi app' in detail_mcp
+
+    dev_token = f'{DEV_KEY_PREFIX}secret'
+    detail_dev = wrong_key_family_detail(dev_token, FIREBASE_FAMILY)
+    assert detail_dev is not None
+    assert 'Developer API keys (omi_dev_...)' in detail_dev
+    assert 'This endpoint requires a Firebase ID token from a signed-in Omi app' in detail_dev
