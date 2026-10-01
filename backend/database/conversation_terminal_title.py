@@ -32,11 +32,15 @@ from utils.conversations.deterministic_minimum import deterministic_minimum_titl
 from utils.conversations.recovery import structured_has_protected_content
 
 # Terminal failure codes after which a user reprocess can still succeed: the
-# retry budget ran out on a provider, parser or worker failure. Deliberately
-# excludes ``recovery_structure_unavailable`` (the model ran and found nothing
-# to summarize; retry would produce the same result).
+# retry budget ran out on a provider, parser or worker failure. Includes both
+# dead-letter production codes ('final_attempt_failed', 'processing_failed') and
+# transient provider/network failure codes. Deliberately excludes
+# ``recovery_structure_unavailable`` (the model ran and found nothing to summarize;
+# retry would produce the same result) and BYOK abandonment.
 SUMMARY_RETRYABLE_FAILURE_CODES: frozenset[str] = frozenset(
     {
+        'final_attempt_failed',
+        'processing_failed',
         'timeout',
         'provider_unavailable',
         'rate_limited',
@@ -46,16 +50,15 @@ SUMMARY_RETRYABLE_FAILURE_CODES: frozenset[str] = frozenset(
     }
 )
 
-# Firestore hard limit is 1,048,576 bytes per document. We enforce a 10 KiB
-# safety headroom so metadata / internal Firestore overhead never faults a
-# commit that passed sizing.
+# Firestore's maximum document size, and the headroom kept for estimation error.
 FIRESTORE_MAX_DOCUMENT_BYTES: int = 1_048_576
-TERMINAL_SIZE_HEADROOM_BYTES: int = 10_240
-
-# Bound the scan when probing whether a photo document holds a description.
-PHOTO_DESCRIPTION_PROBE_LIMIT: int = 5
-
-_FALLBACK_DOCUMENT_NAME_BYTES: int = 64
+# Generous on purpose: dropping a title near the ceiling costs nothing, while
+# an underestimate aborts the terminal write.
+TERMINAL_SIZE_HEADROOM_BYTES: int = 65_536
+# Bounded probe for a described photo in the child collection.
+PHOTO_DESCRIPTION_PROBE_LIMIT: int = 64
+# Used when a test double exposes no document path.
+_FALLBACK_DOCUMENT_NAME_BYTES: int = 256
 MAX_ID_LENGTH: int = 128
 
 
@@ -250,6 +253,7 @@ def estimate_firestore_document_bytes(data: Mapping[str, Any], document_path: st
 
 
 def _value_bytes(value: Any, _depth: int = 0) -> int:
+    """Firestore value size with a depth recursion guard capping at depth 32."""
     if _depth > 32:
         return 32
     if value is None or isinstance(value, bool):
