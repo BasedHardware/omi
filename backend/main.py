@@ -38,6 +38,7 @@ from routers import (
     notifications,
     speech_profile,
     speaker_tag_prompts,
+    people,
     agents,
     users,
     trends,
@@ -73,6 +74,7 @@ from routers import (
     knowledge_graph,
     wrapped,
     folders,
+    search,
     goals,
     workstreams,
     announcements,
@@ -231,6 +233,7 @@ app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
 app.include_router(speaker_tag_prompts.router)
+app.include_router(people.router)
 app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
@@ -268,6 +271,7 @@ app.include_router(developer.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 app.include_router(folders.router)
+app.include_router(search.router)
 app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
 app.include_router(workstreams.router)

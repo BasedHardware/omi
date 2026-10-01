@@ -146,7 +146,9 @@ def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id
     return assigned, created, survivors
 
 
-def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
+def persist_processed_conversation(
+    uid: str, conversation_data: dict[str, Any], *, smart_merge_refresh: tuple[int, str] | None = None
+) -> bool:
     """Persist a processing result and report whether the conversation still exists.
 
     ``False`` means deletion or a newer sync transcript revision. Callers must stop before emitting
@@ -163,7 +165,7 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
         observe_completed_conversation_shape(uid, conversation_data)
 
     return conversations_db.persist_processing_result_with_lifecycle(
-        uid, conversation_data, on_first_completion=_observe_first_completion
+        uid, conversation_data, on_first_completion=_observe_first_completion, smart_merge_refresh=smart_merge_refresh
     )
 
 

@@ -54,7 +54,7 @@ from utils.stt.speaker_embedding import (
     compare_embeddings,
 )
 from utils.stt.speaker_clustering import select_speaker_cluster
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -92,8 +92,9 @@ class STTService(str, Enum):
 
 
 class ParakeetConnectionError(RuntimeError):
-    def __init__(self, reason: str, detail: str = '') -> None:
+    def __init__(self, reason: str, detail: str = '', *, capacity_subtype: str | None = None) -> None:
         self.reason = reason
+        self.capacity_subtype = capacity_subtype
         super().__init__(detail or reason)
 
 
@@ -399,6 +400,7 @@ async def connect_stt_socket_with_fallback(
     circuit = _circuit_for_primary(primary_service)
 
     reason = 'circuit_open'
+    capacity_subtype: str | None = None
     typed_connect_reason: Optional[str] = None
     if circuit.allow_request():
         try:
@@ -455,6 +457,7 @@ async def connect_stt_socket_with_fallback(
             circuit.record_failure()
         except ParakeetConnectionError as error:
             reason = error.reason
+            capacity_subtype = error.capacity_subtype if reason == 'capacity_full' else None
             if reason in EXPECTED_REJECTIONS:
                 circuit.record_rejection(reason)
             else:
@@ -523,6 +526,7 @@ async def connect_stt_socket_with_fallback(
                 to_mode=service.value,
                 reason=reason,
                 outcome='exhausted',
+                **capacity_fallback_kwargs(capacity_subtype),
             )
             if service == candidates[-1][0]:
                 raise
@@ -536,11 +540,13 @@ async def connect_stt_socket_with_fallback(
                 to_mode=service.value,
                 reason=reason,
                 outcome='exhausted',
+                **capacity_fallback_kwargs(capacity_subtype),
             )
             if service == candidates[-1][0]:
                 raise
             from_mode = service.value
             reason = _fallback_failure_reason(error)
+            capacity_subtype = None
             continue
 
         record_fallback(
@@ -549,6 +555,7 @@ async def connect_stt_socket_with_fallback(
             to_mode=service.value,
             reason=reason,
             outcome='recovered',
+            **capacity_fallback_kwargs(capacity_subtype),
         )
         return fallback_socket, service
 

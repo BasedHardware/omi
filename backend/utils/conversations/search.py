@@ -2,7 +2,7 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -229,6 +229,55 @@ def conversation_matches_speaker(conversation: Dict[str, Any], speaker_id: Optio
         elif segment.get('person_id') == speaker_id:
             return True
     return False
+
+
+# Speaker-filtered browsing cannot be answered by Typesense (the index carries no transcript_segments),
+# so it walks the newest Firestore conversations instead. The walk is bounded: one request never reads
+# more than this many conversations, and reports has_more when it stopped early.
+SPEAKER_BROWSE_SCAN_CAP = 1000
+SPEAKER_BROWSE_BATCH = 50
+
+
+def browse_conversations_by_speaker(
+    fetch_page: Callable[[int, int], List[Dict[str, Any]]],
+    speaker_id: str,
+    *,
+    page: int,
+    per_page: int,
+    scan_cap: int = SPEAKER_BROWSE_SCAN_CAP,
+    batch: int = SPEAKER_BROWSE_BATCH,
+) -> Dict[str, Any]:
+    """Return one page of the newest conversations that contain ``speaker_id``.
+
+    ``fetch_page(limit, offset)`` yields conversations newest-first. Filtering the first ``per_page``
+    rows of that stream (what the Typesense browse did) only finds a speaker who appears in the very
+    latest conversations; this keeps reading until the requested page is full or ``scan_cap`` is hit.
+    """
+    wanted = page * per_page
+    matches: List[Dict[str, Any]] = []
+    scanned = 0
+    exhausted = False
+    while scanned < scan_cap and len(matches) <= wanted:
+        request_size = min(batch, scan_cap - scanned)
+        rows = fetch_page(request_size, scanned)
+        scanned += len(rows)
+        for row in rows:
+            if row.get('is_locked'):
+                continue
+            if conversation_matches_speaker(row, speaker_id):
+                matches.append(row)
+        if len(rows) < request_size:
+            exhausted = True
+            break
+    start = (page - 1) * per_page
+    items = matches[start : start + per_page]
+    has_more = len(matches) > wanted or (not exhausted and scanned >= scan_cap)
+    return {
+        'items': items,
+        'total_pages': page + 1 if has_more else page,
+        'current_page': page,
+        'per_page': per_page,
+    }
 
 
 def search_conversations(

@@ -17,11 +17,11 @@ conversations, and discards only above ``JEV_DISCARD_THRESHOLD`` (#14835).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 
-from config.jev_decisions import JEV_MODEL
+from config.jev_decisions import JEV_MODEL, RelevanceArm
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
 from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance
 
@@ -56,6 +56,11 @@ class RelevanceDecision:
     neighbor_id: Optional[str] = None
     # Jev's P(discard) when the Jev tier ran, including a calendar override of its discard.
     jev_p_discard: Optional[float] = None
+    arm: Optional[RelevanceArm] = None
+    # Request-local evidence for shadow admission, never serialized as text.
+    model_tier_reached: bool = field(default=False, compare=False)
+    nano_verdict: Optional[Literal['keep', 'discard']] = field(default=None, compare=False)
+    nano_reason: Optional[str] = field(default=None, compare=False)
 
     @property
     def discard(self) -> bool:
@@ -71,6 +76,8 @@ class RelevanceDecision:
         }
         if self.neighbor_id:
             record['neighbor_id'] = self.neighbor_id
+        if self.arm is not None:
+            record['arm'] = self.arm
         if self.jev_p_discard is not None:
             record['jev'] = {
                 'p_discard': round(self.jev_p_discard, 4),
@@ -128,6 +135,8 @@ def decide_relevance(
     calendar_retains: Callable[[], bool],
     neighbor: Callable[[], Optional[Neighbor]] = lambda: None,
     jev_discard_probability: Optional[Callable[[], Optional[float]]] = None,
+    arm: RelevanceArm = 'nano',
+    record_arm: bool = False,
 ) -> RelevanceDecision:
     """Decide keep/discard. Thunks run only when their tier is reached.
 
@@ -177,13 +186,19 @@ def decide_relevance(
     if model_discards is None:
         return keep('policy', 'model_withheld')
 
+    def model_decision(decision: RelevanceDecision) -> RelevanceDecision:
+        return replace(decision, model_tier_reached=True, arm=arm if record_arm or arm != 'nano' else None)
+
+    if arm == 'keep_all':
+        return model_decision(keep('policy', 'keep_all_arm'))
+
     if jev_discard_probability is not None:
         p_discard = jev_discard_probability()
         if p_discard is None:
-            return keep('jev', 'jev_error')
+            return model_decision(keep('jev', 'jev_error'))
         if p_discard > JEV_DISCARD_THRESHOLD:
-            return discard_unless_calendar('jev', 'jev_discard', p_discard)
-        return RelevanceDecision('keep', 'jev', 'jev_keep', trigger, jev_p_discard=p_discard)
+            return model_decision(discard_unless_calendar('jev', 'jev_discard', p_discard))
+        return model_decision(RelevanceDecision('keep', 'jev', 'jev_keep', trigger, jev_p_discard=p_discard))
 
     model_failed = False
 
@@ -194,19 +209,21 @@ def decide_relevance(
     adjacent = neighbor()
     discards = model_discards(on_model_error, adjacent)
     if model_failed:
-        return keep('model', 'model_error')
+        return model_decision(keep('model', 'model_error'))
+    nano_reason = 'neighbor_fragment' if discards and adjacent else 'model_discard' if discards else 'model_keep'
     if discards:
-        decision = discard_unless_calendar('model', 'neighbor_fragment' if adjacent else 'model_discard')
+        decision = discard_unless_calendar('model', nano_reason)
         if adjacent and decision.discard:
-            return RelevanceDecision('discard', 'model', 'neighbor_fragment', trigger, adjacent.conversation_id)
-        return decision
-    return keep('model', 'model_keep')
+            decision = RelevanceDecision('discard', 'model', 'neighbor_fragment', trigger, adjacent.conversation_id)
+    else:
+        decision = keep('model', 'model_keep')
+    return model_decision(replace(decision, nano_verdict='discard' if discards else 'keep', nano_reason=nano_reason))
 
 
 def final_relevance(decision: Optional[RelevanceDecision], *, discarded: bool) -> Optional[RelevanceDecision]:
     """The decision to store: the structuring model's empty title is its own discard."""
     if decision is not None and discarded and not decision.discard:
-        return RelevanceDecision('discard', 'model', 'empty_title', decision.trigger)
+        return replace(decision, verdict='discard', decided_by='model', reason='empty_title', jev_p_discard=None)
     return decision
 
 

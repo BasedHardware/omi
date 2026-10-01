@@ -59,6 +59,7 @@ SUMMARY_PIPELINE_FLAGS = (
     'CONVERSATION_OCR_CONTEXT_ENABLED',
     'MEETING_NOTES_RICH_CONTEXT_ENABLED',
     'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED',
+    'MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED',
     # Same co-host rule: an omitted or disagreeing value on one
     # process_conversation host would silently keep that host ungated (code
     # default OFF) while the others deny identified-basic first-open.

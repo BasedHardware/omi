@@ -114,7 +114,7 @@ class OmiPalette {
 
 /// Colors for the resolved appearance. Read during build, after the root updates [active].
 abstract final class OmiColors {
-  static OmiPalette active = OmiPalette.dark;
+  static OmiPalette active = OmiPalette.light;
 
   static OmiPalette forBrightness(Brightness brightness) =>
       brightness == Brightness.dark ? OmiPalette.dark : OmiPalette.light;

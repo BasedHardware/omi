@@ -658,3 +658,40 @@ def test_cross_speaker_repair_still_applies_to_adjacent_segments():
     assert segments[0].speaker == "SPEAKER_01"
     assert segments[0].text == "How are you doing today?"
     assert removed_ids == [existing.id]
+
+
+def test_same_speaker_merge_skipped_for_late_arriving_segment():
+    """A same-speaker segment that starts before the current tail is not its continuation.
+
+    Unlike the cross-speaker repair above, this path only checked the gap between
+    a.end and b.start, not their relative order: a late arrival from an earlier batch
+    landed within 3 seconds of the tail's end and was absorbed into it, reversing the
+    text order and producing an end that preceded the start.
+    """
+    existing = _segment("This is the later statement.", speaker="SPEAKER_00", start=10.0, end=12.0)
+    late_arrival = _segment("This was the earlier statement.", speaker="SPEAKER_00", start=2.0, end=5.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [late_arrival])
+
+    assert len(segments) == 2
+    assert segments[0].text == "This is the later statement."
+    assert segments[0].start == pytest.approx(10.0)
+    assert segments[0].end == pytest.approx(12.0)
+    assert segments[1].text == "This was the earlier statement."
+    assert segments[1].start == pytest.approx(2.0)
+    assert removed_ids == []
+
+
+def test_lowercase_continuation_merge_skipped_for_late_arriving_segment():
+    """Same guard for the lowercase-continuation predicate, which had no order check at all."""
+    existing = _segment("this is the later statement", speaker="SPEAKER_00", start=10.0, end=12.0)
+    late_arrival = _segment("this was the earlier statement", speaker="SPEAKER_00", start=2.0, end=5.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [late_arrival])
+
+    assert len(segments) == 2
+    assert segments[0].text == "this is the later statement"
+    assert segments[0].start == pytest.approx(10.0)
+    assert segments[1].text == "this was the earlier statement"
+    assert segments[1].start == pytest.approx(2.0)
+    assert removed_ids == []

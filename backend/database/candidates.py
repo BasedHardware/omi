@@ -857,7 +857,6 @@ def resolve_task_candidate(
     """Atomically accept a task Candidate and create/update exactly one task."""
 
     candidate_ref = _candidate_ref(uid, candidate_id)
-    resolved_at = now or datetime.now(timezone.utc)
     transaction = db.transaction()
 
     @firestore.transactional
@@ -882,6 +881,9 @@ def resolve_task_candidate(
             )
         if candidate.status != CandidateStatus.pending:
             raise CandidateConflictError(f'Candidate already {candidate.status.value}')
+        resolved_at = now or datetime.now(timezone.utc)
+        if candidate_has_lapsed(candidate, now=resolved_at):
+            raise CandidateConflictError('Candidate suggestion has expired')
         claim_snapshot = _candidate_resolution_claim_ref(uid, candidate_id).get(transaction=write_transaction)
         if claim_snapshot.exists and _claim_blocks_resolution(_snapshot_dict(claim_snapshot), now=resolved_at):
             raise CandidateConflictError('Candidate resolution is already claimed')

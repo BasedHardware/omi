@@ -17,6 +17,7 @@ import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/ui/ui.dart';
@@ -109,6 +110,7 @@ class ConversationDetailHeader extends StatelessWidget {
                   focusNode: provider.titleFocusNode,
                   controller: provider.titleController,
                   style: titleStyle,
+                  hintText: transcriptFallbackTitle(conversation),
                 ),
         ),
       ],

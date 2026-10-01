@@ -12,7 +12,7 @@ void main() {
       'btDevice': '{"id":"AA:BB"}',
       'deviceName': 'Omi',
       'doubleTapAction': 2,
-      'showTasksEnabled': false,
+      'showShortConversations': true,
       'uid': 'user-123',
       'givenName': 'Ada',
       'onboardingCompleted': true,
@@ -26,7 +26,7 @@ void main() {
     expect(prefs.getString('btDevice'), '{"id":"AA:BB"}');
     expect(prefs.getString('deviceName'), 'Omi');
     expect(prefs.getInt('doubleTapAction'), 2);
-    expect(prefs.getBool('showTasksEnabled'), isFalse);
+    expect(prefs.getBool('showShortConversations'), isTrue);
   });
 
   test('sign out clears account-scoped values', () async {

@@ -199,7 +199,7 @@ environments:
           max_retry: 0s
           min_backoff: 5s
         attempt_deadline: 1800s
-        owner: .github/workflows/gcp_admin.yml
+        owner: .github/workflows/gcp_scheduler_reconcile.yml
       - name: sentry-feedback-poll
         region: us-central1
         schedule: "*/5 * * * *"
