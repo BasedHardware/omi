@@ -171,8 +171,8 @@ def test_create_import_job_handles_transport_error():
 def test_update_import_job_valid_flow():
     client = FakeFirestoreClient()
     create_import_job({"id": "job_100", "status": "pending"}, client=client)
-    success = update_import_job("job_100", {"status": "completed", "total_files": 12}, client=client)
-    assert success is True
+    res = update_import_job("job_100", {"status": "completed", "total_files": 12}, client=client)
+    assert res is None
     updated = get_import_job("job_100", client=client)
     assert updated is not None
     assert updated["status"] == "completed"
@@ -189,10 +189,12 @@ def test_update_import_job_invalid_id_or_empty_updates():
         update_import_job(None, {"status": "failed"}, client=client)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="Invalid updates payload"):
         update_import_job("job_1", "not_a_dict", client=client)  # type: ignore[arg-type]
-    assert update_import_job("job_1", {}, client=client) is True
+    # Empty updates should be a safe no-op returning None
+    res = update_import_job("job_1", {}, client=client)
+    assert res is None
 
 
-def test_update_import_job_handles_firestore_error():
+def test_update_import_job_propagates_firestore_error():
     client = FakeFirestoreClient()
     with pytest.raises(Exception, match="Document not found"):
         update_import_job("nonexistent_job", {"status": "failed"}, client=client)
@@ -264,7 +266,8 @@ def test_delete_import_job_valid_and_invalid():
     client = FakeFirestoreClient()
     create_import_job({"id": "job_to_del", "uid": "u1"}, client=client)
     assert get_import_job("job_to_del", client=client) is not None
-    assert delete_import_job("job_to_del", client=client) is True
+    res = delete_import_job("job_to_del", client=client)
+    assert res is None
     assert get_import_job("job_to_del", client=client) is None
 
     # Invalid id raises ValueError
@@ -276,7 +279,7 @@ def test_delete_import_job_valid_and_invalid():
         delete_import_job("../bad", client=client)
 
 
-def test_delete_import_job_handles_transport_error():
+def test_delete_import_job_propagates_transport_error():
     client = MagicMock()
     client.collection.side_effect = Exception("Firestore error")
     with pytest.raises(Exception, match="Firestore error"):

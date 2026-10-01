@@ -72,8 +72,17 @@ def create_import_job(job_data: Dict[str, Any], client: Optional[Any] = None) ->
         raise
 
 
-def update_import_job(job_id: str, updates: Dict[str, Any], client: Optional[Any] = None) -> bool:
-    """Update an existing import job in Firestore."""
+def update_import_job(
+    job_id: str,
+    updates: Dict[str, Any],
+    client: Optional[Any] = None,
+) -> None:
+    """Update an existing import job in Firestore.
+
+    Raises:
+        ValueError: If job_id or updates payload is invalid.
+        Exception: If Firestore update mutation fails, ensuring callers do not emit silent HTTP success.
+    """
     cleaned_id = _clean_id(job_id)
     if not cleaned_id:
         raise ValueError(f"Invalid or missing 'job_id': {job_id!r}")
@@ -82,13 +91,12 @@ def update_import_job(job_id: str, updates: Dict[str, Any], client: Optional[Any
         raise ValueError(f"Invalid updates payload for job {cleaned_id}: expected dict, got {type(updates).__name__}")
 
     if not updates:
-        return True
+        return
 
     fs = _resolve_client(client)
     try:
         job_ref = fs.collection("import_jobs").document(cleaned_id)
         job_ref.update(updates)
-        return True
     except Exception as e:
         logger.error("Failed to update import job %s: %s", cleaned_id, e)
         raise
@@ -146,8 +154,13 @@ def get_import_jobs(
         return []
 
 
-def delete_import_job(job_id: str, client: Optional[Any] = None) -> bool:
-    """Delete an import job in Firestore."""
+def delete_import_job(job_id: str, client: Optional[Any] = None) -> None:
+    """Delete an import job in Firestore.
+
+    Raises:
+        ValueError: If job_id is invalid.
+        Exception: If Firestore delete mutation fails, ensuring callers do not emit silent HTTP success.
+    """
     cleaned_id = _clean_id(job_id)
     if not cleaned_id:
         raise ValueError(f"Invalid or missing 'job_id': {job_id!r}")
@@ -156,7 +169,6 @@ def delete_import_job(job_id: str, client: Optional[Any] = None) -> bool:
     try:
         job_ref = fs.collection("import_jobs").document(cleaned_id)
         job_ref.delete()
-        return True
     except Exception as e:
         logger.error("Failed to delete import job %s: %s", cleaned_id, e)
         raise
