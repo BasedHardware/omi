@@ -81,6 +81,11 @@ abstract class LocalWalSync implements IWalSync {
   Future<void> deleteAllPendingWals();
   Future<void> deleteAllCorruptedWals();
 
+  /// Applies the auto-remove synced-copies retention preference immediately
+  /// (e.g. right after the user enables it). Best-effort; returns the number
+  /// of local copies removed.
+  Future<int> applySyncedCopyRetention();
+
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.
   WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot});

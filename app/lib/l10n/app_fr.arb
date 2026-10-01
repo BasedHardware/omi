@@ -3806,5 +3806,15 @@
     "updateAvailableTitle": "Mise à jour disponible",
     "updateAvailableMessage": "Une nouvelle version d'Omi est prête, avec des corrections et des améliorations.",
     "updateRequiredTitle": "Mise à jour requise",
-    "updateRequiredMessage": "Cette version d'Omi n'est plus prise en charge. Mettez à jour pour continuer à enregistrer et à synchroniser."
+    "updateRequiredMessage": "Cette version d'Omi n'est plus prise en charge. Mettez à jour pour continuer à enregistrer et à synchroniser.",
+    "autoRemoveSyncedCopiesTitle": "Suppression automatique des copies synchronisées",
+    "autoRemoveSyncedCopiesDays": "Les copies synchronisées sont supprimées après {days} jours",
+    "autoRemoveSyncedCopiesDescription": "Supprime les copies locales {days} jours après la synchronisation. Les copies cloud sont conservées.",
+    "localCopiesSection": "Copies locales",
+    "speakerLabelLinesLabeled": "Lignes étiquetées : {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Voix apprise} pending{Apprentissage de la voix…} disabled{L’enregistrement de la voix est désactivé} other{Voix pas encore apprise}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi reconnaîtra {name} la prochaine fois.} pending{Cela prend quelques secondes.} disabled{Activez l’enregistrement des voix dans les Réglages pour qu’Omi puisse reconnaître {name}.} other{Omi a besoin d’une parole plus claire de {name} et continuera d’essayer.}}",
+    "speakerLabelEarlierMatches": "Conversations précédentes avec cette voix : {count}",
+    "speakerLabelText": "{part, select, likely{Probable} soundsLike{Ressemble à {name}} notPerson{Pas {name}} carried{Toujours {name}. Repris de votre dernière conversation.} change{Modifier} alsoTitle{Est-ce aussi {name} ?} alsoBody{Omi a retrouvé la même voix dans des conversations précédentes.} confirmed{Vous avez confirmé cette étiquette} other{Vérifier}}",
+    "speakerLabelTalkTime": "{duration} de cette voix"
 }

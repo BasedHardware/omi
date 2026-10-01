@@ -3771,5 +3771,15 @@
     "updateAvailableTitle": "มีอัปเดตใหม่",
     "updateAvailableMessage": "Omi เวอร์ชันใหม่พร้อมแล้ว พร้อมการแก้ไขและการปรับปรุง",
     "updateRequiredTitle": "ต้องอัปเดต",
-    "updateRequiredMessage": "Omi เวอร์ชันนี้ไม่รองรับแล้ว อัปเดตเพื่อบันทึกและซิงค์ต่อ"
+    "updateRequiredMessage": "Omi เวอร์ชันนี้ไม่รองรับแล้ว อัปเดตเพื่อบันทึกและซิงค์ต่อ",
+    "autoRemoveSyncedCopiesTitle": "ลบสำเนาที่ซิงค์แล้วอัตโนมัติ",
+    "autoRemoveSyncedCopiesDays": "สำเนาที่ซิงค์แล้วจะถูกลบหลังจาก {days} วัน",
+    "autoRemoveSyncedCopiesDescription": "ลบสำเนาในเครื่องหลังซิงค์ {days} วัน สำเนาบนคลาวด์จะถูกเก็บไว้",
+    "localCopiesSection": "สำเนาในเครื่อง",
+    "speakerLabelLinesLabeled": "จำนวนบรรทัดที่ติดป้ายชื่อ: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{เรียนรู้เสียงแล้ว} pending{กำลังเรียนรู้เสียง…} disabled{การบันทึกเสียงปิดอยู่} other{ยังไม่ได้เรียนรู้เสียง}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi จะจำเสียงของ {name} ได้ในครั้งหน้า} pending{ใช้เวลาไม่กี่วินาที} disabled{เปิดการบันทึกเสียงในการตั้งค่าเพื่อให้ Omi จำเสียงของ {name} ได้} other{Omi ต้องการเสียงพูดที่ชัดเจนจาก {name} มากขึ้น และจะพยายามต่อไป}}",
+    "speakerLabelEarlierMatches": "การสนทนาก่อนหน้าที่มีเสียงนี้: {count}",
+    "speakerLabelText": "{part, select, likely{น่าจะเป็น} soundsLike{เสียงคล้าย {name}} notPerson{ไม่ใช่ {name}} carried{ยังคงเป็น {name} ต่อจากการสนทนาครั้งล่าสุดของคุณ} change{เปลี่ยน} alsoTitle{นี่คือ {name} ด้วยหรือไม่} alsoBody{Omi พบเสียงเดียวกันในการสนทนาก่อนหน้า} confirmed{คุณยืนยันป้ายชื่อนี้แล้ว} other{ตรวจสอบ}}",
+    "speakerLabelTalkTime": "{duration} ของเสียงนี้"
 }

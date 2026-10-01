@@ -254,6 +254,33 @@ OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
 for _reason in ('window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'):
     OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
 
+OMI_PERSON_VOICE_LEARNING_TOTAL = Counter(
+    'omi_person_voice_learning_total',
+    'Person voice-learning attempts by bounded outcome',
+    ['outcome'],
+)
+for _outcome in (
+    'stored',
+    'disabled',
+    'person_missing',
+    'conversation_missing',
+    'no_audio',
+    'no_chunks',
+    'no_authorized_segments',
+    'contaminated',
+    'insufficient_speech',
+    'uncovered_audio',
+    'transcription_failed',
+    'insufficient_words',
+    'multi_speaker',
+    'text_mismatch',
+    'embedding_failed',
+    'stale_assignment',
+    'timeout',
+    'error',
+):
+    OMI_PERSON_VOICE_LEARNING_TOTAL.labels(outcome=_outcome)
+
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
 for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):

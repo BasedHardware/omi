@@ -3771,5 +3771,15 @@
     "updateAvailableTitle": "अपडेट उपलब्ध है",
     "updateAvailableMessage": "Omi का नया संस्करण तैयार है, सुधारों और बेहतरियों के साथ।",
     "updateRequiredTitle": "अपडेट ज़रूरी है",
-    "updateRequiredMessage": "Omi का यह संस्करण अब समर्थित नहीं है। रिकॉर्डिंग और सिंक जारी रखने के लिए अपडेट करें।"
+    "updateRequiredMessage": "Omi का यह संस्करण अब समर्थित नहीं है। रिकॉर्डिंग और सिंक जारी रखने के लिए अपडेट करें।",
+    "autoRemoveSyncedCopiesTitle": "सिंक की गई कॉपियाँ स्वतः हटाएँ",
+    "autoRemoveSyncedCopiesDays": "सिंक की गई कॉपियाँ {days} दिनों बाद हटा दी जाती हैं",
+    "autoRemoveSyncedCopiesDescription": "सिंक के {days} दिन बाद लोकल कॉपियाँ हटा देता है। क्लाउड कॉपियाँ रखी जाती हैं।",
+    "localCopiesSection": "लोकल कॉपियाँ",
+    "speakerLabelLinesLabeled": "लेबल लगी लाइनें: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{आवाज़ सीख ली गई} pending{आवाज़ सीखी जा रही है…} disabled{आवाज़ सेव करना बंद है} other{आवाज़ अभी सीखी नहीं गई}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi अगली बार {name} को पहचान लेगा।} pending{इसमें कुछ सेकंड लगते हैं।} disabled{Omi {name} को पहचान सके, इसके लिए सेटिंग्स में आवाज़ें सेव करना चालू करें।} other{Omi को {name} की और साफ़ आवाज़ चाहिए और वह कोशिश करता रहेगा।}}",
+    "speakerLabelEarlierMatches": "इस आवाज़ वाली पिछली बातचीत: {count}",
+    "speakerLabelText": "{part, select, likely{संभावित} soundsLike{{name} जैसी लग रही है} notPerson{{name} नहीं} carried{अब भी {name}। आपकी पिछली बातचीत से जारी।} change{बदलें} alsoTitle{क्या यह भी {name} है?} alsoBody{Omi को यही आवाज़ पिछली बातचीतों में मिली।} confirmed{आपने इस लेबल की पुष्टि की} other{समीक्षा करें}}",
+    "speakerLabelTalkTime": "इस आवाज़ का {duration}"
 }

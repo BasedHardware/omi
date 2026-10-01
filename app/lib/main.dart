@@ -277,6 +277,10 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  await PhysicalQualification.startupStage(
+    'autoremove_default',
+    SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,
+  );
   SiriIntegration.instance.installEvents();
 
   // TestFlight remains a distribution/telemetry signal; production-family

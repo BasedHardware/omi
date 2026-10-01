@@ -157,9 +157,6 @@ overlay:
         MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
-        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-          value: ''
-          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -233,9 +230,6 @@ overlay:
           category: rollout
         MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
           value: '60000'
-          category: rollout
-        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-          value: ''
           category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
@@ -469,9 +463,6 @@ overlay:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -598,9 +589,6 @@ overlay:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -702,9 +690,6 @@ overlay:
             category: rollout
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'

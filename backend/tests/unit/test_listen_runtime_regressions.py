@@ -903,7 +903,9 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     processor.photo_buffer = deque()
     processor.cache = SimpleNamespace(get=cache_get)
     processor.current_session_segments = {}
-    processor.speaker_id_allocator = SimpleNamespace(hydrate=lambda _segments: None, assign=lambda _segment: None)
+    processor.speaker_id_allocator = SimpleNamespace(
+        hydrate=lambda _segments: None, hydrate_receipt=MagicMock(), assign=lambda _segment: None
+    )
     processor._update_live_conversation = update
     processor._translate = no_op
     processor._speaker_detection = no_op

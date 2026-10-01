@@ -50,7 +50,7 @@ def _chunk_timestamps(conversation: Mapping[str, Any]) -> List[float]:
     return sorted(set(timestamps))
 
 
-def _v2_relevant_timestamps(conversation: Mapping[str, Any], abs_start: float, abs_end: float) -> List[float]:
+def v2_relevant_timestamps(conversation: Mapping[str, Any], abs_start: float, abs_end: float) -> List[float]:
     """Chunk timestamps whose validated span intersects the clip window."""
     relevant: List[float] = []
     for audio_file in conversation.get('audio_files') or []:
@@ -91,7 +91,7 @@ def conversation_clip_pcm(
             # storage is unavailable, not a claim of aligned audio.
             return None
         abs_start, abs_end = window
-        relevant = _v2_relevant_timestamps(conversation, abs_start, abs_end)
+        relevant = v2_relevant_timestamps(conversation, abs_start, abs_end)
         if not relevant:
             return None
         try:

@@ -31,8 +31,10 @@ from utils.manual_speaker_assignments import (
     LiveTranscriptMerge,
     LiveTranscriptReplayReceipt,
     apply_manual_assignments,
+    donor_selected_ids,
     manual_assignment,
     merge_live_segments,
+    normalize_rejection,
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
@@ -191,6 +193,8 @@ def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) 
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as error:
         logger.error(f"{error} {uid}")
         data['manual_speaker_assignments'] = {}
+    if data['manual_speaker_assignments'] and isinstance(segments := data.get('transcript_segments'), list):
+        data['transcript_segments'] = apply_manual_assignments(segments, data['manual_speaker_assignments'])
 
 
 def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
@@ -2573,24 +2577,21 @@ def assign_conversation_speaker(
     use_for_speech_training=True,
     evidence_source=SOURCE_MANUAL,
     firestore_client=None,
+    rejection=None,
 ):
     """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
+    rejection = normalize_rejection(rejection)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
     collection = user_ref.collection(conversations_collection)
 
     @firestore.transactional
     def assign(transaction):
-        source = collection.document(conversation_id).get(transaction=transaction).to_dict()
-        if not source:
+        if not (source := collection.document(conversation_id).get(transaction=transaction).to_dict()):
             raise LookupError('Conversation not found')
         source_segments = None
-        selected_segment_ids = segment_ids
-        selected_speaker_id = speaker_id
-        selected_segment_index = segment_index
-        current_id = conversation_id
-        raw = source
-        seen = set()
+        selected_segment_ids, selected_speaker_id, selected_segment_index = segment_ids, speaker_id, segment_index
+        current_id, raw, seen = conversation_id, source, set()
         while raw.get('deleted') and raw.get('sync_merged_into'):
             if current_id in seen or len(seen) >= 16:
                 raise LookupError('Conversation not found')
@@ -2600,8 +2601,7 @@ def assign_conversation_speaker(
                     uid, source.get('transcript_segments', []), bool(source.get('transcript_segments_compressed'))
                 )
             current_id = raw['sync_merged_into']
-            raw = collection.document(current_id).get(transaction=transaction).to_dict()
-            if not raw:
+            if not (raw := collection.document(current_id).get(transaction=transaction).to_dict()):
                 raise LookupError('Conversation not found')
         if raw.get('deleted'):
             raise LookupError('Conversation not found')
@@ -2612,18 +2612,14 @@ def assign_conversation_speaker(
         # Carry its stable segment identities across instead of applying the
         # number to a different voice in the surviving conversation.
         if source_segments is not None:
-            if segment_ids:
-                source_ids = set(segment_ids)
-                selected = [s for s in source_segments if s.get('id') in source_ids]
-            elif segment_index is not None:
-                selected = source_segments[segment_index : segment_index + 1]
-            elif speaker_id is not None:
-                selected = [s for s in source_segments if s.get('speaker_id') == speaker_id]
-            else:
-                selected = []
-            selected_segment_ids = [s['id'] for s in selected if s.get('id')]
-            selected_speaker_id = None
-            selected_segment_index = None
+            selected_segment_ids = donor_selected_ids(
+                source_segments,
+                segment_ids=segment_ids,
+                speaker_id=speaker_id,
+                segment_index=segment_index,
+                strict_speaker=rejection is not None,
+            )
+            selected_speaker_id = selected_segment_index = None
         current = copy.deepcopy(raw)
         current['id'] = current_id
         current['transcript_segments'] = _decode_transcript_segments_strict(
@@ -2634,9 +2630,8 @@ def assign_conversation_speaker(
         )
         before = copy.deepcopy(current['transcript_segments'])
         if source_segments is not None:
-            surviving_ids = {s.get('id') for s in before}
-            selected_segment_ids = [sid for sid in selected_segment_ids or [] if sid in surviving_ids]
-            if not selected_segment_ids:
+            before_ids = {s.get('id') for s in before}
+            if not selected_segment_ids or any(sid not in before_ids for sid in selected_segment_ids):
                 raise ValueError('Selected speaker is no longer in the merged conversation')
         segments, receipt, resolved, previous = manual_assignment(
             current,
@@ -2646,19 +2641,24 @@ def assign_conversation_speaker(
             speaker_id=selected_speaker_id,
             segment_index=selected_segment_index,
             use_for_speech_training=use_for_speech_training,
+            rejection=rejection,
         )
         # Read every person before any write; corrections fence in-flight profiles and
         # record label evidence in the same transaction as the label, not in a later task.
         relabeled = [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
-        people = {}
-        for pid in previous | ({person_id} if person_id else set()):
-            person_ref = user_ref.collection('people').document(pid)
-            people[pid] = (person_ref, person_ref.get(transaction=transaction).to_dict())
-        if person_id and not people[person_id][1]:
+        rejected_person_id = (rejection or {}).get('person_id')
+        user_doc = user_ref.get(transaction=transaction).to_dict() or {}
+        save_other = bool(user_doc.get('save_other_voice_profiles', True))
+        people = {
+            pid: (pref := user_ref.collection('people').document(pid), pref.get(transaction=transaction).to_dict())
+            for pid in previous | {p for p in (person_id, rejected_person_id) if p}
+        }
+        if any(not people[pid][1] for pid in (person_id, rejected_person_id) if pid):
             raise LookupError('Person not found')
         docs, now = {pid: doc for pid, (_, doc) in people.items()}, datetime.now(timezone.utc)
+        evidence = (docs, previous, person_id, relabeled, evidence_source, current_id, resolved, now)
         updates, removed = person_updates_for_assignment(
-            docs, previous, person_id, relabeled, evidence_source, current_id, resolved, now, receipt, segments
+            *evidence, receipt, segments, rejected_person_id=rejected_person_id, save_other_voice_profiles=save_other
         )
         for pid, update in updates.items():
             transaction.update(people[pid][0], update)

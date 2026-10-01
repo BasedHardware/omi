@@ -3813,5 +3813,15 @@
     "updateAvailableTitle": "Opdatering tilgængelig",
     "updateAvailableMessage": "En ny version af Omi er klar med rettelser og forbedringer.",
     "updateRequiredTitle": "Opdatering påkrævet",
-    "updateRequiredMessage": "Denne version af Omi understøttes ikke længere. Opdater for at fortsætte med at optage og synkronisere."
+    "updateRequiredMessage": "Denne version af Omi understøttes ikke længere. Opdater for at fortsætte med at optage og synkronisere.",
+    "autoRemoveSyncedCopiesTitle": "Fjern synkroniserede kopier automatisk",
+    "autoRemoveSyncedCopiesDays": "Synkroniserede kopier slettes efter {days} dage",
+    "autoRemoveSyncedCopiesDescription": "Sletter lokale kopier {days} dage efter synkronisering. Cloudkopier gemmes.",
+    "localCopiesSection": "Lokale kopier",
+    "speakerLabelLinesLabeled": "Mærkede linjer: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Stemme lært} pending{Lærer stemmen…} disabled{Lagring af stemmer er slået fra} other{Stemmen er ikke lært endnu}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi genkender {name} næste gang.} pending{Det tager et par sekunder.} disabled{Slå lagring af stemmer til i Indstillinger, så Omi kan genkende {name}.} other{Omi har brug for mere tydelig tale fra {name} og bliver ved med at prøve.}}",
+    "speakerLabelEarlierMatches": "Tidligere samtaler med denne stemme: {count}",
+    "speakerLabelText": "{part, select, likely{Sandsynlig} soundsLike{Lyder som {name}} notPerson{Ikke {name}} carried{Stadig {name}. Overført fra din seneste samtale.} change{Skift} alsoTitle{Er det også {name}?} alsoBody{Omi fandt den samme stemme i tidligere samtaler.} confirmed{Du har bekræftet denne etiket} other{Gennemgå}}",
+    "speakerLabelTalkTime": "{duration} af denne stemme"
 }

@@ -11328,5 +11328,15 @@
     "updateAvailableTitle": "به‌روزرسانی در دسترس است",
     "updateAvailableMessage": "نسخهٔ جدید Omi آماده است، همراه با رفع اشکال‌ها و بهبودها.",
     "updateRequiredTitle": "به‌روزرسانی لازم است",
-    "updateRequiredMessage": "این نسخه از Omi دیگر پشتیبانی نمی‌شود. برای ادامهٔ ضبط و همگام‌سازی، به‌روزرسانی کنید."
+    "updateRequiredMessage": "این نسخه از Omi دیگر پشتیبانی نمی‌شود. برای ادامهٔ ضبط و همگام‌سازی، به‌روزرسانی کنید.",
+    "autoRemoveSyncedCopiesTitle": "حذف خودکار نسخه‌های همگام‌شده",
+    "autoRemoveSyncedCopiesDays": "نسخه‌های همگام‌شده پس از {days} روز حذف می‌شوند",
+    "autoRemoveSyncedCopiesDescription": "نسخه‌های محلی را {days} روز پس از همگام‌سازی حذف می‌کند. نسخه‌های ابری حفظ می‌شوند.",
+    "localCopiesSection": "نسخه‌های محلی",
+    "speakerLabelLinesLabeled": "خط‌های برچسب‌خورده: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{صدا یاد گرفته شد} pending{در حال یادگیری صدا…} disabled{ذخیره صدا خاموش است} other{صدا هنوز یاد گرفته نشده}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi دفعه بعد {name} را تشخیص می‌دهد.} pending{این کار چند ثانیه طول می‌کشد.} disabled{ذخیره صداها را در تنظیمات روشن کنید تا Omi بتواند {name} را تشخیص دهد.} other{Omi به گفتار واضح‌تری از {name} نیاز دارد و به تلاش ادامه می‌دهد.}}",
+    "speakerLabelEarlierMatches": "گفتگوهای قبلی با این صدا: {count}",
+    "speakerLabelText": "{part, select, likely{احتمالاً} soundsLike{شبیه {name} است} notPerson{{name} نیست} carried{همچنان {name}. از آخرین گفتگوی شما منتقل شد.} change{تغییر} alsoTitle{آیا این هم {name} است؟} alsoBody{Omi همین صدا را در گفتگوهای قبلی پیدا کرد.} confirmed{شما این برچسب را تأیید کردید} other{بررسی}}",
+    "speakerLabelTalkTime": "{duration} از این صدا"
 }

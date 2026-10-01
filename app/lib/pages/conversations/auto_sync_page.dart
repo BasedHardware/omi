@@ -369,6 +369,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   Widget _buildStorageSettings(UserProvider userProvider) {
     final isPhoneOn = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
     final isCloudOn = userProvider.privateCloudSyncEnabled;
+    final autoRemoveOn = SharedPreferencesUtil().autoRemoveSyncedCopies;
+    final autoRemoveDays = SharedPreferencesUtil().autoRemoveSyncedCopiesDays;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -399,6 +401,26 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               ),
             ],
           ),
+        ),
+        OmiSettingsGroup(
+          header: context.l10n.localCopiesSection,
+          children: [
+            OmiSettingsRow.toggle(
+              leading: const Icon(Icons.auto_delete),
+              title: context.l10n.autoRemoveSyncedCopiesTitle,
+              subtitle: context.l10n.autoRemoveSyncedCopiesDescription(autoRemoveDays),
+              value: autoRemoveOn,
+              onChanged: (value) async {
+                SharedPreferencesUtil().autoRemoveSyncedCopies = value;
+                if (value) {
+                  // Apply immediately: expired copies should not wait for the
+                  // next sync pass or app restart.
+                  await context.read<SyncProvider>().applySyncedCopyRetention();
+                }
+                if (context.mounted) setState(() {});
+              },
+            ),
+          ],
         ),
       ],
     );
@@ -855,6 +877,15 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             }
           }
         },
+        onToggleAutoRemove: (value) async {
+          SharedPreferencesUtil().autoRemoveSyncedCopies = value;
+          if (value) {
+            // Apply immediately: expired copies should not wait for the next
+            // sync pass or app restart.
+            await context.read<SyncProvider>().applySyncedCopyRetention();
+          }
+          if (context.mounted) setState(() {});
+        },
       ),
     );
   }
@@ -883,12 +914,14 @@ class _ManageStorageSheet extends StatelessWidget {
   final VoidCallback onClearSynced;
   final VoidCallback onClearPending;
   final VoidCallback onClearAll;
+  final ValueChanged<bool> onToggleAutoRemove;
 
   const _ManageStorageSheet({
     required this.provider,
     required this.onClearSynced,
     required this.onClearPending,
     required this.onClearAll,
+    required this.onToggleAutoRemove,
   });
 
   @override
@@ -896,6 +929,7 @@ class _ManageStorageSheet extends StatelessWidget {
     final syncedCount = provider.syncedWals.length;
     final pendingCount = provider.pendingDeletableWals.length;
     final totalCount = provider.clearableWalsCount;
+    final autoRemoveOn = SharedPreferencesUtil().autoRemoveSyncedCopies;
 
     return SingleChildScrollView(
       child: Column(
@@ -919,13 +953,58 @@ class _ManageStorageSheet extends StatelessWidget {
             count: pendingCount,
             onClear: pendingCount > 0 ? onClearPending : null,
             clearLabel: context.l10n.clear,
-            isWarning: true,
+          ),
+          const SizedBox(height: 12),
+          _AutoRemoveRow(
+            initialValue: autoRemoveOn,
+            onChanged: onToggleAutoRemove,
           ),
           if (totalCount > 0) ...[
             const SizedBox(height: 20),
             OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// The auto-remove preference, surfaced beside the clear actions it governs so
+/// the two ways of reclaiming synced-copy space read as one set. Persists
+/// through [SharedPreferencesUtil.autoRemoveSyncedCopies]; both this sheet and
+/// the Offline Sync settings page write the same key, and each rereads it on
+/// build so neither can drift from the stored value. The row holds the tapped
+/// value itself: the sheet around it is stateless and does not rebuild when
+/// only the switch flips, so without local state the knob would snap back
+/// while the stored preference had already changed.
+class _AutoRemoveRow extends StatefulWidget {
+  final bool initialValue;
+  final ValueChanged<bool> onChanged;
+
+  const _AutoRemoveRow({required this.initialValue, required this.onChanged});
+
+  @override
+  State<_AutoRemoveRow> createState() => _AutoRemoveRowState();
+}
+
+class _AutoRemoveRowState extends State<_AutoRemoveRow> {
+  late bool _value = widget.initialValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final days = SharedPreferencesUtil().autoRemoveSyncedCopiesDays;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
+      child: OmiSettingsRow.toggle(
+        leading: const Icon(Icons.auto_delete),
+        title: context.l10n.autoRemoveSyncedCopiesTitle,
+        subtitle: context.l10n.autoRemoveSyncedCopiesDays(days),
+        value: _value,
+        onChanged: (value) {
+          setState(() => _value = value);
+          widget.onChanged(value);
+        },
       ),
     );
   }
@@ -939,7 +1018,6 @@ class _StorageRow extends StatelessWidget {
   final int count;
   final VoidCallback? onClear;
   final String clearLabel;
-  final bool isWarning;
 
   const _StorageRow({
     required this.icon,
@@ -949,14 +1027,13 @@ class _StorageRow extends StatelessWidget {
     required this.count,
     required this.onClear,
     required this.clearLabel,
-    this.isWarning = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
       child: Row(
         children: [
           Container(
@@ -964,7 +1041,7 @@ class _StorageRow extends StatelessWidget {
             height: 36,
             decoration: BoxDecoration(
               color: iconColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: OmiRadius.mdAll,
             ),
             child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
           ),
@@ -977,27 +1054,24 @@ class _StorageRow extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
+                      style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
-                        color: OmiColors.textPrimary.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6),
+                        color: OmiColors.surface3,
+                        borderRadius: OmiRadius.smAll,
                       ),
                       child: Text(
                         '$count',
-                        style: TextStyle(
-                          color: OmiColors.active == OmiPalette.light ? OmiColors.textSecondary : Colors.grey.shade400,
-                          fontSize: 12,
-                        ),
+                        style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 3),
-                Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                Text(subtitle, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
               ],
             ),
           ),
@@ -1007,16 +1081,12 @@ class _StorageRow extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: (isWarning ? Colors.orange : Colors.red).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(100),
+                  color: OmiColors.dangerSurface,
+                  borderRadius: OmiRadius.pillAll,
                 ),
                 child: Text(
                   clearLabel,
-                  style: TextStyle(
-                    color: isWarning ? Colors.orange : Colors.red.shade300,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: OmiType.footnote.copyWith(color: OmiColors.danger, fontWeight: FontWeight.w500),
                 ),
               ),
             ),

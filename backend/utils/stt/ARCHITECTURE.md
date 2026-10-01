@@ -36,6 +36,12 @@ one pace. The PCM buffer is two max-context windows plus two pace intervals
 session.
 `live_metrics.py` exposes bounded process/session metrics. Dead providers are excluded
 from that session; each adopted provider gets a new speaker-provider epoch.
+`batch_pressure.py` owns the off-path GPU-pool poller and cached admission:
+per-replica last-good samples expire after 15 seconds, fresh quorum requires
+both the configured minimum and a strict majority of DNS-ready pods, and busy
+plus unknown pods reaching half the pool stands down. Individual fetch failures
+retain their timestamps; DNS failure invalidates the fleet. Its fan-out/cache
+cap is 64 pods and admission never performs I/O.
 Operational controls and capacity arithmetic: [windowed live STT](../../docs/operational/windowed-live-stt.md).
 
 ## Language constraint

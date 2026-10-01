@@ -33,7 +33,12 @@ import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
-from utils.stt.speaker_match import SPEAKER_MATCH_MIN_EVIDENCE_SECONDS, arbitrate_owner_matches, select_speaker_match
+from utils.stt.speaker_match import (
+    SPEAKER_MATCH_MARGIN as SPEAKER_MATCH_MARGIN,
+    SPEAKER_MATCH_MIN_EVIDENCE_SECONDS,
+    arbitrate_owner_matches,
+    select_speaker_match,
+)
 
 RESOLUTION_VERSION = 2
 
@@ -103,6 +108,11 @@ def _unit_vector(vector: Any) -> Optional[np.ndarray]:
 
 def _cosine(a: np.ndarray, b: np.ndarray) -> float:
     return float(1.0 - np.dot(a, b))
+
+
+# Cached historical matching uses the exact normalization and distance policy.
+unit_voice_vector = _unit_vector
+voice_cosine_distance = _cosine
 
 
 class _Cluster:

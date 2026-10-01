@@ -42,15 +42,25 @@ and background processing.
   (`decided_by=jev`, `reason=jev_error`). Photos and wake-word invocations keep
   `conv_discard`. The record carries the probability under `jev`. EXP-004 uses
   `relevance_arm(uid, conversation_id)`: a stable per-conversation keep-all
-  sample takes precedence over the existing Jev UID ramp; other conversations
-  use Jev or nano. Keep-all bypasses only the reached model tier;
-  restores/rules/plan gates remain first. The sampled conversation set is
-  independent of account identity.
+  sample takes precedence over the per-conversation Jev ramp (salt
+  `relevance-arm-v2`, range [K,min(100,K+J)); other conversations use nano. Keep-all bypasses only the reached model tier;
+  restores/rules/plan gates remain first. Both samples and the shadow receive the same conversation ID, independent
+  of account identity; increasing J with K fixed retains existing Jev conversations.
+  The UID allowlist is read only with `OMI_ENV_STAGE=dev`; prod declarations
+  (including empty bindings) are rejected by the runtime env validator.
   Unset live percentages preserve dev's flag-on=everyone behavior. Prod live
   flags remain off. `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` admits short,
   transcript-only model-tier decisions outside the Jev arm asynchronously, with
   Redis dedupe/daily caps, a bounded queue and text-free 60-day shadow records.
-  See `backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md`.
+  Live rollout is 1% -> 10% -> 50% -> 100%, with 24 h soak per stage. Abort
+  criteria: Jev failures >5%, p95 latency >2x, actual discard rate differing
+  from shadow prediction >20% relative, rising empty titles among Jev-kept
+  conversations, rising 7-day deletes/restores of Jev-kept/discarded conversations,
+  or notes spend per DAU above cap. Discards are recoverable; restoring records
+  `sync_relevance_user_kept`. These monitoring gates belong to the coordinator;
+  this PR adds no automatic fleet controller. Exact env blocks, provider bindings
+  and sync metric visibility limits are in
+  `backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md`.
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by
