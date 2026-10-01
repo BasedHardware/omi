@@ -5,7 +5,6 @@ import pytest
 
 from database.chat_first_intents import (
     fetch_ready_intent_batch,
-    fetch_ready_intents,
     release_due_deferrals,
 )
 
