@@ -233,3 +233,12 @@ def test_is_registered_and_get_owner_validation() -> None:
 
     with pytest.raises(ValueError, match="uid must be a non-empty string without slashes"):
         get_owner("bad/uid", firestore_client=mock_client)
+
+
+def test_claim_next_validates_uid() -> None:
+    """Verify claim_next validates uid before attempting Firestore operations."""
+    mock_client = _MockClient()
+    with pytest.raises(ValueError, match="uid must be a non-empty string without slashes"):
+        claim_next("", firestore_client=mock_client)
+    with pytest.raises(ValueError, match="uid must be a non-empty string without slashes"):
+        claim_next("bad/uid", firestore_client=mock_client)
