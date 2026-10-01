@@ -105,6 +105,20 @@ jobs:
         with:
           ref: ${{ needs.admit.outputs.source_sha }}
           fetch-depth: 1
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+      - name: Verify serving Firestore indexes
+        if: inputs.mode == 'prove'
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ needs.admit.outputs.source_sha }}
+          project_id: ${{ env.QA_PROJECT }}
+          database: ${{ env.QA_FIRESTORE_DATABASE }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
       - uses: google-github-actions/auth@v3
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).

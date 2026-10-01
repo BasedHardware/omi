@@ -129,6 +129,13 @@ jobs:
           echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+
       - name: Install Helm
         uses: azure/setup-helm@v5
 
@@ -183,31 +190,109 @@ jobs:
               exit 1
             fi
             echo "Keeping the running image tag: $RUNNING_TAG"
-            echo "BACKEND_LISTEN_IMAGE_TAG=$RUNNING_TAG" >> "$GITHUB_ENV"
-            exit 0
+            SELECTED_TAG="$RUNNING_TAG"
+          else
+            # An explicit tag advances or rewinds the deployed code, so it must be a
+            # reviewed commit. Prod admits only ancestors of main; the same rule the
+            # source checkout is held to above.
+            if ! git cat-file -e "${REQUESTED_TAG}^{commit}" 2>/dev/null; then
+              echo "ERROR: image_tag ${REQUESTED_TAG} is not a commit in this repository." >&2
+              exit 1
+            fi
+            RESOLVED_TAG=$(git rev-parse --short=7 "${REQUESTED_TAG}^{commit}")
+            if ! gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG}" >/dev/null 2>&1; then
+              echo "ERROR: gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG} does not exist." >&2
+              echo "The image is built by the backend deploy workflow; run that for this commit first." >&2
+              exit 1
+            fi
+            echo "Deploying image tag ${RESOLVED_TAG} (currently ${RUNNING_TAG:-<none>})"
+            SELECTED_TAG="$RESOLVED_TAG"
           fi
 
-          # An explicit tag advances or rewinds the deployed code, so it must be a
-          # reviewed commit. Prod admits only ancestors of main; the same rule the
-          # source checkout is held to above.
-          if ! git cat-file -e "${REQUESTED_TAG}^{commit}" 2>/dev/null; then
-            echo "ERROR: image_tag ${REQUESTED_TAG} is not a commit in this repository." >&2
+          if [[ ! "$SELECTED_TAG" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "ERROR: backend-listen image tag $SELECTED_TAG is not an immutable hexadecimal tag." >&2
+            exit 1
+          fi
+          if ! SELECTED_SHA="$(git rev-parse --verify --quiet "${SELECTED_TAG}^{commit}")"; then
+            echo "ERROR: image tag $SELECTED_TAG does not resolve to a unique commit in this repository." >&2
             exit 1
           fi
           if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
-            if ! git merge-base --is-ancestor "${REQUESTED_TAG}" origin/main; then
-              echo "ERROR: image_tag ${REQUESTED_TAG} is not an ancestor of origin/main." >&2
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            if ! git merge-base --is-ancestor "$SELECTED_SHA" origin/main; then
+              echo "ERROR: image tag $SELECTED_TAG resolves to $SELECTED_SHA, which is not an ancestor of origin/main." >&2
               exit 1
             fi
           fi
-          RESOLVED_TAG=$(git rev-parse --short=7 "${REQUESTED_TAG}^{commit}")
-          if ! gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG}" >/dev/null 2>&1; then
-            echo "ERROR: gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG} does not exist." >&2
-            echo "The image is built by the backend deploy workflow; run that for this commit first." >&2
+          echo "BACKEND_LISTEN_IMAGE_TAG=$SELECTED_TAG" >> "$GITHUB_ENV"
+          echo "BACKEND_LISTEN_SOURCE_SHA=$SELECTED_SHA" >> "$GITHUB_ENV"
+
+      - name: Resolve backend-listen rollback target
+        if: ${{ github.event.inputs.mode == 'rollback' }}
+        env:
+          TARGET_REVISION: ${{ github.event.inputs.helm_revision }}
+        run: |
+          set -euo pipefail
+          RELEASE=${{ vars.ENV }}-omi-backend-listen
+          NS=${{ vars.ENV }}-omi-backend
+          if [[ -n "$TARGET_REVISION" ]]; then
+            if [[ ! "$TARGET_REVISION" =~ ^[1-9][0-9]*$ ]]; then
+              echo "ERROR: helm_revision must be a positive Helm revision number." >&2
+              exit 1
+            fi
+            RESOLVED_REVISION="$TARGET_REVISION"
+          else
+            HISTORY="$(helm -n "$NS" history "$RELEASE" --max 20 -o json)" || {
+              echo "ERROR: cannot read Helm release history for $RELEASE." >&2
+              exit 1
+            }
+            RESOLVED_REVISION="$(jq -r 'if length < 2 then error("Helm release history has no earlier revision") else .[-2].revision end' <<<"$HISTORY")"
+          fi
+          VALUES="$(helm -n "$NS" get values "$RELEASE" --revision "$RESOLVED_REVISION" -o json)" || {
+            echo "ERROR: cannot read Helm values for revision $RESOLVED_REVISION of $RELEASE." >&2
+            exit 1
+          }
+          REPOSITORY="$(jq -r '.image.repository // empty' <<<"$VALUES")"
+          TAG="$(jq -r '.image.tag // empty' <<<"$VALUES")"
+          EXPECTED_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/backend"
+          if [[ "$REPOSITORY" != "$EXPECTED_REPOSITORY" ]]; then
+            echo "ERROR: revision $RESOLVED_REVISION image repository $REPOSITORY is not $EXPECTED_REPOSITORY." >&2
             exit 1
           fi
-          echo "Deploying image tag ${RESOLVED_TAG} (currently ${RUNNING_TAG:-<none>})"
-          echo "BACKEND_LISTEN_IMAGE_TAG=$RESOLVED_TAG" >> "$GITHUB_ENV"
+          if [[ ! "$TAG" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "ERROR: revision $RESOLVED_REVISION image tag ${TAG:-<missing>} is not an immutable hexadecimal tag." >&2
+            exit 1
+          fi
+          if ! ROLLBACK_SHA="$(git rev-parse --verify --quiet "${TAG}^{commit}")"; then
+            echo "ERROR: revision $RESOLVED_REVISION image tag $TAG does not resolve to a unique commit in this repository." >&2
+            exit 1
+          fi
+          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            if ! git merge-base --is-ancestor "$ROLLBACK_SHA" origin/main; then
+              echo "ERROR: revision $RESOLVED_REVISION image tag $TAG resolves to $ROLLBACK_SHA, which is not an ancestor of origin/main." >&2
+              exit 1
+            fi
+          fi
+          echo "Rolling back $RELEASE to revision $RESOLVED_REVISION (image tag $TAG, source $ROLLBACK_SHA)"
+          echo "BACKEND_LISTEN_ROLLBACK_REVISION=$RESOLVED_REVISION" >> "$GITHUB_ENV"
+          echo "BACKEND_LISTEN_SOURCE_SHA=$ROLLBACK_SHA" >> "$GITHUB_ENV"
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ env.BACKEND_LISTEN_SOURCE_SHA }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
+      - name: Verify customer-data Firestore indexes
+        if: ${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ env.BACKEND_LISTEN_SOURCE_SHA }}
+          project_id: based-hardware
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          artifact_suffix: -customer-data
 
       - name: Carry forward config this workflow does not own
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
@@ -357,8 +442,6 @@ jobs:
 
       - name: Roll back backend-listen Helm release
         if: ${{ github.event.inputs.mode == 'rollback' }}
-        env:
-          TARGET_REVISION: ${{ github.event.inputs.helm_revision }}
         run: |
           set -euo pipefail
           RELEASE=${{ vars.ENV }}-omi-backend-listen
@@ -368,11 +451,7 @@ jobs:
           # Helm rollback, not kubectl rollout undo: undo reverts the pod template while
           # leaving Helm's stored release ahead of the cluster, so the next chart upgrade
           # would silently reapply the bad revision.
-          if [[ -n "$TARGET_REVISION" ]]; then
-            helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 30m
-          else
-            helm -n "$NS" rollback "$RELEASE" --wait --timeout 30m
-          fi
+          helm -n "$NS" rollback "$RELEASE" "$BACKEND_LISTEN_ROLLBACK_REVISION" --wait --timeout 30m
           AFTER="$(kubectl -n "$NS" get deploy/"$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
           echo "Image after rollback: $AFTER"
           helm -n "$NS" history "$RELEASE" --max 10

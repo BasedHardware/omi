@@ -187,7 +187,44 @@ jobs:
             echo "PUSHER_QUALIFICATION_RUN_JSON=$QUALIFICATION_DIR/run.json"
             echo "PUSHER_QUALIFICATION_WORKFLOW_ID=$EXPECTED_WORKFLOW_ID"
             echo "PUSHER_QUALIFICATION_RUN_ID=$QUALIFICATION_RUN_ID"
+            echo "QUALIFIED_SOURCE_SHA=$QUALIFIED_SOURCE_SHA"
           } >> "$GITHUB_ENV"
+
+      - name: Resolve Firestore gate source
+        run: |
+          set -euo pipefail
+          if [[ "${{ env.SERVICE }}" == "pusher" && "${{ github.event.inputs.environment }}" == "prod" ]]; then
+            if [[ ! "${QUALIFIED_SOURCE_SHA:-}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Qualified Pusher source SHA is missing or malformed." >&2
+              exit 1
+            fi
+            echo "FIRESTORE_GATE_SOURCE_SHA=$QUALIFIED_SOURCE_SHA" >> "$GITHUB_ENV"
+          else
+            echo "FIRESTORE_GATE_SOURCE_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
+          fi
+
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ env.FIRESTORE_GATE_SOURCE_SHA }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
+      - name: Verify customer-data Firestore indexes
+        if: ${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ env.FIRESTORE_GATE_SOURCE_SHA }}
+          project_id: based-hardware
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          artifact_suffix: -customer-data
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
       # Development keeps its JSON lane.

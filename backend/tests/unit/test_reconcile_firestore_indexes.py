@@ -1,10 +1,15 @@
 import json
+import os
 import re
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 from database.firestore_index_registry import FIELD_INDEX_REQUIREMENTS, firebase_index_manifest
 from scripts import reconcile_firestore_indexes
@@ -624,7 +629,7 @@ def test_writer_and_check_only_share_exact_signature_matching(monkeypatch, check
         'state': 'READY',
     }
 
-    monkeypatch.setattr(reconcile_firestore_indexes, 'verify_manifest_source', lambda _path: {})
+    monkeypatch.setattr(reconcile_firestore_indexes, 'verify_manifest_source', lambda _path, **_kwargs: {})
     monkeypatch.setattr(
         reconcile_firestore_indexes,
         'expected_index_signatures',
@@ -1133,3 +1138,476 @@ def test_provision_missing_applies_union_field_patch():
         } <= modes
         assert 'ttlConfig' not in payload
         assert payload['indexConfig']['indexes'][0].get('state') is None
+
+
+def _write_source_root(tmp_path, manifest):
+    root = tmp_path / 'target-source'
+    registry_dir = root / 'backend' / 'database'
+    registry_dir.mkdir(parents=True)
+    (registry_dir / '__init__.py').write_text('', encoding='utf-8')
+    (registry_dir / 'firestore_index_registry.py').write_text(
+        'import json\n\n\ndef firebase_index_manifest():\n    return json.loads('
+        + repr(json.dumps(manifest))
+        + ")\n\n\nif __name__ == '__main__':\n    print(json.dumps(firebase_index_manifest()))\n",
+        encoding='utf-8',
+    )
+    (root / 'firestore.indexes.json').write_text(json.dumps(manifest), encoding='utf-8')
+    return root
+
+
+_TARGET_MANIFEST = {
+    'indexes': [
+        {
+            'collectionGroup': 'target_group',
+            'queryScope': 'COLLECTION',
+            'fields': [
+                {'fieldPath': 'a', 'order': 'ASCENDING'},
+                {'fieldPath': 'b', 'order': 'DESCENDING'},
+                {'fieldPath': '__name__', 'order': 'DESCENDING'},
+            ],
+        }
+    ],
+    'fieldOverrides': [],
+}
+
+_TARGET_FIELD_MANIFEST = {
+    'indexes': [],
+    'fieldOverrides': [
+        {
+            'collectionGroup': 'target_group',
+            'fieldPath': 'flag',
+            'indexes': [{'queryScope': 'COLLECTION_GROUP', 'order': 'ASCENDING'}],
+        }
+    ],
+}
+
+
+def _target_live_index(index, *, state='READY'):
+    return {
+        'name': (
+            'projects/dev-project/databases/(default)/collectionGroups/' f"{index['collectionGroup']}/indexes/index-id"
+        ),
+        'queryScope': index['queryScope'],
+        'fields': index['fields'],
+        'state': state,
+    }
+
+
+def _target_field_request(state):
+    calls = []
+
+    def request(method, url, payload):
+        calls.append((method, url, payload))
+        match = re.search(r'collectionGroups/([^/]+)/fields/([^/?]+)', url)
+        assert match, url
+        collection_group, field_path = match.group(1), match.group(2)
+        indexes = (
+            []
+            if state == 'MISSING'
+            else [
+                {
+                    'queryScope': 'COLLECTION_GROUP',
+                    'fields': [{'fieldPath': field_path, 'order': 'ASCENDING'}],
+                    'state': state,
+                }
+            ]
+        )
+        return {
+            'name': f'projects/dev-project/databases/(default)/collectionGroups/{collection_group}/fields/{field_path}',
+            'indexConfig': {'usesAncestorConfig': False, 'indexes': indexes},
+        }
+
+    request.calls = calls
+    return request
+
+
+def test_source_root_check_only_uses_target_registry_and_stays_read_only(tmp_path):
+    source_root = _write_source_root(tmp_path, _TARGET_MANIFEST)
+    runner_calls = []
+
+    def runner(command, **_kwargs):
+        runner_calls.append(command)
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps([_target_live_index(index) for index in _TARGET_MANIFEST['indexes']]),
+        )
+
+    assert (
+        reconcile_firestore_indexes.reconcile(
+            project='dev-project',
+            database='(default)',
+            manifest_path=source_root / 'firestore.indexes.json',
+            timeout_seconds=30,
+            poll_interval_seconds=1,
+            check_only=True,
+            source_root=source_root,
+            proposal_output=tmp_path / 'proposal.json',
+            source_commit=SOURCE_COMMIT,
+            runner=runner,
+            field_request=_field_request(),
+            clock=lambda: datetime(2026, 7, 15, tzinfo=timezone.utc),
+        )
+        is None
+    )
+    assert len(runner_calls) == 1
+    assert runner_calls[0][:4] == ['gcloud', 'firestore', 'indexes', 'composite']
+
+
+def test_source_root_check_only_missing_and_nonready_write_validated_proposals(tmp_path):
+    for live_indexes, expected_state in (
+        ([], 'MISSING'),
+        ([_target_live_index(_TARGET_MANIFEST['indexes'][0], state='NEEDS_REPAIR')], 'NEEDS_REPAIR'),
+    ):
+        case_dir = tmp_path / f'case-{expected_state}'
+        case_dir.mkdir()
+        source_root = _write_source_root(case_dir, _TARGET_MANIFEST)
+        proposal_path = case_dir / 'proposal.json'
+
+        with pytest.raises(RuntimeError, match='proposal written'):
+            reconcile_firestore_indexes.reconcile(
+                project='dev-project',
+                database='(default)',
+                manifest_path=source_root / 'firestore.indexes.json',
+                timeout_seconds=30,
+                poll_interval_seconds=1,
+                check_only=True,
+                source_root=source_root,
+                proposal_output=proposal_path,
+                source_commit=SOURCE_COMMIT,
+                runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(live_indexes)),
+                field_request=_field_request(),
+                clock=lambda: datetime(2026, 7, 15, tzinfo=timezone.utc),
+            )
+
+        proposal = json.loads(proposal_path.read_text(encoding='utf-8'))
+        assert [entry['state'] for entry in proposal['blocking_indexes']] == [expected_state]
+        if expected_state == 'MISSING':
+            assert proposal['create_indexes'] == _TARGET_MANIFEST['indexes']
+        validated = reconcile_firestore_indexes.validate_schema_proposal(
+            proposal_path=proposal_path,
+            manifest_path=source_root / 'firestore.indexes.json',
+            project='dev-project',
+            database='(default)',
+            source_commit=SOURCE_COMMIT,
+            ttl_seconds=3600,
+            source_root=source_root,
+            clock=lambda: datetime(2026, 7, 15, 0, 30, tzinfo=timezone.utc),
+        )
+        assert validated == proposal
+
+
+def test_source_root_check_only_nonready_field_override_writes_validated_proposal(tmp_path):
+    source_root = _write_source_root(tmp_path, _TARGET_FIELD_MANIFEST)
+    proposal_path = tmp_path / 'proposal.json'
+    field_api = _target_field_request('CREATING')
+
+    with pytest.raises(RuntimeError, match='proposal written'):
+        reconcile_firestore_indexes.reconcile(
+            project='dev-project',
+            database='(default)',
+            manifest_path=source_root / 'firestore.indexes.json',
+            timeout_seconds=30,
+            poll_interval_seconds=1,
+            check_only=True,
+            source_root=source_root,
+            proposal_output=proposal_path,
+            source_commit=SOURCE_COMMIT,
+            runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout='[]'),
+            field_request=field_api,
+            clock=lambda: datetime(2026, 7, 15, tzinfo=timezone.utc),
+        )
+
+    assert all(method == 'GET' for method, _url, _payload in field_api.calls)
+    proposal = json.loads(proposal_path.read_text(encoding='utf-8'))
+    assert {entry['state'] for entry in proposal['blocking_field_indexes']} == {'CREATING'}
+    assert proposal['create_field_indexes'] == []
+    validated = reconcile_firestore_indexes.validate_schema_proposal(
+        proposal_path=proposal_path,
+        manifest_path=source_root / 'firestore.indexes.json',
+        project='dev-project',
+        database='(default)',
+        source_commit=SOURCE_COMMIT,
+        ttl_seconds=3600,
+        source_root=source_root,
+        clock=lambda: datetime(2026, 7, 15, 0, 30, tzinfo=timezone.utc),
+    )
+    assert validated == proposal
+
+
+def test_source_root_rejects_manifest_not_generated_by_target_registry(tmp_path):
+    source_root = _write_source_root(tmp_path, _TARGET_MANIFEST)
+    drifted = dict(_TARGET_MANIFEST)
+    drifted['indexes'] = []
+    (source_root / 'firestore.indexes.json').write_text(json.dumps(drifted), encoding='utf-8')
+
+    with pytest.raises(ValueError, match='does not match|generated'):
+        reconcile_firestore_indexes.reconcile(
+            project='dev-project',
+            database='(default)',
+            manifest_path=source_root / 'firestore.indexes.json',
+            timeout_seconds=30,
+            poll_interval_seconds=1,
+            check_only=True,
+            source_root=source_root,
+            proposal_output=tmp_path / 'proposal.json',
+            source_commit=SOURCE_COMMIT,
+            runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout='[]'),
+            field_request=_field_request(),
+        )
+
+
+def test_source_root_rejects_manifest_outside_source_root_and_mutating_modes(tmp_path):
+    source_root = _write_source_root(tmp_path, _TARGET_MANIFEST)
+    other_manifest = tmp_path / 'firestore.indexes.json'
+    other_manifest.write_text(json.dumps(_TARGET_MANIFEST), encoding='utf-8')
+
+    with pytest.raises(ValueError):
+        reconcile_firestore_indexes.reconcile(
+            project='dev-project',
+            database='(default)',
+            manifest_path=other_manifest,
+            timeout_seconds=30,
+            poll_interval_seconds=1,
+            check_only=True,
+            source_root=source_root,
+            proposal_output=tmp_path / 'proposal.json',
+            source_commit=SOURCE_COMMIT,
+            runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout='[]'),
+            field_request=_field_request(),
+        )
+
+    for mode in ({'provision_missing': True}, {'dry_run': True}):
+        with pytest.raises(ValueError, match='source-root'):
+            reconcile_firestore_indexes.reconcile(
+                project='dev-project',
+                database='(default)',
+                manifest_path=source_root / 'firestore.indexes.json',
+                timeout_seconds=30,
+                poll_interval_seconds=1,
+                source_root=source_root,
+                runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout='[]'),
+                field_request=_field_request(),
+                **mode,
+            )
+
+
+_TARGET_SUPERSET_MANIFEST = {
+    'indexes': _TARGET_MANIFEST['indexes'],
+    'fieldOverrides': _TARGET_FIELD_MANIFEST['fieldOverrides'],
+}
+
+
+def test_source_root_check_only_passes_on_live_superset(tmp_path):
+    source_root = _write_source_root(tmp_path, _TARGET_SUPERSET_MANIFEST)
+    assert not (source_root / 'backend' / 'scripts' / 'reconcile_firestore_indexes.py').exists()
+    extra_index = {
+        'collectionGroup': 'extra_live_group',
+        'queryScope': 'COLLECTION',
+        'fields': [{'fieldPath': 'c', 'order': 'ASCENDING'}],
+    }
+    live_indexes = [_target_live_index(index) for index in _TARGET_SUPERSET_MANIFEST['indexes']] + [
+        _target_live_index(extra_index)
+    ]
+    runner_calls = []
+
+    def runner(command, **_kwargs):
+        runner_calls.append(command)
+        return SimpleNamespace(returncode=0, stdout=json.dumps(live_indexes))
+
+    field_calls = []
+
+    def field_api(method, url, payload):
+        field_calls.append((method, url, payload))
+        match = re.search(r'collectionGroups/([^/]+)/fields/([^/?]+)', url)
+        collection_group, field_path = match.group(1), match.group(2)
+        return {
+            'name': f'projects/dev-project/databases/(default)/collectionGroups/{collection_group}/fields/{field_path}',
+            'indexConfig': {
+                'usesAncestorConfig': False,
+                'indexes': [
+                    {
+                        'queryScope': 'COLLECTION_GROUP',
+                        'fields': [{'fieldPath': field_path, 'order': 'ASCENDING'}],
+                        'state': 'READY',
+                    },
+                    {
+                        'queryScope': 'COLLECTION_GROUP',
+                        'fields': [{'fieldPath': field_path, 'order': 'DESCENDING'}],
+                        'state': 'READY',
+                    },
+                ],
+            },
+        }
+
+    assert (
+        reconcile_firestore_indexes.reconcile(
+            project='dev-project',
+            database='(default)',
+            manifest_path=source_root / 'firestore.indexes.json',
+            timeout_seconds=30,
+            poll_interval_seconds=1,
+            check_only=True,
+            source_root=source_root,
+            proposal_output=tmp_path / 'proposal.json',
+            source_commit=SOURCE_COMMIT,
+            runner=runner,
+            field_request=field_api,
+            clock=lambda: datetime(2026, 7, 15, tzinfo=timezone.utc),
+        )
+        is None
+    )
+    assert runner_calls and all(call[:4] == ['gcloud', 'firestore', 'indexes', 'composite'] for call in runner_calls)
+    assert all(call[4] == 'list' for call in runner_calls)
+    assert field_calls and all(method == 'GET' for method, _url, _payload in field_calls)
+
+
+def test_source_root_check_only_missing_field_override_writes_validated_proposal(tmp_path):
+    source_root = _write_source_root(tmp_path, _TARGET_FIELD_MANIFEST)
+    proposal_path = tmp_path / 'proposal.json'
+    field_api = _target_field_request('MISSING')
+
+    with pytest.raises(RuntimeError, match='proposal written'):
+        reconcile_firestore_indexes.reconcile(
+            project='dev-project',
+            database='(default)',
+            manifest_path=source_root / 'firestore.indexes.json',
+            timeout_seconds=30,
+            poll_interval_seconds=1,
+            check_only=True,
+            source_root=source_root,
+            proposal_output=proposal_path,
+            source_commit=SOURCE_COMMIT,
+            runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout='[]'),
+            field_request=field_api,
+            clock=lambda: datetime(2026, 7, 15, tzinfo=timezone.utc),
+        )
+
+    assert all(method == 'GET' for method, _url, _payload in field_api.calls)
+    proposal = json.loads(proposal_path.read_text(encoding='utf-8'))
+    assert {entry['state'] for entry in proposal['blocking_field_indexes']} == {'MISSING'}
+    assert proposal['create_field_indexes']
+    validated = reconcile_firestore_indexes.validate_schema_proposal(
+        proposal_path=proposal_path,
+        manifest_path=source_root / 'firestore.indexes.json',
+        project='dev-project',
+        database='(default)',
+        source_commit=SOURCE_COMMIT,
+        ttl_seconds=3600,
+        source_root=source_root,
+        clock=lambda: datetime(2026, 7, 15, 0, 30, tzinfo=timezone.utc),
+    )
+    assert validated == proposal
+
+
+def _stub_gcloud(bin_dir: Path, live_indexes) -> None:
+    stub = bin_dir / 'gcloud'
+    live = json.dumps(live_indexes)
+    stub.write_text(
+        '#!/bin/bash\n'
+        'if [[ "$*" == *"indexes composite"*"list"* ]]; then\n'
+        f"  printf '%s' '{live}'\n"
+        'elif [[ "$*" == *"print-access-token"* ]]; then\n'
+        '  echo stub-token\n'
+        'else\n'
+        '  exit 1\n'
+        'fi\n',
+        encoding='utf-8',
+    )
+    stub.chmod(0o755)
+
+
+def test_source_root_cli_end_to_end_with_stub_gcloud(tmp_path):
+    script = BACKEND_DIR / 'scripts' / 'reconcile_firestore_indexes.py'
+    source_root = _write_source_root(tmp_path / 'ready', _TARGET_MANIFEST)
+    assert not (source_root / 'backend' / 'scripts').exists()
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    _stub_gcloud(bin_dir, [_target_live_index(index) for index in _TARGET_MANIFEST['indexes']])
+    env = dict(os.environ, PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+
+    base_args = [
+        sys.executable,
+        str(script),
+        '--manifest',
+        str(source_root / 'firestore.indexes.json'),
+        '--source-root',
+        str(source_root),
+        '--project',
+        'dev-project',
+        '--database',
+        '(default)',
+    ]
+    ready = subprocess.run(
+        base_args
+        + [
+            '--check-only',
+            '--proposal-output',
+            str(tmp_path / 'ready-proposal.json'),
+            '--source-commit',
+            SOURCE_COMMIT,
+            '--proposal-ttl-seconds',
+            '3600',
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert ready.returncode == 0, ready.stderr
+
+    missing_root = _write_source_root(tmp_path / 'missing', _TARGET_MANIFEST)
+    bin_missing = tmp_path / 'bin-missing'
+    bin_missing.mkdir()
+    _stub_gcloud(bin_missing, [])
+    env_missing = dict(os.environ, PATH=f"{bin_missing}{os.pathsep}{os.environ['PATH']}")
+    proposal = tmp_path / 'missing-proposal.json'
+    missing = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            '--manifest',
+            str(missing_root / 'firestore.indexes.json'),
+            '--source-root',
+            str(missing_root),
+            '--project',
+            'dev-project',
+            '--database',
+            '(default)',
+            '--check-only',
+            '--proposal-output',
+            str(proposal),
+            '--source-commit',
+            SOURCE_COMMIT,
+            '--proposal-ttl-seconds',
+            '3600',
+        ],
+        env=env_missing,
+        capture_output=True,
+        text=True,
+    )
+    assert missing.returncode == 1
+    assert proposal.is_file()
+
+    validated = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            '--manifest',
+            str(missing_root / 'firestore.indexes.json'),
+            '--source-root',
+            str(missing_root),
+            '--project',
+            'dev-project',
+            '--database',
+            '(default)',
+            '--validate-proposal',
+            str(proposal),
+            '--source-commit',
+            SOURCE_COMMIT,
+            '--proposal-ttl-seconds',
+            '3600',
+        ],
+        env=env_missing,
+        capture_output=True,
+        text=True,
+    )
+    assert validated.returncode == 0, validated.stderr

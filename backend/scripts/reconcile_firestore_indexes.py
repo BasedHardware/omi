@@ -96,14 +96,62 @@ def expected_index_signatures(manifest: Mapping[str, Any]) -> set[IndexSignature
     return {_index_signature(index) for index in indexes if isinstance(index, Mapping)}
 
 
-def verify_manifest_source(manifest_path: Path) -> dict[str, Any]:
+_SOURCE_ROOT_REGISTRY_SNIPPET = (
+    'import json, sys\n'
+    'sys.path.insert(0, sys.argv[1])\n'
+    'from database.firestore_index_registry import firebase_index_manifest\n'
+    'json.dump(firebase_index_manifest(), sys.stdout)\n'
+)
+SOURCE_ROOT_REGISTRY_TIMEOUT_SECONDS = 60.0
+
+
+def _generated_manifest_at_source_root(source_root: Path) -> dict[str, Any]:
+    """Regenerate the manifest from the registry inside a separate checkout.
+
+    The registry is imported in a bounded subprocess of this same interpreter so
+    the deploying workflow's registry can validate a manifest checked out at the
+    admitted target SHA without importing target code into this process.
+    """
+
+    registry_path = source_root / 'backend' / 'database' / 'firestore_index_registry.py'
+    if not registry_path.is_file():
+        raise ValueError(f'{source_root} does not contain backend/database/firestore_index_registry.py')
+    try:
+        result = subprocess.run(
+            [sys.executable, '-c', _SOURCE_ROOT_REGISTRY_SNIPPET, str(source_root / 'backend')],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=SOURCE_ROOT_REGISTRY_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError('source-root index registry did not produce a manifest before the bound expired') from exc
+    if result.returncode != 0:
+        raise ValueError('source-root index registry failed to generate a manifest')
+    try:
+        generated = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError('source-root index registry did not emit a JSON manifest') from exc
+    if not isinstance(generated, dict):
+        raise ValueError('source-root index registry manifest must be an object')
+    return generated
+
+
+def verify_manifest_source(manifest_path: Path, source_root: Path | None = None) -> dict[str, Any]:
     try:
         loaded = json.loads(manifest_path.read_text(encoding='utf-8'))
     except json.JSONDecodeError as exc:
         raise ValueError(f'{manifest_path} is not valid JSON') from exc
     if not isinstance(loaded, dict):
         raise ValueError(f'{manifest_path} must contain an object')
-    generated = firebase_index_manifest()
+    if source_root is None:
+        generated = firebase_index_manifest()
+    else:
+        source_root = source_root.resolve()
+        expected_manifest = (source_root / 'firestore.indexes.json').resolve()
+        if manifest_path.resolve() != expected_manifest:
+            raise ValueError(f'--source-root requires the manifest at {expected_manifest}')
+        generated = _generated_manifest_at_source_root(source_root)
     if loaded != generated:
         raise ValueError('firestore.indexes.json is not generated from the repository index registry')
     return generated
@@ -461,6 +509,7 @@ def validate_schema_proposal(
     database: str,
     source_commit: str,
     ttl_seconds: int,
+    source_root: Path | None = None,
     clock: Clock = lambda: datetime.now(timezone.utc),
 ) -> dict[str, Any]:
     """Validate a proposal artifact before it can cross the workflow boundary."""
@@ -478,7 +527,7 @@ def validate_schema_proposal(
 
     _validate_proposal_ttl(ttl_seconds)
     expected_commit = _normalize_source_commit(source_commit)
-    manifest = verify_manifest_source(manifest_path)
+    manifest = verify_manifest_source(manifest_path, source_root=source_root)
     expected_signatures = expected_index_signatures(manifest)
     _require_exact_keys(
         loaded,
@@ -857,6 +906,7 @@ def reconcile(
     proposal_output: Path | None = None,
     source_commit: str | None = None,
     proposal_ttl_seconds: int = DEFAULT_PROPOSAL_TTL_SECONDS,
+    source_root: Path | None = None,
     runner: CommandRunner = subprocess.run,
     field_request=field_indexes.field_api_request,
     sleep: Callable[[float], None] = time.sleep,
@@ -865,6 +915,8 @@ def reconcile(
 ) -> None:
     if sum((check_only, dry_run, provision_missing)) > 1:
         raise ValueError('--check-only, --dry-run, and --provision-missing cannot be combined')
+    if source_root is not None and not check_only:
+        raise ValueError('--source-root is only valid with --check-only or --validate-proposal')
     if check_only:
         if proposal_output is None or not source_commit:
             raise ValueError('--check-only requires --proposal-output and --source-commit')
@@ -872,7 +924,7 @@ def reconcile(
         _validate_proposal_ttl(proposal_ttl_seconds)
     elif proposal_output is not None or source_commit is not None:
         raise ValueError('--proposal-output and --source-commit require --check-only')
-    manifest = verify_manifest_source(manifest_path)
+    manifest = verify_manifest_source(manifest_path, source_root=source_root)
     expected = expected_index_signatures(manifest)
     field_requirements = expected_field_requirements(manifest)
     if dry_run:
@@ -962,6 +1014,11 @@ def main() -> int:
     parser.add_argument('--proposal-output', type=Path)
     parser.add_argument('--validate-proposal', type=Path)
     parser.add_argument('--source-commit')
+    parser.add_argument(
+        '--source-root',
+        type=Path,
+        help='read the manifest and index registry from this checked-out source tree instead of the script\'s own',
+    )
     parser.add_argument('--proposal-ttl-seconds', type=int, default=DEFAULT_PROPOSAL_TTL_SECONDS)
     parser.add_argument(
         '--dry-run', action='store_true', help='validate the manifest and print the no-write reconciliation plan'
@@ -980,6 +1037,7 @@ def main() -> int:
                 database=args.database,
                 source_commit=args.source_commit,
                 ttl_seconds=args.proposal_ttl_seconds,
+                source_root=args.source_root.resolve() if args.source_root else None,
             )
             print('Firestore schema proposal validation passed')
             return 0
@@ -997,6 +1055,7 @@ def main() -> int:
             proposal_output=args.proposal_output.resolve() if args.proposal_output else None,
             source_commit=args.source_commit,
             proposal_ttl_seconds=args.proposal_ttl_seconds,
+            source_root=args.source_root.resolve() if args.source_root else None,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         print(f'ERROR: {exc}', file=sys.stderr)

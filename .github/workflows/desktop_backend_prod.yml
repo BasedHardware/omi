@@ -168,6 +168,29 @@ jobs:
             echo "- Break glass: ${SKIP_PROOF:-false}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ steps.admitted-source.outputs.source_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
+      - name: Verify customer-data Firestore indexes
+        if: ${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ steps.admitted-source.outputs.source_sha }}
+          project_id: based-hardware
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          artifact_suffix: -customer-data
+
       - name: Google Auth
         id: auth
         uses: google-github-actions/auth@v3

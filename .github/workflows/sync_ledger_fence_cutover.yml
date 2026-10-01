@@ -19,6 +19,10 @@ on:
         description: Exact immutable backend image digest (gcr.io/...@sha256:<64 hex>)
         required: true
         type: string
+      release_sha:
+        description: Full main commit SHA the candidate backend image was built from (its short tag must resolve to this digest)
+        required: true
+        type: string
       confirm:
         description: Type cutover-sync-ledger-fence
         required: true
@@ -47,6 +51,8 @@ jobs:
     steps:
       - name: Checkout cutover controls
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Validate deliberate immutable-digest request
         env:
@@ -59,6 +65,13 @@ jobs:
             echo "candidate_image must be an immutable @sha256 digest" >&2
             exit 1
           fi
+
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
 
       # A re-run must reload the first artifact.  Otherwise a partial queue
       # pause could be overwritten with a new, unsafe record of queue origins.
@@ -114,6 +127,50 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Verify candidate image binds to the admitted source
+        env:
+          RELEASE_SHA: ${{ github.event.inputs.release_sha }}
+          CANDIDATE_IMAGE: ${{ github.event.inputs.candidate_image }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ || "$RELEASE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            echo "release_sha must be one non-zero, lowercase, full commit SHA." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          if ! git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"; then
+            echo "release_sha $RELEASE_SHA is not an ancestor of current main $main_sha." >&2
+            exit 1
+          fi
+          EXPECTED_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/backend"
+          if [[ "$CANDIDATE_IMAGE" != "$EXPECTED_REPOSITORY"@sha256:* ]]; then
+            echo "candidate_image must be ${EXPECTED_REPOSITORY}@sha256:<64 hex>." >&2
+            exit 1
+          fi
+          TAGGED_DIGEST="$(gcloud container images describe "${EXPECTED_REPOSITORY}:${RELEASE_SHA:0:7}" --format='value(image_summary.digest)')"
+          if [[ "$CANDIDATE_IMAGE" != "${EXPECTED_REPOSITORY}@${TAGGED_DIGEST}" ]]; then
+            echo "candidate_image does not equal the digest of ${EXPECTED_REPOSITORY}:${RELEASE_SHA:0:7}." >&2
+            exit 1
+          fi
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ github.event.inputs.release_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          artifact_suffix: -stage
+
+      - name: Verify customer-data Firestore indexes
+        if: ${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ github.event.inputs.release_sha }}
+          project_id: based-hardware
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          artifact_suffix: -stage-customer-data
+
       - name: Stage standby barrier and pause queues
         env:
           CANDIDATE_IMAGE: ${{ github.event.inputs.candidate_image }}
@@ -151,6 +208,8 @@ jobs:
     steps:
       - name: Checkout cutover controls
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Validate deliberate immutable-digest request
         env:
@@ -163,6 +222,13 @@ jobs:
             echo "candidate_image must be an immutable @sha256 digest" >&2
             exit 1
           fi
+
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
 
       - name: Find prior activation state artifact
         id: prior-activation-state
@@ -270,6 +336,50 @@ jobs:
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify candidate image binds to the admitted source
+        env:
+          RELEASE_SHA: ${{ github.event.inputs.release_sha }}
+          CANDIDATE_IMAGE: ${{ github.event.inputs.candidate_image }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ || "$RELEASE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            echo "release_sha must be one non-zero, lowercase, full commit SHA." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          if ! git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"; then
+            echo "release_sha $RELEASE_SHA is not an ancestor of current main $main_sha." >&2
+            exit 1
+          fi
+          EXPECTED_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/backend"
+          if [[ "$CANDIDATE_IMAGE" != "$EXPECTED_REPOSITORY"@sha256:* ]]; then
+            echo "candidate_image must be ${EXPECTED_REPOSITORY}@sha256:<64 hex>." >&2
+            exit 1
+          fi
+          TAGGED_DIGEST="$(gcloud container images describe "${EXPECTED_REPOSITORY}:${RELEASE_SHA:0:7}" --format='value(image_summary.digest)')"
+          if [[ "$CANDIDATE_IMAGE" != "${EXPECTED_REPOSITORY}@${TAGGED_DIGEST}" ]]; then
+            echo "candidate_image does not equal the digest of ${EXPECTED_REPOSITORY}:${RELEASE_SHA:0:7}." >&2
+            exit 1
+          fi
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ github.event.inputs.release_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          artifact_suffix: -activate
+
+      - name: Verify customer-data Firestore indexes
+        if: ${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ github.event.inputs.release_sha }}
+          project_id: based-hardware
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          artifact_suffix: -activate-customer-data
 
       - name: Deploy active candidate with a no-traffic probe tag
         id: prepare
