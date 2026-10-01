@@ -16,9 +16,9 @@ MAX_ACCOUNT_DELETION_STATUS_CHARS = 256
 
 def normalize_account_deletion_status(*, marker_exists: bool, raw_status: object) -> str | None:
     """Normalize marker state without treating malformed markers as misses."""
-    if isinstance(marker_exists, (str, list, dict)):
+    if not isinstance(marker_exists, bool):
         raise TypeError("marker_exists must be a boolean")
-    if not bool(marker_exists):
+    if not marker_exists:
         return None
     if isinstance(raw_status, str):
         cleaned = raw_status.strip()

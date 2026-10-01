@@ -21,6 +21,14 @@ def test_normalize_account_deletion_status_rejects_invalid_marker_types():
         normalize_account_deletion_status(marker_exists=["true"], raw_status="active")  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="marker_exists must be a boolean"):
         normalize_account_deletion_status(marker_exists={"exists": True}, raw_status="active")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="marker_exists must be a boolean"):
+        normalize_account_deletion_status(marker_exists=0, raw_status="active")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="marker_exists must be a boolean"):
+        normalize_account_deletion_status(marker_exists=1, raw_status="active")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="marker_exists must be a boolean"):
+        normalize_account_deletion_status(marker_exists=None, raw_status="active")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="marker_exists must be a boolean"):
+        normalize_account_deletion_status(marker_exists=(), raw_status="active")  # type: ignore[arg-type]
 
 
 def test_normalize_account_deletion_status_handles_non_existent_marker():
