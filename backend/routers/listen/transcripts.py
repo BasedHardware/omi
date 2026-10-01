@@ -135,11 +135,14 @@ class TranscriptProcessor:
 
     def _queue_v2_retry(self, segments: List[Dict[str, Any]]) -> None:
         """Retry uncommitted text, then retain it for unplaced v1 persistence."""
+        queued_ids = {str(raw.get('id') or '') for raw in self.segment_buffer}
         for raw in reversed(segments):
             key = str(raw.get('id') or '')
             if key in self._v2_committed_ids:
                 continue
             if key in self._v2_legacy_fallback_ids:
+                continue
+            if key and key in queued_ids:
                 continue
             attempts = self._v2_retry_counts.get(key, 0) + 1
             if attempts > MAX_V2_PERSIST_ATTEMPTS:
@@ -158,6 +161,8 @@ class TranscriptProcessor:
                 self._queue_v2_fallback(raw)
             else:
                 self.segment_buffer.appendleft(raw)
+                if key:
+                    queued_ids.add(key)
 
     def _queue_v2_fallback(self, raw: Dict[str, Any], *, reason: str = 'capacity_full') -> None:
         """Move overflow to the bounded, unplaced legacy persistence lane."""
@@ -960,9 +965,26 @@ class TranscriptProcessor:
             groups[state.current_conversation_id] = []
             order.append(state.current_conversation_id)
 
+        fallback_owners = {
+            str(raw.get('_conversation_id') or state.current_conversation_id or '')
+            for raw in getattr(self, '_v2_legacy_fallback', ())
+        }
         for owner in order:
             segments = groups[owner]
             is_current = owner == state.current_conversation_id
+            if owner in fallback_owners and segments:
+                for raw in reversed(segments):
+                    key = str(raw.get('id') or '')
+                    if key in self._v2_committed_ids or key in self._v2_legacy_fallback_ids:
+                        continue
+                    if len(self.segment_buffer) == self.segment_buffer.maxlen:
+                        self._queue_v2_fallback(raw)
+                    else:
+                        self.segment_buffer.appendleft(dict(raw))
+                groups[owner] = []
+                segments = []
+                if not (is_current and photos):
+                    continue
             data = await self.cache.get(owner) if is_current else await self._load_conversation(owner)
             if not data:
                 if is_current and segments:
