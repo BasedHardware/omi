@@ -254,7 +254,7 @@ for every locale (`hardcoded-text` counts `Text('…')` with letters in it).
 | nothing here / nothing matches | `OmiEmptyState(icon:, title:, message:, action:)` (`glyph: FaIcon(…)` instead of `icon:` where the screen's glyphs are FontAwesome) | Title Case title, one action when it is how the page gets its first row |
 
 - Pull-to-refresh refreshes what the page shows. A failed load always offers Try Again.
-- Home and Tasks reserve three guidance lines with `OmiEmptyState(messageMinLines: 3)` so their empty-state icons and titles align. Messages can grow beyond this minimum with translations or larger text. Empty Tasks points to conversation capture and has no creation button.
+- Home and Tasks use `OmiEmptyState(titleLayoutReference:, messageLayoutReference:)` to reserve enough room for either tab’s title and guidance, keeping their empty-state icons and titles aligned when the text wraps differently. The reference is measured at the available width and text scale; only the current title and message are displayed or announced. Empty Tasks points to conversation capture and has no creation button.
 
 ## 14. Prompts
 

@@ -515,8 +515,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         child: OmiEmptyState(
           icon: Icons.task_alt_rounded,
           title: context.l10n.noTasksYet,
+          titleLayoutReference: context.l10n.noConversationsYet,
           message: context.l10n.tasksEmptyStateMessage,
-          messageMinLines: 3,
+          messageLayoutReference: context.l10n.noConversationsHeroMessage,
         ),
       ),
     );
