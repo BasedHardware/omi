@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -9,6 +10,8 @@ from google.cloud.firestore_v1 import transactional
 
 from database._client import get_data_plane_firestore_client
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
+
+logger = logging.getLogger(__name__)
 
 FIELD = 'live_stt_language_sessions'
 MAX_SESSIONS = 20
@@ -96,11 +99,13 @@ def get_live_language_sessions(uid: str, *, firestore_client: Any = None) -> lis
     if firestore_client is not None:
         try:
             return fetch()
-        except Exception:
+        except Exception as error:
+            logger.warning("Live STT language profile read failed for user %s: %s", clean_uid, error)
             return []
     try:
         return get_or_fetch(_CACHE, clean_uid, fetch)
-    except Exception:
+    except Exception as error:
+        logger.warning("Live STT language profile read failed for user %s: %s", clean_uid, error)
         return []
 
 
@@ -137,9 +142,9 @@ def append_live_language_session(uid: str, counts: dict[str, int], *, firestore_
         else:
             # Fallback for mock test doubles that do not provide transactional decorator wrappers
             snapshot = user_ref.get()
-            if not snapshot or not getattr(snapshot, 'exists', False):
+            if not snapshot or getattr(snapshot, 'exists', None) is False:
                 return False
-            data = snapshot.to_dict()
+            data = snapshot.to_dict() if callable(getattr(snapshot, 'to_dict', None)) else None
             sessions = _clean_sessions((data or {}).get(FIELD))
             user_ref.update({FIELD: (sessions + [clean])[-MAX_SESSIONS:]})
             updated = True

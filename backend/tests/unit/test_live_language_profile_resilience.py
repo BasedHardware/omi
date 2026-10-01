@@ -100,6 +100,15 @@ def test_get_live_language_sessions_firestore_exception_resilience():
     assert get_live_language_sessions("valid_uid", firestore_client=BrokenClient()) == []
 
 
+def test_get_live_language_sessions_read_failure_not_cached(monkeypatch: pytest.MonkeyPatch):
+    # Verify that when client fails, get_live_language_sessions does not populate cache with empty list
+    monkeypatch.setattr(
+        "database.live_language_profile._resolve_client",
+        lambda *_: (_ for _ in ()).throw(RuntimeError("Transient Firestore network failure")),
+    )
+    assert get_live_language_sessions("valid_uid") == []
+
+
 def test_get_live_language_sessions_missing_or_empty_snapshot():
     snapshot = SimpleNamespace(exists=False, to_dict=lambda: None)
     reference = SimpleNamespace(get=lambda *_: snapshot)
