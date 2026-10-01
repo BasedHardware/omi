@@ -649,17 +649,6 @@ ServerConversation? newestProcessingConversation(List<ServerConversation> conver
   });
 }
 
-Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
-  // Only show at most 1 processing widget on homepage
-  final newest = newestProcessingConversation(conversations);
-  if (newest == null) {
-    return const SliverToBoxAdapter(child: SizedBox.shrink());
-  }
-  return SliverToBoxAdapter(
-    child: ProcessingConversationWidget(key: ValueKey('processing_${newest.id}'), conversation: newest),
-  );
-}
-
 // PROCESSING CONVERSATION
 
 class ProcessingConversationWidget extends StatefulWidget {
