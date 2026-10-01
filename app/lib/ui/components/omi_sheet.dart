@@ -61,6 +61,9 @@ Future<T?> showOmiSheet<T>({
 /// `showModalBottomSheet(backgroundColor: ...)` fixes the colour when the sheet opens, so a sheet
 /// left open across a Light/Dark switch kept the old surface under content drawn in the new
 /// palette. [OmiSheetRoute] reads [surface] again whenever the theme rebuilds the sheet.
+///
+/// [showDragHandle] is false only for a sheet that cannot be dismissed (no drag, no scrim tap),
+/// where a handle would promise a swipe that does nothing.
 Future<T?> showOmiSurfaceSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -69,6 +72,7 @@ Future<T?> showOmiSurfaceSheet<T>({
   bool useSafeArea = true,
   bool isDismissible = true,
   bool enableDrag = true,
+  bool showDragHandle = true,
   bool useRootNavigator = false,
   RouteSettings? routeSettings,
 }) {
@@ -88,7 +92,7 @@ Future<T?> showOmiSurfaceSheet<T>({
       modalBarrierColor: Theme.of(context).bottomSheetTheme.modalBarrierColor,
       enableDrag: enableDrag,
       // Size (36x4) and colour come from the app theme's bottomSheetTheme (buildOmiTheme).
-      showDragHandle: true,
+      showDragHandle: showDragHandle,
       settings: routeSettings,
       useSafeArea: useSafeArea,
     ),
