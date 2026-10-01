@@ -137,7 +137,30 @@ Audio-timeline v2 retains at most the configured segment-buffer limit in each
 of its pending and unplaced fallback queues. If pending text fills the first
 queue, new text enters the legacy transaction as unplaced, retaining its ID
 and SEND conversation owner. A retry after an ambiguous commit filters IDs
-already stored inside that transaction. If both queues fill during a store
+already stored inside that transaction, plus the durable
+`live_transcript_replay_receipt`: segment IDs absorbed by an earlier committed
+merge no longer exist in the stored transcript, so the transaction also treats
+the receipt's commit buckets as seen before planning the fresh batch. The
+receipt is written in the same `transaction.update` as the merged transcript,
+holds the newest two absorbing commits of at most 128 absorbed IDs each (256
+total), is stored encrypted and zlib-compressed
+independent of the document's data-protection level, and never leaves the
+document — `prepare_conversation_for_read` drops it before any read response.
+A pure replay or a write that absorbs nothing leaves the receipt
+byte-identical; a replay that also carries fresh text keeps that text as its
+own segments without rotating the buckets. A batch larger than 128 unique
+incoming segments absorbs nothing so every supplied ID survives durably in the
+transcript instead of overflowing a bucket. While a same-owner retry sits in
+the unplaced fallback lane — whose wall-clock lag is unbounded — normal
+absorbing writes for that owner defer back to the pending queue so they cannot
+age a pending ambiguous ID out of the two-commit window; photos and other
+owners still drain. Two commits cover the serial per-owner drain: at most one
+ambiguous commit per owner can be unacknowledged behind the current batch, and
+the extra retained bucket is conservative margin. The normal retry budget is
+bounded (.5/1/2/4/8 s scheduled), while fallback lag is unbounded — the
+same-owner deferral above, not a TTL assumption, keeps the window valid. A
+document without the field has no historical absorbed-ID coverage; its first
+absorbing commit starts the receipt. If both queues fill during a store
 outage, admission raises an explicit capacity error and emits a metric; the
 callback cannot buffer transcript indefinitely.
 
@@ -1920,7 +1943,14 @@ explicit follow-ups. See `utils/sync/ARCHITECTURE.md` for recovery and indexing 
 Live capture passes fresh, unmerged STT segments to `update_conversation_segments(live_segments=...)`.
 The transaction reads the current transcript and manual receipt, then merges only
 its tail and the fresh batch, after applying the receipt to both so compared
-provenance is post-decision. A segment covered by a selected-ID decision blocks all
+provenance is post-decision. Every attempt also rebuilds the
+`live_transcript_replay_receipt` commit buckets from the document — never from
+caller state — so a retry after a lost acknowledgement cannot merge the same
+words twice; a present-but-malformed receipt fails the transaction closed
+without writing. Each absorbing commit appends its absorbed IDs as one bucket
+of at most 128, retaining only the newest two buckets, and the receipt is
+rewritten only when a merge absorbs new
+IDs. A segment covered by a selected-ID decision blocks all
 concatenation and partial sentence transfer. A speaker-wide default is a boundary:
 that speaker's segments only append to each other in chronological order (no sentence
 repair, no late arrivals), and never exchange words with another speaker. Clears,
