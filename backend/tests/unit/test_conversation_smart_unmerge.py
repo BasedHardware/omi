@@ -706,10 +706,13 @@ def test_donor_deleted_after_persistence_checkpoints_without_fanout(world, monke
 
 
 def test_post_merge_append_rejects_undo(world):
-    """Sync content appended after the last absorb (id-less, beyond the merged
-    extent) is not in the ledger; undo must reject instead of misdating."""
+    """Sync content appended after the last absorb — with or without a
+    sync-assigned segment id — is not in the ledger; undo must reject
+    instead of leaving transcript content beyond the restored extent."""
     segments = world.transcript('p')
-    segments.append({'text': 'appended after merge', 'speaker': 'SPEAKER_00', 'start': 1000.0, 'end': 1006.0})
+    segments.append(
+        {'id': 'appended-s1', 'text': 'appended after merge', 'speaker': 'SPEAKER_00', 'start': 1000.0, 'end': 1006.0}
+    )
     world.raw('p').update(
         smart_merge.conversations_db.encode_conversation_for_write(UID, {'transcript_segments': segments}, 'enhanced')
     )
@@ -717,12 +720,55 @@ def test_post_merge_append_rejects_undo(world):
     result = smart_merge.unmerge_conversation(UID, 'n')
     assert result.outcome == 'ineligible' and result.reason == 'survivor_appended_content'
     assert world.store.rows == before
-    # An append that starts inside the merged extent is not provable; allowed.
+    # Content that starts inside the merged extent is not provable; allowed.
     segments[-1] = dict(segments[-1], start=300.0, end=660.0)
     world.raw('p').update(
         smart_merge.conversations_db.encode_conversation_for_write(UID, {'transcript_segments': segments}, 'enhanced')
     )
     assert smart_merge.unmerge_conversation(UID, 'n').outcome == 'dry_run'
+
+
+def test_audio_deletion_holds_the_destructive_gate(world):
+    """Copied-audio deletion runs under the account-wide destructive gate, so
+    a legal hold placed after the undo transaction blocks it instead of
+    deleting retained evidence; the receipt stays pending for replay."""
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).outcome == 'ok'
+    gate = world.store.rows.get(('legal_hold_deletion_gates', UID))
+    # The gate was acquired for the audio phase and finished cleanly.
+    assert gate is not None and gate['kind'] == 'smart_merge_unmerge_audio'
+    assert gate['state'] == 'completed' and gate['uid'] == UID
+    assert world.removed_audio  # deletion ran inside the gate
+    assert 'unmerge_pending' not in world.raw('p')['smart_merge']
+
+
+def test_audio_deletion_blocked_by_late_legal_hold(world):
+    """A hold placed after the undo transaction commits must stop the
+    follow-up before it deletes retained audio; the receipt stays pending."""
+    from database.legal_holds import LEGAL_HOLD_SCHEMA_VERSION
+
+    real_transaction = unmerge_db.unmerge_transaction
+
+    def commit_then_hold(*args, **kwargs):
+        result = real_transaction(*args, **kwargs)
+        if result.outcome == 'ok':
+            world.store.rows[('legal_holds', UID)] = {
+                'schema_version': LEGAL_HOLD_SCHEMA_VERSION,
+                'issuer': 'admin',
+                'active': True,
+                'updated_at': datetime.now(timezone.utc),
+            }
+        return result
+
+    import utils.conversations.smart_merge as sm
+
+    sm.unmerge_db.unmerge_transaction = commit_then_hold
+    try:
+        with pytest.raises(smart_merge.SmartMergeIncomplete):
+            smart_merge.unmerge_conversation(UID, 'n', dry_run=False)
+    finally:
+        sm.unmerge_db.unmerge_transaction = real_transaction
+    assert not world.removed_audio  # retained evidence untouched
+    assert world.raw('p')['smart_merge']['unmerge_pending']  # replayable
 
 
 def test_cli_stays_suppressed_when_drain_times_out(world, monkeypatch, capsys):

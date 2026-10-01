@@ -68,6 +68,13 @@ class World:
         self.on_ask = None
         for module in (smart_merge_db, sync_bridges, conversations_db):
             monkeypatch.setattr(module, 'get_firestore_client', lambda: self.store)
+        # The unmerge follow-up acquires the account-wide destructive gate;
+        # run its real transactional logic against the strict store.
+        from database import legal_holds as legal_holds_db
+
+        monkeypatch.setattr(
+            legal_holds_db, 'account_deletion_firestore_client', lambda firestore_client=None: self.store
+        )
         monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda uid, cid: None)
         monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda uid, cid: None)
         monkeypatch.setattr(conversations_db, 'get_conversation', self.get)

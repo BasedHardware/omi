@@ -66,14 +66,14 @@ def _post_merge_append(
 ) -> str | None:
     """Sync content appended after the last absorb is not in the ledger.
 
-    The sync bridge appends without segment ids, and the undo payload derives
-    the survivor's new extent from the retained ledger fragments. An id-less
-    segment starting beyond the merged extent (the last ledger fragment) can
-    therefore only be a post-merge append: its retention would leave the
-    transcript ending after the restored ``finished_at``, so reject the undo
-    instead of misdating the survivor. Id-less segments inside a donor window
-    are not appends (the window fallback owns them), and id-bearing foreign
-    ids are deliberately preserved by the surgery, so neither is rejected.
+    The undo payload derives the survivor's new extent from the retained
+    ledger fragments, so content the ledger never recorded would be left in
+    the transcript behind an earlier ``finished_at``. Every merge-era
+    segment — the survivor's own and each donor's — lies inside a ledger
+    fragment, so any segment (with or without a sync-assigned id) that
+    starts beyond the merged extent can only be a post-merge append: reject
+    the undo instead of misdating the survivor. Donor-window id-less content
+    inside the extent still follows the window fallback like the surgery.
     """
     origin = survivor.get('started_at')
     if not isinstance(origin, datetime) or not segments:
@@ -83,9 +83,7 @@ def _post_merge_append(
         return None
     merged_until = max(fragment.finished_at for fragment in fragments).timestamp() - origin.timestamp()
     for segment in segments:
-        sid, start = segment.get('id'), segment.get('start')
-        if sid:
-            continue
+        start = segment.get('start')
         if isinstance(start, (int, float)) and start > merged_until + 1e-3:
             return 'survivor_appended_content'
     return None

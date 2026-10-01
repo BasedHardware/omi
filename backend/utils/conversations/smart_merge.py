@@ -53,7 +53,12 @@ from database import notifications as notification_db
 from database import smart_merge as smart_merge_db
 from database import smart_merge_unmerge as unmerge_db
 from database.firestore_read_metrics import FirestoreReadSite
-from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
+from database.legal_holds import (
+    DestructiveOperationInProgress,
+    LegalHoldActive,
+    LegalHoldAuthorityUnavailable,
+    destructive_operation_gate,
+)
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils import app_integrations
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
@@ -636,12 +641,19 @@ def finish_unmerge(uid: str, survivor_id: str) -> None:
         survivor_row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
         survivor_live = bool(survivor_row) and not survivor_row.get('deleted')
         if survivor_live:
-            for cid in pending['donor_ids']:
-                donor = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
-                filenames = (pending.get('audio_filenames') or {}).get(cid)
-                if filenames is not None or (donor and donor.get('sync_bridge_audio_target') == survivor_id):
-                    delete_copied_smart_merge_audio(uid, cid, survivor_id, filenames=filenames)
-            unmerge_audio.rebuild_audio(uid, survivor_id)
+            # The undo transaction fences against a hold at commit time, but
+            # copied-audio deletion removes retained evidence afterwards and
+            # must not run under a hold placed in between. The account-wide
+            # gate is the same authority a hold placement defers to, held
+            # across the deletion and rebuild only — donor processing is not
+            # destructive and stays outside the gate.
+            with destructive_operation_gate(uid, kind='smart_merge_unmerge_audio'):
+                for cid in pending['donor_ids']:
+                    donor = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
+                    filenames = (pending.get('audio_filenames') or {}).get(cid)
+                    if filenames is not None or (donor and donor.get('sync_bridge_audio_target') == survivor_id):
+                        delete_copied_smart_merge_audio(uid, cid, survivor_id, filenames=filenames)
+                unmerge_audio.rebuild_audio(uid, survivor_id)
             refresh_survivor(uid, survivor_id, owner=owner)
         for cid in pending['donor_ids']:
             pending = checkpoint()
