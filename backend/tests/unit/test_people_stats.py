@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 
 from models.other import Person
+from types import SimpleNamespace
+
+from models.transcript_segment import TranscriptSegment
+from utils.sync.speaker_identity import SpeakerIdentityDependencies, identify_speakers_for_segments
 from utils.people_stats import aggregate_people_stats, apply_people_stats, collect_people_stats
 
 
@@ -82,10 +86,6 @@ def test_apply_people_stats_adds_reasons_without_moving_the_band():
 
 
 def test_sync_text_matches_are_automatic_without_changing_manual_labels():
-    from types import SimpleNamespace
-    from models.transcript_segment import TranscriptSegment
-    from utils.sync.speaker_identity import SpeakerIdentityDependencies, identify_speakers_for_segments
-
     deps = SpeakerIdentityDependencies(
         users_db=SimpleNamespace(get_person_by_name=lambda uid, name: {'id': 'p1', 'name': name}),
         detect_speaker_from_text=lambda text, **kwargs: 'Maya' if text == 'I am Maya' else None,
