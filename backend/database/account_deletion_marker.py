@@ -20,7 +20,7 @@ ACCOUNT_DELETION_COLLECTION = "account_deletions"
 MAX_UID_LENGTH = 128
 
 
-def _clean_uid(uid: Any) -> str:
+def clean_uid(uid: Any) -> str:
     """Sanitize and validate UID before forming Firestore document paths.
 
     Preserves exact UID representation without stripping whitespace, while rejecting
@@ -33,6 +33,9 @@ def _clean_uid(uid: Any) -> str:
     if any(c in uid for c in ("/", "\\", "\0", "..")):
         return ""
     return uid
+
+
+_clean_uid = clean_uid
 
 
 def account_deletion_firestore_client(*, firestore_client: Any | None = None) -> Any:
@@ -52,10 +55,10 @@ def account_deletion_collection(*, firestore_client: Any | None = None) -> Any:
 
 
 def account_deletion_document(uid: str, *, firestore_client: Any | None = None) -> Any:
-    clean_uid = _clean_uid(uid)
-    if not clean_uid:
+    sanitized_uid = clean_uid(uid)
+    if not sanitized_uid:
         raise ValueError("uid must be a non-empty string without path separators or traversal characters")
-    return account_deletion_collection(firestore_client=firestore_client).document(clean_uid)
+    return account_deletion_collection(firestore_client=firestore_client).document(sanitized_uid)
 
 
 def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
@@ -68,12 +71,12 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     Fails closed on malformed UIDs or corrupt snapshots by raising an error that
     the auth fence translates to an access denial (HTTP 503).
     """
-    clean_uid = _clean_uid(uid)
-    if not clean_uid:
+    sanitized_uid = clean_uid(uid)
+    if not sanitized_uid:
         raise ValueError("uid must be a non-empty string without path separators or traversal characters")
 
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    doc_ref = account_deletion_document(clean_uid, firestore_client=client)
+    doc_ref = account_deletion_document(sanitized_uid, firestore_client=client)
     snapshot = doc_ref.get()
     if not hasattr(snapshot, "exists") or not isinstance(snapshot.exists, bool):
         raise RuntimeError("Malformed Firestore snapshot for account deletion marker")
@@ -101,5 +104,6 @@ __all__ = [
     "account_deletion_collection",
     "account_deletion_document",
     "account_deletion_firestore_client",
+    "clean_uid",
     "get_user_deletion_wipe_status",
 ]

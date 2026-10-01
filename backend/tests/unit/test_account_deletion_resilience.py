@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 import pytest
 
@@ -11,6 +12,7 @@ from database.account_deletion_marker import (
     MAX_UID_LENGTH,
     _clean_uid,
     account_deletion_document,
+    clean_uid,
     get_user_deletion_wipe_status,
 )
 from database.account_deletion_transitions import (
@@ -25,9 +27,11 @@ from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadS
 # ---------------------------------------------------------------------------
 # Helpers unwrapping @transactional decorators (matching repo test precedent)
 # ---------------------------------------------------------------------------
-raw_mark_wipe_completed = getattr(mark_wipe_completed, "to_wrap", mark_wipe_completed)
-raw_record_late_cleanup = getattr(record_late_agent_vm_cleanup, "to_wrap", record_late_agent_vm_cleanup)
-raw_adopt_legacy_cleanup = getattr(adopt_legacy_late_agent_vm_cleanup, "to_wrap", adopt_legacy_late_agent_vm_cleanup)
+raw_mark_wipe_completed: Any = getattr(mark_wipe_completed, "to_wrap", mark_wipe_completed)
+raw_record_late_cleanup: Any = getattr(record_late_agent_vm_cleanup, "to_wrap", record_late_agent_vm_cleanup)
+raw_adopt_legacy_cleanup: Any = getattr(
+    adopt_legacy_late_agent_vm_cleanup, "to_wrap", adopt_legacy_late_agent_vm_cleanup
+)
 
 
 class FakeTransaction:
@@ -48,18 +52,21 @@ class FakeTransaction:
 # Account Deletion Marker Tests
 # ---------------------------------------------------------------------------
 def test_clean_uid_validation():
-    assert _clean_uid(None) == ""
-    assert _clean_uid(12345) == ""
-    assert _clean_uid("") == ""
-    assert _clean_uid("u" * (MAX_UID_LENGTH + 1)) == ""
-    assert _clean_uid("user/slash") == ""
-    assert _clean_uid("user\\backslash") == ""
-    assert _clean_uid("user\0null") == ""
-    assert _clean_uid("user..traversal") == ""
+    assert clean_uid(None) == ""
+    assert clean_uid(12345) == ""
+    assert clean_uid("") == ""
+    assert clean_uid("u" * (MAX_UID_LENGTH + 1)) == ""
+    assert clean_uid("user/slash") == ""
+    assert clean_uid("user\\backslash") == ""
+    assert clean_uid("user\0null") == ""
+    assert clean_uid("user..traversal") == ""
 
     # Exact UID representation is preserved
-    assert _clean_uid("user_123") == "user_123"
-    assert _clean_uid("u" * MAX_UID_LENGTH) == "u" * MAX_UID_LENGTH
+    assert clean_uid("user_123") == "user_123"
+    assert clean_uid("u" * MAX_UID_LENGTH) == "u" * MAX_UID_LENGTH
+
+    # Backwards-compatibility alias matches
+    assert _clean_uid is clean_uid
 
 
 def test_account_deletion_document_and_client_injection():

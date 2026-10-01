@@ -6,7 +6,7 @@ from typing import Any
 from database._client import get_firestore_client
 from google.cloud.firestore_v1 import transactional
 
-from database.account_deletion_marker import _clean_uid
+from database.account_deletion_marker import clean_uid
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 
@@ -17,11 +17,11 @@ def read_agent_vm_migration_journals(uid: Any, *, firestore_client: Any | None =
     during an Agent VM migration.  Callers must validate each returned record
     against the provider before issuing destructive requests.
     """
-    clean_uid = _clean_uid(uid)
-    if not clean_uid:
+    sanitized_uid = clean_uid(uid)
+    if not sanitized_uid:
         raise ValueError('uid is required and must be a valid identifier without path traversal')
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    migration_ref = client.collection('users').document(clean_uid).collection('agentVmMigrations')
+    migration_ref = client.collection('users').document(sanitized_uid).collection('agentVmMigrations')
     journals: list[dict[str, Any]] = []
     for snapshot in migration_ref.stream():
         data = snapshot.to_dict()
