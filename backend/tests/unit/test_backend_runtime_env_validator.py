@@ -3178,9 +3178,12 @@ def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
         expected = {
             'CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT': '100',
             'MEMORY_OWNER_JEV_SHADOW_PERCENT': '100',
-            'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT': '0',
+            'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT': '2',
             'CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP': '60000',
             'MEMORY_OWNER_JEV_SHADOW_DAILY_CAP': '60000',
         }
         assert {name: env_block.get(name, {}).get('value') for name in expected} == expected, scope
     assert hosts == _JEV_PROCESS_CONVERSATION_HOSTS
+    # backend-sync-backfill is not a shadow host but also processes conversations.
+    backfill = dict(_manifest_env_blocks(prod))['cloud_run/backend-sync-backfill']
+    assert backfill['CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT']['value'] == '2'

@@ -3940,9 +3940,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'גרסה חדשה זמינה';
-
-  @override
   String get no => 'לא';
 
   @override
@@ -5010,7 +5007,7 @@ class AppLocalizationsHe extends AppLocalizations {
       'בהמשך, השיחות, ההקלטות והמידע האישי שלך יאוחסנו בצורה מאובטחת בשרתים שלנו. הקלטות האודיו והתמלולים שלך מעובדים על ידי שירותי AI של צד שלישי (כולל Deepgram לתמלול ו-OpenAI לניתוח) כדי לספק לך תובנות מבוססות AI ולאפשר את כל תכונות האפליקציה.';
 
   @override
-  String get tasksEmptyStateMessage => 'משימות משיחותיך יופיעו כאן.\nלחץ + כדי ליצור אחת ידנית.';
+  String get tasksEmptyStateMessage => 'התחילו שיחה כדי ליצור משימה.';
 
   @override
   String get clearChatAction => 'נקה שיחה';
@@ -12017,4 +12014,16 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'יש עדכון זמין';
+
+  @override
+  String get updateAvailableMessage => 'גרסה חדשה של Omi מוכנה, עם תיקונים ושיפורים.';
+
+  @override
+  String get updateRequiredTitle => 'נדרש עדכון';
+
+  @override
+  String get updateRequiredMessage => 'הגרסה הזו של Omi כבר לא נתמכת. יש לעדכן כדי להמשיך להקליט ולסנכרן.';
 }

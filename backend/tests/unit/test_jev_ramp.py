@@ -33,39 +33,54 @@ def test_bucket_is_stable_salted_and_in_range():
     assert all(0 <= config.uid_bucket(str(i), 'salt') < 100 for i in range(500))
 
 
-def test_disjoint_ranges_and_monotone_jev_ramp(monkeypatch):
+def test_same_uid_can_get_keep_all_and_nano_across_conversations(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '2')
+    selected = next(str(i) for i in range(1000) if config.keep_all_selected(f'conversation-{i}'))
+    unselected = next(str(i) for i in range(1000) if not config.keep_all_selected(f'conversation-{i}'))
+    assert config.relevance_arm('same-user', f'conversation-{selected}') == 'keep_all'
+    assert config.relevance_arm('same-user', f'conversation-{unselected}') == 'nano'
+
+
+def test_keep_all_selection_is_stable_per_conversation_id(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '2')
+    conversation_id = 'synthetic-conversation'
+    expected = config.keep_all_selected(conversation_id)
+    assert all(config.keep_all_selected(conversation_id) is expected for _ in range(20))
+
+
+def test_keep_all_selection_is_approximately_configured_percentage(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '2')
+    selected = sum(config.keep_all_selected(f'conversation-{i}') for i in range(50_000))
+    assert 900 <= selected <= 1100
+
+
+@pytest.mark.parametrize('invalid', ['broken', '', '-1', '101', 'nan', 'inf'])
+def test_invalid_keep_all_percentage_never_selects(invalid, monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', invalid)
+    assert all(not config.keep_all_selected(f'conversation-{i}') for i in range(500))
+
+
+def test_zero_keep_all_percentage_never_selects(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '0')
+    assert all(not config.keep_all_selected(f'conversation-{i}') for i in range(500))
+
+
+def test_conversation_keep_all_precedes_the_existing_jev_uid_window(monkeypatch):
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '2')
-    previous = set()
-    for percent in (1, 10, 50, 100):
-        monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', str(percent))
-        current = set()
-        for i in range(500):
-            uid = str(i)
-            bucket = config.uid_bucket(uid, 'relevance-arm-v1')
-            expected = 'keep_all' if bucket < 2 else 'jev' if bucket < min(100, 2 + percent) else 'nano'
-            assert config.relevance_arm(uid) == expected
-            if expected == 'jev':
-                current.add(uid)
-        assert previous <= current
-        previous = current
-
-
-def test_boundary_ranges_and_keep_all_window_shift(monkeypatch):
-    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'on')
-    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '2')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', '10')
-    monkeypatch.setattr(config, 'uid_bucket', lambda uid, salt: float(uid))
-    assert [config.relevance_arm(uid) for uid in ('0', '1.999', '2', '11.999', '12')] == [
-        'keep_all',
-        'keep_all',
-        'jev',
-        'jev',
-        'nano',
-    ]
-    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '4')
-    assert config.relevance_arm('2') == 'keep_all'
-    assert config.relevance_arm('12') == 'jev'
+    buckets = {
+        ('sampled', 'relevance-keepall-v1'): 1.0,
+        ('ordinary', 'relevance-keepall-v1'): 50.0,
+        ('uid-before-jev', 'relevance-arm-v1'): 1.0,
+        ('uid-jev', 'relevance-arm-v1'): 2.0,
+        ('uid-after-jev', 'relevance-arm-v1'): 12.0,
+    }
+    monkeypatch.setattr(config, 'uid_bucket', lambda value, salt: buckets[(value, salt)])
+    assert config.relevance_arm('uid-before-jev', 'sampled') == 'keep_all'
+    assert config.relevance_arm('uid-before-jev', 'ordinary') == 'nano'
+    assert config.relevance_arm('uid-jev', 'ordinary') == 'jev'
+    assert config.relevance_arm('uid-after-jev', 'ordinary') == 'nano'
 
 
 @pytest.mark.parametrize('invalid', ['broken', '', '-1', '101', 'nan', 'inf'])
@@ -74,9 +89,10 @@ def test_boundary_ranges_and_keep_all_window_shift(monkeypatch):
 def test_invalid_percentages_fail_closed(monkeypatch, invalid, invalid_controls, enabled):
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', enabled)
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'user')
-    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', invalid if invalid_controls != 'jev' else '100')
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '0' if invalid_controls == 'jev' else invalid)
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', invalid if invalid_controls != 'keep_all' else '100')
-    assert all(config.relevance_arm(uid) == 'nano' for uid in ['user', *(str(i) for i in range(100))])
+    uids = ['user', *(str(i) for i in range(100))]
+    assert all(config.relevance_arm(uid, str(i)) == 'nano' for i, uid in enumerate(uids))
 
 
 @pytest.mark.parametrize('percent', ['0', '1', '50', '99.9', 'broken', '', '-1', '101', 'nan', 'inf'])
@@ -95,14 +111,14 @@ def test_owner_flip_100_still_requires_the_flag(monkeypatch):
 
 def test_unset_percent_preserves_dev_and_allowlist_requires_flag(monkeypatch):
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'user')
-    assert config.relevance_arm('user') == 'nano'
+    assert config.relevance_arm('user', 'conversation') == 'nano'
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
-    assert all(config.relevance_arm(str(i)) == 'jev' for i in range(50))
+    assert all(config.relevance_arm(str(i), f'conversation-{i}') == 'jev' for i in range(50))
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', '0')
-    assert config.relevance_arm('user') == 'jev'
-    assert config.relevance_arm('other') == 'nano'
+    assert config.relevance_arm('user', 'conversation') == 'jev'
+    assert config.relevance_arm('other', 'conversation') == 'nano'
     monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '100')
-    assert config.relevance_arm('user') == 'keep_all'
+    assert config.relevance_arm('user', 'conversation') == 'keep_all'
 
 
 def test_owner_flip_flag_is_universal_not_uid_sampled(monkeypatch):
@@ -144,13 +160,38 @@ def test_inactive_nano_record_is_byte_for_byte_unchanged():
     assert json.dumps(actual).encode() == json.dumps(expected).encode()
 
 
-def test_keep_all_bypasses_both_models_and_neighbor_lookup():
-    model, jev, neighbor = MagicMock(), MagicMock(), MagicMock()
-    result = decision(arm='keep_all', model_discards=model, jev_discard_probability=jev, neighbor=neighbor)
-    assert (result.verdict, result.decided_by, result.reason) == ('keep', 'policy', 'keep_all_arm')
-    assert result.model_tier_reached and result.as_record()['arm'] == 'keep_all'
-    for callback in (model, jev, neighbor):
-        callback.assert_not_called()
+def test_keep_all_keeps_and_never_calls_jev_but_records_the_nano_counterfactual():
+    jev = MagicMock()
+    for nano_discards, verdict, reason in ((True, 'discard', 'model_discard'), (False, 'keep', 'model_keep')):
+        result = decision(
+            arm='keep_all',
+            model_discards=lambda on_error, adjacent, d=nano_discards: d,
+            jev_discard_probability=jev,
+        )
+        assert (result.verdict, result.decided_by, result.reason) == ('keep', 'policy', 'keep_all_arm')
+        assert result.model_tier_reached and result.as_record()['arm'] == 'keep_all'
+        assert (result.nano_verdict, result.nano_reason) == (verdict, reason)
+    jev.assert_not_called()
+
+
+def test_keep_all_records_neighbor_fragment_counterfactual_and_keeps():
+    result = decision(
+        arm='keep_all',
+        model_discards=lambda on_error, adjacent: True,
+        neighbor=lambda: Neighbor('kept-neighbor', 20, 'before'),
+    )
+    assert result.verdict == 'keep' and result.reason == 'keep_all_arm'
+    assert (result.nano_verdict, result.nano_reason) == ('discard', 'neighbor_fragment')
+
+
+def test_keep_all_nano_failure_still_keeps_with_no_counterfactual():
+    def failing(on_error, adjacent):
+        on_error(RuntimeError('nano down'))
+        return False
+
+    result = decision(arm='keep_all', model_discards=failing)
+    assert result.verdict == 'keep' and result.reason == 'keep_all_arm'
+    assert result.nano_verdict is None and result.nano_reason is None
 
 
 @pytest.mark.parametrize(

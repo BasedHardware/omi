@@ -4003,9 +4003,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Nouvelle version disponible';
-
-  @override
   String get no => 'Non';
 
   @override
@@ -5104,8 +5101,7 @@ class AppLocalizationsFr extends AppLocalizations {
       'En continuant, vos conversations, enregistrements et informations personnelles seront stockés en toute sécurité sur nos serveurs. Vos enregistrements audio et transcriptions sont traités par des services d\'IA tiers (notamment Deepgram pour la transcription et OpenAI pour l\'analyse) afin de vous fournir des informations alimentées par l\'IA et d\'activer toutes les fonctionnalités de l\'application.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Les tâches de vos conversations apparaîtront ici.\nAppuyez sur + pour en créer une manuellement.';
+  String get tasksEmptyStateMessage => 'Démarrez une conversation pour créer une tâche.';
 
   @override
   String get clearChatAction => 'Effacer le chat';
@@ -12212,4 +12208,18 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Mise à jour disponible';
+
+  @override
+  String get updateAvailableMessage =>
+      'Une nouvelle version d\'Omi est prête, avec des corrections et des améliorations.';
+
+  @override
+  String get updateRequiredTitle => 'Mise à jour requise';
+
+  @override
+  String get updateRequiredMessage =>
+      'Cette version d\'Omi n\'est plus prise en charge. Mettez à jour pour continuer à enregistrer et à synchroniser.';
 }

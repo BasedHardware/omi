@@ -1220,7 +1220,6 @@
     "appsCount": "Aplicacions ({count})",
     "privateAppsCount": "Aplicacions privades ({count})",
     "publicAppsCount": "Aplicacions públiques ({count})",
-    "newVersionAvailable": "Nova versió disponible",
     "no": "No",
     "subscriptionCancelledSuccessfully": "Subscripció cancel·lada amb èxit. Romandrà activa fins al final del període de facturació actual.",
     "failedToCancelSubscription": "No s'ha pogut cancel·lar la subscripció. Torna-ho a provar.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Durada: {seconds} segons",
     "additionalSpeechSampleRemoved": "S'ha eliminat la mostra de veu addicional",
     "consentDataMessage": "Continuant, les vostres converses, enregistraments i informació personal s'emmagatzemaran de manera segura als nostres servidors. Els vostres enregistraments d'àudio i transcripcions són processats per serveis d'IA de tercers (incloent Deepgram per a la transcripció i OpenAI per a l'anàlisi) per proporcionar-vos informació impulsada per IA i habilitar totes les funcions de l'aplicació.",
-    "tasksEmptyStateMessage": "Les tasques de les teves converses apareixeran aquí.\nToca + per crear-ne una manualment.",
+    "tasksEmptyStateMessage": "Inicia una conversa per crear una tasca.",
     "clearChatAction": "Esborrar el xat",
     "enableApps": "Activar aplicacions",
     "omiAppName": "Omi",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "S'aplica a totes les línies d'aquest parlant",
     "collapseAction": "Replega",
     "speakerTagPromptNotMeAction": "No sóc jo",
-    "confidenceNextLabels": "{count, plural, =1{Etiqueta'ls en 1 conversa més.} other{Etiqueta'ls en {count} converses més.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etiqueta'ls en 1 conversa més.} other{Etiqueta'ls en {count} converses més.}}",
+    "updateAvailableTitle": "Actualització disponible",
+    "updateAvailableMessage": "Hi ha una nova versió d'Omi a punt, amb correccions i millores.",
+    "updateRequiredTitle": "Cal actualitzar",
+    "updateRequiredMessage": "Aquesta versió d'Omi ja no és compatible. Actualitza-la per continuar gravant i sincronitzant."
 }
