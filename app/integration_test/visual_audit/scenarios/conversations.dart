@@ -24,23 +24,25 @@ const _page = 'lib/pages/conversations/conversations_page.dart (ConversationsPag
 
 /// A ConversationProvider already holding [items], grouped by date, whose deletes succeed locally.
 List<SingleChildWidget> _listProviders(List<ServerConversation> items) {
-  final provider = ConversationProvider(
-    conversationListFetcher: () async => (items: items, ok: true),
-    isSignedIn: () => true,
-  )
-    ..conversationDeleteFetcherOverride = ((_) async => true)
-    ..conversations = items
-    ..groupConversationsByDate();
+  final provider =
+      ConversationProvider(conversationListFetcher: () async => (items: items, ok: true), isSignedIn: () => true)
+        ..conversationDeleteFetcherOverride = ((_) async => true)
+        ..conversations = items
+        ..groupConversationsByDate();
   return [
     ChangeNotifierProvider<ConversationProvider>.value(value: provider),
     ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
   ];
 }
 
-const _twoSourceGroup = CaptureGroup(id: 'group-1', primaryId: 'grouped-a', members: [
-  CaptureGroupMember(id: 'grouped-a', source: 'desktop'),
-  CaptureGroupMember(id: 'grouped-a-omi', source: 'omi'),
-]);
+const _twoSourceGroup = CaptureGroup(
+  id: 'group-1',
+  primaryId: 'grouped-a',
+  members: [
+    CaptureGroupMember(id: 'grouped-a', source: 'desktop'),
+    CaptureGroupMember(id: 'grouped-a-omi', source: 'omi'),
+  ],
+);
 
 final conversationsScenarios = <AuditScenario>[
   AuditScenario(
@@ -64,7 +66,7 @@ final conversationsScenarios = <AuditScenario>[
       globalNavigatorKey.currentState!.pop();
       await a.settle();
       // A raw gesture in steps: the first move claims the horizontal drag before the row's
-      // long-press recognizer fires, the rest carry the row past the dismiss threshold.
+      // long-press recognizer fires, the rest carry the row past the point where it asks.
       final gesture = await a.tester.startGesture(a.tester.getCenter(find.byType(ConversationListItem).first));
       for (var i = 0; i < 6; i++) {
         await gesture.moveBy(const Offset(-60, 0));
@@ -72,8 +74,8 @@ final conversationsScenarios = <AuditScenario>[
       }
       await gesture.up();
       await a.settle();
-      expect(find.text('Delete Conversation?'), findsOneWidget);
-      await a.shot('Swipe the first row to delete: the delete confirmation', step: 'swipe-delete');
+      expect(find.text('Delete Conversation'), findsOneWidget);
+      await a.shot('Swipe the first row to delete: the confirm menu from its delete button', step: 'swipe-delete');
     },
   ),
   AuditScenario(
@@ -107,7 +109,8 @@ final conversationsScenarios = <AuditScenario>[
         stats: DayStats(totalConversations: 5, actionItemsCount: 3),
       );
       await a.pump(
-          DailyRecapsPage(fetchSummaries: ({int limit = 20, int offset = 0}) async => (items: [summary], ok: true)));
+        DailyRecapsPage(fetchSummaries: ({int limit = 20, int offset = 0}) async => (items: [summary], ok: true)),
+      );
       await a.shot('Open Daily Recaps');
     },
   ),

@@ -3975,9 +3975,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Nova različica dostopna';
-
-  @override
   String get no => 'Ne';
 
   @override
@@ -5063,8 +5060,7 @@ class AppLocalizationsSl extends AppLocalizations {
       'Z nadaljevanjem bodo vaši pogovori, posnetki in osebni podatki varno shranjeni na naših strežnikih. Vaši zvočni posnetki in prepisi se obdelujejo s storitvami umetne inteligence tretjih oseb (vključno z Deepgram za prepis in OpenAI za analizo), da vam zagotovimo vpoglede, ki jih poganja umetna inteligenca, in omogočimo vse funkcije aplikacije.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Naloge iz vaših pogovorov se bodo prikazale tukaj.\nTapnite + za ročno ustvarjanje.';
+  String get tasksEmptyStateMessage => 'Začnite pogovor, da ustvarite nalogo.';
 
   @override
   String get clearChatAction => 'Počistite klepet';
@@ -12142,4 +12138,17 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Na voljo je posodobitev';
+
+  @override
+  String get updateAvailableMessage => 'Nova različica aplikacije Omi je pripravljena, s popravki in izboljšavami.';
+
+  @override
+  String get updateRequiredTitle => 'Potrebna je posodobitev';
+
+  @override
+  String get updateRequiredMessage =>
+      'Ta različica aplikacije Omi ni več podprta. Posodobite jo, da boste lahko še naprej snemali in sinhronizirali.';
 }

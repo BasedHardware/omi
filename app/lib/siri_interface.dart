@@ -47,8 +47,17 @@ class SiriSessionConfig {
   String deviceIdHash;
   String? token;
   int? tokenExpiresAtMs;
-  SiriSessionConfig(this.uid, this.generation, this.baseUrl, this.profile, this.appVersion, this.appBuild,
-      this.deviceIdHash, this.token, this.tokenExpiresAtMs);
+  SiriSessionConfig(
+    this.uid,
+    this.generation,
+    this.baseUrl,
+    this.profile,
+    this.appVersion,
+    this.appBuild,
+    this.deviceIdHash,
+    this.token,
+    this.tokenExpiresAtMs,
+  );
 }
 
 class SiriTelemetryRecord {
@@ -57,7 +66,15 @@ class SiriTelemetryRecord {
   String outcome;
   int latencyMs;
   int entityCounts;
-  SiriTelemetryRecord(this.kind, this.intent, this.outcome, this.latencyMs, this.entityCounts);
+  String entryPath;
+  SiriTelemetryRecord(this.kind, this.intent, this.outcome, this.latencyMs, this.entityCounts, this.entryPath);
+}
+
+class SiriPendingRoute {
+  String route;
+  String uid;
+  int generation;
+  SiriPendingRoute(this.route, this.uid, this.generation);
 }
 
 @HostApi()
@@ -101,7 +118,8 @@ abstract class SiriIndexApi {
   void setCurrentScreen(String route, String? entityId);
   @async
   void publishSessionConfig(SiriSessionConfig config);
-  String? takePendingRoute();
+  SiriPendingRoute? takePendingRoute();
+  void finishPendingRoute(String route, String uid, int generation, bool delivered);
   bool isEnabled();
   List<SiriTelemetryRecord> takeTelemetry();
   @async
@@ -113,7 +131,7 @@ abstract class SiriEventsApi {
   void memoryCreated(String id);
   void taskChanged(String id);
   @async
-  bool openRoute(String route);
+  bool openRoute(String route, String uid, int generation);
   @async
   void setListening(bool enabled);
 }

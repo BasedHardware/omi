@@ -63,10 +63,10 @@ class HomeDeepLink {
   /// The home tab the link belongs to, so the parent (the tab) shows before the child (the page
   /// pushed over it). Null keeps the current tab.
   int? get tabIndex => switch (alias) {
-        'action-items' || 'task' => HomeProvider.tasksTab,
-        'memories' || 'facts' || 'memory' || 'search' || 'conversations' || 'conversation' => HomeProvider.homeTab,
-        _ => null,
-      };
+    'action-items' || 'task' => HomeProvider.tasksTab,
+    'memories' || 'facts' || 'memory' || 'search' || 'conversations' || 'conversation' => HomeProvider.homeTab,
+    _ => null,
+  };
 }
 
 /// Opens [link] on top of the home shell whose [context] is given: parent first (the tab, or the
@@ -84,7 +84,9 @@ Future<void> openHomeDeepLink(
   Future<Memory?> Function(String)? memoryById,
   void Function(Memory)? onMemoryOpened,
   void Function()? onItemUnavailable,
+  bool Function()? canOpen,
 }) async {
+  if (canOpen != null && !canOpen()) return;
   final id = link.id;
   switch (link.alias) {
     case 'conversations':
@@ -95,7 +97,7 @@ Future<void> openHomeDeepLink(
       if (id == null) return;
       final provider = context.read<MemoriesProvider>();
       final memory = await (memoryById?.call(id) ?? _resolveIndexedMemoryById(id));
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (memory == null) {
         if (onItemUnavailable != null) {
           onItemUnavailable();
@@ -120,7 +122,7 @@ Future<void> openHomeDeepLink(
             ? result.data
             : null;
       }
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (task == null || !siriTaskIsIndexable(task, DateTime.now())) {
         if (onItemUnavailable != null) {
           onItemUnavailable();
@@ -140,7 +142,7 @@ Future<void> openHomeDeepLink(
     case 'apps':
       if (id == null) return;
       final app = await context.read<AppProvider>().getAppFromId(id);
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (app == null) {
         OmiFeedback.info(context, context.l10n.appNotFoundOrRemoved);
         return;
@@ -148,10 +150,8 @@ Future<void> openHomeDeepLink(
       unawaited(routeToPage(context, AppDetailPage(app: app)));
     case 'chat':
       await _prepareChat(context, id);
-      if (!context.mounted) return;
-      unawaited(
-        openChatSheet(context, ChatPage(isPivotBottom: false, startFresh: true, initialDraft: link.query['draft'])),
-      );
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
+      unawaited(openChatSheet(context, ChatPage(isPivotBottom: false, initialDraft: link.query['draft'])));
     case 'settings':
       // The sheet is pushed synchronously, so a page pushed next lands on top of it.
       unawaited(openSettings());
@@ -165,16 +165,18 @@ Future<void> openHomeDeepLink(
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
       final conversation = await getConversationById(id);
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (FirebaseAuth.instance.currentUser?.uid != uid || conversation == null) {
         Logger.debug('Conversation not found: $id');
         OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);
         return;
       }
-      unawaited(routeToPage(
-        context,
-        ConversationDetailPage(conversation: conversation, openShareToContactsOnLoad: link.query['share'] == '1'),
-      ));
+      unawaited(
+        routeToPage(
+          context,
+          ConversationDetailPage(conversation: conversation, openShareToContactsOnLoad: link.query['share'] == '1'),
+        ),
+      );
     case 'daily-summary':
       if (id == null) return;
       PlatformManager.instance.analytics.dailySummaryNotificationOpened(
@@ -199,11 +201,8 @@ Future<Memory?> _resolveIndexedMemoryById(String id) async {
   return resolveIndexedMemoryById(id, uid: uid, ownerIsCurrent: () => FirebaseAuth.instance.currentUser?.uid == uid);
 }
 
-typedef IndexedMemoryPageFetcher = Future<memories_api.GetMemoriesResult> Function({
-  required int limit,
-  required int offset,
-  String? cursor,
-});
+typedef IndexedMemoryPageFetcher =
+    Future<memories_api.GetMemoriesResult> Function({required int limit, required int offset, String? cursor});
 
 /// Resolve a Siri memory against owner-wide pages, including rows hidden by
 /// useful-now, this-device, search, or the first visible page.
@@ -218,14 +217,15 @@ Future<Memory?> resolveIndexedMemoryById(
   String? cursor;
   final seenCursors = <String>{};
   for (var page = 0; page < 100; page++) {
-    final result = await (fetchPage?.call(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor) ??
-        memories_api.getMemoriesResult(
-          limit: limit,
-          offset: cursor == null ? offset : 0,
-          cursor: cursor,
-          view: memories_api.MemoryReadView.all,
-          forceView: true,
-        ));
+    final result =
+        await (fetchPage?.call(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor) ??
+            memories_api.getMemoriesResult(
+              limit: limit,
+              offset: cursor == null ? offset : 0,
+              cursor: cursor,
+              view: memories_api.MemoryReadView.all,
+              forceView: true,
+            ));
     if (!ownerIsCurrent() || !result.ok || result.truncated) return null;
     for (final row in result.memories) {
       if (row.id == id && row.uid == uid && siriMemoryIsIndexable(row, DateTime.now())) return row;

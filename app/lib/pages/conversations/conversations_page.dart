@@ -16,7 +16,6 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/models/local_recording.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
@@ -81,8 +80,7 @@ bool shouldReleaseConversationLoadMoreLatch({
   required String? currentRequestKey,
   required String requestKey,
   required bool succeeded,
-}) =>
-    !succeeded && currentRequestKey == requestKey;
+}) => !succeeded && currentRequestKey == requestKey;
 
 String conversationLoadMoreFilterKey({
   required String query,
@@ -94,18 +92,17 @@ String conversationLoadMoreFilterKey({
   required bool discarded,
   required bool shortOnly,
   required int shortThreshold,
-}) =>
-    [
-      query,
-      folderId ?? '',
-      speakerId ?? '',
-      startDate?.toIso8601String() ?? '',
-      endDate?.toIso8601String() ?? '',
-      starredOnly,
-      discarded,
-      shortOnly,
-      shortThreshold,
-    ].join('|');
+}) => [
+  query,
+  folderId ?? '',
+  speakerId ?? '',
+  startDate?.toIso8601String() ?? '',
+  endDate?.toIso8601String() ?? '',
+  starredOnly,
+  discarded,
+  shortOnly,
+  shortThreshold,
+].join('|');
 
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
@@ -459,17 +456,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
   }
 
-  Widget _buildNoConversationsHero(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 120),
-      child: OmiEmptyState(
-        icon: Icons.forum_rounded,
-        title: context.l10n.noConversationsYet,
-        message: context.l10n.noConversationsHeroMessage,
-      ),
-    );
-  }
-
   Widget _buildLoadingShimmer() {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -506,7 +492,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings =
+            convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly;
         final recordingsByDate = <DateTime, List<LocalRecording>>{};
@@ -522,25 +509,27 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool hasProcessingConversations = snapshot.processingConversations.isNotEmpty;
         final apiPhase = snapshot.apiViewPhase;
-        final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
+        final bool showTypedStatus =
+            apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
             apiPhase == ApiViewPhase.authenticationRequired ||
             apiPhase == ApiViewPhase.empty;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
-        final bool isShowingConversationSkeleton = isWaitingForInitialData ||
+        final bool isShowingConversationSkeleton =
+            isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
         final bool showCaptureGaps = _captureGapsEligible(convoProvider) && !convoProvider.isSelectionModeActive;
-        final captureGapsByDate =
-            showCaptureGaps ? _captureGaps.gapsByDate : const <DateTime, List<CalendarCaptureGap>>{};
+        final captureGapsByDate = showCaptureGaps
+            ? _captureGaps.gapsByDate
+            : const <DateTime, List<CalendarCaptureGap>>{};
         final mergedDates = <DateTime>{
           ...convoProvider.groupedConversations.keys,
           ...recordingsByDate.keys,
           if (showCaptureGaps) ...captureGapsByDate.keys,
-        }.toList()
-          ..sort((a, b) => b.compareTo(a));
+        }.toList()..sort((a, b) => b.compareTo(a));
         final conversationRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: convoProvider.groupedConversations,
@@ -599,7 +588,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
-                SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoConversationsHero(context)))
+                const SliverFillRemaining(hasScrollBody: false, child: Center(child: NoConversationsHero()))
               else if (hasProcessingConversations && convoProvider.groupedConversations.isEmpty && !hasRecordings)
                 const SliverToBoxAdapter(child: SizedBox(height: 20))
               else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && !isShowingConversationSkeleton)

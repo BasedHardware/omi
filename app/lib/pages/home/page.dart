@@ -308,14 +308,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       try {
         final diagnostics = await BleHostApi().getDeviceDiagnostics(diagnosticsDeviceId);
         final startMs = backgroundStartedAt.millisecondsSinceEpoch;
-        final recentEvents =
-            diagnostics.disconnectHistory.where((event) => event.timestamp >= startMs && !event.isManual).toList();
-        final backgroundEvents =
-            recentEvents.where((event) => event.appState == 'background' || event.appState == 'inactive').toList();
+        final recentEvents = diagnostics.disconnectHistory
+            .where((event) => event.timestamp >= startMs && !event.isManual)
+            .toList();
+        final backgroundEvents = recentEvents
+            .where((event) => event.appState == 'background' || event.appState == 'inactive')
+            .toList();
         backgroundDisconnectCount = backgroundEvents.where((event) => event.eventType == 'disconnect').length;
         failToConnectCount = backgroundEvents.where((event) => event.eventType == 'fail_to_connect').length;
-        connectionTimeoutCount =
-            backgroundEvents.where((event) => event.reason.toLowerCase().contains('timeout')).length;
+        connectionTimeoutCount = backgroundEvents
+            .where((event) => event.reason.toLowerCase().contains('timeout'))
+            .length;
         final reconnectedEvents = backgroundEvents.where((event) => event.timeToReconnectMs > 0).toList();
         reconnectCount = reconnectedEvents.length;
         for (final event in reconnectedEvents) {
@@ -325,7 +328,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         reconnectionCountTotal = diagnostics.reconnectionCount;
         failToConnectCountTotal = diagnostics.failToConnectCount;
-        bleHistorySaturated = diagnostics.disconnectHistory.length >= 20 &&
+        bleHistorySaturated =
+            diagnostics.disconnectHistory.length >= 20 &&
             diagnostics.disconnectHistory.every((event) => event.timestamp >= startMs);
         nativeBackgroundBytesConsumed = diagnostics.nativeBackgroundBytesConsumed;
         nativeBackgroundPacketsConsumed = diagnostics.nativeBackgroundPacketsConsumed;
@@ -483,15 +487,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   /// Opens a link inside this shell (notification taps, quick actions, app links): its tab first,
   /// then its page — never a second Home (nav #3, #18).
-  Future<void> _openRoute(String route) async {
+  Future<void> _openRoute(String route, {bool Function()? canOpen}) async {
     final link = HomeDeepLink.parse(route);
-    if (link == null || !mounted) return;
+    if (link == null || !mounted || (canOpen != null && !canOpen())) return;
     final tab = link.tabIndex;
     if (tab != null) {
       _ensurePageInitialized(tab);
       context.read<HomeProvider>().setIndex(tab);
     }
-    await openHomeDeepLink(context, link, openSettings: _openSettings, openSearch: _openSearch);
+    await openHomeDeepLink(context, link, openSettings: _openSettings, openSearch: _openSearch, canOpen: canOpen);
   }
 
   /// Opens the search overlay over the shell, optionally with a query already typed (a `/search`
@@ -830,7 +834,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _openChat({bool voice = false}) {
     OmiHaptics.selection();
     PlatformManager.instance.analytics.bottomNavigationTabClicked(voice ? 'Chat Voice' : 'Chat');
-    openChatSheet(context, ChatPage(isPivotBottom: false, startFresh: true, autoStartVoice: voice));
+    openChatSheet(context, ChatPage(isPivotBottom: false, autoStartVoice: voice));
   }
 
   Widget _buildChatBar(BuildContext context) {

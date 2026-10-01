@@ -1220,7 +1220,6 @@
     "appsCount": "Aplikacje ({count})",
     "privateAppsCount": "Prywatne aplikacje ({count})",
     "publicAppsCount": "Publiczne aplikacje ({count})",
-    "newVersionAvailable": "Dostępna nowa wersja",
     "no": "Nie",
     "subscriptionCancelledSuccessfully": "Subskrypcja anulowana pomyślnie. Pozostanie aktywna do końca bieżącego okresu rozliczeniowego.",
     "failedToCancelSubscription": "Nie udało się anulować subskrypcji. Spróbuj ponownie.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Czas trwania: {seconds} sekund",
     "additionalSpeechSampleRemoved": "Dodatkowa próbka głosowa usunięta",
     "consentDataMessage": "Kontynuując, Twoje rozmowy, nagrania i dane osobowe będą bezpiecznie przechowywane na naszych serwerach. Twoje nagrania audio i transkrypcje są przetwarzane przez zewnętrzne usługi AI (w tym Deepgram do transkrypcji i OpenAI do analizy), aby dostarczyć Ci wglądy oparte na AI i umożliwić wszystkie funkcje aplikacji.",
-    "tasksEmptyStateMessage": "Zadania z twoich rozmów pojawią się tutaj.\nDotknij +, aby utworzyć ręcznie.",
+    "tasksEmptyStateMessage": "Rozpocznij rozmowę, aby utworzyć zadanie.",
     "clearChatAction": "Wyczyść czat",
     "enableApps": "Włącz aplikacje",
     "omiAppName": "Omi",
@@ -3800,5 +3799,9 @@
     "speakerSuggestionAppliesToSpeaker": "Dotyczy każdej wypowiedzi tego mówcy",
     "collapseAction": "Zwiń",
     "speakerTagPromptNotMeAction": "To nie ja",
-    "confidenceNextLabels": "{count, plural, =1{Oznacz je jeszcze w 1 rozmowie.} other{Oznacz je jeszcze w {count} rozmowach.}}"
+    "confidenceNextLabels": "{count, plural, =1{Oznacz je jeszcze w 1 rozmowie.} other{Oznacz je jeszcze w {count} rozmowach.}}",
+    "updateAvailableTitle": "Dostępna aktualizacja",
+    "updateAvailableMessage": "Nowa wersja Omi jest gotowa – z poprawkami i ulepszeniami.",
+    "updateRequiredTitle": "Wymagana aktualizacja",
+    "updateRequiredMessage": "Ta wersja Omi nie jest już obsługiwana. Zaktualizuj, aby dalej nagrywać i synchronizować."
 }

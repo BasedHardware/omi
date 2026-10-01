@@ -18,8 +18,11 @@ void main() {
         tester,
         Scaffold(
           body: Center(
-            child:
-                OmiIconButton(icon: const Icon(Icons.share, size: 16), label: 'Share memory', onPressed: () => taps++),
+            child: OmiIconButton(
+              icon: const Icon(Icons.share, size: 16),
+              label: 'Share memory',
+              onPressed: () => taps++,
+            ),
           ),
         ),
       );
@@ -39,7 +42,9 @@ void main() {
       final semantics = tester.ensureSemantics();
       await pumpUi(
         tester,
-        const Scaffold(body: OmiIconButton(icon: Icon(Icons.delete), label: 'Delete', onPressed: null)),
+        const Scaffold(
+          body: OmiIconButton(icon: Icon(Icons.delete), label: 'Delete', onPressed: null),
+        ),
       );
       final data = tester.getSemantics(find.bySemanticsLabel('Delete')).getSemanticsData();
       expect(data.flagsCollection.isEnabled, isNot(Tristate.isTrue));
@@ -49,7 +54,7 @@ void main() {
   });
 
   group('showOmiSheet', () {
-    Future<Future<String?>> openSheet(WidgetTester tester) async {
+    Future<Future<String?>> openSheet(WidgetTester tester, {bool dismissible = true}) async {
       late Future<String?> result;
       await pumpUi(
         tester,
@@ -60,10 +65,10 @@ void main() {
                 result = showOmiSheet<String>(
                   context: context,
                   title: 'Move to Folder',
-                  builder: (sheetContext) => TextButton(
-                    onPressed: () => Navigator.of(sheetContext).pop('work'),
-                    child: const Text('Work'),
-                  ),
+                  isDismissible: dismissible,
+                  enableDrag: dismissible,
+                  builder: (sheetContext) =>
+                      TextButton(onPressed: () => Navigator.of(sheetContext).pop('work'), child: const Text('Work')),
                 );
               },
               child: const Text('open'),
@@ -91,6 +96,12 @@ void main() {
       expect(sheet.backgroundColor, OmiColors.surface1);
     });
 
+    testWidgets('a sheet nothing can swipe or tap away has no drag handle', (tester) async {
+      await openSheet(tester, dismissible: false);
+      expect(tester.widget<BottomSheet>(find.byType(BottomSheet)).showDragHandle, isFalse);
+      expect(find.bySemanticsLabel('Dismiss'), findsNothing);
+    });
+
     testWidgets('closes on X with a null result', (tester) async {
       final result = await openSheet(tester);
       await tester.tap(find.byType(OmiCloseButton));
@@ -113,8 +124,12 @@ void main() {
       await pumpUi(
         tester,
         Scaffold(
-            body: OmiErrorState(
-                title: "Couldn't Load Tasks", message: 'Check your connection.', onRetry: () => retries++)),
+          body: OmiErrorState(
+            title: "Couldn't Load Tasks",
+            message: 'Check your connection.',
+            onRetry: () => retries++,
+          ),
+        ),
       );
       expect(find.text("Couldn't Load Tasks"), findsOneWidget);
       expect(find.text('Check your connection.'), findsOneWidget);
@@ -149,7 +164,9 @@ void main() {
     testWidgets('OmiEmptyState draws a non-Material glyph at the empty-state size', (tester) async {
       await pumpUi(
         tester,
-        const Scaffold(body: OmiEmptyState(glyph: FaIcon(FontAwesomeIcons.key), title: 'No API Keys')),
+        const Scaffold(
+          body: OmiEmptyState(glyph: FaIcon(FontAwesomeIcons.key), title: 'No API Keys'),
+        ),
       );
       final glyph = find.byType(FaIcon);
       expect(glyph, findsOneWidget);
@@ -222,9 +239,17 @@ void main() {
     });
 
     testWidgets('OmiSwitch is a Cupertino switch on iOS and a Material switch on Android', (tester) async {
-      await pumpUi(tester, Scaffold(body: OmiSwitch(value: true, onChanged: (_) {})), platform: TargetPlatform.iOS);
+      await pumpUi(
+        tester,
+        Scaffold(body: OmiSwitch(value: true, onChanged: (_) {})),
+        platform: TargetPlatform.iOS,
+      );
       expect(find.byType(Switch), findsNothing);
-      await pumpUi(tester, Scaffold(body: OmiSwitch(value: true, onChanged: (_) {})), platform: TargetPlatform.android);
+      await pumpUi(
+        tester,
+        Scaffold(body: OmiSwitch(value: true, onChanged: (_) {})),
+        platform: TargetPlatform.android,
+      );
       await tester.pumpAndSettle(); // the theme animates to the new platform
       expect(find.byType(Switch), findsOneWidget);
     });

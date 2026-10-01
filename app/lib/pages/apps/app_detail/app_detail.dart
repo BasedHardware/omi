@@ -434,10 +434,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                           ),
                         ),
-                        placeholder: (context, url) => const SizedBox.square(
-                          dimension: 108,
-                          child: Center(child: OmiSpinner()),
-                        ),
+                        placeholder: (context, url) =>
+                            const SizedBox.square(dimension: 108, child: Center(child: OmiSpinner())),
                         errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
                       ),
                       const SizedBox(width: 20),
@@ -631,8 +629,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     ),
                                     const SizedBox(height: OmiSpacing.md),
                                     RecentReviewsSection(
-                                      reviews:
-                                          app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
+                                      reviews: app.reviews
+                                          .sorted((a, b) => b.ratedAt.compareTo(a.ratedAt))
+                                          .take(3)
+                                          .toList(),
                                       userReview: app.userReview,
                                       app: app,
                                       onReviewUpdated: () => setState(() {}),
@@ -925,7 +925,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         messageProvider.sendInitialAppMessage(selectedApp);
       }
       PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
-      if (mounted) await openChatSheet(context, const ChatPage(isPivotBottom: false, startFresh: false));
+      if (mounted) await openChatSheet(context, const ChatPage(isPivotBottom: false));
     } finally {
       if (mounted) setState(() => chatButtonLoading = false);
     }
@@ -936,20 +936,31 @@ class _AppDetailPageState extends State<AppDetailPage> {
     // iPad needs the share button's position for the popover.
     final box = buttonContext.findRenderObject() as RenderBox?;
     final origin = box != null ? box.localToGlobal(Offset.zero) & box.size : null;
-    final outcome = await SharePlus.instance
-        .share(ShareParams(text: appShareUrl(app.id, sid: sid), subject: app.name, sharePositionOrigin: origin));
+    final outcome = await SharePlus.instance.share(
+      ShareParams(
+        text: appShareUrl(app.id, sid: sid),
+        subject: app.name,
+        sharePositionOrigin: origin,
+      ),
+    );
     final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
-    PlatformManager.instance.analytics.track('App Shared', properties: {
-      'appId': app.id,
-      'share_id': sid,
-      'share_status': outcome.status.name,
-      if (targetApp != null) 'target_app': targetApp
-    });
-    PlatformManager.instance.analytics.track('App Detail Shared', properties: {
-      'app_id': app.id,
-      'app_name': app.name,
-      'share_id': sid,
-      if (targetApp != null) 'target_app': targetApp,
-    });
+    PlatformManager.instance.analytics.track(
+      'App Shared',
+      properties: {
+        'appId': app.id,
+        'share_id': sid,
+        'share_status': outcome.status.name,
+        if (targetApp != null) 'target_app': targetApp,
+      },
+    );
+    PlatformManager.instance.analytics.track(
+      'App Detail Shared',
+      properties: {
+        'app_id': app.id,
+        'app_name': app.name,
+        'share_id': sid,
+        if (targetApp != null) 'target_app': targetApp,
+      },
+    );
   }
 }

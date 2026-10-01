@@ -68,19 +68,20 @@ class _WalService implements IWalService {
 SyncUploadGate _offlineGate() {
   return SyncUploadGate(
     limiter: SyncRateLimiter.instance,
-    uploader: (
-      files, {
-      onUploadProgress,
-      conversationId,
-      captureEvidence,
-      recordingSessionId,
-      audioStartSeconds,
-      audioEndSeconds,
-      claimLiveCapture = false,
-      geolocation,
-    }) async {
-      throw StateError('unexpected upload in sync button test');
-    },
+    uploader:
+        (
+          files, {
+          onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation,
+        }) async {
+          throw StateError('unexpected upload in sync button test');
+        },
     fairUseStatusLoader: () async => {'stage': 'none'},
   );
 }
@@ -192,8 +193,7 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('stays quiet: no fill, a bare tertiary count, no warning colour while files wait on the device',
-      (tester) async {
+  testWidgets('keeps the filled circle and a black-and-white badge while files wait on the device', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     localSync.testWals = [
       _wal(timerStart: now - 120, storage: WalStorage.sdcard),
@@ -204,16 +204,28 @@ void main() {
 
     await pumpButton(tester, syncProvider, hasPairedDevice: true);
 
-    final count = tester.widget<Text>(find.byKey(const ValueKey('header_count_badge')));
-    expect(count.style!.color, OmiColors.textTertiary);
-    final icon = tester.widget<Icon>(find.byIcon(Icons.cloud_outlined));
-    expect(icon.color, OmiColors.textTertiary);
+    final badge = tester.widget<Container>(find.byKey(const ValueKey('header_count_badge')));
+    expect((badge.decoration as BoxDecoration).color, OmiColors.accent);
+    expect(tester.widget<Text>(find.text('2')).style!.color, OmiColors.onAccent);
+    expect(tester.widget<Icon>(find.byIcon(Icons.cloud_rounded)).color, OmiColors.textSecondary);
     expect(
       find.byWidgetPredicate(
         (w) =>
             w is Container &&
             w.decoration is BoxDecoration &&
-            (w.decoration as BoxDecoration).color == OmiColors.warning,
+            (w.decoration as BoxDecoration).shape == BoxShape.circle &&
+            (w.decoration as BoxDecoration).color == OmiColors.surface1,
+      ),
+      findsOneWidget,
+      reason: 'the same filled circle as Search and Settings',
+    );
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            ((w.decoration as BoxDecoration).color == OmiColors.warning ||
+                (w.decoration as BoxDecoration).color == OmiColors.warning.withValues(alpha: 0.15)),
       ),
       findsNothing,
     );

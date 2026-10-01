@@ -455,6 +455,52 @@ describe("server Firestore manifest contract: static chains, aliases, and review
     expect(notifications.every((shape) => !served(shape, without))).toBe(true);
   });
 
+  it("removing an additive single-field override refuses the group scans it serves", () => {
+    const cases: [string, string, string][] = [
+      [
+        "app/api/omi/fair-use/case/[caseRef]/route.ts",
+        "fair_use_events",
+        "case_ref",
+      ],
+      ["app/api/omi/stats/infra-costs/route.ts", "llm_usage", "date"],
+    ];
+    for (const [relative, collection, field] of cases) {
+      const shapes = extract(
+        readFileSync(path.join(root, relative), "utf8")
+      ).shapes.filter(
+        (shape) =>
+          shape.collection === collection && shape.scope === "COLLECTION_GROUP"
+      );
+      expect(shapes.length, relative).toBeGreaterThan(0);
+      const removed: Manifest = {
+        ...manifest,
+        fieldOverrides: manifest.fieldOverrides.filter(
+          (entry) =>
+            !(entry.collectionGroup === collection && entry.fieldPath === field)
+        ),
+      };
+      const collectionsOnly: Manifest = {
+        ...manifest,
+        fieldOverrides: manifest.fieldOverrides.map((entry) =>
+          entry.collectionGroup === collection && entry.fieldPath === field
+            ? {
+                ...entry,
+                indexes: (entry.indexes ?? []).filter(
+                  (index) =>
+                    (index.queryScope ?? "COLLECTION") !== "COLLECTION_GROUP"
+                ),
+              }
+            : entry
+        ),
+      };
+      for (const shape of shapes) {
+        expect(served(shape), relative).toBe(true);
+        expect(served(shape, removed), relative).toBe(false);
+        expect(served(shape, collectionsOnly), relative).toBe(false);
+      }
+    }
+  });
+
   it("refuses unresolved dynamic fields and newly reassigned query modifiers", () => {
     expect(
       extract("const q=db.collection('c'); q.where(field,'==',v).get();")

@@ -1234,7 +1234,6 @@
     "appsCount": "التطبيقات ({count})",
     "privateAppsCount": "التطبيقات الخاصة ({count})",
     "publicAppsCount": "التطبيقات العامة ({count})",
-    "newVersionAvailable": "إصدار جديد متاح",
     "no": "لا",
     "subscriptionCancelledSuccessfully": "تم إلغاء الاشتراك بنجاح. سيظل نشطًا حتى نهاية فترة الفوترة الحالية.",
     "failedToCancelSubscription": "فشل إلغاء الاشتراك. يرجى المحاولة مرة أخرى.",
@@ -1558,7 +1557,7 @@
     "durationSeconds": "المدة: {seconds} ثانية",
     "additionalSpeechSampleRemoved": "تمت إزالة عينة الكلام الإضافية",
     "consentDataMessage": "بالمتابعة، سيتم تخزين محادثاتك وتسجيلاتك ومعلوماتك الشخصية بشكل آمن على خوادمنا. تتم معالجة تسجيلاتك الصوتية ونصوصك بواسطة خدمات ذكاء اصطناعي تابعة لجهات خارجية (بما في ذلك Deepgram للنسخ و OpenAI للتحليل) لتزويدك برؤى مدعومة بالذكاء الاصطناعي وتمكين جميع ميزات التطبيق.",
-    "tasksEmptyStateMessage": "ستظهر المهام من محادثاتك هنا.\nاضغط على + لإنشاء مهمة يدويًا.",
+    "tasksEmptyStateMessage": "ابدأ محادثة لإنشاء مهمة.",
     "clearChatAction": "مسح المحادثة",
     "enableApps": "تفعيل التطبيقات",
     "omiAppName": "Omi",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "ينطبق على كل سطر من هذا المتحدث",
     "collapseAction": "طيّ",
     "speakerTagPromptNotMeAction": "ليس أنا",
-    "confidenceNextLabels": "{count, plural, =1{قم بوسم هذا الشخص في محادثة واحدة أخرى.} other{قم بوسم هذا الشخص في {count} محادثات أخرى.}}"
+    "confidenceNextLabels": "{count, plural, =1{قم بوسم هذا الشخص في محادثة واحدة أخرى.} other{قم بوسم هذا الشخص في {count} محادثات أخرى.}}",
+    "updateAvailableTitle": "يتوفر تحديث",
+    "updateAvailableMessage": "إصدار جديد من Omi جاهز، مع إصلاحات وتحسينات.",
+    "updateRequiredTitle": "التحديث مطلوب",
+    "updateRequiredMessage": "لم يعد هذا الإصدار من Omi مدعومًا. حدّث التطبيق لمواصلة التسجيل والمزامنة."
 }

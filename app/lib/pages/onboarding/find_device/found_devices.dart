@@ -235,7 +235,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => OmiAlertDialog(
+        builder: (dialogContext, setDialogState) => OmiDialogCard(
           title: device.getFirmwareWarningTitle(),
           message: warningMessage,
           content: OmiCheckboxRow(
@@ -333,8 +333,10 @@ class _FoundDevicesState extends State<FoundDevices> {
                           color: provider.batteryPercentage <= 25 ? OmiColors.danger : OmiColors.textSecondary,
                         ),
                         const SizedBox(width: OmiSpacing.xxs),
-                        Text('${provider.batteryPercentage}%',
-                            style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
+                        Text(
+                          '${provider.batteryPercentage}%',
+                          style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
+                        ),
                       ],
                     ),
                   ),

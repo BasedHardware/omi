@@ -1,18 +1,30 @@
 import ast
 import importlib
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from google.auth.credentials import AnonymousCredentials
 from google.cloud.firestore_v1 import Client
 
+from database.firestore_index_registry import FIELD_INDEX_REQUIREMENTS
 from scripts import firestore_index_oracle as oracle
 from scripts import firestore_query_shapes as exporter
 from tests.support import firestore_outside_query_drivers as outside
+from tests.support.firestore_caller_witnesses import (
+    install_capture,
+    matching_profile_names,
+    witness_completeness_errors,
+)
+from tests.support.firestore_conversation_profiles import discover_callers
 from tests.support.firestore_index_rules import is_served
+from tests.support.firestore_outside_caller_witnesses import (
+    TARGETS as OUTSIDE_WITNESS_TARGETS,
+    WITNESSES as OUTSIDE_WITNESSES,
+    _run_scheduled_health_check,
+)
 from tests.support.firestore_query_driver_registry import DRIVERS
 from tests.support.firestore_query_drivers import run_all_drivers
-from database.firestore_outside_index_requirements import OUTSIDE_SERVING_FIELD_INDEX_CALLERS
 from tests.support.firestore_serving_query_inventory import (
     discover_serving_query_functions,
     serving_function_body_digest,
@@ -21,10 +33,37 @@ from tests.support.firestore_shape_recorder import RecordingFirestore
 
 ROOT = Path(__file__).resolve().parents[2]
 
+OUTSIDE_FIELD_REQUIREMENT_PAIRS = (
+    ('chat_first_dead_letters', 'created_at'),
+    ('chat_first_proactive_intents', 'created_at'),
+    ('fair_use_events', 'case_ref'),
+    ('llm_usage', 'date'),
+)
+
 
 @pytest.fixture(scope='module')
 def outside_results():
     return run_all_drivers(outside.DRIVERS)
+
+
+@pytest.fixture(scope='module')
+def outside_caller_inventory():
+    return discover_callers(ROOT, OUTSIDE_WITNESS_TARGETS)
+
+
+@pytest.fixture(scope='module')
+def outside_contract_artifacts(outside_results):
+    manifest = exporter.load_manifest()
+    client = Client(project='shape-contract', credentials=AnonymousCredentials())
+    queries = {
+        key: [
+            oracle.build_query(oracle.hydrate_shape(shape.to_dict(), client, 'outside-contract'), client)
+            for shape in result.shapes
+        ]
+        for key, result in outside_results.items()
+    }
+    payload = exporter.build_export(outside_results, manifest)
+    return {'manifest': manifest, 'queries': queries, 'payload': payload}
 
 
 def test_outside_registry_is_part_of_the_export_registry():
@@ -32,21 +71,21 @@ def test_outside_registry_is_part_of_the_export_registry():
     assert all(DRIVERS[key] is entry for key, entry in outside.DRIVERS.items())
 
 
-def test_every_outside_shape_is_manifest_served_and_oracle_serializable(outside_results):
-    manifest = exporter.load_manifest()
-    client = Client(project='shape-contract', credentials=AnonymousCredentials())
+def test_every_outside_shape_is_manifest_served_and_oracle_serializable(outside_results, outside_contract_artifacts):
+    manifest = outside_contract_artifacts['manifest']
     for key, result in outside_results.items():
         assert not result.errors, (key, result.errors)
         assert result.shapes, key
-        for shape in result.shapes:
+        queries = outside_contract_artifacts['queries'][key]
+        assert len(queries) == len(result.shapes)
+        for shape, query in zip(result.shapes, queries):
             assert is_served(shape, manifest), (key, shape.to_dict())
-            encoded = shape.to_dict()
-            hydrated = oracle.hydrate_shape(encoded, client, 'outside-contract')
-            query = oracle.build_query(hydrated, client)
             assert query is not None
-    payload = exporter.build_export(outside_results, manifest)
+    payload = outside_contract_artifacts['payload']
     assert {row['function'] for row in payload['drivers']} == set(outside.DRIVERS)
     assert payload['counts']['unserved_certain'] == payload['counts']['unserved_uncertain'] == 0
+    for row in payload['shapes']:
+        assert row['served'] and not row['uncertain'], (row['id'], row['driver_function'])
     assert oracle.deduplicate(payload['shapes'])
 
 
@@ -56,6 +95,9 @@ def test_operational_profiles_are_explicit_and_exported(outside_results):
         assert {shape.parameter_combo['caller_profile'] for shape in outside_results[key].shapes} == {
             profile.name for profile in entry.profiles
         }, key
+        for profile in entry.profiles:
+            want = not profile.name.startswith(('operational-', 'maintenance-'))
+            assert profile.serving is want, (key, profile.name)
     assert (
         outside.DRIVERS['utils.memory.belief_backfill._default_item_reader'].profiles[0].name.startswith('operational-')
     )
@@ -153,27 +195,85 @@ def test_relocated_queries_keep_their_exact_shapes():
     assert case.limit == 1
 
 
-def test_group_single_field_requirements_preserve_collection_defaults_and_cite_callers():
+def test_outside_field_requirements_generate_their_manifest_overrides():
     manifest = exporter.load_manifest()
-    for pair, callers in OUTSIDE_SERVING_FIELD_INDEX_CALLERS.items():
+    for pair in OUTSIDE_FIELD_REQUIREMENT_PAIRS:
         collection, field = pair
+        requirements = [
+            requirement
+            for requirement in FIELD_INDEX_REQUIREMENTS
+            if (requirement.collection_group, requirement.field_path) == pair
+        ]
+        assert requirements, pair
         overrides = [
             entry for entry in manifest['fieldOverrides'] if (entry['collectionGroup'], entry['fieldPath']) == pair
         ]
         assert len(overrides) == 1, pair
-        assert overrides[0]['indexes'] == [
-            {'order': 'ASCENDING', 'queryScope': 'COLLECTION'},
-            {'order': 'DESCENDING', 'queryScope': 'COLLECTION'},
-            {'arrayConfig': 'CONTAINS', 'queryScope': 'COLLECTION'},
-            {'order': 'ASCENDING', 'queryScope': 'COLLECTION_GROUP'},
-        ]
-        assert callers
-        for caller in callers:
-            path = caller.split(':')[0]
-            assert (ROOT.parent / path if path.startswith('web/') else ROOT / path).is_file(), caller
+        assert overrides[0] in [requirement.to_manifest() for requirement in requirements], pair
         assert not any(
             entry['collectionGroup'] == collection
             and entry['queryScope'] == 'COLLECTION_GROUP'
             and [part['fieldPath'] for part in entry['fields']] == [field, '__name__']
             for entry in manifest['indexes']
         )
+    fair_use = next(
+        requirement
+        for requirement in FIELD_INDEX_REQUIREMENTS
+        if (requirement.collection_group, requirement.field_path) == ('fair_use_events', 'case_ref')
+    )
+    assert set(fair_use.collection_group_modes) == {'ASCENDING', 'DESCENDING'}
+
+
+def test_nonserving_outside_row_flipped_to_serving_fails_the_guard(outside_contract_artifacts):
+    nonserving = [row for row in outside_contract_artifacts['payload']['shapes'] if not row['serving']]
+    assert nonserving
+    unserved = dict(nonserving[0], served=False)
+    assert not exporter.format_guard_failure(exporter.evaluate_shapes([unserved]))
+    flipped = dict(unserved, serving=True)
+    assert exporter.format_guard_failure(exporter.evaluate_shapes([flipped]))
+
+
+def test_outside_caller_witnesses_match_the_discovered_bindings(outside_caller_inventory):
+    errors = witness_completeness_errors(outside_caller_inventory, OUTSIDE_WITNESSES)
+    assert not errors, '; '.join(errors)
+    for witness in OUTSIDE_WITNESSES.values():
+        names = {profile.name for profile in outside.DRIVERS[witness.target].profiles}
+        assert witness.profiles and set(witness.profiles) <= names, witness.key
+
+
+def test_outside_caller_completeness_flags_a_new_discovered_binding(outside_caller_inventory):
+    discovered = dict(outside_caller_inventory)
+    injected = 'routers/fair_use_admin.py:new_case_route:database.serving_query_reads.find_fair_use_case_snapshots'
+    discovered[injected] = {
+        'target': 'database.serving_query_reads.find_fair_use_case_snapshots',
+        'references': 1,
+    }
+    errors = witness_completeness_errors(discovered, OUTSIDE_WITNESSES)
+    assert any(injected in error for error in errors)
+
+
+@pytest.mark.parametrize('witness_key', sorted(OUTSIDE_WITNESSES))
+def test_outside_caller_witness_executes_the_real_caller(monkeypatch, witness_key):
+    witness = OUTSIDE_WITNESSES[witness_key]
+    capture = install_capture(monkeypatch, witness)
+    witness.run(monkeypatch, capture)
+    assert capture.calls, witness_key
+    profiles = outside.DRIVERS[witness.target].profiles
+    for call in capture.calls:
+        assert matching_profile_names(profiles, call) == set(witness.profiles), (witness_key, call)
+
+
+def test_scheduled_health_check_windows_the_real_collector(monkeypatch):
+    witness = OUTSIDE_WITNESSES[
+        'utils/task_intelligence/chat_first_materialization_health.py:collect:'
+        'utils.task_intelligence.chat_first_materialization_health._documents'
+    ]
+    capture = install_capture(monkeypatch, replace(witness, abort=False))
+    status, captured = _run_scheduled_health_check(monkeypatch, capture)
+    assert status == 'healthy'
+    entry = outside.DRIVERS[witness.target]
+    scheduled = next(profile for profile in entry.profiles if profile.name == 'scheduled-materialization-health')
+    assert scheduled.serving is True
+    assert matching_profile_names((scheduled,), captured) == {'scheduled-materialization-health'}
+    for mutation in ({'uid': 'shape-user'}, {'min_created_at': None}, {'limit': 25}):
+        assert not matching_profile_names((scheduled,), {**captured, **mutation})

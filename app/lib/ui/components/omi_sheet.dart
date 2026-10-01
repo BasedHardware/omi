@@ -21,7 +21,8 @@ import 'package:omi/ui/omi_tokens.dart';
 ///
 /// Migrating an existing sheet: delete its hand-drawn handle, title row and close X, and pass its
 /// title here. Sheets are dismissed by the X, a swipe down, or a tap on the scrim; set
-/// [isDismissible]/[enableDrag] to false only while an irreversible operation runs.
+/// [isDismissible]/[enableDrag] to false only while an irreversible operation runs. With both false
+/// the sheet has no drag handle, since nothing would answer a swipe.
 Future<T?> showOmiSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -41,6 +42,7 @@ Future<T?> showOmiSheet<T>({
     useSafeArea: useSafeArea,
     isDismissible: isDismissible,
     enableDrag: enableDrag,
+    showDragHandle: isDismissible || enableDrag,
     useRootNavigator: useRootNavigator,
     routeSettings: routeSettings,
     builder: (sheetContext) => OmiSheetScaffold(
@@ -61,6 +63,9 @@ Future<T?> showOmiSheet<T>({
 /// `showModalBottomSheet(backgroundColor: ...)` fixes the colour when the sheet opens, so a sheet
 /// left open across a Light/Dark switch kept the old surface under content drawn in the new
 /// palette. [OmiSheetRoute] reads [surface] again whenever the theme rebuilds the sheet.
+///
+/// Pass [showDragHandle] false for a sheet that cannot be dismissed (no drag, no scrim tap), where a
+/// handle would promise a swipe that does nothing; [showOmiSheet] does this for you.
 Future<T?> showOmiSurfaceSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -69,6 +74,7 @@ Future<T?> showOmiSurfaceSheet<T>({
   bool useSafeArea = true,
   bool isDismissible = true,
   bool enableDrag = true,
+  bool showDragHandle = true,
   bool useRootNavigator = false,
   RouteSettings? routeSettings,
 }) {
@@ -88,7 +94,7 @@ Future<T?> showOmiSurfaceSheet<T>({
       modalBarrierColor: Theme.of(context).bottomSheetTheme.modalBarrierColor,
       enableDrag: enableDrag,
       // Size (36x4) and colour come from the app theme's bottomSheetTheme (buildOmiTheme).
-      showDragHandle: true,
+      showDragHandle: showDragHandle,
       settings: routeSettings,
       useSafeArea: useSafeArea,
     ),
@@ -176,15 +182,21 @@ class OmiSheetScaffold extends StatelessWidget {
                           ? const SizedBox.shrink()
                           : Semantics(
                               header: true,
-                              child:
-                                  Text(title!, style: OmiType.headline, maxLines: 2, overflow: TextOverflow.ellipsis),
+                              child: Text(
+                                title!,
+                                style: OmiType.headline,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                     ),
                     if (showCloseButton) OmiCloseButton(onPressed: onClose, color: OmiColors.textSecondary),
                   ],
                 ),
               ),
-            Flexible(child: Padding(padding: padding, child: child)),
+            Flexible(
+              child: Padding(padding: padding, child: child),
+            ),
           ],
         ),
       ),

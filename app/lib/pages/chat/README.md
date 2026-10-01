@@ -1,56 +1,34 @@
 # Mobile chat
 
 Chat opens as a full-screen popup through `openChatSheet`. It keeps the existing app theme,
-composer, streaming renderer, citations, attachments and microphone controls. Past chats
-is a pushed page above the popup; Back returns to that exact Chat page and Close or a
-downward pull from the top handle returns
-to the original caller. The popup owns no Home instance or bottom navigation bar.
+composer, streaming renderer, citations, attachments and microphone controls. Close or a
+downward pull from the top handle returns to the original caller. The popup owns no Home
+instance or bottom navigation bar.
 
 ## Ownership
 
 | Component | Responsibility |
 |---|---|
-| `chat_route.dart` | `openChatSheet` and `ChatSheetRoute`: one popup transition and the header pull-to-dismiss for Home, quick actions, app detail, conversation detail and deep links. |
-| `page.dart` | Focus, editable draft, quoted/conversation context and integration with existing send/voice behavior. |
-| `widgets/chat_entrance.dart` | A single disposable entrance timeline; only an explicit new-chat revision replays it. |
-| `widgets/chat_starters.dart` | Localized greeting and editable question chips; never sends a message. |
-| `widgets/chat_chrome.dart` | Close, history, selected app and connection/loading feedback. |
-| `past_chats_page.dart` | Server history projection, pagination, refresh/retry, app choice and confirmed deletion. Returns a selection to the existing page. |
-| `providers/chat_history_state.dart` | MessageProvider's selected thread and history lifecycle. No separate persistent transcript or new cache. |
-| `backend/http/api/chat_sessions.dart` | Existing authenticated session endpoints, with explicit typed success/failure outcomes. |
+| `chat_route.dart` | Shared popup transition and header pull-to-dismiss for every entry point. |
+| `page.dart` | Focus, editable draft, conversation context and existing send/voice behavior. |
+| `widgets/chat_entrance.dart` | One disposable entrance timeline per popup. |
+| `widgets/chat_starters.dart` | Localized greeting and editable question chips. |
+| `widgets/chat_chrome.dart` | Close, centered dismissal handle, selected app and loading feedback. |
+| `providers/chat_history_state.dart` | Existing current-thread loading and cache; shared session compatibility. |
 
 ## Thread and draft rules
 
-Normal user entry requests a fresh thread; rendering `ChatPage` alone does not erase an
-existing transcript. App-detail entry retains the selected app. If a send or voice operation
-is already active, fresh entry cannot replace that operation's thread.
+All mobile entry points resume the current conversation. Opening or closing the popup never
+creates a chat session, clears messages or changes an active send's target. An empty provider
+loads the server-current transcript through the existing current-chat path and cache.
+Typed questions and composer microphone transcripts continue that same conversation.
+The mobile popup has no Past chats or New Chat controls.
 
-Opening a fresh screen does not create a server record. Its first typed or transcribed
-question creates the session once, then sends with that explicit ID. Creation failure leaves
-a retryable failed reply and **does not fall back to the server-current thread**. Retry keeps
-the original question, attachment IDs and context. Titles are derived through the existing
-title endpoint after a completed reply; a title failure does not fail the reply.
-
-Opening history alone preserves the draft. Choosing a different thread with text or
-attachments asks before discarding them. A history read replaces the current thread only
-after success. Text typed while that read is pending is retained; completing a switch only
-clears the draft that existed before it started. Every history load captures a revision: a slow earlier result cannot replace
-a newer selection, a fresh thread or a disposed provider. Thread changes are blocked during
-message sending, voice work, file upload and destructive mutations.
-
-Session reads never fall back to the old unscoped message cache. The legacy current-chat
-path retains its existing cache for compatibility. History list failures show Retry rather
-than an empty-history claim; failed refreshes retain visible rows. A successful empty list
-shows the localized empty state. Both history and older messages paginate.
-
-Deletion uses the shared row menu and destructive confirmation. The row stays until the
-server succeeds. Deleting the selected session starts a fresh thread only after success.
-Deleting another session leaves the visible transcript alone.
-
-The composer microphone retains Stop → transcribe → edit, direct Send and Discard. It sends
-the resulting text through the same explicitly targeted path. Pendant-button voice uses a
-separate, existing server-current voice endpoint; its playback may continue while history
-is being viewed, but its reply is not appended to an explicitly selected past thread.
+Existing server sessions and stored messages remain intact. Shared session APIs stay available
+for their other consumers; this change does not merge or delete previously saved sessions.
+Selected chat apps retain their existing scoped behavior. The composer microphone keeps
+Stop → transcribe → edit, direct Send and Discard. Clear Chat still requires the existing
+destructive confirmation.
 
 ## Motion and accessibility
 
@@ -76,8 +54,8 @@ callout text, distinct from the user's filled message bubble. They retain a
 Only the latest completed AI reply can supply that suggestion, in the fixed area above the
 composer and keyboard. Historical answers never render their own chips. Sending a new turn
 hides the old suggestion immediately; a newer answer without one leaves the area empty.
-Opening a saved chat derives the suggestion from its latest reply, without changing stored
-content blocks. Suggestions are hidden during history loading, streaming, voice work and offline use.
+Reloading the current conversation derives its suggestion from the latest reply without changing
+stored content blocks. Suggestions are hidden during loading, streaming, voice work and offline use.
 
 The top handle drives the route position directly while dragging. A short or cancelled pull
 settles back with its draft and focus intact. A pull past 22% of the screen or a downward
@@ -90,8 +68,7 @@ matching the supplied V3 design without a second network request or a late layou
 number starts counting at 250 ms over 650 ms with the prototype's cubic power easing, driven by
 the same 1.1-second entrance as the three text lines. Provider updates change the settled number
 without replaying the greeting. Reduce Motion shows the final number immediately, and screen
-readers receive only the final count. The Chat Apps management shortcut is absent from Past chats;
-New Chat and saved-thread actions remain.
+readers receive only the final count. Closing and reopening the popup does not reset the conversation.
 
 ## Verification
 
@@ -100,10 +77,9 @@ New Chat and saved-thread actions remain.
 - `test/providers/chat_history_state_test.dart`: delayed results, session creation failure and
   retry, single-flight creation, switching during sends, scoped cache behavior, pagination,
   deletion and disposal.
-- `test/widgets/past_chats_page_test.dart`: retry, selection, deletion confirmation and pagination.
-- `test/widgets/chat_history_navigation_test.dart`: actual ChatPage-to-history navigation,
-  read-only selection, failed reads, delayed-read draft preservation, starter editing,
-  follow-up sends and header-only swipe dismissal.
+- `test/widgets/chat_continuity_navigation_test.dart`: reopen continuity, current-thread initial
+  loading, active sends, absent history controls, centered handle, starter editing, follow-ups
+  and header-only swipe dismissal.
 - `test/widgets/chat_presentation_test.dart`: stable draft/focus across rebuilds, deliberate
   replay, reduced motion, small-screen large text, and popup/history return navigation.
 - `test/widgets/chat_greeting_count_test.dart`: exact text and stagger timing, count-up easing,

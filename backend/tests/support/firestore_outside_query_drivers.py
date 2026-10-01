@@ -39,7 +39,18 @@ def _stub(dotted, value):
     return patcher
 
 
-def _driver(function, *, base=None, domains=None, neutrals=None, setup=None, patchers=(), trials=1, profile='request'):
+def _driver(
+    function,
+    *,
+    base=None,
+    domains=None,
+    neutrals=None,
+    setup=None,
+    patchers=(),
+    trials=1,
+    profile='request',
+    serving=True,
+):
     entry = DriverEntry(
         function,
         base=base or {},
@@ -47,7 +58,7 @@ def _driver(function, *, base=None, domains=None, neutrals=None, setup=None, pat
         setup=setup,
         patchers=patchers,
         trials=trials,
-        profiles=(CallerProfile(profile, domains or {}),),
+        profiles=(CallerProfile(profile, domains or {}, serving=serving),),
     )
     if function in DRIVERS:
         raise ValueError(function)
@@ -239,6 +250,7 @@ _driver(
     base={'uid': UID},
     neutrals={'now': NOW, 'limit': LIMIT},
     profile='maintenance-keyframe-retention',
+    serving=False,
 )
 _driver(
     'services.frame_request_retention._load_user_page',
@@ -246,6 +258,7 @@ _driver(
     setup=_inventory_cursors,
     trials=2,
     profile='maintenance-frame-retention',
+    serving=False,
 )
 _driver(
     'services.users.data_export._iter_user_subcollection',
@@ -323,6 +336,7 @@ _driver(
     base={'experiment_id': 'experiment-1'},
     neutrals={'variants': (('control', 'treatment'), 'post-read tally only')},
     profile='operational-enrollment-audit',
+    serving=False,
 )
 _driver(
     'utils.feedback_context._find_message',
@@ -344,6 +358,7 @@ _driver(
     domains={'start_after': [None, 'memory-1']},
     neutrals={'limit': LIMIT},
     profile='operational-belief-backfill',
+    serving=False,
 )
 _driver(
     'utils.memory.canonical_consolidation.list_pending_consolidation_items',
@@ -351,30 +366,35 @@ _driver(
     domains={'start_after': [None, (T0, 'memory-1')]},
     neutrals={'now': NOW, 'limit': LIMIT},
     profile='maintenance-consolidation',
+    serving=False,
 )
 _driver(
     'utils.memory.canonical_required_processing.list_pending_required_processing_items',
     base={'uid': UID},
     neutrals={'limit': LIMIT},
     profile='maintenance-required-processing',
+    serving=False,
 )
 _driver(
     'jobs.short_term_lifecycle_worker.fetch_expired_short_term_memory_items_firestore',
     base={'uid': UID},
     neutrals={'now': NOW, 'limit': LIMIT},
     profile='maintenance-short-term-expiry',
+    serving=False,
 )
 _driver(
     'jobs.short_term_lifecycle_worker.fetch_expiry_urgent_short_term_memory_items_firestore',
     base={'deadline': T1},
     neutrals={'limit': LIMIT},
     profile='maintenance-global-expiry',
+    serving=False,
 )
 _driver(
     'utils.memory.canonical_short_term_maintenance_cron.count_active_short_term',
     base={'uid': UID},
     neutrals={'cap': (11, 'caps tally only')},
     profile='maintenance-short-term-count',
+    serving=False,
 )
 for function in (
     'utils.memory.canonical_short_term_maintenance_cron._seed_registry_from_existing_memory_states',
@@ -398,7 +418,14 @@ for function in (
         neutrals['return_page'] = (False, 'return packaging only')
     if function.endswith('bounded_ledger_drain_inventory'):
         neutrals['uid_allowlist'] = (None, 'collection-group scan profile; allowlisted mode uses point reads only')
-    _driver(function, neutrals=neutrals, setup=_inventory_cursors, trials=2, profile='maintenance-resumable-inventory')
+    _driver(
+        function,
+        neutrals=neutrals,
+        setup=_inventory_cursors,
+        trials=2,
+        profile='maintenance-resumable-inventory',
+        serving=False,
+    )
 _driver(
     'utils.memory.canonical_graph._read_canonical_graph_page_once',
     base={'uid': UID, 'limit': 25},
@@ -440,12 +467,14 @@ _driver(
     base={'uid': UID},
     neutrals={'now': NOW, 'limit': LIMIT},
     profile='maintenance-stage-retention',
+    serving=False,
 )
 _driver(
     'utils.memory.daily_memory_sweep.assert_no_live_pre_lock_claims',
     base={'now': T0},
     neutrals={'uids': (None, 'post-read scope filter only')},
     profile='operational-rollout-audit',
+    serving=False,
 )
 _driver(
     'utils.memory.daily_memory_sweep._invoke_model_once_claimed',
@@ -465,18 +494,21 @@ _driver(
     },
     setup=_control,
     profile='maintenance-fenced-model-claim',
+    serving=False,
 )
 _driver(
     'utils.memory.daily_memory_sweep._consume_attested_window_skip',
     base={'uid': UID, 'account_generation': 1, 'source_generation': 1, 'sweep_generation': 1, 'window_id': 'window-1'},
     setup=_control,
     profile='maintenance-attested-window',
+    serving=False,
 )
 _driver(
     'utils.memory.daily_memory_sweep._pending_receipt_dates',
     base={'uid': UID, 'through': D0, 'account_generation': 1, 'source_generation': 1},
     neutrals={'sweep_generation': (1, 'post-read generation check only')},
     profile='maintenance-receipt-recovery',
+    serving=False,
 )
 _driver(
     'utils.memory.daily_memory_sweep._find_active_slot_or_subject',
@@ -484,6 +516,7 @@ _driver(
     domains={'candidate': [(None, None), ('role', None), (None, 'person-1'), ('role', 'person-1')]},
     setup=_candidate,
     profile='maintenance-occupant-proof',
+    serving=False,
 )
 _driver(
     'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
@@ -491,6 +524,7 @@ _driver(
     domains={'window': [None]},
     setup=_window,
     profile='maintenance-completed-day',
+    serving=False,
 )
 _driver(
     'utils.memory.daily_memory_sweep._produce_onboarding_sources',
@@ -504,11 +538,13 @@ _driver(
     },
     setup=_onboarding,
     profile='maintenance-onboarding',
+    serving=False,
 )
 _driver(
     'utils.memory.daily_memory_sweep._read_daily_sweep_folder_options',
     base={'uid': UID},
     profile='maintenance-folder-taxonomy',
+    serving=False,
 )
 _driver(
     'utils.memory.daily_memory_sweep.produce_completed_day_daily_summary_sources',
@@ -522,11 +558,13 @@ _driver(
     },
     setup=_summary,
     profile='maintenance-completed-day-summary',
+    serving=False,
 )
 _driver(
     'utils.memory.daily_memory_sweep._iter_active_standing_triggers',
     base={'uid': UID},
     profile='maintenance-standing-triggers',
+    serving=False,
 )
 _driver(
     'utils.memory.jit_ledger_mirror_snapshot.read_authoritative_ledger_mirror_page',
@@ -557,6 +595,7 @@ _driver(
     base={'uid': UID},
     domains={'run_id': [None, 'run-1']},
     profile='operational-non-active-route-audit',
+    serving=False,
 )
 _driver(
     'utils.memory.product_memory_read_service.iter_authoritative_product_memory_items',
@@ -598,11 +637,20 @@ _driver(
     domains={'start_ts': [None, int(T0.timestamp())], 'end_ts': [None, int(T1.timestamp())]},
 )
 _driver('utils.sync.recording_session_target._candidate_rows', base={'uid': UID, 'recording_session_id': 'recording-1'})
-_driver(
+DRIVERS['utils.task_intelligence.chat_first_materialization_health._documents'] = DriverEntry(
     'utils.task_intelligence.chat_first_materialization_health._documents',
-    base={'limit': 25},
-    domains={'uid': [None, UID], 'min_created_at': [None, T0]},
-    profile='operational-materialization-health',
+    profiles=(
+        CallerProfile(
+            'operational-materialization-health',
+            {'uid': [None, UID], 'limit': [25], 'min_created_at': [None, T0]},
+            serving=False,
+        ),
+        CallerProfile(
+            'scheduled-materialization-health',
+            {'uid': [None], 'limit': [None], 'min_created_at': [T0]},
+            serving=True,
+        ),
+    ),
 )
 _driver(
     'utils.x_connector.run_x_sync_job',
@@ -639,6 +687,7 @@ _driver(
     'utils.task_intelligence.chat_first_e2e_fixture._existing_feature_refs',
     base={'uid': UID},
     profile='operational-offline-fixture',
+    serving=False,
 )
 _driver(
     'utils.task_intelligence.chat_first_e2e_fixture._snapshot_from_rows',
@@ -646,6 +695,7 @@ _driver(
     neutrals={'prepared_state': (None, 'point-read state source only')},
     setup=_fixture_state,
     profile='operational-offline-fixture',
+    serving=False,
 )
 _driver(
     'utils.task_intelligence.chat_first_e2e_fixture.advance_fixture_clock',
@@ -653,6 +703,7 @@ _driver(
     setup=_fixture_state,
     patchers=(_stub('utils.task_intelligence.chat_first_e2e_fixture._require_harness', None),),
     profile='operational-offline-fixture',
+    serving=False,
 )
 COVERED_BY['utils.memory.canonical_graph._build_canonical_graph_items_query'] = CoveredByEntry(
     'utils.memory.canonical_graph._build_canonical_graph_items_query',

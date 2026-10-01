@@ -70,10 +70,7 @@ class QuickActionsService {
         localizedTitle: isDeviceConnected ? l10n.deviceSettings : l10n.connectDevice,
       ),
       if (isDeviceConnected)
-        ShortcutItem(
-          type: isMuted ? _kUnmute : _kMute,
-          localizedTitle: isMuted ? l10n.phoneUnmute : l10n.mute,
-        ),
+        ShortcutItem(type: isMuted ? _kUnmute : _kMute, localizedTitle: isMuted ? l10n.phoneUnmute : l10n.mute),
       ShortcutItem(type: _kVoiceMode, localizedTitle: l10n.voiceMode),
       ShortcutItem(type: _kAskOmi, localizedTitle: l10n.quickActionAskOmi),
       ShortcutItem(type: _kAddTask, localizedTitle: l10n.addTask),
@@ -93,10 +90,10 @@ class QuickActionsService {
         break;
       // D1: chat is a normal pushed page everywhere.
       case _kAskOmi:
-        openChatSheet(context, const ChatPage(isPivotBottom: false, startFresh: true));
+        openChatSheet(context, const ChatPage(isPivotBottom: false));
         break;
       case _kVoiceMode:
-        openChatSheet(context, const ChatPage(isPivotBottom: false, startFresh: true, autoStartVoice: true));
+        openChatSheet(context, const ChatPage(isPivotBottom: false, autoStartVoice: true));
         break;
       case _kMute:
         _toggleMute(context, mute: true);
