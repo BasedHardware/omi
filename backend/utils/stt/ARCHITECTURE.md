@@ -193,7 +193,10 @@ configured ramp and capacity. There is no portfolio split or worst-provider
 probe. The existing Parakeet admission and batch-pressure gates still reject
 at connect and overflow into the next target. Target IDs are distinct from
 provider families: two Modulate endpoints have separate health and connection
-breakers. `live_target_connect.py` reuses the existing Modulate socket protocol
+breakers. A narrow typed-death hook routes a custom endpoint's serving failure
+to its own local breaker, preserving the old endpoint's serving capacity;
+account failures still quarantine their shared credential family.
+`live_target_connect.py` reuses the existing Modulate socket protocol
 for endpoint overrides; it does not change provider clients.
 
 The registry defaults to `parakeet-window` ($0.02/audio-hour),

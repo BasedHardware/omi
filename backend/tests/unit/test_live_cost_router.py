@@ -546,3 +546,21 @@ async def test_expected_languages_flow_through_dispatcher_to_cost_selection(monk
     )
     assert service == st.STTService.modulate
     parakeet.assert_not_awaited()
+
+
+def test_custom_endpoint_serve_failure_does_not_poison_default_endpoint(monkeypatch):
+    from tests.unit.test_live_routing_health import _leg
+    from utils.stt import live_failure, live_router
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    target = Target('modulate-next', 'modulate', 0.05, endpoint='wss://example.invalid/stream')
+    monkeypatch.setattr(live_router, '_target_circuits', {})
+    leg = _leg()
+    leg._routing_target_entry = target
+    leg.routing_target = target.id
+    leg.raw.typed_death_reason = st.MODULATE_DEATH_SERVE_ERROR
+    assert live_failure.note_typed_provider_death(leg, 'modulate')
+    assert live_failure.note_typed_provider_death(leg, 'modulate')
+    assert st._modulate_circuit.state == 'closed'
+    assert live_router.target_circuit(target, st._modulate_circuit).state == 'open'

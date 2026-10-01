@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import replace
+from abc import ABC, abstractmethod
+from typing import Any, Callable, ContextManager
 import os
 
-from config.live_stt_registry import DEFAULT_IDS
+from config.live_stt_registry import DEFAULT_IDS, Target
 from utils.stt.live_gate import GateState, begin_trial, transition
 from utils.stt.live_metrics import COST_BENCH, COST_EVENTS, COST_STAGE, FLEET_HEALTH_WRITE_DROPPED
 
@@ -21,7 +23,28 @@ return 1
 """
 
 
-class CostHealthMixin:
+class CostHealthMixin(ABC):
+    _clock: Callable[[], float]
+    _lock: ContextManager[Any]
+    _redis_retry_at: float
+    _cost_local: dict[tuple[str, str], GateState]
+    _cost_cached: dict[tuple[str, str], GateState]
+    _cost_interests: dict[tuple[str, str], float]
+    _cost_preferred: dict[tuple[str, str], float]
+    _cost_fresh_at: float | None
+
+    @abstractmethod
+    def _redis(self) -> Any:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def _bounded(self, operation: Any) -> Any:
+        raise NotImplementedError
+
+    @abstractmethod
+    def schedule(self, coroutine: Any) -> None:
+        raise NotImplementedError
+
     def init_cost_health(self) -> None:
         self._cost_local = {}
         self._cost_cached = {}
@@ -32,9 +55,9 @@ class CostHealthMixin:
     def _target_id(self, provider: str) -> str:
         return DEFAULT_IDS.get(provider, provider)
 
-    def cost_snapshot(self, targets, language: str) -> dict[str, GateState]:
+    def cost_snapshot(self, targets: list[Target] | tuple[Target, ...], language: str) -> dict[str, GateState]:
         now = self._clock()
-        result = {}
+        result: dict[str, GateState] = {}
         with self._lock:
             fresh = self._cost_fresh_at is not None and now - self._cost_fresh_at <= 15 and now >= self._redis_retry_at
             known = any(
@@ -50,7 +73,7 @@ class CostHealthMixin:
                 for lang in ('all', language):
                     self._cost_interests[(target.id, lang)] = now
                     if len(self._cost_interests) > 256:
-                        self._cost_interests.pop(min(self._cost_interests, key=self._cost_interests.get))
+                        self._cost_interests.pop(min(self._cost_interests, key=lambda item: self._cost_interests[item]))
                 source = self._cost_cached if fresh else self._cost_local
                 global_state = source.get((target.id, 'all'), GateState())
                 lang_state = source.get((target.id, language), GateState())
@@ -105,14 +128,14 @@ class CostHealthMixin:
     def quarantine_target(self, target: str, seconds: float) -> None:
         now = self._clock()
 
-        def update(state):
+        def update(state: GateState) -> GateState:
             return replace(state, stage=0, until=max(state.until, now + seconds), generation=state.generation + 1)
 
         with self._lock:
             self._cost_local[(target, 'all')] = update(self._cost_local.get((target, 'all'), GateState()))
         self.schedule(self._write_cost_quarantine(target, update))
 
-    async def _write_cost_quarantine(self, target, update):
+    async def _write_cost_quarantine(self, target: str, update: Callable[[GateState], GateState]) -> None:
         try:
             await self._bounded(self._cost_update((target, 'all'), update))
         except Exception:
@@ -128,7 +151,9 @@ class CostHealthMixin:
         )
         return {lang: source.get((target, lang), GateState()).generation for lang in ('all', language)}
 
-    def _cost_event(self, target, language, old, new, failed=None) -> None:
+    def _cost_event(
+        self, target: str, language: str, old: GateState, new: GateState, failed: bool | None = None
+    ) -> None:
         if old.stage == new.stage:
             return
         event = 'bench' if new.stage == 0 else 'unbench' if new.stage == 100 else 'stage'
@@ -148,7 +173,9 @@ class CostHealthMixin:
             new.until,
         )
 
-    async def _cost_update(self, key, update, failed=None):
+    async def _cost_update(
+        self, key: tuple[str, str], update: Callable[[GateState], GateState], failed: bool | None = None
+    ) -> GateState:
         redis_key = f'{PREFIX}:{key[0]}:{key[1]}'
         for _ in range(5):
             raw = await self._redis().get(redis_key)
@@ -158,17 +185,19 @@ class CostHealthMixin:
                 return old
             encoded = json.dumps(new.encode(), separators=(',', ':'))
             if await self._redis().eval(CAS, 1, redis_key, raw or '', encoded):
-                self._cost_event(*key, old, new, failed)
+                self._cost_event(key[0], key[1], old, new, failed)
                 with self._lock:
                     self._cost_cached[key] = new
                 return new
         raise RuntimeError('cost state contention')
 
-    async def _write_cost_result(self, target, language, failed, generations):
+    async def _write_cost_result(
+        self, target: str, language: str, failed: bool, generations: dict[str, int] | None
+    ) -> None:
         async def write():
             for lang in ('all', language):
 
-                def update(state, lang=lang):
+                def update(state: GateState, lang: str = lang) -> GateState:
                     if generations is not None and state.generation != generations.get(lang, state.generation):
                         return state
                     return transition(state, failed, self._clock())

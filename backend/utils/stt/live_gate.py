@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import os
 from dataclasses import asdict, dataclass, replace
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -19,29 +20,28 @@ class GateState:
     generation: int = 0
 
     @classmethod
-    def decode(cls, raw: dict) -> GateState:
+    def decode(cls, raw: dict[str, Any]) -> GateState:
         raw = dict(raw)
+        if not all(isinstance(raw.get(field, 0), int) for field in ('n', 'failures', 'generation', 'strikes')):
+            raise ValueError('invalid cost gate counts')
         raw['evidence'] = tuple(raw.get('evidence', cls().evidence))
         state = cls(**raw)
         if (
             not math.isfinite(state.threshold)
             or not 0 < state.threshold < 1
             or state.stage not in (0, 5, 25, 100)
-            or not isinstance(state.n, int)
             or not 0 <= state.failures <= state.n <= 1024
             or len(state.evidence) != 3
             or not all(math.isfinite(value) for value in state.evidence)
             or not math.isfinite(state.until)
             or state.until < 0
-            or not isinstance(state.generation, int)
             or state.generation < 0
-            or not isinstance(state.strikes, int)
             or not 0 <= state.strikes <= 10
         ):
             raise ValueError('invalid cost gate state')
         return state
 
-    def encode(self) -> dict:
+    def encode(self) -> dict[str, Any]:
         return asdict(self)
 
 

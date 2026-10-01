@@ -16,6 +16,7 @@ from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, routing_on
+from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
@@ -334,6 +335,7 @@ class LiveLegSocket(STTSocket):
         self._health_language = bounded_language(session.receiver.host.language)
         self._cost_generations = health.cost_generations(self.routing_target, self._health_language)
         self._cost_recorded = False
+        self._target_death_recorded = False
         self._closing_for_health = False
         try:
             self._routing_active = target is not None and routing_on(
@@ -417,6 +419,26 @@ class LiveLegSocket(STTSocket):
         if dead and self._pending_selection is not None:
             self._pending_selection.note_failure(self.typed_death_reason)
         return dead
+
+    def record_target_death(self, reason: str) -> bool:
+        target = self._routing_target_entry
+        if (
+            not self._routing_active
+            or target is None
+            or (target.id == DEFAULT_IDS.get(target.family) and target.endpoint is None)
+        ):
+            return False
+        if self._target_death_recorded:
+            return True
+        self._target_death_recorded = True
+        circuit = target_circuit(target)
+        if reason in ACCOUNT_REJECTION_REASONS:
+            circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+            health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
+            health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
+        else:
+            circuit.record_serve_failure()
+        return True
 
     def _release_open_gauge(self) -> None:
         if not self._open_gauge_released:

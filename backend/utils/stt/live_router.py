@@ -14,8 +14,10 @@ connecting_target: ContextVar[Target | None] = ContextVar('stt_connecting_target
 _target_circuits: dict[str, ProviderCircuitBreaker] = {}
 
 
-def target_circuit(target: Target | None, default):
+def target_circuit(target: Target | None, default: ProviderCircuitBreaker | None = None) -> ProviderCircuitBreaker:
     if target is None or (target.id == DEFAULT_IDS.get(target.family) and target.endpoint is None):
+        if default is None:
+            raise ValueError('Default live target requires its family circuit')
         return default
     if target.id not in _target_circuits:
         _target_circuits[target.id] = ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
