@@ -45,8 +45,6 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
-import redis as redis_pkg
-
 from database import redis_db
 
 logger = logging.getLogger(__name__)
@@ -78,6 +76,16 @@ def list_cache_ttl_seconds() -> int:
     return min(ttl, _TTL_MAX_SECONDS)
 
 
+def _sanitize_uid(uid: Any) -> Optional[str]:
+    """Return stripped string uid or None if empty, non-string, or containing control characters."""
+    if not isinstance(uid, str):
+        return None
+    cleaned = uid.strip()
+    if not cleaned or any(ord(c) < 32 for c in cleaned):
+        return None
+    return cleaned
+
+
 def _version_key(uid: str) -> str:
     return f'{_VERSION_KEY_PREFIX}:{uid}'
 
@@ -89,16 +97,17 @@ def bump_action_items_list_version(uid: str) -> None:
     mutation has committed. Fail-open: a Redis outage means the cache simply
     keeps serving until its short TTL expires.
     """
-    if not uid:
+    clean_uid = _sanitize_uid(uid)
+    if not clean_uid:
         return
     try:
-        key = _version_key(uid)
+        key = _version_key(clean_uid)
         pipe = redis_db.r.pipeline()
         pipe.incr(key)
         pipe.expire(key, _VERSION_TTL_SECONDS)
         pipe.execute()
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
-        logger.warning('action-items list cache: version bump failed uid=%s: %s', uid, e)
+    except Exception as e:
+        logger.warning('action-items list cache: version bump failed uid=%s: %s', clean_uid, e)
 
 
 def get_action_items_list_version(uid: str) -> Optional[int]:
@@ -107,38 +116,51 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
     ``None`` means "do not use the cache for this request" — it is not the same
     as version 0, which is a legitimate never-written-yet user.
     """
+    clean_uid = _sanitize_uid(uid)
+    if not clean_uid:
+        return None
     try:
-        raw = redis_db.r.get(_version_key(uid))
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
-        logger.warning('action-items list cache: version read failed uid=%s: %s', uid, e)
+        raw = redis_db.r.get(_version_key(clean_uid))
+    except Exception as e:
+        logger.warning('action-items list cache: version read failed uid=%s: %s', clean_uid, e)
         return None
     if raw is None:
         return 0
     try:
-        return int(raw)
-    except (TypeError, ValueError):
+        val = int(raw)
+        return None if val < 0 else val
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 
 def list_cache_key(uid: str, version: int, params: Dict[str, Any]) -> str:
     """Address one list page. Params are hashed so the key length is bounded."""
+    clean_uid = _sanitize_uid(uid) or 'unknown'
+    try:
+        safe_version = max(0, int(version))
+    except (TypeError, ValueError, OverflowError):
+        safe_version = 0
+    safe_params = params or {}
     fingerprint = hashlib.sha256(
-        json.dumps(params, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
+        json.dumps(safe_params, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
     ).hexdigest()[:16]
-    return f'{_ENTRY_KEY_PREFIX}:{uid}:{version}:{fingerprint}'
+    return f'{_ENTRY_KEY_PREFIX}:{clean_uid}:{safe_version}:{fingerprint}'
 
 
-def compute_etag(body: Dict[str, Any]) -> str:
+def compute_etag(body: Any) -> str:
     """Weak ETag over the exact bytes the route would return."""
-    digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8'))
+    safe_body = body if isinstance(body, (dict, list)) else {}
+    digest = hashlib.sha256(json.dumps(safe_body, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8'))
     return f'W/"{digest.hexdigest()[:32]}"'
 
 
 def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
     """Return ``{"etag": str, "body": dict}`` or ``None``. Never raises."""
+    if not key or not key.strip():
+        return None
     try:
         raw = redis_db.r.get(key)
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
+    except Exception as e:
         logger.warning('action-items list cache: read failed: %s', e)
         return None
     if not raw:
@@ -147,33 +169,58 @@ def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
         payload = json.loads(raw)
     except (TypeError, ValueError):
         return None
-    if not isinstance(payload, dict) or 'body' not in payload or 'etag' not in payload:
+    if not isinstance(payload, dict):
+        return None
+    body = payload.get('body')
+    etag = payload.get('etag')
+    if not isinstance(body, (dict, list)) or not isinstance(etag, str) or not etag.strip():
         return None
     return payload
 
 
-def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) -> None:
+def write_cached_list(key: str, *, body: Any, etag: str, ttl: int) -> None:
     """Store one list page. Never raises; a failed write just means a later miss."""
-    if ttl <= 0:
+    if not key or not key.strip():
+        return
+    if not isinstance(body, (dict, list)) or not etag or not etag.strip():
         return
     try:
-        redis_db.r.set(key, json.dumps({'etag': etag, 'body': body}, default=str), ex=ttl)
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
+        ttl_val = int(ttl)
+    except (TypeError, ValueError, OverflowError):
+        return
+    if ttl_val <= 0:
+        return
+    safe_ttl = min(ttl_val, _TTL_MAX_SECONDS)
+    try:
+        redis_db.r.set(key, json.dumps({'etag': etag, 'body': body}, default=str), ex=safe_ttl)
+    except Exception as e:
         logger.warning('action-items list cache: write failed: %s', e)
-    except (TypeError, ValueError) as e:
-        logger.warning('action-items list cache: body not serializable: %s', e)
 
 
 def if_none_match_matches(header_value: Optional[str], etag: str) -> bool:
     """RFC 9110 If-None-Match comparison (weak comparison, ``*`` matches)."""
-    if not header_value:
+    if not header_value or not header_value.strip():
         return False
+    if not etag or not etag.strip():
+        return False
+
     candidates = [c.strip() for c in header_value.split(',')]
     if '*' in candidates:
         return True
-    normalized = etag[2:] if etag.startswith('W/') else etag
+
+    def _normalize(tag: str) -> Optional[str]:
+        s = tag.strip()
+        if s.startswith('W/'):
+            s = s[2:]
+        if len(s) < 2 or not (s.startswith('"') and s.endswith('"')):
+            return None
+        return s[1:-1]
+
+    normalized_etag = _normalize(etag)
+    if normalized_etag is None:
+        return False
     for candidate in candidates:
-        stripped = candidate[2:] if candidate.startswith('W/') else candidate
-        if stripped == normalized:
+        normalized_candidate = _normalize(candidate)
+        if normalized_candidate is not None and normalized_candidate == normalized_etag:
             return True
     return False
