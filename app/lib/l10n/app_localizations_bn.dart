@@ -12109,6 +12109,16 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'শর্টকাট → Siri-তে Omi চালু করুন। “$askPhrase” বা “$questionPhrase” বলুন, তারপর আপনার প্রশ্ন করুন।';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' আপনি “$searchPhrase for what I did today”-ও বলতে পারেন।';
+  }
+
+  @override
   String get updateAvailableTitle => 'আপডেট উপলব্ধ';
 
   @override
