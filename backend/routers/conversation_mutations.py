@@ -64,7 +64,7 @@ def apply_conversation_sync_mutation(
             uid,
             sanitize(str(error)),
         )
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(status_code=400, detail="Invalid conversation mutation request") from error
     except Exception as error:
         record_product_event("conversation_sync_mutation", request=http_request, outcome="error")
         logger.error(

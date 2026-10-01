@@ -177,12 +177,14 @@ def test_apply_mutation_receipt_unavailable(monkeypatch):
     assert any(event == "conversation_sync_mutation" and kwargs.get("outcome") == "error" for event, kwargs in events)
 
 
-def test_apply_mutation_value_error_returns_400(monkeypatch):
+def test_apply_mutation_value_error_returns_400_and_pins_non_leakage(monkeypatch):
     events = []
     monkeypatch.setattr(router_module, "record_product_event", lambda event, **kwargs: events.append((event, kwargs)))
 
+    internal_leak = "INTERNAL_LEAK_SECRET_VAL_12345"
+
     def mock_apply(*args, **kwargs):
-        raise ValueError("unsupported conversation mutation: custom_op")
+        raise ValueError(f"unsupported conversation mutation internal error: {internal_leak}")
 
     monkeypatch.setattr(router_module.mutations_db, "apply_conversation_sync_mutation", mock_apply)
 
@@ -190,7 +192,28 @@ def test_apply_mutation_value_error_returns_400(monkeypatch):
     response = client.post("/v1/conversations/conv_abc123/mutations", json=_valid_request_payload())
 
     assert response.status_code == 400
-    assert "unsupported conversation mutation" in response.json()["detail"]
+    assert response.json()["detail"] == "Invalid conversation mutation request"
+    assert internal_leak not in response.text
+    assert any(event == "conversation_sync_mutation" and kwargs.get("outcome") == "error" for event, kwargs in events)
+
+
+def test_apply_mutation_type_error_returns_400_and_pins_non_leakage(monkeypatch):
+    events = []
+    monkeypatch.setattr(router_module, "record_product_event", lambda event, **kwargs: events.append((event, kwargs)))
+
+    internal_leak = "CORRUPT_TYPE_OPERAND_SECRET_67890"
+
+    def mock_apply(*args, **kwargs):
+        raise TypeError(f"corrupt operation operand internal detail: {internal_leak}")
+
+    monkeypatch.setattr(router_module.mutations_db, "apply_conversation_sync_mutation", mock_apply)
+
+    client = _client(monkeypatch)
+    response = client.post("/v1/conversations/conv_abc123/mutations", json=_valid_request_payload())
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid conversation mutation request"
+    assert internal_leak not in response.text
     assert any(event == "conversation_sync_mutation" and kwargs.get("outcome") == "error" for event, kwargs in events)
 
 
