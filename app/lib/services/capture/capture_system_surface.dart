@@ -24,6 +24,9 @@ class CaptureSystemSurface {
   DateTime? _anchor;
   DateTime? _pausedAt;
   String? _lastFingerprint;
+  // What the card showed when an action on it failed. The native card marks the
+  // same failure; it stays until that state changes or a later action succeeds.
+  String? _failedState;
   bool _closed = false;
   bool _busy = false;
   bool _ready = false;
@@ -113,19 +116,30 @@ class CaptureSystemSurface {
       'canFinish': active &&
           (capture.systemSurfacePhoneCapture || batch || capture.segments.isNotEmpty || capture.photos.isNotEmpty),
       'busy': _busy,
-      'actionFailed': false,
+      'actionFailed': _failedState != null,
     };
   }
 
-  void _changed({bool force = false}) {
-    if (_closed || !_ready) return;
-    final value = snapshot;
-    // Elapsed time and the wave are drawn by the OS; only frozen values are significant.
-    final fingerprint = {...value}
+  /// What the card shows, apart from the busy and failure marks. Elapsed time and
+  /// the wave are drawn by the OS; only frozen values are significant.
+  static String _stateKey(Map<String, Object?> value) {
+    final key = {...value}
       ..remove('elapsed')
-      ..remove('waveTime');
-    if (value['paused'] == true) fingerprint['elapsed'] = value['elapsed'];
-    final key = fingerprint.toString();
+      ..remove('waveTime')
+      ..remove('busy')
+      ..remove('actionFailed');
+    if (value['paused'] == true) key['elapsed'] = value['elapsed'];
+    return key.toString();
+  }
+
+  void _changed({bool force = false}) {
+    // A disposed controller has no state to read.
+    if (_closed || !_ready || capture.lifetime.isClosed) return;
+    final value = snapshot;
+    final state = _stateKey(value);
+    if (_failedState != state) _failedState = null;
+    value['actionFailed'] = _failedState != null;
+    final key = '$state ${value['busy']} ${value['actionFailed']}';
     if (!force && key == _lastFingerprint) return;
     _lastFingerprint = key;
     _armHourMark(value);
@@ -158,22 +172,37 @@ class CaptureSystemSurface {
         request['conversationRevision'] != current['conversationRevision']) {
       throw StateError('Recording is no longer available');
     }
-    if (_busy) throw StateError('A recording action is already running');
-    final action = request['action'];
-    final allowed = switch (action) {
-      'pause' || 'resume' => current['canPause'],
-      'finish' => current['canFinish'],
-      _ => false,
-    };
-    if (allowed != true) throw StateError('Action is unavailable for this recording');
-    _busy = true;
-    _changed(force: true);
     try {
-      await capture.performSystemSurfaceAction(action as String,
-          recordingId: current['recordingId'] as String, conversationRevision: current['conversationRevision'] as int);
+      if (_busy) throw StateError('A recording action is already running');
+      final action = request['action'];
+      final allowed = switch (action) {
+        'pause' || 'resume' => current['canPause'],
+        'finish' => current['canFinish'],
+        _ => false,
+      };
+      if (allowed != true) throw StateError('Action is unavailable for this recording');
+      _busy = true;
+      _changed(force: true);
+      try {
+        await capture.performSystemSurfaceAction(action as String,
+            recordingId: current['recordingId'] as String,
+            conversationRevision: current['conversationRevision'] as int);
+      } finally {
+        _busy = false;
+      }
+      _failedState = null;
       return snapshot;
+    } catch (_) {
+      // The native card marks this failure too, unless the card moved on meanwhile.
+      if (!capture.lifetime.isClosed) {
+        final now = snapshot;
+        if (now['recordingId'] == request['recordingId'] &&
+            now['conversationRevision'] == request['conversationRevision']) {
+          _failedState = _stateKey(now);
+        }
+      }
+      rethrow;
     } finally {
-      _busy = false;
       _changed(force: true);
     }
   }

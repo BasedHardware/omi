@@ -212,6 +212,25 @@ void main() {
     await rejected;
   });
 
+  test('a failed card action stays on the card until the recording changes', () async {
+    world.emitNativeState(PhoneMicCaptureState.interrupted);
+    await world.settle();
+    await expectLater(sink.action(request('pause')), throwsStateError);
+    await world.settle();
+    expect(sink.states.last['actionFailed'], true);
+    final published = sink.states.length;
+    await world.elapse(const Duration(seconds: 30));
+    expect(sink.states.length, greaterThan(published));
+    expect(sink.states.last['status'], 'interrupted');
+    expect(sink.states.last['actionFailed'], true, reason: 'a health refresh keeps the failure');
+
+    world.emitNativeState(PhoneMicCaptureState.running);
+    world.injectAudioFrames(20, sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: 20);
+    await world.settle();
+    expect(sink.states.last['paused'], false);
+    expect(sink.states.last['actionFailed'], false);
+  });
+
   test('Finish processes phone conversation and stops its native capture', () async {
     world.controller.segments.add(TranscriptSegment(
       id: 'segment',
