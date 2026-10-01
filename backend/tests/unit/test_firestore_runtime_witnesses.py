@@ -65,6 +65,11 @@ VECTOR_REPAIR_TICK = f'{VECTOR_REPAIR_MODULE}.run_vector_repair_outbox_worker_ti
 VECTOR_REPAIR_TARGETS = frozenset({VECTOR_REPAIR_LEASE, VECTOR_REPAIR_TICK})
 VECTOR_REPAIR_MODULES = frozenset({VECTOR_REPAIR_MODULE})
 VECTOR_REPAIR_FIELDS = {'available_at', 'lease_expires_at'}
+VECTOR_REPAIR_ALLOWED_BINDINGS = frozenset(
+    {
+        f'{VECTOR_REPAIR_MODULE_PATH}:run_vector_repair_outbox_worker_tick:{VECTOR_REPAIR_LEASE}',
+    }
+)
 
 VECTOR_REPAIR_INVENTORIES = (
     REPO_ROOT / '.github' / 'workflows',
@@ -304,8 +309,7 @@ def _vector_repair_wiring_errors(references: dict, registrations: dict, manifest
         manifest = firebase_index_manifest()
     new_wiring: list[str] = []
     for key in sorted(references):
-        relative = key.split(':', 1)[0]
-        if relative == VECTOR_REPAIR_MODULE_PATH:
+        if key in VECTOR_REPAIR_ALLOWED_BINDINGS:
             continue
         new_wiring.append(f'{key}: new serving-code reference to a disabled vector-repair entrypoint')
     for path, needles in sorted(registrations.items()):
@@ -373,9 +377,22 @@ def test_vector_repair_sentinel_flags_textual_schedule(tmp_path):
 
 
 def test_vector_repair_sentinel_internal_reference_allowed(discovered_vector_repair_references):
-    assert all(
-        key.split(':', 1)[0] == VECTOR_REPAIR_MODULE_PATH for key in discovered_vector_repair_references
+    assert (
+        set(discovered_vector_repair_references) <= VECTOR_REPAIR_ALLOWED_BINDINGS
     ), discovered_vector_repair_references
+    assert VECTOR_REPAIR_ALLOWED_BINDINGS <= set(discovered_vector_repair_references)
+
+
+@pytest.mark.parametrize(
+    'owner',
+    ['register_worker', '<module>'],
+)
+def test_vector_repair_sentinel_flags_same_module_tick_registration(owner):
+    """A new register/schedule reference to the tick INSIDE the worker module is
+    still new wiring: only the existing tick→lease call seam is allowed."""
+    key = f'{VECTOR_REPAIR_MODULE_PATH}:{owner}:{VECTOR_REPAIR_TICK}'
+    references = {key: {'target': VECTOR_REPAIR_TICK, 'references': 1}}
+    assert _vector_repair_wiring_errors(references, {})
 
 
 def _vector_repair_manifest(*, pending: bool = True, expired: bool = True) -> dict:
