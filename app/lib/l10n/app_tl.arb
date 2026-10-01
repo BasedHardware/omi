@@ -11322,6 +11322,7 @@
     "collapseAction": "I-collapse",
     "speakerTagPromptNotMeAction": "Hindi ako",
     "confidenceNextLabels": "{count, plural, =1{I-label sila sa 1 pang usapan.} other{I-label sila sa {count} pang usapan.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 nagsasalita} other{{count} nagsasalita}}",
     "siriShortcutsSetupHint": "I-on ang Omi sa Mga Shortcut → Siri. Sabihin ang “{askPhrase}” o “{questionPhrase}”, pagkatapos ay itanong ang tanong mo.",
     "siriShortcutsSearchHint": " Maaari mo ring sabihin ang “{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "May available na update",

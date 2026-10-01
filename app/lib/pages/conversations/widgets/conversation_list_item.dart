@@ -12,6 +12,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -220,7 +221,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         // Search matches explicitly open Transcript. Other rows
         // let detail choose Transcript for retained fragments that
         // have no generated summary after hydration.
-        initialTabIndex: seek != null ? 0 : null,
+        initialTab: seek != null ? ConversationTab.transcript : null,
         initialSeekStart: seek?.start,
         initialSeekEnd: seek?.end,
       ),

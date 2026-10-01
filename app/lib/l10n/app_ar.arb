@@ -3765,6 +3765,7 @@
     "collapseAction": "طيّ",
     "speakerTagPromptNotMeAction": "ليس أنا",
     "confidenceNextLabels": "{count, plural, =1{قم بوسم هذا الشخص في محادثة واحدة أخرى.} other{قم بوسم هذا الشخص في {count} محادثات أخرى.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{متحدث واحد} other{{count} متحدثين}}",
     "siriShortcutsSetupHint": "شغّل Omi في الاختصارات ← Siri. قل “{askPhrase}” أو “{questionPhrase}” ثم اطرح سؤالك.",
     "siriShortcutsSearchHint": " يمكنك أيضًا قول “{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "يتوفر تحديث",
