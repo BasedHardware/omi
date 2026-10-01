@@ -35,12 +35,17 @@ class _RecordingActions extends NoopCaptureExternalActions {
 }
 
 class _GatedPhoneSync {
-  _GatedPhoneSync(this.finalizeGate);
+  _GatedPhoneSync(this.finalizeGates);
 
-  final Completer<void> finalizeGate;
+  /// One gate per drain, in call order; later drains reuse the last gate.
+  final List<Completer<void>> finalizeGates;
+  var _finalizeCalls = 0;
   var stampCalls = 0;
 
-  Future<void> finalizeCurrentSession() => finalizeGate.future;
+  Future<void> finalizeCurrentSession() {
+    final call = _finalizeCalls++;
+    return finalizeGates[call < finalizeGates.length ? call : finalizeGates.length - 1].future;
+  }
 
   Future<void> stampConversationId(int start, String id, {String? recordingSessionId}) async {
     stampCalls++;
@@ -79,8 +84,9 @@ CaptureProvider _provider({
   required _RecordingActions actions,
   required Completer<void> finalizeGate,
   required Future<CreateConversationResponse?> Function() process,
+  List<Completer<void>> laterFinalizeGates = const [],
 }) {
-  final phone = _GatedPhoneSync(finalizeGate);
+  final phone = _GatedPhoneSync([finalizeGate, ...laterFinalizeGates]);
   return CaptureProvider(
     externalActions: actions,
     walService: _GatedWal(phone),
@@ -186,6 +192,38 @@ void main() {
 
     expect(actions.processing, isEmpty);
     expect(processed, isFalse);
+    expect(actions.upserted, isEmpty);
+  });
+
+  test('a stale drain keeps the skeleton a newer request is still showing', () async {
+    final firstDrain = Completer<void>();
+    final secondDrain = Completer<void>();
+    final actions = _RecordingActions();
+    var processCalls = 0;
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: firstDrain,
+      laterFinalizeGates: [secondDrain],
+      process: () {
+        processCalls++;
+        return Completer<CreateConversationResponse?>().future;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    final first = provider.forceProcessingCurrentConversation();
+    // The conversation moves on during the first drain and the next one is processed.
+    provider.startNewOfflineRecording();
+    final second = provider.forceProcessingCurrentConversation();
+
+    firstDrain.complete();
+    await first;
+    expect(actions.processing.map((conversation) => conversation.id), ['0']);
+
+    secondDrain.complete();
+    await second;
+    expect(processCalls, 1);
+    expect(actions.processing.map((conversation) => conversation.id), ['0']);
   });
 
   test('keeps a processing skeleton instead of a contentless completed row', () async {
