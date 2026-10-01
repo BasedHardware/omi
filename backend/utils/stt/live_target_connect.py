@@ -15,7 +15,9 @@ from utils.stt import streaming
 async def connect_modulate(callback, sample_rate, language):
     target = connecting_target.get()
     if target is None or target.endpoint is None:
-        return await streaming.process_audio_modulate(callback, sample_rate, language)
+        socket = await streaming.process_audio_modulate(callback, sample_rate, language)
+        setattr(socket, 'routing_endpoint', None)
+        return socket
     key = os.getenv('MODULATE_API_KEY')
     if not key:
         raise ValueError('Modulate credential missing')
@@ -30,4 +32,6 @@ async def connect_modulate(callback, sample_rate, language):
     if language and language != 'multi':
         params['language'] = language
     ws = await websockets.connect(target.endpoint + '?' + urlencode(params), ping_timeout=10, ping_interval=10)
-    return streaming.SafeModulateSocket(ws, callback, asyncio.get_running_loop())
+    socket = streaming.SafeModulateSocket(ws, callback, asyncio.get_running_loop())
+    setattr(socket, 'routing_endpoint', target.endpoint)
+    return socket

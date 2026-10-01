@@ -186,7 +186,17 @@ code defaults. Deepgram availability includes its runtime endpoint.
 `live_router.py` filters capabilities, sorts by audio-hour cost (stable config
 order for ties), then skips ramp exclusions, capacity signals and fleet benches.
 The first surviving target is primary and the rest retain cost order for
-failover. Capability checks include every expected language from the immutable
+failover. Eligibility also uses the session's actual precomputed family engine:
+windowed Parakeet must have won the existing window/RNNT selection, pass
+`window_language_supported`/`window_allocation`, and have its hosted endpoint.
+Connect validates target/model/endpoint identity; a mismatch counts a bounded
+`engine_mismatch` fail-open and restores configured order. RNNT outcomes are
+never labelled as window outcomes.
+An empty proposal always restores the configured chain. A nonempty proposal
+appends configured services outside the proposal (including unregistered
+Deepgram), then eligible benched targets as last resorts. Bench means demotion
+when every better connection fails, not denial of service. Local account and
+capacity protections still apply; this tail does not generate proactive probes. Capability checks include every expected language from the immutable
 declared/learned session profile, so a declared English account with a learned
 Hindi prior cannot enter an English-only target. Healthy cheaper targets take every eligible session within their
 configured ramp and capacity. There is no portfolio split or worst-provider
@@ -220,30 +230,62 @@ re-entry means 5% of sessions eligible under the configured ramp.
 
 ### Health evidence and hysteresis
 
-`live_gate.py` implements a sequential mixture likelihood test, with three
-alternatives above `STT_ROUTING_DISRUPTION_GATE` (default 0.08). Each session
-invests 1/1024 of the evidence budget in a new possible change point, while
-existing investments continue accumulating likelihood. This detects an abrupt
-outage after a long healthy history without treating minutes as samples. The
-mixture is an anytime-valid test within each 1024-session evidence block;
-bench at likelihood evidence >= 1000 with at least eight speech sessions.
-Fleet writes additionally require four distinct authenticated UID fingerprints
-among the last eight failure outcomes. This prevents one caller from supplying
-an entire outage, including after healthy traffic. Recovery promotion requires
-four distinct sampled UIDs; session counts remain the statistical denominator.
-The state retains at most four sample fingerprints and eight recent-failure
-fingerprints (salted SHA-256 prefixes), never raw UIDs or user content. These
-values are never metric labels or logs. Sparse cohorts may not meet the
-diversity floor; local breakers still protect their connections.
-Under independent Bernoulli outcomes with a rate at or below the gate, the
-sequential false-bench bound is 0.1% per block/test (0.2% for the target and one language
-test combined). Repeated blocks/languages increase that bound; it is not a
-lifetime guarantee; fixed-sample trial rejection has its own false-rejection
-probability. Changing the disruption gate resets the evidence generation
-without clearing an existing bench. Synthetic tests observe zero benches over 200 seeded runs
-of 5000 sessions at 3% (one million outcomes). The 95% upper bound for a
-5000-session run's false-bench probability from those zero observations is
-about 1.5%, rather than proof that false positives cannot occur.
+`live_gate.py` uses three Page CUSUM log-likelihood scores. At the default
+`STT_ROUTING_DISRUPTION_GATE=0.08`, alternatives are 0.12, 0.16 and 0.60;
+for another gate g they are g + (1-g) times 1/23, 2/23 and 13/23.
+Each score updates as `max(0, score + log P_q(outcome)/P_g(outcome))`.
+Bench thresholds are 12, 11 and 10 respectively, with at least eight speech
+sessions. The rapid 60% alternative additionally needs eight failures in the
+last 32 sessions, so five failures after a long healthy history cannot alone
+trigger it. Scores continue across reporting-counter boundaries; there is no
+1,024-session test reset or repeated injection of fresh likelihood mass.
+This is an empirically calibrated change detector, **not an anytime-valid
+e-process, posterior probability or formal lifetime alpha guarantee**.
+
+A healthy target's fleet-wide bench requires at least four distinct failure
+UID fingerprints in the last 32 sessions, with no one UID supplying more than
+half of those failures. A smaller language cohort can bench only its language
+with at least two affected UIDs, sixteen recent failures, and a score >=14.
+One caller cannot bench a healthy target or language. Recovery promotion uses
+session count plus passing rate, without a distinct-user floor. At a failed
+30/60-session recovery boundary, even one user can abort a trial of an already
+benched target and return it to backoff. Fingerprints are bounded salted
+SHA-256 prefixes, never raw UIDs, labels, logs or content.
+
+Calibration uses 200 independent seeded runs of 20,000 sessions per baseline
+rate, resetting after false benches to count all episodes:
+
+| True disruption rate | False benches / 4,000,000 sessions | Runs with a bench / 200 | Episodes per 252,000 sessions (14 days at 18k/day) |
+| --- | --- | --- | --- |
+| 3% | 0 | 0 | 0 observed |
+| 5% | 1 | 1 | 0.063 |
+| 7.5% | 24 | 22 | 1.512 |
+
+The 3% experiment covers about 222 traffic-days. Zero observed events does not
+prove impossibility; the one-sided 95% upper bound on a 20k-session run having
+a false bench is about 1.49%. Near-gate 7.5% traffic has appreciably more false
+benches than the 3% baseline; the detector trades this for useful brownout
+sensitivity. Independent synthetic outcomes are not production qualification.
+
+Across 200 seeded outage runs after 500 healthy sessions:
+
+| True disruption rate | Median sessions to bench | 95th percentile sessions | Median / 95th percentile failed sessions |
+| --- | --- | --- | --- |
+| 60% | 13 | 21 | 8 / 10 |
+| 80% | 10 | 13 | 8 / 8 |
+| 100% | 8 | 8 | 8 / 8 |
+| 16% (2x gate) | 264.5 | 557 | 44 / 78 |
+| 12% | 972.5 | 2362 | 119 / 249 |
+
+Periodic 60% outage tests cover every phase and 0/100/1020/20,000 healthy
+warmups and bench within ten failed sessions. A stochastic 60% outage does
+not guarantee that bound for every possible random sequence; its measured
+95th percentile is ten failures. At 10%, there is **no prompt-bench SLA**:
+only 101/200 seeded runs bench within 5,000 sessions; censored median 4975.5.
+Changing the configured gate clears accumulated scores without clearing an
+existing bench. A hard outage's wall time depends on completed speech-session
+volume: eight failures at 62 sessions/5 minutes take about 39 seconds at full
+traffic or 155 seconds at 25%, plus outcome and cache delays.
 
 A leg contributes once after at least one second of VAD-confirmed speech:
 no text by the existing deadline, death/failover after text, or successful
@@ -258,55 +300,58 @@ and bounded-language evidence run independently; a language bench can restrict
 that language, and sparse healthy languages inherit target-global health.
 The language view is used after 30 samples or a decisive failure test.
 
-Cold hard outages bench after eight failed speech sessions. The deterministic
-warm-history tests bound detection to 15 failures, including a 12-failure
-case crossing an evidence-block reset. The synthetic replay detects a hard
-outage after seven additional failures and a 25% brownout after 64 speech
-sessions. At 62 speech sessions/5 minutes, eight failures take approximately
-39 seconds if all traffic serves that target, or 155 seconds at a 25% share,
-plus outcome and cache delay. Long open successful sessions, sparse traffic,
-local breaker cooldowns, dropped Redis writes and smaller cohorts make wall
-clock detection slower. The statistical guarantee assumes independent
-outcomes; repeated sessions from one UID can be correlated.
+A bench waits 300 seconds initially. Failed trials double the wait up to
+four hours. A fleet lease starts a shared 5% trial when that target would be
+preferred over surviving targets. Thirty speech sessions with disruption <=
+the gate promote to 25%; sixty more promote to 100%, even in a single-user
+cohort. Trial rejection uses the sequential detector or empirical failure rate
+at those fixed boundaries. These acceptance checks do not prove an 8% upper
+confidence bound. Strike history clears after 1,024 healthy observations.
+Expensive benches receive no primary probes while cheaper targets can serve;
+they remain available only at the failover tail. No pod privately restarts a
+trial during Redis faults. Trial evidence must belong to the sticky re-entry
+cohort intersected with the target ramp. Stage generations reject stale
+completions, including samples admitted from a stale snapshot.
 
-A bench waits 300 seconds initially. A failed trial doubles the wait, capped
-at four hours. A fleet lease starts the shared 5% trial after cooldown when
-this target would be cheaper than a surviving primary for some eligible
-session. Thirty speech sessions spanning four sampled UIDs with disruption <= the gate promote to 25%;
-sixty more promote to 100%. Trial failures from enough distinct callers trigger an early sequential bench,
-or re-bench at the fixed sample boundary when the empirical rate exceeds the
-gate. These are fixed-sample acceptance checks, not a high-confidence proof of
-an 8% upper bound. Strike history clears after a full healthy evidence block.
-A more expensive bench receives no primary probes while a cheaper target
-serves it; it can remain unknown until needed. No pod starts a private trial
-when Redis is down. Trial evidence is accepted only for the sticky re-entry cohort intersected
-with the target ramp, including when existing static/shadow traffic supplies
-observations. Out-of-cohort completions cannot accelerate a stage.
-Outcomes carry a stage generation: completions from a
-previous stage cannot promote a newer one.
+The daily Modulate trial replay models 17,900 eligible speech sessions/day,
+61% disruption, sticky UID admission, 30-second outcome delay, 15-second cache
+lag, and initial 5-minute cooldown doubling to the 4-hour cap. Across 100 seeds,
+mean trial traffic is 122.08 sessions/day; mean disruptions **75.46/day**, median
+75, p95 80, maximum 83. Every run must remain below 100 trial disruptions;
+allowing ten initial outage failures still stays below 100 (maximum 93).
+A constant 5% trial without benches/backoff would instead expect
+`17900 * 0.05 * 0.61 = 545.95` disruptions/day. This is a conditional replay
+budget, not an absolute production traffic cap: burst arrivals, correlated
+heavy UIDs, longer outcome delays and dropped writes can change exposure.
+Local breakers are omitted from the replay, so their additional protection
+is not credited. Other providers' failures are outside this trial budget.
 
 `live_cost_health.py` stores target/global and target/language state in the
-`omi:live-stt:cost-v1` Redis namespace. Compare-and-set updates preserve shared
-counts and transitions across pods; leases serialize trial starts. A background
-refresh uses the existing 75 ms deadline. Connect reads memory only. Redis
+`omi:live-stt:cost-v2` Redis namespace. Compare-and-set updates preserve shared
+counts and transitions across pods; leases serialize trial starts. Fleet
+bench deadlines and trial admission use Redis `TIME`, not pod wall clocks.
+Redis-down local deadlines use the last known server offset and translate once
+on recovery before CAS reconciliation. Tests cover opposite +/-60-second pod
+skews and a ten-minute Redis outage with sixty successful connection decisions.
+The v2 namespace prevents old score/clock state from being read as this detector.
+A background refresh uses the existing 75 ms deadline. Connect reads memory only. Redis
 faults use local evidence and retain known benches, then unknown health and
 configured cost order. A router exception restores today's configured chain. Local benches backed by failed Redis writes remain restrictive when Redis returns, and are reconciled
 through CAS before staged recovery; snapshot and generation capture use the
 same freshness/backoff predicate. Fresh shared health remains authoritative
 over an isolated pod's local rate; verified writes refresh the local fallback
 view so a later Redis blip cannot revive a stale pod-only bench.
-Account/billing refusals remain immediate protection; local connection/serve
-breakers remain fast protection and cannot bypass an active fleet cost bench,
-including the old last-resort path. Legacy provider-score state is retained for
-static-path protection/telemetry, but never ranks the active cost router.
-Registry field types and endpoint URL structure are validated before selection.
-Initial same-family target overflow emits the shared fallback telemetry; a
-normal cost-selected primary is not reported as a fallback. Existing
-same-provider reconnects retain their selected target identity for health.
-The managed mid-session receiver still records failed provider families, so a
-serving death excludes all endpoints of that family for the remaining capture.
-Changing that receiver algorithm is outside this PR and belongs to the separate
-mid-session lane; initial connection attempts use target-scoped exclusions.
+Account/billing refusals remain family-wide immediate protection. Connection
+and serve breakers remain fast local protection; a fleet bench demotes its
+target to the last-resort tail, with no forced account/capacity bypass.
+Legacy provider-score state is retained for static protection/telemetry but
+never ranks the active cost router. Registry fields and endpoint URL structure
+are validated before selection. Actual same-family initial overflow emits
+shared fallback telemetry; normal cost-selected primaries do not. Reconnects
+retain target identity. Initial connects and mid-session rebuilds use separate
+failed-target and failed-family sets. Ordinary serving deaths exclude only the
+selected target; typed quota/auth deaths exclude the family and its siblings.
+The receiver builds on #20157's replay/retry behavior without discarding capture.
 
 ### Adding a second Modulate endpoint and rollout
 
@@ -346,12 +391,14 @@ New bounded metrics: `omi_stt_cost_routing_decisions_total{target,reason}` with
 `capability|cost_primary|benched_skip|ramp_skip|capacity_skip|failover`,
 `omi_stt_cost_routing_benched{target}`, `omi_stt_cost_routing_stage{target}`,
 `omi_stt_cost_routing_shadow_total{agreement,target}`, and
-`omi_stt_cost_routing_events_total{target,event}`. Primary and skip decisions count the proposed policy even in shadow;
+`omi_stt_cost_routing_events_total{target,event}`, and
+`omi_stt_cost_routing_fail_open_total{reason}` with bounded
+`empty_proposal|engine_mismatch|cache_unavailable|router_error`. Primary and skip decisions count the proposed policy even in shadow;
 `failover` counts actual active backup attempts, and capacity admission refusals
 count actual overflow. Unused backup legs do not inflate failover counters. The event counter counts fleet transitions; local Redis-down transitions are
 logged with `scope=local` and do not increment it again. Transition logs contain
 target, bounded language, scope, stage, n,
-failures, rate and cooldown, never UID/content/endpoint/credentials. Gauges
+failures, rate, CUSUM score and cooldown, never UID/content/endpoint/credentials. Gauges
 reflect the last queried language per pod: use event logs for language diagnosis.
 Add dashboard panels for proposed target share, shadow disagreement, maximum
 bench state, minimum recovery stage, transition counts, and dropped writes.

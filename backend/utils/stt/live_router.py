@@ -4,14 +4,47 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 
-from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS
+from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS, routing_on
 from utils.stt.live_gate import GateState, gate_rate
 from utils.stt.live_health import bounded_language
 from utils.stt.live_metrics import COST_DECISION, COST_SHADOW
 from utils.stt.provider_resilience import ProviderCircuitBreaker
+from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 
 connecting_target: ContextVar[Target | None] = ContextVar('stt_connecting_target', default=None)
 _target_circuits: dict[str, ProviderCircuitBreaker] = {}
+
+
+class TargetEngineMismatch(RuntimeError):
+    """The family callback cannot construct the target the router selected."""
+
+
+def note_failed_route(receiver, family: str | None) -> int:
+    targets = getattr(receiver, '_stt_failed_targets', None)
+    if targets is None:
+        receiver._stt_failed_targets = targets = set()
+    try:
+        active = routing_on(receiver.host.request.uid)
+    except ValueError:
+        active = False
+    socket = receiver.stt_socket
+    target = getattr(socket, 'routing_target', None)
+    if (
+        active
+        and target
+        and getattr(socket, '_routing_active', False)
+        and (getattr(socket, 'typed_death_reason', None) not in ACCOUNT_REJECTION_REASONS)
+    ):
+        targets.add(target)
+    elif family:
+        receiver._stt_failed_providers.add(family)
+    return len(receiver._stt_failed_providers) + len(targets)
+
+
+def engine_matches(target: Target, models: dict[str, str | None] | None) -> bool:
+    # Parakeet's actual window/RNNT choice is precomputed by LiveChainSession
+    # using window_allocation/window_language_supported and endpoint config.
+    return target.family != 'parakeet' or bool(models and models.get('parakeet') == target.id)
 
 
 def target_circuit(target: Target | None, default: ProviderCircuitBreaker | None = None) -> ProviderCircuitBreaker:
@@ -52,10 +85,27 @@ def select(targets, states, uid, language, *, features=frozenset({'streaming'}),
     return result
 
 
-def propose(health, configured_families, uid, language, static_primary, account_states=None, required_languages=()):
+def propose(
+    health,
+    configured_families,
+    uid,
+    language,
+    static_primary,
+    account_states=None,
+    required_languages=(),
+    engine_models=None,
+    last_resorts=None,
+):
     language = bounded_language(language)
     gate_rate()
-    targets = [target for target in registry() if target.family in configured_families]
+    targets = []
+    for target in registry():
+        if target.family not in configured_families:
+            continue
+        if not engine_matches(target, engine_models):
+            COST_DECISION.labels(target=target.id, reason='capability').inc()
+            continue
+        targets.append(target)
     states = health.cost_snapshot(targets, language)
     account_states = (
         account_states if account_states is not None else health.cached_snapshot(configured_families, language)
@@ -67,6 +117,20 @@ def propose(health, configured_families, uid, language, static_primary, account_
     proposed = select(
         targets, states, uid, language, required_languages=required_languages, recovery=health.prefer_recovery
     )
+    if last_resorts is not None:
+        last_resorts.extend(
+            target
+            for target in sorted(targets, key=lambda target: target.cost_per_audio_hour)
+            if states.get(target.id, GateState()).stage == 0
+            and not (
+                account_states.get(target.family)
+                and account_states[target.family].bench == 'account'
+                and account_states[target.family].excluded
+            )
+            and target.capable(language)
+            and all(target.capable(code) for code in required_languages)
+            and assigned(uid, target.id, target.ramp())
+        )
     chosen = proposed[0].id if proposed else 'unavailable'
     COST_SHADOW.labels(
         agreement=(

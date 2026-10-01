@@ -13,7 +13,7 @@ from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, bounded_language
-from utils.stt.live_router import connecting_target, target_circuit
+from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
@@ -42,6 +42,8 @@ WINDOW_VAD_CONTINUE_THRESHOLD = 0.65
 class LiveChainSession:
     def __init__(self, receiver: Any) -> None:
         self.receiver = receiver
+        if not hasattr(receiver, '_stt_failed_targets'):
+            receiver._stt_failed_targets = set()
         self.audio_seconds = 0.0
         self.last_end = 0.0
         self.generation = 0
@@ -86,6 +88,12 @@ class LiveChainSession:
         )
         window = parakeet_token == 'parakeet-window'
         parakeet_allowed = parakeet_token is not None
+        engine_models = {
+            'parakeet': parakeet_token,
+            'modulate': 'velma-2',
+            'soniox': 'soniox',
+            'deepgram': dg_model,
+        }
         if any(token in models for token in ('parakeet', 'parakeet-window')) and not parakeet_allowed:
             record_fallback(
                 component='stt_selection',
@@ -154,6 +162,13 @@ class LiveChainSession:
 
         async def build(service: st.STTService) -> STTSocket:
             is_window = service == st.STTService.parakeet and window
+            target = connecting_target.get()
+            if target is not None and (
+                target.family != service.value
+                or not engine_matches(target, engine_models)
+                or (target.id == 'parakeet-window' and not os.getenv('HOSTED_PARAKEET_API_URL'))
+            ):
+                raise TargetEngineMismatch('Selected target differs from the session engine')
             try:
                 gate = build_gate(is_window)
             except Exception:
@@ -322,6 +337,8 @@ class LiveChainSession:
                 routing_uid=uid,
                 routing_language=host.language,
                 routing_languages=tuple(getattr(host.language_profile, 'expected', ())),
+                routing_models=engine_models,
+                failed_targets=self.receiver._stt_failed_targets,
             )
         host.stt_service = actual
         self._routing_target_entry = getattr(socket, '_routing_target_entry', None)
@@ -366,7 +383,19 @@ class LiveLegSocket(STTSocket):
         self._transcript_outcome: str | None = None
         target = connecting_target.get()
         self._routing_target_entry = target
-        self.routing_target = target.id if target else DEFAULT_IDS.get(service.value, service.value)
+        self.routing_target = (
+            target.id
+            if target
+            else (
+                'parakeet'
+                if service.value == 'parakeet' and not window
+                else DEFAULT_IDS.get(service.value, service.value)
+            )
+        )
+        self.routing_model = (
+            'parakeet-window' if window else 'parakeet' if service.value == 'parakeet' else service.value
+        )
+        self.routing_endpoint = getattr(raw, 'routing_endpoint', None)
         self._health_language = bounded_language(session.receiver.host.language)
         self._cost_generations = health.cost_generations(self.routing_target, self._health_language)
         self._cost_recorded = False

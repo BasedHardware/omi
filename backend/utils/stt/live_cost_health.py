@@ -21,7 +21,7 @@ class CostHealthUnavailable(RuntimeError):
     """Expected missing cache during a Redis outage; selection uses static order."""
 
 
-PREFIX = 'omi:live-stt:cost-v1'
+PREFIX = 'omi:live-stt:cost-v2'
 CAS = """
 local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
@@ -40,6 +40,7 @@ class CostHealthMixin(ABC):
     _cost_preferred: dict[tuple[str, str], float]
     _cost_fresh_at: float | None
     _cost_unreconciled: set[tuple[str, str]]
+    _cost_server_offset: float
 
     @abstractmethod
     def _redis(self) -> Any:
@@ -60,6 +61,25 @@ class CostHealthMixin(ABC):
         self._cost_preferred = {}
         self._cost_fresh_at = None
         self._cost_unreconciled = set()
+        self._cost_server_offset = 0.0
+
+    def _fleet_now(self) -> float:
+        return self._clock() + self._cost_server_offset
+
+    async def _server_now(self) -> float:
+        seconds, micros = await self._redis().time()
+        now = float(seconds) + float(micros) / 1_000_000
+        with self._lock:
+            offset = now - self._clock()
+            delta = offset - self._cost_server_offset
+            # Fault-only local deadlines use the last known server offset.
+            # Translate them once when the server clock becomes available.
+            for key in self._cost_unreconciled:
+                state = self._cost_local.get(key)
+                if state is not None and state.stage == 0:
+                    self._cost_local[key] = replace(state, until=max(0, state.until + delta))
+            self._cost_server_offset = offset
+        return now
 
     def _target_id(self, provider: str) -> str:
         return DEFAULT_IDS.get(provider, provider)
@@ -146,7 +166,7 @@ class CostHealthMixin(ABC):
                 if 0 < state.stage < minimum_share:
                     continue
                 if generations is None or state.generation == generations.get(lang, state.generation):
-                    updated = transition(state, failed, now, witness=witness)
+                    updated = transition(state, failed, self._fleet_now(), witness=witness, language_only=lang != 'all')
                     self._cost_local.pop(key, None)
                     self._cost_local[key] = updated
                     if updated.stage == 0 and now < self._redis_retry_at:
@@ -160,10 +180,10 @@ class CostHealthMixin(ABC):
         self.schedule(self._write_cost_result(target, language, failed, generations, witness, minimum_share))
 
     def quarantine_target(self, target: str, seconds: float) -> None:
-        now = self._clock()
-
         def update(state: GateState) -> GateState:
-            return replace(state, stage=0, until=max(state.until, now + seconds), generation=state.generation + 1)
+            return replace(
+                state, stage=0, until=max(state.until, self._fleet_now() + seconds), generation=state.generation + 1
+            )
 
         with self._lock:
             self._cost_local[(target, 'all')] = update(self._cost_local.get((target, 'all'), GateState()))
@@ -171,8 +191,12 @@ class CostHealthMixin(ABC):
         self.schedule(self._write_cost_quarantine(target, update))
 
     async def _write_cost_quarantine(self, target: str, update: Callable[[GateState], GateState]) -> None:
+        async def write():
+            await self._server_now()
+            await self._cost_update((target, 'all'), update)
+
         try:
-            await self._bounded(self._cost_update((target, 'all'), update))
+            await self._bounded(write())
         except Exception:
             self._redis_retry_at = self._clock() + 10
             FLEET_HEALTH_WRITE_DROPPED.labels(kind='bench').inc()
@@ -203,7 +227,7 @@ class CostHealthMixin(ABC):
             (new.n, new.failures) if new.n else (old.n + int(failed is not None), old.failures + int(bool(failed)))
         )
         logger.info(
-            'live_stt_gate target=%s language=%s scope=%s event=%s stage=%d n=%d failures=%d rate=%.4f until=%.0f',
+            'live_stt_gate target=%s language=%s scope=%s event=%s stage=%d n=%d failures=%d rate=%.4f score=%.3f until=%.0f',
             target,
             language,
             'local' if local else 'fleet',
@@ -212,6 +236,7 @@ class CostHealthMixin(ABC):
             n,
             failures,
             failures / n if n else 0,
+            max(new.evidence if new.n else old.evidence),
             new.until,
         )
 
@@ -243,6 +268,7 @@ class CostHealthMixin(ABC):
         minimum_share: int = 5,
     ) -> None:
         async def write():
+            now = await self._server_now()
             for lang in ('all', language):
 
                 def update(state: GateState, lang: str = lang) -> GateState:
@@ -250,7 +276,7 @@ class CostHealthMixin(ABC):
                         return state
                     if generations is not None and state.generation != generations.get(lang, state.generation):
                         return state
-                    return transition(state, failed, self._clock(), witness=witness)
+                    return transition(state, failed, now, witness=witness, language_only=lang != 'all')
 
                 key = (target, lang)
                 written = await self._cost_update(key, update, failed)
@@ -293,6 +319,7 @@ class CostHealthMixin(ABC):
             return
 
         async def refresh():
+            fleet_now = await self._server_now()
             values = await self._redis().mget([f'{PREFIX}:{target}:{lang}' for target, lang in keys])
             if not isinstance(values, list) or len(values) != len(keys):
                 raise ValueError('invalid cost gate snapshot')
@@ -318,10 +345,10 @@ class CostHealthMixin(ABC):
                         self._cost_unreconciled.discard(key)
             for key in preferred:
                 state = states.get(key, GateState())
-                if state.stage == 0 and state.until <= now:
+                if state.stage == 0 and state.until <= fleet_now:
                     # One coordinator begins a shared trial; stable UID selection bounds the fleet share.
                     if await self._redis().set(f'{PREFIX}:lease:{key[0]}:{key[1]}', '1', nx=True, ex=10):
-                        states[key] = await self._cost_update(key, lambda state: begin_trial(state, now))
+                        states[key] = await self._cost_update(key, lambda state: begin_trial(state, fleet_now))
             with self._lock:
                 self._cost_cached = states
                 self._cost_fresh_at = self._clock()

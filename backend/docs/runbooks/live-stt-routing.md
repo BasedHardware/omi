@@ -25,7 +25,31 @@ gate trials. Successful speech legs count at completion, failed/no-text legs
 as soon as known. First-text `text`/`no_text` metrics remain diagnostic and are
 not double-counted into the cost health test. The static-path legacy score and
 account state remains available for local resilience; it does not rank the
-active policy.
+active policy. Fleet deadlines use Redis server time; opposite +/-60-second
+pod skews cannot start recovery early. During a Redis outage local evidence
+keeps routing usable, and pending local benches reconcile before re-entry.
+
+Window candidates must match the session's actual engine choice, language
+eligibility and hosted endpoint. Mismatches and empty proposals restore the
+configured chain and increment `omi_stt_cost_routing_fail_open_total`.
+Configured unregistered services remain at the tail, followed by benched
+targets as last resorts. Ordinary mid-session deaths exclude only the target;
+quota/auth failures exclude its whole family.
+
+The gate is a calibrated Page CUSUM, not an anytime-valid probability test.
+At 3%/5%/7.5% baselines, 200 x 20k-session replays observe 0/1/24 false benches
+per four million sessions. At 60% outage, median/p95 detection is 8/10 failed
+sessions; 16% and 12% median detection is 264.5 and 972.5 sessions. A 10%
+brownout has no prompt-bench SLA. Sparse languages can bench with two users,
+sixteen recent failures and stronger score evidence; promotion at 30/60
+passing sessions needs no distinct-user floor.
+
+At 17.9k eligible sessions/day and 61% Modulate disruption, the delayed-result
+trial replay averages 75.46 disruptions/day (p95 80; worst seeded run 83),
+versus 545.95/day for an uninterrupted 5% trial. The deterministic replay bound
+is below 100/day, including ten initial outage failures. This is conditional
+on the documented workload/delay assumptions, not a hard production traffic
+budget. Watch actual failovers and dropped writes before increasing the ramp.
 
 ## Read during rollout
 
@@ -40,14 +64,15 @@ sum by (kind) (rate(omi_stt_fleet_health_write_dropped_total{job="backend-listen
 sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[5m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[5m])), 1)
 ```
 
-Cost state uses `omi:live-stt:cost-v1:<target>:<bounded-language>` (and `all`)
+Cost state uses `omi:live-stt:cost-v2:<target>:<bounded-language>` (and `all`)
 with atomic compare-and-set updates and trial-start leases. A full result-write
 pool, deadline or CAS contention can drop a fleet sample and increments
 `omi_stt_fleet_health_write_dropped_total`; local evidence still advances.
 Monitor dropped writes before increasing traffic. New dashboard panels should
 show `omi_stt_cost_routing_decisions_total`, `omi_stt_cost_routing_shadow_total`,
 `omi_stt_cost_routing_benched`, `omi_stt_cost_routing_stage`, and
-`omi_stt_cost_routing_events_total`. Transition logs include numeric evidence.
+`omi_stt_cost_routing_events_total`, and `omi_stt_cost_routing_fail_open_total`.
+Transition logs include counts, failure rate and CUSUM score.
 The bench/stage gauges show the last language queried per pod; use transition
 logs to investigate language-specific health.
 

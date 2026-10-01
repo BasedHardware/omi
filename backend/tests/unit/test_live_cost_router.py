@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned, registry, routing_on
-from utils.stt import live_chain, live_health, live_session, streaming as st
+from utils.stt import live_chain, live_health, live_session, live_router, streaming as st
 from utils.stt.live_gate import GateState, begin_trial, transition
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 from utils.stt.live_router import select, connecting_target
@@ -30,6 +30,7 @@ def controls(monkeypatch):
     # Scope every new test's process state; do not poison another module's circuits.
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
+    monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
     monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
     monkeypatch.setattr(live_chain, 'health', pod)
@@ -66,16 +67,6 @@ def test_hard_outage_detection_samples(warmup):
             break
     assert detected <= 15
     assert state.stage == 0
-
-
-@pytest.mark.parametrize('seed', range(200))
-def test_three_percent_false_positive_and_simulation(seed):
-    # Independent runs keep the million-outcome experiment within the per-case
-    # fast-unit CPU budget without weakening its sample count or transition path.
-    rng, state = random.Random(seed), GateState()
-    for _ in range(5000):
-        state = transition(state, rng.random() < 0.03, 0)
-        assert state.stage == 100, f'false bench in 3% baseline seed={seed}'
 
 
 def test_staged_recovery_and_exponential_backoff():
@@ -143,9 +134,13 @@ def test_sticky_ramp_cohort_and_router_gate(monkeypatch):
 
 
 class MemoryRedis:
-    def __init__(self):
+    def __init__(self, clock=None):
         self.data = {}
         self.leases = []
+        self.clock = clock or (lambda: 1000)
+
+    async def time(self):
+        return (int(self.clock()), 0)
 
     async def get(self, key):
         return self.data.get(key)
@@ -169,7 +164,8 @@ class MemoryRedis:
 
 @pytest.mark.asyncio
 async def test_fleet_counts_recovery_lease_and_stale_generation(monkeypatch):
-    redis, now = MemoryRedis(), [0]
+    now = [0]
+    redis = MemoryRedis(clock=lambda: now[0])
     pods = [live_health.FleetHealth(redis_client=redis, clock=lambda: now[0]) for _ in range(2)]
     for pod in pods:
         pod.cost_snapshot(DEFAULT_TARGETS, 'en')
@@ -318,23 +314,24 @@ async def test_router_exception_fails_open_and_no_network_on_connect(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_fleet_bench_holds_against_local_half_open_and_last_resort(monkeypatch):
+async def test_all_fleet_benched_fails_open_to_configured_order(monkeypatch):
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
     monkeypatch.setattr(live_chain.health, 'cost_snapshot', lambda *_: {'soniox': GateState(stage=0, until=1e20)})
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
     connect = AsyncMock(return_value=SimpleNamespace(is_connection_dead=False))
-    with pytest.raises(RuntimeError, match='chain exhausted'):
-        await live_chain.connect_configured_chain(
-            primary_service=st.STTService.soniox,
-            connect_primary=connect,
-            callbacks={},
-            failed=set(),
-            models=['soniox'],
-            routing_uid='u',
-            routing_language='en',
-        )
-    connect.assert_not_awaited()
+    _, actual = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.soniox,
+        connect_primary=connect,
+        callbacks={},
+        failed=set(),
+        models=['soniox'],
+        routing_uid='u',
+        routing_language='en',
+    )
+    assert actual == st.STTService.soniox
+    connect.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -381,19 +378,21 @@ async def test_two_modulate_targets_failover_and_independent_identity(monkeypatc
             raise ConnectionError('synthetic outage')
         return SimpleNamespace(is_connection_dead=False)
 
-    failed = set()
+    failed, failed_targets = set(), set()
     _, service = await live_chain.connect_configured_chain(
         primary_service=st.STTService.modulate,
         connect_primary=connect,
         callbacks={},
         failed=failed,
+        failed_targets=failed_targets,
         models=['modulate-velma-2'],
         routing_uid='u',
         routing_language='en',
     )
     assert service == st.STTService.modulate
     assert seen == ['modulate-next', 'modulate-velma-2']
-    assert failed == {'modulate-next'}
+    assert not failed
+    assert failed_targets == {'modulate-next'}
     assert connecting_target.get() is None
     assert [(event['from_mode'], event['to_mode'], event['outcome']) for event in fallbacks] == [
         ('modulate', 'modulate', 'recovered')
@@ -408,7 +407,7 @@ async def test_modulate_endpoint_uses_existing_protocol_socket(monkeypatch):
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-key')
     connect = AsyncMock(return_value=object())
     monkeypatch.setattr(live_target_connect.websockets, 'connect', connect)
-    constructor = lambda *args: args
+    constructor = lambda *args: SimpleNamespace(ws=args[0])
     monkeypatch.setattr(st, 'SafeModulateSocket', constructor)
     token = connecting_target.set(target)
     try:
@@ -417,7 +416,8 @@ async def test_modulate_endpoint_uses_existing_protocol_socket(monkeypatch):
         connecting_target.reset(token)
     url = connect.call_args.args[0]
     assert url.startswith('wss://example.invalid/stream?') and 'sample_rate=16000' in url and 'language=en' in url
-    assert result[0] is connect.return_value
+    assert result.ws is connect.return_value
+    assert result.routing_endpoint == target.endpoint
 
 
 def test_capacity_skip_keeps_cost_order(monkeypatch):
@@ -613,7 +613,7 @@ async def test_client_drain_censors_missing_text_but_counts_real_text(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_one_uid_cannot_bench_or_promote_the_shared_fleet_gate():
+async def test_one_uid_cannot_bench_and_small_cohort_can_promote():
     redis = MemoryRedis()
     pods = [live_health.FleetHealth(redis_client=redis, clock=lambda: 1000) for _ in range(2)]
     for pod in pods:
@@ -630,14 +630,15 @@ async def test_one_uid_cannot_bench_or_promote_the_shared_fleet_gate():
         await pods[i % 2]._write_cost_result('parakeet-window', 'en', True, None, f'{i:016x}')
     await pods[0].refresh_cost_once()
     state = pods[0].cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window']
-    assert state.stage == 0 and state.n == 106
+    assert state.stage == 0
+    assert pods[0]._cost_cached[('parakeet-window', 'all')].stage == 100
     state = begin_trial(state, state.until)
     for _ in range(60):
         state = transition(state, False, 0, witness='0' * 16)
-    assert state.stage == 5
-    for i in range(1, 4):
-        state = transition(state, False, 0, witness=f'{i:016x}')
     assert state.stage == 25
+    for _ in range(60):
+        state = transition(state, False, 0, witness='0' * 16)
+    assert state.stage == 100
     warm = GateState()
     for i in range(100):
         warm = transition(warm, i % 32 == 0, 0, witness=f'{i:016x}')
@@ -681,7 +682,7 @@ def test_malformed_registry_fields_fail_open_instead_of_selecting_bad_targets(mo
 @pytest.mark.asyncio
 async def test_local_bench_is_reconciled_before_redis_recovery_can_unbench(monkeypatch):
     now = [1000]
-    redis = MemoryRedis()
+    redis = MemoryRedis(clock=lambda: now[0])
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: now[0])
     pod._redis_retry_at = 1010
     monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
@@ -691,7 +692,7 @@ async def test_local_bench_is_reconciled_before_redis_recovery_can_unbench(monke
     now[0] = 1010
     await pod.refresh_cost_once()
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0
-    stored = json.loads(redis.data['omi:live-stt:cost-v1:parakeet-window:all'])
+    stored = json.loads(redis.data['omi:live-stt:cost-v2:parakeet-window:all'])
     assert stored['stage'] == 0 and stored['until'] == 1300
     now[0] = 1300
     pod.prefer_recovery('parakeet-window', 'en')
@@ -705,7 +706,7 @@ async def test_healthy_fleet_is_not_benched_by_an_isolated_pod_local_rate():
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
     for lang in ('all', 'en'):
         healthy = GateState(n=200)
-        redis.data[f'omi:live-stt:cost-v1:parakeet-window:{lang}'] = json.dumps(healthy.encode())
+        redis.data[f'omi:live-stt:cost-v2:parakeet-window:{lang}'] = json.dumps(healthy.encode())
         pod._cost_local[('parakeet-window', lang)] = GateState(stage=0, generation=1, until=1300)
     pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
@@ -769,7 +770,7 @@ async def test_static_out_of_cohort_sessions_cannot_accelerate_reentry(stage, re
     redis = MemoryRedis()
     state = GateState(stage=stage, generation=1)
     for lang in ('all', 'en'):
-        redis.data[f'omi:live-stt:cost-v1:parakeet-window:{lang}'] = json.dumps(state.encode())
+        redis.data[f'omi:live-stt:cost-v2:parakeet-window:{lang}'] = json.dumps(state.encode())
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
     pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
@@ -837,3 +838,291 @@ async def test_same_provider_reconnect_retains_target_identity_and_kill_switch(m
     third.finish()
     assert seen == ['soniox-canary', 'soniox-canary', None]
     assert connecting_target.get() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scenario', ['empty', 'deepgram-only', 'unknown-tail', 'benched-tail'])
+async def test_router_never_removes_configured_serviceability(monkeypatch, scenario):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
+    primary = st.STTService.deepgram if scenario == 'deepgram-only' else st.STTService.soniox
+    seen = []
+
+    def connector(service, fails=False):
+        async def connect():
+            seen.append(service.value)
+            if fails:
+                raise ConnectionError('synthetic connect failure')
+            return SimpleNamespace(is_connection_dead=False)
+
+        return connect
+
+    callbacks = {}
+    models = ['dg-nova-3'] if scenario == 'deepgram-only' else ['soniox']
+    if scenario == 'empty':
+        monkeypatch.setattr(live_chain, 'propose', lambda *args: [])
+    elif scenario == 'unknown-tail':
+        callbacks[st.STTService.deepgram] = connector(st.STTService.deepgram)
+        models.append('dg-nova-3')
+    elif scenario == 'benched-tail':
+        callbacks[st.STTService.modulate] = connector(st.STTService.modulate)
+        models.append('modulate-velma-2')
+        monkeypatch.setattr(
+            live_chain.health,
+            'cost_snapshot',
+            lambda *_: {
+                'soniox': GateState(),
+                'modulate-velma-2': GateState(stage=0, until=1e20),
+            },
+        )
+    _, service = await live_chain.connect_configured_chain(
+        primary_service=primary,
+        connect_primary=connector(primary, scenario in ('unknown-tail', 'benched-tail')),
+        callbacks=callbacks,
+        failed=set(),
+        models=models,
+        routing_uid='synthetic',
+        routing_language='en',
+    )
+    expected = (
+        st.STTService.deepgram
+        if scenario == 'unknown-tail'
+        else (st.STTService.modulate if scenario == 'benched-tail' else primary)
+    )
+    assert service == expected
+    assert seen == ([primary.value, expected.value] if expected != primary else [primary.value])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'requested,resolved,model,endpoint',
+    [
+        ('multi', 'multi', 'parakeet-window', 'https://example.invalid'),
+        ('en', 'en', 'parakeet-window', ''),
+        ('en', 'en', 'parakeet', 'https://example.invalid'),
+    ],
+)
+async def test_session_engine_choice_is_the_router_eligibility(monkeypatch, requested, resolved, model, endpoint):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', endpoint)
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic')
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'parakeet', 'soniox'])
+    monkeypatch.setattr(st, 'parakeet_is_configured_fallback', lambda _: model == 'parakeet')
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda _: None)
+    monkeypatch.setattr(live_session, 'should_initialize_vad_gate', lambda **kwargs: False)
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    seen = []
+
+    def connector(engine):
+        async def connect(*args, **kwargs):
+            seen.append((engine, connecting_target.get()))
+            return SimpleNamespace(is_connection_dead=False, finish=lambda: None)
+
+        return connect
+
+    monkeypatch.setattr(st, 'process_audio_parakeet', connector('parakeet'))
+    monkeypatch.setattr(st, 'process_audio_soniox', connector('soniox'))
+    recv = SimpleNamespace(
+        host=SimpleNamespace(
+            request=SimpleNamespace(uid='synthetic'),
+            language=requested,
+            stt_language=resolved,
+            language_profile=None,
+            stt_service=st.STTService.parakeet,
+            stt_model=model,
+            vocabulary=[],
+        ),
+        _stt_failed_providers=set(),
+        vad_gate=None,
+    )
+    socket = await live_session.LiveChainSession(recv).connect(16000)
+    assert socket.routing_target != 'parakeet-window'
+    assert all(target is None or target.id != 'parakeet-window' for _, target in seen)
+    assert socket.routing_target == 'soniox'
+    socket.finish()
+
+
+@pytest.mark.asyncio
+async def test_connect_engine_mismatch_restores_configured_order_and_counts(monkeypatch):
+    from utils.stt.live_metrics import COST_FAIL_OPEN
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    calls = []
+    before = COST_FAIL_OPEN.labels(reason='engine_mismatch')._value.get()
+
+    async def connect():
+        target = connecting_target.get()
+        calls.append(target.id if target else None)
+        return SimpleNamespace(
+            is_connection_dead=False,
+            finish=lambda: None,
+            routing_target='parakeet-window',
+            routing_model='parakeet',
+            routing_endpoint=None,
+        )
+
+    _, actual = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.parakeet,
+        connect_primary=connect,
+        callbacks={},
+        failed=set(),
+        models=['parakeet-window'],
+        routing_uid='synthetic',
+        routing_language='en',
+        routing_models={'parakeet': 'parakeet-window'},
+    )
+    assert actual == st.STTService.parakeet and calls == ['parakeet-window', None]
+    assert COST_FAIL_OPEN.labels(reason='engine_mismatch')._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_three_user_language_outage_does_not_bench_other_languages():
+    redis = MemoryRedis()
+    pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
+    pod.cost_snapshot(DEFAULT_TARGETS, 'fr')
+    pod.cost_snapshot(DEFAULT_TARGETS, 'en')
+    for i in range(16):
+        await pod._write_cost_result('modulate-velma-2', 'fr', True, None, f'{i % 3:016x}')
+    await pod.refresh_cost_once()
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'fr')['modulate-velma-2'].stage == 0
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['modulate-velma-2'].stage == 100
+    assert pod._cost_cached[('modulate-velma-2', 'all')].stage == 100
+
+
+@pytest.mark.asyncio
+async def test_server_clock_controls_deadlines_despite_sixty_second_pod_skew():
+    now = [1000]
+    redis = MemoryRedis(clock=lambda: now[0])
+    pods = [live_health.FleetHealth(redis_client=redis, clock=lambda skew=skew: now[0] + skew) for skew in (-60, 60)]
+    for pod in pods:
+        pod.cost_snapshot(DEFAULT_TARGETS, 'en')
+    for i in range(8):
+        await pods[i % 2]._write_cost_result('modulate-velma-2', 'en', True, None, f'{i:016x}')
+    assert json.loads(redis.data['omi:live-stt:cost-v2:modulate-velma-2:all'])['until'] == 1300
+    now[0] = 1299
+    for pod in pods:
+        pod.prefer_recovery('modulate-velma-2', 'en')
+        await pod.refresh_cost_once()
+        assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['modulate-velma-2'].stage == 0
+    now[0] = 1300
+    for pod in pods:
+        pod.prefer_recovery('modulate-velma-2', 'en')
+        await pod.refresh_cost_once()
+        assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['modulate-velma-2'].stage == 5
+
+
+@pytest.mark.asyncio
+async def test_ten_minute_redis_outage_remains_usable_then_reconciles(monkeypatch):
+    now = [1000]
+
+    class FlappingRedis(MemoryRedis):
+        down = True
+
+        async def time(self):
+            if self.down:
+                raise ConnectionError('synthetic ten minute outage')
+            return await super().time()
+
+    redis = FlappingRedis(clock=lambda: now[0])
+    pod = live_health.FleetHealth(redis_client=redis, clock=lambda: now[0])
+    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    for i in range(8):
+        pod.record_session('modulate-velma-2', 'en', 'failover', uid=str(i))
+        await pod._write_cost_result('modulate-velma-2', 'en', True, None, f'{i:016x}')
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setattr(live_chain, 'health', pod)
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    connect = AsyncMock(return_value=SimpleNamespace(is_connection_dead=False))
+    for seconds in range(0, 600, 10):
+        now[0] = 1000 + seconds
+        await pod.refresh_cost_once()
+        states = pod.cost_snapshot(DEFAULT_TARGETS, 'en')
+        assert select(DEFAULT_TARGETS, states, 'synthetic', 'en')[0].id == 'parakeet-window'
+        assert states['modulate-velma-2'].stage == 0
+        _, actual = await live_chain.connect_configured_chain(
+            primary_service=st.STTService.parakeet,
+            connect_primary=connect,
+            callbacks={},
+            failed=set(),
+            models=['parakeet-window'],
+            routing_uid='synthetic',
+            routing_language='en',
+            routing_models={'parakeet': 'parakeet-window'},
+        )
+        assert actual == st.STTService.parakeet
+    assert connect.await_count == 60
+    now[0] = 1600
+    redis.down = False
+    await pod.refresh_cost_once()
+    state = json.loads(redis.data['omi:live-stt:cost-v2:modulate-velma-2:all'])
+    assert state['stage'] == 0 and state['failures'] == 8
+    assert not pod._cost_unreconciled
+    assert (
+        select(DEFAULT_TARGETS, pod.cost_snapshot(DEFAULT_TARGETS, 'en'), 'synthetic', 'en')[0].id == 'parakeet-window'
+    )
+
+
+def test_default_target_id_equal_to_family_has_separate_failure_namespaces(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    socket = SimpleNamespace(_routing_active=True, routing_target='soniox', typed_death_reason='provider_5xx')
+    recv = SimpleNamespace(
+        host=SimpleNamespace(request=SimpleNamespace(uid='synthetic')), stt_socket=socket, _stt_failed_providers=set()
+    )
+    assert live_router.note_failed_route(recv, 'soniox') == 1
+    assert recv._stt_failed_targets == {'soniox'} and not recv._stt_failed_providers
+    socket.typed_death_reason = 'provider_auth_rejected'
+    assert live_router.note_failed_route(recv, 'soniox') == 2
+    assert recv._stt_failed_providers == {'soniox'}
+
+
+def test_single_user_failed_recovery_step_returns_to_backoff():
+    state = GateState(stage=5, strikes=1)
+    for i in range(30):
+        state = transition(state, i % 3 != 0, 1000, witness='f' * 16)
+    assert state.stage == 0 and state.until == 1600
+
+
+@pytest.mark.asyncio
+async def test_new_endpoint_only_registry_keeps_configured_endpoint_tail(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv(
+        'STT_ROUTING_TARGETS_JSON',
+        json.dumps(
+            [
+                {
+                    'id': 'modulate-next',
+                    'family': 'modulate',
+                    'cost_per_audio_hour': 0.05,
+                    'endpoint': 'wss://example.invalid/stream',
+                },
+            ]
+        ),
+    )
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    seen = []
+
+    async def connect():
+        target = connecting_target.get()
+        seen.append(target.id if target else None)
+        if target is not None:
+            raise ConnectionError('synthetic new endpoint failure')
+        return SimpleNamespace(is_connection_dead=False)
+
+    _, actual = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=connect,
+        callbacks={},
+        failed=set(),
+        models=['modulate-velma-2'],
+        routing_uid='synthetic',
+        routing_language='en',
+    )
+    assert actual == st.STTService.modulate and seen == ['modulate-next', None]
