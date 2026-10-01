@@ -16,7 +16,9 @@ def test_prod_job_runs_as_jobs_runtime_and_drops_the_key(job):
     config = manifest['environments']['prod']['cloud_run']['jobs'][job]
 
     assert config['flags']['--service-account'] == JOBS_RUNTIME_SA
-    assert set(config['flags']['--remove-secrets'].split(',')) == set(KEY_ENV)
+    # deploy-cloudrun deploys job secrets with --set-secrets (full replacement), which gcloud refuses
+    # to combine with --remove-secrets; the replacement itself drops the undeclared key ref.
+    assert '--remove-secrets' not in config['flags']
     assert not set(KEY_ENV) & set(config.get('secrets') or {})
     assert not set(KEY_ENV) & set(config.get('env') or {})
 

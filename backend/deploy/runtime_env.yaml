@@ -3511,7 +3511,6 @@ environments:
             --task-timeout: 3600s
             --memory: 2Gi
             --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
-            --remove-secrets: SERVICE_ACCOUNT_JSON,GOOGLE_APPLICATION_CREDENTIALS
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -3770,7 +3769,6 @@ environments:
             --remove-env-vars: HOSTED_PUSHER_API_URL
             --task-timeout: 900s
             --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
-            --remove-secrets: SERVICE_ACCOUNT_JSON,GOOGLE_APPLICATION_CREDENTIALS
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
