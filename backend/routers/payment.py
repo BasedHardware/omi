@@ -393,7 +393,7 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                     "next_billing_date": stripe_sub_dict['current_period_end'],
                 }
     except Exception as e:
-        logger.error(f"Error checking for reactivation: {e}")
+        logger.error(f"Error checking for reactivation: {sanitize(str(e))}")
 
     if recovered_from_stripe:
         record_fallback(
@@ -644,8 +644,9 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
             customer_id=existing_customer_id,
             promotion_code_id=resolved_checkout_promo_id,
         )
-    except stripe.error.InvalidRequestError as e:
-        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe rejected checkout session: {sanitize(str(e))}")
+        detail = _stripe_client_error_detail(e, "Could not create checkout session.")
         raise HTTPException(status_code=400, detail=detail)
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
@@ -822,9 +823,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
     except HTTPException:
         raise
-    except stripe.error.InvalidRequestError as e:
+    except stripe.error.StripeError as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
-        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        detail = _stripe_client_error_detail(e, "Stripe rejected subscription change.")
         raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
@@ -904,7 +905,7 @@ def cancel_subscription_endpoint(
             detail=_stripe_client_error_detail(e, "Could not cancel subscription. Please try again."),
         )
     except Exception as e:
-        logger.error(f"Error canceling subscription: {e}")
+        logger.error(f"Error canceling subscription: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
@@ -1026,7 +1027,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         ),
                     )
                 except Exception as e:
-                    logger.error(f"Error updating subscription metadata: {e}")
+                    logger.error(f"Error updating subscription metadata: {sanitize(str(e))}")
 
                 # Send paid notification if applicable
                 try:
@@ -1225,7 +1226,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         f"Stripe webhook: user {uid} not found in Firestore, " f"skipping scheduled upgrade update"
                     )
                 except Exception as e:
-                    logger.error(f"Error updating subscription after scheduled upgrade: {e}")
+                    logger.error(f"Error updating subscription after scheduled upgrade: {sanitize(str(e))}")
             elif schedule_obj.get('status') == 'canceled':
                 try:
                     if schedule_obj.get('subscription'):
@@ -1256,7 +1257,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         f"Stripe webhook: user {uid} not found in Firestore, " f"skipping schedule cancellation update"
                     )
                 except Exception as e:
-                    logger.error(f"Error updating subscription after schedule cancellation: {e}")
+                    logger.error(f"Error updating subscription after schedule cancellation: {sanitize(str(e))}")
 
     if event['type'] in ['invoice.paid', 'invoice.payment_succeeded']:
         invoice = event['data']['object']
@@ -1273,7 +1274,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     await run_blocking(db_executor, paid_app, app_id, uid)
                     logger.info(f"Paid app entitlement renewed for user {uid}. App: {app_id}")
             except Exception as e:
-                logger.error(f"Error renewing paid app entitlement for subscription {subscription_id}: {e}")
+                logger.error(f"Error renewing paid app entitlement for subscription {subscription_id}: {sanitize(str(e))}")
 
     return {"status": "success"}
 
@@ -1461,7 +1462,7 @@ def save_paypal_payment_details(data: SavePayPalPaymentDetailsRequest, uid: str 
         # StripeError sites elsewhere in this file (whose messages are
         # designed to be user-facing), an unexpected exception here could be
         # anything, so log the real detail server-side and don't echo it.
-        logger.error(f"Failed to save PayPal payment details for uid={uid}: {e}")
+        logger.error(f"Failed to save PayPal payment details for uid={uid}: {sanitize(str(e))}")
         raise HTTPException(status_code=400, detail="Could not save PayPal payment details. Please try again.")
 
 
@@ -1514,20 +1515,30 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
     if not customer_id:
         subscription = users_db.get_user_subscription(uid)
         if subscription and subscription.stripe_subscription_id:
-            stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-            customer_id = stripe_sub.customer
-            if customer_id:
-                users_db.set_stripe_customer_id(uid, customer_id)
+            try:
+                stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+                customer_id = stripe_sub.customer
+                if customer_id:
+                    users_db.set_stripe_customer_id(uid, customer_id)
+            except stripe.error.StripeError as e:
+                logger.error(f"Failed to retrieve Stripe subscription for portal: {sanitize(str(e))}")
+                detail = _stripe_client_error_detail(e, "Could not retrieve subscription.")
+                raise HTTPException(status_code=400, detail=detail)
 
     if not customer_id:
         raise HTTPException(status_code=400, detail="No Stripe customer found. Please create a subscription first.")
 
     return_url = urljoin(base_url, 'v1/payments/portal-return')
 
-    portal_session = stripe.billing_portal.Session.create(
-        customer=customer_id,
-        return_url=return_url,
-    )
+    try:
+        portal_session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=return_url,
+        )
+    except stripe.error.StripeError as e:
+        logger.error(f"Failed to create Stripe customer portal session: {sanitize(str(e))}")
+        detail = _stripe_client_error_detail(e, "Could not create customer portal session.")
+        raise HTTPException(status_code=400, detail=detail)
 
     return {"url": portal_session.url}
 
@@ -1599,7 +1610,7 @@ def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_u
 
         return {"subscription": None}
     except Exception as e:
-        logger.error(f"Error getting app subscription: {e}")
+        logger.error(f"Error getting app subscription: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Could not retrieve subscription information")
 
 
@@ -1640,5 +1651,5 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             detail=_stripe_client_error_detail(e, "Could not cancel subscription. Please try again."),
         )
     except Exception as e:
-        logger.error(f"Error canceling app subscription: {e}")
+        logger.error(f"Error canceling app subscription: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription")
