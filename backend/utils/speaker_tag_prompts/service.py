@@ -548,10 +548,11 @@ def apply_answer(
         # The automatic label was wrong: record an explicit "not the owner / not them".
         conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False)
         if answer == SpeakerTagPromptAnswer.not_a_person:
+            resolved_ids = set(resolved)
             speaker_ids = {
-                sid
+                speaker_id_of(segment)
                 for segment in conversation.get('transcript_segments') or []
-                if segment.get('id') in set(resolved) and (sid := speaker_id_of(segment)) is not None
+                if segment.get('id') in resolved_ids
             }
             for speaker_id in sorted(speaker_ids):
                 voice_profiles_db.record_ignored_voice(
