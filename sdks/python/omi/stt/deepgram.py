@@ -15,6 +15,7 @@ class DeepgramTranscriber:
         sample_rate: int = 16000,
         model: str = "nova",
         language: str = "en-US",
+        drain_timeout: float = 5.0,
     ) -> None:
         if not api_key:
             raise ValueError("Deepgram api_key is required")
@@ -22,6 +23,7 @@ class DeepgramTranscriber:
         self.sample_rate = sample_rate
         self.model = model
         self.language = language
+        self.drain_timeout = drain_timeout
 
     async def run(
         self,
@@ -69,11 +71,9 @@ class DeepgramTranscriber:
                                 else:
                                     print(alt)
 
-                    tasks = (
-                        asyncio.create_task(send_audio()),
-                        asyncio.create_task(receive()),
-                    )
-                    caller_stopped = False
+                    send_task = asyncio.create_task(send_audio())
+                    recv_task = asyncio.create_task(receive())
+                    tasks = (send_task, recv_task)
                     try:
                         done, _ = await asyncio.wait(
                             tasks, return_when=asyncio.FIRST_COMPLETED
@@ -83,17 +83,20 @@ class DeepgramTranscriber:
                         # A clean receive EOF must also trigger the retry loop.
                         raise ConnectionError("Deepgram connection closed")
                     except asyncio.CancelledError:
-                        caller_stopped = True
+                        send_task.cancel()
+                        await asyncio.gather(send_task, return_exceptions=True)
+                        try:
+                            await ws.send(json.dumps({"type": "CloseStream"}))
+                            await asyncio.wait_for(
+                                asyncio.shield(recv_task), timeout=self.drain_timeout
+                            )
+                        except Exception:
+                            pass
                         raise
                     finally:
                         for task in tasks:
                             task.cancel()
                         await asyncio.gather(*tasks, return_exceptions=True)
-                        if caller_stopped:
-                            try:
-                                await ws.send(json.dumps({"type": "CloseStream"}))
-                            except Exception:
-                                pass
             except Exception as exc:
                 print(f"Deepgram error: {exc}")
                 await asyncio.sleep(1)

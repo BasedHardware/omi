@@ -109,6 +109,16 @@ audio or enable automatic language detection. See Deepgram's
 
 ## Development
 
+### Stopping Deepgram transcription
+
+Cancel and await the task running the transcriber to stop it. The SDK stops
+sending PCM, sends Deepgram's `CloseStream`, and keeps receiving final transcripts
+until the server closes or `drain_timeout` expires (default: five seconds).
+Callbacks can therefore run while cancellation is being awaited. Set
+`drain_timeout=0` on `create_transcriber("deepgram", ...)` to close without waiting
+for final results. A server EOF or connection error still follows the reconnect
+path; it does not send `CloseStream`.
+
 ### Local Development Setup
 
 ```bash
