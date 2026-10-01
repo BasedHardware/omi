@@ -137,3 +137,21 @@ def test_get_url_client_rejects_invalid_inputs():
     assert get_url_client("   ") is None
     assert get_url_client("http://insecure.com") is None
     assert get_url_client("https://example.com?query=not_allowed") is None
+
+
+def test_get_url_client_normalizes_whitespace_padded_id(monkeypatch):
+    """Verify whitespace-padded client_id is normalized once and used consistently."""
+    valid_id = "https://auth.example.com/.well-known/oauth-client"
+    padded_id = f"  {valid_id}  "
+    mock_metadata = {
+        "client_id": valid_id,
+        "client_name": "Test Client",
+        "redirect_uris": ["https://auth.example.com/callback"],
+    }
+    monkeypatch.setattr("database.mcp_client_metadata._read_cached", lambda cid: mock_metadata if cid == valid_id else None)
+
+    client = get_url_client(padded_id)
+    assert client is not None
+    assert client["id"] == valid_id
+    assert client["metadata_url"] == valid_id
+    assert client["name"] == "Test Client (auth.example.com)"

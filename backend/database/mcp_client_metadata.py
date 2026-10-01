@@ -598,14 +598,14 @@ def get_url_client(client_id: str) -> Optional[Dict[str, Any]]:
     """
     if not isinstance(client_id, str) or not client_id.strip():
         return None
-    parsed = parse_metadata_url(client_id.strip())
+    clean_client_id = client_id.strip()
+    parsed = parse_metadata_url(clean_client_id)
     if parsed is None:
-
         return None
     hostname, target = parsed
     canonical_url = f"https://{hostname}{target}"
 
-    metadata = _read_cached(client_id)
+    metadata = _read_cached(clean_client_id)
     if metadata is None:
         if _negative_cached(canonical_url):
             return None
@@ -614,14 +614,14 @@ def get_url_client(client_id: str) -> Optional[Dict[str, Any]]:
             _negative_cache(canonical_url)
             return None
         document, ttl_seconds = fetched
-        metadata = _validated_metadata(document, client_id)
+        metadata = _validated_metadata(document, clean_client_id)
         if metadata is None:
             _negative_cache(canonical_url)
             return None
-        _write_cache(client_id, metadata, ttl_seconds)
+        _write_cache(clean_client_id, metadata, ttl_seconds)
 
     return {
-        "id": client_id,
+        "id": clean_client_id,
         "name": _display_name_for(metadata, hostname),
         "registration_mode": "client_id_metadata_document",
         "allowed_redirect_uris": metadata["redirect_uris"],
@@ -631,6 +631,6 @@ def get_url_client(client_id: str) -> Optional[Dict[str, Any]]:
         "token_endpoint_auth_method": "none",
         "client_secret_hash": "",
         "disabled_at": None,
-        "metadata_url": client_id,
+        "metadata_url": clean_client_id,
         "metadata_host": hostname,
     }
