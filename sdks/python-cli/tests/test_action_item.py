@@ -120,10 +120,20 @@ def test_action_item_list_invalid_date_range_raises_usage_error(authed_profile, 
     assert "Invalid date range" in result.stderr
 
 
+def test_action_item_list_mixed_timezone_date_range_raises_usage_error(authed_profile, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["action-item", "list", "--start-date", "2026-10-02", "--end-date", "2026-10-01T00:00:00Z"],
+    )
+    assert result.exit_code == 1
+    assert "Invalid date range" in result.stderr
+
+
 def test_action_item_list_handles_non_list_payload(authed_profile, respx_mock, cli_runner) -> None:
     respx_mock.get("/v1/dev/user/action-items").respond(json={"detail": "Unexpected envelope"})
     result = cli_runner.invoke(app, ["action-item", "list"])
     assert result.exit_code == 0
+    assert "Unexpected API response envelope" in result.stderr
 
 
 def test_action_item_list_handles_non_dict_elements(authed_profile, respx_mock, cli_runner) -> None:
