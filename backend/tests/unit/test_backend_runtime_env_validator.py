@@ -3274,3 +3274,21 @@ def test_jev_uid_allowlist_contract_survives_cyclic_yaml_aliases():
     assert validate_jev_uid_allowlist(stage='prod', scope='cloud_run/backend', config=cyclic) == []
     cyclic['env'].append({JEV_UID_ALLOWLIST: {'value': ''}})
     assert len(validate_jev_uid_allowlist(stage='prod', scope='cloud_run/backend', config=cyclic)) >= 1
+
+
+def test_deploy_actions_remove_the_retired_jev_allowlist_env():
+    # gcloud deploy keeps variables it is not told to drop, so a service that once declared the
+    # retired allowlist keeps it (even empty) until every deploy path lists it for removal. The
+    # backfill clone renders from live backend-sync env, so its REMOVE_ENV_VARS must list it too.
+    for relative in (
+        '.github/actions/deploy-backend-stack/action.yml',
+        '.github/actions/sync-backfill-lifecycle/action.yml',
+    ):
+        text = (ROOT.parent / relative).read_text()
+        lines = [
+            line
+            for line in text.splitlines()
+            if ('--remove-env-vars=' in line or 'REMOVE_ENV_VARS:' in line) and 'MEMORY_ENABLED_USERS' in line
+        ]
+        assert lines, relative
+        assert all('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST' in line for line in lines), relative
