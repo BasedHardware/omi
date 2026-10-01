@@ -436,3 +436,14 @@ jobs:
           sync_backfill_alert_channels: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Provision Firestore missing-index alert
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/ensure_firestore_missing_index_alert.py \
+            --project "$PROJECT_ID" \
+            --notification-channels "$ALERT_CHANNELS"
