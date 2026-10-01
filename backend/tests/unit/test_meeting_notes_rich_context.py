@@ -870,6 +870,11 @@ class TestMeetingContextPack:
             return [_Record('Ash Kalb prefers async updates'), _Record('locked: do not surface', locked=True)]
 
         monkeypatch.setattr(pack_module, 'MemoryService', lambda **kw: SimpleNamespace(read=_read))
+        # Every other source stays hermetic: without these the pack reached live Firestore
+        # (meetings, prior conversations, goals) and the test spent minutes on network timeouts.
+        monkeypatch.setattr(pack_module.calendar_db, 'list_meetings', lambda *a, **k: [])
+        monkeypatch.setattr(pack_module.conversations_db, 'get_conversations_without_photos', lambda *a, **k: [])
+        monkeypatch.setattr(pack_module.goals_db, 'get_user_goals', lambda *a, **k: [])
         roster = _roster([_entry('Ash Kalb', 'ash@fulcra.com')])
         conversation = SimpleNamespace(started_at=START, finished_at=START + timedelta(minutes=30), id='c1')
 
@@ -1028,7 +1033,7 @@ class TestRichFailOpen:
         monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda uid: ('David', ('david@acme.com',)))
         monkeypatch.setattr(wiring, 'normalize_meeting_participants', boom)
         conversation = SimpleNamespace(source=ConversationSource.omi, external_data={})
-        roster, people_docs, desktop_capture = wiring._rich_meeting_roster('uid', conversation, None)
+        roster, people_docs, desktop_capture, _evidence = wiring._rich_meeting_roster('uid', conversation, None)
         # An empty roster — never None — keeps the strict rich speaker path.
         assert roster is not None
         assert roster.entries == ()
@@ -1046,7 +1051,7 @@ class TestRichFailOpen:
             source=ConversationSource.desktop,
             external_data={'conversation_role': 'meeting'},
         )
-        roster, _people_docs, desktop_capture = wiring._rich_meeting_roster('uid', conversation, None)
+        roster, _people_docs, desktop_capture, _evidence = wiring._rich_meeting_roster('uid', conversation, None)
         assert roster is not None
         assert roster.entries == ()
         assert desktop_capture is True

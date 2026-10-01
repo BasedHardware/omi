@@ -8,6 +8,8 @@ Widget _wrap(Widget child) => MaterialApp(
     );
 
 void main() {
+  // These assertions describe the dark appearance; the app now starts light by default.
+  setUpAll(() => OmiColors.active = OmiPalette.dark);
   group('ReviewAvatar', () {
     testWidgets('renders the uppercased first initial of the username', (tester) async {
       await tester.pumpWidget(_wrap(const ReviewAvatar(seed: 'uid_1', username: 'jane')));

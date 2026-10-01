@@ -19,7 +19,11 @@ def _as_utc(value: Any) -> Optional[datetime]:
 
 
 def aggregate_people_stats(conversations: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    """person_id -> {conversation_count, last_heard_at, talk_seconds} over the given conversations."""
+    """person_id -> {conversation_count, last_heard_at, talk_seconds, auto_conversation_count}.
+
+    ``auto_conversation_count`` counts conversations where every label for that person was an
+    automatic match (``speaker_match_source`` set): matches the user never reviewed.
+    """
     stats: Dict[str, Dict[str, Any]] = {}
     for conversation in conversations:
         if conversation.get('is_locked'):
@@ -29,13 +33,19 @@ def aggregate_people_stats(conversations: Iterable[Dict[str, Any]]) -> Dict[str,
             continue
         heard_at = _as_utc(conversation.get('started_at')) or _as_utc(conversation.get('created_at'))
         seen: set = set()
+        reviewed: set = set()
         for segment in segments:
             if not isinstance(segment, dict):
                 continue
             person_id = segment.get('person_id')
             if not person_id or not isinstance(person_id, str):
                 continue
-            entry = stats.setdefault(person_id, {'conversation_count': 0, 'last_heard_at': None, 'talk_seconds': 0.0})
+            entry = stats.setdefault(
+                person_id,
+                {'conversation_count': 0, 'last_heard_at': None, 'talk_seconds': 0.0, 'auto_conversation_count': 0},
+            )
+            if not segment.get('speaker_match_source'):
+                reviewed.add(person_id)
             if person_id not in seen:
                 seen.add(person_id)
                 entry['conversation_count'] += 1
@@ -44,7 +54,20 @@ def aggregate_people_stats(conversations: Iterable[Dict[str, Any]]) -> Dict[str,
             start, end = segment.get('start'), segment.get('end')
             if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
                 entry['talk_seconds'] += float(end - start)
+        for person_id in seen - reviewed:
+            stats[person_id]['auto_conversation_count'] += 1
     return stats
+
+
+def apply_people_stats(people: List[Any], stats: Dict[str, Dict[str, Any]]) -> None:
+    """Attach stats to ``models.other.Person`` objects and refresh their confidence reasons."""
+    for person in people:
+        entry = stats.get(person.id) or {}
+        person.conversation_count = entry.get('conversation_count', 0)
+        person.last_heard_at = entry.get('last_heard_at')
+        person.talk_seconds = entry.get('talk_seconds', 0.0)
+        person.auto_conversation_count = entry.get('auto_conversation_count', 0)
+        person.refresh_confidence()
 
 
 def collect_people_stats(

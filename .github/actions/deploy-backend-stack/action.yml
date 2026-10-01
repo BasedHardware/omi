@@ -743,6 +743,12 @@ runs:
           --member="serviceAccount:${TASKS_INVOKER_SA}" \
           --role=roles/run.invoker \
           --quiet
+        # Every listen finalization and self-heal recovery shares this queue.
+        # At 4 dispatches the queue saturated (median dispatch delay ~6 min),
+        # which exceeds the 300s replay window: the reconciler then minted a
+        # new generation for most jobs and about half of all dispatches were
+        # stale-generation acks. 16 leaves headroom on backend-sync
+        # (min 5 x concurrency 20) for the I/O-bound handler.
         if gcloud tasks queues describe conversation-finalization \
           --location="${{ inputs.region }}" \
           --project="${{ inputs.project_id }}" >/dev/null 2>&1; then
@@ -750,13 +756,13 @@ runs:
             --location="${{ inputs.region }}" \
             --project="${{ inputs.project_id }}" \
             --max-attempts=5 \
-            --max-concurrent-dispatches=4
+            --max-concurrent-dispatches=16
         else
           gcloud tasks queues create conversation-finalization \
             --location="${{ inputs.region }}" \
             --project="${{ inputs.project_id }}" \
             --max-attempts=5 \
-            --max-concurrent-dispatches=4
+            --max-concurrent-dispatches=16
         fi
 
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run

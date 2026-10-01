@@ -119,70 +119,59 @@ def resolve_live_continuation(
         except (AttributeError, TypeError):
             return None, None
 
-    try:
-        client = _resolve_client(firestore_client)
-        if client is None:
-            logger.warning("No firestore client available for resolve_live_continuation")
-            return None, None
-
-        user = client.collection('users').document(clean_uid)
-        root = user.collection('recording_sessions').document(clean_origin_id)
-
-        def _resolve_core(transaction: Any) -> tuple[dict[str, str] | None, dict[str, str] | None]:
-            orig_snap = root.get(transaction=transaction)
-            if not orig_snap or getattr(orig_snap, 'exists', None) is False:
-                return None, None
-            original = orig_snap.to_dict() or {}
-            if original.get('uid') != clean_uid or original.get('recording_session_id') != clean_origin_id:
-                # Do not invent a canonical recording binding when dual-write failed.
-                return None, None
-            pointer = original.get('live_continuation') or {}
-            cid = _clean_id(pointer.get('conversation_id'))
-            sid = _clean_id(pointer.get('recording_session_id'))
-            retired = None
-            if cid and sid:
-                row_snap = user.collection('conversations').document(cid).get(transaction=transaction)
-                row = (row_snap.to_dict() or {}) if getattr(row_snap, 'exists', None) is not False else {}
-                if 'finished_at' in row and isinstance(row['finished_at'], datetime):
-                    row['finished_at'] = _align_datetime_tz(row['finished_at'], valid_now)
-                if resumable_continuation(
-                    row, source=clean_source, device_id=clean_device_id, now=valid_now, timeout=valid_timeout
-                ):
-                    return {'conversation_id': cid, 'recording_session_id': sid}, None
-                finish = row.get('finished_at')
-                if (
-                    row.get('source') == clean_source
-                    and row.get('client_device_id') == clean_device_id
-                    and not row.get('is_locked')
-                    and isinstance(finish, datetime)
-                ):
-                    if gap_splits((valid_now - finish).total_seconds(), valid_timeout):
-                        retired = {'conversation_id': cid, 'recording_session_id': sid}
-            if clean_proposed is None:
-                return None, None
-            candidate_snap = (
-                user.collection('conversations')
-                .document(clean_proposed['conversation_id'])
-                .get(transaction=transaction)
-            )
-            candidate = (candidate_snap.to_dict() or {}) if getattr(candidate_snap, 'exists', None) is not False else {}
-            if 'finished_at' in candidate and isinstance(candidate['finished_at'], datetime):
-                candidate['finished_at'] = _align_datetime_tz(candidate['finished_at'], valid_now)
-            if not resumable_continuation(
-                candidate, source=clean_source, device_id=clean_device_id, now=valid_now, timeout=valid_timeout
-            ):
-                return None, None
-            adopted = dict(clean_proposed)
-            transaction.update(root, {'live_continuation': adopted})
-            return adopted, retired
-
-        txn = client.transaction() if callable(getattr(client, 'transaction', None)) else None
-        if txn is not None:
-            try:
-                return firestore.transactional(_resolve_core)(txn)
-            except (AttributeError, TypeError):
-                return _resolve_core(txn)
-        return _resolve_core(None)
-    except Exception as e:
-        logger.warning("Error in resolve_live_continuation for uid %s, origin %s: %s", clean_uid, clean_origin_id, e)
+    client = _resolve_client(firestore_client)
+    if client is None:
+        logger.warning("No firestore client available for resolve_live_continuation")
         return None, None
+
+    user = client.collection('users').document(clean_uid)
+    root = user.collection('recording_sessions').document(clean_origin_id)
+
+    @firestore.transactional
+    def _resolve_core(transaction: Any) -> tuple[dict[str, str] | None, dict[str, str] | None]:
+        orig_snap = root.get(transaction=transaction)
+        if not orig_snap or getattr(orig_snap, 'exists', None) is False:
+            return None, None
+        original = orig_snap.to_dict() or {}
+        if original.get('uid') != clean_uid or original.get('recording_session_id') != clean_origin_id:
+            # Do not invent a canonical recording binding when dual-write failed.
+            return None, None
+        pointer = original.get('live_continuation') or {}
+        cid = _clean_id(pointer.get('conversation_id'))
+        sid = _clean_id(pointer.get('recording_session_id'))
+        retired = None
+        if cid and sid:
+            row_snap = user.collection('conversations').document(cid).get(transaction=transaction)
+            row = (row_snap.to_dict() or {}) if getattr(row_snap, 'exists', None) is not False else {}
+            if 'finished_at' in row and isinstance(row['finished_at'], datetime):
+                row['finished_at'] = _align_datetime_tz(row['finished_at'], valid_now)
+            if resumable_continuation(
+                row, source=clean_source, device_id=clean_device_id, now=valid_now, timeout=valid_timeout
+            ):
+                return {'conversation_id': cid, 'recording_session_id': sid}, None
+            finish = row.get('finished_at')
+            if (
+                row.get('source') == clean_source
+                and row.get('client_device_id') == clean_device_id
+                and not row.get('is_locked')
+                and isinstance(finish, datetime)
+            ):
+                if gap_splits((valid_now - finish).total_seconds(), valid_timeout):
+                    retired = {'conversation_id': cid, 'recording_session_id': sid}
+        if clean_proposed is None:
+            return None, None
+        candidate_snap = (
+            user.collection('conversations').document(clean_proposed['conversation_id']).get(transaction=transaction)
+        )
+        candidate = (candidate_snap.to_dict() or {}) if getattr(candidate_snap, 'exists', None) is not False else {}
+        if 'finished_at' in candidate and isinstance(candidate['finished_at'], datetime):
+            candidate['finished_at'] = _align_datetime_tz(candidate['finished_at'], valid_now)
+        if not resumable_continuation(
+            candidate, source=clean_source, device_id=clean_device_id, now=valid_now, timeout=valid_timeout
+        ):
+            return None, None
+        adopted = dict(clean_proposed)
+        transaction.update(root, {'live_continuation': adopted})
+        return adopted, retired
+
+    return _resolve_core(client.transaction())

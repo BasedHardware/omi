@@ -24,6 +24,8 @@ from utils.conversations.transcript_hash import (
     transcript_sha256_for_binding,
 )
 from utils.observability.speaker_identification import record_speaker_review
+from models.person_confidence import SOURCE_MANUAL
+from utils.person_evidence import person_updates_for_assignment
 from utils.manual_speaker_assignments import (
     LiveTranscriptMerge,
     apply_manual_assignments,
@@ -59,6 +61,7 @@ from .first_open_obligations import (
 )
 
 from config.translation import resolve_ondemand_config
+from config.sync_lineage import sync_lineage_resolve_active_for
 from database.translation_admission import TranslationReservation, reservation_is_current
 
 logger = logging.getLogger(__name__)
@@ -224,7 +227,17 @@ def _require_segment_list(parsed: Any) -> List[Any]:
     return parsed
 
 
-def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
+def _is_verified_recovery_discard(write_data: Dict[str, Any]) -> bool:
+    # Imported lazily: several unit harnesses load this module with a stubbed
+    # ``utils`` package that has no ``utils.conversations`` subpackage.
+    from utils.conversations.recovery import verified_recovery_discard
+
+    return verified_recovery_discard(write_data.get('discarded'), write_data.get('relevance_decision'))
+
+
+def _decode_transcript_segments_strict(
+    uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
+) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
 
     The read path swallows decode failures into an empty list, which is safe for
@@ -236,6 +249,10 @@ def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: 
         return raw_segments
     if isinstance(raw_segments, str):
         payload = encryption.decrypt(raw_segments, uid)
+        if require_decryption and payload == raw_segments:
+            # decrypt's display fallback returns the input on authentication
+            # failure. Even parseable plaintext is not a successful decode.
+            raise ValueError('undecodable transcript_segments: decryption failed')
         if compressed:
             parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
         else:
@@ -244,6 +261,11 @@ def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: 
     if isinstance(raw_segments, bytes) and compressed:
         return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
     raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
+
+
+def decode_transcript_segments_verified(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
+    """Strict decode for callers outside this module: raises unless the blob decodes and decrypts."""
+    return _decode_transcript_segments_strict(uid, raw_segments, compressed, require_decryption=True)
 
 
 def _decode_public_transcript_segments_bounded(
@@ -352,6 +374,18 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
     return bool(segments)
 
 
+def effective_user_title(user_title: Any) -> Optional[str]:
+    """The user's title override, or ``None`` when there is none.
+
+    A blank string is no override: applying it would erase the generated (or
+    deterministic) title and render the row "Untitled". Readers and the
+    processing persists that re-apply the override resolve ``user_title``
+    through this one rule, so the stored ``structured.title`` shows. The
+    user-facing title writes (PATCH, ``set_title``) are unchanged.
+    """
+    return user_title if isinstance(user_title, str) and user_title.strip() else None
+
+
 def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
@@ -359,8 +393,8 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
     data = copy.deepcopy(conversation_data)
     # User titles are durable overrides. Conversation processing owns the
     # generated title, but must never erase an explicit user edit.
-    user_title = data.get('user_title')
-    if isinstance(user_title, str):
+    user_title = effective_user_title(data.get('user_title'))
+    if user_title is not None:
         structured = data.get('structured')
         if not isinstance(structured, dict):
             structured = {}
@@ -699,8 +733,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             if existing.get('folder_user_set'):
                 write_data['folder_id'] = existing.get('folder_id')
 
-            user_title = existing.get('user_title')
-            if isinstance(user_title, str):
+            user_title = effective_user_title(existing.get('user_title'))
+            if user_title is not None:
                 structured = write_data.get('structured')
                 if not isinstance(structured, dict):
                     structured = {}
@@ -796,6 +830,41 @@ def persist_processing_result_with_lifecycle(
             stale_sync_revision = True
             return False
 
+        if write_data.get('discarded') is True and _is_verified_recovery_discard(write_data):
+            from utils.conversations.recovery import (
+                RecoveryStructureUnavailableError,
+                structured_has_protected_content,
+            )
+
+            try:
+                _decode_transcript_segments_strict(
+                    uid,
+                    existing.get('transcript_segments', []),
+                    bool(existing.get('transcript_segments_compressed')),
+                    require_decryption=True,
+                )
+            except (TypeError, ValueError, zlib.error) as error:
+                raise RecoveryStructureUnavailableError(
+                    'server recovery discard requires a decoded transcript'
+                ) from error
+            # Admission and processing snapshots can precede a title edit or
+            # restore. Refuse before writing any verdict/content: the existing
+            # typed-minimum terminal path preserves a visible row and selfheal
+            # reports dead_letter rather than a contradictory completed discard.
+            if existing.get('sync_relevance_user_kept') or structured_has_protected_content(
+                existing.get('structured'), existing.get('user_title')
+            ):
+                raise RecoveryStructureUnavailableError('server recovery discard lost to protected content')
+            # Recovery never owns the stored transcript. Omit both fields even
+            # though the write decorators encoded the processing snapshot; this
+            # also prevents manual-assignment reapplication from re-encoding it.
+            write_data.pop('transcript_segments', None)
+            write_data.pop('transcript_segments_compressed', None)
+            write_data.pop('data_protection_level', None)
+            # Speaker resolution ran on the processing snapshot; its ids only
+            # describe a transcript this write no longer persists.
+            write_data.pop('speaker_resolution', None)
+
         # Restoring a legacy review row is an explicit user decision. A
         # processor that started before the restore may still carry the old
         # review/discarded verdict, so preserve the server-owned marker and
@@ -821,8 +890,8 @@ def persist_processing_result_with_lifecycle(
         if existing.get('folder_user_set'):
             write_data['folder_id'] = existing.get('folder_id')
 
-        user_title = existing.get('user_title')
-        if isinstance(user_title, str):
+        user_title = effective_user_title(existing.get('user_title'))
+        if user_title is not None:
             structured = write_data.get('structured')
             if not isinstance(structured, dict):
                 structured = {}
@@ -884,13 +953,34 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversation(uid, conversation_id, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED):
+def get_conversation(
+    uid,
+    conversation_id,
+    *,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_transcript_decode_status: bool = False,
+):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = document_data_with_revision(conversation_ref.get())
     record_document_read(
         read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
     )
+    if conversation_data is not None and include_transcript_decode_status:
+        # Recovery needs evidence from the raw field, before the tolerant read
+        # decoder turns corruption into an empty transcript. Other readers keep
+        # their existing behavior and never receive this server-only marker.
+        try:
+            _decode_transcript_segments_strict(
+                uid,
+                conversation_data.get('transcript_segments', []),
+                bool(conversation_data.get('transcript_segments_compressed')),
+                require_decryption=True,
+            )
+            conversation_data['_recovery_transcript_decoded'] = True
+        except (TypeError, ValueError, zlib.error):
+            conversation_data['_recovery_transcript_decoded'] = False
+            conversation_data['transcript_segments'] = []
     return conversation_data
 
 
@@ -2475,9 +2565,10 @@ def assign_conversation_speaker(
     speaker_id=None,
     segment_index=None,
     use_for_speech_training=True,
+    evidence_source=SOURCE_MANUAL,
     firestore_client=None,
 ):
-    """Commit the manual edit, provenance and invalidation in one transaction."""
+    """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
     collection = user_ref.collection(conversations_collection)
@@ -2550,27 +2641,21 @@ def assign_conversation_speaker(
             segment_index=selected_segment_index,
             use_for_speech_training=use_for_speech_training,
         )
-        # Read every person before any write; corrections fence in-flight profiles
-        # in the same transaction as the label, not in a later background task.
+        # Read every person before any write; corrections fence in-flight profiles and
+        # record label evidence in the same transaction as the label, not in a later task.
+        relabeled = [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
         people = {}
         for pid in previous | ({person_id} if person_id else set()):
             person_ref = user_ref.collection('people').document(pid)
             people[pid] = (person_ref, person_ref.get(transaction=transaction).to_dict())
         if person_id and not people[person_id][1]:
             raise LookupError('Person not found')
-        removed = []
-        for pid in previous:
-            person_ref, person = people[pid]
-            if not person:
-                continue
-            update = {'updated_at': datetime.now(timezone.utc)}
-            source = person.get('speech_sample_source') or {}
-            if source.get('conversation_id') == current_id and set(source.get('segment_ids', [])) & set(resolved):
-                removed.extend(person.get('speech_samples', []))
-                update.update(
-                    speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
-                )
-            transaction.update(person_ref, update)
+        docs, now = {pid: doc for pid, (_, doc) in people.items()}, datetime.now(timezone.utc)
+        updates, removed = person_updates_for_assignment(
+            docs, previous, person_id, relabeled, evidence_source, current_id, resolved, now, receipt, segments
+        )
+        for pid, update in updates.items():
+            transaction.update(people[pid][0], update)
         payload = _prepare_conversation_for_write(
             {'transcript_segments': segments, 'manual_speaker_assignments': receipt},
             uid,
@@ -2581,7 +2666,7 @@ def assign_conversation_speaker(
         current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
         for field in PROJECTION_FAMILY_FIELDS:
             current.pop(field, None)
-        return current, resolved, removed, [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
+        return current, resolved, removed, relabeled
 
     result = run_transactional(client, assign)
     current, _, _, before = result
@@ -2714,6 +2799,18 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(accepted),
         }
+        if (
+            live_segments is not None
+            and sync_lineage_resolve_active_for(uid)
+            and current.get('sync_live_target')
+            and current.get('sync_content_revision') is not None
+            and accepted != persisted
+        ):
+            # Sync and live now share this transcript. A processor that read
+            # before fresh live speech must lose the same revision fence as
+            # one that read before a sync append. Retries with no change do
+            # not invalidate a current processor.
+            update_payload['sync_content_revision'] = current['sync_content_revision'] + 1
         if capture_evidence is not None:
             update_payload['capture_evidence'] = capture_evidence
         if remap:

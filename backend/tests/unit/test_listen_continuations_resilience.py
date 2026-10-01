@@ -11,6 +11,7 @@ from database.listen_continuations import (
     MAX_ID_LENGTH,
     _align_datetime_tz,
     _clean_id,
+    _clean_str,
     _clean_timeout,
     _normalize_datetime,
     _resolve_client,
@@ -70,6 +71,22 @@ class FakeFirestoreClient:
 
 
 class FakeTransaction:
+    _read_only: bool = False
+    _id: bytes = b"fake-transaction-id"
+    _max_attempts: int = 5
+
+    def _clean_up(self) -> None:
+        pass
+
+    def _begin(self, retry_id: Any = None) -> None:
+        pass
+
+    def _commit(self) -> None:
+        pass
+
+    def _rollback(self) -> None:
+        pass
+
     def update(self, doc_ref: Any, data: Dict[str, Any]) -> None:
         doc_ref.update(data)
 
@@ -281,16 +298,15 @@ def test_resolve_live_continuation_retires_expired_continuation():
     assert retired == {"conversation_id": "conv_old", "recording_session_id": "rec_old"}
 
 
-def test_resolve_live_continuation_firestore_exception_resilience():
+def test_resolve_live_continuation_firestore_outage_propagates():
     broken_client = MagicMock()
     broken_client.collection.side_effect = RuntimeError("Firestore unavailable")
 
     now = datetime.now(timezone.utc)
-    adopted, retired = resolve_live_continuation(
-        "u1", "orig1", source="mic", device_id="dev1", now=now, timeout=120, firestore_client=broken_client
-    )
-    assert adopted is None
-    assert retired is None
+    with pytest.raises(RuntimeError, match="Firestore unavailable"):
+        resolve_live_continuation(
+            "u1", "orig1", source="mic", device_id="dev1", now=now, timeout=120, firestore_client=broken_client
+        )
 
 
 def test_resolve_live_continuation_naive_finished_at_alignment():
@@ -330,3 +346,102 @@ def test_resolve_live_continuation_naive_finished_at_alignment():
 
     assert adopted == {"conversation_id": "conv_existing", "recording_session_id": "rec_existing"}
     assert retired is None
+
+
+def test_clean_str_validation():
+    assert _clean_str(None) == ""
+    assert _clean_str(12345) == ""
+    assert _clean_str("") == ""
+    assert _clean_str("   ") == ""
+    assert _clean_str("x" * (MAX_ID_LENGTH + 1)) == ""
+    assert _clean_str("valid_source") == "valid_source"
+    assert _clean_str("  spaced_source  ") == "spaced_source"
+
+
+def test_normalize_datetime_with_invalid_type():
+    dt = _normalize_datetime("invalid_date")
+    assert isinstance(dt, datetime)
+    assert dt.tzinfo == timezone.utc
+
+
+def test_resolve_live_continuation_dual_write_mismatch():
+    client = FakeFirestoreClient()
+    now = datetime(2026, 9, 30, 10, 0, tzinfo=timezone.utc)
+
+    # Origin session has mismatched uid or recording_session_id
+    client.store["users/u1/recording_sessions/orig1"] = FakeDocument(
+        {
+            "uid": "mismatched_uid",
+            "recording_session_id": "orig1",
+        }
+    )
+
+    adopted, retired = resolve_live_continuation(
+        "u1",
+        "orig1",
+        source="mic",
+        device_id="dev1",
+        now=now,
+        timeout=120,
+        proposed={"conversation_id": "c1", "recording_session_id": "s1"},
+        firestore_client=client,
+    )
+    assert adopted is None
+    assert retired is None
+
+
+def test_resolve_live_continuation_candidate_not_resumable():
+    client = FakeFirestoreClient()
+    now = datetime(2026, 9, 30, 10, 0, tzinfo=timezone.utc)
+
+    client.store["users/u1/recording_sessions/orig1"] = FakeDocument(
+        {
+            "uid": "u1",
+            "recording_session_id": "orig1",
+        }
+    )
+
+    # Proposed conversation is completed and locked -> not resumable
+    client.store["users/u1/conversations/conv1"] = FakeDocument(
+        {
+            "status": "completed",
+            "is_locked": True,
+            "source": "mic",
+            "client_device_id": "dev1",
+            "finished_at": now - timedelta(seconds=10),
+        }
+    )
+
+    proposed = {"conversation_id": "conv1", "recording_session_id": "rec1"}
+    adopted, retired = resolve_live_continuation(
+        "u1",
+        "orig1",
+        source="mic",
+        device_id="dev1",
+        now=now,
+        timeout=120,
+        proposed=proposed,
+        firestore_client=client,
+    )
+
+    assert adopted is None
+    assert retired is None
+
+
+def test_resolve_live_continuation_no_client():
+    now = datetime.now(timezone.utc)
+    # When firestore_client is explicitly None and default client cannot be imported or initialized
+    # We simulate by mocking _resolve_client returning None
+    from unittest.mock import patch
+
+    with patch("database.listen_continuations._resolve_client", return_value=None):
+        adopted, retired = resolve_live_continuation(
+            "u1",
+            "orig1",
+            source="mic",
+            device_id="dev1",
+            now=now,
+            timeout=120,
+        )
+        assert adopted is None
+        assert retired is None

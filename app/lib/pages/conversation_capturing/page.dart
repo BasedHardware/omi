@@ -35,6 +35,7 @@ import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 
 import 'capture_state_header.dart';
+import 'widgets/speaker_suggestion_chip.dart';
 
 /// Switch the home IndexedStack to Home (the conversation list) *before* popping the capturing
 /// route so the user lands there with no flash of the previous page.
@@ -453,6 +454,26 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   void _editSegmentSpeaker(TranscriptSegment segment, CaptureProvider provider) =>
       _nameSpeaker(segment.id, segment.speakerId, provider);
 
+  /// A pinned near-miss the backend asked about for this unlabeled segment, if its person is known.
+  Person? _pinnedSuggestion(TranscriptSegment segment, CaptureProvider provider, List<Person> people) {
+    if (segment.isUser || segment.personId != null) return null;
+    final suggestedId = provider.suggestionsBySegmentId[segment.id]?.suggestedPersonId;
+    return suggestedId == null ? null : personById(people, suggestedId);
+  }
+
+  /// "Yes" on the inline suggestion labels every unlabeled line from this speaker.
+  Future<void> _acceptSuggestion(TranscriptSegment segment, Person person, CaptureProvider provider) async {
+    final ids = [
+      for (final s in provider.segments)
+        if (s.speakerId == segment.speakerId && !s.isUser && s.personId == null) s.id,
+    ];
+    OmiHaptics.light();
+    final ok = await provider.assignSpeakerToConversation(segment.speakerId, person.id, person.name, ids,
+        applyToSpeaker: true);
+    if (!mounted) return;
+    ok ? OmiHaptics.success() : OmiFeedback.error(context, context.l10n.somethingWentWrongTryAgain);
+  }
+
   Widget _buildTranscriptTimelineItem(
       TranscriptSegment segment, CaptureProvider provider, List<Person> people, SpeakerNames names) {
     final bool isUser = segment.isUser;
@@ -503,6 +524,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(name, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
+                    if (_pinnedSuggestion(segment, provider, people) case final suggested?)
+                      SpeakerSuggestionChip(
+                        key: ValueKey('suggestion_${segment.id}'),
+                        person: suggested,
+                        onYes: () => _acceptSuggestion(segment, suggested, provider),
+                        onSomeoneElse: () => _editSegmentSpeaker(segment, provider),
+                      ),
                     const SizedBox(height: 4),
                     Text(segment.text, style: OmiType.subhead.copyWith(height: 1.4)),
                   ],

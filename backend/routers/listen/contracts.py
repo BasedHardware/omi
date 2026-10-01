@@ -91,6 +91,9 @@ class ListenRequest:
     # onboarding — see runtime.py's _bootstrap. Appended last so a positional
     # caller can't silently mis-bind an existing argument.
     speech_profile_redo: bool = False
+    # The client (desktop, meeting role only) declared it runs a pre-notes
+    # screen-evidence pass; persisted to external_data['screen_evidence_pass'].
+    screen_evidence_pass: bool = False
 
 
 @dataclass

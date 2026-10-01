@@ -313,8 +313,14 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     id = wire.id
     createdAt = try Self.parseDate(wire.createdAt, decoder: decoder)
     updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
-    startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
-    finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
+    // Microsecond precision: `started_at` is the origin of the screenshot selection fingerprint
+    // the server stamps, and a formatter that stops at milliseconds disagrees with it.
+    startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder).map {
+      Self.restoringMicroseconds(of: wire.startedAt, to: $0)
+    }
+    finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder).map {
+      Self.restoringMicroseconds(of: wire.finishedAt, to: $0)
+    }
     let rendered = ConversationProjectionRendering.resolve(
       wire, transcriptIncluded: container.contains(.transcriptSegments))
     structured = rendered.structured
@@ -369,6 +375,18 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   private static func parseOptionalDate(_ s: String?, decoder: Decoder) throws -> Date? {
     guard let s else { return nil }
     return try parseDate(s, decoder: decoder)
+  }
+
+  /// `ISO8601DateFormatter` keeps three fractional digits. Re-apply the wire's sub-millisecond
+  /// digits (up to microseconds, which is all Firestore and Python carry) to the parsed instant.
+  static func restoringMicroseconds(of wire: String?, to parsed: Date) -> Date {
+    guard let wire,
+      let range = wire.range(of: #"(?<=T\d{2}:\d{2}:\d{2}\.)\d{4,}"#, options: .regularExpression)
+    else { return parsed }
+    let digits = String(wire[range].prefix(6)).padding(toLength: 6, withPad: "0", startingAt: 0)
+    guard let microseconds = Int64(digits) else { return parsed }
+    let wholeSeconds = parsed.timeIntervalSince1970.rounded(.down)
+    return Date(timeIntervalSince1970: wholeSeconds + Double(microseconds) / 1_000_000)
   }
 
   /// Memberwise initializer for creating from local storage

@@ -165,6 +165,11 @@ struct ConversationScreenFrameSet: Codable, Sendable, Equatable {
   let adjudicatedAt: Date?
   /// Selection policy + trusted content interval used by the adjudication pass.
   let selectionFingerprint: String?
+  /// The fingerprint the server would stamp *now*: its own trusted transcript content window for
+  /// this conversation, or nil when it has none. It lets a background caller learn the window from
+  /// a side-effect-free read instead of the conversation detail route, whose first open runs
+  /// deferred enrichment and first-open fanout. Absent from servers that predate it.
+  var trustedSelectionFingerprint: String? = nil
 
   enum CodingKeys: String, CodingKey {
     case revision
@@ -172,6 +177,7 @@ struct ConversationScreenFrameSet: Codable, Sendable, Equatable {
     case strip
     case adjudicatedAt = "adjudicated_at"
     case selectionFingerprint = "selection_fingerprint"
+    case trustedSelectionFingerprint = "trusted_selection_fingerprint"
   }
 
   static let empty = ConversationScreenFrameSet(
