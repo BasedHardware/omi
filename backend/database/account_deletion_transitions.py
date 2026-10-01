@@ -6,6 +6,7 @@ timestamps are strictly normalized to timezone-aware UTC.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +17,7 @@ from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 MAX_MIGRATION_JOURNALS_LIMIT = 500
+_GCE_NAME = re.compile(r'[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?')
 
 
 def _ensure_utc(dt: datetime | None) -> datetime:
@@ -27,10 +29,20 @@ def _ensure_utc(dt: datetime | None) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
+def _validate_gce_identifier(name: str, field_name: str) -> str:
+    """Validate GCE resource name against GCE naming rules."""
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(f'{field_name} must be a non-empty string')
+    clean = name.strip()
+    if not _GCE_NAME.fullmatch(clean):
+        raise ValueError(f'{field_name} must match GCE naming constraints')
+    return clean
+
+
 def read_agent_vm_migration_journals(
     uid: str,
     *,
-    limit: int = 100,
+    limit: int | None = None,
     firestore_client: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Read migration journals before deleting the user's Firestore subtree.
@@ -43,17 +55,18 @@ def read_agent_vm_migration_journals(
         raise ValueError('uid is required')
     if '/' in uid:
         raise ValueError('uid cannot contain path delimiters')
-    if not isinstance(limit, int) or limit <= 0:
+    if limit is not None and (not isinstance(limit, int) or limit <= 0):
         raise ValueError('limit must be a positive integer')
 
-    effective_limit = min(limit, MAX_MIGRATION_JOURNALS_LIMIT)
+    effective_limit = min(limit, MAX_MIGRATION_JOURNALS_LIMIT) if limit is not None else None
     client = firestore_client if firestore_client is not None else get_firestore_client()
     clean_uid = uid.strip()
     migration_ref = client.collection('users').document(clean_uid).collection('agentVmMigrations')
+    query_target = migration_ref if effective_limit is None else migration_ref.limit(effective_limit)
     journals: list[dict[str, Any]] = []
 
     try:
-        stream_iter = migration_ref.stream()
+        stream_iter = query_target.stream()
         for snapshot in stream_iter:
             raw_data = snapshot.to_dict() if hasattr(snapshot, 'to_dict') else None
             if not isinstance(raw_data, dict):
@@ -63,7 +76,7 @@ def read_agent_vm_migration_journals(
                 raise RuntimeError('Agent VM migration journal identity is ambiguous')
             journal['migrationId'] = snapshot.id
             journals.append(journal)
-            if len(journals) >= effective_limit:
+            if effective_limit is not None and len(journals) >= effective_limit:
                 break
     except NotFound:
         return []
@@ -107,10 +120,8 @@ def record_late_agent_vm_cleanup(
 ) -> bool:
     if doc_ref is None:
         raise ValueError('doc_ref is required')
-    if not isinstance(vm_name, str) or not vm_name.strip():
-        raise ValueError('vm_name must be a non-empty string')
-    if not isinstance(zone, str) or not zone.strip():
-        raise ValueError('zone must be a non-empty string')
+    clean_vm_name = _validate_gce_identifier(vm_name, 'vm_name')
+    clean_zone = _validate_gce_identifier(zone, 'zone')
     if expected_instance_id is not None:
         if (
             not isinstance(expected_instance_id, str)
@@ -129,7 +140,7 @@ def record_late_agent_vm_cleanup(
     if not account_deletion_blocks_access(status):
         return False
 
-    pending = {'vmName': vm_name.strip(), 'zone': zone.strip()}
+    pending = {'vmName': clean_vm_name, 'zone': clean_zone}
     if expected_instance_id is not None:
         pending['expectedInstanceId'] = expected_instance_id.strip()
     transaction.set(
@@ -155,10 +166,8 @@ def adopt_legacy_late_agent_vm_cleanup(
     """Add a provider identity fence to an exact pre-fence cleanup record."""
     if doc_ref is None:
         raise ValueError('doc_ref is required')
-    if not isinstance(vm_name, str) or not vm_name.strip():
-        raise ValueError('vm_name must be a non-empty string')
-    if not isinstance(zone, str) or not zone.strip():
-        raise ValueError('zone must be a non-empty string')
+    clean_vm_name = _validate_gce_identifier(vm_name, 'vm_name')
+    clean_zone = _validate_gce_identifier(zone, 'zone')
     if (
         not isinstance(expected_instance_id, str)
         or not expected_instance_id.strip()

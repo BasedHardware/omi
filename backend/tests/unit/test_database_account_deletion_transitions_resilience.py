@@ -36,9 +36,10 @@ class _MockDocRef:
 
 
 class _MockCollection:
-    def __init__(self, snapshots=None, stream_exc=None):
+    def __init__(self, snapshots=None, stream_exc=None, limit_val=None):
         self.snapshots = snapshots or []
         self.stream_exc = stream_exc
+        self.limit_val = limit_val
 
     def document(self, doc_id):
         return self
@@ -46,9 +47,14 @@ class _MockCollection:
     def collection(self, coll_id):
         return self
 
+    def limit(self, count):
+        return _MockCollection(snapshots=self.snapshots, stream_exc=self.stream_exc, limit_val=count)
+
     def stream(self):
         if self.stream_exc:
             raise self.stream_exc
+        if self.limit_val is not None:
+            return iter(self.snapshots[: self.limit_val])
         return iter(self.snapshots)
 
 
@@ -114,6 +120,27 @@ def test_read_agent_vm_migration_journals_bounds_results():
     assert [j["migrationId"] for j in journals] == ["mig-0", "mig-1", "mig-2"]
 
 
+def test_read_agent_vm_migration_journals_clamp_500_and_default_unlimited():
+    """Verify clamp to 500 items when limit > 500, and complete read when limit is None."""
+    snapshots = [
+        _MockSnapshot(f"mig-{i:04d}", {"migrationId": f"mig-{i:04d}", "status": "ok"})
+        for i in range(600)
+    ]
+    mock_client = MagicMock()
+    mock_coll = _MockCollection(snapshots=snapshots)
+    mock_client.collection.return_value = mock_coll
+
+    # limit > 500 clamped to 500
+    clamped = read_agent_vm_migration_journals("user-1", limit=550, firestore_client=mock_client)
+    assert len(clamped) == 500
+    assert clamped[0]["migrationId"] == "mig-0000"
+    assert clamped[-1]["migrationId"] == "mig-0499"
+
+    # default limit=None streams all 600
+    all_journals = read_agent_vm_migration_journals("user-1", firestore_client=mock_client)
+    assert len(all_journals) == 600
+
+
 def test_read_agent_vm_migration_journals_detects_malformed_data():
     """Verify non-dict snapshot payloads raise RuntimeError."""
     mock_client = MagicMock()
@@ -156,7 +183,7 @@ def test_mark_wipe_completed_normalizes_naive_datetime():
     assert call_doc is doc_ref
     assert kwargs.get("merge") is True
     assert payload["wipe_status"] == "completed"
-    assert payload["wipe_completed_at"].tzinfo == timezone.utc
+    assert payload["wipe_completed_at"] == naive_dt.replace(tzinfo=timezone.utc)
 
 
 def test_mark_wipe_completed_handles_late_cleanup_failure():
@@ -166,8 +193,9 @@ def test_mark_wipe_completed_handles_late_cleanup_failure():
         data={"late_agent_vm_cleanup": {"vmName": "vm-1"}},
         exists=True,
     )
+    naive_dt = datetime(2026, 9, 30, 21, 0, 0)
 
-    result = mark_wipe_completed(mock_txn, doc_ref)
+    result = mark_wipe_completed(mock_txn, doc_ref, now=naive_dt)
 
     assert result is False
     assert mock_txn.set.call_count == 1
@@ -176,7 +204,7 @@ def test_mark_wipe_completed_handles_late_cleanup_failure():
     assert call_doc is doc_ref
     assert kwargs.get("merge") is True
     assert payload["wipe_status"] == "failed"
-    assert payload["wipe_failed_at"].tzinfo == timezone.utc
+    assert payload["wipe_failed_at"] == naive_dt.replace(tzinfo=timezone.utc)
 
 
 def test_record_late_agent_vm_cleanup_validates_inputs():
@@ -193,8 +221,14 @@ def test_record_late_agent_vm_cleanup_validates_inputs():
     with pytest.raises(ValueError, match="zone must be a non-empty string"):
         record_late_agent_vm_cleanup(mock_txn, doc_ref, "vm-1", "")
 
+    with pytest.raises(ValueError, match="vm_name must match GCE naming constraints"):
+        record_late_agent_vm_cleanup(mock_txn, doc_ref, "VM_INVALID_UPPER", "us-central1-a")
+
+    with pytest.raises(ValueError, match="zone must match GCE naming constraints"):
+        record_late_agent_vm_cleanup(mock_txn, doc_ref, "vm-1", "ZONE_UPPER")
+
     with pytest.raises(ValueError, match="late Agent VM cleanup instance identity must be numeric"):
-        record_late_agent_vm_cleanup(mock_txn, doc_ref, "vm-1", "zone-1", expected_instance_id="abc-not-num")
+        record_late_agent_vm_cleanup(mock_txn, doc_ref, "vm-1", "us-central1-a", expected_instance_id="abc-not-num")
 
 
 def test_record_late_agent_vm_cleanup_writes_record():
@@ -219,7 +253,7 @@ def test_record_late_agent_vm_cleanup_writes_record():
     assert call_doc is doc_ref
     assert kwargs.get("merge") is True
     assert payload["wipe_status"] == "failed"
-    assert payload["wipe_failed_at"].tzinfo == timezone.utc
+    assert payload["wipe_failed_at"] == naive_dt.replace(tzinfo=timezone.utc)
     assert payload["late_agent_vm_cleanup"] == {
         "vmName": "my-vm",
         "zone": "us-central1-a",
@@ -233,13 +267,19 @@ def test_adopt_legacy_late_agent_vm_cleanup_validates_inputs():
     doc_ref = _MockDocRef(data={"wipe_status": "in_progress"}, exists=True)
 
     with pytest.raises(ValueError, match="doc_ref is required"):
-        adopt_legacy_late_agent_vm_cleanup(mock_txn, None, "vm-1", "zone", "12345")
+        adopt_legacy_late_agent_vm_cleanup(mock_txn, None, "vm-1", "us-central1-a", "12345")
 
     with pytest.raises(ValueError, match="vm_name must be a non-empty string"):
-        adopt_legacy_late_agent_vm_cleanup(mock_txn, doc_ref, "", "zone", "12345")
+        adopt_legacy_late_agent_vm_cleanup(mock_txn, doc_ref, "", "us-central1-a", "12345")
+
+    with pytest.raises(ValueError, match="vm_name must match GCE naming constraints"):
+        adopt_legacy_late_agent_vm_cleanup(mock_txn, doc_ref, "-invalid-start", "us-central1-a", "12345")
+
+    with pytest.raises(ValueError, match="zone must match GCE naming constraints"):
+        adopt_legacy_late_agent_vm_cleanup(mock_txn, doc_ref, "vm-1", "us-central1-a-!", "12345")
 
     with pytest.raises(ValueError, match="late Agent VM cleanup instance identity must be numeric"):
-        adopt_legacy_late_agent_vm_cleanup(mock_txn, doc_ref, "vm-1", "zone", "not-digits")
+        adopt_legacy_late_agent_vm_cleanup(mock_txn, doc_ref, "vm-1", "us-central1-a", "not-digits")
 
 
 def test_adopt_legacy_late_agent_vm_cleanup_updates_target():
