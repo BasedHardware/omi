@@ -4010,46 +4010,61 @@ async def test_nonempty_held_post_preserves_sentence_anchor_and_reports_answers(
 @pytest.mark.asyncio
 @pytest.mark.parametrize('hold_after', [1, 2])
 async def test_continuous_speech_slow_post_can_answer_after_twelve_speech_seconds(monkeypatch, hold_after):
-    client = RacingTextClient(data={'segments': [{'text': 'Unfinished words', 'start': 0.0, 'end': 5.5}]})
+    actual, base, previous, _client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    client = RacingTextClient(
+        data={'segments': [{'text': 'Unfinished words', 'start': 3.5 if hold_after == 2 else 0.0, 'end': 5.5}]}
+    )
     original_post = client.post
 
     async def no_repeated_fake_text(url, **kwargs):
-        if len(client.requests) >= hold_after:
+        if len(client.requests) + 1 == hold_after:
+            client.release.clear()
+        elif len(client.requests) >= hold_after:
             client.data = {'text': ''}
         return await original_post(url, **kwargs)
 
     monkeypatch.setattr(client, 'post', no_repeated_fake_text)
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     if hold_after == 2:
         client.release.set()
-    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
-    sock, emitted, clock = await _clocked_startup_socket(monkeypatch, client)
+    origin = clock[0]
+    sock = previous.raw
     before = WINDOW_PRE_DEADLINE_POSTS._value.get()
-    await _startup_capture(sock, clock, 1000.0, speech_seconds=1.0)
-    await _startup_capture(sock, clock, 1005.0, speech_seconds=5.0)
-    assert len(client.requests) == 1
-    if hold_after == 2:
-        client.release.clear()
-    await _startup_capture(sock, clock, 1011.0, speech_seconds=5.28, admitted_silence_seconds=0.72)
+    for _ in range(150):  # six continuous capture seconds; first POST at the normal pace
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+    assert len(client.requests) == hold_after
+    assert sock._episode_first_post_at == pytest.approx(origin + 6)
+    for _ in range(132):  # another 5.28 continuous speech seconds, no gaps
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+    # Capture then reaches twelve seconds; only the short VAD hangover is
+    # sent. The two-POST case is the first window plus head recovery, not
+    # a second normal six-second step. Both are counted as attempts in prod.
+    sample = await _settled_fragment_silence(actual, clock, sample, 18)
+    for _ in range(20):
+        await _REAL_SLEEP(0)
     assert len(client.requests) == hold_after
     assert sock._admitted_speech_bytes == round(11.28 * 16000) * 2
     assert sock._empty_posts_since_anchor == 0 and sock._post_in_flight
     assert sock._answered_posts_since_anchor == sock._text_posts_since_anchor == hold_after - 1
-    clock[0] = 1012.0
-    assert not sock.is_connection_dead and sock._first_text_timer is not None
-    assert sock._first_text_deadline_at == 1017.0
-    assert WINDOW_PRE_DEADLINE_POSTS._value.get() == before  # normal POST already gave this episode a chance
-    clock[0] = 1012.5
-    client.data = {'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]}
+    clock[0] = sock._first_speech_at + 12
+    assert not previous.is_connection_dead and sock._first_text_timer is not None
+    assert sock._first_text_deadline_at == sock._episode_first_post_at + 12
+    assert WINDOW_PRE_DEADLINE_POSTS._value.get() == before
+    # The held POST answers after the former speech-relative deadline,
+    # within its existing eight-second request budget in either case.
+    clock[0] = sock._first_speech_at + 12.5
+    client.data = {'segments': [{'text': 'Done.', 'start': 0.0, 'end': 2.0}]}
     client.release.set()
     for _ in range(100):
-        if emitted:
+        if base.emitted:
             break
         await _REAL_SLEEP(0)
-    assert [item['text'] for item in emitted] == ['Done.']
+    assert [item['text'] for item in base.emitted] == ['Done.']
     assert sock._first_text_timer is None and sock._pre_deadline_timer is None
     sock._expire_first_text()
-    assert not sock.is_connection_dead
-    await sock.drain_and_close()
+    assert not previous.is_connection_dead
+    assert actual.stt_socket is previous and callbacks == [] and replayed == []
+    await actual._drain_stt_sockets()
 
 
 @pytest.mark.asyncio
