@@ -72,7 +72,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
   // Whether the backend enrollment actually succeeded — the banner must not
   // claim "Free plan active" off key presence alone: an invalid or rejected key
   // stays in the fields while activation stays off.
-  const [enrolledActive, setEnrolledActive] = useState(false)
+  const [validatedProviders, setValidatedProviders] = useState<ByokProvider[]>([])
   const [reveal, setReveal] = useState<Record<ByokProvider, boolean>>({
     openrouter: false,
     openai: false,
@@ -97,16 +97,14 @@ export function DeveloperKeysSection(): React.JSX.Element {
       keysRef.current = merged
       setKeys(merged)
     })
-    void window.omi.byokValidatedProviders().then((validated) => {
-      const llm = new Set<string>(BYOK_LLM_PROVIDERS as readonly string[])
-      setEnrolledActive(validated.some((p) => llm.has(p)))
-    })
+    void window.omi.byokValidatedProviders().then(setValidatedProviders)
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [])
 
-  const hasActiveLLMByok = enrolledActive
+  const hasActiveLLMByok = validatedProviders.some((p) => BYOK_LLM_PROVIDERS.includes(p))
+  const hasTranscriptionByok = validatedProviders.includes('deepgram')
   const hasAnyKey = BYOK_PROVIDERS.some((p) => keys[p].trim().length > 0)
 
   // Persist the current key set, then reconcile backend activation. Runs
@@ -126,11 +124,12 @@ export function DeveloperKeysSection(): React.JSX.Element {
       return
     }
     const result = await window.omi.byokEnroll(token)
+    const validated = await window.omi.byokValidatedProviders()
     if (gen !== enrollGenRef.current) return
+    setValidatedProviders(validated)
     setChecking(false)
     setStatuses(result.results)
     if (result.active) {
-      setEnrolledActive(true)
       setActivationError(null)
       // Mac parity: on activation, refresh plan/quota and clear any sticky
       // paywall so a user who just hit their limit isn't left blocked.
@@ -138,12 +137,11 @@ export function DeveloperKeysSection(): React.JSX.Element {
       void fetchSubscription().catch(() => {})
       void fetchChatQuota().catch(() => {})
     } else if (result.backendError) {
-      // The enroll POST failed — server state unknown, so keep the prior
-      // activation evidence instead of flipping the banner either way.
+      // The enroll POST failed; the store retains prior enrollment evidence
+      // only for keys that still match its accepted fingerprints.
       setActivationError("Couldn't reach Omi to switch on the free plan. Try again.")
     } else {
       // Deactivate DELETE sent (or every LLM key rejected) — the free plan is off.
-      setEnrolledActive(false)
       if (willValidate) {
         const rejected = PROVIDERS.filter((p) => result.results[p.id] && !result.results[p.id]?.ok)
           .map((p) => p.displayName)
@@ -175,7 +173,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
     setStatuses({})
     setActivationError(null)
     setChecking(false)
-    setEnrolledActive(false)
+    setValidatedProviders([])
     await window.omi.byokClearAll()
     const token = await auth.currentUser?.getIdToken().catch(() => undefined)
     if (token) await window.omi.byokEnroll(token) // deactivates (empty set)
@@ -200,12 +198,21 @@ export function DeveloperKeysSection(): React.JSX.Element {
         )}
         <div className="min-w-0">
           <div className="text-[15px] font-semibold text-text-primary">
-            {hasActiveLLMByok ? 'Free plan active' : 'Use Omi free forever'}
+            {hasActiveLLMByok ? 'Chat and AI: BYOK keys active' : 'Bring your own keys'}
           </div>
           <div className="mt-0.5 text-sm text-text-tertiary">
             {hasActiveLLMByok
-              ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this PC."
-              : 'Add an LLM key to switch to the free plan. OpenRouter is preferred when configured; Deepgram is optional and only powers transcription. Keys stay on this PC — we never store them on our servers.'}
+              ? 'Your LLM keys cover supported chat and AI features. Keys stay on this PC.'
+              : 'Add an LLM key for supported chat and AI features. OpenRouter is preferred when configured. Keys stay on this PC — we never store them on our servers.'}
+          </div>
+          <div className="mt-2 text-sm text-text-tertiary">
+            A validated Deepgram key is required for BYOK transcription. Without it, your Omi
+            transcription allowance and conversation locks still apply.
+          </div>
+          <div className="mt-2 text-sm text-text-tertiary">
+            {hasTranscriptionByok
+              ? 'Transcription: Deepgram BYOK'
+              : 'Transcription: Omi plan allowance'}
           </div>
         </div>
       </div>
