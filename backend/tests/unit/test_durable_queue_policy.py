@@ -97,3 +97,14 @@ def test_adopt_on_identity():
     assert adopt_on_identity(existing_id=None, item_id='item_1').adopted is False
     with pytest.raises(ValueError, match='enqueue identity mismatch'):
         adopt_on_identity(existing_id='other_item', item_id='item_1')
+
+
+def test_process_outcome_factories_truncate_long_errors():
+    long_err = 'F' * 3500
+    retry_outcome = ProcessOutcome.retry(long_err, reason='flake')
+    assert retry_outcome.error_text is not None
+    assert len(retry_outcome.error_text) == 2000
+
+    reject_outcome = ProcessOutcome.reject(long_err, reason='bad_format')
+    assert reject_outcome.error_text is not None
+    assert len(reject_outcome.error_text) == 2000
