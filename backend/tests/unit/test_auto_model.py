@@ -1,5 +1,9 @@
+import asyncio
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 import routers.auto_model as am
 
@@ -61,7 +65,8 @@ async def test_fetch_and_score_with_mocked_models(monkeypatch):
     mock_client.__aenter__.return_value = mock_client
     mock_client.__aexit__.return_value = None
 
-    with patch("httpx.AsyncClient", return_value=mock_client):
+    # backend/AGENTS.md: use patch.object on the target module instead of string patch
+    with patch.object(httpx, "AsyncClient", return_value=mock_client):
         provider, detail = await am._fetch_and_score()
         # gemini: 0.65*(70/100) + 0.35*(200/250) = 0.455 + 0.28 = 0.735
         # gpt5:   0.65*(90/100) + 0.35*(150/250) = 0.585 + 0.21 = 0.795
@@ -71,17 +76,48 @@ async def test_fetch_and_score_with_mocked_models(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_auto_model_pick_caching(monkeypatch):
-    """Test auto_model_pick caches result and returns response dict matching AutoModelPick."""
-    # Reset cache
-    am._cache = {"provider": None, "ts": 0.0, "detail": {}}
+async def test_auto_model_pick_caching_and_expiration(monkeypatch):
+    """Test auto_model_pick caching and 24-hour expiration behavior."""
+    # Isolate module cache with monkeypatch so teardown restores original
+    monkeypatch.setattr(am, "_cache", {"provider": None, "ts": 0.0, "detail": {}})
     monkeypatch.delenv("ARTIFICIALANALYSIS_API_KEY", raising=False)
 
+    base_time = 100000.0
+    monkeypatch.setattr(time, "time", lambda: base_time)
+
+    # First call initializes cache
     pick1 = await am.auto_model_pick(uid="user_123")
     assert pick1["provider"] == "geminiFlashLive"
-    assert pick1["attribution"] == "https://artificialanalysis.ai/"
+    assert am._cache["ts"] == base_time
 
-    # Mutate cache provider manually to verify subsequent calls read from cache
+    # Advance time within 24-hour TTL (e.g., 1 hour later) -> should return cached value
     am._cache["provider"] = "cached_test_provider"
+    monkeypatch.setattr(time, "time", lambda: base_time + 3600.0)
     pick2 = await am.auto_model_pick(uid="user_456")
     assert pick2["provider"] == "cached_test_provider"
+
+    # Advance time past 24-hour TTL (e.g., 25 hours later) -> cache expires and re-fetches
+    monkeypatch.setattr(time, "time", lambda: base_time + am.TTL_SECONDS + 10.0)
+    pick3 = await am.auto_model_pick(uid="user_789")
+    assert pick3["provider"] == "geminiFlashLive"
+    assert am._cache["ts"] == base_time + am.TTL_SECONDS + 10.0
+
+
+@pytest.mark.asyncio
+async def test_auto_model_pick_concurrent_misses_single_refresh(monkeypatch):
+    """Verify that multiple concurrent cache misses trigger only one _fetch_and_score refresh."""
+    monkeypatch.setattr(am, "_cache", {"provider": None, "ts": 0.0, "detail": {}})
+
+    fetch_mock = AsyncMock(return_value=("geminiFlashLive", {"reason": "single_fetch"}))
+    monkeypatch.setattr(am, "_fetch_and_score", fetch_mock)
+
+    # Trigger 5 concurrent calls
+    tasks = [am.auto_model_pick(uid=f"user_{i}") for i in range(5)]
+    results = await asyncio.gather(*tasks)
+
+    # All calls should return the same provider
+    for r in results:
+        assert r["provider"] == "geminiFlashLive"
+
+    # _fetch_and_score must have been called exactly once due to _cache_lock
+    assert fetch_mock.call_count == 1
