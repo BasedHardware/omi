@@ -31,11 +31,11 @@ class AppKeyMemoryGrantStateRead:
     reason: str
 
 
-def _validate_non_empty_string(val: object, name: str) -> str:
-    """Validate and return normalized non-empty string."""
-    if not isinstance(val, str) or not val.strip():
+def _validate_non_empty_string(val: object, name: str, *, allow_slash: bool = False) -> str:
+    """Validate and return normalized non-empty string without whitespace."""
+    if not isinstance(val, str) or not val.strip() or any(c.isspace() for c in val):
         raise ValueError(f"{name} must be a non-empty string without whitespace")
-    if "/" in val:
+    if not allow_slash and "/" in val:
         raise ValueError(f"{name} cannot contain path delimiters")
     return val.strip()
 
@@ -139,7 +139,7 @@ def build_app_key_scope_grant_contract_state(
     `users/{uid}/memory_control/app_key_memory_grants`.
     """
     clean_consumer = _validate_non_empty_string(consumer, "consumer")
-    clean_app_id = _validate_non_empty_string(app_id, "app_id")
+    clean_app_id = _validate_non_empty_string(app_id, "app_id", allow_slash=True)
     clean_key_id = _validate_non_empty_string(key_id, "key_id")
     if not isinstance(scopes, list) or any(not isinstance(s, str) or not s.strip() for s in scopes):
         raise ValueError("scopes must be a list of non-empty strings")

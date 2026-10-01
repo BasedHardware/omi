@@ -6,10 +6,9 @@ from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import GoogleAPICallError, NotFound
 
+import database._client as db_client_module
 from database.memory_app_key_grants import (
-    APP_KEY_MEMORY_GRANT_DOC_ID,
     APP_KEY_MEMORY_GRANT_SUBPATH,
-    APP_KEY_MEMORY_GRANTS_COLLECTION,
     MAX_SCOPES_PER_GRANT,
     app_key_memory_grants_document_path,
     build_app_key_scope_grant_contract_state,
@@ -67,11 +66,18 @@ def test_validate_non_empty_string():
     with pytest.raises(ValueError, match="test_id must be a non-empty string without whitespace"):
         _validate_non_empty_string("   ", "test_id")
     with pytest.raises(ValueError, match="test_id must be a non-empty string without whitespace"):
+        _validate_non_empty_string("a b", "test_id")
+    with pytest.raises(ValueError, match="test_id must be a non-empty string without whitespace"):
+        _validate_non_empty_string("a\tb", "test_id")
+    with pytest.raises(ValueError, match="test_id must be a non-empty string without whitespace"):
+        _validate_non_empty_string("  valid  ", "test_id")
+    with pytest.raises(ValueError, match="test_id must be a non-empty string without whitespace"):
         _validate_non_empty_string(None, "test_id")
     with pytest.raises(ValueError, match="test_id cannot contain path delimiters"):
         _validate_non_empty_string("id/with/slash", "test_id")
 
-    assert _validate_non_empty_string("  valid-id  ", "test_id") == "valid-id"
+    assert _validate_non_empty_string("valid-id", "test_id") == "valid-id"
+    assert _validate_non_empty_string("https://client.com/mcp", "test_id", allow_slash=True) == "https://client.com/mcp"
 
 
 def test_app_key_memory_grants_document_path():
@@ -138,6 +144,15 @@ def test_build_app_key_scope_grant_contract_state_validations():
             consumer="c", app_id="app-1", key_id="key-1", scopes=oversized_scopes
         )
 
+    # URL-form MCP client IDs containing '/' are allowed as app_id
+    contract = build_app_key_scope_grant_contract_state(
+        consumer="mcp",
+        app_id="https://oauth.provider.com/client/123",
+        key_id="key-1",
+        scopes=["memories.read"],
+    )
+    assert "https://oauth.provider.com/client/123" in contract["grants"]["mcp"]["apps"]
+
 
 def test_seed_developer_api_key_memory_grant_validates_and_writes(monkeypatch):
     """Verify seed_developer_api_key_memory_grant validates inputs and performs merge write."""
@@ -148,7 +163,6 @@ def test_seed_developer_api_key_memory_grant_validates_and_writes(monkeypatch):
     with pytest.raises(ValueError, match="key_id must be a non-empty string"):
         seed_developer_api_key_memory_grant("user-1", "", db_client=mock_client)
 
-    import database._client as db_client_module
     monkeypatch.setattr(db_client_module, "db", None)
     with pytest.raises(ValueError, match="db_client is required"):
         seed_developer_api_key_memory_grant("user-1", "key-1", db_client=None)
@@ -197,7 +211,6 @@ def test_remove_developer_api_key_memory_grant_validates_and_removes(monkeypatch
     with pytest.raises(ValueError, match="uid must be a non-empty string"):
         remove_developer_api_key_memory_grant("", "key-1", db_client=mock_client)
 
-    import database._client as db_client_module
     monkeypatch.setattr(db_client_module, "db", None)
     with pytest.raises(ValueError, match="db_client is required"):
         remove_developer_api_key_memory_grant("user-1", "key-1", db_client=None)
