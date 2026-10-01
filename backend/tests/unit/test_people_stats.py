@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 
 from models.other import Person
+from types import SimpleNamespace
+
+from models.transcript_segment import TranscriptSegment
+from utils.sync.speaker_identity import SpeakerIdentityDependencies, identify_speakers_for_segments
 from utils.people_stats import aggregate_people_stats, apply_people_stats, collect_people_stats
 
 
@@ -79,3 +83,27 @@ def test_apply_people_stats_adds_reasons_without_moving_the_band():
     assert unheard.conversation_count == 0
     assert "not_heard" in {r.code for r in unheard.confidence_reasons}
     assert unheard.confidence == band_before
+
+
+def test_sync_text_matches_are_automatic_without_changing_manual_labels():
+    deps = SpeakerIdentityDependencies(
+        users_db=SimpleNamespace(get_person_by_name=lambda uid, name: {'id': 'p1', 'name': name}),
+        detect_speaker_from_text=lambda text, **kwargs: 'Maya' if text == 'I am Maya' else None,
+    )
+    for speaker_id in (0, 2):
+        segments = [
+            TranscriptSegment(id='intro', text='I am Maya', speaker_id=speaker_id, is_user=False, start=0, end=3),
+            TranscriptSegment(id='later', text='hello', speaker_id=speaker_id, is_user=False, start=3, end=6),
+            TranscriptSegment(
+                id='manual', text='hello', speaker_id=speaker_id, is_user=False, person_id='p2', start=6, end=9
+            ),
+        ]
+        identify_speakers_for_segments(segments, None, {}, 'u', dependencies=deps)
+        assert segments[0].person_id == 'p1'
+        assert segments[0].speaker_match_source == 'sync_text'
+        assert segments[1].person_id == ('p1' if speaker_id > 0 else None)
+        assert segments[1].speaker_match_source == ('sync_text' if speaker_id > 0 else None)
+        assert segments[2].person_id == 'p2' and segments[2].speaker_match_source is None
+        stats = aggregate_people_stats([_conv(None, *(segment.model_dump() for segment in segments))])
+        assert stats['p1']['auto_conversation_count'] == 1
+        assert stats['p2']['auto_conversation_count'] == 0

@@ -14,6 +14,7 @@ import numpy as np
 from config.speaker_prior import pinned_speaker_prior_enabled
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.audio import AudioRingBuffer
+from utils.live_speaker_suggestions import reconcile_pinned_suggestion
 from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
 from utils.speaker_sample import download_sample_audio
@@ -28,7 +29,6 @@ from utils.stt.speaker_match import (
     arbitrate_owner_matches,
     mean_embedding,
     select_speaker_match,
-    voice_candidates,
 )
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
 from utils.transcribe_store import conversations_db, get_user_name, user_db
@@ -429,6 +429,8 @@ class SpeakerMatcher:
             for voice, result in decisions.items():
                 segment_id = self._voice_segments[voice]
                 if result.person_id is not None:
+                    self._suggested_person.pop(voice, None)
+                    self.voice_candidates.pop(voice, None)
                     best_id = result.person_id
                     best_name = self.person_embeddings[best_id]['name']
                     changed = self.speaker_to_person.get(voice) != (best_id, best_name)
@@ -472,20 +474,7 @@ class SpeakerMatcher:
         Never labels: the event carries an empty person_id, which every client treats as a
         suggestion only, plus ``suggested_person_id`` for clients that can show who.
         """
-        excluded = (
-            assigned | set(self.segment_assignments.values()) | {pid for pid, _ in self.speaker_to_person.values()}
-        )
-        candidates = voice_candidates(
-            self._voice_distances.get(voice, {}), result, pinned, exclude=tuple(excluded | {USER_SELF_PERSON_ID})
-        )
-        self.voice_candidates[voice] = candidates
-        near = next((entry['person_id'] for entry in candidates if entry.get('suggest')), None)
-        if near is None or self._suggested_person.get(voice) == near:
-            return
-        self._suggested_person[voice] = near
-        self.host.emit_speaker_suggestion(
-            voice, '', self.person_embeddings[near]['name'], segment_id, suggested_person_id=near
-        )
+        reconcile_pinned_suggestion(self, voice, result, pinned, segment_id, assigned)
 
     def _provider_epoch_voice_groups(self) -> Dict[int, int]:
         """Reconcile a voice only across stamped provider epochs with close audio."""

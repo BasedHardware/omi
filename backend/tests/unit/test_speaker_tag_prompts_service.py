@@ -51,8 +51,11 @@ class World:
 
         def assign(uid, conversation_id, **kwargs):
             self.assignments.append(kwargs)
-            segments = [{'id': 's1', 'start': 0, 'end': 9}, {'id': 's2', 'start': 9, 'end': 12}]
-            return {'transcript_segments': segments}, ['s1', 's2'], [], []
+            segments = [
+                {'id': 's1', 'speaker_id': 1, 'start': 0, 'end': 9},
+                {'id': 's2', 'speaker_id': 1, 'start': 9, 'end': 12},
+            ]
+            return {'id': conversation_id, 'transcript_segments': segments}, ['s1', 's2'], [], []
 
         monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
 
@@ -746,3 +749,49 @@ def test_ignored_voices_list_skips_deleted_conversations_and_restore_forgets_ans
     uid, conversation_id, speaker_id, prompt_ids = removed[0]
     assert (uid, conversation_id, speaker_id) == ('u', 'c1', 1)
     assert set(prompt_ids) == {service.prompt_id('c1', 1, kind) for kind in K}
+
+
+def test_ignored_voices_limit_applies_after_missing_and_deleted_conversations(monkeypatch):
+    entries = [
+        {'conversation_id': f'c{i}', 'speaker_id': 1, 'ignored_at': NOW - timedelta(minutes=i)} for i in range(120)
+    ]
+    state = {'ignored_voices': {f"{entry['conversation_id']}:1": entry for entry in entries}}
+    monkeypatch.setattr(service.voice_profiles_db, 'get_tag_prompt_state', lambda uid: state)
+
+    def conversations(uid, ids):
+        assert uid == 'u'
+        return [{'id': cid, 'deleted': int(cid[1:]) < 60} for cid in ids if cid != 'c60']
+
+    monkeypatch.setattr(service.conversations_db, 'get_conversations_by_id_without_photos', conversations)
+    result = service.list_ignored_voices('u').voices
+    assert len(result) == service.IGNORED_VOICES_LIST_LIMIT
+    assert [voice.conversation_id for voice in result] == [f'c{i}' for i in range(61, 111)]
+
+
+def test_ignored_voice_uses_the_merged_survivor_and_resolved_speaker(monkeypatch):
+    World(monkeypatch)
+    markers = []
+
+    def assign(uid, conversation_id, **kwargs):
+        assert uid == 'u' and conversation_id == 'donor' and kwargs['speaker_id'] == 1
+        return (
+            {
+                'id': 'survivor',
+                'manual_speaker_assignments': {'generation': 7},
+                'transcript_segments': [
+                    {'id': 's1', 'speaker_id': 8},
+                    {'id': 's2', 'speaker_id': 8},
+                    {'id': 'other', 'speaker_id': 1},
+                ],
+            },
+            ['s1', 's2'],
+            [],
+            [],
+        )
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign)
+    monkeypatch.setattr(
+        service.voice_profiles_db, 'record_ignored_voice', lambda *args, **kwargs: markers.append((args, kwargs))
+    )
+    service.apply_answer('u', _request(K.identify, O.unnamed, A.not_a_person, conversation_id='donor'), now=NOW)
+    assert markers == [(('u', 'survivor', 8, NOW), {'assignment_generation': 7})]
