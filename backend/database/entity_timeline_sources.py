@@ -179,6 +179,7 @@ def list_entity_timeline_meetings(
     """Read a stable, bounded calendar window through an injected authority."""
     if not isinstance(uid, str) or not uid.strip():
         raise ValueError("uid must be a non-empty string")
+    clean_uid = uid.strip()
     if db_client is None:
         raise ValueError("db_client must not be None")
     if not isinstance(limit, int) or isinstance(limit, bool):
@@ -191,7 +192,7 @@ def list_entity_timeline_meetings(
     if norm_start is not None and norm_end is not None and norm_start > norm_end:
         raise ValueError("start_date cannot be after end_date")
 
-    collection = db_client.collection('users').document(uid.strip()).collection('meetings')
+    collection = db_client.collection('users').document(clean_uid).collection('meetings')
     query = ENTITY_TIMELINE_MEETINGS_QUERY.build(collection, {}, field_filter_factory=FieldFilter)
     if norm_start is not None:
         query = query.where('start_time', '>=', norm_start)
@@ -224,6 +225,7 @@ def list_entity_timeline_screen_activity(
     """Read a deterministic screen-metadata window for exact alias matching."""
     if not isinstance(uid, str) or not uid.strip():
         raise ValueError("uid must be a non-empty string")
+    clean_uid = uid.strip()
     if db_client is None:
         raise ValueError("db_client must not be None")
     if not isinstance(limit, int) or isinstance(limit, bool):
@@ -236,7 +238,7 @@ def list_entity_timeline_screen_activity(
     if norm_start is not None and norm_end is not None and norm_start > norm_end:
         raise ValueError("start_date cannot be after end_date")
 
-    collection = db_client.collection(USERS_COLLECTION).document(uid.strip()).collection(SCREEN_ACTIVITY_COLLECTION)
+    collection = db_client.collection(USERS_COLLECTION).document(clean_uid).collection(SCREEN_ACTIVITY_COLLECTION)
     query = ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY.build(collection, {}, field_filter_factory=FieldFilter)
     if norm_start is not None:
         query = query.where(
