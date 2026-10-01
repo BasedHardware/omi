@@ -93,6 +93,12 @@ def world(monkeypatch):
         return world.assign_fn(uid, conversation_id, **kwargs)
 
     monkeypatch.setattr(conversations_router.conversations_db, 'assign_conversation_speaker', assign)
+    world.naming_checks = []
+    monkeypatch.setattr(
+        conversations_router,
+        'named_speaker_prompts_allowed',
+        lambda uid: world.naming_checks.append(uid) or True,
+    )
     app = FastAPI()
     app.include_router(conversations_router.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: UID
@@ -189,6 +195,7 @@ def test_owner_teaching_never_checks_named_entitlement(world, monkeypatch):
     )
     assert response.status_code == 200
     assert world.scheduled['owner']
+    assert world.naming_checks == []
 
 
 def test_owner_window_allows_split_same_voice_run():

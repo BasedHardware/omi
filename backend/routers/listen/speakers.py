@@ -21,7 +21,7 @@ from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
 from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-from utils.manual_speaker_assignments import manual_owner_reserved
+from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers
 from utils.stt.conversation_speakers import VOICE_MATCH_THRESHOLD
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 from utils.stt.speaker_match import (
@@ -53,8 +53,9 @@ MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
 #   this detection was queued, or the segment belongs to an earlier conversation.
 # - already_mapped: a decision exists for this diarized speaker (a race drop,
 #   not a loss).
+# - rejected: the manual receipt named this voice as nobody, so it emits nothing.
 SPEAKER_ID_EXIT_REASONS = frozenset(
-    {'window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'}
+    {'window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped', 'rejected'}
 )
 
 
@@ -276,9 +277,41 @@ class SpeakerMatcher:
         async with lock:
             drop_reason = self._drop_reason(generation, conversation_id, speaker_id)
             if drop_reason is not None:
+                if drop_reason == 'already_mapped':
+                    await self._drop_rejected_mapping(speaker_id, segment, generation, conversation_id)
                 self._record_exit(drop_reason, speaker_id)
                 return
             await self._match_unmapped(speaker_id, segment, generation, conversation_id)
+
+    async def _drop_rejected_mapping(
+        self, speaker_id: int, segment: dict[str, Any], generation: int, conversation_id: Optional[str]
+    ) -> None:
+        """A mapped voice the receipt rejects must stop emitting its stale label."""
+        if not conversation_id:
+            return
+        try:
+            receipt = await self.host.persistence.call(
+                conversations_db.get_manual_speaker_receipt, self.host.request.uid, conversation_id
+            )
+        except Exception as error:
+            logger.warning('Speaker ID receipt load failed type=%s', type(error).__name__)
+            return
+        if generation != self._generation or self._profile_conversation_id != conversation_id:
+            return
+        if speaker_id in manual_rejected_speakers(receipt):
+            self._retract_rejected_voice(speaker_id, segment.get('id'))
+            self.host.state.speaker_map_dirty = True
+
+    def _retract_rejected_voice(self, voice: int, segment_id: Optional[str]) -> None:
+        stale = voice in self.speaker_to_person or voice in self._suggested_person
+        self.speaker_to_person.pop(voice, None)
+        self.voice_candidates.pop(voice, None)
+        self._suggested_person.pop(voice, None)
+        self.voice_identity_status[voice] = SpeakerIdentityStatus.no_match
+        if segment_id is not None:
+            self.segment_identity_status[segment_id] = SpeakerIdentityStatus.no_match
+            if stale:
+                self.host.emit_speaker_suggestion(voice, '', '', segment_id, retracted=True)
 
     async def _match_unmapped(
         self, speaker_id: int, segment: dict[str, Any], generation: int, conversation_id: Optional[str]
@@ -386,37 +419,45 @@ class SpeakerMatcher:
             # Receipt reads may await. Re-arbitrate the latest shared evidence
             # after the read, then publish synchronously.
             owner_reserved = False
+            rejected: Dict[int, dict] = {}
             if conversation_id:
                 try:
                     receipt = await self.host.persistence.call(
                         conversations_db.get_manual_speaker_receipt, self.host.request.uid, conversation_id
                     )
                     owner_reserved = manual_owner_reserved(receipt)
+                    rejected = manual_rejected_speakers(receipt)
                 except Exception as error:
                     logger.warning('Speaker ID receipt load failed type=%s', type(error).__name__)
                     owner_reserved = True
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
                 return
+            if speaker_id in rejected:
+                for voice in rejected:
+                    self._retract_rejected_voice(voice, self._voice_segments.get(voice))
+                self.host.state.speaker_map_dirty = True
+                self._record_exit('rejected', speaker_id)
+                return
             voice_groups = self._provider_epoch_voice_groups()
             decisions = arbitrate_owner_matches(
-                self._voice_distances,
-                self._voice_decisions,
+                {v: d for v, d in self._voice_distances.items() if v not in rejected},
+                {v: d for v, d in self._voice_decisions.items() if v not in rejected},
                 owner_reserved=owner_reserved,
                 voice_groups=voice_groups,
             )
-            decision = decisions[speaker_id]
+            decision = decisions.get(speaker_id)
             logger.info(
                 'speaker_id_decision surface=live speaker=%s clips=%d evidence_seconds=%.1f '
                 'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s owner_contended=%s session=%s',
                 speaker_id,
                 len(evidence),
                 evidence_seconds,
-                decision.best_id,
-                decision.best_distance,
-                decision.runner_up_distance,
-                decision.accepted,
-                decision.owner_contended,
+                decision.best_id if decision else None,
+                decision.best_distance if decision else 0.0,
+                decision.runner_up_distance if decision else 0.0,
+                decision.accepted if decision else False,
+                decision.owner_contended if decision else False,
                 self._session_log_id(),
             )
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
@@ -428,6 +469,8 @@ class SpeakerMatcher:
             prior = pinned_speaker_prior_enabled()
             pinned = {pid for pid, value in self.person_embeddings.items() if value.get('pinned')}
             assigned = {result.person_id for result in decisions.values() if result.person_id is not None}
+            for voice in rejected:
+                self._retract_rejected_voice(voice, self._voice_segments.get(voice))
             for voice, result in decisions.items():
                 segment_id = self._voice_segments[voice]
                 if result.person_id is not None:

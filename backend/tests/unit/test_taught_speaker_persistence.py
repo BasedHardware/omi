@@ -24,6 +24,7 @@ from models.conversation import Conversation
 from routers import conversations
 from datetime import datetime, timezone
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils import speaker_assignment_teaching as teaching_tasks
 from utils import speaker_identification as teaching
 from utils import speaker_sample
 
@@ -322,8 +323,9 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
     # the real command/transaction while leaving storage encryption out of scope.
     monkeypatch.setattr(conversations.conversations_db, '_prepare_conversation_for_write', lambda data, *args: data)
     monkeypatch.setattr(conversations, 'deserialize_conversation', deserialize)
+    monkeypatch.setattr(conversations, 'named_speaker_prompts_allowed', lambda uid: True)
     monkeypatch.setattr(conversations, '_emit_speaker_identity_confirmed', lambda **kwargs: None)
-    monkeypatch.setattr(conversations, 'delete_speech_profile_blob', lambda path: world.deleted.append(path))
+    monkeypatch.setattr(teaching_tasks, 'delete_speech_profile_blob', lambda path: world.deleted.append(path))
     app = FastAPI()
     app.include_router(conversations.router)
     app.dependency_overrides[conversations.auth.get_current_user_uid] = lambda: 'account-a'

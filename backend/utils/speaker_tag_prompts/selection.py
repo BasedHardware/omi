@@ -25,6 +25,7 @@ from models.speaker_tag_prompts import (
     SpeakerTagPromptOrigin,
 )
 from models.transcript_segment import legacy_conversation_segment_id
+from utils.manual_speaker_assignments import manual_rejected_speakers
 from utils.speaker_tag_prompts.coverage import prompt_window_covered
 
 PROMPT_WINDOW = timedelta(hours=48)
@@ -110,6 +111,7 @@ def _normalized_segments(conversation: Mapping[str, Any]) -> List[Dict[str, Any]
 def _manually_decided(conversation: Mapping[str, Any]) -> Tuple[set, set]:
     receipt = conversation.get('manual_speaker_assignments') or {}
     speakers = {str(key) for key in (receipt.get('speakers') or {})}
+    speakers.update(str(speaker_id) for speaker_id in manual_rejected_speakers(receipt))
     segments = set(receipt.get('segments') or {})
     return speakers, segments
 

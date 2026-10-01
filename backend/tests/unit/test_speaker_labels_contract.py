@@ -2,7 +2,7 @@
 
 C1: ``TranscriptSegment.speaker_label_source`` — optional literal, default None.
 C2: ``Person`` voice-learning fields — flat, defaulted for legacy records.
-C4: ``RejectSpeakerRequest`` + POST reject route — body validation, inert 501.
+C4: ``RejectSpeakerRequest`` + POST reject route — body validation, durable ledger.
 C5: ``VoiceMatch``/``VoiceMatchesResponse`` + GET voice-matches route — empty list.
 """
 
@@ -16,10 +16,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from database import conversations as conversations_db
 from models.other import Person
 from models.speaker_labels import RejectSpeakerRequest, VoiceMatch, VoiceMatchesResponse
 from models.transcript_segment import TranscriptSegment
 from routers import speaker_labels as speaker_labels_router
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.other import endpoints as auth
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -40,7 +42,7 @@ def test_segment_speaker_label_source_defaults_none():
 
 @pytest.mark.parametrize('source', ['manual', 'auto', 'carried'])
 def test_segment_speaker_label_source_accepts_literals(source):
-    assert _segment(speaker_label_source=source).speaker_label_source == source
+    assert _segment(speaker_label_source=source, person_id='p1').speaker_label_source == source
 
 
 def test_segment_speaker_label_source_rejects_invalid():
@@ -49,7 +51,7 @@ def test_segment_speaker_label_source_rejects_invalid():
 
 
 def test_segment_dump_includes_speaker_label_source():
-    dumped = _segment(speaker_label_source='manual').model_dump()
+    dumped = _segment(speaker_label_source='manual', person_id='p1').model_dump()
     assert dumped['speaker_label_source'] == 'manual'
     assert 'speaker_label_source' in _segment().model_dump()
 
@@ -88,6 +90,17 @@ def test_reject_speaker_request_accepts_all_kinds(kind):
 def test_reject_speaker_request_allows_omitted_segment_ids():
     body = RejectSpeakerRequest(kind='not_me')
     assert body.segment_ids is None
+
+
+def test_reject_speaker_request_rejects_empty_segment_ids():
+    with pytest.raises(ValidationError):
+        RejectSpeakerRequest(kind='not_me', segment_ids=[])
+
+
+def test_reject_speaker_request_normalizes_person_id_for_non_person_kinds():
+    assert RejectSpeakerRequest(kind='not_me', person_id='p1').person_id is None
+    assert RejectSpeakerRequest(kind='not_a_person', person_id='p1').person_id is None
+    assert RejectSpeakerRequest(kind='not_person', person_id='p1').person_id == 'p1'
 
 
 def test_reject_speaker_request_not_person_requires_person_id():
@@ -134,18 +147,22 @@ def test_voice_match_shape():
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(auth, '_enforce_rate_limit', lambda *args, **kwargs: None)
+    store = StrictFirestore()
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     app = FastAPI()
     app.include_router(speaker_labels_router.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: UID
     return TestClient(app)
 
 
-def test_reject_route_returns_501_without_mutation(client):
+def test_reject_route_missing_conversation_mutates_nothing(client, monkeypatch):
     response = client.post(
         '/v1/conversations/conv1/speakers/3/reject',
         json={'kind': 'not_me'},
     )
-    assert response.status_code == 501
+    assert response.status_code == 404
+    store = conversations_db.get_firestore_client()
+    assert ('users', UID, 'conversations', 'conv1') not in store.rows
 
 
 def test_reject_route_rejects_malformed_body(client):

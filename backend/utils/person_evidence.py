@@ -134,6 +134,7 @@ def person_updates_for_assignment(
     now: datetime,
     receipt: Dict[str, Any],
     after: Sequence[Mapping[str, Any]],
+    rejected_person_id: Optional[str] = None,
 ) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
     """Every person-document write one manual assignment makes, and the sample paths it retires.
 
@@ -145,7 +146,7 @@ def person_updates_for_assignment(
     if len(people) > 499:
         raise ValueError('Assignment affects too many people for one transaction')
     removed: List[str] = []
-    for pid in previous:
+    for pid in set(previous) | ({rejected_person_id} if rejected_person_id else set()):
         person = people.get(pid)
         if not person:
             continue
@@ -164,6 +165,8 @@ def person_updates_for_assignment(
             )
         updates[pid] = update
     earned = assignment_evidence(before, person_id=person_id, source=source)
+    if rejected_person_id:
+        earned[rejected_person_id] = AUTO_CORRECTED
     target = people.get(person_id) if person_id else None
     if person_id and target:
         target_update = updates.setdefault(person_id, {})

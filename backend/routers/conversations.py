@@ -90,7 +90,8 @@ from utils.conversations.search import (
     search_conversations,
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
-from utils.speaker_assignment_teaching import schedule_assignment_teaching
+from utils.speaker_assignment_teaching import commit_manual_assignment
+from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -1532,8 +1533,10 @@ def _assign_manual_speaker(
     value = None if value == 'null' else value
     is_user = assign_type == 'is_user' and str(value).lower() in {'true', '1'}
     person_id = value if assign_type == 'person_id' else None
+    if person_id and not named_speaker_prompts_allowed(uid):
+        raise HTTPException(status_code=403, detail='Naming other people needs a paid plan')
     try:
-        raw, resolved, removed, before = conversations_db.assign_conversation_speaker(
+        raw, resolved, removed, before = commit_manual_assignment(
             uid,
             conversation_id,
             person_id=person_id,
@@ -1542,6 +1545,8 @@ def _assign_manual_speaker(
             speaker_id=speaker_id,
             segment_index=segment_index,
             use_for_speech_training=use_for_speech_training,
+            rejection={'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None,
+            background_tasks=background_tasks,
         )
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -1552,18 +1557,6 @@ def _assign_manual_speaker(
     conversation = deserialize_conversation(raw)
     resolved_conversation_id = raw.get('id') or conversation_id
     _drop_display_projection(conversation)
-    if background_tasks is not None:
-        schedule_assignment_teaching(
-            background_tasks,
-            uid,
-            resolved_conversation_id,
-            raw,
-            resolved,
-            removed,
-            person_id=person_id,
-            is_user=is_user,
-            use_for_speech_training=use_for_speech_training,
-        )
     _emit_speaker_identity_confirmed(
         uid=uid,
         conversation_id=resolved_conversation_id,

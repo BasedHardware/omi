@@ -74,8 +74,8 @@ from utils.speaker_tag_prompts.selection import (
     select_prompts,
 )
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
+from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.speaker_match import mean_embedding
-from utils.subscription import is_paid_plan
 
 logger = logging.getLogger(__name__)
 
@@ -100,15 +100,6 @@ class TagPromptForbidden(Exception):
 
 class TagPromptInvalid(Exception):
     """The answer does not fit the prompt."""
-
-
-def named_speaker_prompts_allowed(uid: str) -> bool:
-    """Naming other people follows the named speaker-ID entitlement (paid plans).
-
-    "Is this you?" never calls this: the owner check is free for everyone.
-    """
-    subscription = users_db.get_user_valid_subscription(uid, provision=False)
-    return bool(subscription and is_paid_plan(subscription.plan))
 
 
 def _cooldown_until(state: Dict[str, Any]) -> Optional[datetime]:
@@ -512,11 +503,6 @@ def apply_answer(
         person_id, person = _resolve_person(uid, request, answer)
         person_enrolled = bool(person.get('speaker_embedding'))
 
-    clears_auto_label = request.origin != SpeakerTagPromptOrigin.unnamed and answer in {
-        SpeakerTagPromptAnswer.not_me,
-        SpeakerTagPromptAnswer.someone_else,
-        SpeakerTagPromptAnswer.not_a_person,
-    }
     if answer == SpeakerTagPromptAnswer.me:
         conversation, resolved = _assign(uid, request, is_user=True, person_id=None, train=False)
         if schedule is not None:
@@ -546,9 +532,23 @@ def apply_answer(
             )
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='queued').inc()
             voice_sample_queued = True
-    elif clears_auto_label or answer == SpeakerTagPromptAnswer.not_a_person:
+    elif answer in {
+        SpeakerTagPromptAnswer.not_me,
+        SpeakerTagPromptAnswer.someone_else,
+        SpeakerTagPromptAnswer.not_a_person,
+    }:
         # The automatic label was wrong: record an explicit "not the owner / not them".
-        conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False)
+        if answer == SpeakerTagPromptAnswer.not_a_person:
+            rejection = {'kind': 'not_a_person', 'person_id': None}
+        elif answer == SpeakerTagPromptAnswer.not_me or request.kind == SpeakerTagPromptKind.owner_check:
+            rejection = {'kind': 'not_me', 'person_id': None}
+        elif request.kind == SpeakerTagPromptKind.confirm_person:
+            if not request.suggested_person_id:
+                raise TagPromptInvalid('person_id is required')
+            rejection = {'kind': 'not_person', 'person_id': request.suggested_person_id}
+        else:
+            rejection = None
+        conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False, rejection=rejection)
         if answer == SpeakerTagPromptAnswer.not_a_person:
             resolved_ids = set(resolved)
             speaker_ids = {
@@ -599,6 +599,7 @@ def _assign(
     is_user: bool,
     person_id: Optional[str],
     train: bool,
+    rejection: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, Any], List[str]]:
     """Label the whole diarized speaker in that conversation, like "apply to all" in the tag sheet."""
     raw, resolved, _removed, _before = conversations_db.assign_conversation_speaker(
@@ -609,6 +610,7 @@ def _assign(
         speaker_id=request.speaker_id,
         use_for_speech_training=train,
         evidence_source=SOURCE_CARD,
+        **({'rejection': rejection} if rejection else {}),
     )
     return raw, resolved
 

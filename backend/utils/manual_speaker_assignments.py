@@ -5,11 +5,12 @@ Inference must never create or replace these explicit user decisions.
 """
 
 from dataclasses import dataclass
-from typing import Annotated, Optional
+from typing import Annotated, Mapping, Optional
 import uuid
 
 from pydantic import BaseModel, Field, StrictStr
 
+from models.speaker_label_provenance import project_source
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
 TEACHING_CANDIDATE_LIMIT = 3
@@ -56,30 +57,79 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
     overrides = receipt.get('segments') or {}
     if not speakers and not overrides:
         return segments
+    rejected = manual_rejected_speakers(receipt)
     result = None
     for index, segment in enumerate(segments):
         by_segment = overrides.get(segment.get('id'))
         by_speaker = speakers.get(str(segment.get('speaker_id')))
-        decisions = [value for value in (by_segment, by_speaker) if value]
+        negative = rejected.get(segment.get('speaker_id'))
+        if negative is not None and negative.get('speaker_id_scope') is not None:
+            if negative['speaker_id_scope'] != segment.get('speaker_id_scope'):
+                negative = None
+        decisions = [value for value in (by_segment, by_speaker, negative) if value]
         if not decisions:
             continue
         decision = max(decisions, key=lambda value: value.get('generation', 0))
         is_user = bool(decision.get('is_user', False))
         person_id = decision.get('person_id')
         status = 'user' if is_user else 'not_user' if person_id else 'unknown'
+        source = project_source({'person_id': person_id, 'is_user': is_user}, decision)
         if (
             segment.get('is_user') == is_user
             and segment.get('person_id') == person_id
             and segment.get('speaker_identity_status') == status
             and segment.get('speaker_match_source') is None
+            and segment.get('speaker_label_source') == source
         ):
             continue
         if result is None:
             result = list(segments)
         copied = dict(segment)
-        copied.update(is_user=is_user, person_id=person_id, speaker_identity_status=status, speaker_match_source=None)
+        copied.update(
+            is_user=is_user,
+            person_id=person_id,
+            speaker_identity_status=status,
+            speaker_match_source=None,
+            speaker_label_source=source,
+        )
         result[index] = copied
     return result if result is not None else segments
+
+
+def manual_rejected_speakers(receipt: Mapping) -> dict:
+    """speaker_id -> its winning rejection decision, per the manual receipt.
+
+    Speaker entries carry the speaker id in their key; selected-segment
+    rejections carry the voice they were written against in ``speaker_id``.
+    A rejection only stands while no newer explicit positive decision
+    (an entry without ``rejection``) covers the same voice.
+    """
+    decisions: dict = {}
+    for key, entry in (receipt.get('speakers') or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        try:
+            speaker_id = int(key)
+        except (TypeError, ValueError):
+            continue
+        decisions.setdefault(speaker_id, []).append(entry)
+    for entry in (receipt.get('segments') or {}).values():
+        if isinstance(entry, dict) and isinstance(entry.get('speaker_id'), int):
+            decisions.setdefault(entry['speaker_id'], []).append(entry)
+    rejected: dict = {}
+    for speaker_id, entries in decisions.items():
+        rejection = None
+        positive = -1
+        for entry in entries:
+            generation = entry.get('generation', 0)
+            if entry.get('rejection'):
+                if rejection is None or generation >= rejection.get('generation', 0):
+                    rejection = entry
+            else:
+                positive = max(positive, generation)
+        if rejection is not None and positive <= rejection.get('generation', 0):
+            rejected[speaker_id] = rejection
+    return rejected
 
 
 def remap_absorbed_receipt(receipt: dict, absorbed_into: dict[str, str]) -> dict:
@@ -121,6 +171,46 @@ def remap_absorbed_receipt(receipt: dict, absorbed_into: dict[str, str]) -> dict
     return updated
 
 
+REJECTION_KINDS = ('not_me', 'not_person', 'not_a_person')
+
+
+def normalize_rejection(rejection: Optional[dict]) -> Optional[dict]:
+    """Validate the kind and keep ``person_id`` only where it binds a person."""
+    if rejection is None:
+        return None
+    kind = rejection.get('kind')
+    if kind not in REJECTION_KINDS:
+        raise ValueError('Unknown speaker rejection kind')
+    person_id = rejection.get('person_id') if kind == 'not_person' else None
+    if kind == 'not_person' and not (person_id and str(person_id).strip()):
+        raise ValueError('person_id is required when kind is not_person')
+    return {'kind': kind, 'person_id': person_id}
+
+
+def donor_selected_ids(
+    source_segments: list, *, segment_ids=None, speaker_id=None, segment_index=None, strict_speaker=False
+) -> list:
+    """Translate ids targeted at a merged-away donor into surviving segment ids.
+
+    Every requested id must exist on the donor, or the whole edit fails.
+    Rejections additionally require the ids to be the donor's own records of the
+    requested speaker; positive assigns tolerate the donor's stale numbering.
+    """
+    if segment_ids:
+        by_id = {s.get('id'): s for s in source_segments if s.get('id')}
+        missing = [sid for sid in segment_ids if sid not in by_id]
+        if missing:
+            raise ValueError('Unable to resolve transcript segment assignment target(s): ' + ', '.join(missing))
+        selected = [by_id[sid] for sid in segment_ids]
+        if strict_speaker and speaker_id is not None and any(s.get('speaker_id') != speaker_id for s in selected):
+            raise ValueError('Selected segments do not belong to the requested speaker')
+    elif segment_index is not None:
+        selected = source_segments[segment_index : segment_index + 1]
+    else:
+        selected = [s for s in source_segments if s.get('speaker_id') == speaker_id]
+    return [s['id'] for s in selected if s.get('id')]
+
+
 def manual_assignment(
     conversation: dict,
     *,
@@ -130,7 +220,9 @@ def manual_assignment(
     speaker_id: Optional[int] = None,
     segment_index: Optional[int] = None,
     use_for_speech_training: bool = True,
+    rejection: Optional[dict] = None,
 ) -> tuple[list[dict], dict, list[str], set[str]]:
+    rejection = normalize_rejection(rejection)
     segments = [dict(segment) for segment in conversation.get('transcript_segments', [])]
 
     for index, segment in enumerate(segments):
@@ -140,7 +232,7 @@ def manual_assignment(
             segment['speaker_id'] = TranscriptSegment(**segment).speaker_id
     if segment_index is not None:
         indices = [segment_index] if 0 <= segment_index < len(segments) else []
-    elif speaker_id is not None:
+    elif speaker_id is not None and not segment_ids:
         indices = [i for i, s in enumerate(segments) if s.get('speaker_id') == speaker_id]
     else:
         by_id = {s.get('id'): i for i, s in enumerate(segments) if s.get('id')}
@@ -158,6 +250,8 @@ def manual_assignment(
                 indices.append(index)
         if unresolved:
             raise ValueError('Unable to resolve transcript segment assignment target(s): ' + ', '.join(unresolved))
+        if speaker_id is not None and any(segments[i].get('speaker_id') != speaker_id for i in indices):
+            raise ValueError('Selected segments do not belong to the requested speaker')
     if not indices:
         raise LookupError('Segment not found')
     receipt = dict(conversation.get('manual_speaker_assignments') or {})
@@ -165,9 +259,11 @@ def manual_assignment(
     receipt['speakers'] = dict(receipt.get('speakers') or {})
     generation = receipt.get('generation', 0) + 1
     receipt['generation'] = generation
-    identity = dict(generation=generation, person_id=person_id, is_user=is_user)
-    if not use_for_speech_training:
+    identity: dict = dict(generation=generation, person_id=person_id, is_user=is_user)
+    if not use_for_speech_training or rejection:
         identity['use_for_speech_training'] = False
+    if rejection:
+        identity['rejection'] = {'kind': rejection.get('kind'), 'person_id': rejection.get('person_id')}
     previous = set()
     resolved = []
     for index in indices:
@@ -177,10 +273,18 @@ def manual_assignment(
         if not segment.get('id'):
             segment['id'] = str(uuid.uuid4())
         resolved.append(segment['id'])
-        if speaker_id is None:
-            receipt['segments'][segment['id']] = dict(identity)
-    if speaker_id is not None:
-        receipt['speakers'][str(speaker_id)] = dict(identity)
+        if speaker_id is None or segment_ids:
+            entry = dict(identity)
+            entry['speaker_id'] = segment.get('speaker_id')
+            if segment.get('speaker_id_scope') is not None:
+                entry['speaker_id_scope'] = segment['speaker_id_scope']
+            receipt['segments'][segment['id']] = entry
+    if speaker_id is not None and not segment_ids:
+        entry = dict(identity)
+        scopes = {segments[i].get('speaker_id_scope') for i in indices}
+        if len(scopes) == 1 and next(iter(scopes)) is not None:
+            entry['speaker_id_scope'] = next(iter(scopes))
+        receipt['speakers'][str(speaker_id)] = entry
         by_id = {segment.get('id'): segment for segment in segments}
         for sid in list(receipt['segments']):
             owner = by_id.get(sid)
@@ -190,7 +294,23 @@ def manual_assignment(
         receipt.pop('segments', None)
     if not receipt['speakers']:
         receipt.pop('speakers', None)
-    return apply_manual_assignments(segments, receipt), receipt, resolved, previous
+    applied = apply_manual_assignments(segments, receipt)
+    if rejection is not None:
+        chosen = set(indices)
+        rejected = manual_rejected_speakers(receipt)
+        for index, segment in enumerate(segments):
+            negative = rejected.get(segment.get('speaker_id'))
+            if negative is None or negative.get('generation') != generation:
+                continue
+            if index in chosen or applied[index] is segment:
+                continue
+            scope = negative.get('speaker_id_scope')
+            if scope is not None and scope != segment.get('speaker_id_scope'):
+                continue
+            if segment.get('person_id'):
+                previous.add(segment['person_id'])
+            resolved.append(segment['id'])
+    return applied, receipt, resolved, previous
 
 
 def acknowledged_teaching(conversation: dict, person_id: str, segment_ids: list[str]) -> bool:

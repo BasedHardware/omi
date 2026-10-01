@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 from pydantic.json_schema import SkipJsonSchema
 
 from models.other import Person
+from models.speaker_label_provenance import project_source
 
 # Unicode sentence-ending punctuation used across supported locales.
 # Conservative set: English (.!?), CJK (。！？), Arabic/Urdu (؟۔), Hindi/Sanskrit (।॥)
@@ -106,6 +107,7 @@ class TranscriptSegment(BaseModel):
         # the return type inferred so Pydantic retains the public field schema.
         # Omit absent internal markers to keep ordinary v1 payloads unchanged.
         data = handler(self)
+        data['speaker_label_source'] = project_source(data)
         for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
             value = getattr(self, key)
             if value is not None:
@@ -118,6 +120,14 @@ class TranscriptSegment(BaseModel):
         speaker_in_payload = data.get('speaker') is not None
         speaker_id_in_payload = data.get('speaker_id') is not None
         super().__init__(**data)
+        self.speaker_label_source = project_source(
+            {
+                'person_id': self.person_id,
+                'is_user': self.is_user,
+                'speaker_label_source': self.speaker_label_source,
+                'speaker_match_source': self.speaker_match_source,
+            }
+        )
         self._speaker_id_synthesized = not speaker_in_payload and not speaker_id_in_payload
         if not self.id:
             self.id = str(uuid.uuid4())
@@ -326,6 +336,8 @@ class TranscriptSegment(BaseModel):
             if b.stt_provider != a.stt_provider:
                 return a, b
             if b.speaker_match_source != a.speaker_match_source:
+                return a, b
+            if b.speaker_label_source != a.speaker_label_source:
                 return a, b
             if b.speaker_id_scope != a.speaker_id_scope:
                 return a, b

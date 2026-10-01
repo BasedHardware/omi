@@ -134,16 +134,26 @@ def test_rejecting_an_automatic_label_clears_it(monkeypatch):
             'speaker_id': 1,
             'use_for_speech_training': False,
             'evidence_source': 'card',
+            'rejection': {'kind': 'not_me', 'person_id': None},
         }
     ]
     assert response.quality_outcome == Q.owner_auto_rejected
 
 
-def test_unknown_voice_and_skip_write_nothing(monkeypatch):
+def test_unknown_voice_writes_an_anonymous_decision_and_skip_writes_nothing(monkeypatch):
     world = World(monkeypatch)
     service.apply_answer('u', _request(K.identify, O.unnamed, A.someone_else), world.schedule, NOW)
     service.apply_answer('u', _request(K.identify, O.unnamed, A.skip), world.schedule, NOW)
-    assert world.assignments == [] and world.answered == ['pid', 'pid']
+    assert world.assignments == [
+        {
+            'person_id': None,
+            'is_user': False,
+            'speaker_id': 1,
+            'use_for_speech_training': False,
+            'evidence_source': 'card',
+        }
+    ]
+    assert world.answered == ['pid', 'pid']
 
 
 def test_invalid_answer_for_kind(monkeypatch):
@@ -693,6 +703,7 @@ def test_not_a_person_clears_an_automatic_label_and_is_remembered(monkeypatch):
             'speaker_id': 1,
             'use_for_speech_training': False,
             'evidence_source': 'card',
+            'rejection': {'kind': 'not_a_person', 'person_id': None},
         }
     ]
     assert ignored == [('u', 'c1', 1, NOW)] and world.answered == ['pid']

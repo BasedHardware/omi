@@ -11,8 +11,13 @@ class RejectSpeakerRequest(BaseModel):
 
     @model_validator(mode='after')
     def not_person_requires_person_id(self) -> 'RejectSpeakerRequest':
-        if self.kind == 'not_person' and not (self.person_id and self.person_id.strip()):
-            raise ValueError('person_id is required when kind is not_person')
+        if self.segment_ids is not None and not self.segment_ids:
+            raise ValueError('segment_ids must be non-empty when provided')
+        if self.kind == 'not_person':
+            if not (self.person_id and self.person_id.strip()):
+                raise ValueError('person_id is required when kind is not_person')
+        else:
+            self.person_id = None
         return self
 
 

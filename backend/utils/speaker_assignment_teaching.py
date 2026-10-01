@@ -9,10 +9,51 @@ what a successful assignment may schedule.
 
 from typing import Any, List, Mapping, Optional, Sequence
 
+from database import conversations as conversations_db
 from utils.manual_speaker_assignments import teaching_segment_ids
 from utils.other.storage import delete_speech_profile_blob
 from utils.speaker_identification import extract_speaker_samples
 from utils.speaker_tag_prompts.service import store_owner_voice_sample
+
+
+def commit_manual_assignment(
+    uid: str,
+    conversation_id: str,
+    *,
+    person_id: Optional[str],
+    is_user: bool,
+    segment_ids: Optional[List[str]] = None,
+    speaker_id: Optional[int] = None,
+    segment_index: Optional[int] = None,
+    use_for_speech_training: bool = True,
+    rejection: Optional[dict] = None,
+    background_tasks: Any = None,
+):
+    """The assignment transaction plus the background work it earned, one call."""
+    raw, resolved, removed, before = conversations_db.assign_conversation_speaker(
+        uid,
+        conversation_id,
+        person_id=person_id,
+        is_user=is_user,
+        segment_ids=segment_ids,
+        speaker_id=speaker_id,
+        segment_index=segment_index,
+        use_for_speech_training=use_for_speech_training,
+        rejection=rejection,
+    )
+    if background_tasks is not None:
+        schedule_assignment_teaching(
+            background_tasks,
+            uid,
+            raw.get('id') or conversation_id,
+            raw,
+            resolved,
+            removed,
+            person_id=person_id,
+            is_user=is_user,
+            use_for_speech_training=use_for_speech_training,
+        )
+    return raw, resolved, removed, before
 
 
 def schedule_assignment_teaching(

@@ -1324,15 +1324,15 @@ sets in a row (`POST /dismiss`) back off to 7 days, and an empty scan is cached
 for 2 h so repeated app opens do not rescan 30 conversations.
 
 Answers apply through the same `assign_conversation_speaker` transaction as the
-transcript tag sheet (scope: that diarized speaker in that conversation), so a
-prompt answer is an ordinary manual receipt. Rejecting an automatic label writes
-an explicit unknown decision. `someone_else` with a `person_id` or `name` is the correction
-path and labels that person. `not_a_person` (TV, podcast) clears an automatic
-label and stores an ignored-voice marker (`ignored_voices` in the prompt state,
-newest 200) so that conversation speaker is never asked about again;
-`GET /v1/speaker-tag-prompts/ignored-voices` lists markers and `DELETE
-.../ignored-voices/{conversation_id}/{speaker_id}` undoes one (and forgets its
-answered prompt ids).
+transcript tag sheet, and `POST /v1/conversations/{id}/speakers/{speaker_id}/reject`
+writes that same ledger (optionally per `segment_ids` of that speaker).
+`someone_else` with a `person_id`/`name` labels that person. Every negative
+answer writes `rejection: {kind, person_id}` on the receipt decision —
+`not_person` earns `AUTO_CORRECTED` once per conversation, `not_a_person`
+stores an ignored-voice marker (`ignored_voices`, newest 200) — and the voice is
+filtered from live matching, resolution, and prompt selection until a newer
+positive decision wins. A segment's `speaker_label_source` projects provenance:
+`manual`/`carried` under a winning decision, `auto` for match-only evidence.
 
 The same transaction keeps each person's `label_evidence` tally
 (`models/person_confidence.py`, `utils/person_evidence.py`): hand labels, card confirms and picks,
