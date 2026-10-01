@@ -10,6 +10,11 @@ import '../../spine/c7_registry_test.dart' show RecordingAdapter, emissionPayloa
 /// Adapter payloads captured from leftover empty phone/device/speech-profile
 /// public methods at `82776e2e7ab08af3c24731bd7d2d13128a1da011`, the C8 slice 2
 /// tip, before those methods called [TypedEvents.emit].
+///
+/// `deviceDisconnected` was re-emitted as the registry-enriched
+/// `Device Disconnected Detailed` (deprecating the property-less wire name per
+/// the C7 rename contract); its pre-change golden was pinned at
+/// `279d77d496be9941f098055fc357eb1fbed47295`.
 const c8Slice3PreMigrationSha = '82776e2e7ab08af3c24731bd7d2d13128a1da011';
 
 void fireC8Slice3(AnalyticsManager analytics) {
@@ -31,67 +36,67 @@ void fireC8Slice3(AnalyticsManager analytics) {
 }
 
 List<List<Object>> c8Slice3Goldens(Map<String, Object> globals) => [
-      [
-        'Phone Call Page Opened',
-        {...globals}
-      ],
-      [
-        'Phone Call Verification Started',
-        {...globals}
-      ],
-      [
-        'Phone Call Verification Completed',
-        {...globals}
-      ],
-      [
-        'Phone Call Connected',
-        {...globals}
-      ],
-      [
-        'Phone Call Dialpad Opened',
-        {...globals}
-      ],
-      [
-        'Phone Call Upsell Upgrade Tapped',
-        {...globals}
-      ],
-      [
-        'Phone Call Upsell Dismissed',
-        {...globals}
-      ],
-      [
-        'Device Disconnected',
-        {...globals}
-      ],
-      [
-        'Speech Profile Capture Page Clicked',
-        {...globals}
-      ],
-      [
-        'Speech Profile Skipped',
-        {...globals}
-      ],
-      [
-        'Speech Profile Upload Succeeded',
-        {...globals}
-      ],
-      [
-        'Speech Profile Embedding Stored',
-        {...globals}
-      ],
-      [
-        'Onboarding Step Speech Profile Continued',
-        {...globals}
-      ],
-      [
-        'Use Without Device Onboarding Welcome',
-        {...globals}
-      ],
-      [
-        'Use Without Device Onboarding Find Devices',
-        {...globals}
-      ],
-    ];
+  [
+    'Phone Call Page Opened',
+    {...globals},
+  ],
+  [
+    'Phone Call Verification Started',
+    {...globals},
+  ],
+  [
+    'Phone Call Verification Completed',
+    {...globals},
+  ],
+  [
+    'Phone Call Connected',
+    {...globals},
+  ],
+  [
+    'Phone Call Dialpad Opened',
+    {...globals},
+  ],
+  [
+    'Phone Call Upsell Upgrade Tapped',
+    {...globals},
+  ],
+  [
+    'Phone Call Upsell Dismissed',
+    {...globals},
+  ],
+  [
+    'Device Disconnected Detailed',
+    {...globals, 'reason': 'unknown', 'reason_code': -1, 'app_state': 'unknown'},
+  ],
+  [
+    'Speech Profile Capture Page Clicked',
+    {...globals},
+  ],
+  [
+    'Speech Profile Skipped',
+    {...globals},
+  ],
+  [
+    'Speech Profile Upload Succeeded',
+    {...globals},
+  ],
+  [
+    'Speech Profile Embedding Stored',
+    {...globals},
+  ],
+  [
+    'Onboarding Step Speech Profile Continued',
+    {...globals},
+  ],
+  [
+    'Use Without Device Onboarding Welcome',
+    {...globals},
+  ],
+  [
+    'Use Without Device Onboarding Find Devices',
+    {...globals},
+  ],
+];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -99,7 +104,12 @@ void main() {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
-        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
+      appName: 'Omi Test',
+      packageName: 'com.omi.test',
+      version: '1.0.543',
+      buildNumber: '992',
+      buildSignature: '',
+    );
     await SharedPreferencesUtil.init();
   });
   tearDown(AnalyticsManager.resetForTesting);
@@ -112,14 +122,18 @@ void main() {
     await AnalyticsManager.flushPending(force: true);
     await AnalyticsManager.flushPending(force: true);
     final platformName = PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown');
-    final globals = <String, Object>{
-      'app_platform': platformName,
-      'app_version': '1.0.543',
-      'app_build': '992',
-    };
+    final globals = <String, Object>{'app_platform': platformName, 'app_version': '1.0.543', 'app_build': '992'};
     expect(emissionPayloads(adapter.events), c8Slice3Goldens(globals));
     expect(adapter.events.every((event) => !event.$2.containsKey('correlation_id')), isTrue);
-    expect(adapter.events.every((event) => event.$2.keys.toSet().difference(globals.keys.toSet()).isEmpty), isTrue);
+    // Provenance globals ride on every slice-3 emission; only the registry-enriched
+    // disconnect event adds properties beyond them (pinned exactly above).
+    expect(adapter.events.every((event) => globals.keys.toSet().difference(event.$2.keys.toSet()).isEmpty), isTrue);
+    expect(
+      adapter.events
+          .where((event) => event.$1 != 'Device Disconnected Detailed')
+          .every((event) => event.$2.keys.toSet().difference(globals.keys.toSet()).isEmpty),
+      isTrue,
+    );
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
   });
 }

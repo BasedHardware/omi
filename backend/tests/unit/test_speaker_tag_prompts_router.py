@@ -176,3 +176,32 @@ def test_settings_patch_passes_source_and_drops_it_from_updates(monkeypatch):
     assert seen == {'updates': {'save_other_voice_profiles': False}, 'source': 'first_prompt'}
     bad = _client(monkeypatch).patch('/v1/users/voice-profile-settings', json={'source': 'push'})
     assert bad.status_code == 422
+
+
+def test_ignored_voices_list_and_restore(monkeypatch):
+    from models.speaker_tag_prompts import IgnoredVoice, IgnoredVoicesResponse
+
+    client = _client(monkeypatch)
+    voice = IgnoredVoice(conversation_id='c1', speaker_id=2, ignored_at=datetime(2026, 9, 30, tzinfo=timezone.utc))
+    monkeypatch.setattr(router_module.service, 'list_ignored_voices', lambda uid: IgnoredVoicesResponse(voices=[voice]))
+    body = client.get('/v1/speaker-tag-prompts/ignored-voices').json()
+    assert body['voices'][0]['speaker_id'] == 2 and body['voices'][0]['conversation_title'] == ''
+    calls = []
+    monkeypatch.setattr(
+        router_module.service, 'restore_ignored_voice', lambda *args: calls.append(args) or args[2] == 2
+    )
+    assert client.delete('/v1/speaker-tag-prompts/ignored-voices/c1/2').status_code == 204
+    assert client.delete('/v1/speaker-tag-prompts/ignored-voices/c1/5').status_code == 404
+    assert calls[0] == ('u', 'c1', 2)
+
+
+def test_not_a_person_answer_is_accepted(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        router_module.service,
+        'apply_answer',
+        lambda uid, data, schedule=None: seen.append(data.answer.value)
+        or {'status': 'ok', 'quality_outcome': 'unknown_voice'},
+    )
+    response = _client(monkeypatch).post('/v1/speaker-tag-prompts/answer', json=_answer_body(answer='not_a_person'))
+    assert response.status_code == 200 and seen == ['not_a_person']

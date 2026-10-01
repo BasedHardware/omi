@@ -43,28 +43,28 @@ enum MobileFeedbackReason {
 }
 
 String _mobileFeedbackKindValue(MobileFeedbackKind kind) => switch (kind) {
-      MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
-      MobileFeedbackKind.recordingQuality => 'recording_quality',
-    };
+  MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
+  MobileFeedbackKind.recordingQuality => 'recording_quality',
+};
 
 String _mobileFeedbackTargetKindValue(MobileFeedbackTargetKind kind) => switch (kind) {
-      MobileFeedbackTargetKind.conversation => 'conversation',
-      MobileFeedbackTargetKind.recording => 'recording',
-    };
+  MobileFeedbackTargetKind.conversation => 'conversation',
+  MobileFeedbackTargetKind.recording => 'recording',
+};
 
 String _mobileFeedbackReasonValue(MobileFeedbackReason reason) => switch (reason) {
-      MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
-      MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
-      MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
-      MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
-      MobileFeedbackReason.summaryOther => 'summary_other',
-      MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
-      MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
-      MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
-      MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
-      MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
-      MobileFeedbackReason.recordingOther => 'recording_other',
-    };
+  MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
+  MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
+  MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
+  MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
+  MobileFeedbackReason.summaryOther => 'summary_other',
+  MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
+  MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
+  MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
+  MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
+  MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
+  MobileFeedbackReason.recordingOther => 'recording_other',
+};
 
 /// Persist explicit, content-free mobile feedback through the idempotent
 /// feedback ledger. The caller can reuse [feedbackId] when retrying a 503.
@@ -78,10 +78,7 @@ class MobileFeedbackReceipt {
   /// Parses the server's durable-write receipt. A 201 alone is insufficient:
   /// callers may only complete the product journey after the ledger confirms
   /// persistence and returns its bounded event coordinate.
-  static MobileFeedbackReceipt? fromJson(
-    Map<String, dynamic> payload, {
-    required String expectedFeedbackId,
-  }) {
+  static MobileFeedbackReceipt? fromJson(Map<String, dynamic> payload, {required String expectedFeedbackId}) {
     try {
       // The generated model applies OpenAPI defaults for these fields. Keep
       // the receipt gate strict: both markers must be present on the wire so
@@ -113,15 +110,16 @@ class MobileFeedbackReceipt {
 
 /// Signature of [submitMobileFeedback]. Callers that surface the feedback flow
 /// accept an override of this shape so tests can observe the request path.
-typedef MobileFeedbackSubmit = Future<MobileFeedbackReceipt?> Function({
-  required MobileFeedbackKind kind,
-  required String targetId,
-  required int value,
-  MobileFeedbackReason? reason,
-  String? correlationId,
-  String? feedbackId,
-  required MobileFeedbackTargetKind targetKind,
-});
+typedef MobileFeedbackSubmit =
+    Future<MobileFeedbackReceipt?> Function({
+      required MobileFeedbackKind kind,
+      required String targetId,
+      required int value,
+      MobileFeedbackReason? reason,
+      String? correlationId,
+      String? feedbackId,
+      required MobileFeedbackTargetKind targetKind,
+    });
 
 Future<MobileFeedbackReceipt?> submitMobileFeedback({
   required MobileFeedbackKind kind,
@@ -397,6 +395,20 @@ Future<bool> updatePersonName(String personId, String newName) async {
   return response.statusCode == 200;
 }
 
+@visibleForTesting
+String personPinnedPath(String personId, bool pinned) => 'v1/users/people/$personId/pinned?value=$pinned';
+
+/// Pins or unpins a person. True when the server stored it.
+Future<bool> setPersonPinned(String personId, bool pinned) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}${personPinnedPath(personId, pinned)}',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  return response != null && response.statusCode == 200;
+}
+
 Future<bool> deletePerson(String personId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/people/$personId',
@@ -570,16 +582,10 @@ Future<String?> getUsageDeviceTimeZone() async {
 }
 
 Future<UserUsageResponse?> getUserUsage({required String period, required String? timeZone}) async {
-  final url = Uri.parse('${Env.apiBaseUrl}v1/users/me/usage').replace(queryParameters: {
-    'period': period,
-    if (timeZone != null) 'time_zone': timeZone,
-  });
-  var response = await makeApiCall(
-    url: url.toString(),
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
+  final url = Uri.parse(
+    '${Env.apiBaseUrl}v1/users/me/usage',
+  ).replace(queryParameters: {'period': period, if (timeZone != null) 'time_zone': timeZone});
+  var response = await makeApiCall(url: url.toString(), headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   Logger.debug('getUserUsage response: ${response.body}');
   if (response.statusCode == 200) {

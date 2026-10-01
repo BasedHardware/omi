@@ -97,6 +97,7 @@ from utils.conversations.relevance_io import (
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
+    clear_summary_retryable,
     client_processing_mutation,
     omit_null_processing_state,
     sanitize_untrusted_provenance_field,
@@ -2381,7 +2382,7 @@ def _terminal_persist_payload(conversation: Conversation) -> dict[str, Any]:
     payload = conversation.dict()
     payload['jit_first_open'] = None
     payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
-    return omit_null_processing_state(strip_client_processing(payload))
+    return clear_summary_retryable(omit_null_processing_state(strip_client_processing(payload)))
 
 
 def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker: bool) -> dict[str, Any]:
@@ -2415,7 +2416,7 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
         payload.pop('processing_state', None)
     else:
         payload['processing_state'] = None
-    return strip_client_processing(payload)
+    return clear_summary_retryable(strip_client_processing(payload))
 
 
 def _store_deterministic_minimum(
@@ -2478,6 +2479,7 @@ def _store_deterministic_minimum(
     conversation.processing_state = ConversationProcessingState(minimum_state) if minimum_state else None
     _attach_client_projection(conversation, client_projection)
     payload = _terminal_persist_payload(conversation)
+    conversation.summary_retryable = None  # a new processing pass answers the dead-letter retry
     apply_relevance(conversation, payload, decision)
     if is_initial_creation and client_projection is not None:
         payload.update(client_processing_mutation(client_projection))
@@ -3014,6 +3016,7 @@ def process_conversation(
         # minimum's local_pending); the object the caller returns must agree,
         # not answer the stale pending state back to the client.
         conversation.processing_state = None
+    conversation.summary_retryable = None  # merge-cleared by the payload the same way
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     elif smart_merge_refresh is not None:

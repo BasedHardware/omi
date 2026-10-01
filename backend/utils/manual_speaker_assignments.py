@@ -234,16 +234,25 @@ def merge_live_segments(persisted: list[dict], fresh: list[dict], receipt: dict)
         unique_fresh.append(segment)
         if segment_id:
             seen_ids.add(str(segment_id))
-    tail = [TranscriptSegment(**persisted[-1])] if persisted else []
-    incoming = [TranscriptSegment(**segment) for segment in unique_fresh]
+    # Plan against the identity the writer will store. Otherwise a fresh word
+    # tagged by live inference never matches a manually decided tail's
+    # speaker_match_source, and every word lands in its own segment.
+    tail = [TranscriptSegment(**segment) for segment in apply_manual_assignments(persisted[-1:], receipt)]
+    incoming = [TranscriptSegment(**segment) for segment in apply_manual_assignments(unique_fresh, receipt)]
+    # Selected-segment decisions are keyed by ID, so those segments must keep it.
+    # Speaker-wide decisions are keyed by speaker: same-speaker merges keep them.
     covered = set(receipt.get('segments') or {})
     speakers = receipt.get('speakers') or {}
-    covered.update(s.id for s in [*tail, *incoming] if str(s.speaker_id) in speakers and s.id)
+    speaker_bound = {
+        s.speaker_id for s in [*tail, *incoming] if s.speaker_id is not None and str(s.speaker_id) in speakers
+    }
     # Unplaced fallback IDs are the retry receipt. Never absorb one into the
     # preceding unplaced tail, or a committed retry would no longer find its
     # ID in the next transaction snapshot.
     covered.update(s.id for s in incoming if s.audio_alignment == 'unplaced' and s.id)
-    combined = TranscriptSegment.combine_segments(tail, incoming, protected_segment_ids=covered)
+    combined = TranscriptSegment.combine_segments(
+        tail, incoming, protected_segment_ids=covered, speaker_bound_ids=speaker_bound
+    )
     result = persisted[:-1] + [segment.model_dump() for segment in combined.segments]
     result.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))
     return LiveTranscriptMerge(

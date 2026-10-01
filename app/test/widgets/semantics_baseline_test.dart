@@ -20,9 +20,7 @@ import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/search/global_search.dart';
 import 'package:omi/backend/http/api/search.dart';
-import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
-import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/settings/device_settings.dart';
@@ -206,7 +204,8 @@ void _expectNoUnnamedActivateControls(SurfaceSemanticsReport report) {
   expect(
     report.dump!.unnamedInteractive,
     isEmpty,
-    reason: '${report.surface} unnamed activate-controls:\n'
+    reason:
+        '${report.surface} unnamed activate-controls:\n'
         '${report.dump!.unnamedInteractive.map((node) => node.line).join('\n')}\n'
         'tree:\n${report.dump!.treeText}',
   );
@@ -450,9 +449,9 @@ Future<SurfaceSemanticsReport> _measureMemories(WidgetTester tester) async {
 
 Future<SurfaceSemanticsReport> _measureTasks(WidgetTester tester) async {
   final items = ActionItemsProvider(
-    getActionItems: (
-            {limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) async =>
-        const ActionItemsResponse(actionItems: [], hasMore: false),
+    getActionItems:
+        ({limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) async =>
+            const ActionItemsResponse(actionItems: [], hasMore: false),
   );
   addTearDown(items.dispose);
   final goals = GoalsProvider();
@@ -624,7 +623,11 @@ class _EmptySearchSource extends GlobalSearchSource {
   @override
   Future<ConversationSearchResult> conversations(String query, {String? speakerId}) async =>
       const ConversationSearchResult(
-          items: [], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
+        items: [],
+        currentPage: 1,
+        totalPages: 1,
+        outcome: ConversationSearchResultOutcome.success,
+      );
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) async => const [];
@@ -637,7 +640,4 @@ class _EmptySearchSource extends GlobalSearchSource {
 
   @override
   Future<ApiResult<List<MemorySearchHit>>> memories(String query) async => const ApiSuccess([]);
-
-  @override
-  Future<List<Person>> people() async => const [];
 }

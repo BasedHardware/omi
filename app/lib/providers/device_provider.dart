@@ -143,9 +143,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     BleDiagnosticsLoader? bleDiagnosticsLoader,
     FindDeviceRunner? findDeviceRunner,
     CaptureWedgeMonitor? captureWedgeMonitor,
-  })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
-        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
-        _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
+  }) : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+       _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
+       _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _handlePairingLost;
   }
@@ -254,7 +254,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final now = DateTime.now();
     final capture = captureProvider;
     final liveCaptureDevice = capture?.recordingDevice;
-    final endedDeviceWasLiveCapture = endedDevice != null &&
+    final endedDeviceWasLiveCapture =
+        endedDevice != null &&
         endedDevice.id == liveCaptureDevice?.id &&
         capture!.recordingState == RecordingState.deviceRecord &&
         !capture.isPaused &&
@@ -405,13 +406,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   static Future<bool> _defaultFindDeviceRunner(BtDevice device) async {
-    final connection = await ServiceManager.instance().device.ensureConnection(device.id).timeout(
-      const Duration(seconds: 5),
-      onTimeout: () {
-        Logger.debug('DeviceProvider: Timed out finding the active device connection');
-        return null;
-      },
-    );
+    final connection = await ServiceManager.instance().device
+        .ensureConnection(device.id)
+        .timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            Logger.debug('DeviceProvider: Timed out finding the active device connection');
+            return null;
+          },
+        );
     return await connection?.playFindDevicePattern() ?? false;
   }
 
@@ -564,8 +567,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -728,6 +732,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void onDeviceDisconnected() async {
     final generation = _sessionGeneration;
+    // Capture before setConnectedDevice(null) clears both device references.
+    final disconnectedDeviceId = pairedDevice?.id ?? connectedDevice?.id;
     Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
@@ -761,7 +767,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
 
-    PlatformManager.instance.analytics.deviceDisconnected();
+    unawaited(_trackDeviceDisconnected(disconnectedDeviceId, generation));
     BatteryWidgetService().updateBatteryInfo(
       deviceName: SharedPreferencesUtil().deviceName,
       batteryLevel: -1,
@@ -775,6 +781,32 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Notify interactive device onboarding of disconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
+  }
+
+  /// Emits the enriched Device Disconnected analytics event with the reason
+  /// native persisted for this disconnect. Both platforms persist the event
+  /// before notifying Dart, so the freshest history entry is the one that
+  /// triggered this callback; diagnostics are best-effort and degrade to
+  /// `unknown` when the read fails (non-BLE devices, early teardown).
+  Future<void> _trackDeviceDisconnected(String? deviceId, int generation) async {
+    BleDisconnectEvent? latest;
+    if (deviceId != null && deviceId.isNotEmpty) {
+      try {
+        final diagnostics = await _bleDiagnosticsLoader(deviceId);
+        if (!_isCurrent(generation)) return;
+        final history = diagnostics.disconnectHistory;
+        if (history.isNotEmpty) latest = history.last;
+      } catch (_) {
+        if (!_isCurrent(generation)) return;
+        // Native diagnostics are best-effort; emit without reason detail.
+      }
+    }
+    if (!_isCurrent(generation)) return;
+    PlatformManager.instance.analytics.deviceDisconnected(
+      reason: latest?.reason,
+      reasonCode: latest?.reasonCode,
+      appState: latest?.appState,
+    );
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {

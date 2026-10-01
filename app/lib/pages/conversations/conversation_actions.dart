@@ -16,7 +16,9 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -183,8 +185,10 @@ Future<void> shareConversation(BuildContext context, ServerConversation conversa
     sharePositionOrigin: box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size,
   );
   if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
-    final reverted =
-        await setConversationVisibility(conversation.id, visibility: ConversationVisibility.private_.value);
+    final reverted = await setConversationVisibility(
+      conversation.id,
+      visibility: ConversationVisibility.private_.value,
+    );
     if (reverted) conversation.visibility = ConversationVisibility.private_;
   }
 }
@@ -225,10 +229,9 @@ Future<ConversationRowAction?> showConversationActionsSheet(
   bool canSelect = true,
 }) {
   final l10n = context.l10n;
-  final title = conversation.structured.title.trim();
   return showOmiSheet<ConversationRowAction>(
     context: context,
-    title: title.isEmpty ? l10n.untitledConversation : title,
+    title: conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.actions),
     padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
     builder: (sheetContext) {
       // FontAwesome glyphs, the same ones the conversation page's "…" menu uses for the same actions.

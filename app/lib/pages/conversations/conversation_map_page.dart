@@ -8,6 +8,8 @@ import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
@@ -57,13 +59,14 @@ List<ConversationMapGroup> buildConversationMapGroups(Iterable<ServerConversatio
   located.sort((a, b) => a.$1.id.compareTo(b.$1.id));
   final grouped = <({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})>[];
   for (final (conversation, point) in located) {
-    final group =
-        grouped.cast<({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})?>().firstWhere(
-              (candidate) => candidate!.points.every(
-                (member) => _mapDistance.as(LengthUnit.Meter, member, point) <= _mapClusterDistanceMeters,
-              ),
-              orElse: () => null,
-            );
+    final group = grouped
+        .cast<({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})?>()
+        .firstWhere(
+          (candidate) => candidate!.points.every(
+            (member) => _mapDistance.as(LengthUnit.Meter, member, point) <= _mapClusterDistanceMeters,
+          ),
+          orElse: () => null,
+        );
     if (group == null) {
       grouped.add((anchor: point, points: [point], conversations: [conversation]));
     } else {
@@ -115,9 +118,7 @@ class ConversationMapPage extends StatelessWidget {
             ListTile(
               key: ValueKey('conversation_map_cluster_row_${conversation.id}'),
               title: Text(
-                conversation.structured.title.isEmpty
-                    ? context.l10n.untitledConversation
-                    : conversation.structured.title,
+                conversationDisplayTitle(conversation, context.l10n, surface: ConversationUntitledRenderedSurface.map),
               ),
               subtitle: Text(
                 dates.dateTime(conversation.startedAt ?? conversation.createdAt),
@@ -137,7 +138,7 @@ class ConversationMapPage extends StatelessWidget {
   String _groupLabel(BuildContext context, ConversationMapGroup group) {
     if (group.conversations.length == 1) {
       final conversation = group.conversations.single;
-      return conversation.structured.title.isEmpty ? context.l10n.untitledConversation : conversation.structured.title;
+      return conversationDisplayTitle(conversation, context.l10n, surface: ConversationUntitledRenderedSurface.map);
     }
     return context.l10n.conversationCount(group.conversations.length);
   }
@@ -192,10 +193,7 @@ class ConversationMapPage extends StatelessWidget {
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: OmiColors.surface1,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
                         child: Row(
                           children: [
                             Container(
@@ -207,10 +205,7 @@ class ConversationMapPage extends StatelessWidget {
                                     ? Icon(Icons.location_on, color: OmiColors.onAccent, size: 20)
                                     : Text(
                                         '${group.conversations.length}',
-                                        style: TextStyle(
-                                          color: OmiColors.onAccent,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                                        style: TextStyle(color: OmiColors.onAccent, fontWeight: FontWeight.w700),
                                       ),
                               ),
                             ),
@@ -220,8 +215,11 @@ class ConversationMapPage extends StatelessWidget {
                                 _groupLabel(context, group),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style:
-                                    TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
+                                style: TextStyle(
+                                  color: OmiColors.textPrimary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                             Icon(Icons.chevron_right, color: OmiColors.textSecondary),

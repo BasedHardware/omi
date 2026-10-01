@@ -13,6 +13,7 @@ import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:omi/pages/action_items/task_categorization.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 
 /// Flutter conformance suite for the shared cross-platform parity contracts
 /// (contracts/parity/README.md). Runs the repo-root fixture vectors through the
@@ -111,6 +112,37 @@ void main() {
     }
   });
 
+  group('deterministic title (parity contract)', () {
+    final fixture = _fixture(root, 'deterministic_title.json');
+    test('budget matches the server', () {
+      expect(fixture['max_chars'], conversationFallbackTitleMaxChars);
+    });
+    for (final raw in fixture['cases'] as List<dynamic>) {
+      final c = raw as Map<String, dynamic>;
+      test(c['name'] as String, () {
+        final conversation = ServerConversation(
+          id: 'parity',
+          createdAt: DateTime.utc(2026),
+          structured: Structured('', ''),
+          transcriptSegments: [
+            for (final text in (c['segments'] as List<dynamic>).cast<String>())
+              TranscriptSegment(
+                id: 'seg',
+                text: text,
+                speaker: 'SPEAKER_00',
+                isUser: false,
+                personId: null,
+                start: 0,
+                end: 1,
+                translations: [],
+              ),
+          ],
+        );
+        expect(transcriptFallbackTitle(conversation), c['expected_title']);
+      });
+    }
+  });
+
   group('capture group collapse (parity contract)', () {
     final fixture = _fixture(root, 'capture_group_collapse.json');
     final groups = fixture['groups'] as Map<String, dynamic>;
@@ -193,12 +225,12 @@ String _pad(int n) => n.toString().padLeft(2, '0');
 /// Build the item through the production wire decode so bucket cases exercise
 /// the same path a backend response takes.
 GeneratedActionItemResponse _wireItem({DateTime? due, DateTime? created}) => GeneratedActionItemResponse.fromJson({
-      'id': 'parity',
-      'description': 'parity case',
-      'completed': false,
-      if (created != null) 'created_at': created.toUtc().toIso8601String(),
-      if (due != null) 'due_at': due.toUtc().toIso8601String(),
-    });
+  'id': 'parity',
+  'description': 'parity case',
+  'completed': false,
+  if (created != null) 'created_at': created.toUtc().toIso8601String(),
+  if (due != null) 'due_at': due.toUtc().toIso8601String(),
+});
 
 /// Build the conversation through the production model so duration cases
 /// exercise the same getter the conversation list and detail header read.

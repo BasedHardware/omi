@@ -165,8 +165,9 @@ and an explicit empty literal renders as `''`.
 | `OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED` | Shadow all development gateway lanes | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | — | pending | 2026-10-15 | unowned |
 | `OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED` | Enable explicit GPT-5.6 cache hints | backend | env | closed | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | unowned |
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | pending | 2026-10-23 | unowned |
-| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | 0 | 1 (backend-listen (chart), gke/backend-listen) | 5 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | dazheng |
+| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | 0 | 1 (backend-listen (chart), gke/backend-listen) | 0 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | dazheng |
 | `PARAKEET_WINDOW_DIARIZATION` | Enable Parakeet window diarization | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | unowned |
+| `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | closed | — | — | — | — | pending | 2026-10-30 | dazheng |
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | off | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | dazheng |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `SCREEN_FRAME_EGRESS_ENABLED` | Allow meeting-note screen frame egress | backend | env | closed | — | true | true | — | graduate | 2026-10-23 | dazheng |
@@ -183,6 +184,8 @@ and an explicit empty literal renders as `''`.
 | `SYNC_BACKFILL_INFLIGHT_LIMIT` | One in-flight backfill upload per uid; excess uploads get 429 backfill_paced | backend | env | closed | false | false | false | — | pending | 2026-10-27 | dazheng |
 | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `SYNC_BACKFILL_UID_SEQUENCER` | Accept backfill uploads then dispatch one worker job per uid from durable queue | backend | env | closed | on | on | on | — | pending | 2026-10-27 | dazheng |
+| `SYNC_LINEAGE_RESOLVE_ENABLED` | Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) | backend | env | open | — | — | — | — | graduate | 2026-10-30 | dazheng |
+| `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` | Limit sync lineage binding and its live-row fences to listed UIDs; empty admits every user | backend | env | open | — | — | vi7SA9ckQCe4ccobWNxlbdcNdC23 (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | pending | 2026-10-30 | dazheng |
 | `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSCRIPT_CHUNK_INDEXING_ENABLED` | Index transcript chunks for retrieval | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
@@ -317,6 +320,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_MODEL_TIER` — Select proxy budget tier (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
 - `PARAKEET_USE_V2` — Select Parakeet prerecorded v2 pipeline (fail: open)
+- `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: closed)
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
@@ -324,6 +328,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
+- `SYNC_LINEAGE_RESOLVE_ENABLED` — Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) (fail: open)
 - `TRANSCRIPT_CHUNK_INDEXING_ENABLED` — Index transcript chunks for retrieval (fail: closed)
 - `TRANSLATION_OUTPUT_GUARD_ENABLED` — Reject conservative same-language translation rewrites (fail: open)
 - `TRANSLATION_PROFILE_GATE_ENABLED` — Defer short out-of-profile translation guesses (fail: open)

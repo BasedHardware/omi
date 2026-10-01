@@ -36,6 +36,11 @@ WINDOW_REPLAY_CUT_SKIPPED = Counter(
     'Requested cuts deferred at request time or not performed on a POST result',
     ['reason'],
 )
+WINDOW_STRANDED_FLUSHES = Counter(
+    'omi_stt_window_stranded_flushes_total',
+    'Long-silence fragment flush attempts and answers',
+    ['outcome'],
+)
 WINDOW_CANARY_OUTCOME = Counter(
     'omi_stt_window_canary_transcript_outcome_total',
     'Listen transcript outcome by stable window allocation arm',
