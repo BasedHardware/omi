@@ -519,8 +519,11 @@ class LiveLegSocket(STTSocket):
                 self.finish()
                 self._dead = True
                 return False
-            if output is not None and output.should_finalize and not self.window:
-                self.raw.finalize()
+            if output is not None and output.should_finalize:
+                if self.window and isinstance(self.raw, WindowedParakeetSocket):
+                    self.raw.finalize(vad_pause=True)
+                else:
+                    self.raw.finalize()
         except Exception:
             self._dead = True
             self.finish()
