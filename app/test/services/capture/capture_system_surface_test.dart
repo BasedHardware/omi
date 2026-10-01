@@ -256,7 +256,7 @@ void main() {
     world.emitNativeState(PhoneMicCaptureState.running);
     world.emitBatchProgress(2);
     await world.settle();
-    expect(presentation.snapshot['batch'], true);
+    expect(presentation.snapshot['status'], 'recording');
     final beforeLoop = sink.states.length;
     await world.elapse(const Duration(milliseconds: 1600));
     expect(sink.states.length, beforeLoop, reason: 'the OS animates the wave without activity updates');

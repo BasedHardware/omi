@@ -103,7 +103,6 @@ class CaptureSystemSurface {
       'active': active,
       'status': status,
       'source': capture.systemSurfacePhoneCapture ? 'phone' : 'pendant',
-      'batch': batch,
       'startedAt': _anchor == null ? 0.0 : _anchor!.millisecondsSinceEpoch / 1000,
       'elapsed': _anchor == null ? 0 : (_pausedAt ?? now).difference(_anchor!).inSeconds.clamp(0, 2147483647),
       // The OS animates the wave from startedAt; this fractional time holds its phase on Stop.

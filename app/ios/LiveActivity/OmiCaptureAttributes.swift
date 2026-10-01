@@ -9,7 +9,6 @@ struct OmiCaptureAttributes: ActivityAttributes {
         var conversationRevision: Int
         var status: String
         var source: String
-        var batch: Bool
         var startedAt: Double
         var elapsed: Int
         /// Decorative animation time, frozen on pause. Optional for existing activities.
