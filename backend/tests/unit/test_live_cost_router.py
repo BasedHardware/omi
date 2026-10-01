@@ -427,6 +427,88 @@ def test_capacity_skip_keeps_cost_order(monkeypatch):
     assert select(targets, {}, 'u', 'en')[0].id == 'modulate-velma-2'
 
 
+@pytest.mark.asyncio
+async def test_capacity_escape_dials_when_other_candidate_circuit_is_open(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('TEST_CAPACITY_ESCAPE_A', 'true')
+    candidate_a = replace(DEFAULT_TARGETS[1], capacity_env='TEST_CAPACITY_ESCAPE_A')
+    candidate_b = DEFAULT_TARGETS[-1]
+    targets = [candidate_a, candidate_b]
+    monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([target.__dict__ for target in targets]))
+    monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
+    monkeypatch.setattr(live_chain.health, 'cost_snapshot', lambda *_: {})
+    monkeypatch.setattr(live_chain, 'propose', lambda *args: targets)
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        st,
+        '_circuit_for_primary',
+        lambda service: SimpleNamespace(
+            state='open' if service == st.STTService.soniox else 'closed',
+            allow_request=lambda **_: service != st.STTService.soniox,
+            deferred_result_callbacks=lambda: (lambda: None, lambda: None),
+        ),
+    )
+    seen = []
+
+    async def connect_a():
+        seen.append(connecting_target.get().id)
+        return SimpleNamespace(is_connection_dead=False)
+
+    async def connect_b():
+        seen.append(connecting_target.get().id)
+        return SimpleNamespace(is_connection_dead=False)
+
+    _, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=connect_a,
+        callbacks={st.STTService.soniox: connect_b},
+        failed=set(),
+        models=['modulate-velma-2', 'soniox'],
+        routing_uid='synthetic',
+        routing_language='en',
+    )
+
+    assert service == st.STTService.modulate
+    assert seen == [candidate_a.id]
+
+
+@pytest.mark.asyncio
+async def test_admitted_non_capacity_candidate_dial_suppresses_capacity_escape(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('TEST_CAPACITY_ESCAPE_A', 'true')
+    candidate_a = replace(DEFAULT_TARGETS[1], capacity_env='TEST_CAPACITY_ESCAPE_A')
+    candidate_b = DEFAULT_TARGETS[-1]
+    targets = [candidate_a, candidate_b]
+    monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([target.__dict__ for target in targets]))
+    monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
+    monkeypatch.setattr(live_chain.health, 'cost_snapshot', lambda *_: {})
+    monkeypatch.setattr(live_chain, 'propose', lambda *args: targets)
+    seen = []
+
+    async def connect_a():
+        seen.append(connecting_target.get().id)
+        return SimpleNamespace(is_connection_dead=False)
+
+    async def connect_b():
+        seen.append(connecting_target.get().id)
+        raise ConnectionError('synthetic candidate failure')
+
+    with pytest.raises(RuntimeError, match='chain exhausted'):
+        await live_chain.connect_configured_chain(
+            primary_service=st.STTService.modulate,
+            connect_primary=connect_a,
+            callbacks={st.STTService.soniox: connect_b},
+            failed=set(),
+            models=['modulate-velma-2', 'soniox'],
+            routing_uid='synthetic',
+            routing_language='en',
+        )
+
+    assert seen == [candidate_b.id]
+
+
 def test_health_session_is_once_and_late_failure_after_text_counts(monkeypatch):
     from tests.unit.test_live_routing_health import _leg, SpeechGate
 

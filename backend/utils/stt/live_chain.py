@@ -239,7 +239,6 @@ async def connect_configured_chain(
     probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
     capacity_blocked = set()
     capacity_resorts = []
-    non_capacity_candidate = False
 
     async def attempt(service: STTService, connect: Connect, target=None) -> tuple[STTSocket, STTService] | None:
         nonlocal origin, prior_reason, prior_capacity_subtype, attempted
@@ -408,7 +407,6 @@ async def connect_configured_chain(
             capacity_resorts.append((service, target, capacity_target))
             COST_DECISION.labels(target=capacity_target.id, reason='capacity_skip').inc()
             continue
-        non_capacity_candidate = True
         circuit = target_circuit(target, _circuit_for_primary(service))
         if not circuit.allow_request(max_probes=probes):
             primary_open |= not backup(service, target)
@@ -427,7 +425,7 @@ async def connect_configured_chain(
 
     # Capacity is advisory when it would suppress every usable route. Dial only
     # one least-recently-refused candidate; retain account/local circuit gates.
-    if canary and not attempted and not non_capacity_candidate and capacity_resorts:
+    if canary and not attempted and capacity_resorts:
         for service, target, capacity_target in sorted(
             capacity_resorts, key=lambda route: capacity_refused_at(route[2])
         ):
