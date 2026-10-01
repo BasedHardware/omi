@@ -25,6 +25,9 @@ from .action_items import (
 )
 
 
+MAX_ACTION_ITEMS_SYNC_LIMIT = 500
+
+
 def get_action_items_sync_page(
     uid: str,
     *,
@@ -43,6 +46,13 @@ def get_action_items_sync_page(
     ``updated_at`` cannot appear (the ordering field is absent), which is the
     intended contract: they predate the sync surface.
     """
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        raise ValueError('limit must be a positive integer')
+
+    clamped_limit = min(limit, MAX_ACTION_ITEMS_SYNC_LIMIT)
+    uid = uid.strip()
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection(action_items_collection)
     query = (
@@ -54,16 +64,19 @@ def get_action_items_sync_page(
         '__name__', direction=firestore.Query.ASCENDING
     )
     if after is not None:
+        if not isinstance(after, tuple) or len(after) != 2:
+            raise ValueError('after must be a tuple of (updated_at, doc_id)')
         after_dt, after_id = after
         if after_dt is None:
             raise ValueError('action item sync timestamp is invalid')
-        if not after_id.strip() or '/' in after_id:
+        if not isinstance(after_id, str) or not after_id.strip() or '/' in after_id:
             raise ValueError('action item sync doc id is invalid')
+        after_id = after_id.strip()
         query = query.start_after({'updated_at': after_dt, '__name__': collection.document(after_id)})
-    query = query.select(list(ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(limit + 1)
+    query = query.select(list(ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(clamped_limit + 1)
 
     docs = list(query.stream())
-    page_docs = docs[:limit]
+    page_docs = docs[:clamped_limit]
     items: List[Dict[str, Any]] = []
     last_position: Optional[Tuple[Any, str]] = None
     for doc in page_docs:
@@ -74,5 +87,5 @@ def get_action_items_sync_page(
         data['id'] = doc.id
         items.append(prepare_action_item_for_read(data))
         last_position = (raw_updated_at, doc.id)
-    resume = last_position if len(docs) > limit else None
+    resume = last_position if len(docs) > clamped_limit else None
     return items, resume
