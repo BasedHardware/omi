@@ -53,15 +53,30 @@ def dead_letter_failure_code(reason: Any) -> str:
     return 'unknown'
 
 
+def _validate_job_id(job_id: Any) -> str:
+    """Validate that job_id is a non-empty string without slashes and return stripped value."""
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    return job_id.strip()
+
+
+def _coerce_utc(dt: Any) -> datetime:
+    """Ensure timestamp is a timezone-aware UTC datetime."""
+    if not isinstance(dt, datetime):
+        return datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _client(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
 
 
 def _doc_ref(client: Any, job_id: str) -> Any:
-    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
-        raise ValueError('job_id must be a non-empty string without slashes')
+    clean_job_id = _validate_job_id(job_id)
     collection = sync_stage.collection_name(DEAD_LETTERS_COLLECTION)
-    return client.collection(collection).document(job_id.strip())
+    return client.collection(collection).document(clean_job_id)
 
 
 def _emit_confirmed(doc: dict[str, Any]) -> None:
@@ -97,28 +112,32 @@ def record_dead_letter_pending(
     Raises on Firestore failure; callers must let that fail the publish closed
     rather than terminalizing Redis without the durable record.
     """
-    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
-        raise ValueError('job_id must be a non-empty string without slashes')
-    job_id = job_id.strip()
+    clean_job_id = _validate_job_id(job_id)
     if uid is not None and isinstance(uid, str):
         uid = uid.strip()
 
     client = _client(firestore_client)
-    doc_ref = _doc_ref(client, job_id)
+    doc_ref = _doc_ref(client, clean_job_id)
     now = datetime.now(timezone.utc)
 
     def _txn(transaction: Any) -> dict[str, Any]:
         snapshot = doc_ref.get(transaction=transaction)
         existing = snapshot.to_dict() or {} if getattr(snapshot, 'exists', False) else {}
+        created_at_val = existing.get('created_at')
+        if created_at_val is not None:
+            created_at_val = _coerce_utc(created_at_val)
+        else:
+            created_at_val = now
+
         record: dict[str, Any] = {
             'uid': uid,
-            'job_id': job_id,
+            'job_id': clean_job_id,
             'lane': DEAD_LETTER_LANE,
             'status': existing.get('status') if existing.get('status') == STATUS_DEAD_LETTER else STATUS_PENDING,
             'failure_code': failure_code if failure_code in FAILURE_CODES else 'unknown',
             'failure_stage': sync_stage.current_stage(),
             'attempt_count': int(existing.get('attempt_count') or 0) + 1,
-            'created_at': existing.get('created_at') or now,
+            'created_at': created_at_val,
         }
         if conversation_id or existing.get('conversation_id'):
             conv_val = conversation_id or existing.get('conversation_id')
@@ -133,11 +152,9 @@ def record_dead_letter_pending(
 
 def get_dead_letter(job_id: str, *, firestore_client: Any = None) -> Optional[dict[str, Any]]:
     """Return the ledger doc for ``job_id`` or ``None`` when it does not exist."""
-    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
-        raise ValueError('job_id must be a non-empty string without slashes')
-    job_id = job_id.strip()
+    clean_job_id = _validate_job_id(job_id)
     client = _client(firestore_client)
-    snapshot = _doc_ref(client, job_id).get()
+    snapshot = _doc_ref(client, clean_job_id).get()
     if not getattr(snapshot, 'exists', False):
         return None
     return snapshot.to_dict()
@@ -152,11 +169,9 @@ def confirm_dead_letter(job_id: str, *, firestore_client: Any = None) -> Optiona
     returns ``did_transition=False``, so redeliveries and transaction retries
     cannot double-count the confirmed cohort.
     """
-    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
-        raise ValueError('job_id must be a non-empty string without slashes')
-    job_id = job_id.strip()
+    clean_job_id = _validate_job_id(job_id)
     client = _client(firestore_client)
-    doc_ref = _doc_ref(client, job_id)
+    doc_ref = _doc_ref(client, clean_job_id)
     now = datetime.now(timezone.utc)
 
     def _txn(transaction: Any) -> tuple[Optional[dict[str, Any]], bool]:
@@ -179,12 +194,15 @@ def _validate_dead_letter_identity(doc: dict[str, Any], job_id: str, uid: Any) -
     """Fail closed when a ledger doc does not belong to this job/uid pair."""
     if not isinstance(doc, dict):
         raise ValueError('ledger doc must be a dictionary')
-    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
-        raise ValueError('job_id must be a non-empty string without slashes')
-    norm_job_id = job_id.strip()
-    norm_uid = uid.strip() if isinstance(uid, str) else uid
-    if doc.get('job_id') != norm_job_id or (isinstance(norm_uid, str) and norm_uid and doc.get('uid') != norm_uid):
-        raise RuntimeError(f'sync dead-letter identity mismatch for job {norm_job_id}')
+    clean_job_id = _validate_job_id(job_id)
+    if doc.get('job_id') != clean_job_id:
+        raise RuntimeError(f'sync dead-letter identity mismatch for job {clean_job_id}')
+
+    if uid is not None:
+        if not isinstance(uid, str) or not uid.strip():
+            raise RuntimeError(f'sync dead-letter identity mismatch for job {clean_job_id}')
+        if doc.get('uid') != uid.strip():
+            raise RuntimeError(f'sync dead-letter identity mismatch for job {clean_job_id}')
 
 
 def ensure_dead_letter_confirmed(
@@ -204,24 +222,22 @@ def ensure_dead_letter_confirmed(
     a uid, so a fabricated replacement can never pass for the real record. Any
     identity mismatch fails closed instead of confirming someone else's doc.
     """
-    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
-        raise ValueError('job_id must be a non-empty string without slashes')
-    job_id = job_id.strip()
-    existing = get_dead_letter(job_id, firestore_client=firestore_client)
+    clean_job_id = _validate_job_id(job_id)
+    existing = get_dead_letter(clean_job_id, firestore_client=firestore_client)
     if existing is None:
         if not isinstance(uid, str) or not uid.strip():
-            raise RuntimeError(f'sync dead-letter missing and uid unavailable for job {job_id}')
+            raise RuntimeError(f'sync dead-letter missing and uid unavailable for job {clean_job_id}')
         record_dead_letter_pending(
-            job_id=job_id,
+            job_id=clean_job_id,
             uid=uid.strip(),
             conversation_id=conversation_id,
             failure_code=failure_code,
             firestore_client=firestore_client,
         )
     else:
-        _validate_dead_letter_identity(existing, job_id, uid)
-    confirmed = confirm_dead_letter(job_id, firestore_client=firestore_client)
+        _validate_dead_letter_identity(existing, clean_job_id, uid)
+    confirmed = confirm_dead_letter(clean_job_id, firestore_client=firestore_client)
     if confirmed is None:
-        raise RuntimeError(f'sync dead-letter write did not land for job {job_id}')
-    _validate_dead_letter_identity(confirmed, job_id, uid)
+        raise RuntimeError(f'sync dead-letter write did not land for job {clean_job_id}')
+    _validate_dead_letter_identity(confirmed, clean_job_id, uid)
     return confirmed
