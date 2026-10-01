@@ -3806,5 +3806,9 @@
     "updateAvailableTitle": "Mise à jour disponible",
     "updateAvailableMessage": "Une nouvelle version d'Omi est prête, avec des corrections et des améliorations.",
     "updateRequiredTitle": "Mise à jour requise",
-    "updateRequiredMessage": "Cette version d'Omi n'est plus prise en charge. Mettez à jour pour continuer à enregistrer et à synchroniser."
+    "updateRequiredMessage": "Cette version d'Omi n'est plus prise en charge. Mettez à jour pour continuer à enregistrer et à synchroniser.",
+    "autoRemoveSyncedCopiesTitle": "Suppression automatique des copies synchronisées",
+    "autoRemoveSyncedCopiesDays": "Les copies synchronisées sont supprimées après {days} jours",
+    "autoRemoveSyncedCopiesDescription": "Supprime les copies locales {days} jours après la synchronisation. Les copies cloud sont conservées.",
+    "localCopiesSection": "Copies locales"
 }

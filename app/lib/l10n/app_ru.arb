@@ -3806,5 +3806,9 @@
     "updateAvailableTitle": "Доступно обновление",
     "updateAvailableMessage": "Новая версия Omi готова: с исправлениями и улучшениями.",
     "updateRequiredTitle": "Требуется обновление",
-    "updateRequiredMessage": "Эта версия Omi больше не поддерживается. Обновите приложение, чтобы продолжить запись и синхронизацию."
+    "updateRequiredMessage": "Эта версия Omi больше не поддерживается. Обновите приложение, чтобы продолжить запись и синхронизацию.",
+    "autoRemoveSyncedCopiesTitle": "Автоудаление синхронизированных копий",
+    "autoRemoveSyncedCopiesDays": "Синхронизированные копии удаляются через {days} дней",
+    "autoRemoveSyncedCopiesDescription": "Удаляет локальные копии через {days} дней после синхронизации. Облачные копии сохраняются.",
+    "localCopiesSection": "Локальные копии"
 }

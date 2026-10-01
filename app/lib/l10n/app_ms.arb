@@ -3771,5 +3771,9 @@
     "updateAvailableTitle": "Kemas kini tersedia",
     "updateAvailableMessage": "Versi baharu Omi sudah sedia, dengan pembetulan dan penambahbaikan.",
     "updateRequiredTitle": "Kemas kini diperlukan",
-    "updateRequiredMessage": "Versi Omi ini tidak lagi disokong. Kemas kini untuk terus merakam dan menyegerakkan."
+    "updateRequiredMessage": "Versi Omi ini tidak lagi disokong. Kemas kini untuk terus merakam dan menyegerakkan.",
+    "autoRemoveSyncedCopiesTitle": "Buang Salinan Tersegerak Secara Automatik",
+    "autoRemoveSyncedCopiesDays": "Salinan tersegerak dipadam selepas {days} hari",
+    "autoRemoveSyncedCopiesDescription": "Memadam salinan setempat {days} hari selepas segerak. Salinan awan dikekalkan.",
+    "localCopiesSection": "Salinan Setempat"
 }

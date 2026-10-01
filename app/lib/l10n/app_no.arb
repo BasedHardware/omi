@@ -3771,5 +3771,9 @@
     "updateAvailableTitle": "Oppdatering tilgjengelig",
     "updateAvailableMessage": "En ny versjon av Omi er klar, med feilrettinger og forbedringer.",
     "updateRequiredTitle": "Oppdatering kreves",
-    "updateRequiredMessage": "Denne versjonen av Omi støttes ikke lenger. Oppdater for å fortsette å ta opp og synkronisere."
+    "updateRequiredMessage": "Denne versjonen av Omi støttes ikke lenger. Oppdater for å fortsette å ta opp og synkronisere.",
+    "autoRemoveSyncedCopiesTitle": "Fjern synkroniserte kopier automatisk",
+    "autoRemoveSyncedCopiesDays": "Synkroniserte kopier slettes etter {days} dager",
+    "autoRemoveSyncedCopiesDescription": "Sletter lokale kopier {days} dager etter synkronisering. Skykopier beholdes.",
+    "localCopiesSection": "Lokale kopier"
 }

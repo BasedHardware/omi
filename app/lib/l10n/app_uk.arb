@@ -3771,5 +3771,9 @@
     "updateAvailableTitle": "Доступне оновлення",
     "updateAvailableMessage": "Нова версія Omi готова: з виправленнями та покращеннями.",
     "updateRequiredTitle": "Потрібне оновлення",
-    "updateRequiredMessage": "Ця версія Omi більше не підтримується. Оновіть, щоб і далі записувати та синхронізувати."
+    "updateRequiredMessage": "Ця версія Omi більше не підтримується. Оновіть, щоб і далі записувати та синхронізувати.",
+    "autoRemoveSyncedCopiesTitle": "Автоматичне видалення синхронізованих копій",
+    "autoRemoveSyncedCopiesDays": "Синхронізовані копії видаляються через {days} днів",
+    "autoRemoveSyncedCopiesDescription": "Видаляє локальні копії через {days} днів після синхронізації. Хмарні копії зберігаються.",
+    "localCopiesSection": "Локальні копії"
 }

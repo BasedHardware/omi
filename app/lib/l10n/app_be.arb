@@ -11328,5 +11328,9 @@
     "updateAvailableTitle": "Даступнае абнаўленне",
     "updateAvailableMessage": "Новая версія Omi гатовая: з выпраўленнямі і паляпшэннямі.",
     "updateRequiredTitle": "Патрабуецца абнаўленне",
-    "updateRequiredMessage": "Гэтая версія Omi больш не падтрымліваецца. Абнавіце, каб працягваць запіс і сінхранізацыю."
+    "updateRequiredMessage": "Гэтая версія Omi больш не падтрымліваецца. Абнавіце, каб працягваць запіс і сінхранізацыю.",
+    "autoRemoveSyncedCopiesTitle": "Аўтаматычна выдаляць сінхранізаваныя копіі",
+    "autoRemoveSyncedCopiesDays": "Сінхранізаваныя копіі выдаляюцца праз {days} дзён",
+    "autoRemoveSyncedCopiesDescription": "Выдаляе лакальныя копіі праз {days} дзён пасля сінхранізацыі. Воблачныя копіі захоўваюцца.",
+    "localCopiesSection": "Лакальныя копіі"
 }

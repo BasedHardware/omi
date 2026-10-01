@@ -3771,5 +3771,9 @@
     "updateAvailableTitle": "K dispozícii je aktualizácia",
     "updateAvailableMessage": "Nová verzia Omi je pripravená, s opravami a vylepšeniami.",
     "updateRequiredTitle": "Vyžaduje sa aktualizácia",
-    "updateRequiredMessage": "Táto verzia Omi už nie je podporovaná. Aktualizujte ju, aby ste mohli ďalej nahrávať a synchronizovať."
+    "updateRequiredMessage": "Táto verzia Omi už nie je podporovaná. Aktualizujte ju, aby ste mohli ďalej nahrávať a synchronizovať.",
+    "autoRemoveSyncedCopiesTitle": "Automatické odstraňovanie synchronizovaných kópií",
+    "autoRemoveSyncedCopiesDays": "Synchronizované kópie sa odstránia po {days} dňoch",
+    "autoRemoveSyncedCopiesDescription": "Odstráni lokálne kópie {days} dní po synchronizácii. Cloudové kópie zostávajú zachované.",
+    "localCopiesSection": "Lokálne kópie"
 }
