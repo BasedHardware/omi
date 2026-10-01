@@ -1220,7 +1220,6 @@
     "appsCount": "Sovellukset ({count})",
     "privateAppsCount": "Yksityiset sovellukset ({count})",
     "publicAppsCount": "Julkiset sovellukset ({count})",
-    "newVersionAvailable": "Uusi versio saatavilla",
     "no": "Ei",
     "subscriptionCancelledSuccessfully": "Tilaus peruutettu onnistuneesti. Se pysyy aktiivisena nykyisen laskutuskauden loppuun.",
     "failedToCancelSubscription": "Tilauksen peruuttaminen epäonnistui. Yritä uudelleen.",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "Koskee kaikkia tämän puhujan rivejä",
     "collapseAction": "Tiivistä",
     "speakerTagPromptNotMeAction": "En ole minä",
-    "confidenceNextLabels": "{count, plural, =1{Nimeä heidät vielä 1 keskustelussa.} other{Nimeä heidät vielä {count} keskustelussa.}}"
+    "confidenceNextLabels": "{count, plural, =1{Nimeä heidät vielä 1 keskustelussa.} other{Nimeä heidät vielä {count} keskustelussa.}}",
+    "updateAvailableTitle": "Päivitys saatavilla",
+    "updateAvailableMessage": "Omin uusi versio on valmis, ja siinä on korjauksia ja parannuksia.",
+    "updateRequiredTitle": "Päivitys vaaditaan",
+    "updateRequiredMessage": "Tätä Omin versiota ei enää tueta. Päivitä, jotta voit jatkaa tallentamista ja synkronointia."
 }

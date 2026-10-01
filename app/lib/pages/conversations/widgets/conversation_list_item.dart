@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -87,6 +88,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
   bool isNew = false;
   bool _reprocessing = false;
 
+  /// How far the row has been swiped toward delete (0 to 1), for [_SwipeDeleteReveal].
+  final ValueNotifier<double> _swipe = ValueNotifier<double>(0);
+
   int _visualSignature(ServerConversation conversation) => Object.hash(
         conversation.structured.title,
         conversation.structured.emoji,
@@ -108,6 +112,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   @override
   void dispose() {
     _conversationNewStatusResetTimer?.cancel();
+    _swipe.dispose();
     super.dispose();
   }
 
@@ -377,12 +382,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             key: ValueKey('conversation_dismissible_${widget.conversation.id}'),
                             direction:
                                 isSelectionMode || isMerging ? DismissDirection.none : DismissDirection.endToStart,
-                            background: Container(
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20.0),
-                              color: OmiColors.danger,
-                              child: const Icon(Icons.delete, color: Colors.white),
-                            ),
+                            // The card stays; a small red delete button comes in at its edge.
+                            background: _SwipeDeleteReveal(progress: _swipe),
+                            onUpdate: (details) => _swipe.value = details.progress,
                             // One delete path (D5): confirm unless opted out, then Undo.
                             confirmDismiss: (direction) async {
                               HapticFeedback.mediumImpact();
@@ -594,6 +596,43 @@ class _ConversationListItemState extends State<ConversationListItem> {
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
     return OmiDuration.compact(durationSeconds, context.l10n);
+  }
+}
+
+/// What a conversation row shows behind it as it is swiped to delete: the row's own card, with a
+/// round red delete button at its trailing edge that grows in as the swipe nears the point where
+/// letting go deletes. The same trash icon as the row menu.
+class _SwipeDeleteReveal extends StatelessWidget {
+  const _SwipeDeleteReveal({required this.progress});
+
+  final ValueListenable<double> progress;
+
+  /// [Dismissible]'s default dismiss threshold: past it, letting go asks to delete.
+  static const double _threshold = 0.4;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(end: 16),
+        child: ValueListenableBuilder<double>(
+          valueListenable: progress,
+          builder: (context, value, child) {
+            final t = Curves.easeOut.transform((value / _threshold).clamp(0.0, 1.0));
+            return Opacity(opacity: t, child: Transform.scale(scale: 0.6 + 0.4 * t, child: child));
+          },
+          child: Container(
+            key: const ValueKey('conversation_swipe_delete'),
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: OmiColors.danger, shape: BoxShape.circle),
+            child: const FaIcon(FontAwesomeIcons.trashCan, size: 17, color: Colors.white),
+          ),
+        ),
+      ),
+    );
   }
 }
 

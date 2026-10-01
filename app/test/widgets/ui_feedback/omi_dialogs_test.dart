@@ -93,6 +93,57 @@ void main() {
       expect(result!.confirmed, isTrue);
       expect(result!.dontAskAgain, isTrue);
     });
+
+    testWidgets('iOS opt-out row: the box sits beside its label and shows a check once ticked', (tester) async {
+      await tester.pumpWidget(feedbackHarness(
+        (context) => showOmiConfirmWithOptOut(
+          context,
+          title: 'Delete Conversation?',
+          message: 'This also deletes its memories, tasks, and audio files.',
+          confirmLabel: 'Delete',
+          destructive: true,
+        ),
+        platform: TargetPlatform.iOS,
+      ));
+      await tapTrigger(tester);
+
+      expect(find.byType(CupertinoCheckbox), findsNothing);
+      final box = find.byKey(const ValueKey('omi_checkbox_box'));
+      final label = find.text("Don't ask me again");
+      expect(tester.getSize(box), const Size(18, 18));
+      expect(tester.getTopLeft(label).dx - tester.getTopRight(box).dx, lessThanOrEqualTo(10),
+          reason: 'no loose gap between the box and its label');
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+
+      await tester.tap(label);
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    });
+
+    testWidgets('iOS opt-out row: the air above and below the row comes out even', (tester) async {
+      // A one-line label: the test font is wider than San Francisco, and "Don't ask me again" wraps.
+      await tester.pumpWidget(feedbackHarness(
+        (context) => showOmiConfirmWithOptOut(
+          context,
+          title: 'Delete Conversation?',
+          message: 'This also deletes its memories, tasks, and audio files.',
+          confirmLabel: 'Delete',
+          destructive: true,
+          optOutLabel: 'Not again',
+        ),
+        platform: TargetPlatform.iOS,
+      ));
+      await tapTrigger(tester);
+
+      final message = tester.getRect(find.text('This also deletes its memories, tasks, and audio files.'));
+      final label = tester.getRect(find.text('Not again'));
+      final buttons = tester.getRect(find.widgetWithText(CupertinoDialogAction, 'Delete'));
+      final above = label.top - message.bottom;
+      final below = buttons.top - label.bottom;
+      expect(above, greaterThanOrEqualTo(16));
+      expect((above - below).abs(), lessThanOrEqualTo(4), reason: 'above $above, below $below');
+      expect(tester.getSize(find.byType(OmiCheckboxRow)).height, greaterThanOrEqualTo(44));
+    });
   });
 
   testWidgets('showOmiAlert has one OK button', (tester) async {

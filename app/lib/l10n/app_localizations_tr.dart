@@ -3976,9 +3976,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Yeni Sürüm Mevcut';
-
-  @override
   String get no => 'Hayır';
 
   @override
@@ -12123,4 +12120,17 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Güncelleme mevcut';
+
+  @override
+  String get updateAvailableMessage => 'Omi\'nin yeni sürümü hazır; düzeltmeler ve iyileştirmeler içeriyor.';
+
+  @override
+  String get updateRequiredTitle => 'Güncelleme gerekli';
+
+  @override
+  String get updateRequiredMessage =>
+      'Omi\'nin bu sürümü artık desteklenmiyor. Kayda ve eşitlemeye devam etmek için güncelleyin.';
 }

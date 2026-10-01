@@ -1220,7 +1220,6 @@
     "appsCount": "Aplikasi ({count})",
     "privateAppsCount": "Aplikasi Pribadi ({count})",
     "publicAppsCount": "Aplikasi Publik ({count})",
-    "newVersionAvailable": "Versi Baru Tersedia",
     "no": "Tidak",
     "subscriptionCancelledSuccessfully": "Langganan berhasil dibatalkan. Akan tetap aktif hingga akhir periode penagihan saat ini.",
     "failedToCancelSubscription": "Gagal membatalkan langganan. Silakan coba lagi.",
@@ -3800,5 +3799,9 @@
     "speakerSuggestionAppliesToSpeaker": "Berlaku untuk setiap baris dari pembicara ini",
     "collapseAction": "Ciutkan",
     "speakerTagPromptNotMeAction": "Bukan saya",
-    "confidenceNextLabels": "{count, plural, =1{Beri label pada 1 percakapan lagi.} other{Beri label pada {count} percakapan lagi.}}"
+    "confidenceNextLabels": "{count, plural, =1{Beri label pada 1 percakapan lagi.} other{Beri label pada {count} percakapan lagi.}}",
+    "updateAvailableTitle": "Pembaruan tersedia",
+    "updateAvailableMessage": "Versi baru Omi sudah siap, dengan perbaikan dan peningkatan.",
+    "updateRequiredTitle": "Pembaruan diperlukan",
+    "updateRequiredMessage": "Versi Omi ini tidak lagi didukung. Perbarui untuk terus merekam dan menyinkronkan."
 }

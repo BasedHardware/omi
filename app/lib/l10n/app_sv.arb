@@ -1220,7 +1220,6 @@
     "appsCount": "Appar ({count})",
     "privateAppsCount": "Privata appar ({count})",
     "publicAppsCount": "Offentliga appar ({count})",
-    "newVersionAvailable": "Ny version tillgänglig",
     "no": "Nej",
     "subscriptionCancelledSuccessfully": "Prenumeration avbruten. Den förblir aktiv till slutet av den aktuella faktureringsperioden.",
     "failedToCancelSubscription": "Det gick inte att avbryta prenumerationen. Försök igen.",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "Gäller alla repliker från den här talaren",
     "collapseAction": "Dölj",
     "speakerTagPromptNotMeAction": "Inte jag",
-    "confidenceNextLabels": "{count, plural, =1{Märk dem i 1 konversation till.} other{Märk dem i {count} konversationer till.}}"
+    "confidenceNextLabels": "{count, plural, =1{Märk dem i 1 konversation till.} other{Märk dem i {count} konversationer till.}}",
+    "updateAvailableTitle": "Uppdatering tillgänglig",
+    "updateAvailableMessage": "En ny version av Omi är klar, med rättningar och förbättringar.",
+    "updateRequiredTitle": "Uppdatering krävs",
+    "updateRequiredMessage": "Den här versionen av Omi stöds inte längre. Uppdatera för att fortsätta spela in och synkronisera."
 }

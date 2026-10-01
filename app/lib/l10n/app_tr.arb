@@ -1220,7 +1220,6 @@
     "appsCount": "Uygulamalar ({count})",
     "privateAppsCount": "Özel Uygulamalar ({count})",
     "publicAppsCount": "Herkese Açık Uygulamalar ({count})",
-    "newVersionAvailable": "Yeni Sürüm Mevcut",
     "no": "Hayır",
     "subscriptionCancelledSuccessfully": "Abonelik başarıyla iptal edildi. Mevcut fatura döneminin sonuna kadar aktif kalacaktır.",
     "failedToCancelSubscription": "Abonelik iptal edilemedi. Lütfen tekrar deneyin.",
@@ -3800,5 +3799,9 @@
     "speakerSuggestionAppliesToSpeaker": "Bu konuşmacının tüm satırlarına uygulanır",
     "collapseAction": "Daralt",
     "speakerTagPromptNotMeAction": "Ben değilim",
-    "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}"
+    "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}",
+    "updateAvailableTitle": "Güncelleme mevcut",
+    "updateAvailableMessage": "Omi'nin yeni sürümü hazır; düzeltmeler ve iyileştirmeler içeriyor.",
+    "updateRequiredTitle": "Güncelleme gerekli",
+    "updateRequiredMessage": "Omi'nin bu sürümü artık desteklenmiyor. Kayda ve eşitlemeye devam etmek için güncelleyin."
 }

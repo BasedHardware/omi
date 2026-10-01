@@ -1220,7 +1220,6 @@
     "appsCount": "App ({count})",
     "privateAppsCount": "App private ({count})",
     "publicAppsCount": "App pubbliche ({count})",
-    "newVersionAvailable": "Nuova versione disponibile",
     "no": "No",
     "subscriptionCancelledSuccessfully": "Abbonamento annullato con successo. Rimarrà attivo fino alla fine del periodo di fatturazione corrente.",
     "failedToCancelSubscription": "Impossibile annullare l'abbonamento. Riprova.",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "Vale per ogni riga di questo interlocutore",
     "collapseAction": "Comprimi",
     "speakerTagPromptNotMeAction": "Non sono io",
-    "confidenceNextLabels": "{count, plural, =1{Etichettali in 1 altra conversazione.} other{Etichettali in altre {count} conversazioni.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etichettali in 1 altra conversazione.} other{Etichettali in altre {count} conversazioni.}}",
+    "updateAvailableTitle": "Aggiornamento disponibile",
+    "updateAvailableMessage": "È pronta una nuova versione di Omi, con correzioni e miglioramenti.",
+    "updateRequiredTitle": "Aggiornamento necessario",
+    "updateRequiredMessage": "Questa versione di Omi non è più supportata. Aggiorna per continuare a registrare e sincronizzare."
 }

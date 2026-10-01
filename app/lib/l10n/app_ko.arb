@@ -1220,7 +1220,6 @@
     "appsCount": "앱 ({count})",
     "privateAppsCount": "비공개 앱 ({count})",
     "publicAppsCount": "공개 앱 ({count})",
-    "newVersionAvailable": "새 버전 사용 가능",
     "no": "아니요",
     "subscriptionCancelledSuccessfully": "구독이 성공적으로 취소되었습니다. 현재 결제 기간이 끝날 때까지 유효합니다.",
     "failedToCancelSubscription": "구독 취소에 실패했습니다. 다시 시도해 주세요.",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "이 화자의 모든 발언에 적용돼요",
     "collapseAction": "접기",
     "speakerTagPromptNotMeAction": "제가 아니에요",
-    "confidenceNextLabels": "{count, plural, =1{대화 1개에서 더 라벨을 지정해 주세요.} other{대화 {count}개에서 더 라벨을 지정해 주세요.}}"
+    "confidenceNextLabels": "{count, plural, =1{대화 1개에서 더 라벨을 지정해 주세요.} other{대화 {count}개에서 더 라벨을 지정해 주세요.}}",
+    "updateAvailableTitle": "업데이트 가능",
+    "updateAvailableMessage": "수정 사항과 개선 사항이 담긴 새 버전의 Omi가 준비되었습니다.",
+    "updateRequiredTitle": "업데이트 필요",
+    "updateRequiredMessage": "이 버전의 Omi는 더 이상 지원되지 않습니다. 계속 녹음하고 동기화하려면 업데이트하세요."
 }

@@ -3969,9 +3969,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Uusi versio saatavilla';
-
-  @override
   String get no => 'Ei';
 
   @override
@@ -12116,4 +12113,17 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Päivitys saatavilla';
+
+  @override
+  String get updateAvailableMessage => 'Omin uusi versio on valmis, ja siinä on korjauksia ja parannuksia.';
+
+  @override
+  String get updateRequiredTitle => 'Päivitys vaaditaan';
+
+  @override
+  String get updateRequiredMessage =>
+      'Tätä Omin versiota ei enää tueta. Päivitä, jotta voit jatkaa tallentamista ja synkronointia.';
 }

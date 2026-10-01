@@ -1220,7 +1220,6 @@
     "appsCount": "{count} apps",
     "privateAppsCount": "Private apps ({count})",
     "publicAppsCount": "Offentlige apps ({count})",
-    "newVersionAvailable": "Ny version tilgængelig",
     "no": "Nej",
     "subscriptionCancelledSuccessfully": "Abonnement annulleret. Det forbliver aktivt indtil slutningen af den aktuelle faktureringsperiode.",
     "failedToCancelSubscription": "Kunne ikke annullere abonnement. Prøv venligst igen.",
@@ -3807,5 +3806,9 @@
     "speakerSuggestionAppliesToSpeaker": "Gælder for alle linjer fra denne taler",
     "collapseAction": "Skjul",
     "speakerTagPromptNotMeAction": "Ikke mig",
-    "confidenceNextLabels": "{count, plural, =1{Mærk dem i 1 samtale mere.} other{Mærk dem i {count} samtaler mere.}}"
+    "confidenceNextLabels": "{count, plural, =1{Mærk dem i 1 samtale mere.} other{Mærk dem i {count} samtaler mere.}}",
+    "updateAvailableTitle": "Opdatering tilgængelig",
+    "updateAvailableMessage": "En ny version af Omi er klar med rettelser og forbedringer.",
+    "updateRequiredTitle": "Opdatering påkrævet",
+    "updateRequiredMessage": "Denne version af Omi understøttes ikke længere. Opdater for at fortsætte med at optage og synkronisere."
 }

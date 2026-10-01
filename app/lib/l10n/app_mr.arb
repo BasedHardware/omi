@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "नवीन संस्करण उपलब्ध",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "नाही",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -11325,5 +11321,9 @@
     "speakerSuggestionAppliesToSpeaker": "या वक्त्याच्या प्रत्येक ओळीला लागू होते",
     "collapseAction": "आकसा",
     "speakerTagPromptNotMeAction": "मी नाही",
-    "confidenceNextLabels": "{count, plural, =1{त्यांना आणखी 1 संभाषणात लेबल करा.} other{त्यांना आणखी {count} संभाषणांमध्ये लेबल करा.}}"
+    "confidenceNextLabels": "{count, plural, =1{त्यांना आणखी 1 संभाषणात लेबल करा.} other{त्यांना आणखी {count} संभाषणांमध्ये लेबल करा.}}",
+    "updateAvailableTitle": "अपडेट उपलब्ध आहे",
+    "updateAvailableMessage": "Omi ची नवीन आवृत्ती तयार आहे, दुरुस्त्या आणि सुधारणांसह.",
+    "updateRequiredTitle": "अपडेट आवश्यक आहे",
+    "updateRequiredMessage": "Omi ची ही आवृत्ती आता समर्थित नाही. रेकॉर्डिंग आणि सिंक सुरू ठेवण्यासाठी अपडेट करा."
 }

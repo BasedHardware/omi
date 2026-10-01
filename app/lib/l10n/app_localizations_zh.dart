@@ -3897,9 +3897,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => '新版本可用';
-
-  @override
   String get no => '否';
 
   @override
@@ -11895,4 +11892,16 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => '有可用更新';
+
+  @override
+  String get updateAvailableMessage => 'Omi 新版本已就绪，包含问题修复和改进。';
+
+  @override
+  String get updateRequiredTitle => '需要更新';
+
+  @override
+  String get updateRequiredMessage => '此版本的 Omi 已不再受支持。请更新以继续录音和同步。';
 }

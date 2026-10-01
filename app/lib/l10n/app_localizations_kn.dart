@@ -3982,9 +3982,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'ಹೊಸ ಆವೃತ್ತಿ ಲಭ್ಯವಿದೆ';
-
-  @override
   String get no => 'ಇಲ್ಲ';
 
   @override
@@ -12149,4 +12146,17 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'ಅಪ್‌ಡೇಟ್ ಲಭ್ಯವಿದೆ';
+
+  @override
+  String get updateAvailableMessage => 'Omi ನ ಹೊಸ ಆವೃತ್ತಿ ಸಿದ್ಧವಾಗಿದೆ, ಸರಿಪಡಿಸುವಿಕೆಗಳು ಮತ್ತು ಸುಧಾರಣೆಗಳೊಂದಿಗೆ.';
+
+  @override
+  String get updateRequiredTitle => 'ಅಪ್‌ಡೇಟ್ ಅಗತ್ಯವಿದೆ';
+
+  @override
+  String get updateRequiredMessage =>
+      'Omi ನ ಈ ಆವೃತ್ತಿಗೆ ಇನ್ನು ಬೆಂಬಲವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಸಿಂಕ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಡೇಟ್ ಮಾಡಿ.';
 }

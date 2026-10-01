@@ -1220,7 +1220,6 @@
     "appsCount": "Aplicações ({count})",
     "privateAppsCount": "Aplicações privadas ({count})",
     "publicAppsCount": "Aplicações públicas ({count})",
-    "newVersionAvailable": "Nova versão disponível",
     "no": "Não",
     "subscriptionCancelledSuccessfully": "Assinatura cancelada com sucesso. Permanecerá ativa até o final do período de faturamento atual.",
     "failedToCancelSubscription": "Falha ao cancelar a assinatura. Por favor, tente novamente.",
@@ -3800,5 +3799,9 @@
     "speakerSuggestionAppliesToSpeaker": "Vale para todas as falas deste falante",
     "collapseAction": "Recolher",
     "speakerTagPromptNotMeAction": "Não sou eu",
-    "confidenceNextLabels": "{count, plural, =1{Etiquete-os em mais 1 conversa.} other{Etiquete-os em mais {count} conversas.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etiquete-os em mais 1 conversa.} other{Etiquete-os em mais {count} conversas.}}",
+    "updateAvailableTitle": "Atualização disponível",
+    "updateAvailableMessage": "Uma nova versão do Omi está pronta, com correções e melhorias.",
+    "updateRequiredTitle": "Atualização necessária",
+    "updateRequiredMessage": "Esta versão do Omi não é mais suportada. Atualize para continuar gravando e sincronizando."
 }

@@ -1220,7 +1220,6 @@
     "appsCount": "Приложения ({count})",
     "privateAppsCount": "Приватные приложения ({count})",
     "publicAppsCount": "Публичные приложения ({count})",
-    "newVersionAvailable": "Доступна новая версия",
     "no": "Нет",
     "subscriptionCancelledSuccessfully": "Подписка успешно отменена. Она останется активной до конца текущего расчетного периода.",
     "failedToCancelSubscription": "Не удалось отменить подписку. Пожалуйста, попробуйте снова.",
@@ -3800,5 +3799,9 @@
     "speakerSuggestionAppliesToSpeaker": "Относится ко всем репликам этого говорящего",
     "collapseAction": "Свернуть",
     "speakerTagPromptNotMeAction": "Не я",
-    "confidenceNextLabels": "{count, plural, =1{Отметьте их ещё в 1 разговоре.} other{Отметьте их ещё в {count} разговорах.}}"
+    "confidenceNextLabels": "{count, plural, =1{Отметьте их ещё в 1 разговоре.} other{Отметьте их ещё в {count} разговорах.}}",
+    "updateAvailableTitle": "Доступно обновление",
+    "updateAvailableMessage": "Новая версия Omi готова: с исправлениями и улучшениями.",
+    "updateRequiredTitle": "Требуется обновление",
+    "updateRequiredMessage": "Эта версия Omi больше не поддерживается. Обновите приложение, чтобы продолжить запись и синхронизацию."
 }

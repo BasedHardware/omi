@@ -3989,9 +3989,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Új verzió elérhető';
-
-  @override
   String get no => 'Nem';
 
   @override
@@ -12157,4 +12154,17 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Frissítés érhető el';
+
+  @override
+  String get updateAvailableMessage => 'Elkészült az Omi új verziója, javításokkal és fejlesztésekkel.';
+
+  @override
+  String get updateRequiredTitle => 'Frissítés szükséges';
+
+  @override
+  String get updateRequiredMessage =>
+      'Az Omi ezen verziója már nem támogatott. Frissítsen a felvétel és a szinkronizálás folytatásához.';
 }

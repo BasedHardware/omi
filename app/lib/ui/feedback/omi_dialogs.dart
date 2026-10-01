@@ -113,12 +113,14 @@ class OmiAlertDialog extends StatelessWidget {
   Widget? _body(BuildContext context) {
     if (message == null && content == null) return null;
     if (content == null) return Text(message!);
+    final cupertino = omiUsesCupertinoDialogs(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: omiUsesCupertinoDialogs(context) ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      crossAxisAlignment: cupertino ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
         if (message != null) Text(message!),
-        if (message != null) const SizedBox(height: 12),
+        // Extra content (a 44pt row) carries its own air; a gap here left a band under it.
+        if (message != null && !cupertino) const SizedBox(height: 8),
         content!,
       ],
     );
@@ -251,6 +253,10 @@ List<OmiDialogAction> _confirmActions(
 }
 
 /// A checkbox with its label as one ≥44pt tappable row (the label toggles it too).
+///
+/// The box sits right beside its label, drawn in the dialog's own text colour so it reads on the
+/// light and the dark dialog. The row keeps the 44pt target; its label is set low in it, so on the
+/// iOS alert the air under the message matches the alert's own 20pt above the buttons.
 class OmiCheckboxRow extends StatelessWidget {
   const OmiCheckboxRow({super.key, required this.label, required this.value, required this.onChanged});
 
@@ -260,7 +266,7 @@ class OmiCheckboxRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cupertino = omiUsesCupertinoDialogs(context);
+    final ink = DefaultTextStyle.of(context).style.color ?? OmiColors.textPrimary;
     return MergeSemantics(
       child: Semantics(
         checked: value,
@@ -268,33 +274,53 @@ class OmiCheckboxRow extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => onChanged(!value),
+          // At least 44pt tall (a wrapped label at a large text size grows it).
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ExcludeSemantics(
-                  child: cupertino
-                      ? CupertinoCheckbox(
-                          value: value,
-                          onChanged: (v) => onChanged(v ?? false),
-                          activeColor: Colors.white,
-                          checkColor: CupertinoColors.black,
-                        )
-                      : Checkbox(
-                          value: value,
-                          onChanged: (v) => onChanged(v ?? false),
-                          activeColor: Colors.white,
-                          checkColor: Colors.black,
-                        ),
-                ),
-                const SizedBox(width: 4),
-                Flexible(child: Text(label, textAlign: TextAlign.start)),
-              ],
+            child: Align(
+              alignment: const Alignment(0, 0.7),
+              widthFactor: 1,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ExcludeSemantics(
+                    child: _OmiCheckBox(value: value, ink: ink),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(child: Text(label, textAlign: TextAlign.start)),
+                ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The 18pt rounded box of [OmiCheckboxRow]: an outline in [ink] when off, filled with a check
+/// when on.
+class _OmiCheckBox extends StatelessWidget {
+  const _OmiCheckBox({required this.value, required this.ink});
+
+  final bool value;
+  final Color ink;
+
+  @override
+  Widget build(BuildContext context) {
+    // The check takes whichever of black or white stands out on the filled box.
+    final check = ink.computeLuminance() > 0.5 ? Colors.black : Colors.white;
+    return AnimatedContainer(
+      key: const ValueKey('omi_checkbox_box'),
+      duration: OmiMotion.of(context).quick,
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        color: value ? ink : Colors.transparent,
+        borderRadius: const BorderRadius.all(Radius.circular(5)),
+        border: Border.all(color: value ? ink : ink.withValues(alpha: 0.45), width: 1.5),
+      ),
+      child: value ? Icon(Icons.check_rounded, size: 14, color: check) : null,
     );
   }
 }

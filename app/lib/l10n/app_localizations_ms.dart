@@ -3980,9 +3980,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Versi Baharu Tersedia';
-
-  @override
   String get no => 'Tidak';
 
   @override
@@ -12144,4 +12141,17 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Kemas kini tersedia';
+
+  @override
+  String get updateAvailableMessage => 'Versi baharu Omi sudah sedia, dengan pembetulan dan penambahbaikan.';
+
+  @override
+  String get updateRequiredTitle => 'Kemas kini diperlukan';
+
+  @override
+  String get updateRequiredMessage =>
+      'Versi Omi ini tidak lagi disokong. Kemas kini untuk terus merakam dan menyegerakkan.';
 }
