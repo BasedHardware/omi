@@ -14,21 +14,6 @@ from database.desktop_update_channels import (
 )
 
 
-def _valid_manifest() -> dict:
-    return {
-        "release_id": "v0.12.85+12085-macos",
-        "platform": "macos",
-        "channel": "stable",
-        "version": "0.12.85",
-        "build_number": 12085,
-        "qualification_tier": "T2",
-        "qualification_passed": True,
-        "created_at": "2026-09-30T12:00:00Z",
-        "dmg_url": "https://storage.googleapis.com/omi_macos_updates/releases/Omi-0.12.85.dmg",
-        "dmg_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-    }
-
-
 def test_build_pointer_rejects_non_dict_payloads():
     """Verify build_channel_pointer strictly rejects non-dict current and manifest."""
     with pytest.raises(ValueError, match="current pointer must be a dictionary"):
@@ -61,6 +46,17 @@ def test_build_pointer_rejects_invalid_generation_types():
             current, manifest, transition="promote", platform="macos", channel="stable", release_id="v2", expected_generation=-1
         )
 
+    # Test that same-release idempotent retries also validate expected_generation before early return
+    same_release_current = {"generation": 2, "build_number": 200, "release_id": "v2"}
+    with pytest.raises(ValueError, match="expected_generation must be a non-negative integer"):
+        build_channel_pointer(
+            same_release_current, manifest, transition="promote", platform="macos", channel="stable", release_id="v2", expected_generation=True  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="expected_generation must be a non-negative integer"):
+        build_channel_pointer(
+            same_release_current, manifest, transition="promote", platform="macos", channel="stable", release_id="v2", expected_generation=-1
+        )
+
 
 def test_build_pointer_coerces_naive_datetime():
     """Verify build_channel_pointer coerces a naive updated_at datetime to UTC."""
@@ -84,6 +80,33 @@ def test_build_pointer_coerces_naive_datetime():
         updated_at=naive_dt,
     )
     assert pointer["updated_at"].tzinfo == timezone.utc
+
+
+def test_build_pointer_converts_aware_non_utc_datetime():
+    """Verify build_channel_pointer converts aware non-UTC updated_at datetime to UTC."""
+    from datetime import timedelta
+    current = {"generation": 0, "build_number": 100}
+    manifest = {
+        "platform": "macos",
+        "qualification_tier": "T2",
+        "qualification_passed": True,
+        "version": "1.0.0",
+        "build_number": 200,
+    }
+    tz_offset = timezone(timedelta(hours=4))
+    aware_dt = datetime(2026, 9, 30, 18, 0, 0, tzinfo=tz_offset)
+    pointer = build_channel_pointer(
+        current,
+        manifest,
+        transition="promote",
+        platform="macos",
+        channel="stable",
+        release_id="v2",
+        expected_generation=0,
+        updated_at=aware_dt,
+    )
+    assert pointer["updated_at"].tzinfo == timezone.utc
+    assert pointer["updated_at"] == datetime(2026, 9, 30, 14, 0, 0, tzinfo=timezone.utc)
 
 
 def test_promote_channel_rejects_invalid_input_types():

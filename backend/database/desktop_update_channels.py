@@ -360,6 +360,10 @@ def _build_pointer(
     if accepted_evidence is not None and evidence not in accepted_evidence:
         raise ValueError("release manifest qualification is missing accepted normal-path evidence")
 
+    if expected_generation is not None:
+        if isinstance(expected_generation, bool) or not isinstance(expected_generation, int) or expected_generation < 0:
+            raise ValueError("expected_generation must be a non-negative integer")
+
     current_release_id = current.get("release_id")
     # An acknowledged pointer target is a safe exact retry. It still had to
     # resolve to this qualified immutable manifest above, but does not require
@@ -376,8 +380,6 @@ def _build_pointer(
 
     current_generation = _generation(current.get("generation", 0))
     if expected_generation is not None:
-        if isinstance(expected_generation, bool) or not isinstance(expected_generation, int) or expected_generation < 0:
-            raise ValueError("expected_generation must be a non-negative integer")
         if expected_generation != current_generation:
             raise ValueError(f"generation mismatch: expected {expected_generation}, current {current_generation}")
 
@@ -394,6 +396,8 @@ def _build_pointer(
             raise ValueError("updated_at must be a datetime")
         if updated_at.tzinfo is None or updated_at.utcoffset() is None:
             updated_at = updated_at.replace(tzinfo=timezone.utc)
+        else:
+            updated_at = updated_at.astimezone(timezone.utc)
 
     pointer = {
         "platform": platform,
@@ -402,7 +406,7 @@ def _build_pointer(
         "version": manifest["version"],
         "build_number": manifest["build_number"],
         "generation": current_generation + 1,
-        "updated_at": updated_at or datetime.now(timezone.utc),
+        "updated_at": updated_at if updated_at is not None else datetime.now(timezone.utc),
     }
     if serving_backends is not None:
         pointer["serving_backends"] = normalize_serving_backends(serving_backends)
