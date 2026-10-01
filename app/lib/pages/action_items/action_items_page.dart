@@ -438,11 +438,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final showCompleted = provider.showCompletedView;
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
         final apiPhase = provider.apiViewState.phase;
+        // Successful empty results use the existing icon, guidance and Create Task action.
         final showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
-            apiPhase == ApiViewPhase.authenticationRequired ||
-            apiPhase == ApiViewPhase.empty;
+            apiPhase == ApiViewPhase.authenticationRequired;
 
         return Scaffold(
           body: Stack(
