@@ -3188,7 +3188,7 @@ async def test_dev_sync_job_route_acks_before_shared_state_access(payload):
     module.uid_sequencer.production_stage = MagicMock(return_value=False)
     module.get_sync_ledger_fence_mode = MagicMock()
     module._run_sync_job_body = AsyncMock()
-    module.get_raw_sync_job = MagicMock()
+    module.get_sync_job = MagicMock()
     module.try_acquire_job_run_lock = MagicMock()
     module.sync_backfill_sequencer.reset_mock()
     module.backfill_cutover.reset_mock()
@@ -3202,7 +3202,7 @@ async def test_dev_sync_job_route_acks_before_shared_state_access(payload):
         assert response.status_code == 200
         assert response.body == b'{"status":"foreign_stage"}'
         module.get_sync_ledger_fence_mode.assert_not_called()
-        module.get_raw_sync_job.assert_not_called()
+        module.get_sync_job.assert_not_called()
         module.try_acquire_job_run_lock.assert_not_called()
         module._run_sync_job_body.assert_not_awaited()
         assert module.sync_backfill_sequencer.mock_calls == []
