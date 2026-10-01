@@ -135,6 +135,7 @@ def person_updates_for_assignment(
     receipt: Dict[str, Any],
     after: Sequence[Mapping[str, Any]],
     rejected_person_id: Optional[str] = None,
+    save_other_voice_profiles: bool = True,
 ) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
     """Every person-document write one manual assignment makes, and the sample paths it retires.
 
@@ -159,7 +160,7 @@ def person_updates_for_assignment(
                 speech_sample_transcripts=[],
                 speaker_embedding=None,
                 speech_sample_source=None,
-                voice_learning_state='pending',
+                voice_learning_state='pending' if save_other_voice_profiles else 'disabled',
                 voice_speech_seconds=None,
                 voice_needed_seconds=None,
             )
@@ -171,13 +172,23 @@ def person_updates_for_assignment(
     if person_id and target:
         target_update = updates.setdefault(person_id, {})
         target_update['updated_at'] = now
-        authorized = any(
-            decision_authorizes_training(winning_receipt_decision(receipt, segment), person_id)
-            for segment in after
-            if segment.get('person_id') == person_id
-        )
-        if authorized or voice_readiness(target) != VoiceReadiness.ready:
-            target_update.update(voice_learning_state='pending', voice_speech_seconds=None, voice_needed_seconds=None)
+        if not save_other_voice_profiles:
+            target_update.update(
+                voice_learning_state='disabled',
+                voice_learning_outcome='disabled',
+                voice_speech_seconds=target.get('voice_speech_seconds'),
+                voice_needed_seconds=None,
+            )
+        else:
+            authorized = any(
+                decision_authorizes_training(winning_receipt_decision(receipt, segment), person_id)
+                for segment in after
+                if segment.get('person_id') == person_id
+            )
+            if authorized or voice_readiness(target) != VoiceReadiness.ready:
+                target_update.update(
+                    voice_learning_state='pending', voice_speech_seconds=None, voice_needed_seconds=None
+                )
     ledger = dict(receipt.get('label_evidence') or {})
     for pid, person in people.items():
         if not person:

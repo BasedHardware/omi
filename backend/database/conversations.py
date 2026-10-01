@@ -193,8 +193,7 @@ def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) 
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as error:
         logger.error(f"{error} {uid}")
         data['manual_speaker_assignments'] = {}
-    segments = data.get('transcript_segments')
-    if data['manual_speaker_assignments'] and isinstance(segments, list):
+    if data['manual_speaker_assignments'] and isinstance(segments := data.get('transcript_segments'), list):
         data['transcript_segments'] = apply_manual_assignments(segments, data['manual_speaker_assignments'])
 
 
@@ -2602,8 +2601,7 @@ def assign_conversation_speaker(
                     uid, source.get('transcript_segments', []), bool(source.get('transcript_segments_compressed'))
                 )
             current_id = raw['sync_merged_into']
-            raw = collection.document(current_id).get(transaction=transaction).to_dict()
-            if not raw:
+            if not (raw := collection.document(current_id).get(transaction=transaction).to_dict()):
                 raise LookupError('Conversation not found')
         if raw.get('deleted'):
             raise LookupError('Conversation not found')
@@ -2649,6 +2647,8 @@ def assign_conversation_speaker(
         # record label evidence in the same transaction as the label, not in a later task.
         relabeled = [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
         rejected_person_id = (rejection or {}).get('person_id')
+        user_doc = user_ref.get(transaction=transaction).to_dict() or {}
+        save_other = bool(user_doc.get('save_other_voice_profiles', True))
         people = {
             pid: (pref := user_ref.collection('people').document(pid), pref.get(transaction=transaction).to_dict())
             for pid in previous | {p for p in (person_id, rejected_person_id) if p}
@@ -2658,7 +2658,7 @@ def assign_conversation_speaker(
         docs, now = {pid: doc for pid, (_, doc) in people.items()}, datetime.now(timezone.utc)
         evidence = (docs, previous, person_id, relabeled, evidence_source, current_id, resolved, now)
         updates, removed = person_updates_for_assignment(
-            *evidence, receipt, segments, rejected_person_id=rejected_person_id
+            *evidence, receipt, segments, rejected_person_id=rejected_person_id, save_other_voice_profiles=save_other
         )
         for pid, update in updates.items():
             transaction.update(people[pid][0], update)
