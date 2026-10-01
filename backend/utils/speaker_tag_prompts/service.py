@@ -785,14 +785,18 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
         if not np.isfinite(embedding).all() or not np.any(embedding):
             outcome = 'rejected_embedding'
             return outcome
-        await run_blocking(
+        stored = await run_blocking(
             db_executor,
             voice_profiles_db.add_owner_voice_confirmation,
             uid,
             embedding.flatten().tolist(),
             _pool,
             conversation_id=conversation_id,
+            expected_receipt_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
         )
+        if not stored:
+            outcome = 'stale_assignment'
+            return outcome
         outcome = 'stored'
         return outcome
     except Exception as error:

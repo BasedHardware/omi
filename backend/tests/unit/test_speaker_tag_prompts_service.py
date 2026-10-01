@@ -600,7 +600,9 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
     monkeypatch.setattr(service, 'extract_embedding_from_bytes', lambda *a: np.array([[1.0, 0.0]], dtype=np.float32))
     monkeypatch.setattr(
-        service.voice_profiles_db, 'add_owner_voice_confirmation', lambda uid, embedding, pool, conversation_id: 1
+        service.voice_profiles_db,
+        'add_owner_voice_confirmation',
+        lambda uid, embedding, pool, conversation_id, expected_receipt_generation: 1,
     )
     assert asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a', 'b', 'c'])) == 'stored'
     assert clipped == [(5.0, 15.0)]
@@ -653,7 +655,10 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
     monkeypatch.setattr(
         service.voice_profiles_db,
         'add_owner_voice_confirmation',
-        lambda uid, embedding, pool, conversation_id: pooled.append((embedding, pool([embedding]))) or 1,
+        lambda uid, embedding, pool, conversation_id, expected_receipt_generation: pooled.append(
+            (embedding, pool([embedding]))
+        )
+        or 1,
     )
     outcome = asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a']))
     assert outcome == 'stored'

@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from google.cloud import firestore
 
 from ._client import get_firestore_client, run_transactional
+from .conversations import decode_manual_speaker_assignments
 
 SETTINGS_DEFAULTS: Dict[str, bool] = {
     'speaker_tag_prompts_enabled': True,
@@ -157,6 +158,7 @@ def add_owner_voice_confirmation(
     pool: Callable[[List[List[float]]], List[float]],
     *,
     conversation_id: str,
+    expected_receipt_generation: Optional[int] = None,
     firestore_client: Any = None,
 ) -> int:
     """Pool a confirmed owner clip into the owner's voiceprint in one transaction."""
@@ -165,6 +167,19 @@ def add_owner_voice_confirmation(
 
     @firestore.transactional
     def pool_in(transaction: Any) -> int:
+        if expected_receipt_generation is not None:
+            conversation = (
+                ref.collection('conversations').document(conversation_id).get(transaction=transaction).to_dict()
+            )
+            if not conversation or conversation.get('deleted'):
+                return 0
+            receipt = decode_manual_speaker_assignments(
+                uid,
+                conversation.get('manual_speaker_assignments'),
+                bool(conversation.get('manual_speaker_assignments_compressed')),
+            )
+            if receipt.get('generation', 0) != expected_receipt_generation:
+                return 0
         snapshot = ref.get(transaction=transaction)
         data = snapshot.to_dict() or {}
         current = data.get('speaker_embedding')
