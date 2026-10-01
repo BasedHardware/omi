@@ -2049,13 +2049,15 @@ visibility edges but do not renew a lease or opt into detail translation.
 
 ### Jev population measurement (EXP-004)
 
-Conversation processing assigns stable per-user relevance arms (`relevance_arm`).
+Conversation processing assigns stable per-conversation keep-all selection and
+otherwise uses the existing per-user Jev relevance ramp (`relevance_arm`).
 The owner flip flag is universal when enabled (INV-MEM-5); owner *measurement*
 stays candidate-sampled. Existing live flags are dev-on, prod-off; dev pins
 relevance and universal owner live percentages to zero for shadow coverage.
 Owner percentage permits only 100 (everyone) or 0 (off); invalid/intermediate
-values fail closed. Either malformed relevance arm percentage selects nano. The ambiguous model tier
-can be policy-kept by `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT`; deterministic
+values fail closed. Malformed keep-all percentages select no conversations;
+malformed Jev percentages admit no Jev users. The ambiguous model tier can be
+policy-kept by `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT`; deterministic
 rules, restores, calendar retention and plan gates retain their precedence.
 
 Both processing hosts submit advisory relevance/owner questions through

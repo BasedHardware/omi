@@ -153,10 +153,10 @@ runs:
         flags: >-
           --revision-suffix=${{ inputs.revision_suffix }}
           ${{ steps.candidate-tag.outputs.flag }}
-          --min-instances=2
-          --max-instances=20
-          --max=20
-          --concurrency=2
+          --min-instances=3
+          --max-instances=15
+          --max=15
+          --concurrency=3
           --cpu=2
           --memory=8Gi
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
@@ -209,7 +209,7 @@ runs:
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
             --max-concurrent-dispatches=30 \
-            --max-dispatches-per-second=30 \
+            --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s
         else
@@ -217,7 +217,7 @@ runs:
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
             --max-concurrent-dispatches=30 \
-            --max-dispatches-per-second=30 \
+            --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s
         fi

@@ -149,7 +149,15 @@ class EnsureFirestoreMissingIndexAlertTests(unittest.TestCase):
         self.assertLess(deploy, alert)
         self.assertIn("if: github.event.inputs.environment == 'prod'", step)
         self.assertIn("ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}", step)
-        self.assertIn("python3 .github/scripts/ensure_firestore_missing_index_alert.py", step)
+        self.assertIn('test -n "${DEPLOY_WORKFLOW_ROOT:-}"', step)
+        self.assertIn(
+            'test -f "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py"',
+            step,
+        )
+        self.assertIn(
+            'python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py"',
+            step,
+        )
         self.assertIn("--notification-channels \"$ALERT_CHANNELS\"", step)
         self.assertIn(DOCUMENTATION_URL, (root / ".github/scripts/ensure_firestore_missing_index_alert.py").read_text())
         self.assertTrue((root / "backend/docs/runbooks/firestore-missing-index.md").is_file())
