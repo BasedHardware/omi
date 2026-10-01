@@ -183,8 +183,16 @@ final class SiriBridge: SiriIndexApi {
     func navigate(_ route: String, entryPath: String = "unknown") -> Bool {
         let appRoute = route.hasPrefix("omi://") ? "/" + String(route.dropFirst(6)) : route
         let started = Date()
-        guard SiriSnapshotStore.shared.setPendingRoute(appRoute, entryPath: entryPath, started: started),
-              let pending = SiriSnapshotStore.shared.pendingRoute() else {
+        let claim = SiriSnapshotStore.shared.claimPendingRoute(appRoute, entryPath: entryPath, started: started)
+        let pending: SiriPendingRoute
+        switch claim {
+        case .accepted(let route): pending = route
+        case .duplicate:
+            if entryPath != "unknown" {
+                SiriTelemetry.intent("open", outcome: "ok", started: started, entryPath: entryPath)
+            }
+            return true
+        case .rejected:
             if entryPath != "unknown" {
                 SiriTelemetry.intent("open", outcome: "auth", started: started, entryPath: entryPath)
             }

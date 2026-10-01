@@ -106,6 +106,14 @@ final class SiriSnapshotStore {
         let entryPath: String
         let startedAtMs: Int64
     }
+    enum RouteClaim {
+        case accepted(SiriPendingRoute)
+        case duplicate
+        case rejected
+    }
+    private static let pendingRouteLifetimeMs: Int64 = 60_000
+    private static let duplicateRouteWindowMs: Int64 = 2_000
+    private var lastClaimedRoute: PendingRoute?
 
     private struct Snapshot: Codable {
         var eligibilityVersion: Int? = nil
@@ -741,24 +749,49 @@ final class SiriSnapshotStore {
     private func storedPendingRoute() -> PendingRoute? {
         defaults.data(forKey: routeKey).flatMap { try? JSONDecoder().decode(PendingRoute.self, from: $0) }
     }
+    private func routeIsRecent(_ pending: PendingRoute, nowMs: Int64, windowMs: Int64) -> Bool {
+        let age = nowMs - pending.startedAtMs
+        return age >= 0 && age <= windowMs
+    }
     func pendingRoute() -> SiriPendingRoute? {
-        guard let pending = storedPendingRoute(), let config = SiriSession.shared.currentConfig(),
+        lock.lock()
+        guard let pending = storedPendingRoute() else { lock.unlock(); return nil }
+        if !routeIsRecent(pending, nowMs: CheckedIntegerConversion.epochMs(),
+                          windowMs: Self.pendingRouteLifetimeMs) {
+            defaults.removeObject(forKey: routeKey)
+            lock.unlock()
+            return nil
+        }
+        lock.unlock()
+        guard let config = SiriSession.shared.currentConfig(),
               config.uid == pending.uid, (config.generation ?? 0) == pending.generation,
               generationForOwner(pending.uid) == pending.generation,
               (try? SiriSession.shared.validateOwner(config)) != nil else { return nil }
         return SiriPendingRoute(route: pending.route, uid: pending.uid, generation: pending.generation)
     }
-    @discardableResult
-    func setPendingRoute(_ route: String, entryPath: String = "unknown", started: Date = Date()) -> Bool {
+    func claimPendingRoute(_ route: String, entryPath: String = "unknown", started: Date = Date()) -> RouteClaim {
         guard let config = SiriSession.shared.currentConfig(),
               (try? SiriSession.shared.validateOwner(config)) != nil,
-              generationForOwner(config.uid) == (config.generation ?? 0) else { return false }
+              generationForOwner(config.uid) == (config.generation ?? 0) else { return .rejected }
         let pending = PendingRoute(route: route, uid: config.uid, generation: config.generation ?? 0,
                                    entryPath: entryPath, startedAtMs: CheckedIntegerConversion.epochMs(started))
+        lock.lock(); defer { lock.unlock() }
+        guard accountOwnerLocked(), generationMatchesLocked(pending.generation) else { return .rejected }
+        if let lastClaimedRoute, lastClaimedRoute.route == route,
+           lastClaimedRoute.uid == pending.uid, lastClaimedRoute.generation == pending.generation,
+           routeIsRecent(lastClaimedRoute, nowMs: pending.startedAtMs,
+                         windowMs: Self.duplicateRouteWindowMs) { return .duplicate }
         guard let data = try? JSONEncoder().encode(pending),
-              (try? SafeDefaults.store(.data(data), forKey: routeKey, in: defaults)) != nil else { return false }
-        return true
+              (try? SafeDefaults.store(.data(data), forKey: routeKey, in: defaults)) != nil else { return .rejected }
+        lastClaimedRoute = pending
+        return .accepted(SiriPendingRoute(route: route, uid: pending.uid, generation: pending.generation))
     }
+    #if OMI_SIRI_PROBE
+    func resetRouteDedupForProbe() {
+        lock.lock(); defer { lock.unlock() }
+        lastClaimedRoute = nil
+    }
+    #endif
     func finishPendingRoute(route: String, uid: String, generation: Int64, delivered: Bool) {
         lock.lock()
         guard let pending = storedPendingRoute(), pending.route == route,

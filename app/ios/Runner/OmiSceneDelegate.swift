@@ -150,6 +150,10 @@ enum OmiSpotlightActivityRoute {
         if let entity, !entity.identifier.isEmpty {
             switch ObjectIdentifier(entity.entityType) {
             case ObjectIdentifier(ConversationEntity.self):
+                if let explicit = urlTarget(raw), explicit.id == entity.identifier,
+                   explicit.kinds.first == "conversation" || explicit.kinds.first == "memory" {
+                    return explicit
+                }
                 return Target(kinds: ["conversation", "memory"], id: entity.identifier)
             case ObjectIdentifier(MemoryEntity.self):
                 return Target(kinds: ["memory"], id: entity.identifier)
@@ -161,6 +165,10 @@ enum OmiSpotlightActivityRoute {
         // Old iOS indexes included a URL as relatedUniqueIdentifier. Accept
         // one if Spotlight supplies it as its activity identifier, but never
         // trust it without the same current-owner snapshot check below.
+        return urlTarget(raw)
+    }
+
+    private static func urlTarget(_ raw: String?) -> Target? {
         guard let raw, let url = URLComponents(string: raw), url.scheme == "omi",
               let kind = url.host, ["conversation", "memory", "task"].contains(kind),
               let id = url.path.split(separator: "/").first.map(String.init),
@@ -175,9 +183,10 @@ enum OmiSpotlightActivityRoute {
             SiriTelemetry.intent("open", outcome: "server", started: started, entryPath: "user_activity")
             return
         }
-        guard let kind = target.kinds.first(where: {
+        let matches = target.kinds.filter {
             SiriSnapshotStore.shared.containsCurrentEntity(type: $0, id: target.id)
-        }) else {
+        }
+        guard matches.count == 1, let kind = matches.first else {
             SiriTelemetry.intent("open", outcome: "auth", started: started, entryPath: "user_activity")
             return
         }

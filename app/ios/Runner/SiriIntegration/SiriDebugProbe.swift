@@ -91,6 +91,7 @@ enum SiriDebugProbe {
                         SiriSnapshotStore.shared.finishPendingRoute(route: pending.route, uid: pending.uid,
                             generation: pending.generation, delivered: true)
                     }
+                    SiriSnapshotStore.shared.resetRouteDedupForProbe()
                 }
                 SiriBridge.shared.routeDeliveryProbe = nil
                 let stale = NSUserActivity(activityType: CSSearchableItemActionType)
@@ -100,6 +101,86 @@ enum SiriDebugProbe {
                 OmiSpotlightActivityRoute.handle(stale)
                 NSLog("[SiriSceneProbe] syntheticActivity_stale=%@",
                       SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL")
+
+                let store = SiriSnapshotStore.shared
+                _ = SiriTelemetry.take()
+                var deliveries = 0
+                SiriBridge.shared.routeDeliveryProbe = { _, completion in
+                    deliveries += 1
+                    completion(true)
+                }
+                let duplicateActivity = NSUserActivity(activityType: CSSearchableItemActionType)
+                duplicateActivity.appEntityIdentifier = EntityIdentifier(for: conversation)
+                OmiSpotlightActivityRoute.handle(duplicateActivity)
+                var duplicateIntent = OpenOmiIntent()
+                duplicateIntent.target = conversation
+                _ = try await duplicateIntent.perform()
+                let openRows = SiriTelemetry.take().filter { $0.intent == "open" }
+                let paths = Set(openRows.map(\.entryPath))
+                NSLog("[SiriSceneProbe] duplicateCrossPath=%@ deliveries=%d telemetry=%@",
+                      deliveries == 1 && store.pendingRoute() == nil && openRows.count == 2 &&
+                          paths == Set(["user_activity", "app_intent"]) ? "PASS" : "FAIL",
+                      deliveries, String(describing: paths))
+                store.resetRouteDedupForProbe()
+                _ = SiriTelemetry.take()
+                var deferredAcknowledgment: ((Bool) -> Void)?
+                deliveries = 0
+                SiriBridge.shared.routeDeliveryProbe = { _, completion in
+                    deliveries += 1
+                    deferredAcknowledgment = completion
+                }
+                _ = try await duplicateIntent.perform()
+                OmiSpotlightActivityRoute.handle(duplicateActivity)
+                let pendingBeforeAck = store.pendingRoute()?.route == "/conversation/spotlight-conversation"
+                deferredAcknowledgment?(true)
+                let inFlightRows = SiriTelemetry.take().filter { $0.intent == "open" }
+                NSLog("[SiriSceneProbe] duplicateBeforeAck=%@",
+                      deliveries == 1 && pendingBeforeAck && store.pendingRoute() == nil &&
+                          Set(inFlightRows.map(\.entryPath)) == Set(["app_intent", "user_activity"])
+                          ? "PASS" : "FAIL")
+                SiriBridge.shared.routeDeliveryProbe = nil
+                store.resetRouteDedupForProbe()
+
+                let expired = store.claimPendingRoute("/task/expired", started: Date().addingTimeInterval(-61))
+                let expiredClaimed: Bool
+                if case .accepted = expired { expiredClaimed = true } else { expiredClaimed = false }
+                NSLog("[SiriSceneProbe] expiredRoute=%@",
+                      expiredClaimed && store.pendingRoute() == nil ? "PASS" : "FAIL")
+                store.resetRouteDedupForProbe()
+                let retry = store.claimPendingRoute("/task/retry", started: Date().addingTimeInterval(-59))
+                if case .accepted(let route) = retry {
+                    store.finishPendingRoute(route: route.route, uid: route.uid,
+                                             generation: route.generation, delivered: false)
+                    let stillPending = store.pendingRoute()?.route == route.route
+                    store.finishPendingRoute(route: route.route, uid: route.uid,
+                                             generation: route.generation, delivered: true)
+                    NSLog("[SiriSceneProbe] inWindowRetry=%@",
+                          stillPending && store.pendingRoute() == nil ? "PASS" : "FAIL")
+                } else {
+                    NSLog("[SiriSceneProbe] inWindowRetry=FAIL claim")
+                }
+                store.resetRouteDedupForProbe()
+
+                let sharedID = "spotlight-shared-id"
+                try await store.upsert([SiriConversation(id: sharedID, title: "Shared probe",
+                    summary: "Synthetic", startedAtMs: now, updatedAtMs: now)], uid: uid)
+                try await store.upsert([SiriMemory(id: sharedID, content: "Shared probe",
+                    createdAtMs: now, expiresAtMs: nil)], uid: uid)
+                let shared = ConversationEntity(id: sharedID, name: "Shared probe", content: "Synthetic",
+                    creationDate: Date(), modificationDate: Date())
+                let ambiguous = NSUserActivity(activityType: CSSearchableItemActionType)
+                ambiguous.appEntityIdentifier = EntityIdentifier(for: shared)
+                OmiSpotlightActivityRoute.handle(ambiguous)
+                NSLog("[SiriSceneProbe] ambiguousConversationMemory=%@",
+                      store.pendingRoute() == nil ? "PASS" : "FAIL")
+                let explicitMemory = NSUserActivity(activityType: CSSearchableItemActionType)
+                explicitMemory.appEntityIdentifier = EntityIdentifier(for: shared)
+                explicitMemory.userInfo = [CSSearchableItemActivityIdentifier: "omi://memory/\(sharedID)"]
+                SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(false) }
+                OmiSpotlightActivityRoute.handle(explicitMemory)
+                NSLog("[SiriSceneProbe] explicitMemoryKind=%@",
+                      store.pendingRoute()?.route == "/memory/\(sharedID)" ? "PASS" : "FAIL")
+                SiriBridge.shared.routeDeliveryProbe = nil
             }
         } catch {
             NSLog("[SiriSceneProbe] syntheticIndex=failed error=%@", String(describing: error))
