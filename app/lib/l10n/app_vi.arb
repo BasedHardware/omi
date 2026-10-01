@@ -3776,5 +3776,11 @@
     "autoRemoveSyncedCopiesDays": "Bản sao đã đồng bộ bị xóa sau {days} ngày",
     "autoRemoveSyncedCopiesDescription": "Xóa bản sao cục bộ {days} ngày sau khi đồng bộ. Bản sao trên đám mây được giữ lại.",
     "localCopiesSection": "Bản sao cục bộ",
+    "speakerLabelLinesLabeled": "Số dòng đã gắn nhãn: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Đã học giọng nói} pending{Đang học giọng nói…} disabled{Tính năng lưu giọng nói đang tắt} other{Chưa học giọng nói}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi sẽ nhận ra {name} vào lần sau.} pending{Việc này mất vài giây.} disabled{Hãy bật lưu giọng nói trong Cài đặt để Omi có thể nhận ra {name}.} other{Omi cần thêm giọng nói rõ ràng của {name} và sẽ tiếp tục thử.}}",
+    "speakerLabelEarlierMatches": "Số cuộc trò chuyện trước có giọng nói này: {count}",
+    "speakerLabelText": "{part, select, likely{Có thể} soundsLike{Nghe giống {name}} notPerson{Không phải {name}} carried{Vẫn là {name}. Được giữ từ cuộc trò chuyện gần nhất của bạn.} change{Đổi} alsoTitle{Đây cũng là {name}?} alsoBody{Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.} confirmed{Bạn đã xác nhận nhãn này} other{Xem lại}}",
+    "speakerLabelTalkTime": "{duration} từ giọng nói này",
     "showOnLockScreen": "Hiển thị trên màn hình khóa"
 }

@@ -11968,5 +11968,67 @@ class AppLocalizationsKo extends AppLocalizations {
   String get localCopiesSection => '로컬 사본';
 
   @override
+  String speakerLabelLinesLabeled(int count) {
+    return '라벨을 지정한 줄 수: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '목소리를 학습했어요',
+        'pending': '목소리 학습 중…',
+        'disabled': '목소리 저장이 꺼져 있어요',
+        'other': '아직 목소리를 학습하지 못했어요',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '다음부터 Omi가 $name님을 알아볼 거예요.',
+        'pending': '몇 초 정도 걸려요.',
+        'disabled': 'Omi가 $name님을 알아보려면 설정에서 목소리 저장을 켜 주세요.',
+        'other': 'Omi에 $name님의 또렷한 음성이 더 필요해요. 계속 시도할게요.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return '이 목소리의 이전 대화 수: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': '추정',
+        'soundsLike': '$name님 목소리와 비슷해요',
+        'notPerson': '$name님 아님',
+        'carried': '계속 $name님이에요. 지난 대화에서 이어졌어요.',
+        'change': '변경',
+        'alsoTitle': '이분도 $name님인가요?',
+        'alsoBody': 'Omi가 이전 대화에서 같은 목소리를 찾았어요.',
+        'confirmed': '이 라벨을 확인했어요',
+        'other': '검토',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '이 목소리 $duration';
+  }
+
+  @override
   String get showOnLockScreen => '잠금 화면에 표시';
 }

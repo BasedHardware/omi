@@ -200,6 +200,7 @@ def _fake_with_rate_limit(dependency, _policy):  # pragma: no cover - returns wr
 _endpoints.get_current_user_uid = _fake_get_current_user_uid
 _endpoints.with_rate_limit = _fake_with_rate_limit
 _endpoints.get_user = MagicMock()
+_endpoints.timeit = lambda fn: fn
 _register_module('utils.other.endpoints', _endpoints)
 
 _request_validation = ModuleType('utils.request_validation')

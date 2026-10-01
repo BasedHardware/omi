@@ -12185,5 +12185,67 @@ class AppLocalizationsLv extends AppLocalizations {
   String get localCopiesSection => 'Vietējās kopijas';
 
   @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Atzīmētās rindas: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Balss apgūta',
+        'pending': 'Apgūst balsi…',
+        'disabled': 'Balss saglabāšana ir izslēgta',
+        'other': 'Balss vēl nav apgūta',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi nākamreiz atpazīs $name.',
+        'pending': 'Tas aizņem dažas sekundes.',
+        'disabled': 'Ieslēdziet balsu saglabāšanu iestatījumos, lai Omi varētu atpazīt $name.',
+        'other': 'Omi vajag vairāk skaidras $name runas, un tas turpinās mēģināt.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Iepriekšējās sarunas ar šo balsi: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Iespējams',
+        'soundsLike': 'Izklausās pēc $name',
+        'notPerson': 'Nav $name',
+        'carried': 'Joprojām $name. Pārnests no jūsu pēdējās sarunas.',
+        'change': 'Mainīt',
+        'alsoTitle': 'Vai šī ir arī $name?',
+        'alsoBody': 'Omi atrada to pašu balsi iepriekšējās sarunās.',
+        'confirmed': 'Jūs apstiprinājāt šo birku',
+        'other': 'Pārskatīt',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration no šīs balss';
+  }
+
+  @override
   String get showOnLockScreen => 'Rādīt bloķēšanas ekrānā';
 }

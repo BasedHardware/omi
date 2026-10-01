@@ -12240,5 +12240,67 @@ class AppLocalizationsEl extends AppLocalizations {
   String get localCopiesSection => 'Τοπικά αντίγραφα';
 
   @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Γραμμές που επισημάνθηκαν: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Η φωνή εκμαθήθηκε',
+        'pending': 'Εκμάθηση φωνής…',
+        'disabled': 'Η αποθήκευση φωνής είναι ανενεργή',
+        'other': 'Η φωνή δεν έχει εκμαθηθεί ακόμα',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Το Omi θα αναγνωρίσει το άτομο $name την επόμενη φορά.',
+        'pending': 'Αυτό διαρκεί λίγα δευτερόλεπτα.',
+        'disabled': 'Ενεργοποιήστε την αποθήκευση φωνών στις Ρυθμίσεις, ώστε το Omi να αναγνωρίζει το άτομο $name.',
+        'other': 'Το Omi χρειάζεται πιο καθαρή ομιλία από το άτομο $name και θα συνεχίσει να προσπαθεί.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Προηγούμενες συζητήσεις με αυτή τη φωνή: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Πιθανό',
+        'soundsLike': 'Ακούγεται σαν $name',
+        'notPerson': 'Όχι $name',
+        'carried': 'Εξακολουθεί να είναι $name. Μεταφέρθηκε από την τελευταία σας συζήτηση.',
+        'change': 'Αλλαγή',
+        'alsoTitle': 'Είναι και αυτό το άτομο $name;',
+        'alsoBody': 'Το Omi βρήκε την ίδια φωνή σε προηγούμενες συζητήσεις.',
+        'confirmed': 'Επιβεβαιώσατε αυτή την ετικέτα',
+        'other': 'Έλεγχος',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration αυτής της φωνής';
+  }
+
+  @override
   String get showOnLockScreen => 'Εμφάνιση στην οθόνη κλειδώματος';
 }

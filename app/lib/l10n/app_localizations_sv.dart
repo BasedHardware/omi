@@ -12168,5 +12168,67 @@ class AppLocalizationsSv extends AppLocalizations {
   String get localCopiesSection => 'Lokala kopior';
 
   @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Märkta rader: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Rösten är inlärd',
+        'pending': 'Lär sig rösten…',
+        'disabled': 'Sparande av röst är avstängt',
+        'other': 'Rösten är inte inlärd ännu',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi känner igen $name nästa gång.',
+        'pending': 'Det tar några sekunder.',
+        'disabled': 'Aktivera sparande av röster i Inställningar så att Omi kan känna igen $name.',
+        'other': 'Omi behöver mer tydligt tal från $name och fortsätter försöka.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Tidigare konversationer med den här rösten: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Troligen',
+        'soundsLike': 'Låter som $name',
+        'notPerson': 'Inte $name',
+        'carried': 'Fortfarande $name. Förd över från din senaste konversation.',
+        'change': 'Ändra',
+        'alsoTitle': 'Är det också $name?',
+        'alsoBody': 'Omi hittade samma röst i tidigare konversationer.',
+        'confirmed': 'Du har bekräftat den här etiketten',
+        'other': 'Granska',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration av den här rösten';
+  }
+
+  @override
   String get showOnLockScreen => 'Visa på låsskärmen';
 }

@@ -1,7 +1,7 @@
 # EXP-004 — Jev relevance and owner measurement and ramp
 
 **Owner:** dazheng. **Registered:** 2026-09-30. **Review by:** 2026-10-21.
-**Decision:** pending; production live Jev flags remain absent (off).
+**Decision:** operational ramp authorized; stage 1 (J=1%) started 2026-10-02.
 
 ## Fixed treatment and cohort assignment
 
@@ -16,15 +16,22 @@ ambiguous model tier, independently within every account. K is
 `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT` (default 0). No account is selected
 into a different policy, consistent with INV-MEM-5: every account uses the
 same memory and task authority. Keep-all selection takes precedence for that
-conversation. Otherwise a UID bucket of `relevance-arm-v1` preserves the Jev
-range [K,min(100,K+J)); remaining conversations use nano. J is
+conversation. Otherwise the same conversation ID used by keep-all and the
+shadow is hashed with salt `relevance-arm-v2` into the Jev range
+[K,min(100,K+J)); remaining conversations use nano. J is
 `CONVERSATION_RELEVANCE_JEV_PERCENT` (unset means 100 when the existing enable
-flag is on, otherwise 0). A UID in `CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST`
-is Jev only while enabled and never overrides a conversation selected for
-keep-all. Invalid percentages fail closed; malformed keep-all configuration
-selects no conversations. With K fixed, increasing J retains existing Jev
-users. Increasing K moves the Jev range's lower and upper bounds; the upper
-bound is capped at 100.
+flag is on, otherwise 0). No account is pinned to an arm: one account can have
+keep-all, Jev and nano conversations. `CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST`
+is dev dogfooding only, read only when `OMI_ENV_STAGE=dev` and the live flag is
+enabled; it never overrides keep-all. Production never reads it, and the runtime
+env validator rejects any prod declaration, including an empty or secret binding.
+Invalid percentages fail closed to nano outside keep-all; malformed keep-all
+configuration selects no conversations. With K fixed, increasing J retains every
+conversation already in Jev. Increasing K moves the Jev range's lower and upper
+bounds; the upper bound is capped at 100. Keep-all and Jev use independent salts:
+at K=2 and J=100, keep-all still wins and non-keep-all conversations whose Jev
+bucket is below 2 still use nano. J is the range width, not a promise that 100
+bypasses the keep-all experiment.
 
 The production keep-all arm starts 2026-10-01 and runs for at least 14 days
 before evaluation. At K=2, each ambiguous model-tier conversation has a stable
@@ -77,8 +84,14 @@ Dev backend-sync and backend-sync-backfill stay at 0: their Cloud
 Run revisions have no GMP sidecar/exporter allowlist entry, so their shadow
 outcomes and latency would be invisible (see utils/metrics.py). Prod declares
 both shadow percentages 100 on backend-listen, pusher and Cloud Run backend,
-backend-sync and backend-sync-backfill, with live flags absent, keep-all 2 and
-caps unchanged. The production configuration is in its own removable commit.
+backend-sync and backend-sync-backfill. Stage 1 enables relevance Jev at J=1 on
+those same five hosts while keep-all K=2 remains live; owner-flip flags remain
+absent, UID allowlists remain absent, and caps are unchanged. Keep-all takes
+precedence on each conversation. Because keep-all and Jev use independent salts,
+their assignments can overlap; non-keep-all conversations in the Jev bucket
+range [2,3) use Jev and the remaining roughly 97% stay on nano. Nano remains the
+large control arm, but this is not a separate matched nano-only cohort. The
+production configuration is in its own removable commit.
 The Firestore TTL policy on collection group `jev_shadow`, field `expire_at`,
 in project `based-hardware` was enabled 2026-10-01 and verified ACTIVE by the
 coordinator before the flip; the production flip is no longer held on TTL.
@@ -164,4 +177,93 @@ Report decision counts separately from unique conversations.
 Population and measurement: shadow scores all model-tier, transcript-only, <=100-word conversations (dedupe by conversation+transcript hash; note decisions != conversations because `SYNC_UPDATE`/`CLIENT_FINALIZE` re-assess). Ground truth is (a) David's labels on his OWN account only (no agent or human reads other users' transcripts), stratified on nano verdict x Jev verdict x score band {0.85-0.93, 0.93-0.95, 0.95-0.97, >0.97} and on source, reweighted by inclusion probability (Horvitz-Thompson), with a locked confirmation set that is never used for threshold tuning; (b) behavioral outcomes for the whole population from the randomized keep-all arm (opens, stars, shares, edits, chat citations, deletes within 7 days, restores; restores are heavily censored and used only for a monotonicity check).
 Discard GO requires all of: shadow >= 5,000 scored conversations over >= 300 users, Jev failure rate < 5%, p95 latency <= 2.5 s; share of Jev discards (P(discard) > 0.95) judged worth keeping <= 5% on >= 250 stratified David labels; predicted incremental paid-notes spend (conversations nano discards but Jev keeps x measured $0.0024 per kept conversation) <= $25/day or a higher threshold that meets the cap with the same safety bar; and in the production keep-all sample (2% of ambiguous model-tier conversations, starting 2026-10-01 and running for at least 14 days) the open rate of conversations nano would have discarded is >= 5%. At approximately 18,000 nano discards/day, the sample is expected to keep about 360 extra conversations/day, costing about $0.90/day uncached at $0.0024 each. Analyze these outcomes per conversation and account for within-user clustering. To stop the sample, set the production keep-all percentage back to 0 and redeploy; conversations already kept remain kept and are not retroactively discarded. If the open rate is below 5%, flipping discard is NO-GO (value of keeping is not visible in behavior) and nano stays.
 Owner flip GO requires all of: prod shadow P(user) >= 0.9 share among answered third-party candidates within 15-40% (benchmark ~25%; dev showed 74% and must be explained, e.g. by source, empty user name or prompt preamble, before any prod flip); >= 150 David labels stratified by source with Wilson 95% lower bound on precision >= 0.90; flips stay reversible via the stored `attribution_override` record.
-Ramp aborts (automatic, any one): Jev failure rate > 5%; p95 latency regresses > 2x; arm actual discard rate differs from the shadow prediction by > 20% relative; empty-title rate among Jev-kept conversations rises; 7-day deletes of kept conversations rise; notes spend per daily active user exceeds cap. Cohorts: 1% -> 10% -> 50% -> 100%, 24 h soak each; the ramp proves operational safety only, quality comes from labels and the keep-all arm.
+## Live relevance ramp and coordinator runbook
+
+Ramp by conversation: **1% -> 10% -> 50% -> 100%**, with **24 h soak per
+stage** and K fixed at 2. Stage 1 is live at J=1 with keep-all K=2 on the five
+processing hosts; keep-all wins any overlap, and all remaining conversations
+outside the Jev range use nano. Owner-flip flags and the UID allowlist remain
+absent. The coordinator ships each next env stage in a separate tiny PR. The
+ramp proves operational safety; the keep-all arm remains the engagement evidence.
+The 250-label bar above is not met by this implementation and must not be
+reported as passed. The coordinator's 2026-10-02 decision authorizes this
+operational ramp with restores/deletes monitored while labels and the 14-day
+keep-all readout remain outstanding quality evidence.
+
+Automatic abort criteria (any one): Jev failure rate > 5%; p95 latency regressing
+> 2x against the preceding stage; actual arm discard rate differing from the
+matched shadow prediction by > 20% relative; empty-title rate among Jev-kept
+conversations rising; 7-day deletes of Jev-kept conversations or restores of
+Jev-discarded conversations rising; notes spend per DAU exceeding the cap.
+Track both deletes and restores across Jev-kept/discarded conversations and
+cluster repeated decisions by conversation and account. Discards are recoverable
+through Show discarded / restore; restoring records `sync_relevance_user_kept`,
+which takes precedence over later model decisions. These are rollout gates for
+the coordinator's monitoring, not automatic control implemented by this PR.
+At shadow prediction zero, any nonzero actual discard rate aborts; do not divide
+by zero. Compare matched source/word-count/model-tier populations. Define the
+rise baselines and notes spend per DAU cap before promotion; the existing $25/day
+incremental-notes bar does not itself define a per-DAU cap.
+
+On **gke/backend-listen**, **gke/pusher**, **cloud_run/services/backend**,
+**cloud_run/services/backend-sync**, and **cloud_run/services/backend-sync-backfill**,
+add the following exact entries to each host's `env` map in
+`backend/deploy/runtime_env/prod.overlay.yaml` for stage 1:
+
+```yaml
+CONVERSATION_RELEVANCE_JEV_ENABLED:
+  value: 'true'
+  category: rollout
+CONVERSATION_RELEVANCE_JEV_PERCENT:
+  value: '1'
+  category: rollout
+```
+
+For stages 10, 50 and 100, change only the percent `value: '1'` -> `'10'` ->
+`'50'` -> `'100'` on those same five hosts; the enable entry stays `'true'`.
+Do not add these flags to backend-integration or change owner-flip flags.
+For each stage, compose `backend/deploy/runtime_env.yaml` with
+`python3 backend/deploy/compose_runtime_env.py`. In both production Helm values
+files (`backend/charts/backend-listen/prod_omi_backend_listen_values.yaml` and
+`backend/charts/pusher/prod_omi_pusher_values.yaml`), add the matching env list
+at stage 1, then change only the percent literal at later stages:
+
+```yaml
+- name: CONVERSATION_RELEVANCE_JEV_ENABLED
+  value: "true"
+- name: CONVERSATION_RELEVANCE_JEV_PERCENT
+  value: "1"
+```
+
+Update the currently-off prod assertions in
+`test_backend_runtime_env_validator.py`, then regenerate the feature-flag registry
+with `python3 scripts/render_feature_flag_registry.py`. Validate via
+`bash backend/scripts/pre-deploy-check.sh` and deploy the Cloud Run, listen and
+pusher workflows serially. Verify the two live env values on all five hosts;
+source declarations alone do not prove serving state. Rollback sets enabled to
+`false` (and percent to `0`) on all five hosts and redeploys; it does not
+retroactively rewrite conversation decisions. Reprocessing follows the current
+policy, while explicit restores stay protected.
+
+### Provider bindings and measurement limits
+
+Both the live relevance helper and the prod shadow call `ask_jev` in
+`utils/llm/jev_client.py`: `POST /v1/systemone`, model
+`omi:auto:jev-decisions`. Each processing host already declares the derived
+`OMI_LLM_GATEWAY_URL` and secret `OMI_LLM_GATEWAY_SERVICE_TOKEN`. Jev does not
+require `OMI_LLM_GATEWAY_FEATURE_MODE` or a backend-host OpenRouter key; it always
+uses the gateway. The generated lane in `llm_gateway/gateway/config_loader.py`
+pins `typesafe/jev-1.13`, provider `openrouter`, one provider attempt and no
+fallback. The production gateway Helm values bind `OPENROUTER_API_KEY` and
+`OMI_LLM_GATEWAY_SERVICE_TOKEN` from the gateway secret. No missing source
+binding was found; secret payloads, installed route and serving reachability
+remain deployment checks and are not verified by this code-only PR.
+
+Live calls record `omi_jev_decision_total` and latency for
+`conversation_relevance`; shadow calls suppress those metrics. Sync and backfill
+have no exporter, so scraped failure/latency bars cover only listen, pusher and
+Cloud Run backend. At J=100 very little nano shadow population remains; preserve
+pre-ramp predictions and the parallel keep-all shadow instead of treating a
+shrinking shadow sample as fleet-wide proof. The coordinator must close the sync
+visibility and monitoring/cap definition gaps before claiming automatic fleet
+abort coverage or promoting on those gates.

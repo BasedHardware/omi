@@ -3522,7 +3522,10 @@ export interface Person {
   speech_samples_version?: number;
   talk_seconds?: number | null;
   updated_at?: string | null;
+  voice_learning_state?: "learned" | "pending" | "needs_more_speech" | "disabled" | "unknown";
+  voice_needed_seconds?: number | null;
   voice_readiness?: VoiceReadiness;
+  voice_speech_seconds?: number | null;
 }
 
 export type PersonConfidence = "unknown" | "confirmed" | "likely" | "unverified";
@@ -3818,6 +3821,12 @@ export interface ReferralClaimResponse {
 
 export interface ReferralLinkResponse {
   referral_url: string;
+}
+
+export interface RejectSpeakerRequest {
+  kind: "not_me" | "not_person" | "not_a_person";
+  person_id?: string | null;
+  segment_ids?: Array<string> | null;
 }
 
 export interface ReorderFoldersRequest {
@@ -4811,6 +4820,7 @@ export interface TranscriptSegment {
   person_id?: string | null;
   speaker?: string | null;
   speaker_id?: number | null;
+  speaker_label_source?: "manual" | "auto" | "carried" | null;
   speech_profile_processed?: boolean;
   start: number;
   stt_provider?: string | null;
@@ -5148,6 +5158,22 @@ export interface VerifyPhoneNumberResponse {
   status: string;
   validation_code: string;
   verification_sid: string;
+}
+
+export interface VoiceMatch {
+  clip_end: number;
+  clip_start: number;
+  conversation_id: string;
+  match_level: "strong" | "likely";
+  segment_ids: Array<string>;
+  speaker_id: number;
+  started_at: string;
+  talk_seconds: number;
+  title: string;
+}
+
+export interface VoiceMatchesResponse {
+  matches?: Array<VoiceMatch>;
 }
 
 export interface VoiceMessageTranscriptionResponse {
@@ -5823,6 +5849,7 @@ export interface OmiApiSchemas {
   "ReferralClaimRequest": ReferralClaimRequest;
   "ReferralClaimResponse": ReferralClaimResponse;
   "ReferralLinkResponse": ReferralLinkResponse;
+  "RejectSpeakerRequest": RejectSpeakerRequest;
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
@@ -6013,6 +6040,8 @@ export interface OmiApiSchemas {
   "ValidationError": ValidationError;
   "VerifyPhoneNumberRequest": VerifyPhoneNumberRequest;
   "VerifyPhoneNumberResponse": VerifyPhoneNumberResponse;
+  "VoiceMatch": VoiceMatch;
+  "VoiceMatchesResponse": VoiceMatchesResponse;
   "VoiceMessageTranscriptionResponse": VoiceMessageTranscriptionResponse;
   "VoiceProfileSettings": VoiceProfileSettings;
   "VoiceProfileSettingsUpdate": VoiceProfileSettingsUpdate;
@@ -7383,6 +7412,16 @@ export interface OmiApiPaths {
         "200": ConversationScreenFrameSet;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject": {
+    post: {
+      operationId: "reject_speaker_label_v1_conversations__conversation_id__speakers__speaker_id__reject_post";
+      responses: {
+        "200": Conversation;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -9924,6 +9963,17 @@ export interface OmiApiPaths {
       operationId: "delete_person_speech_sample_endpoint_v1_users_people__person_id__speech_samples__sample_index__delete";
       responses: {
         "200": UserStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/people/{person_id}/voice-matches": {
+    get: {
+      operationId: "get_person_voice_matches_v1_users_people__person_id__voice_matches_get";
+      responses: {
+        "200": VoiceMatchesResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -13396,6 +13446,27 @@ export async function get_shared_conversation_screenshots_v1_conversations__conv
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function reject_speaker_label_v1_conversations__conversation_id__speakers__speaker_id__reject_post(path: { conversation_id: string, speaker_id: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RejectSpeakerRequest, init?: OmiApiClientInit): Promise<Conversation> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/speakers/${path.speaker_id}/reject`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -18349,6 +18420,25 @@ export async function delete_person_speech_sample_endpoint_v1_users_people__pers
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_person_voice_matches_v1_users_people__person_id__voice_matches_get(path: { person_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<VoiceMatchesResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/people/${path.person_id}/voice-matches`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function set_preferred_app_for_user_v1_users_preferences_app_put(query: { app_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/preferences/app`;
@@ -19986,4 +20076,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 466 client methods generated.
+// Total: 468 client methods generated.

@@ -12184,5 +12184,67 @@ class AppLocalizationsUk extends AppLocalizations {
   String get localCopiesSection => 'Локальні копії';
 
   @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Позначено рядків: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Голос запам’ятано',
+        'pending': 'Вивчення голосу…',
+        'disabled': 'Збереження голосу вимкнено',
+        'other': 'Голос ще не запам’ятано',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi впізнає $name наступного разу.',
+        'pending': 'Це займе кілька секунд.',
+        'disabled': 'Увімкніть збереження голосів у налаштуваннях, щоб Omi міг впізнавати $name.',
+        'other': 'Omi потрібно більше чіткого мовлення від $name, і він продовжить спроби.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Попередні розмови з цим голосом: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Імовірно',
+        'soundsLike': 'Схоже на $name',
+        'notPerson': 'Не $name',
+        'carried': 'Досі $name. Перенесено з вашої останньої розмови.',
+        'change': 'Змінити',
+        'alsoTitle': 'Це теж $name?',
+        'alsoBody': 'Omi знайшов такий самий голос у попередніх розмовах.',
+        'confirmed': 'Ви підтвердили цю мітку',
+        'other': 'Переглянути',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration цього голосу';
+  }
+
+  @override
   String get showOnLockScreen => 'Показувати на екрані блокування';
 }

@@ -1,0 +1,3 @@
+{
+  "change": "Naming a speaker during a live recording now actually saves — the label is stored before the sheet closes and the sheet shows an error instead of silently dismissing when the save fails."
+}

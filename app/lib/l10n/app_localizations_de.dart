@@ -12256,5 +12256,67 @@ class AppLocalizationsDe extends AppLocalizations {
   String get localCopiesSection => 'Lokale Kopien';
 
   @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Zugeordnete Zeilen: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Stimme gelernt',
+        'pending': 'Stimme wird gelernt…',
+        'disabled': 'Stimmspeicherung ist aus',
+        'other': 'Stimme noch nicht gelernt',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi erkennt $name beim nächsten Mal.',
+        'pending': 'Das dauert ein paar Sekunden.',
+        'disabled': 'Aktiviere in den Einstellungen das Speichern von Stimmen, damit Omi $name erkennen kann.',
+        'other': 'Omi braucht mehr klare Sprache von $name und versucht es weiter.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Frühere Gespräche mit dieser Stimme: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Wahrscheinlich',
+        'soundsLike': 'Klingt wie $name',
+        'notPerson': 'Nicht $name',
+        'carried': 'Weiterhin $name. Aus deinem letzten Gespräch übernommen.',
+        'change': 'Ändern',
+        'alsoTitle': 'Ist das auch $name?',
+        'alsoBody': 'Omi hat dieselbe Stimme in früheren Gesprächen gefunden.',
+        'confirmed': 'Du hast dieses Label bestätigt',
+        'other': 'Prüfen',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration dieser Stimme';
+  }
+
+  @override
   String get showOnLockScreen => 'Auf dem Sperrbildschirm anzeigen';
 }

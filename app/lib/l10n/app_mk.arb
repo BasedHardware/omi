@@ -11333,5 +11333,11 @@
     "autoRemoveSyncedCopiesDays": "Синхронизираните копии се бришат по {days} дена",
     "autoRemoveSyncedCopiesDescription": "Ги брише локалните копии {days} дена по синхронизацијата. Облачните копии се задржуваат.",
     "localCopiesSection": "Локални копии",
+    "speakerLabelLinesLabeled": "Означени линии: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Гласот е научен} pending{Се учи гласот…} disabled{Зачувувањето на глас е исклучено} other{Гласот сѐ уште не е научен}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi ќе препознае {name} следниот пат.} pending{Ова трае неколку секунди.} disabled{Вклучете го зачувувањето на гласови во Поставки за Omi да може да препознава {name}.} other{На Omi му треба појасен говор од {name} и ќе продолжи да се обидува.}}",
+    "speakerLabelEarlierMatches": "Претходни разговори со овој глас: {count}",
+    "speakerLabelText": "{part, select, likely{Веројатно} soundsLike{Звучи како {name}} notPerson{Не е {name}} carried{Сѐ уште е {name}. Пренесено од вашиот последен разговор.} change{Промени} alsoTitle{Дали и ова е {name}?} alsoBody{Omi го најде истиот глас во претходни разговори.} confirmed{Ја потврдивте оваа ознака} other{Прегледај}}",
+    "speakerLabelTalkTime": "{duration} од овој глас",
     "showOnLockScreen": "Прикажи на заклучениот екран"
 }

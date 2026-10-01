@@ -3872,5 +3872,11 @@
     "autoRemoveSyncedCopiesDays": "A szinkronizált másolatok {days} nap után törlődnek",
     "autoRemoveSyncedCopiesDescription": "Törli a helyi másolatokat a szinkronizálás után {days} nappal. A felhőbeli másolatok megmaradnak.",
     "localCopiesSection": "Helyi másolatok",
+    "speakerLabelLinesLabeled": "Megjelölt sorok: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Hang megtanulva} pending{Hang tanulása…} disabled{A hang mentése ki van kapcsolva} other{A hang még nincs megtanulva}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Az Omi legközelebb felismeri őt: {name}.} pending{Ez néhány másodpercig tart.} disabled{Kapcsold be a hangok mentését a Beállításokban, hogy az Omi felismerhesse őt: {name}.} other{Az Ominak több tiszta beszédre van szüksége tőle: {name}, és tovább próbálkozik.}}",
+    "speakerLabelEarlierMatches": "Korábbi beszélgetések ezzel a hanggal: {count}",
+    "speakerLabelText": "{part, select, likely{Valószínű} soundsLike{{name} hangjához hasonlít} notPerson{Nem {name}} carried{Továbbra is {name}. Átvéve az előző beszélgetésedből.} change{Módosítás} alsoTitle{Ő is {name}?} alsoBody{Az Omi ugyanezt a hangot megtalálta korábbi beszélgetésekben.} confirmed{Megerősítetted ezt a címkét} other{Áttekintés}}",
+    "speakerLabelTalkTime": "{duration} ebből a hangból",
     "showOnLockScreen": "Megjelenítés a zárolási képernyőn"
 }

@@ -15,6 +15,7 @@ from utils.conversations.relevance_rules import RULES_VERSION
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
     for name in (
+        'OMI_ENV_STAGE',
         'CONVERSATION_RELEVANCE_JEV_ENABLED',
         'CONVERSATION_RELEVANCE_JEV_PERCENT',
         'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT',
@@ -27,9 +28,9 @@ def clean_env(monkeypatch):
 
 
 def test_bucket_is_stable_salted_and_in_range():
-    expected = int.from_bytes(hashlib.sha256(b'relevance-arm-v1\0user').digest()[:8], 'big') / 2**64 * 100
-    assert config.uid_bucket('user', 'relevance-arm-v1') == expected
-    assert expected != config.uid_bucket('user', 'owner-shadow-v1')
+    expected = int.from_bytes(hashlib.sha256(b'relevance-arm-v2\0conversation').digest()[:8], 'big') / 2**64 * 100
+    assert config.uid_bucket('conversation', 'relevance-arm-v2') == expected
+    assert expected != config.uid_bucket('conversation', 'owner-shadow-v1')
     assert all(0 <= config.uid_bucket(str(i), 'salt') < 100 for i in range(500))
 
 
@@ -50,8 +51,9 @@ def test_keep_all_selection_is_stable_per_conversation_id(monkeypatch):
 
 def test_keep_all_selection_is_approximately_configured_percentage(monkeypatch):
     monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '2')
-    selected = sum(config.keep_all_selected(f'conversation-{i}') for i in range(50_000))
-    assert 900 <= selected <= 1100
+    selected = sum(config.keep_all_selected(f'conversation-{i}') for i in range(10_000))
+    # Expected 200, sd ~14: bounds are ~5 sd, and the loop stays inside the fast-unit CPU guard.
+    assert 120 <= selected <= 280
 
 
 @pytest.mark.parametrize('invalid', ['broken', '', '-1', '101', 'nan', 'inf'])
@@ -65,28 +67,31 @@ def test_zero_keep_all_percentage_never_selects(monkeypatch):
     assert all(not config.keep_all_selected(f'conversation-{i}') for i in range(500))
 
 
-def test_conversation_keep_all_precedes_the_existing_jev_uid_window(monkeypatch):
+def test_conversation_keep_all_precedes_jev_conversation_window(monkeypatch):
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '2')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', '10')
     buckets = {
         ('sampled', 'relevance-keepall-v1'): 1.0,
-        ('ordinary', 'relevance-keepall-v1'): 50.0,
-        ('uid-before-jev', 'relevance-arm-v1'): 1.0,
-        ('uid-jev', 'relevance-arm-v1'): 2.0,
-        ('uid-after-jev', 'relevance-arm-v1'): 12.0,
+        ('before-jev', 'relevance-keepall-v1'): 50.0,
+        ('jev', 'relevance-keepall-v1'): 50.0,
+        ('after-jev', 'relevance-keepall-v1'): 50.0,
+        ('before-jev', 'relevance-arm-v2'): 1.0,
+        ('jev', 'relevance-arm-v2'): 2.0,
+        ('after-jev', 'relevance-arm-v2'): 12.0,
     }
     monkeypatch.setattr(config, 'uid_bucket', lambda value, salt: buckets[(value, salt)])
-    assert config.relevance_arm('uid-before-jev', 'sampled') == 'keep_all'
-    assert config.relevance_arm('uid-before-jev', 'ordinary') == 'nano'
-    assert config.relevance_arm('uid-jev', 'ordinary') == 'jev'
-    assert config.relevance_arm('uid-after-jev', 'ordinary') == 'nano'
+    assert config.relevance_arm('same-user', 'sampled') == 'keep_all'
+    assert config.relevance_arm('same-user', 'before-jev') == 'nano'
+    assert config.relevance_arm('same-user', 'jev') == 'jev'
+    assert config.relevance_arm('same-user', 'after-jev') == 'nano'
 
 
 @pytest.mark.parametrize('invalid', ['broken', '', '-1', '101', 'nan', 'inf'])
 @pytest.mark.parametrize('invalid_controls', ['keep_all', 'jev', 'both'])
 @pytest.mark.parametrize('enabled', ['true', 'false'])
 def test_invalid_percentages_fail_closed(monkeypatch, invalid, invalid_controls, enabled):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', enabled)
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'user')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '0' if invalid_controls == 'jev' else invalid)
@@ -110,6 +115,7 @@ def test_owner_flip_100_still_requires_the_flag(monkeypatch):
 
 
 def test_unset_percent_preserves_dev_and_allowlist_requires_flag(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'user')
     assert config.relevance_arm('user', 'conversation') == 'nano'
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
@@ -128,6 +134,49 @@ def test_owner_flip_flag_is_universal_not_uid_sampled(monkeypatch):
     monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_ENABLED', 'false')
     assert config.memory_owner_jev_flip_enabled() is False
     assert not hasattr(config, 'owner_flip_enabled_for')
+
+
+def test_jev_ramp_is_monotone_and_no_account_is_pinned(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '2')
+    conversations = [f'conversation-{i}' for i in range(1500)]
+    previous = set()
+    keep_all = {cid for cid in conversations if config.keep_all_selected(cid)}
+    for percent in ('1', '10', '50', '100'):
+        monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', percent)
+        arms = {cid: config.relevance_arm('same-user', cid) for cid in conversations}
+        selected = {cid for cid, arm in arms.items() if arm == 'jev'}
+        assert previous < selected
+        assert keep_all == {cid for cid, arm in arms.items() if arm == 'keep_all'}
+        assert selected.isdisjoint(keep_all)
+        assert set(arms.values()) == {'nano', 'jev', 'keep_all'}
+        for uid in ('another-user', 'third-user', 'same-user'):
+            assert {cid: config.relevance_arm(uid, cid) for cid in conversations} == arms
+        previous = selected
+    # K and J use different salts: at J=100, the [0,K) gap still uses nano.
+    assert all(
+        config.relevance_arm('same-user', cid) == 'nano'
+        for cid in conversations
+        if cid not in keep_all and config.uid_bucket(cid, 'relevance-arm-v2') < 2
+    )
+
+
+@pytest.mark.parametrize('stage', ['prod', 'local', 'offline', '', None])
+def test_allowlist_is_never_read_outside_dev(monkeypatch, stage):
+    if stage is not None:
+        monkeypatch.setenv('OMI_ENV_STAGE', stage)
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', '0')
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'user')
+    getenv = config.os.getenv
+
+    def forbid_allowlist(name, default=None):
+        assert name != 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'
+        return getenv(name, default)
+
+    monkeypatch.setattr(config.os, 'getenv', forbid_allowlist)
+    assert config.relevance_arm('user', 'conversation') == 'nano'
 
 
 def decision(**overrides):

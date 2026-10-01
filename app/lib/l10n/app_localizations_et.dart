@@ -12157,5 +12157,67 @@ class AppLocalizationsEt extends AppLocalizations {
   String get localCopiesSection => 'Kohalikud koopiad';
 
   @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Märgitud ridu: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Hääl õpitud',
+        'pending': 'Häält õpitakse…',
+        'disabled': 'Hääle salvestamine on välja lülitatud',
+        'other': 'Häält pole veel õpitud',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi tunneb $name järgmisel korral ära.',
+        'pending': 'See võtab mõne sekundi.',
+        'disabled': 'Lülita seadetes sisse häälte salvestamine, et Omi saaks $name ära tunda.',
+        'other': 'Omi vajab inimeselt $name rohkem selget kõnet ja proovib edasi.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Varasemad vestlused selle häälega: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Tõenäoline',
+        'soundsLike': 'Kõlab nagu $name',
+        'notPerson': 'Pole $name',
+        'carried': 'Endiselt $name. Üle võetud sinu viimasest vestlusest.',
+        'change': 'Muuda',
+        'alsoTitle': 'Kas see on ka $name?',
+        'alsoBody': 'Omi leidis sama hääle varasematest vestlustest.',
+        'confirmed': 'Kinnitasid selle sildi',
+        'other': 'Vaata üle',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration sellest häälest';
+  }
+
+  @override
   String get showOnLockScreen => 'Kuva lukustuskuval';
 }

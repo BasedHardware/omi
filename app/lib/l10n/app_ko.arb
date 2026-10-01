@@ -3776,5 +3776,11 @@
     "autoRemoveSyncedCopiesDays": "동기화된 사본은 {days}일 후 삭제됩니다",
     "autoRemoveSyncedCopiesDescription": "동기화 후 {days}일에 로컬 사본을 삭제합니다. 클라우드 사본은 유지됩니다.",
     "localCopiesSection": "로컬 사본",
+    "speakerLabelLinesLabeled": "라벨을 지정한 줄 수: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{목소리를 학습했어요} pending{목소리 학습 중…} disabled{목소리 저장이 꺼져 있어요} other{아직 목소리를 학습하지 못했어요}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{다음부터 Omi가 {name}님을 알아볼 거예요.} pending{몇 초 정도 걸려요.} disabled{Omi가 {name}님을 알아보려면 설정에서 목소리 저장을 켜 주세요.} other{Omi에 {name}님의 또렷한 음성이 더 필요해요. 계속 시도할게요.}}",
+    "speakerLabelEarlierMatches": "이 목소리의 이전 대화 수: {count}",
+    "speakerLabelText": "{part, select, likely{추정} soundsLike{{name}님 목소리와 비슷해요} notPerson{{name}님 아님} carried{계속 {name}님이에요. 지난 대화에서 이어졌어요.} change{변경} alsoTitle{이분도 {name}님인가요?} alsoBody{Omi가 이전 대화에서 같은 목소리를 찾았어요.} confirmed{이 라벨을 확인했어요} other{검토}}",
+    "speakerLabelTalkTime": "이 목소리 {duration}",
     "showOnLockScreen": "잠금 화면에 표시"
 }

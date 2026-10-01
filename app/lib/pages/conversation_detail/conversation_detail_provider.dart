@@ -12,7 +12,9 @@ import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/conversations.dart' as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
+import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -38,12 +40,15 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     SpeakerAssignmentCall? assignSpeaker,
     ConversationReprocessCall? reprocess,
     ConversationDetailFetchCall? fetchConversation,
+    SpeakerRejectionCall? rejectSpeaker,
   })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
+        _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
         _reprocess = reprocess ?? reProcessConversationServer,
         _fetchConversation = fetchConversation ?? getConversationById;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
   final ConversationDetailFetchCall _fetchConversation;
+  final SpeakerRejectionCall _rejectSpeaker;
   String? _speakerSummaryConversationId;
   int _speakerEditGeneration = 0;
   final Map<String, int> _speakerEditGenerationByConversation = {};
@@ -125,7 +130,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _speakerSummaryRefreshTimer = null;
     final self = personId == 'user';
     final person = self ? null : personId;
-    final before = {for (final segment in selected) segment: (segment.isUser, segment.personId)};
+    final before = {
+      for (final segment in selected) segment: (segment.isUser, segment.personId, segment.speakerLabelSource)
+    };
     final changed = selected.any((s) => s.isUser != self || s.personId != person);
     final generation = ++_speakerEditGeneration;
     _speakerEditGenerationByConversation[target.id] = generation;
@@ -134,6 +141,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     for (final segment in selected) {
       segment.isUser = self;
       segment.personId = person;
+      segment.speakerLabelSource = 'manual';
     }
     conversationProvider?.updateConversation(target);
     notifyListeners();
@@ -159,7 +167,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<bool> _persistSpeakerAssignment(
     ServerConversation target,
     List<TranscriptSegment> selected,
-    Map<TranscriptSegment, (bool, String?)> before,
+    Map<TranscriptSegment, (bool, String?, String?)> before,
     int generation,
     bool changed,
     List<String> segmentIds,
@@ -231,22 +239,26 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       }
       return true;
     } finally {
-      _pendingSpeakerSaves--;
-      final remaining = _pendingSpeakerSavesByConversation[target.id]! - 1;
-      if (remaining == 0) {
-        _pendingSpeakerSavesByConversation.remove(target.id);
-      } else {
-        _pendingSpeakerSavesByConversation[target.id] = remaining;
-      }
-      if (_pendingSpeakerSaves == 0) {
-        final refreshId = _speakerRefreshId;
-        _speakerRefreshId = null;
-        if (!_isDisposed && refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
-      }
-      if (remaining == 0) {
-        _scheduleAutomaticSpeakerSummaryRefresh(target.id);
-        _pruneSpeakerSessionState(target.id);
-      }
+      await _finishSpeakerSave(target);
+    }
+  }
+
+  Future<void> _finishSpeakerSave(ServerConversation target) async {
+    _pendingSpeakerSaves--;
+    final remaining = _pendingSpeakerSavesByConversation[target.id]! - 1;
+    if (remaining == 0) {
+      _pendingSpeakerSavesByConversation.remove(target.id);
+    } else {
+      _pendingSpeakerSavesByConversation[target.id] = remaining;
+    }
+    if (_pendingSpeakerSaves == 0) {
+      final refreshId = _speakerRefreshId;
+      _speakerRefreshId = null;
+      if (!_isDisposed && refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
+    }
+    if (remaining == 0) {
+      _scheduleAutomaticSpeakerSummaryRefresh(target.id);
+      _pruneSpeakerSessionState(target.id);
     }
   }
 
@@ -328,10 +340,93 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
+  /// Tells Omi the label on [segment]'s voice is wrong: every line of that voice carrying the same
+  /// label is cleared at once, and restored if the server did not accept the rejection.
+  Future<bool> rejectSpeakerLabel(TranscriptSegment segment, SpeakerRejection kind) async {
+    final target = conversationOrNull;
+    if (target == null || loadingReprocessConversation) return false;
+    final rejectedPerson = segment.personId;
+    final wasUser = segment.isUser;
+    final selected = target.transcriptSegments
+        .where((s) => s.speakerId == segment.speakerId && s.isUser == wasUser && s.personId == rejectedPerson)
+        .toList();
+    if (selected.isEmpty) return false;
+    final before = {for (final s in selected) s: (s.isUser, s.personId, s.speakerLabelSource)};
+    final generation = ++_speakerEditGeneration;
+    _speakerEditGenerationByConversation[target.id] = generation;
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
+    _pendingSpeakerSaves++;
+    _pendingSpeakerSavesByConversation.update(target.id, (count) => count + 1, ifAbsent: () => 1);
+    for (final s in selected) {
+      s.isUser = false;
+      s.personId = null;
+      s.speakerLabelSource = null;
+    }
+    conversationProvider?.updateConversation(target);
+    notifyListeners();
+    final pending = _persistSpeakerRejection(
+      target,
+      selected,
+      before,
+      generation,
+      segment.speakerId,
+      kind,
+      rejectedPerson,
+      _speakerSaveTail,
+    );
+    _speakerSaveTail = pending.then((_) {});
+    return pending;
+  }
+
+  Future<bool> _persistSpeakerRejection(
+    ServerConversation target,
+    List<TranscriptSegment> selected,
+    Map<TranscriptSegment, (bool, String?, String?)> before,
+    int generation,
+    int speakerId,
+    SpeakerRejection kind,
+    String? rejectedPerson,
+    Future<void> previousSave,
+  ) async {
+    try {
+      await previousSave;
+      if (_speakerEditGenerationByConversation[target.id] != generation) return false;
+      final result = await _rejectSpeaker(
+        target.id,
+        speakerId,
+        kind,
+        personId: kind == SpeakerRejection.notPerson ? rejectedPerson : null,
+        segmentIds: [for (final s in selected) s.id],
+      );
+      if (result case ApiSuccess<ServerConversation>(:final data)) {
+        if (!_isDisposed &&
+            _speakerEditGenerationByConversation[target.id] == generation &&
+            identical(conversationOrNull, target)) {
+          if (data.id == target.id) {
+            conversationProvider?.updateConversation(data);
+          } else {
+            conversationProvider?.replaceBridgedConversation(target.id, data);
+            selectedDate = conversationLocalDayKey(data.startedAt ?? data.createdAt);
+          }
+          setCachedConversation(data);
+        }
+        return true;
+      }
+      _rollbackSpeakerAssignment(target, selected, before, generation, null);
+      return false;
+    } catch (_) {
+      _rollbackSpeakerAssignment(target, selected, before, generation, null);
+      return false;
+    } finally {
+      await _finishSpeakerSave(target);
+    }
+  }
+
   void _rollbackSpeakerAssignment(
     ServerConversation target,
     List<TranscriptSegment> selected,
-    Map<TranscriptSegment, (bool, String?)> before,
+    Map<TranscriptSegment, (bool, String?, String?)> before,
     int generation,
     VoidCallback? onFailed,
   ) {
@@ -340,6 +435,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       final original = before[segment]!;
       segment.isUser = original.$1;
       segment.personId = original.$2;
+      segment.speakerLabelSource = original.$3;
     }
     _speakerEditGeneration++;
     conversationProvider?.updateConversation(target);
