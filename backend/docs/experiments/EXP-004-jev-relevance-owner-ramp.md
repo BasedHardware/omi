@@ -38,8 +38,10 @@ locked classifier/label set; shadow scores alone are not nano counterfactuals.
 
 Both deployment stages declare keep-all percentage 0 and daily caps 60000. Dev
 runs both shadows at 100 on the scraped processing hosts (backend-listen, pusher
-and the Cloud Run backend service) and retains both live flags on with unset
-live percentages. backend-sync and backend-sync-backfill stay at 0: their Cloud
+and the Cloud Run backend service) and retains both live flags on with the live
+Jev percentage pinned to 0: unset would default to 100, which routes every UID
+to the live Jev arm and leaves the relevance shadow an empty population.
+backend-sync and backend-sync-backfill stay at 0: their Cloud
 Run revisions have no GMP sidecar/exporter allowlist entry, so their shadow
 outcomes and latency would be invisible (see utils/metrics.py). Prod declares
 shadow percentages 0 and live flags absent: the Firestore TTL policy on
@@ -61,8 +63,9 @@ without waiting on a dedicated, lazily created four-worker `jev-shadow` executor
 A 2.5-second task deadline includes queue, Redis, vendor and persistence time.
 Admission uses an attempt-owned Redis client with connect/read timeouts at most
 0.5 seconds and bounded by the remaining budget; Redis retries are disabled.
-The vendor gets one attempt, and Firestore writes disable SDK retries and use
-only the remaining task budget. Redis atomically claims UID + conversation ID +
+The vendor gets one attempt, and Firestore writes disable SDK retries and bound
+even the SDK-default commit timeout by racing the transactional call with the
+remaining task budget. Redis atomically claims UID + conversation ID +
 content SHA256 + question version and increments a global UTC-day cap.
 `CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP` and
 `MEMORY_OWNER_JEV_SHADOW_DAILY_CAP` default to 60000. Bad caps or unavailable

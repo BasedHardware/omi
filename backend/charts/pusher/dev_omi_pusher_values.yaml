@@ -206,6 +206,8 @@ env:
     value: "true"
   - name: MEMORY_OWNER_JEV_FLIP_ENABLED
     value: "true"
+  - name: CONVERSATION_RELEVANCE_JEV_PERCENT
+    value: "0"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
     value: "100"
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT

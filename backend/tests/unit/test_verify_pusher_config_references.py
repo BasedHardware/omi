@@ -184,6 +184,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_ENABLED": "true",
+        "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
         "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT": "100",
         "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP": "60000",
         "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
