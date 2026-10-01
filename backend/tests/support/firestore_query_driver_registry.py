@@ -428,12 +428,20 @@ _add(
         neutrals={'limit': _LIMIT, 'offset': _OFFSET},
     )
 )
+
+
+def _candidates_page_cursor(client, combo, trial):
+    if combo.get('cursor') is not None:
+        combo['cursor'] = client.snapshot(f'users/{UID}/candidates/cursor-1', {'created_at': T0})
+
+
 _add(
     DriverEntry(
         'database.candidates.list_candidates_compatibility_page',
         base={'uid': UID, 'account_generation': 1},
-        domains={'cursor': [None, 'cursor-1']},
+        domains={'cursor': [None, True]},
         neutrals={'limit': _LIMIT},
+        setup=_candidates_page_cursor,
     )
 )
 

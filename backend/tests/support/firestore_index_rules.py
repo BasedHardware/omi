@@ -1,6 +1,6 @@
 """Conservative Standard-edition index requirements for recorded Firestore queries."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
 from tests.support.firestore_shape_recorder import QueryShape
@@ -11,6 +11,7 @@ ARRAY = 'CONTAINS'
 RANGE_OPERATORS = frozenset({'<', '<=', '>', '>=', '!=', 'not_in'})
 EQUALITY_OPERATORS = frozenset({'==', 'in'})
 ARRAY_OPERATORS = frozenset({'array_contains', 'array_contains_any'})
+MERGING_REASON = 'equality/array index merging may serve this query without the full candidate index'
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,8 @@ def candidate_index(shape: QueryShape) -> IndexSpec:
     References: Firebase index-overview (modes, merging, group scope, aggregation
     fields), REST StructuredQuery.orderBy (lexicographic implicit ordering), and
     firebase-js-sdk TargetIndexMatcher (unordered equality segments). Matching is
-    deliberately full-index-only: partial-index merging remains oracle debt.
+    deliberately full-index-only: ``is_served`` separately models the
+    evidence-backed merging rule.
     """
     equalities: set[str] = set()
     arrays: set[str] = set()
@@ -101,7 +103,7 @@ def candidate_index(shape: QueryShape) -> IndexSpec:
     if aggregate_fields - (equalities | arrays | ranges | ordered_fields):
         reasons.append('aggregation-only field ordering needs real-Firestore oracle validation')
     if not ranges and len(equalities | arrays) > 1:
-        reasons.append('equality/array index merging may serve this query without the full candidate index')
+        reasons.append(MERGING_REASON)
     fields = [(field, ARRAY if field in arrays else ASC) for field in sorted(equalities | arrays)]
     used = set(equalities | arrays)
     for field, mode in orders:
@@ -200,11 +202,92 @@ def _single_field_modes(collection: str, field: str, scope: str, manifest: Mappi
     return modes
 
 
-def is_served(shape: QueryShape, manifest: Mapping[str, Any]) -> bool:
-    """Prove service by one complete declared index or an enabled single-field index.
+def _merging_prefixes(
+    spec: IndexSpec, manifest: Mapping[str, Any]
+) -> tuple[dict[str, str], tuple[tuple[str, str], ...], list[set[str]]]:
+    """Collect eligible equality-prefix field sets for index merging.
 
-    An uncertain shape is still reported by the guard even if this returns True.
-    OR service and partial-index merging are not asserted without the oracle.
+    A composite participates when it shares the candidate's collection and
+    scope, carries no duplicate or extra prefix fields, ends with the exact
+    common suffix (``__name__`` direction included), and its prefix assigns
+    every member an equality field: ARRAY modes must match an array equality,
+    scalar fields may be ASC or DESC. A ``__name__``-ASC-only suffix can also
+    be served by automatic single-field indexes, so each equality field whose
+    enabled single-field modes cover its equality mode contributes a
+    singleton prefix.
+    """
+    eq = dict(spec.fields[: len(spec.equality_fields)])
+    suffix = spec.fields[len(eq) :]
+    prefixes = []
+    for entry in manifest.get('indexes', ()):
+        if entry.get('collectionGroup') != spec.collection_group or entry.get('queryScope', 'COLLECTION') != spec.scope:
+            continue
+        fields = _normalized_fields(entry)
+        if len(fields) <= len(suffix) or len(dict(fields)) != len(fields) or fields[-len(suffix) :] != suffix:
+            continue
+        prefix = fields[: len(fields) - len(suffix)]
+        if all(
+            field in eq and (mode == ARRAY if eq[field] == ARRAY else mode in {ASC, DESC}) for field, mode in prefix
+        ):
+            prefixes.append({field for field, _ in prefix})
+    if suffix == (('__name__', ASC),):
+        for field, mode in eq.items():
+            if _single_field_modes(spec.collection_group, field, spec.scope, manifest) & (
+                {ARRAY} if mode == ARRAY else {ASC, DESC}
+            ):
+                prefixes.append({field})
+    return eq, suffix, prefixes
+
+
+def is_merged(shape: QueryShape, manifest: Mapping[str, Any]) -> bool:
+    """Prove service by merging eligible equality prefixes over a shared suffix.
+
+    Merging is only inferred for validity-certain AND queries without
+    ``!=``/``not_in``, at most one range field, count-only aggregations, and
+    well-formed ``in`` operands; array equalities require the automatic
+    ``('__name__', ASCENDING)``-only suffix. With a longer suffix and exactly
+    one multi-value ``in`` field, that field must anchor a single prefix whose
+    union with all prefixes free of it still covers every equality; zero or
+    more than one multi-value ``in`` fields use the plain union of all
+    eligible prefixes.
+    """
+    spec = candidate_index(shape)
+    eq, suffix, prefixes = _merging_prefixes(spec, manifest)
+    if not eq or spec.validity_uncertain or _has_or(shape.filter_tree):
+        return False
+    if any(predicate.operator in {'!=', 'not_in'} for predicate in shape.filters):
+        return False
+    ranges = {predicate.field for predicate in shape.filters if predicate.operator in {'<', '<=', '>', '>='}}
+    if len(ranges) > 1 or any(aggregation.kind != 'count' for aggregation in shape.aggregations):
+        return False
+    if any(mode == ARRAY for mode in eq.values()) and suffix != (('__name__', ASC),):
+        return False
+    in_filters = [predicate for predicate in shape.filters if predicate.operator == 'in']
+    if any(not isinstance(predicate.value, (list, tuple)) or not predicate.value for predicate in in_filters):
+        return False
+    multi_in = {predicate.field for predicate in in_filters if len(predicate.value) > 1}
+    if len(suffix) > 1 and len(multi_in) == 1:
+        plain = set().union(*(prefix for prefix in prefixes if not prefix & multi_in))
+        return any(prefix | plain >= eq.keys() for prefix in prefixes if prefix & multi_in)
+    return set().union(*prefixes) >= eq.keys()
+
+
+def resolved_candidate_index(shape: QueryShape, manifest: Mapping[str, Any]) -> IndexSpec:
+    """Candidate spec with the generic merging caveat dropped once merging is proven."""
+    spec = candidate_index(shape)
+    if spec.scope != 'COLLECTION' or not is_merged(shape, manifest):
+        return spec
+    remaining = [reason for reason in spec.reason.split('; ') if reason and reason != MERGING_REASON]
+    return replace(spec, uncertain=bool(remaining), reason='; '.join(remaining))
+
+
+def is_served(shape: QueryShape, manifest: Mapping[str, Any]) -> bool:
+    """Prove service by one complete declared index, index merging, or an enabled single-field index.
+
+    This is only the serving proof: declaration metadata (``required_index``,
+    ``candidate_index``) is unaffected, and unresolved uncertainty is carried
+    separately by ``resolved_candidate_index``.
+    OR service is not asserted without the oracle.
     A validity-uncertain shape (possibly-invalid query) is never served: a
     declared index cannot establish that the query itself is valid, so it must
     stay in the uncertainty ledger until the real-Firestore oracle exists.
@@ -215,6 +298,8 @@ def is_served(shape: QueryShape, manifest: Mapping[str, Any]) -> bool:
     if spec.validity_uncertain:
         return False
     if any(matches_index(spec, entry) for entry in manifest.get('indexes', ())):
+        return True
+    if is_merged(shape, manifest):
         return True
     if spec.composite:
         return False
