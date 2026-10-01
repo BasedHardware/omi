@@ -43,9 +43,44 @@ CANONICAL = json.loads(CANONICAL_PATH.read_text())
 
 
 def _walk(root: Path, suffixes: tuple[str, ...]) -> list[Path]:
+    if root.is_file():
+        return [root] if root.suffix in suffixes and 'Tests' not in root.parts else []
     if not root.exists():
         return []
-    return sorted(p for p in root.rglob('*') if p.suffix in suffixes and 'Tests' not in p.parts)
+    return sorted(p for suffix in suffixes for p in root.rglob(f'*{suffix}') if 'Tests' not in p.parts)
+
+
+# Source scans are parameterized one bounded subtree per test node so no single
+# node pays the whole desktop tree against the fast-unit CPU budget. Chunks are
+# enumerated from the directory itself — a new top-level source directory joins
+# the contract automatically.
+_MAX_FILES_PER_CHUNK = 300
+
+
+def _scan_chunks(root: Path, suffixes: tuple[str, ...]) -> list[Path]:
+    if not root.exists():
+        return []
+    chunks: list[Path] = []
+    for child in sorted(root.iterdir()):
+        if child.is_dir():
+            if len(_walk(child, suffixes)) > _MAX_FILES_PER_CHUNK:
+                chunks.extend(_scan_chunks(child, suffixes))
+            else:
+                chunks.append(child)
+        elif child.suffix in suffixes and 'Tests' not in child.parts:
+            chunks.append(child)
+    return chunks
+
+
+_MACOS_CHUNKS = _scan_chunks(MACOS_SOURCES, ('.swift',))
+_WINDOWS_CHUNKS = _scan_chunks(WINDOWS_SRC, ('.ts', '.tsx'))
+
+
+def _chunk_id(chunk: Path) -> str:
+    for root in (MACOS_SOURCES, WINDOWS_SRC):
+        if chunk.is_relative_to(root):
+            return str(chunk.relative_to(root))
+    return chunk.name
 
 
 def test_canonical_json_shape():
@@ -115,10 +150,13 @@ def test_generated_typescript_matches_canonical_json():
 # Source-inspection ratchet: a GeminiClient init that drops the required `lane`
 # fails compilation in app builds, but this ratchet runs in backend CI where no
 # Swift compiler exists.
-def test_macos_every_gemini_client_init_declares_a_lane():
+@pytest.mark.parametrize('chunk', _MACOS_CHUNKS, ids=_chunk_id)
+def test_macos_every_gemini_client_init_declares_a_lane(chunk):
     offenders = []
-    for path in _walk(MACOS_SOURCES, ('.swift',)):
+    for path in _walk(chunk, ('.swift',)):
         src = path.read_text()
+        if 'GeminiClient(' not in src:
+            continue
         for match in re.finditer(r'\bGeminiClient\(', src):
             window = src[match.start() : match.start() + 600]
             if 'lane:' not in window.split(')')[0]:
@@ -142,34 +180,37 @@ def test_macos_gemini_transports_route_through_the_shared_header_helper():
 
 # Source-inspection ratchet: only the centralized transports may construct the
 # proxy path or set the X-Omi-* attribution headers.
-def test_no_raw_proxy_url_or_attribution_headers_outside_transport_owners():
+@pytest.mark.parametrize('chunk', _MACOS_CHUNKS + _WINDOWS_CHUNKS, ids=_chunk_id)
+def test_no_raw_proxy_url_or_attribution_headers_outside_transport_owners(chunk):
     macos_owner = 'ProactiveAssistants/Core/GeminiProxyRequestHeaders.swift'
     windows_owner = 'src/shared/geminiProxy.ts'
     offenders = []
-    for path in _walk(MACOS_SOURCES, ('.swift',)):
-        rel = path.relative_to(MACOS_SOURCES).as_posix()
-        src = path.read_text()
-        if rel in {macos_owner, 'ProactiveAssistants/Core/GeminiLane.swift'}:
-            pass
-        # The DEBUG E2E bridge reads back the headers the shared helper set; it
-        # never sets them itself.
-        elif rel == 'DesktopAutomationOpenOmiShortcutQA.swift':
-            pass
-        elif 'X-Omi-Lane' in src or 'X-Omi-Workload' in src:
-            offenders.append(str(rel))
-        if 'proxy/gemini' in src and rel not in {
-            macos_owner,
-            'ProactiveAssistants/Core/GeminiClient.swift',
-            'ProactiveAssistants/Services/EmbeddingService.swift',
-        }:
-            offenders.append(str(rel))
-    for path in _walk(WINDOWS_SRC, ('.ts', '.tsx')):
-        rel = path.relative_to(WINDOWS_SRC.parent).as_posix()
-        src = path.read_text()
-        if rel.endswith('.test.ts') or rel in {windows_owner, 'src/shared/geminiAttribution.ts'}:
-            continue
-        if 'proxy/gemini' in src or 'X-Omi-Lane' in src or 'X-Omi-Workload' in src:
-            offenders.append(str(rel))
+    if chunk.is_relative_to(MACOS_SOURCES):
+        for path in _walk(chunk, ('.swift',)):
+            rel = path.relative_to(MACOS_SOURCES).as_posix()
+            src = path.read_text()
+            if rel in {macos_owner, 'ProactiveAssistants/Core/GeminiLane.swift'}:
+                pass
+            # The DEBUG E2E bridge reads back the headers the shared helper set;
+            # it never sets them itself.
+            elif rel == 'DesktopAutomationOpenOmiShortcutQA.swift':
+                pass
+            elif 'X-Omi-Lane' in src or 'X-Omi-Workload' in src:
+                offenders.append(str(rel))
+            if 'proxy/gemini' in src and rel not in {
+                macos_owner,
+                'ProactiveAssistants/Core/GeminiClient.swift',
+                'ProactiveAssistants/Services/EmbeddingService.swift',
+            }:
+                offenders.append(str(rel))
+    else:
+        for path in _walk(chunk, ('.ts', '.tsx')):
+            rel = path.relative_to(WINDOWS_SRC.parent).as_posix()
+            src = path.read_text()
+            if rel.endswith('.test.ts') or rel in {windows_owner, 'src/shared/geminiAttribution.ts'}:
+                continue
+            if 'proxy/gemini' in src or 'X-Omi-Lane' in src or 'X-Omi-Workload' in src:
+                offenders.append(str(rel))
     assert offenders == []
 
 
