@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import time
 import os
+import asyncio
 from collections import deque
 from typing import Any, Callable, Literal, cast
 
+from config.stt_provider_policy import provider_for_service
+
 from utils.stt.live_metrics import RECONNECT, REPLAY_SECONDS, WINDOW_REPLAY_SAFE_TRIMS
-from utils.stt.provider_resilience import close_rejected_socket
+from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
+from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.socket import release_live_stt_socket
 
 RING_SECONDS = 15
@@ -80,11 +84,12 @@ class ResilientAudio:
     def snapshot(self) -> tuple[tuple[int, bytes], ...]:
         return tuple(self._chunks)
 
-    def admit(self, provider: str, reason: str) -> bool:
+    def admit(self, provider: str, reason: str, *, samples: int | None = None) -> bool:
         now = time.monotonic()
         while self._attempts and now - self._attempts[0] >= 60:
             self._attempts.popleft()
-        samples = sum(len(data) // 2 for _, data in self._chunks)
+        if samples is None:
+            samples = sum(len(data) // 2 for _, data in self._chunks)
         if (
             self._total_attempts >= MAX_RECONNECTS
             or len(self._attempts) >= MAX_RECONNECTS_PER_MINUTE
@@ -253,6 +258,97 @@ def socket_is_finishing(socket: Any) -> bool:
         except Exception:
             continue
     return False
+
+
+def retire_window_replay_socket(receiver: Any, socket: Any) -> None:
+    retire = getattr(socket, 'retire_for_replay', None)
+    if receiver._window_ring() is not None and callable(retire):
+        retire()
+
+
+async def reconnect_live_stt_socket(receiver: Any) -> bool:
+    """Use the complete window obligation, with the existing reconnect budget."""
+    ring = receiver._resilient_audio
+    socket = receiver.stt_socket
+    if (
+        ring is None
+        or socket is None
+        or provider_for_service(receiver.host.stt_service) != 'soniox'
+        or receiver.host.is_multi_channel
+        or receiver.host.use_custom_stt
+        or not receiver.host.state.active
+        or receiver.host.state.stt_terminal_failure
+        or receiver._stt_rebuild is None
+        or getattr(receiver, '_resilient_closing', False)
+        or socket_is_finishing(socket)
+    ):
+        return False
+    reason = getattr(socket, 'typed_death_reason', None)
+    if reason not in {'soniox_rotation', 'provider_5xx', 'connection_lost'}:
+        return False
+    if reason == 'connection_lost' and not str(getattr(socket, 'death_reason', '')).startswith('ws '):
+        return False
+    replay_ring = receiver._window_ring() or ring
+    if not ring.admit('soniox', reason, samples=replay_ring.buffered_bytes // 2):
+        return False
+    receiver._settle_pending_live_failover_failure(continuing=True)
+    replacement = None
+    retire_window_replay_socket(receiver, socket)
+    try:
+        socket.finish()
+    except Exception:
+        pass
+    finally:
+        # Direct sockets carry a lease here; managed sockets release their
+        # own gauge in finish(), and release_live_stt_socket is idempotent.
+        release_live_stt_socket(socket)
+    await asyncio.sleep(0)  # deliver the dead socket's last finalized callback
+    if not receiver.host.state.active or receiver.host.state.stt_terminal_failure:
+        RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
+        return False
+    replay = replay_ring.snapshot()
+    parakeet_callback, modulate_callback, epoch = receiver._stt_rebuild[0]()
+    if epoch is not None:
+        epoch.replay_origin_sample = replay[0][0] if replay else replay_ring.finalized_sample
+    try:
+        raw = await receiver._create_stt_socket(
+            parakeet_callback,
+            receiver._stt_rebuild[1],
+            modulate_callback=modulate_callback,
+            epoch=epoch,
+            same_provider=True,
+            replay_start_sample=replay[0][0] if replay else replay_ring.finalized_sample,
+        )
+        if raw is None or not await fallback_socket_is_serving(raw):
+            if raw is not None:
+                retire_window_replay_socket(receiver, raw)
+                close_rejected_socket(raw)
+            raise RuntimeError('Soniox reconnect refused')
+        replacement = receiver._wrap_legacy_stt_socket(raw, epoch)
+        cutoff = replay_ring.finalized_sample
+        replay_send = getattr(replacement, 'replay_send', None)
+        for start, data in replay:
+            accepted = replay_send(data, start) if callable(replay_send) else replacement.send(data, start_sample=start)
+            if not accepted:
+                raise RuntimeError('Soniox replay send failed')
+            ring.record_replay('soniox', len(data) // 2)
+        if not receiver.host.state.active or receiver.host.state.stt_terminal_failure:
+            replacement.finish()
+            RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
+            return False
+    except Exception:
+        if replacement is not None:
+            retire_window_replay_socket(receiver, replacement)
+            replacement.finish()
+        RECONNECT.labels(provider='soniox', reason=reason, outcome='failed').inc()
+        return False
+    receiver._window_replay_cutoff_sample = cutoff
+    receiver._replay_cutoff_sample = cutoff
+    receiver.stt_socket = replacement
+    receiver._record_selected_epoch(epoch, replacement)
+    receiver._pending_live_failover = PendingLiveFailover(from_mode='soniox', to_mode='soniox', reason=reason)
+    RECONNECT.labels(provider='soniox', reason=reason, outcome='connected').inc()
+    return True
 
 
 async def retry_failed_replacement(receiver: Any, raw: Any, epoch: Any, hop: Any, previous: Any) -> bool:

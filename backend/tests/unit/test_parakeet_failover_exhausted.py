@@ -243,3 +243,32 @@ async def test_five_minutes_of_silence_on_replacement_keeps_recent_tail_and_forw
         assert not actual.host.state.stt_terminal_failure
     finally:
         await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('timeline_v2', [False, True])
+async def test_enabled_soniox_reconnect_uses_full_window_obligation_not_fifteen_second_tail(monkeypatch, timeline_v2):
+    monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'true')
+    monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if timeline_v2 else 'false')
+    actual, base, previous, legs, capture = await setup_chain(monkeypatch)
+    try:
+        assert await actual._failover_stt_socket()
+        pcm = b'\x02\x00' * 16000
+        for second in range(20):
+            await _flush_capture(actual, pcm, 1920 + second * 16000)
+        legs['modulate'][0].is_connection_dead = True
+        legs['modulate'][0].typed_death_reason = 'modulate_serve_error'
+        assert await actual._failover_stt_socket()
+        expected = capture + pcm * 20
+        assert b''.join(legs['soniox'][0].sent) == expected
+        legs['soniox'][0].is_connection_dead = True
+        legs['soniox'][0].typed_death_reason = 'provider_5xx'
+        assert await actual._failover_stt_socket()
+        assert len(legs['soniox']) == 2
+        assert b''.join(legs['soniox'][1].sent) == expected
+        assert actual._resilient_audio._replayed_samples == len(expected) // 2
+        legs['soniox'][0].callback([{'text': 'retired tail', 'start': 0.0, 'end': 20.12}])
+        assert base.emitted == []
+        assert actual._window_ring().capture_bounds == (0, 321920)
+    finally:
+        await actual._drain_stt_sockets()

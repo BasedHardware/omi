@@ -65,17 +65,17 @@ from utils.stt.live_failure import (
 from utils.stt.live_chain import ProviderChainUnavailable
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
-from utils.stt.live_metrics import RECONNECT
 from utils.stt.brand_terms import normalize_brand_segments
 from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
 from utils.stt.resilient_stream import (
     enabled as resilient_reconnect_enabled,
+    reconnect_live_stt_socket,
     retry_failed_replacement,
     trim_window_replay_to_anchor,
     window_replay_action,
 )
 from utils.stt.language_policy import observe_live_segments, record_live_connection
-from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
+from utils.stt.provider_resilience import fallback_socket_is_serving
 from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
 from utils.stt.streaming import (
     STTService,
@@ -1255,84 +1255,7 @@ class ListenReceiver(ReplayFilterMixin):
             return await self._rebuild_stt_socket_locked()
 
     async def _reconnect_stt_socket_locked(self) -> bool:
-        ring = self._resilient_audio
-        socket = self.stt_socket
-        if (
-            ring is None
-            or socket is None
-            or self.host.stt_service != STTService.soniox
-            or self.host.is_multi_channel
-            or self.host.use_custom_stt
-            or not self.host.state.active
-            or self.host.state.stt_terminal_failure
-            or self._stt_rebuild is None
-            or getattr(self, '_resilient_closing', False)
-            or socket_is_finishing(socket)
-        ):
-            return False
-        reason = getattr(socket, 'typed_death_reason', None)
-        if reason not in {'soniox_rotation', 'provider_5xx', 'connection_lost'}:
-            return False
-        if reason == 'connection_lost' and not str(getattr(socket, 'death_reason', '')).startswith('ws '):
-            return False
-        if not ring.admit('soniox', reason):
-            return False
-        self._settle_pending_live_failover_failure(continuing=True)
-        replacement = None
-        try:
-            socket.finish()
-        except Exception:
-            pass
-        finally:
-            # Direct sockets carry a lease here; managed sockets release their
-            # own gauge in finish(), and release_live_stt_socket is idempotent.
-            release_live_stt_socket(socket)
-        await asyncio.sleep(0)  # deliver the dead socket's last finalized callback
-        if not self.host.state.active or self.host.state.stt_terminal_failure:
-            RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
-            return False
-        replay = ring.snapshot()
-        parakeet_callback, modulate_callback, epoch = self._stt_rebuild[0]()
-        if epoch is not None:
-            epoch.replay_origin_sample = replay[0][0] if replay else ring.finalized_sample
-        try:
-            raw = await self._create_stt_socket(
-                parakeet_callback,
-                self._stt_rebuild[1],
-                modulate_callback=modulate_callback,
-                epoch=epoch,
-                same_provider=True,
-                replay_start_sample=replay[0][0] if replay else ring.finalized_sample,
-            )
-            if raw is None or not await fallback_socket_is_serving(raw):
-                if raw is not None:
-                    close_rejected_socket(raw)
-                raise RuntimeError('Soniox reconnect refused')
-            replacement = self._wrap_legacy_stt_socket(raw, epoch)
-            cutoff = ring.finalized_sample
-            replay_send = getattr(replacement, 'replay_send', None)
-            for start, data in replay:
-                accepted = (
-                    replay_send(data, start) if callable(replay_send) else replacement.send(data, start_sample=start)
-                )
-                if not accepted:
-                    raise RuntimeError('Soniox replay send failed')
-                ring.record_replay('soniox', len(data) // 2)
-            if not self.host.state.active or self.host.state.stt_terminal_failure:
-                replacement.finish()
-                RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
-                return False
-        except Exception:
-            if replacement is not None:
-                replacement.finish()
-            RECONNECT.labels(provider='soniox', reason=reason, outcome='failed').inc()
-            return False
-        self._replay_cutoff_sample = cutoff
-        self.stt_socket = replacement
-        self._record_selected_epoch(epoch, replacement)
-        self._pending_live_failover = PendingLiveFailover(from_mode='soniox', to_mode='soniox', reason=reason)
-        RECONNECT.labels(provider='soniox', reason=reason, outcome='connected').inc()
-        return True
+        return await reconnect_live_stt_socket(self)
 
     async def _rebuild_stt_socket_locked(self) -> bool:
         rebuild = getattr(self, '_stt_rebuild', None)
