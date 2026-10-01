@@ -9,7 +9,7 @@ import os
 import re
 import sys
 import time
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterable, AsyncIterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
@@ -28,8 +28,8 @@ from utils.journey_metrics_contract import resolve_client_kind_from_headers
 from utils.llm import desktop_gemini_gateway, vertex_pt_routing as ptr
 from utils.llm.managed_spend_ledger import DESKTOP_PROXY_CALLER, ManagedAttempt, schedule_managed_attempt
 
-_ALLOWED_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
-_ALLOWED_MODELS = frozenset(
+ALLOWED_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
+ALLOWED_MODELS = frozenset(
     {
         'gemini-2.5-flash',
         'gemini-2.5-flash-lite',
@@ -155,8 +155,8 @@ class ProxyTelemetry:
         candidate = path.replace(_LEGACY_PREVIEW_MODEL, ptr.PT_MODEL_CURRENT)
         prefix, separator, action = candidate.partition(':')
         model = prefix.removeprefix('models/') if separator and prefix.startswith('models/') else ''
-        self.model = model if model in _ALLOWED_MODELS else 'unknown'
-        self.action = action if action in _ALLOWED_ACTIONS else 'unknown'
+        self.model = model if model in ALLOWED_MODELS else 'unknown'
+        self.action = action if action in ALLOWED_ACTIONS else 'unknown'
 
     def set_route(self, route: UpstreamRoute) -> None:
         self.provider = route.provider
@@ -204,9 +204,9 @@ class ProxyTelemetry:
             'route': self.route,
             'provider_route': self.provider,
             'credential_source': self.credential_source,
-            'model': self.model if self.model in _ALLOWED_MODELS else 'unknown',
+            'model': self.model if self.model in ALLOWED_MODELS else 'unknown',
             'region': _safe_region(self.region),
-            'action': self.action if self.action in _ALLOWED_ACTIONS else 'unknown',
+            'action': self.action if self.action in ALLOWED_ACTIONS else 'unknown',
             'lane': self.lane if self.lane in GEMINI_LANES else 'unknown',
             'client_platform': self.client_platform if self.client_platform in GEMINI_CLIENT_PLATFORMS else 'unknown',
             'workload_class': self.workload_class,
@@ -272,7 +272,7 @@ class ProxyTelemetry:
                 caller=DESKTOP_PROXY_CALLER,
                 user_uid=self.uid,
                 feature=desktop_gemini_gateway.DESKTOP_GATEWAY_FEATURE,
-                api_surface=f'gemini_{self.action}' if self.action in _ALLOWED_ACTIONS else 'gemini_unknown',
+                api_surface=f'gemini_{self.action}' if self.action in ALLOWED_ACTIONS else 'gemini_unknown',
                 payer=self.payer,
                 provider=_LEDGER_PROVIDER,
                 configured_model=self.model,
@@ -306,7 +306,8 @@ def _dependency_outcome(exc: HTTPException) -> str:
     return 'authorization_rejected'
 
 
-async def _terminal_stream_guard(iterator: AsyncIterator[Any], telemetry: ProxyTelemetry) -> AsyncIterator[Any]:
+async def _terminal_stream_guard(source: AsyncIterable[Any], telemetry: ProxyTelemetry) -> AsyncIterator[Any]:
+    iterator = source.__aiter__()
     try:
         async for chunk in iterator:
             yield chunk

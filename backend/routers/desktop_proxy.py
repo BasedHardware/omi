@@ -23,12 +23,11 @@ from utils.http_client import (
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm import desktop_gemini_gateway
 from utils.llm.desktop_gemini_telemetry import (
+    ALLOWED_ACTIONS as _ALLOWED_ACTIONS,
+    ALLOWED_MODELS as _ALLOWED_MODELS,
     DesktopGeminiProxyRoute,
     ProxyTelemetry,
     UpstreamRoute,
-    _ALLOWED_ACTIONS,
-    _ALLOWED_MODELS,
-    _safe_region,
     get_proxy_telemetry,
 )
 from utils.llm.desktop_llm_stub import (

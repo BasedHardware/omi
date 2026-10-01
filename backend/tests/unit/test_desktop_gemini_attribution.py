@@ -726,6 +726,44 @@ async def test_stream_guard_closes_custom_iterator_on_early_termination(capsys):
 
 
 @pytest.mark.asyncio
+async def test_stream_guard_closes_distinct_iterator_from_async_iterable(capsys):
+    telemetry = _telemetry()
+
+    class InnerIterator:
+        def __init__(self):
+            self.closed = False
+            self.served = False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self.served:
+                raise StopAsyncIteration
+            self.served = True
+            return b'chunk'
+
+        async def aclose(self):
+            self.closed = True
+
+    class Source:
+        def __init__(self):
+            self.iterator = InnerIterator()
+
+        def __aiter__(self):
+            return self.iterator
+
+    source = Source()
+    iterator = desktop_gemini_telemetry._terminal_stream_guard(source, telemetry)
+    assert await iterator.__anext__() == b'chunk'
+    await iterator.aclose()
+    assert source.iterator.closed
+    events = _events(capsys)
+    assert len(events) == 1
+    assert events[0]['outcome'] == 'client_cancelled'
+
+
+@pytest.mark.asyncio
 async def test_stream_guard_reports_unfinished_iterator_as_incomplete(capsys):
     telemetry = _telemetry()
 

@@ -18,6 +18,7 @@ if str(BACKEND_DIR) not in sys.path:
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
 from routers import desktop_proxy
+from utils.llm import desktop_gemini_telemetry
 from utils.managed_compute import Decision
 from utils.observability import journeys
 from config.plan_catalog import PlanType
@@ -1956,7 +1957,7 @@ async def test_a_fallback_across_families_also_crosses_endpoints(monkeypatch):
     assert reserved.region == "us-central1"
     assert overflow.region == "us"
     # Multi-region labels must survive the telemetry sanitizer, not log as none.
-    assert desktop_proxy._safe_region(overflow.region) == "us"
+    assert desktop_gemini_telemetry._safe_region(overflow.region) == "us"
 
 
 # --- Generalized fallback chains -------------------------------------------
