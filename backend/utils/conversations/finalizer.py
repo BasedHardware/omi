@@ -143,7 +143,14 @@ async def finalize_persisted_conversation(
             # finish the absorb first. A failure raises and stays retryable. Only
             # the claim transaction closes a job whose earlier attempt leased fanout.
             stage = 'smart_merge'
-            await smart_merge_step(uid, conversation_id, conversation_data, trigger=trigger, owner=finalization_job_id)
+            await smart_merge_step(
+                uid,
+                conversation_id,
+                conversation_data,
+                trigger=trigger,
+                owner=finalization_job_id,
+                job_lease=(dispatch_generation, lease_epoch),
+            )
             stage = 'fanout_claim'
             fanout = await run_blocking(
                 db_executor,
@@ -257,7 +264,12 @@ async def finalize_persisted_conversation(
             # before any derived effect of this one; a donor skips all of them.
             stage = 'smart_merge'
             if await smart_merge_step(
-                uid, conversation_id, conversation_data, trigger=trigger, owner=finalization_job_id
+                uid,
+                conversation_id,
+                conversation_data,
+                trigger=trigger,
+                owner=finalization_job_id,
+                job_lease=(dispatch_generation, lease_epoch),
             ):
                 stage = 'fanout_completion'
                 if not await run_blocking(

@@ -207,8 +207,9 @@ def claim_survivor_refresh(
     A live lease excludes every claimant, including another invocation of the
     same job. An expired one (its holder crashed, or outlived the lease) is
     taken over in this transaction under the caller's new token; every later
-    lease-holder write (processing persist, checkpoint, completion, release)
-    compares that token, so the previous holder can no longer touch it.
+    lease-state write (processing persist, checkpoint, completion, release)
+    compares that token. Derived effects emitted after processing persists and
+    external vector writes do not have an atomic lease fence.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = _collection(client, uid).document(survivor_id)
@@ -284,6 +285,30 @@ def checkpoint_survivor_processing(
     return run_transactional(client, checkpoint)
 
 
+def survivor_refresh_is_current(
+    uid: str, survivor_id: str, *, owner: str, revision: int, sync_revision: Any, firestore_client: Any = None
+) -> bool:
+    """Revalidate ownership even when a processing receipt lets us skip persistence.
+
+    This is an admission check, not an atomic fence around external vector writes
+    or the effects process_conversation emits after its persistence transaction.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    row = _collection(client, uid).document(survivor_id).get().to_dict()
+    if not row or row.get('deleted'):
+        return False
+    state = row.get(SMART_MERGE_FIELD) or {}
+    lease = state.get('refresh_lease') or {}
+    until = lease.get('until')
+    return bool(
+        int(state.get('revision') or 0) == revision
+        and row.get('sync_content_revision') == sync_revision
+        and lease.get('owner') == owner
+        and isinstance(until, datetime)
+        and until > datetime.now(timezone.utc)
+    )
+
+
 def complete_survivor_refresh(
     uid: str, survivor_id: str, *, owner: str, revision: int, firestore_client: Any = None
 ) -> bool:
@@ -297,7 +322,14 @@ def complete_survivor_refresh(
         if not row or row.get('deleted'):
             return False
         state = dict(row.get(SMART_MERGE_FIELD) or {})
-        if int(state.get('revision') or 0) != revision or (state.get('refresh_lease') or {}).get('owner') != owner:
+        lease = state.get('refresh_lease') or {}
+        until = lease.get('until')
+        if (
+            int(state.get('revision') or 0) != revision
+            or lease.get('owner') != owner
+            or not isinstance(until, datetime)
+            or until <= datetime.now(timezone.utc)
+        ):
             return False
         state['refreshed_revision'] = revision
         state.pop('refresh_lease', None)

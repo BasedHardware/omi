@@ -6,6 +6,7 @@ conversation codec (encryption on), the redirect resolver and the decision
 logic run for real. All text is synthetic.
 """
 
+import asyncio
 import inspect
 import json
 from datetime import datetime, timedelta, timezone
@@ -15,6 +16,7 @@ import pytest
 
 from config import conversation_smart_merge as config
 from database import conversation_finalization_jobs as jobs_db
+from database import legal_holds
 from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
 from database import sync_bridges
@@ -1082,7 +1084,10 @@ async def test_wait_gives_up_after_one_lease_lifetime_as_one_retryable_attempt(w
     caplog.clear()
     assert await _Listen().deliver() == FAILED
     assert jobs.job['status'] == 'queued' and jobs.job['attempt_count'] == 2
-    assert sum(clock.sleeps) == config.REFRESH_WAIT_SECONDS and world.processed == []
+    assert config.REFRESH_WAIT_SECONDS == 630
+    assert sum(clock.sleeps) == 630 and world.processed == []
+    assert clock.sleeps[:5] == [2, 4, 8, 16, 30]
+    assert all(0 < seconds <= 30 for seconds in clock.sleeps)
     lines = [m for m in _messages(caplog) if 'outcome=incomplete' in m]
     assert lines == ['event=smart_merge outcome=incomplete step=refresh cause=refresh_lease_busy']
 
@@ -1145,6 +1150,136 @@ async def test_legal_hold_defers_the_retraction_but_never_the_survivor_refresh(w
     rows = {key: dict(value) for key, value in world.store.rows.items()}
     smart_merge.finish_absorb(UID, 'n', owner=JOB, resumed=True)
     assert world.store.rows == rows and world.processed == [('p', 4)] and world.retracted == ['n']
+
+
+# Review regressions use the real job claims and cancellation, not only the fake clock.
+
+
+def test_receipted_refresh_loses_takeover_before_vector_write(world):
+    world.add('p', 0, 10, sync_content_revision=1, smart_merge={'revision': 1})
+    old = _hold('old-invocation')
+    assert smart_merge_db.checkpoint_survivor_processing(UID, 'p', owner=old, revision=1, sync_revision=1)
+    _expire(world)
+    new = _hold('new-invocation')
+    with pytest.raises(smart_merge.SmartMergeIncomplete, match='refresh_ownership_fenced'):
+        smart_merge._refresh_claimed(UID, 'p', 1, owner=old)
+    assert world.vectors == [] and world.processed == []
+    assert _lease(world)['owner'] == new
+
+
+def test_expired_holder_cannot_complete_without_a_takeover(world):
+    world.add('p', 0, 10, smart_merge={'revision': 1})
+    old = _hold('expired-invocation')
+    _expire(world)
+    assert not smart_merge_db.complete_survivor_refresh(UID, 'p', owner=old, revision=1)
+    assert world.raw('p')['smart_merge'].get('refreshed_revision', 0) == 0
+    assert _lease(world)['owner'] == old
+
+
+@pytest.mark.asyncio
+async def test_waiter_rechecks_job_epoch_before_refresh_after_another_delivery(world, monkeypatch):
+    jobs = await _absorbed_after_a_failed_refresh(world, monkeypatch)
+    holder = _hold()
+    clock = _Clock(monkeypatch)
+
+    def supersede(_clock):
+        jobs.job['lease_expires_at'] = datetime.now(timezone.utc) - timedelta(seconds=1)
+        claim = jobs_db.claim_finalization_job(JOB, 1)
+        assert claim['status'] == 'claimed' and claim['lease_epoch'] == 3
+        # The holder disappears while the original waiter is asleep.
+        assert smart_merge_db.release_survivor_refresh(UID, 'p', owner=holder)
+
+    clock.on_sleep = supersede
+    assert await _Listen().deliver() == FAILED
+    assert jobs.job['lease_epoch'] == 3 and jobs.job['status'] == 'leased'
+    assert jobs.job['attempt_count'] == 1 and world.processed == [] and world.vectors == []
+    assert len(clock.sleeps) == 1
+
+
+@pytest.mark.asyncio
+async def test_absorbing_wait_reserves_refresh_time_in_the_remaining_job_lease(world, monkeypatch):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10, finalization_job_id=JOB, finalization_revision=1)
+    monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'merge')
+    jobs = _Jobs(world, monkeypatch)
+    real_absorb = smart_merge_db.absorb_conversation
+
+    def absorb_after_slow_initial_processing(*args, **kwargs):
+        result = real_absorb(*args, **kwargs)
+        # Previous processing spent 1,000 seconds of the 1,500-second lease.
+        jobs.job['lease_expires_at'] = datetime.now(timezone.utc) + timedelta(seconds=500)
+        _hold()
+        return result
+
+    monkeypatch.setattr(smart_merge_db, 'absorb_conversation', absorb_after_slow_initial_processing)
+    clock = _Clock(monkeypatch)
+    assert await _Listen().deliver() == FAILED
+    assert jobs.job['attempt_count'] == 1 and world.processed == []
+    assert clock.sleeps == []  # insufficient headroom for waiting plus a lease-length refresh
+
+
+@pytest.mark.asyncio
+async def test_busy_wait_uses_real_asyncio_cancellation_without_spending_budget(world, monkeypatch):
+    jobs = await _absorbed_after_a_failed_refresh(world, monkeypatch)
+    holder = _hold()
+    sleeping = asyncio.Event()
+
+    async def real_sleep(seconds):
+        sleeping.set()
+        await asyncio.sleep(seconds)
+
+    monkeypatch.setattr(smart_merge, '_sleep', real_sleep)
+    task = asyncio.create_task(_Listen().deliver())
+    try:
+        await asyncio.wait_for(sleeping.wait(), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, timeout=2)
+        assert jobs.job['status'] == 'leased' and jobs.job['attempt_count'] == 1
+        assert _lease(world)['owner'] == holder and world.processed == []
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_wait_cap_uses_real_event_loop_time(world, monkeypatch):
+    await _absorbed_after_a_failed_refresh(world, monkeypatch)
+    _hold()
+    monkeypatch.setattr(smart_merge, 'REFRESH_WAIT_SECONDS', 0.04)
+    monkeypatch.setattr(smart_merge, 'REFRESH_WAIT_FIRST_POLL_SECONDS', 0.01)
+    monkeypatch.setattr(smart_merge, 'REFRESH_WAIT_MAX_POLL_SECONDS', 0.02)
+    started = asyncio.get_running_loop().time()
+    with pytest.raises(smart_merge.RefreshLeaseBusy):
+        await asyncio.wait_for(
+            smart_merge._finish_absorb_behind_live_holder(UID, 'n', owner=JOB, resumed=True), timeout=2
+        )
+    assert 0.035 <= asyncio.get_running_loop().time() - started < 2
+
+
+def test_destructive_account_gate_still_fences_refresh_after_deferred_cleanup(world, monkeypatch):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.retract_error = DestructiveOperationInProgress('synthetic gate')
+    world.store.rows[(legal_holds.LEGAL_HOLD_DELETION_GATES_COLLECTION, UID)] = {
+        'schema_version': legal_holds.LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+        'uid': UID,
+        'kind': 'explicit_memory_deletion',
+        'token': 'synthetic-gate',
+        'state': 'running',
+        'started_at': datetime.now(timezone.utc),
+    }
+
+    def canonical_effect(*args, **kwargs):
+        # The real guard used by canonical source replacement; no hold/gate bypass.
+        legal_holds.assert_no_destructive_operation_transaction(world.store.transaction(), world.store, uid=UID)
+
+    monkeypatch.setattr(smart_merge, 'process_conversation', canonical_effect)
+    with pytest.raises(smart_merge.SmartMergeIncomplete, match='DestructiveOperationInProgress'):
+        world.finish('n')
+    assert world.raw('p')['smart_merge']['refreshed_revision'] == 0 and world.vectors == []
+    assert 'sync_bridge_cleaned_revision' not in world.raw('n')
+    assert 'refresh_lease' not in world.raw('p')['smart_merge']
 
 
 # --------------------------------------------------------------------------- replay

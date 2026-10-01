@@ -57,6 +57,7 @@ from config.conversation_smart_merge import (
     smart_merge_uid_allowed,
 )
 from config.jev_decisions import JEV_MODEL
+from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import notifications as notification_db
 from database import smart_merge as smart_merge_db
@@ -87,7 +88,7 @@ from utils.conversations.smart_merge_policy import (
     stretch_before,
 )
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
-from utils.executors import postprocess_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.jev_client import ask_jev
 from utils.metrics import record_conversation_smart_merge, record_conversation_smart_merge_refresh
 from utils.observability.fallback import record_fallback
@@ -129,6 +130,7 @@ async def smart_merge_step(
     *,
     trigger: ProcessingTrigger,
     owner: str,
+    job_lease: Optional[tuple[int, int]] = None,
 ) -> bool:
     """Returns True when N is (now) a donor: the caller must skip N's own derived effects.
 
@@ -136,7 +138,7 @@ async def smart_merge_step(
     free donor check, so ``off`` stays I/O-free.
     """
     if is_donor(initial_row):
-        await _finish_absorb_behind_live_holder(uid, conversation_id, owner=owner, resumed=True)
+        await _finish_absorb_behind_live_holder(uid, conversation_id, owner=owner, resumed=True, job_lease=job_lease)
         return True
     mode = smart_merge_mode()
     if mode is SmartMergeMode.OFF:
@@ -147,12 +149,20 @@ async def smart_merge_step(
         )
     except RefreshLeaseBusy:
         # The absorb committed and N is a donor; only its survivor refresh waits.
-        await _finish_absorb_behind_live_holder(uid, conversation_id, owner=owner, resumed=False, busy=True)
+        await _finish_absorb_behind_live_holder(
+            uid, conversation_id, owner=owner, resumed=False, busy=True, job_lease=job_lease
+        )
         return True
 
 
 async def _finish_absorb_behind_live_holder(
-    uid: str, donor_id: str, *, owner: str, resumed: bool, busy: bool = False
+    uid: str,
+    donor_id: str,
+    *,
+    owner: str,
+    resumed: bool,
+    busy: bool = False,
+    job_lease: Optional[tuple[int, int]] = None,
 ) -> None:
     """Run ``finish_absorb``, waiting out a refresh lease another live invocation holds.
 
@@ -160,10 +170,12 @@ async def _finish_absorb_behind_live_holder(
     the job straight back through the retry path, spending its attempt budget
     in about a second and dead-lettering it before a crashed holder's lease can
     expire. Never claims a live lease (the claim transaction rejects one), so
-    two refreshes of one survivor never overlap; an abandoned lease is taken
-    over by the normal claim once it expires, under this invocation's own token.
+    an unexpired lease cannot be taken over. An expired lease is taken over
+    under a fresh token, even if its former holder is still computing.
     Sleeps on the event loop, holding no executor thread, and gives up (one
-    failed attempt) only after a full lease lifetime of polling.
+    failed attempt) after a full lease lifetime of polling, or earlier when
+    the finalization lease has insufficient refresh headroom. The job epoch
+    is rechecked after every sleep before cleanup or refresh can resume.
     """
     deadline: Optional[float] = None
     delay = REFRESH_WAIT_FIRST_POLL_SECONDS
@@ -174,16 +186,45 @@ async def _finish_absorb_behind_live_holder(
                 deadline = now + REFRESH_WAIT_SECONDS
                 record_conversation_smart_merge_refresh('lease_busy')
                 logger.info('event=smart_merge outcome=refresh_wait')
-            if now >= deadline:
+            if job_lease is not None:
+                remaining = await run_blocking(db_executor, _refresh_wait_budget, uid, donor_id, owner, job_lease)
+                deadline = min(deadline, _monotonic() + remaining)
+            if _monotonic() >= deadline:
                 logger.warning('event=smart_merge outcome=incomplete step=refresh cause=refresh_lease_busy')
                 raise RefreshLeaseBusy()
-            await _sleep(min(delay, deadline - now))
+            await _sleep(min(delay, max(0.0, deadline - _monotonic())))
             delay = min(delay * 2, REFRESH_WAIT_MAX_POLL_SECONDS)
+            if job_lease is not None:
+                remaining = await run_blocking(db_executor, _refresh_wait_budget, uid, donor_id, owner, job_lease)
+                if remaining <= 0:
+                    logger.warning('event=smart_merge outcome=incomplete step=refresh cause=refresh_lease_busy')
+                    raise RefreshLeaseBusy()
         try:
             await run_blocking(postprocess_executor, finish_absorb, uid, donor_id, owner=owner, resumed=resumed)
             return
         except RefreshLeaseBusy:
             busy = True
+
+
+def _refresh_wait_budget(uid: str, donor_id: str, owner: str, job_lease: tuple[int, int]) -> float:
+    """Re-admit a sleeping finalizer and reserve one refresh lease of headroom.
+
+    The job lease is not renewed by finalization. In particular, an absorbing
+    attempt may have spent most of it processing N before reaching this wait.
+    This reserve bounds waiting; it is not a hard timeout on synchronous effects.
+    """
+    job = jobs_db.get_finalization_job(owner)
+    until = (job or {}).get('lease_expires_at')
+    if not job or (
+        job.get('status') != 'leased'
+        or (job.get('dispatch_generation'), job.get('lease_epoch')) != job_lease
+        or job.get('uid') != uid
+        or job.get('conversation_id') != donor_id
+        or not isinstance(until, datetime)
+        or until <= datetime.now(timezone.utc)
+    ):
+        raise SmartMergeIncomplete('finalization_lease_lost')
+    return max(0.0, (until - datetime.now(timezone.utc)).total_seconds() - REFRESH_LEASE_SECONDS)
 
 
 def decide_and_apply(
@@ -493,6 +534,8 @@ _INCOMPLETE_CODES = frozenset(
         'refresh_completion_fenced',
         'processing_checkpoint_fenced',
         'donor_cleanup_deferred',
+        'finalization_lease_lost',
+        'refresh_ownership_fenced',
     }
 )
 
@@ -627,6 +670,10 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str) ->
         if row and not row.get('deleted'):
             raise SmartMergeIncomplete('survivor_changed_before_refresh')
         return
+    if not smart_merge_db.survivor_refresh_is_current(
+        uid, survivor_id, owner=owner, revision=claimed, sync_revision=row.get('sync_content_revision')
+    ):
+        raise SmartMergeIncomplete('refresh_ownership_fenced')
     processed = deserialize_conversation(row)
     state = smart_merge_state(row)
     if int(state.get('processed_revision') or 0) < claimed or state.get('processed_sync_revision') != row.get(
@@ -654,6 +701,10 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str) ->
             uid, survivor_id, owner=owner, revision=claimed, sync_revision=row.get('sync_content_revision')
         ):
             raise SmartMergeIncomplete('processing_checkpoint_fenced')
+    if not smart_merge_db.survivor_refresh_is_current(
+        uid, survivor_id, owner=owner, revision=claimed, sync_revision=row.get('sync_content_revision')
+    ):
+        raise SmartMergeIncomplete('refresh_ownership_fenced')
     try:
         # Reprocess never re-embeds; the merged occasion must be findable as a whole.
         save_structured_vector(uid, processed)
