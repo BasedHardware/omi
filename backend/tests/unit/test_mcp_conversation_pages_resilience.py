@@ -11,6 +11,7 @@ Verifies:
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+from google.api_core.exceptions import FailedPrecondition
 import pytest
 
 import database.mcp_conversation_pages as pages_db
@@ -217,3 +218,13 @@ def test_query_stream_failure_recovers_gracefully():
         page, resume = pages_db.get_mcp_conversation_cards_page(UID, 10)
         assert page == []
         assert resume is None
+
+
+def test_query_stream_reraises_failed_precondition():
+    query = _DescKeysetQuery([], stream_error=FailedPrecondition("The query requires an index"))
+    with _stub_client(query):
+        with pytest.raises(FailedPrecondition):
+            pages_db.get_mcp_conversation_cards(UID, 10, 0)
+
+        with pytest.raises(FailedPrecondition):
+            pages_db.get_mcp_conversation_cards_page(UID, 10)

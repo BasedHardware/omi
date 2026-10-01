@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from google.api_core.exceptions import FailedPrecondition
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -137,6 +138,8 @@ def get_mcp_conversation_cards(
                 continue
             conversation.setdefault('id', doc.id)
             conversations.append(conversation)
+    except FailedPrecondition:
+        raise
     except Exception:
         logger.exception('Failed streaming conversation cards for uid=%s', valid_uid)
     return conversations
@@ -219,6 +222,8 @@ def get_mcp_conversation_cards_page(
             query = query.start_after({'created_at': after_ts, '__name__': collection.document(after_id.strip())})
         try:
             raw_docs = list(query.stream())
+        except FailedPrecondition:
+            raise
         except Exception:
             logger.exception('mcp_conversation_pages: query stream failed for uid=%s', valid_uid)
             exhausted = True
