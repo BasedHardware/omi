@@ -3765,6 +3765,8 @@
     "collapseAction": "Σύμπτυξη",
     "speakerTagPromptNotMeAction": "Δεν είμαι εγώ",
     "confidenceNextLabels": "{count, plural, =1{Επισημάνετέ τους σε 1 ακόμη συνομιλία.} other{Επισημάνετέ τους σε {count} ακόμη συνομιλίες.}}",
+    "siriShortcutsSetupHint": "Ενεργοποιήστε το Omi στις Συντομεύσεις → Siri. Πείτε «{askPhrase}» ή «{questionPhrase}» και μετά κάντε την ερώτησή σας.",
+    "siriShortcutsSearchHint": " Μπορείτε επίσης να πείτε «{searchPhrase} for what I did today».",
     "updateAvailableTitle": "Διαθέσιμη ενημέρωση",
     "updateAvailableMessage": "Μια νέα έκδοση του Omi είναι έτοιμη, με διορθώσεις και βελτιώσεις.",
     "updateRequiredTitle": "Απαιτείται ενημέρωση",

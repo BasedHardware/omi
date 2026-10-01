@@ -882,6 +882,27 @@ class SiriIndexApi {
     return (pigeonVar_replyValue! as List<Object?>).cast<SiriTelemetryRecord>();
   }
 
+  /// True only when the Runner was compiled with the Siri toolchain, so Dart can
+  /// skip App Shortcuts UI (e.g. the Shortcuts button) in stable-compiler builds.
+  Future<bool> appShortcutsAvailable() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.appShortcutsAvailable$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as bool;
+  }
+
   Future<void> donateAction(String uid, String type, String id) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.donateAction$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(

@@ -3765,6 +3765,8 @@
     "collapseAction": "Restrânge",
     "speakerTagPromptNotMeAction": "Nu sunt eu",
     "confidenceNextLabels": "{count, plural, =1{Etichetează-i în încă 1 conversație.} other{Etichetează-i în încă {count} conversații.}}",
+    "siriShortcutsSetupHint": "Activați Omi în Comenzi rapide → Siri. Spuneți „{askPhrase}” sau „{questionPhrase}”, apoi puneți-vă întrebarea.",
+    "siriShortcutsSearchHint": " Puteți spune și „{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "Actualizare disponibilă",
     "updateAvailableMessage": "O versiune nouă de Omi este gata, cu remedieri și îmbunătățiri.",
     "updateRequiredTitle": "Actualizare necesară",
