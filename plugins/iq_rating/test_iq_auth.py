@@ -2,6 +2,7 @@
 
 Run: python3 plugins/iq_rating/test_iq_auth.py
 """
+
 import os
 import sys
 import types
@@ -46,12 +47,16 @@ def _load():
     sys.modules['iq_rating'] = pkg
 
     import importlib
-    return importlib.import_module('iq_rating.iq_auth')
+
+    mod = importlib.import_module('iq_rating.iq_auth')
+    # Assert against the HTTPException class the module actually bound:
+    # real fastapi under pytest, the stub above in standalone runs.
+    return mod, mod.HTTPException
 
 
 class IqAuthTest(unittest.TestCase):
     def setUp(self):
-        self.mod = _load()
+        self.mod, self.http_exc = _load()
         os.environ[_ENV] = 'test-secret'
 
     def tearDown(self):
@@ -59,30 +64,30 @@ class IqAuthTest(unittest.TestCase):
 
     def test_missing_secret_fails_closed_503(self):
         os.environ.pop(_ENV, None)
-        with self.assertRaises(_HTTPException) as ctx:
+        with self.assertRaises(self.http_exc) as ctx:
             self.mod.require_iq_auth(FakeRequest(query_params={'uid': 'u1'}), uid='u1')
         self.assertEqual(ctx.exception.status_code, 503)
 
     def test_blank_secret_fails_closed_503(self):
         os.environ[_ENV] = '   '
-        with self.assertRaises(_HTTPException) as ctx:
+        with self.assertRaises(self.http_exc) as ctx:
             self.mod.require_iq_auth(FakeRequest(query_params={'uid': 'u1'}), uid='u1')
         self.assertEqual(ctx.exception.status_code, 503)
 
     def test_missing_token_401(self):
-        with self.assertRaises(_HTTPException) as ctx:
+        with self.assertRaises(self.http_exc) as ctx:
             self.mod.require_iq_auth(FakeRequest(query_params={'uid': 'u1'}), uid='u1')
         self.assertEqual(ctx.exception.status_code, 401)
 
     def test_wrong_token_401(self):
         req = FakeRequest(authorization='Bearer nope', query_params={'uid': 'u1'})
-        with self.assertRaises(_HTTPException) as ctx:
+        with self.assertRaises(self.http_exc) as ctx:
             self.mod.require_iq_auth(req, uid='u1')
         self.assertEqual(ctx.exception.status_code, 401)
 
     def test_non_bearer_scheme_ignored(self):
         req = FakeRequest(authorization='Basic test-secret', query_params={'uid': 'u1'})
-        with self.assertRaises(_HTTPException) as ctx:
+        with self.assertRaises(self.http_exc) as ctx:
             self.mod.require_iq_auth(req, uid='u1')
         self.assertEqual(ctx.exception.status_code, 401)
 
@@ -103,7 +108,7 @@ class IqAuthTest(unittest.TestCase):
         self.assertIsNone(self.mod.require_iq_auth_if_uid(FakeRequest(), uid='   '))
 
     def test_if_uid_present_requires_auth(self):
-        with self.assertRaises(_HTTPException) as ctx:
+        with self.assertRaises(self.http_exc) as ctx:
             self.mod.require_iq_auth_if_uid(FakeRequest(), uid='victim')
         self.assertEqual(ctx.exception.status_code, 401)
         req = FakeRequest(query_params={'iq_rating_token': 'test-secret'})
@@ -115,15 +120,14 @@ class RouteWiringTest(unittest.TestCase):
 
     def test_routes_use_auth_dependency(self):
         src = open(os.path.join(os.path.dirname(__file__), 'main.py')).read()
-        for route in ('/iq/api', '/iq/hide', '/iq/unhide', '/iq/adjust',
-                      '/iq/preload', '/iq/refresh'):
+        for route in ('/iq/api', '/iq/hide', '/iq/unhide', '/iq/adjust', '/iq/preload', '/iq/refresh'):
             idx = src.find(f'"{route}"')
             self.assertGreater(idx, -1, route)
-            body = src[idx:idx + 400]
+            body = src[idx : idx + 400]
             self.assertIn('Depends(require_iq_auth)', body, route)
         # /iq page uses the optional-uid variant
         idx = src.find('"/iq", response_class=HTMLResponse')
-        self.assertIn('Depends(require_iq_auth_if_uid)', src[idx:idx + 400])
+        self.assertIn('Depends(require_iq_auth_if_uid)', src[idx : idx + 400])
         # JS no longer embeds a raw uid string
         self.assertNotIn("'{uid}'", src)
 
