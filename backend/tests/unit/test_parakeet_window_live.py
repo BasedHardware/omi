@@ -1320,9 +1320,29 @@ def _observe_first_text_deadline_schedule(monkeypatch, raw):
     call_later = loop.call_later
     scheduled = []
 
+    class ManualTimerHandle:
+        def __init__(self, delay, callback, args):
+            self._when = loop.time() + delay
+            self._callback = callback
+            self._args = args
+            self._cancelled = False
+
+        def cancel(self):
+            self._cancelled = True
+
+        def cancelled(self):
+            return self._cancelled
+
+        def when(self):
+            return self._when
+
     def observed(delay, callback, *args, context=None):
         if callback == raw._expire_first_text:
             scheduled.append(delay)
+            # Capture time is advanced independently in these tests. Keep the
+            # first-text deadline under test control instead of letting the
+            # real event-loop clock race that simulated clock.
+            return ManualTimerHandle(delay, callback, args)
         return call_later(delay, callback, *args, context=context)
 
     monkeypatch.setattr(loop, 'call_later', observed)
