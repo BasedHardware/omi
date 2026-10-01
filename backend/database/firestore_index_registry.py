@@ -2053,6 +2053,18 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
         ('ASCENDING',),
     ),
     FieldIndexRequirement(
+        'chat_first_dead_letters_created_at_group_ascending',
+        'chat_first_dead_letters',
+        'created_at',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
+        'chat_first_proactive_intents_created_at_group_ascending',
+        'chat_first_proactive_intents',
+        'created_at',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
         'chat_first_proactive_intents_delivery_state_group_ascending',
         'chat_first_proactive_intents',
         'delivery_state',

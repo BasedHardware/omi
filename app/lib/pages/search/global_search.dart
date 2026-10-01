@@ -16,6 +16,7 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_map_page.dart';
 import 'package:omi/pages/conversations/widgets/create_folder_sheet.dart';
 import 'package:omi/pages/conversations/widgets/folder_options_sheet.dart';
@@ -376,7 +377,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       context,
       ConversationDetailPage(
         conversation: conversation,
-        initialTabIndex: seek != null ? 0 : null,
+        initialTab: seek != null ? ConversationTab.transcript : null,
         initialSeekStart: seek?.start,
         initialSeekEnd: seek?.end,
       ),

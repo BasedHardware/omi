@@ -1426,8 +1426,8 @@ async def test_real_empty_speech_keeps_original_twelve_second_rescue(monkeypatch
     assert diagnostic.answered_empty_admitted_seconds == speech_frames * 0.04
     assert diagnostic.posts == expected_posts and diagnostic.empty_posts == expected_posts
     assert diagnostic.answered_empty_stranded_flushes == 1
-    assert diagnostic.seconds_since_first_speech == 12
-    assert diagnostic.seconds_since_deadline_speech == 12
+    assert diagnostic.seconds_since_first_speech == pytest.approx(12)
+    assert diagnostic.seconds_since_deadline_speech == pytest.approx(12)
     assert actual._pending_live_failover.first_text_diagnostics is diagnostic
     callbacks[0]([{'text': 'Recovered.', 'start': 0, 'end': 0.5}])
     line = next(

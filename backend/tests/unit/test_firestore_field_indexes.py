@@ -71,8 +71,8 @@ def test_expected_field_requirements_parses_only_additive_overrides():
         (requirement.collection_group, requirement.field_path, requirement.collection_group_modes)
         for requirement in FIELD_INDEX_REQUIREMENTS
     ]
-    assert len(requirements) == 14
-    assert sum(len(requirement.collection_group_modes) for requirement in requirements) == 16
+    assert len(requirements) == 16
+    assert sum(len(requirement.collection_group_modes) for requirement in requirements) == 18
     assert all(
         requirement.collection_group_modes
         and all(mode in {'ASCENDING', 'DESCENDING', 'CONTAINS'} for mode in requirement.collection_group_modes)
@@ -559,6 +559,17 @@ def test_creating_transition_then_still_missing_plans_one_union_patch():
     assert {('COLLECTION_GROUP', 'ASCENDING'), ('COLLECTION_GROUP', 'DESCENDING')} <= modes
 
 
+_ORIGINAL_REQUIREMENTS = tuple(
+    requirement
+    for requirement in FIELD_INDEX_REQUIREMENTS
+    if requirement.identifier
+    not in {
+        'chat_first_dead_letters_created_at_group_ascending',
+        'chat_first_proactive_intents_created_at_group_ascending',
+    }
+)
+
+
 def test_frozen_inventory_fake_patches_exactly_the_five_missing_fields():
     production_project = 'based-hardware'
     production_database = '(default)'
@@ -582,7 +593,7 @@ def test_frozen_inventory_fake_patches_exactly_the_five_missing_fields():
             'indexConfig': {'usesAncestorConfig': False, 'indexes': _collection_defaults('*')},
         }
     }
-    for requirement in FIELD_INDEX_REQUIREMENTS:
+    for requirement in _ORIGINAL_REQUIREMENTS:
         name = fields.field_resource_name(
             project=production_project,
             database=production_database,
@@ -635,7 +646,7 @@ def test_frozen_inventory_fake_patches_exactly_the_five_missing_fields():
 
     before = {name: copy.deepcopy(config) for name, config in live.items()}
     patched = fields.provision_field_requirements(
-        requirements=FIELD_INDEX_REQUIREMENTS,
+        requirements=_ORIGINAL_REQUIREMENTS,
         project=production_project,
         database=production_database,
         request=_request(payload),
@@ -647,7 +658,7 @@ def test_frozen_inventory_fake_patches_exactly_the_five_missing_fields():
 
     assert patched == {
         (requirement.collection_group, requirement.field_path)
-        for requirement in FIELD_INDEX_REQUIREMENTS
+        for requirement in _ORIGINAL_REQUIREMENTS
         if requirement.collection_group in missing_groups
     }
     assert len(applied) == 5
