@@ -1511,7 +1511,7 @@ def test_backend_gcr_publishers_are_exactly_the_gated_builders():
     local_actions = _local_actions(repo)
     # Workflows publish only by pushing gcr.io refs directly or through local
     # composites that do so (transitively); anything else cannot ship an image.
-    push_actions = {key for key, body in local_actions.items() if 'gcr.io' in body}
+    push_actions = {key for key, body in local_actions.items() if policy._GCR_HOST.search(body)}
     while True:
         push_names = {key.rsplit('/', 2)[-2] for key in push_actions}
         grown = push_actions | {
@@ -1526,7 +1526,7 @@ def test_backend_gcr_publishers_are_exactly_the_gated_builders():
     publishers: set[str] = set()
     for path in sorted((repo / '.github/workflows').glob('*.yml')):
         text = path.read_text(encoding='utf-8')
-        if 'gcr.io' not in text and not any(ref in text for ref in push_refs):
+        if not policy._GCR_HOST.search(text) and not any(ref in text for ref in push_refs):
             continue
         document = policy._yaml_document(text)
         for job_id, job in (document.get('jobs') or {}).items():

@@ -219,7 +219,10 @@ SERVICE_IMAGE_NAMES = {
 
 _DOCKERFILE_FLAG = re.compile(r'(?:--file|--dockerfile|-f|file:)\s*=?["\']?([^\s"\']*Dockerfile[^\s"\']*)')
 _GCR_IMAGE = re.compile(r'gcr\.io/[A-Za-z0-9_.${} /-]+?/([A-Za-z0-9_-]+)(?=[@:\s]|$)')
-_GCR_REPO = re.compile(r"gcr\.io/(?:\$\{\{[^}]*\}\}|[^\s:/'\"])+?/([A-Za-z0-9_-]+)")
+# The two project-segment alternatives are disjoint (a `${{` opener can only be
+# consumed by the expression branch), so the match cannot backtrack exponentially.
+_GCR_REPO = re.compile(r"gcr\.io/(?:\$\{\{[^}]*\}\}|\$(?!\{\{)|[^\s:/'\"$])+?/([A-Za-z0-9_-]+)")
+_GCR_HOST = re.compile(r'(?<![\w.-])gcr\.io/')
 _RUN_DEPLOY = re.compile(r'gcloud\s+run\s+(?:deploy|jobs\s+(?:deploy|update))\s+["\']?([^\s"\']+)')
 _HELM_MUTATION = re.compile(r'\bhelm\s+(?:upgrade|rollback)\b')
 _RUN_SERVICES_UPDATE = re.compile(r'gcloud\s+run\s+services\s+update\s')
@@ -612,7 +615,7 @@ def _step_shipments(
     for match in _ENV_ASSIGNMENT.finditer(resolved):
         name, value = match.group(1), match.group(2).strip('"\'')
         names_in_value = _names_in_text(value, known)
-        if names_in_value or 'gcr.io/' in value:
+        if names_in_value or _GCR_HOST.search(value):
             excluded_only = names_in_value and names_in_value <= set(NON_FIRESTORE_IMAGE_EXCLUSIONS)
             job_state['var_images'][name] = (frozenset(names_in_value), bool(excluded_only))
             line_end = resolved.find('\n', match.end())
