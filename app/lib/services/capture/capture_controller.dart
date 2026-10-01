@@ -1586,22 +1586,17 @@ class CaptureController extends ChangeNotifier
       _deviceHasButtonTaps = false;
       return;
     }
-    final features = await connection.getFeatures();
-    var supportsTaps = (features & OmiFeatures.buttonTaps) != 0;
-    StreamSubscription? tapsSub;
-    if (supportsTaps) {
-      tapsSub = await connection.getBleButtonTapsListener(
-        onTapsReceived: (value) => _onButtonTaps(deviceId, value),
-      );
-    } else {
-      // DevKit has no features GATT: probe the taps characteristic.
-      tapsSub = await connection.getBleButtonTapsListener(
-        onTapsReceived: (value) => _onButtonTaps(deviceId, value),
-      );
-      supportsTaps = tapsSub != null;
-    }
+    // CV1: feature bit 9. DevKit: no features GATT — GATT presence of 23ba7926.
+    final supportsTaps = await connection.supportsButtonTaps();
     _deviceHasButtonTaps = supportsTaps;
     if (!supportsTaps) return;
+    final tapsSub = await connection.getBleButtonTapsListener(
+      onTapsReceived: (value) => _onButtonTaps(deviceId, value),
+    );
+    if (tapsSub == null) {
+      _deviceHasButtonTaps = false;
+      return;
+    }
     _bleButtonTapsStream = lifetime.takeSubscription(_bleButtonTapsStream, tapsSub);
   }
 
@@ -1770,37 +1765,19 @@ class CaptureController extends ChangeNotifier
     }
 
 
-    // Single tap (buttonState == 1) - toggle voice question mode
-    // Tap once to start, tap again to end
+    // Single tap (buttonState == 1) — remappable; default ask-question toggle.
     if (buttonState == 1) {
       debugPrint("Single tap detected");
-      if (_voiceCommandSession == null) {
-        final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
-        if (autoSubmittedAt != null && _now().difference(autoSubmittedAt) <= _voiceCommandAutoSubmitGrace) {
-          _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.autoEndGrace);
-          return;
-        }
-        // Start voice question session (new toggle mode)
-        debugPrint("Starting voice question session (toggle mode)");
-        // Cut off any in-flight voice playback from a prior reply so the
-        // new recording starts clean.
-        if (OmiVoicePlaybackService.instance.isSpeaking) {
-          OmiVoicePlaybackService.instance.interrupt(
-            source: VoiceReplyPlaybackInterruptSource.newVoiceQuery,
-          );
-        }
-        _lastVoiceCommandAutoSubmitAt = null;
-        _voiceCommandSession = _now();
-        _voiceCommandTrigger = _VoiceCommandTrigger.toggle;
-        _commandBytes = [];
-        _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
-
-        _startVoiceCommandTimeout(deviceId);
-        _playSpeakerHaptic(deviceId, 1);
-      } else {
-        // End on second tap
-        debugPrint("Ending voice question session (toggle mode)");
-        _endVoiceCommandSession(deviceId);
+      final onboardingAsk = deviceOnboardingProvider?.isOnboardingActive == true &&
+          deviceOnboardingProvider?.currentStep == 1;
+      final action = resolveSingleTapActionForSession(
+        _preferences.singleTapAction,
+        onboardingAskQuestionStep: onboardingAsk,
+      );
+      if (action == ButtonAction.askQuestion) {
+        _toggleVoiceQuestion(deviceId);
+      } else if (!_isProcessingButtonEvent) {
+        _runButtonAction(action, trackDoubleTap: false);
       }
       return;
     }

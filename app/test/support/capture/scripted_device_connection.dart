@@ -45,6 +45,12 @@ class ScriptedDeviceConnection implements DeviceConnection {
   Future<int> getFeatures() async => 0;
 
   @override
+  Future<bool> supportsButtonTaps() async => false;
+
+  @override
+  Future<bool> hasButtonTapsCharacteristic() async => false;
+
+  @override
   Future<bool> hasPhotoStreamingCharacteristic() async => false;
 
   @override

@@ -184,6 +184,10 @@ class NativeBleTransport extends DeviceTransport {
     }
   }
 
+  @override
+  bool hasCharacteristic(String serviceUuid, String characteristicUuid) =>
+      _hasCharacteristic(serviceUuid, characteristicUuid);
+
   bool _hasCharacteristic(String serviceUuid, String characteristicUuid) {
     final sUuid = serviceUuid.toLowerCase();
     final cUuid = characteristicUuid.toLowerCase();

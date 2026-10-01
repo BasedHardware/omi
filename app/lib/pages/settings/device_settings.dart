@@ -113,7 +113,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final features = await connection.getFeatures();
     final hasDimming = (features & OmiFeatures.ledDimming) != 0;
     final hasMicGain = (features & OmiFeatures.micGain) != 0;
-    final hasButtonTaps = (features & OmiFeatures.buttonTaps) != 0;
+    // Match CaptureController: feature bit on CV1, GATT probe on DevKit.
+    final hasButtonTaps = await connection.supportsButtonTaps();
     if (!mounted) return;
     setState(() {
       _hasDimmingFeature = hasDimming;

@@ -17,6 +17,14 @@ abstract class DeviceTransport {
 
   Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid);
 
+  /// Whether [characteristicUuid] was discovered under [serviceUuid].
+  ///
+  /// Default false for non-BLE transports. Native BLE overrides this from the
+  /// discovered GATT table — callers must not infer presence from a non-null
+  /// [getCharacteristicStream] subscription (that API creates a controller even
+  /// when the characteristic is missing).
+  bool hasCharacteristic(String serviceUuid, String characteristicUuid) => false;
+
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid);
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data);
 

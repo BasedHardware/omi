@@ -318,6 +318,23 @@ abstract class DeviceConnection {
     return null;
   }
 
+  /// True when the connected device exposes progressive button taps.
+  ///
+  /// CV1 advertises feature bit 9 (`OmiFeatures.buttonTaps`). DevKit has no
+  /// features GATT, so support is detected from the `23ba7926` characteristic.
+  Future<bool> supportsButtonTaps() async {
+    if (!await isConnected()) return false;
+    final features = await getFeatures();
+    if ((features & OmiFeatures.buttonTaps) != 0) return true;
+    return hasButtonTapsCharacteristic();
+  }
+
+  /// GATT presence of progressive taps (`23ba7926`), independent of features bits.
+  Future<bool> hasButtonTapsCharacteristic() async {
+    if (!await isConnected()) return false;
+    return transport.hasCharacteristic(buttonServiceUuid, buttonTapsCharacteristicUuid);
+  }
+
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
