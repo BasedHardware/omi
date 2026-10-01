@@ -239,6 +239,19 @@ final class SiriIntentServiceTests: XCTestCase {
     XCTAssertEqual(SiriFailure.unsupported.message(for: "ask"), "What would you like to ask Omi?")
   }
 
+  /// Ask runs under the weaker companion-device `.requiresAuthentication` policy,
+  /// so a remember phrase must never persist a memory from Ask; it is redirected
+  /// to the strict local-device-authenticated Remember shortcut instead.
+  func testAskOmiRememberPhrasesRedirectInsteadOfSaving() {
+    XCTAssertNotNil(AskOmiIntent.rememberRedirectDialog(for: "Remember my passport is in the drawer"))
+    XCTAssertNotNil(AskOmiIntent.rememberRedirectDialog(for: "to remember the gate code"))
+    XCTAssertNotNil(AskOmiIntent.rememberRedirectDialog(for: "TO REMEMBER the wifi password"))
+    XCTAssertNil(AskOmiIntent.rememberRedirectDialog(for: "What did I forget to remember today?"))
+    XCTAssertNil(AskOmiIntent.rememberRedirectDialog(for: "remembering things is hard"))
+    XCTAssertNil(AskOmiIntent.rememberRedirectDialog(for: "Do you remember our last chat?"))
+    XCTAssertNil(AskOmiIntent.rememberRedirectDialog(for: ""))
+  }
+
   func testBackendFailuresHaveTypedSpokenOutcomes() {
     let cases: [(Error, SiriFailure, String)] = [
       (APIError.unauthorized, .auth, "Open Omi and sign in first."),

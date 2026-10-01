@@ -137,18 +137,28 @@ struct AskOmiIntent: AppIntent {
     return openChat
   }
 
+  /// Remember saves require local-device authentication (contracts/siri). Ask
+  /// runs under the weaker companion-device `.requiresAuthentication` policy,
+  /// so a remember phrase is redirected to the strict Remember shortcut
+  /// instead of persisting a private memory under the weaker policy. No save
+  /// is attempted here, so no success is claimed.
+  static func rememberRedirectDialog(for question: String) -> String? {
+    let lower = question.lowercased()
+    guard lower.hasPrefix("remember ") || lower.hasPrefix("to remember ") else { return nil }
+    return "To save that, say 'Remember something in Omi' instead."
+  }
+
   @MainActor
   func perform() async throws -> IntentResultContainer<Never, Never, Never, IntentDialog> {
     let value = SiriIntentService.normalizedQuestion(question)
     let ownerID = RuntimeOwnerIdentity.captureAuthorizationSnapshot()?.ownerID
     let openChat = OpenOmiChatIntent()
     openChat.ownerID = ownerID
-    if value.lowercased().hasPrefix("remember ") || value.lowercased().hasPrefix("to remember ") {
-      let prefix = value.lowercased().hasPrefix("to remember ") ? "to remember " : "remember "
-      _ = try await SiriIntentTelemetry.perform("ask_omi") {
-        try await SiriIntentService.remember(String(value.dropFirst(prefix.count)))
-      }
-      return .result(dialog: "Saved to Omi")
+    if let redirect = Self.rememberRedirectDialog(for: value) {
+      // Record the redirect as a cancelled ask (no write, no answer), matching
+      // the iOS outcome for the same phrase.
+      _ = try? await SiriIntentTelemetry.perform("ask_omi") { throw SiriFailure.cancelled }
+      return .result(dialog: IntentDialog("\(redirect)"))
     }
     let result = try await SiriIntentTelemetry.perform("ask_omi") {
       try await SiriIntentService.ask(value)

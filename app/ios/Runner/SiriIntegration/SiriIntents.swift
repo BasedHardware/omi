@@ -246,25 +246,15 @@ struct AskOmiIntent: AppIntent {
         guard !value.isEmpty else {
             return (.result(dialog: "What would you like to ask Omi?"), "cancelled")
         }
-        let lower = value.lowercased()
-        let memoryPrefix = lower.hasPrefix("to remember ") ? "to remember " :
-            (lower.hasPrefix("remember ") ? "remember " : "")
+        if let redirect = Self.rememberRedirectDialog(for: value) {
+            return (.result(dialog: IntentDialog(redirect)), "cancelled")
+        }
         var didAttemptChatPost = false
         do {
             guard let owner = SiriSession.shared.currentConfig() else { throw SiriSession.Failure.auth }
             try SiriSession.shared.validateOwner(owner)
             openChat.ownerUID = owner.uid
             openChat.ownerGeneration = String(owner.generation ?? 0)
-            // Only the exact imperative is delegated to Remember; other questions
-            // containing "remember" remain chat questions.
-            if !memoryPrefix.isEmpty {
-                let memory = cleanedMemory(String(value.dropFirst(memoryPrefix.count)))
-                guard !memory.isEmpty else {
-                    return (.result(dialog: "What should Omi remember?"), "cancelled")
-                }
-                try await saveSiriMemory(memory, owner: owner)
-                return (.result(dialog: "Saved to Omi"), "ok")
-            }
             didAttemptChatPost = true
             let answer = try await OmiNativeAPI().ask(question: value, owner: owner)
             // Short answers stay spoken-only; a truncated one must say where the
@@ -273,24 +263,28 @@ struct AskOmiIntent: AppIntent {
         } catch SiriSession.Failure.auth {
             return (await Self.offerChat(openChat, dialog: "Open Omi and sign in first."), "auth")
         } catch SiriSession.Failure.network {
-            if !memoryPrefix.isEmpty {
-                return (await Self.offerChat(openChat, dialog: "I couldn't reach Omi, so nothing was saved."),
-                        "network")
-            }
             return (await Self.offerChat(Self.fallbackOpenChat(openChat, question: value,
                                                                didAttemptChatPost: didAttemptChatPost),
                                         dialog: "Omi couldn't confirm the answer. Open Omi chat to check before trying again."),
                     "network")
         } catch {
-            if !memoryPrefix.isEmpty {
-                return (await Self.offerChat(openChat, dialog: "Omi couldn't save that right now."),
-                        SiriTelemetry.outcome(error))
-            }
             return (await Self.offerChat(Self.fallbackOpenChat(openChat, question: value,
                                                                didAttemptChatPost: didAttemptChatPost),
                                         dialog: "Omi couldn't confirm the answer. Open Omi chat to check before trying again."),
                     SiriTelemetry.outcome(error))
         }
+    }
+
+    /// Remember saves require local-device authentication (contracts/siri).
+    /// Ask runs under the weaker companion-device `.requiresAuthentication`
+    /// policy — an unlocked Watch can invoke it while the phone stays locked —
+    /// so a remember phrase is redirected to the strict Remember shortcut
+    /// instead of persisting a private memory under the weaker policy. No save
+    /// is attempted here, so no success is claimed.
+    static func rememberRedirectDialog(for question: String) -> String? {
+        let lower = question.lowercased()
+        guard lower.hasPrefix("remember ") || lower.hasPrefix("to remember ") else { return nil }
+        return "To save that, say 'Remember something in Omi' instead."
     }
 
     /// The answer is also persisted to the owner's chat, so a truncated spoken
