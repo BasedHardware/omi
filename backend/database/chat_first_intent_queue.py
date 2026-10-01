@@ -26,8 +26,8 @@ def sort_ready_intents(
         intents,
         key=lambda intent: ready_sort_key(
             priority=priority_of(intent),
-            created_at=getattr(intent, "created_at", None),
-            item_id=getattr(intent, "intent_id", ""),
+            created_at=intent.created_at,
+            item_id=intent.intent_id,
             enable_priority=True,
         ),
     )
