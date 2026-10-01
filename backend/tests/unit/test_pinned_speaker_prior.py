@@ -227,3 +227,40 @@ def test_sync_candidates_survive_both_parent_serializations():
     for mode in ('validation', 'serialization'):
         schema = TranscriptSegment.model_json_schema(mode=mode)
         assert 'text' in schema['properties'] and 'voice_candidates' not in schema['properties']
+
+
+def test_live_retracts_a_near_match_when_later_audio_no_longer_matches(monkeypatch):
+    matcher, emitted = _live(monkeypatch, pinned=True, enabled=True)
+    asyncio.run(matcher.match(3, _clip('s1')))
+    assert matcher._suggested_person[3] == 'p1'
+    matcher._voice_distances[3] = {'p1': T + 0.5}
+    matcher._offer_pinned_suggestion(3, decide(matcher._voice_distances[3]), {'p1'}, 's2', set())
+    assert 3 not in matcher._suggested_person
+    assert emitted[-1] == ((3, '', '', 's2'), {'retracted': True})
+    assert matcher.voice_candidates[3] == []
+    matcher._offer_pinned_suggestion(3, decide(matcher._voice_distances[3]), {'p1'}, 's3', set())
+    assert len(emitted) == 2
+
+
+def test_live_later_audio_retracts_the_emitted_near_match(monkeypatch):
+    matcher, emitted = _live(monkeypatch, pinned=True, enabled=True)
+    asyncio.run(matcher.match(3, _clip('s1')))
+    monkeypatch.setattr(
+        speakers_mod,
+        'extract_embedding_from_bytes',
+        lambda _audio, _name: np.array([[0.0, -1.0, 0.0]], dtype=np.float32),
+    )
+    asyncio.run(matcher.match(3, {'id': 's2', 'duration': 6.0, 'abs_start': 6.0, 'abs_end': 12.0}))
+    assert 3 not in matcher.speaker_to_person
+    assert 3 not in matcher._suggested_person
+    assert emitted[-1] == ((3, '', '', 's2'), {'retracted': True})
+
+
+def test_live_replaces_a_near_match_for_the_same_speaker(monkeypatch):
+    matcher, emitted = _live(monkeypatch, pinned=True, enabled=True)
+    asyncio.run(matcher.match(3, _clip('s1')))
+    matcher.person_embeddings['p2'] = {'name': 'Sam', 'pinned': True}
+    matcher._voice_distances[3] = {'p2': T + 0.02, 'p1': T + 0.5}
+    matcher._offer_pinned_suggestion(3, decide(matcher._voice_distances[3]), {'p1', 'p2'}, 's2', set())
+    assert matcher._suggested_person[3] == 'p2'
+    assert emitted[-1] == ((3, '', 'Sam', 's2'), {'suggested_person_id': 'p2'})
