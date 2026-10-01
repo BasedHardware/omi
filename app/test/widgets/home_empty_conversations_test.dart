@@ -11,7 +11,8 @@ import '../support/typed_conversation_screen.dart';
 
 void main() {
   for (final brightness in Brightness.values) {
-    testWidgets('Home keeps its empty icon, hint and layout after loading in $brightness', (tester) async {
+    testWidgets('Home keeps its empty icon, title and layout after loading in $brightness', (tester) async {
+      final semantics = tester.ensureSemantics();
       final previousPalette = OmiColors.active;
       OmiColors.active = OmiColors.forBrightness(brightness);
       addTearDown(() => OmiColors.active = previousPalette);
@@ -42,8 +43,12 @@ void main() {
       final hint = find.text(l10n.noConversationsHeroMessage);
       final icon = find.byIcon(Icons.forum_rounded);
       expect(title, findsOneWidget);
-      expect(hint, findsOneWidget);
+      expect(hint, findsNothing);
       expect(icon, findsOneWidget);
+      expect(find.text(l10n.tasksEmptyStateMessage), findsNothing);
+      expect(find.bySemanticsLabel(l10n.tasksEmptyStateMessage), findsNothing);
+      expect(find.bySemanticsLabel(l10n.noConversationsHeroMessage), findsNothing);
+      semantics.dispose();
       final initialTitleRect = tester.getRect(title);
 
       await provider.forceRefreshConversations();
@@ -51,11 +56,10 @@ void main() {
       expect(provider.apiViewState.phase, ApiViewPhase.empty);
       expect(find.byKey(const ValueKey('omi.conversations.empty')), findsOneWidget);
       expect(title, findsOneWidget);
-      expect(hint, findsOneWidget);
+      expect(hint, findsNothing);
       expect(icon, findsOneWidget);
       expect(tester.getRect(title), initialTitleRect);
       expect(tester.widget<Text>(title).style!.color, OmiColors.textPrimary);
-      expect(tester.widget<Text>(hint).style!.color, OmiColors.textSecondary);
       expect(IconTheme.of(tester.element(icon)).color, OmiColors.textTertiary);
 
       // A later outage must still show an error, and retry must restore the full hero.
@@ -70,7 +74,7 @@ void main() {
       await tester.pump();
       expect(provider.apiViewState.phase, ApiViewPhase.empty);
       expect(icon, findsOneWidget);
-      expect(hint, findsOneWidget);
+      expect(hint, findsNothing);
       expect(tester.getRect(title), initialTitleRect);
 
       await tester.pumpWidget(const SizedBox.shrink());

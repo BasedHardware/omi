@@ -517,7 +517,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           title: context.l10n.noTasksYet,
           titleLayoutReference: context.l10n.noConversationsYet,
           message: context.l10n.tasksEmptyStateMessage,
-          messageLayoutReference: context.l10n.noConversationsHeroMessage,
         ),
       ),
     );

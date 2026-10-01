@@ -65,7 +65,8 @@ class OmiEmptyState extends StatelessWidget {
   final String? message;
 
   /// Reserves space for another tab’s guidance to keep headings aligned when
-  /// the messages wrap differently. Only [message] is displayed or announced.
+  /// the messages wrap differently, including when this state has no message.
+  /// Only [message] is displayed or announced.
   final String? messageLayoutReference;
   final Widget? action;
 
@@ -161,7 +162,7 @@ class _StateLayout extends StatelessWidget {
                       ),
               ),
             ],
-            if (message != null) ...[
+            if (message != null || messageLayoutReference != null) ...[
               SizedBox(height: title != null ? OmiSpacing.xs : OmiSpacing.md),
               if (messageLayoutReference == null)
                 Text(message!, textAlign: TextAlign.center, style: messageStyle)
@@ -169,10 +170,10 @@ class _StateLayout extends StatelessWidget {
                 // IndexedStack sizes to either localized message but only paints
                 // and exposes semantics for the current tab's guidance.
                 IndexedStack(
-                  index: 0,
+                  index: message == null ? null : 0,
                   alignment: Alignment.topCenter,
                   children: [
-                    Text(message!, textAlign: TextAlign.center, style: messageStyle),
+                    if (message != null) Text(message!, textAlign: TextAlign.center, style: messageStyle),
                     Text(messageLayoutReference!, textAlign: TextAlign.center, style: messageStyle),
                   ],
                 ),

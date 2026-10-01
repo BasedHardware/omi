@@ -107,7 +107,9 @@ void main() {
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(tester.getRect(find.text(l10n.noConversationsHeroMessage)).bottom, lessThan(844));
+      expect(find.text(l10n.noConversationsHeroMessage), findsNothing);
+      expect(find.text(l10n.tasksEmptyStateMessage), findsNothing);
+      expect(tester.getRect(find.text(l10n.noConversationsYet)).bottom, lessThan(844));
       tester.platformDispatcher.clearTextScaleFactorTestValue();
 
       await tester.pumpWidget(const SizedBox.shrink());

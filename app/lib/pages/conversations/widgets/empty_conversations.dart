@@ -17,7 +17,6 @@ class NoConversationsHero extends StatelessWidget {
         icon: Icons.forum_rounded,
         title: context.l10n.noConversationsYet,
         titleLayoutReference: context.l10n.noTasksYet,
-        message: context.l10n.noConversationsHeroMessage,
         messageLayoutReference: context.l10n.tasksEmptyStateMessage,
       ),
     );
