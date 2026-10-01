@@ -484,7 +484,7 @@ overlay:
       backend-sync:
         # Attached runtime identity (credential hygiene D4). The deploy pins it and removes
         # SERVICE_ACCOUNT_JSON/GOOGLE_APPLICATION_CREDENTIALS; every secret and bucket this
-        # service reads needs its own grant to this account. `backend` and `backend-integration` wait for their own canaries.
+        # service reads needs its own grant to this account. `backend` waits for its own cut-over.
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -716,6 +716,7 @@ overlay:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-integration:
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH

@@ -13,7 +13,7 @@ BACKEND = Path(__file__).resolve().parents[2]
 REPO = BACKEND.parent
 _RENDERER = runpy.run_path(str(BACKEND / 'scripts/render_backend_runtime_env.py'), run_name='identity_test_renderer')
 RUNTIME_SA = 'backend-runtime@based-hardware.iam.gserviceaccount.com'
-PINNED_PROD_SERVICES = ('backend-sync', 'backend-sync-backfill')
+PINNED_PROD_SERVICES = ('backend-sync', 'backend-sync-backfill', 'backend-integration')
 
 
 def test_identity_flags_pin_the_account_and_drop_key_refs_in_the_same_deploy():
@@ -102,7 +102,6 @@ def test_repo_prod_manifest_pins_only_the_cut_over_services():
     # Each further service is pinned only after its own canary; `backend` moves with listen/pusher
     # in its own reviewed cut-over (credential hygiene D4 phase 2).
     assert 'service_account' not in services['backend']
-    assert 'service_account' not in services['backend-integration']
 
 
 def test_backend_stack_deploys_pass_each_services_identity_flags():
