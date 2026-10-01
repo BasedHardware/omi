@@ -238,6 +238,9 @@ class TranscriptProcessor:
         return data
 
     def enqueue(self, segments: List[Dict[str, Any]]) -> None:
+        for raw in segments:
+            if not raw.get('id'):
+                raw['id'] = str(uuid.uuid4())
         if not getattr(self.host.state, 'capture_timeline_v2', False):
             self.segment_buffer.extend(segments)
             return
@@ -254,9 +257,6 @@ class TranscriptProcessor:
             OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='persist_fallback_exhausted').inc()
             logger.error('Audio-timeline transcript capacity exhausted; refusing provider batch')
             raise RuntimeError('Audio-timeline transcript persistence capacity exhausted')
-        for raw in segments:
-            if not raw.get('id'):
-                raw['id'] = str(uuid.uuid4())
         for raw in segments[:free_v2]:
             self.segment_buffer.append(raw)
         for raw in segments[free_v2:]:

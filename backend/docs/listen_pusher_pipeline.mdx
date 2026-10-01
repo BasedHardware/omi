@@ -1790,6 +1790,18 @@ attributable: `store_owner_voice_sample` logs one
 `owner sample outcome=… conversation=<id>` line per outcome next to the
 existing counter.
 
+Provider segment IDs are normalized once at `TranscriptProcessor.enqueue`
+admission: a raw segment arriving with a missing or empty `id` is minted a
+uuid before the batch splits across the segment buffer, the capture-window
+map, and the raw speaker-detection queue — shared raw identity is
+established before the typed/raw fanout, so event construction can never
+see a null `segment_id` (the live merge may still relabel a merged turn
+with the absorbing segment's id, as described above). Matcher failures stay
+privacy-safe: a `ValidationError` raised while building the wire event logs
+only the model title plus the first structural error's `loc` and `type`
+(`validation_model`/`validation_loc`/`validation_type`) — never input
+values, field contents, or transcript text.
+
 ## 6. Event Wire Protocol
 
 ### Server → Client (JSON over WS text frames)
