@@ -569,6 +569,23 @@ class RunnerBehaviorTests(unittest.TestCase):
 
             self.assertTrue(Path(resolved).samefile(bash))
 
+    def test_windows_bash_resolution_from_git_hook_exec_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            git = git_root / "mingw64/libexec/git-core/git.exe"
+            git.parent.mkdir(parents=True)
+            git.touch()
+            bash = git_root / "bin/bash.exe"
+            bash.parent.mkdir()
+            bash.touch()
+
+            resolved = bash_executable(
+                platform_name="nt",
+                which=lambda name: str(git) if name == "git" else None,
+            )
+
+            self.assertTrue(Path(resolved).samefile(bash))
+
     def test_windows_bash_path_is_converted_back_to_native(self) -> None:
         commands: list[list[str]] = []
 
