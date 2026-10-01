@@ -3973,9 +3973,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Pieejama jauna versija';
-
-  @override
   String get no => 'Nē';
 
   @override
@@ -5060,8 +5057,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros. Jūsu audio ieraksti un transkripcijas tiek apstrādātas ar trešo pušu AI pakalpojumiem (ieskaitot Deepgram transkripcijai un OpenAI analīzei), lai sniegtu jums AI vadītus ieskatus un iespējotu visas lietotnes funkcijas.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Uzdevumi no jūsu sarunām parādīsies šeit.\nPieskarieties +, lai izveidotu manuāli.';
+  String get tasksEmptyStateMessage => 'Sāciet sarunu, lai izveidotu uzdevumu.';
 
   @override
   String get clearChatAction => 'Notīrīt tērzēšanu';
@@ -12137,6 +12133,40 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Runātāji: $count',
+      one: '1 runātājs',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Ieslēdziet Omi sadaļā Saīsnes → Siri. Sakiet „$askPhrase“ vai „$questionPhrase“ un pēc tam uzdodiet savu jautājumu.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Varat arī teikt „$searchPhrase for what I did today“.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Pieejams atjauninājums';
+
+  @override
+  String get updateAvailableMessage => 'Jaunā Omi versija ir gatava – ar labojumiem un uzlabojumiem.';
+
+  @override
+  String get updateRequiredTitle => 'Nepieciešams atjauninājums';
+
+  @override
+  String get updateRequiredMessage =>
+      'Šī Omi versija vairs netiek atbalstīta. Atjauniniet, lai turpinātu ierakstīt un sinhronizēt.';
 
   @override
   String get singleTap => 'Viens klikšķis';

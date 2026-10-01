@@ -566,3 +566,29 @@ def test_correction_never_recreates_evidence_for_a_deleted_person(world):
     db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     assert ('users', 'u', 'people', 'old') not in store.rows
     assert store.rows[('users', 'u', 'people', 'new')]['label_evidence']['manual_labels'] == 1
+
+
+@pytest.mark.parametrize(
+    'source,automatic,counter',
+    [
+        ('card', False, 'card_picks'),
+        ('card', True, 'card_confirms'),
+        ('manual', True, 'auto_confirmed'),
+    ],
+)
+def test_reviewed_evidence_is_retracted_for_every_positive_source(world, source, automatic, counter):
+    store, path, _ = world
+    if automatic:
+        store.rows[path]['transcript_segments'][1]['speaker_match_source'] = 'sync_embedding'
+        db.assign_conversation_speaker('u', 'c', person_id='old', segment_ids=['s1'], evidence_source=source)
+        person_id = 'old'
+        other = 'new'
+    else:
+        db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'], evidence_source=source)
+        person_id = 'new'
+        other = 'old'
+    evidence_path = ('users', 'u', 'people', person_id)
+    assert store.rows[evidence_path]['label_evidence'][counter] == 1
+    db.assign_conversation_speaker('u', 'c', person_id=other, segment_ids=['s1'])
+    assert store.rows[evidence_path]['label_evidence'][counter] == 0
+    assert read(world)['manual_speaker_assignments']['label_evidence'][person_id]['kinds'] == []

@@ -48,6 +48,10 @@ class TranscriptWidget extends StatefulWidget {
   final List<String> leadingItemIds;
   final TranscriptSegmentBuilder? segmentBuilder;
 
+  /// When the conversation started. A saved conversation's lines show their clock time
+  /// ("12:40 PM") from it; without it they show the offset into the recording.
+  final DateTime? startedAt;
+
   const TranscriptWidget({
     super.key,
     required this.segments,
@@ -74,6 +78,7 @@ class TranscriptWidget extends StatefulWidget {
     this.leadingItems = const [],
     this.leadingItemIds = const [],
     this.segmentBuilder,
+    this.startedAt,
   }) : assert(leadingItems.length == leadingItemIds.length);
 
   @override
@@ -213,8 +218,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     // Notify parent about scroll controller
     widget.onScrollControllerReady?.call(_scrollController);
 
-    if ((widget.segments.isNotEmpty || widget.leadingItems.isNotEmpty) &&
-        (widget.isConversationDetail || widget.followLatest)) {
+    // A live transcript opens at its latest line; a saved conversation reads from the top.
+    if ((widget.segments.isNotEmpty || widget.leadingItems.isNotEmpty) && widget.followLatest) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (widget.followLatest && _userHasScrolled) {
@@ -261,7 +266,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         widget.segments.length != oldWidget.segments.length ||
         widget.leadingItems.length != oldWidget.leadingItems.length ||
         widget.layoutIdentity != oldWidget.layoutIdentity;
-    final shouldFollow = !_userHasScrolled;
+    final shouldFollow = !_userHasScrolled && !widget.isConversationDetail;
 
     if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
     _syncSegmentKeys();
@@ -956,6 +961,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   Widget _buildSegmentItem(int segmentIdx, List<Person> people, SpeakerNames names) {
+    if (widget.isConversationDetail) return _buildDetailLine(segmentIdx, people, names);
     final data = widget.segments[segmentIdx];
     final Person? person = personById(people, data.personId);
     final isTagging = widget.taggingSegmentIds.contains(data.id);
@@ -1131,11 +1137,140 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     );
   }
 
-  Widget _buildSegmentText(TranscriptSegment data, int segmentIdx, bool isUser) {
+  /// One line of a saved conversation (Omi v8 `.tt`): who spoke and when, then what they said, with
+  /// no bubble or avatar. The name and time are 13/600 in the tertiary ink (the owner's in the
+  /// primary ink, a voice nobody has named underlined with dots); the words are 17 pt at a 1.5 line
+  /// in 80 % ink (the owner's in the primary ink). Tapping the name names the speaker; tapping the
+  /// line plays the recording from there; double-tapping the words edits them.
+  Widget _buildDetailLine(int segmentIdx, List<Person> people, SpeakerNames names) {
+    final data = widget.segments[segmentIdx];
+    final Person? person = personById(people, data.personId);
+    final isTagging = widget.taggingSegmentIds.contains(data.id);
+    final isOmi = data.speakerId == omiSpeakerId && !data.isUser;
+    final unnamed = !data.isUser && !isOmi && person == null;
+    final labelColor = data.isUser ? OmiColors.textPrimary : OmiColors.textTertiary;
+    final label = OmiType.footnote.copyWith(color: labelColor, fontWeight: FontWeight.w600, height: 1.3);
+    final seek = widget.onSegmentTap;
+    void play() {
+      HapticFeedback.lightImpact();
+      seek!(data);
+    }
+
+    final startedAt = widget.startedAt;
+    final time = !widget.canDisplaySeconds
+        ? null
+        : startedAt == null
+            ? OmiDuration.offset(data.start)
+            : OmiDateFormat.of(context).time(startedAt.add(Duration(milliseconds: (data.start * 1000).round())));
+
+    final who = Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Flexible(
+          child: _speakerTarget(
+            data,
+            Text(
+              names.forSegment(data, person: person),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: label.copyWith(
+                decoration: unnamed ? TextDecoration.underline : null,
+                decorationStyle: TextDecorationStyle.dotted,
+                decorationColor: labelColor,
+              ),
+            ),
+          ),
+        ),
+        if (time != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            time,
+            style: label.copyWith(fontWeight: FontWeight.w400, fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+        ],
+        if (isTagging) ...[
+          const SizedBox(width: 6),
+          const OmiSpinner(size: OmiSpinnerSize.small),
+        ],
+      ],
+    );
+
+    // The tap lives inside the selection area too: its own tap recognizer would otherwise win a tap
+    // on the words over the line's. A long press still selects.
+    final words = SelectionArea(
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: seek == null ? null : play,
+        onDoubleTap: widget.onEditSegmentText == null
+            ? null
+            : () {
+                HapticFeedback.mediumImpact();
+                widget.onEditSegmentText!(segmentIdx);
+              },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildSegmentText(
+              data,
+              segmentIdx,
+              data.isUser,
+              style: OmiType.body.copyWith(
+                color: data.isUser ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.8),
+                letterSpacing: 0.0,
+                height: 1.5,
+              ),
+            ),
+            if (data.translations.isNotEmpty) ...[
+              for (final translation in data.translations)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _getDecodedText(translation.text),
+                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontStyle: FontStyle.italic),
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+              const SizedBox(height: 4),
+              _buildTranslationNotice(),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    // 8 above and below, plus the list's 4 between segments: the design's 20 between lines.
+    Widget line = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [who, const SizedBox(height: 3), words],
+      ),
+    );
+    if (seek != null) {
+      line = Semantics(
+        hint: context.l10n.playFromHere,
+        child: GestureDetector(
+          key: ValueKey('transcript_seek_${data.id}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: play,
+          child: line,
+        ),
+      );
+    }
+    return Container(
+      key: _segmentKeys[data.id],
+      padding: EdgeInsets.symmetric(horizontal: widget.horizontalMargin ? 16 : 0),
+      child: line,
+    );
+  }
+
+  Widget _buildSegmentText(TranscriptSegment data, int segmentIdx, bool isUser, {TextStyle? style}) {
     final richText = RichText(
       textAlign: TextAlign.left,
       text: TextSpan(
-        style: OmiType.subhead.copyWith(letterSpacing: 0.0, height: 1.4),
+        style: style ?? OmiType.subhead.copyWith(letterSpacing: 0.0, height: 1.4),
         children: widget.searchQuery.isNotEmpty
             ? _highlightSearchMatchesWithKeys(_getDecodedText(data.text), widget.searchQuery, segmentIdx)
             : [TextSpan(text: _getDecodedText(data.text))],

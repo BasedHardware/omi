@@ -925,7 +925,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         messageProvider.sendInitialAppMessage(selectedApp);
       }
       PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
-      if (mounted) await openChatSheet(context, const ChatPage(isPivotBottom: false, startFresh: false));
+      if (mounted) await openChatSheet(context, const ChatPage(isPivotBottom: false));
     } finally {
       if (mounted) setState(() => chatButtonLoading = false);
     }

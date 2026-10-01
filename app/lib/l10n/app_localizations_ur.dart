@@ -3973,9 +3973,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'نیا ورژن دستیاب ہے';
-
-  @override
   String get no => 'نہیں';
 
   @override
@@ -5058,8 +5055,7 @@ class AppLocalizationsUr extends AppLocalizations {
       'جاری رکھ کر، آپ کی بات چیت، ریکارڈنگز اور ذاتی معلومات ہمارے سرورز پر محفوظ طریقے سے ذخیرہ کی جائیں گی۔ آپ کی آڈیو ریکارڈنگز اور ٹرانسکرپٹس تھرڈ پارٹی AI سروسز کے ذریعے پراسیس کی جاتی ہیں (بشمول ٹرانسکرپشن کے لیے Deepgram اور تجزیے کے لیے OpenAI) تاکہ آپ کو AI سے چلنے والی بصیرتیں فراہم کی جا سکیں اور ایپ کی تمام خصوصیات کو فعال کیا جا سکے۔';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'آپ کی گفتگو سے کام کی چیزیں یہاں ظاہر ہوں گی۔\n+ ٹیپ کریں دستی طور پر ایک بنانے کے لیے۔';
+  String get tasksEmptyStateMessage => 'ٹاسک بنانے کے لیے گفتگو شروع کریں۔';
 
   @override
   String get clearChatAction => 'بات کو صاف کریں';
@@ -12122,6 +12118,40 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مقررین',
+      one: '1 مقرر',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'شارٹ کٹس ← Siri میں Omi آن کریں۔ “$askPhrase” یا “$questionPhrase” کہیں، پھر اپنا سوال پوچھیں۔';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' آپ “$searchPhrase for what I did today” بھی کہہ سکتے ہیں۔';
+  }
+
+  @override
+  String get updateAvailableTitle => 'اپ ڈیٹ دستیاب ہے';
+
+  @override
+  String get updateAvailableMessage => 'Omi کا نیا ورژن تیار ہے، اصلاحات اور بہتریوں کے ساتھ۔';
+
+  @override
+  String get updateRequiredTitle => 'اپ ڈیٹ ضروری ہے';
+
+  @override
+  String get updateRequiredMessage =>
+      'Omi کا یہ ورژن اب تعاون یافتہ نہیں ہے۔ ریکارڈنگ اور سنک جاری رکھنے کے لیے اپ ڈیٹ کریں۔';
 
   @override
   String get singleTap => 'ایک بار تھپتھپائیں';

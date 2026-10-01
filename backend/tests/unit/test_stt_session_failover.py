@@ -135,6 +135,54 @@ async def test_a_dead_primary_moves_the_session_to_the_next_provider(monkeypatch
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('primary', [STTService.modulate, STTService.soniox])
+async def test_control_late_rejection_continues_without_a_window_replay_ring(monkeypatch, caplog, primary):
+    rejected_service = STTService.soniox if primary == STTService.modulate else STTService.modulate
+    rejected = FakeSocket()
+    healthy = FakeSocket()
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=rejected)
+    receiver.host.stt_service = primary
+    receiver.host.stt_model = 'soniox' if primary == STTService.soniox else 'modulate-velma-2'
+    receiver._create_stt_socket.side_effect = [rejected, healthy]
+    assert receiver._window_ring() is None
+    checked = []
+
+    async def serving(socket):
+        checked.append(socket)
+        if socket is rejected:
+            rejected._dead = True
+            rejected.typed_death_reason = 'connection_lost'
+            return False
+        return True
+
+    monkeypatch.setattr('routers.listen.receiver.fallback_socket_is_serving', serving)
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        side_effect=[(rejected_service, 'en', rejected_service.value), (STTService.deepgram, 'en', 'dg-nova-3')],
+    ) as select:
+        assert await receiver._failover_stt_socket()
+    assert checked == [rejected, healthy]
+    assert receiver._create_stt_socket.await_count == 2
+    assert select.call_count == 2
+    assert select.call_args_list[0].kwargs['exclude'] == frozenset({provider_for_service(primary)})
+    assert select.call_args_list[1].kwargs['exclude'] == frozenset(
+        {provider_for_service(primary), provider_for_service(rejected_service)}
+    )
+    assert rejected.finished
+    assert receiver.stt_socket is healthy
+    assert receiver.host.stt_service == STTService.deepgram
+    assert receiver.host.state.active
+    assert not receiver.host.state.stt_terminal_failure
+    assert receiver._window_ring() is None
+    assert healthy.sent == []
+    receiver.host.request.websocket.close.assert_not_called()
+    assert [r.message for r in caplog.records if 'component=stt_live_session' in r.message] == [
+        f'omi_fallback_event component=stt_live_session from={primary.value} to={rejected_service.value} '
+        'reason=other outcome=degraded subtype=connection_lost'
+    ]
+
+
+@pytest.mark.asyncio
 async def test_failover_reuses_the_initial_language_profile(monkeypatch):
     receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
     profile = LiveLanguageProfile.create('pt', multi=True, uid='stable-user')

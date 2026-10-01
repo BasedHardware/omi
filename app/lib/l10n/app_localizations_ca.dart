@@ -3990,9 +3990,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Nova versió disponible';
-
-  @override
   String get no => 'No';
 
   @override
@@ -5086,8 +5083,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'Continuant, les vostres converses, enregistraments i informació personal s\'emmagatzemaran de manera segura als nostres servidors. Els vostres enregistraments d\'àudio i transcripcions són processats per serveis d\'IA de tercers (incloent Deepgram per a la transcripció i OpenAI per a l\'anàlisi) per proporcionar-vos informació impulsada per IA i habilitar totes les funcions de l\'aplicació.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Les tasques de les teves converses apareixeran aquí.\nToca + per crear-ne una manualment.';
+  String get tasksEmptyStateMessage => 'Inicia una conversa per crear una tasca.';
 
   @override
   String get clearChatAction => 'Esborrar el xat';
@@ -12180,6 +12176,40 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count participants',
+      one: '1 participant',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Activa Omi a Dreceres → Siri. Digueu «$askPhrase» o «$questionPhrase» i feu la vostra pregunta.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' També podeu dir «$searchPhrase for what I did today».';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Actualització disponible';
+
+  @override
+  String get updateAvailableMessage => 'Hi ha una nova versió d\'Omi a punt, amb correccions i millores.';
+
+  @override
+  String get updateRequiredTitle => 'Cal actualitzar';
+
+  @override
+  String get updateRequiredMessage =>
+      'Aquesta versió d\'Omi ja no és compatible. Actualitza-la per continuar gravant i sincronitzant.';
 
   @override
   String get singleTap => 'Toc simple';

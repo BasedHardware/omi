@@ -207,6 +207,7 @@ getTranscriptWidget(
   List<Widget> leadingItems = const [],
   List<String> leadingItemIds = const [],
   TranscriptSegmentBuilder? segmentBuilder,
+  DateTime? startedAt,
 }) {
   if (conversationCreating) {
     return const Padding(padding: EdgeInsets.only(top: 80), child: Center(child: OmiSpinner()));
@@ -244,6 +245,7 @@ getTranscriptWidget(
       leadingItems: leadingItems,
       leadingItemIds: leadingItemIds,
       segmentBuilder: segmentBuilder,
+      startedAt: startedAt,
     );
   }
 

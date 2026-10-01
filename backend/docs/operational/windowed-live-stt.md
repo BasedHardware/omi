@@ -147,7 +147,11 @@ sentence so the next POST starts on a sentence boundary.
 The last sentence is held on a paced POST unless it ended ≥1.2 s ago with
 terminal punctuation (`.?!`). `finalize()` from the live VAD gate (300 ms hangover)
 is a **soft** pause POST: `[anchor, now]` with `force=False` as soon as pacing
-and the single in-flight slot allow. On that pause POST the last segment is
+and the single in-flight slot allow. Managed windows enable this pause and
+the normal idle paths once unresolved VAD-admitted speech reaches one second.
+Sub-second fragments retain the five-second capture-silence flush and the
+three-second cumulative answered-empty startup budget documented in the
+listen pipeline. On that pause POST the last segment is
 emitted only if it already ends with `.?!` — there is no 1.2 s gap, because
 the gate has already stripped silence from the timeline. Treating every
 `finalize()` as a forced cut re-anchors at a breath and the next POST starts
@@ -156,7 +160,9 @@ mid-sentence, which is the empty-clip failure mode.
 Forced flush (emit everything, re-anchor at `now`) happens only on close /
 `drain_and_close()`, ≥1.5 s of non-speech bytes after speech (ungated
 callers), or **wall-clock idle**: no audio accepted by `send()` for ≥2.0 s
-while unemitted speech remains after the anchor. Idle fires once per idle
+while ordinary unemitted speech remains after the anchor. An empty managed
+idle answer retains its anchor, PCM and replay; only the long-silence path
+settles empty-answered accounting. Idle fires once per idle
 period, but only after a forced job that reached `received`; a capped idle
 POST leaves `_idle_flushed` false so the pump takes another paced forced job
 for the remainder. Under the gate no audio arrives during silence, so the

@@ -137,7 +137,30 @@ Audio-timeline v2 retains at most the configured segment-buffer limit in each
 of its pending and unplaced fallback queues. If pending text fills the first
 queue, new text enters the legacy transaction as unplaced, retaining its ID
 and SEND conversation owner. A retry after an ambiguous commit filters IDs
-already stored inside that transaction. If both queues fill during a store
+already stored inside that transaction, plus the durable
+`live_transcript_replay_receipt`: segment IDs absorbed by an earlier committed
+merge no longer exist in the stored transcript, so the transaction also treats
+the receipt's commit buckets as seen before planning the fresh batch. The
+receipt is written in the same `transaction.update` as the merged transcript,
+holds the newest two absorbing commits of at most 128 absorbed IDs each (256
+total), is stored encrypted and zlib-compressed
+independent of the document's data-protection level, and never leaves the
+document — `prepare_conversation_for_read` drops it before any read response.
+A pure replay or a write that absorbs nothing leaves the receipt
+byte-identical; a replay that also carries fresh text keeps that text as its
+own segments without rotating the buckets. A batch larger than 128 unique
+incoming segments absorbs nothing so every supplied ID survives durably in the
+transcript instead of overflowing a bucket. While a same-owner retry sits in
+the unplaced fallback lane — whose wall-clock lag is unbounded — normal
+absorbing writes for that owner defer back to the pending queue so they cannot
+age a pending ambiguous ID out of the two-commit window; photos and other
+owners still drain. Two commits cover the serial per-owner drain: at most one
+ambiguous commit per owner can be unacknowledged behind the current batch, and
+the extra retained bucket is conservative margin. The normal retry budget is
+bounded (.5/1/2/4/8 s scheduled), while fallback lag is unbounded — the
+same-owner deferral above, not a TTL assumption, keeps the window valid. A
+document without the field has no historical absorbed-ID coverage; its first
+absorbing commit starts the receipt. If both queues fill during a store
 outage, admission raises an explicit capacity error and emits a metric; the
 callback cannot buffer transcript indefinitely.
 
@@ -482,8 +505,13 @@ are retracted through the sync bridge seam, retained audio is copied when the
 survivor keeps cloud audio, and the survivor is reprocessed once per merge
 (`ProcessingTrigger.SMART_MERGE`) under a revision lease. A committed merge whose
 cleanup or refresh fails fails the finalization attempt; every retry resumes the
-donor, whatever the mode. Late repair WALs that target a donor append to its
-survivor (`utils/sync/assignment.py`). The absorb advances the survivor's
+donor, whatever the mode, before the fanout claim (which fences the discarded
+donor and so closes the job), after checking its job epoch/generation/binding.
+Stale or terminal jobs never resume. A failed refresh releases its unique invocation
+lease; even same-job refreshes are exclusive. A processing receipt tied to both
+merge and sync revisions lets a failed vector write retry without rerunning the
+completed processing bundle. Deferred retraction keeps cleanup retryable. Late
+repair WALs that target a donor append to its survivor (`utils/sync/assignment.py`). The absorb advances the survivor's
 `sync_content_revision` to fence an older processor, and the refresh write
 requires the current lease owner and revision.
 
@@ -619,10 +647,68 @@ admissions at four live requests pending on any replica or 0.75 seconds of
 oldest live wait. A missing replica, old server revision without live fields,
 invalid response, or stale reading stands down all listen processes. The
 window POST explicitly marks its live lane; unmarked requests remain backfill.
-A partial replay retains its unaccepted tail and new audio
-for the next vendor leg while preserving capture sample offsets. Window POSTs mark their
+A partial replay retains **all un-emitted audio**, including bytes accepted by
+a replacement that dies before returning text, for the next vendor leg. The
+ring continues across downstream providers; emitted capture positions trim it.
+A failed replacement is excluded by its actual provider, including a rejection
+at the final health check, and the receiver tries the remaining eligible chain.
+Callbacks from an epoch retired for replay are fenced, including callbacks
+queued on the listen loop, so the failed epoch cannot duplicate replayed words.
+The retained window span bypasses downstream VAD gating and finalize signals
+during replay: speech admitted with window gain cannot be discarded by a
+different downstream VAD decision. Ordinary sends keep their existing gate.
+Each adopted replacement gets 15 seconds of new capture headroom while it
+processes a potentially full source backlog. The finite three-provider suffix
+bounds retention at 135 seconds; stalled un-emitted audio still fails over
+before eviction. This ceiling grows from the original 90-second ring only
+while a replacement is handling its replay obligation. As soon as transcript
+progress leaves at most 75 seconds of capture, the cap returns to 90 seconds
+without evicting pending audio, leaving the full 15-second headroom free.
+A later replacement can reserve headroom again.
+The ring survives until session teardown, but emitted text continuously settles
+its contents; healthy continuous speech normally retains only its current tail.
+135 seconds of mono PCM16 is 2.16 MB at 8 kHz, 4.32 MB at 16 kHz, or 12.96 MB
+at 48 kHz. With the ordinary 30ms flush floor, owned Python ring objects add
+about 0.565 MB per ring. At 60 sessions/pod and three post-failover sessions,
+the conservative 16 kHz planning allowance for these changes is about 16 MiB of added
+RSS (14 MiB of measured owned ring objects, plus shadow VAD and allocator margin). This is additional
+to the old post-adoption path, which cleared the ring; it is not merely the
+45-second increase. Provider queues and model memory are separate allocations.
+Replacements with ordinary VAD disabled use a shadow gate
+for replay accounting only: every byte is still forwarded, and it introduces
+no finalize signals. Settled silence retains the same recent 15-second tail
+instead of filling the ring on an otherwise healthy idle replacement.
+Downstream capture-progress bookkeeping activates when each window-origin
+replacement is created, even if the preceding epoch has fully settled the ring
+and its replay snapshot is empty. New speech still remains pending until that
+replacement emits text; silence trimming cannot discard it. A session that
+never fails over does not track that extra progress.
+`testing/bench_live_leg_send.py` compares real class implementations against a
+pinned pre-PR Git revision using identical synthetic PCM and deterministic
+dependencies; vendor I/O and ONNX inference are excluded. Its `--ring-memory`
+mode measures retained ring objects at the normal 30ms flush floor.
+Window POSTs mark their
 request so `parakeet_prerecorded_requests_total` excludes live canary errors
 while covering the batch path used by sync backfill.
+
+Previously `stt_live_session ... outcome=exhausted` meant an individual
+replacement hop died before producing text, even when selection continued.
+These failed hops now emit `degraded` when another candidate is being tried;
+`exhausted` is reserved for no remaining replacement path. Budget/auth deaths
+map to `quota`/`auth`; other typed deaths (and untyped closes) map to `other`,
+with a bounded log-only `subtype` (`modulate_serve_error`, `connection_lost`,
+etc., or `untyped`). The shared fallback metric dimensions remain unchanged.
+Only an actual failure to find a serving replacement terminates live STT,
+emitting `stt_failed` and closing the client WebSocket with 1011; recovery then
+requires a client reconnect. Configured and circuit-open candidate skipping
+continues to be enforced by the connector.
+Late upgrade rejection recovery also applies to control sessions that started
+on Soniox or Modulate: an eligible next provider is attempted before terminal
+closure. These sessions do not have the window replay ring, so preserving their
+un-emitted cross-provider tail remains outside this change. A follow-up would
+need a replay ring and emitted capture accounting for all managed sessions;
+60 filled 90-second PCM16 rings at 16 kHz require about 165 MiB of payload
+(about 186 MiB including normal ring objects), before allocator and VAD costs.
 Before the first window transcript, 12 seconds after the active speech episode
 starts or four consecutive empty speech-containing POSTs ends the Parakeet leg.
 A fully answered-empty episode with less than one admitted second and at least
@@ -824,6 +910,50 @@ degraded telemetry and a generic failure; shared configuration failures still
 stop the batch and cancellation propagates. Apple Reminders retains its single
 push. This is best-effort export, not a durable retry queue: the worker does not
 automatically repeat an uncertain provider create after a failed marker write.
+
+A reprocess (smart-merge survivor refresh, user reprocess, sync update, server
+recovery) replaces the conversation's tasks. A new item whose description has the
+same exact canonical form (width/typography normalized, ordinary text case-folded,
+sentence punctuation and whitespace collapsed; internal punctuation, numeric signs,
+numeric compatibility symbols and Unicode joiners retained; code-bearing descriptions
+retain case) as a prior
+row of the same conversation keeps that row's id and export
+marker (`utils/conversations/action_item_identity.py`), so its cloud task-app
+copy (Todoist, Asana, ClickUp, Google Tasks) is not created again; reworded or
+new items are delivered as before. Apple Reminders keeps the previous behavior:
+an Apple-linked or pending row (`apple_reminder_id` set, `export_platform` =
+`apple_reminders`, or `sync_requested` set) never lends its id, so a reprocess
+pushes a second reminder. Pending pushes use fresh ids too, so a delayed client
+callback cannot attach an old Apple copy to the replacement row. The old Omi
+local notification is cancelled; the old Apple Reminders copy is left alone,
+as on main.
+The Reminders sync is last-writer-wins on Omi `updated_at` vs the reminder's
+`lastModifiedDate`, and the replaced row has no edit timestamp, so a kept link
+would let the extraction overwrite a title or due date the user edited in
+Reminders; the duplicate keeps that edited copy. With prior rows, delivery is
+queued only after the task vectors are written. An unexpected planner error
+falls back to the kill-switch plan (`outcome=planner_error`).
+`ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` (unset = on, any unrecognized value =
+off) restores recreate-under-fresh-ids; `event=action_item_identity` logs the
+per-replace counts and the processing `trigger`. A measurement-only anchor shadow
+on the same line counts how many prior rows the exact rule left unmatched pair
+strictly one-to-one with an unmatched new item by shared stored
+`provenance[].transcript_segment_ids` for this conversation (`anchor_pairs`;
+other overlaps are `anchor_ambiguous`). It only logs: the prior-row read gains the
+`provenance` field and nothing written, deleted or delivered changes. A shadow
+failure logs `shadow=error`; `ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENABLED`
+(unset = on, any unrecognized value = off) turns it and the extra field off.
+The measurement rejects oversized inputs rather than sampling: at most 512 rows
+per side, 65,536 candidate comparisons, 64 provenance entries per row, 512 cited
+segment ids per row, 65,536 distinct segment references in total and 256 characters
+per segment id. Exceeding a limit logs `shadow=error shadow_error=budget_exceeded`
+with zero shadow counts; exclude those lines from coverage ratios. Graph degree
+counts use linear space. Malformed evidence containers are unanchored; iterators
+are never consumed. Error labels are a fixed set (`RuntimeError`, `TypeError`,
+`ValueError`, `AssertionError`, `KeyError`, `Exception`, `budget_exceeded`, `none`).
+The projection can increase bytes materially for large provenance arrays even
+though query/document counts do not change. Legacy missing-completion harvests
+retain the lean projection and may understate anchor coverage.
 
 With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant
@@ -1484,13 +1614,25 @@ fill the 90-second window ring. A fresh 40 ms blip after a full silence ring
 previously admitted 280 ms with pre-roll and failed on the next packet,
 before the 12-second first-text deadline (armed on speech send) was due.
 
-Managed window sessions flush a stranded fragment only after **5 seconds of
-trailing capture silence**. This exceeds ordinary 1.5–4 second pauses and
-leaves seven seconds of the startup budget for pacing and the POST. VAD
-end-of-speech, 1.5 seconds of admitted silence, and the legacy 2-second
-wall-idle timer do not flush a managed fragment. If speech resumes before
-selection, it stays in the same sentence-anchored context. Direct socket
-callers retain their explicit finalize, idle and close behavior.
+Managed window sessions retain the original VAD end-of-speech POST and
+1.5-second provider-silence / 2-second wall-idle paths for ordinary utterances
+with **at least one second of unresolved VAD-admitted speech**. This uses the
+existing startup short-episode boundary, excluding retained answered-empty
+context: a prior answered clip cannot make a new blip eligible. Pause POSTs
+keep sentence anchoring; an empty managed idle answer also keeps its anchor,
+PCM and exact replay so a mid-utterance decode can recover with more context.
+The first-text rescue remains 12 seconds from the episode's first speech;
+there is no new forced-POST timer or POST-relative deadline extension.
+
+Short fragments below that boundary bypass the ordinary pause/idle
+paths and wait for **5 seconds of trailing capture silence** before their
+stranded flush. This exceeds ordinary 1.5–4 second pauses and leaves seven
+seconds of the startup budget for pacing and the POST. If speech resumes
+before selection, it stays in the same sentence-anchored context. Direct
+socket callers retain their explicit finalize, idle and close behavior.
+An ordinary utterance that remains unresolved after those earlier POSTs can
+still use the existing long-silence accounting path; restoring cadence does
+not remove its answered-empty replay retention.
 
 A stranded clip shorter than 1.5 seconds receives zero padding for its POST;
 timestamp validation, embeddings and replay still use its original duration
@@ -1747,6 +1889,18 @@ attributable: `store_owner_voice_sample` logs one
 `owner sample outcome=… conversation=<id>` line per outcome next to the
 existing counter.
 
+Provider segment IDs are normalized once at `TranscriptProcessor.enqueue`
+admission: a raw segment arriving with a missing or empty `id` is minted a
+uuid before the batch splits across the segment buffer, the capture-window
+map, and the raw speaker-detection queue — shared raw identity is
+established before the typed/raw fanout, so event construction can never
+see a null `segment_id` (the live merge may still relabel a merged turn
+with the absorbing segment's id, as described above). Matcher failures stay
+privacy-safe: a `ValidationError` raised while building the wire event logs
+only the model title plus the first structural error's `loc` and `type`
+(`validation_model`/`validation_loc`/`validation_type`) — never input
+values, field contents, or transcript text.
+
 ## 6. Event Wire Protocol
 
 ### Server → Client (JSON over WS text frames)
@@ -1847,7 +2001,14 @@ explicit follow-ups. See `utils/sync/ARCHITECTURE.md` for recovery and indexing 
 Live capture passes fresh, unmerged STT segments to `update_conversation_segments(live_segments=...)`.
 The transaction reads the current transcript and manual receipt, then merges only
 its tail and the fresh batch, after applying the receipt to both so compared
-provenance is post-decision. A segment covered by a selected-ID decision blocks all
+provenance is post-decision. Every attempt also rebuilds the
+`live_transcript_replay_receipt` commit buckets from the document — never from
+caller state — so a retry after a lost acknowledgement cannot merge the same
+words twice; a present-but-malformed receipt fails the transaction closed
+without writing. Each absorbing commit appends its absorbed IDs as one bucket
+of at most 128, retaining only the newest two buckets, and the receipt is
+rewritten only when a merge absorbs new
+IDs. A segment covered by a selected-ID decision blocks all
 concatenation and partial sentence transfer. A speaker-wide default is a boundary:
 that speaker's segments only append to each other in chronological order (no sentence
 repair, no late arrivals), and never exchange words with another speaker. Clears,
@@ -1943,3 +2104,35 @@ source-fenced display materialization, and an explicit bounded detail-read
 request. Per the owner decision of 2026-09-29 these switches ship enabled
 (default on) with kill switches back to legacy behavior. Current clients send
 visibility edges but do not renew a lease or opt into detail translation.
+
+### Jev population measurement (EXP-004)
+
+Conversation processing assigns stable per-conversation keep-all selection and
+otherwise uses the existing per-user Jev relevance ramp (`relevance_arm`).
+The owner flip flag is universal when enabled (INV-MEM-5); owner *measurement*
+stays candidate-sampled. Existing live flags are dev-on, prod-off; dev pins
+relevance and universal owner live percentages to zero for shadow coverage.
+Owner percentage permits only 100 (everyone) or 0 (off); invalid/intermediate
+values fail closed. Malformed keep-all percentages select no conversations;
+malformed Jev percentages admit no Jev users. The ambiguous model tier can be
+policy-kept by `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT`; deterministic
+rules, restores, calendar retention and plan gates retain their precedence.
+
+Both processing hosts submit advisory relevance/owner questions through
+`utils/conversations/jev_shadow.py` after the relevant live decision. Percentages
+sample conversation IDs for relevance and conversation+full-scoring hashes for
+owner (candidate, speaker-labelled evidence/context, question owner name and
+pipeline subject metadata). Same text with different evidence remains distinct.
+Defaults are off, and Redis atomically dedupes these identities and caps
+daily calls (60000 per lane). Owner hash selection sees the complete eligible
+batch before submission and selects at most eight unique candidates; eight owner
+slots and two relevance slots bound queued/active work on a ten-worker pool. IO stays in the worker; slow or unavailable services drop measurement without
+changing the conversation or memory. All durable `users/{uid}/jev_shadow` records
+are text-free and have a 60-day expiry. Owner records carry integer candidate
+position/population metadata: original extraction index and unique eligible
+scoring identities before percentage filtering and the cap. First-write-wins records preserve scores and expiry
+on retries; aborted concurrent commit losers count as `deduped` while preserving
+the transactional deletion fence. Late commits after a worker timeout are valid and counted once by
+(uid, document ID), separately from attempt metrics. Drops are coverage losses.
+The protocol and TTL deployment prerequisite
+are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).
