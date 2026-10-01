@@ -265,7 +265,7 @@ class LiveChainSession:
                 if not is_window and callable(replay_ring) and replay_ring() is not None:
                     # An empty snapshot still carries the obligation to retain
                     # future speech until this replacement emits text.
-                    leg._enable_window_replay_tracking()
+                    leg.enable_window_replay_tracking()
                 return leg
             except BaseException:
                 if raw is not None:
@@ -534,7 +534,8 @@ class LiveLegSocket(STTSocket):
         self._note_replay_capture(data, start_sample)
         return LiveLegSocket.send(self, data, start_sample=start_sample)
 
-    def _enable_window_replay_tracking(self) -> None:
+    def enable_window_replay_tracking(self) -> None:
+        """Retain future speech on a window-origin replacement, even without replay."""
         if self._tracks_window_replay:
             return
         self._tracks_window_replay = True
@@ -665,7 +666,7 @@ class LiveLegSocket(STTSocket):
         # span. A different VAD score must not discard or finalize its middle.
         self._replay_passthrough = callable(ring) and ring() is not None
         if self._replay_passthrough and not self.window:
-            self._enable_window_replay_tracking()
+            self.enable_window_replay_tracking()
             # The source epoch admitted this span. A different VAD decision
             # during replay cannot erase its still-unfulfilled obligation.
             if self._pending_capture_sample is None:
