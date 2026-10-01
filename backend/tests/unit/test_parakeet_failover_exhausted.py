@@ -295,5 +295,10 @@ async def test_window_replay_is_not_gated_again_when_replacement_vad_misses_sour
         # The caller's active gate still governs new capture after replay.
         await _flush_capture(actual, b'\x03\x00' * 640, 1920)
         assert b''.join(legs['soniox'][0].sent) == capture
+        # Starting new speech may forward its new pre-roll, but must not
+        # forward the already replayed source prefix a second time.
+        monkeypatch.setattr(actual.stt_socket.gate, '_run_vad', lambda _pcm: True)
+        await _flush_capture(actual, b'\x04\x00' * 640, 2560)
+        assert b''.join(legs['soniox'][0].sent) == capture + b'\x03\x00' * 640 + b'\x04\x00' * 640
     finally:
         await actual._drain_stt_sockets()

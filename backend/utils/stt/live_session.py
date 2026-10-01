@@ -531,6 +531,13 @@ class LiveLegSocket(STTSocket):
                 self.raw.observe_session_peak(self._ingest_gain.peak)
         output = None
         if self.gate is not None:
+            replay_gate = self.gate
+            gate_mode = replay_gate.mode if self._replay_passthrough else None
+            if self._replay_passthrough:
+                # Replay was already admitted upstream. Score it for accounting
+                # without caching it in active VAD's pre-roll: a later utterance
+                # must not resend an already accepted replay prefix.
+                replay_gate.mode = 'shadow'
             try:
                 # Synthetic wall clock follows received audio. Positive epoch
                 # avoids VAD's zero sentinel. Silero scores the level-corrected
@@ -557,6 +564,9 @@ class LiveLegSocket(STTSocket):
                 self.gate.mode = 'off'
                 self.gate = None
                 self.session.vad_mode = 'off'
+            finally:
+                if gate_mode is not None and self.gate is replay_gate:
+                    replay_gate.mode = gate_mode
         audio = data if output is None or self.passthrough or self._replay_passthrough else output.audio_to_send
         if output is not None and output.is_speech and self._first_speech_at is None:
             self._first_speech_at = time.monotonic()
