@@ -12,6 +12,7 @@ import logging
 import os
 import requests
 import hashlib
+import html
 import random
 import re
 import time
@@ -24,6 +25,25 @@ try:
     from .iq_auth import require_iq_auth, require_iq_auth_if_uid
 except ImportError:
     from iq_rating.iq_auth import require_iq_auth, require_iq_auth_if_uid
+
+
+def _json_data_island(field: str, value) -> str:
+    """Render a value as a non-executing JSON data island for the /iq page.
+
+    The page template parses these islands with JSON.parse at startup, so the
+    decoded JS values are identical to what json.dumps would have inlined.
+    Embedding attacker-controllable values (uid, the iq_rating_token query
+    parameter) directly into an inline <script> is a reflected-XSS vector:
+    JSON strings may legally contain raw < > & and a closing script tag, so a
+    crafted value can break out of the script element. A <script
+    type="application/json"> block never executes, and html.escape makes the
+    payload unable to close the element early or inject attributes.
+    """
+    payload = json.dumps(value)
+    return '<script type="application/json" id="{0}">{1}</script>'.format(
+        field, html.escape(payload, quote=True)
+    )
+
 
 # Setup logging
 logging.basicConfig(
@@ -1586,9 +1606,9 @@ PEOPLE_LIST_CONTENT = """
 </div>
 
 <script>
-    const uid = {uid};
-    const tokenParam = {token_param};
-    let peopleData = {people_data_json};
+    const uid = JSON.parse(document.getElementById('iq-data-uid').textContent);
+    const tokenParam = JSON.parse(document.getElementById('iq-data-token-param').textContent);
+    let peopleData = JSON.parse(document.getElementById('iq-data-people').textContent);
     let currentSort = 'dumbest';
     
     function getIqColor(iq) {{
@@ -1757,7 +1777,9 @@ async def iq_rating_page(request: Request, uid: Optional[str] = Depends(require_
         query_token = request.query_params.get('iq_rating_token', '').strip()
         token_param = json.dumps(f'iq_rating_token={query_token}&' if query_token else '')
         content = PEOPLE_LIST_CONTENT.format(
-            uid=json.dumps(uid), token_param=token_param, people_data_json=people_json,
+            uid=_json_data_island('iq-data-uid', uid),
+            token_param=_json_data_island('iq-data-token-param', token_param),
+            people_data_json=_json_data_island('iq-data-people', people_json),
             total_people=len(people_with_iq))
         html = IQ_RATING_HTML.format(content=content)
         return HTMLResponse(content=html)

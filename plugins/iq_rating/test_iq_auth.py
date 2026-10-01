@@ -130,6 +130,12 @@ class RouteWiringTest(unittest.TestCase):
         self.assertIn('Depends(require_iq_auth_if_uid)', src[idx : idx + 400])
         # JS no longer embeds a raw uid string
         self.assertNotIn("'{uid}'", src)
+        # Script-context values ship as non-executing JSON data islands that
+        # the page parses with JSON.parse — never as inline JS literals.
+        self.assertIn("uid=_json_data_island('iq-data-uid', uid)", src)
+        self.assertIn("token_param=_json_data_island('iq-data-token-param', token_param)", src)
+        self.assertIn("people_data_json=_json_data_island('iq-data-people', people_json)", src)
+        self.assertIn("JSON.parse(document.getElementById('iq-data-uid').textContent)", src)
 
 
 if __name__ == '__main__':
