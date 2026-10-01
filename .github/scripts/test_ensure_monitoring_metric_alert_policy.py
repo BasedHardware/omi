@@ -56,6 +56,29 @@ class EnsureMonitoringMetricAlertPolicyTests(unittest.TestCase):
         self.assertEqual(self.create_attempts, 2)
         self.assertEqual(sleeps, [30])
 
+    def test_create_can_declare_window_aggregation_and_single_series_trigger(self) -> None:
+        policy = ensure_policy(
+            project=PROJECT,
+            display_name=DISPLAY_NAME,
+            metric_type=METRIC_TYPE,
+            condition_display_name=DISPLAY_NAME,
+            condition_filter=f'metric.type="{METRIC_TYPE}" AND resource.type="cloud_run_revision"',
+            duration="0s",
+            comparison="> 0",
+            combiner="OR",
+            notification_channels="channel",
+            documentation="docs",
+            aggregation='{"alignmentPeriod":"300s","perSeriesAligner":"ALIGN_SUM"}',
+            trigger_count=1,
+            runner=self.runner,
+            sleep=lambda _: None,
+        )
+
+        self.assertEqual(policy, POLICY_NAME)
+        create_call = next(call for call in self.calls if "create" in call)
+        self.assertIn('--aggregation={"alignmentPeriod":"300s","perSeriesAligner":"ALIGN_SUM"}', create_call)
+        self.assertIn("--trigger-count=1", create_call)
+
     def test_existing_policy_is_returned_without_recreation(self) -> None:
         def runner(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             self.calls.append(args)

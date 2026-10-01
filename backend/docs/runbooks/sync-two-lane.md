@@ -13,6 +13,12 @@ Historical recovery defaults are a 30-day lookback and thirty globally concurren
 
 Production deploys require `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS` as a comma-separated list of Cloud Monitoring notification-channel resource names. The workflow provisions log-based metrics and routed alert policies at 70% and 90%, then verifies each policy has a notification channel before traffic shifts.
 
+## Firestore missing-index alerts
+
+The production backend lifecycle provisions a `firestore_missing_index_errors` counter for Cloud Run revision logs in `based-hardware` that contain `The query requires an index` in `textPayload` or `jsonPayload.message`. It extracts `service_name` and routes any occurrence in a five-minute window to the backend alert channels. After deployment, verify the metric series for the incident and a known-good period, record both evaluated counts in the alert documentation, and confirm the incident threshold separates them.
+
+Decode the suggested index from the `create_composite=` URL (base64url; field order byte 1=ASC, 2=DESC), declare it in backend/database/firestore_index_registry.py, regenerate firestore.indexes.json, merge; the index workflow creates it (prod approval).
+
 Backfill speech is written under the `sync_backfill` accounting source. Live hard restrictions read only `realtime` and `sync_fresh`. Existing lookback, BYOK, global capacity, and fair-use guards remain. No per-UID `backfill_paced` response is emitted by v2 admission. Mobile retains the WAL on a non-202 response and polls an accepted job normally; no client change is needed.
 
 ## Per-UID backfill dispatch

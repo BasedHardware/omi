@@ -23,6 +23,10 @@ def check_policy(
     channels: list[str],
     threshold_value: float | None = None,
     alignment_period: str | None = None,
+    per_series_aligner: str | None = None,
+    trigger_count: int | None = None,
+    condition_display_name: str | None = None,
+    combiner: str | None = None,
 ) -> list[str]:
     errors: list[str] = []
     conditions = policy.get('conditions')
@@ -32,6 +36,8 @@ def check_policy(
     actual = conditions[0].get(field) if isinstance(conditions[0], dict) else None
     if not isinstance(actual, dict):
         return [f'expected {field} condition']
+    if condition_display_name is not None and conditions[0].get('displayName') != condition_display_name:
+        errors.append('condition display name differs')
     if actual.get('filter') != filter_text:
         errors.append('condition filter differs')
     duration = actual.get('duration', '0s')
@@ -43,11 +49,23 @@ def check_policy(
         aggregations = actual.get('aggregations') or [{}]
         if aggregations[0].get('alignmentPeriod') != alignment_period:
             errors.append('condition alignment period differs')
+    if per_series_aligner is not None:
+        aggregations = actual.get('aggregations') or [{}]
+        if aggregations[0].get('perSeriesAligner') != per_series_aligner:
+            errors.append('condition per-series aligner differs')
+    if trigger_count is not None:
+        trigger = actual.get('trigger') or {}
+        if int(trigger.get('count', 0)) != trigger_count:
+            errors.append('condition trigger count differs')
     actual_channels = policy.get('notificationChannels')
     if not isinstance(actual_channels, list) or sorted(actual_channels) != sorted(channels):
         errors.append('notification channels differ')
     if policy.get('enabled') is False:
         errors.append('policy is disabled')
+    elif policy.get('enabled') is not True:
+        errors.append('policy enabled state is missing')
+    if combiner is not None and policy.get('combiner') != combiner:
+        errors.append('policy combiner differs')
     return errors
 
 
@@ -59,6 +77,10 @@ def main() -> int:
     parser.add_argument('--channels', required=True, help='comma-separated notification-channel resource names')
     parser.add_argument('--threshold-value', type=float)
     parser.add_argument('--alignment-period')
+    parser.add_argument('--per-series-aligner')
+    parser.add_argument('--trigger-count', type=int)
+    parser.add_argument('--condition-display-name')
+    parser.add_argument('--combiner')
     args = parser.parse_args()
     channels = [channel.strip() for channel in args.channels.split(',') if channel.strip()]
     if not channels or len(channels) != len(set(channels)):
@@ -72,6 +94,10 @@ def main() -> int:
         channels=channels,
         threshold_value=args.threshold_value,
         alignment_period=args.alignment_period,
+        per_series_aligner=args.per_series_aligner,
+        trigger_count=args.trigger_count,
+        condition_display_name=args.condition_display_name,
+        combiner=args.combiner,
     )
     if errors:
         print('Sync backfill alert policy drift: ' + '; '.join(errors), file=sys.stderr)

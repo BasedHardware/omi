@@ -35,6 +35,8 @@ def ensure_policy(
     combiner: str,
     notification_channels: str,
     documentation: str,
+    aggregation: str | None = None,
+    trigger_count: int | None = None,
     runner: Runner = subprocess.run,
     sleep: Callable[[float], None] = time.sleep,
     retry_interval_seconds: int = 30,
@@ -56,6 +58,10 @@ def ensure_policy(
         f"--documentation={documentation}",
         "--format=value(name)",
     ]
+    if aggregation is not None:
+        create_args.append(f"--aggregation={aggregation}")
+    if trigger_count is not None:
+        create_args.append(f"--trigger-count={trigger_count}")
 
     for attempt in range(1, max_attempts + 1):
         listed = _run_gcloud(
@@ -119,6 +125,8 @@ def main() -> int:
     parser.add_argument("--combiner", default="OR")
     parser.add_argument("--notification-channels", required=True)
     parser.add_argument("--documentation", required=True)
+    parser.add_argument("--aggregation")
+    parser.add_argument("--trigger-count", type=int)
     args = parser.parse_args()
     try:
         policy = ensure_policy(
@@ -132,6 +140,8 @@ def main() -> int:
             combiner=args.combiner,
             notification_channels=args.notification_channels,
             documentation=args.documentation,
+            aggregation=args.aggregation,
+            trigger_count=args.trigger_count,
         )
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)

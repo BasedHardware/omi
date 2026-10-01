@@ -34,6 +34,10 @@ def reconcile_policy_channels(
     channels: list[str],
     threshold_value: float | None = None,
     alignment_period: str | None = None,
+    per_series_aligner: str | None = None,
+    trigger_count: int | None = None,
+    condition_display_name: str | None = None,
+    combiner: str | None = None,
     runner: Runner = subprocess.run,
 ) -> bool:
     """Align channels when all other policy contract fields already match.
@@ -71,6 +75,10 @@ def reconcile_policy_channels(
         channels=channels,
         threshold_value=threshold_value,
         alignment_period=alignment_period,
+        per_series_aligner=per_series_aligner,
+        trigger_count=trigger_count,
+        condition_display_name=condition_display_name,
+        combiner=combiner,
     )
     non_channel_errors = [error for error in errors if error != "notification channels differ"]
     if non_channel_errors:
@@ -104,6 +112,10 @@ def reconcile_policy_channels(
         channels=channels,
         threshold_value=threshold_value,
         alignment_period=alignment_period,
+        per_series_aligner=per_series_aligner,
+        trigger_count=trigger_count,
+        condition_display_name=condition_display_name,
+        combiner=combiner,
     )
     if remaining:
         raise RuntimeError("Monitoring policy remains out of contract: " + "; ".join(remaining))
@@ -121,6 +133,10 @@ def main() -> int:
     parser.add_argument("--channels", required=True)
     parser.add_argument("--threshold-value", type=float)
     parser.add_argument("--alignment-period")
+    parser.add_argument("--per-series-aligner")
+    parser.add_argument("--trigger-count", type=int)
+    parser.add_argument("--condition-display-name")
+    parser.add_argument("--combiner")
     args = parser.parse_args()
     channels = [item.strip() for item in args.channels.split(",") if item.strip()]
     if not channels or len(channels) != len(set(channels)):
@@ -136,6 +152,10 @@ def main() -> int:
             channels=channels,
             threshold_value=args.threshold_value,
             alignment_period=args.alignment_period,
+            per_series_aligner=args.per_series_aligner,
+            trigger_count=args.trigger_count,
+            condition_display_name=args.condition_display_name,
+            combiner=args.combiner,
         )
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
