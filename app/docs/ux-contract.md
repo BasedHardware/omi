@@ -110,9 +110,10 @@ One policy, and never neither:
 - A row's long-press opens `showOmiRowMenu(context, title:, actions: [OmiMenuAction(...)])` — the
   same menu shape on conversations, memories and tasks (Open first, Delete last and destructive);
   multi-select is a "Select" entry in that menu, not the long-press itself.
-- Swipe-to-delete follows the same table: `confirmDismiss` shows the confirm for things that cannot
-  be undone; restorable things dismiss and show Undo. A swipe means the same thing on every row of a
-  list.
+- Swipe-to-delete follows the same table: the confirm shows for things that cannot be undone;
+  restorable things dismiss and show Undo. A swipe means the same thing on every row of a list. A
+  conversation row swipes open to a round delete button and asks with `showOmiConfirmMenu` from that
+  button; a long swipe asks straight away.
 
 ## 5. Dialogs
 
@@ -123,6 +124,7 @@ One policy, and never neither:
 |---|---|
 | a question with two answers | `await showOmiConfirm(context, title:, message:, confirmLabel:, destructive:)` → `bool` |
 | the same with "Don't ask again" (only when Undo backs it, §4) | `await showOmiConfirmWithOptOut(...)` → `OmiConfirmResult(confirmed, dontAskAgain)` |
+| a destructive confirm from the button that asked (a row's delete button) | `await showOmiConfirmMenu(context, anchor:, title:, message:, confirmLabel:, offerOptOut:)` → `OmiConfirmResult` |
 | information with one button | `await showOmiAlert(context, title:, message:, okLabel:)` |
 | a widget for `showDialog(builder:)` | `OmiAlertDialog(title:, message:, content:, actions: [OmiDialogAction(...)])` |
 | a dialog that holds a control ("Don't ask again") | `OmiDialogCard(title:, message:, content:, actions:)` |

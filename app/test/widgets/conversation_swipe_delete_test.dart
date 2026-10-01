@@ -1,5 +1,6 @@
-/// Swiping a conversation row to delete (#20038): the whole card slides and a round red delete button
-/// grows in where it was; the full-width red block is gone. The confirm and Undo path is unchanged.
+/// Swiping a conversation row to delete (#20038): the card swipes open to a round red delete button,
+/// and the confirm is a small menu that pops from that button. The delete path is unchanged:
+/// confirm unless opted out, then Undo.
 library;
 
 import 'package:flutter/material.dart';
@@ -14,7 +15,6 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/ui/ui.dart';
 
 void main() {
   late ConversationProvider provider;
@@ -52,52 +52,97 @@ void main() {
     ));
   }
 
-  double revealOpacity(WidgetTester tester) => tester
-      .widget<Opacity>(find
-          .ancestor(of: find.byKey(const ValueKey('conversation_swipe_delete')), matching: find.byType(Opacity))
-          .first)
-      .opacity;
+  final card = find.byKey(const ValueKey('conversation_card'));
+  final button = find.byKey(const ValueKey('conversation_swipe_delete'));
+  final deleteItem = find.text('Delete Conversation');
 
-  bool hasRedBlock(WidgetTester tester) => tester.widgetList<Container>(find.byType(Container)).any((c) =>
-      c.color == OmiColors.danger ||
-      (c.decoration is BoxDecoration &&
-          (c.decoration! as BoxDecoration).color == OmiColors.danger &&
-          (c.decoration! as BoxDecoration).shape != BoxShape.circle));
-
-  testWidgets('the swipe reveals a round delete button that grows in, never a red row', (tester) async {
-    await pumpRow(tester);
-    final button = find.byKey(const ValueKey('conversation_swipe_delete'));
-    expect(button, findsNothing, reason: 'nothing shows at rest');
-
-    final gesture = await tester.startGesture(tester.getCenter(find.byType(ConversationListItem)));
-    await gesture.moveBy(const Offset(-20, 0));
-    await gesture.moveBy(const Offset(-60, 0));
-    await tester.pump();
-    final partway = revealOpacity(tester);
-    expect(partway, greaterThan(0));
-    expect(partway, lessThan(1));
-
-    final cardAtRest = tester.getRect(find.byKey(const ValueKey('conversation_card')));
-    await gesture.moveBy(const Offset(-320, 0));
-    await tester.pump();
-    expect(revealOpacity(tester), 1);
-    final cardSwiped = tester.getRect(find.byKey(const ValueKey('conversation_card')));
-    expect(cardSwiped.size, cardAtRest.size, reason: 'the card moves whole, its own edge and padding with it');
-    expect(cardSwiped.right, lessThan(tester.getRect(find.byKey(const ValueKey('conversation_swipe_delete'))).left),
-        reason: 'the button sits in the space the card left, not on top of it');
-    expect(tester.getSize(find.byKey(const ValueKey('conversation_swipe_delete'))), const Size(44, 44));
-    expect(hasRedBlock(tester), isFalse, reason: 'only the round button is red');
+  /// A finger's swipe: many small moves, as a real drag arrives.
+  Future<void> swipe(WidgetTester tester, double dx) async {
+    final gesture = await tester.startGesture(tester.getCenter(card));
+    const steps = 12;
+    for (var i = 0; i < steps; i++) {
+      await gesture.moveBy(Offset(dx / steps, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
     await gesture.up();
     await tester.pumpAndSettle();
+  }
 
-    // Past the delete point: the confirm opens over the card with its small button, not a red row.
-    expect(find.text('Delete Conversation?'), findsOneWidget);
-    expect(hasRedBlock(tester), isFalse);
+  double buttonOpacity(WidgetTester tester) =>
+      tester.widget<Opacity>(find.ancestor(of: button, matching: find.byType(Opacity)).first).opacity;
 
-    await tester.tap(find.text('Cancel'));
+  testWidgets('a short swipe leaves the row open on the delete button; a tap on the card closes it', (tester) async {
+    await pumpRow(tester);
+    final rest = tester.getRect(card);
+    expect(buttonOpacity(tester), 0, reason: 'nothing shows at rest');
+
+    await swipe(tester, -100);
+    final open = tester.getRect(card);
+    expect(rest.left - open.left, 76, reason: 'open by the button and the air around it');
+    expect(open.size, rest.size, reason: 'the card moves whole');
+    expect(buttonOpacity(tester), 1);
+    expect(open.right, lessThan(tester.getRect(button).left), reason: 'the button sits in the space the card left');
+    expect(deleteItem, findsNothing, reason: 'a short swipe does not ask');
+
+    await tester.tapAt(open.center);
     await tester.pumpAndSettle();
-    expect(find.text('Delete Conversation?'), findsNothing);
-    expect(button.evaluate().isEmpty || revealOpacity(tester) == 0, isTrue,
-        reason: 'Cancel slides the row back and the button fades out');
+    expect(tester.getRect(card), rest);
+  });
+
+  testWidgets('the delete button asks in a menu below it; tapping outside cancels and closes the row', (tester) async {
+    await pumpRow(tester);
+    final rest = tester.getRect(card);
+    await swipe(tester, -100);
+
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(deleteItem, findsOneWidget);
+    expect(find.text('This also deletes its memories, tasks, and audio files.'), findsOneWidget);
+    expect(find.text("Don't ask me again"), findsOneWidget);
+    final item = tester.getRect(find.byKey(const ValueKey('omi_confirm_menu_confirm')));
+    final anchor = tester.getRect(button);
+    expect(item.top, greaterThan(anchor.bottom), reason: 'the menu opens below the button');
+    expect(item.right, moreOrLessEquals(anchor.right), reason: 'and lines up with its trailing edge');
+
+    await tester.tapAt(const Offset(10, 400));
+    await tester.pumpAndSettle();
+    expect(deleteItem, findsNothing);
+    expect(tester.getRect(card), rest);
+    expect(provider.conversations, hasLength(1));
+  });
+
+  testWidgets('a long swipe asks straight away; Delete Conversation deletes with Undo', (tester) async {
+    await pumpRow(tester);
+    await swipe(tester, -340);
+    expect(deleteItem, findsOneWidget);
+
+    await tester.tap(deleteItem);
+    await tester.pumpAndSettle();
+    expect(provider.conversations, isEmpty);
+    expect(find.text('Undo'), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(provider.conversations, hasLength(1));
+  });
+
+  testWidgets('with "Don\'t ask me again" ticked, the next swipe deletes without asking', (tester) async {
+    await pumpRow(tester);
+    await swipe(tester, -340);
+    expect(find.byIcon(Icons.check_rounded), findsNothing);
+    await tester.tap(find.text("Don't ask me again"));
+    await tester.pump();
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    await tester.tap(deleteItem);
+    await tester.pumpAndSettle();
+    expect(SharedPreferencesUtil().showConversationDeleteConfirmation, isFalse);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+
+    await swipe(tester, -340);
+    expect(deleteItem, findsNothing);
+    expect(provider.conversations, isEmpty);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
   });
 }

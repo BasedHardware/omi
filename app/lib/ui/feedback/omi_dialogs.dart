@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -15,6 +18,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// * [OmiAlertDialog] — the widget behind all three, for code that has to hand `showDialog` a
 ///   widget (the legacy `getDialog` / `ConfirmationDialog` adapters).
 /// * [OmiDialogCard] — a dialog that holds a control, such as the "Don't ask again" row.
+/// * [showOmiConfirmMenu] — a destructive confirm that pops from the button that asked for it.
 ///
 /// On iOS [OmiAlertDialog] is a `CupertinoAlertDialog` with real `CupertinoDialogAction`s
 /// (destructive actions red, the safe choice bold); elsewhere a Material `AlertDialog` with text
@@ -211,6 +215,272 @@ Future<OmiConfirmResult> showOmiConfirmWithOptOut(
     ),
   );
   return OmiConfirmResult(confirmed: confirmed ?? false, dontAskAgain: dontAskAgain);
+}
+
+/// Asks to confirm a destructive action in a small menu that pops from [anchor], the on-screen rect
+/// of the button that asked (a row's delete button): the consequence ([message]), an optional
+/// "Don't ask again" toggle ([offerOptOut]), and the action naming its object ([confirmLabel],
+/// "Delete Conversation") in red with [confirmIcon]. Tapping outside cancels.
+///
+/// The menu lines up with [anchor]'s trailing edge, below it, or above it when there is no room
+/// below. At large text sizes, where a 268pt menu has no room, it falls back to the card
+/// ([showOmiConfirmWithOptOut] or [showOmiConfirm]) with [title]. Contract as for
+/// [showOmiConfirmWithOptOut]: offer the opt-out only when an Undo backs the action.
+Future<OmiConfirmResult> showOmiConfirmMenu(
+  BuildContext context, {
+  required Rect anchor,
+  required String title,
+  required String message,
+  required String confirmLabel,
+  Widget? confirmIcon,
+  bool offerOptOut = false,
+  String? optOutLabel,
+}) async {
+  if (MediaQuery.textScalerOf(context).scale(1) > _OmiConfirmMenu.maxTextScale) {
+    if (offerOptOut) {
+      return showOmiConfirmWithOptOut(context,
+          title: title, message: message, confirmLabel: confirmLabel, destructive: true, optOutLabel: optOutLabel);
+    }
+    final confirmed =
+        await showOmiConfirm(context, title: title, message: message, confirmLabel: confirmLabel, destructive: true);
+    return OmiConfirmResult(confirmed: confirmed, dontAskAgain: false);
+  }
+  final light = OmiColors.active == OmiPalette.light;
+  final screen = MediaQuery.sizeOf(context);
+  // Below the button unless it sits in the lower part of the screen; the menu grows from the button.
+  final below = anchor.center.dy < screen.height * 0.6;
+  final rtl = Directionality.of(context) == TextDirection.rtl;
+  final origin = FractionalOffset(
+    ((rtl ? anchor.left : anchor.right) / screen.width).clamp(0.0, 1.0),
+    ((below ? anchor.bottom : anchor.top) / screen.height).clamp(0.0, 1.0),
+  );
+  var dontAskAgain = false;
+  final confirmed = await showGeneralDialog<bool>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.black.withValues(alpha: light ? 0.06 : 0.35),
+    transitionDuration: OmiMotion.of(context).standard,
+    pageBuilder: (dialogContext, _, __) => CustomSingleChildLayout(
+      delegate: _OmiConfirmMenuLayout(
+        anchor: anchor,
+        below: below,
+        padding: MediaQuery.paddingOf(dialogContext),
+        textDirection: Directionality.of(dialogContext),
+      ),
+      child: _OmiConfirmMenu(
+        title: title,
+        message: message,
+        confirmLabel: confirmLabel,
+        confirmIcon: confirmIcon,
+        optOutLabel: offerOptOut ? (optOutLabel ?? dialogContext.l10n.dontAskAgain) : null,
+        onOptOutChanged: (value) => dontAskAgain = value,
+        onConfirm: () => Navigator.of(dialogContext).pop(true),
+      ),
+    ),
+    transitionBuilder: (_, animation, __, child) => FadeTransition(
+      opacity: CurvedAnimation(parent: animation, curve: const Interval(0, 0.6, curve: Curves.easeOut)),
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.5, end: 1)
+            .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutBack, reverseCurve: Curves.easeIn)),
+        alignment: origin,
+        child: child,
+      ),
+    ),
+  );
+  return OmiConfirmResult(confirmed: confirmed ?? false, dontAskAgain: dontAskAgain);
+}
+
+/// Places the confirm menu against its anchor: trailing edges lined up, 8pt below (or above), and
+/// never closer than 16pt to the screen's edges or the safe area.
+class _OmiConfirmMenuLayout extends SingleChildLayoutDelegate {
+  _OmiConfirmMenuLayout(
+      {required this.anchor, required this.below, required this.padding, required this.textDirection});
+
+  final Rect anchor;
+  final bool below;
+  final EdgeInsets padding;
+  final TextDirection textDirection;
+
+  static const double _margin = OmiSpacing.md;
+  static const double _gap = OmiSpacing.xs;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final width = math.min(_OmiConfirmMenu.width, constraints.maxWidth - 2 * _margin);
+    return BoxConstraints.tightFor(width: width)
+        .copyWith(maxHeight: math.max(0.0, constraints.maxHeight - padding.vertical - 2 * _margin));
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final double x = (textDirection == TextDirection.rtl ? anchor.left : anchor.right - childSize.width)
+        .clamp(_margin, math.max(_margin, size.width - _margin - childSize.width));
+    final top = padding.top + _margin;
+    final bottom = size.height - padding.bottom - _margin;
+    final fitsBelow = anchor.bottom + _gap + childSize.height <= bottom;
+    final fitsAbove = anchor.top - _gap - childSize.height >= top;
+    final y = (below && fitsBelow) || !fitsAbove ? anchor.bottom + _gap : anchor.top - _gap - childSize.height;
+    return Offset(x, y.clamp(top, math.max(top, bottom - childSize.height)).toDouble());
+  }
+
+  @override
+  bool shouldRelayout(_OmiConfirmMenuLayout oldDelegate) =>
+      anchor != oldDelegate.anchor ||
+      below != oldDelegate.below ||
+      padding != oldDelegate.padding ||
+      textDirection != oldDelegate.textDirection;
+}
+
+/// The menu [showOmiConfirmMenu] shows: frosted, with the consequence on top, the opt-out toggle,
+/// and the destructive action in its own group.
+class _OmiConfirmMenu extends StatefulWidget {
+  const _OmiConfirmMenu({
+    required this.title,
+    required this.message,
+    required this.confirmLabel,
+    required this.confirmIcon,
+    required this.optOutLabel,
+    required this.onOptOutChanged,
+    required this.onConfirm,
+  });
+
+  static const double width = 268;
+
+  /// Above this text scale the menu falls back to the card.
+  static const double maxTextScale = 1.3;
+
+  final String title;
+  final String message;
+  final String confirmLabel;
+  final Widget? confirmIcon;
+  final String? optOutLabel;
+  final ValueChanged<bool> onOptOutChanged;
+  final VoidCallback onConfirm;
+
+  @override
+  State<_OmiConfirmMenu> createState() => _OmiConfirmMenuState();
+}
+
+class _OmiConfirmMenuState extends State<_OmiConfirmMenu> {
+  bool _optOut = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final light = OmiColors.active == OmiPalette.light;
+    final surface = (light ? OmiColors.surface1 : OmiColors.surface2).withValues(alpha: 0.92);
+    final hairline = Divider(height: 1, thickness: 0.5, color: OmiColors.border);
+    final optOutLabel = widget.optOutLabel;
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: widget.title,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: OmiRadius.mdAll,
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 44, offset: const Offset(0, 14))
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: OmiRadius.mdAll,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Material(
+              color: surface,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.sm),
+                      child: Text(
+                        widget.message,
+                        style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, height: 1.35),
+                      ),
+                    ),
+                    if (optOutLabel != null) ...[
+                      hairline,
+                      _OmiMenuItem(
+                        key: const ValueKey('omi_confirm_menu_opt_out'),
+                        label: optOutLabel,
+                        checked: _optOut,
+                        onTap: () {
+                          setState(() => _optOut = !_optOut);
+                          widget.onOptOutChanged(_optOut);
+                        },
+                      ),
+                    ],
+                    // The destructive action sits in its own group, as in an iOS menu.
+                    ColoredBox(
+                        color: OmiColors.textPrimary.withValues(alpha: 0.07),
+                        child: const SizedBox(height: OmiSpacing.xs)),
+                    _OmiMenuItem(
+                      key: const ValueKey('omi_confirm_menu_confirm'),
+                      label: widget.confirmLabel,
+                      color: OmiColors.danger,
+                      trailing: widget.confirmIcon,
+                      onTap: widget.onConfirm,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One ≥44pt row of the confirm menu. A [checked] row is a toggle with a leading checkmark.
+class _OmiMenuItem extends StatelessWidget {
+  const _OmiMenuItem({super.key, required this.label, required this.onTap, this.checked, this.color, this.trailing});
+
+  final String label;
+  final VoidCallback onTap;
+  final bool? checked;
+  final Color? color;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = color ?? OmiColors.textPrimary;
+    final checked = this.checked;
+    return Semantics(
+      button: checked == null,
+      checked: checked,
+      child: InkWell(
+        onTap: onTap,
+        splashFactory: NoSplash.splashFactory,
+        highlightColor: OmiColors.textPrimary.withValues(alpha: 0.08),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+            child: Row(
+              children: [
+                if (checked != null) ...[
+                  SizedBox(
+                    width: 16,
+                    child: checked ? Icon(Icons.check_rounded, size: 18, color: ink) : null,
+                  ),
+                  const SizedBox(width: OmiSpacing.xs),
+                ],
+                Expanded(child: Text(label, style: OmiType.body.copyWith(color: ink))),
+                if (trailing != null) ...[
+                  const SizedBox(width: OmiSpacing.xs),
+                  IconTheme(data: IconThemeData(size: 17, color: ink), child: trailing!),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Information with one button ([okLabel], default "OK"). Resolves when it closes.

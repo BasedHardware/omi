@@ -186,6 +186,75 @@ void main() {
     });
   });
 
+  group('showOmiConfirmMenu', () {
+    Future<OmiConfirmResult?> Function() pumpMenu(WidgetTester tester, Rect anchor, {double textScale = 1}) {
+      OmiConfirmResult? result;
+      tester.platformDispatcher.textScaleFactorTestValue = textScale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      return () async {
+        await tester.pumpWidget(feedbackHarness((context) async {
+          result = await showOmiConfirmMenu(
+            context,
+            anchor: anchor,
+            title: 'Delete Conversation?',
+            message: 'This also deletes its memories, tasks, and audio files.',
+            confirmLabel: 'Delete Conversation',
+            offerOptOut: true,
+          );
+        }));
+        await tapTrigger(tester);
+        return result;
+      };
+    }
+
+    final confirm = find.byKey(const ValueKey('omi_confirm_menu_confirm'));
+
+    testWidgets('opens below its anchor, trailing edges lined up', (tester) async {
+      const anchor = Rect.fromLTWH(720, 60, 44, 44);
+      await pumpMenu(tester, anchor)();
+      final item = tester.getRect(confirm);
+      expect(item.top, greaterThan(anchor.bottom));
+      expect(item.right, anchor.right);
+      expect(item.width, 268);
+      expect(tester.getSize(confirm).height, greaterThanOrEqualTo(44));
+      expect(find.byType(OmiDialogCard), findsNothing);
+    });
+
+    testWidgets('opens above an anchor near the bottom of the screen', (tester) async {
+      const anchor = Rect.fromLTWH(720, 520, 44, 44);
+      await pumpMenu(tester, anchor)();
+      expect(tester.getRect(confirm).bottom, lessThan(anchor.top));
+    });
+
+    testWidgets('a tap outside cancels; the toggle and the action confirm with the opt-out', (tester) async {
+      const anchor = Rect.fromLTWH(720, 60, 44, 44);
+      var result = pumpMenu(tester, anchor);
+      await result();
+      await tester.tapAt(const Offset(10, 500));
+      await tester.pumpAndSettle();
+      expect(confirm, findsNothing);
+      expect((await result())!.confirmed, isFalse);
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+      await tester.tap(find.text("Don't ask me again"));
+      await tester.pump();
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      final confirmed = await result();
+      expect(confirmed!.confirmed, isTrue);
+      expect(confirmed.dontAskAgain, isTrue);
+    });
+
+    testWidgets('at large text sizes it falls back to the card', (tester) async {
+      await pumpMenu(tester, const Rect.fromLTWH(720, 60, 44, 44), textScale: 1.6)();
+      expect(confirm, findsNothing);
+      expect(find.byType(OmiDialogCard), findsOneWidget);
+      expect(find.text('Delete Conversation'), findsOneWidget);
+    });
+  });
+
   testWidgets('showOmiAlert has one OK button', (tester) async {
     await tester.pumpWidget(feedbackHarness((context) => showOmiAlert(context, title: 'Saved', message: 'Done.')));
     await tapTrigger(tester);
