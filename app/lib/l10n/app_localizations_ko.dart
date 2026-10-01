@@ -3902,9 +3902,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => '새 버전 사용 가능';
-
-  @override
   String get no => '아니요';
 
   @override
@@ -4960,7 +4957,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '계속하면 대화, 녹음 및 개인 정보가 서버에 안전하게 저장됩니다. 오디오 녹음 및 텍스트 변환은 제3자 AI 서비스(전사를 위한 Deepgram 및 분석을 위한 OpenAI 포함)에 의해 처리되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
 
   @override
-  String get tasksEmptyStateMessage => '대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요.';
+  String get tasksEmptyStateMessage => '대화를 시작하여 할 일을 만드세요.';
 
   @override
   String get clearChatAction => '채팅 삭제';
@@ -11920,4 +11917,16 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => '업데이트 가능';
+
+  @override
+  String get updateAvailableMessage => '수정 사항과 개선 사항이 담긴 새 버전의 Omi가 준비되었습니다.';
+
+  @override
+  String get updateRequiredTitle => '업데이트 필요';
+
+  @override
+  String get updateRequiredMessage => '이 버전의 Omi는 더 이상 지원되지 않습니다. 계속 녹음하고 동기화하려면 업데이트하세요.';
 }

@@ -3975,9 +3975,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Versi Baru Tersedia';
-
-  @override
   String get no => 'Tidak';
 
   @override
@@ -5064,8 +5061,7 @@ class AppLocalizationsId extends AppLocalizations {
       'Dengan melanjutkan, percakapan, rekaman, dan informasi pribadi Anda akan disimpan dengan aman di server kami. Rekaman audio dan transkrip Anda diproses oleh layanan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan Anda wawasan berbasis AI dan mengaktifkan semua fitur aplikasi.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Tugas dari percakapan Anda akan muncul di sini.\nKetuk + untuk membuat secara manual.';
+  String get tasksEmptyStateMessage => 'Mulai percakapan untuk membuat tugas.';
 
   @override
   String get clearChatAction => 'Hapus obrolan';
@@ -12123,4 +12119,17 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Pembaruan tersedia';
+
+  @override
+  String get updateAvailableMessage => 'Versi baru Omi sudah siap, dengan perbaikan dan peningkatan.';
+
+  @override
+  String get updateRequiredTitle => 'Pembaruan diperlukan';
+
+  @override
+  String get updateRequiredMessage =>
+      'Versi Omi ini tidak lagi didukung. Perbarui untuk terus merekam dan menyinkronkan.';
 }
