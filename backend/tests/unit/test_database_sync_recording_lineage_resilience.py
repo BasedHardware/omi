@@ -71,31 +71,47 @@ def test_get_recording_generations_validates_inputs() -> None:
 
     # Empty/invalid uid
     with pytest.raises(ValueError, match="uid must be a non-empty string without slashes"):
-        get_recording_generations("", "orig-1", started_before=now, finished_after=now, limit=10, firestore_client=mock_client)
+        get_recording_generations(
+            "", "orig-1", started_before=now, finished_after=now, limit=10, firestore_client=mock_client
+        )
 
     with pytest.raises(ValueError, match="uid must be a non-empty string without slashes"):
-        get_recording_generations("users/bad", "orig-1", started_before=now, finished_after=now, limit=10, firestore_client=mock_client)
+        get_recording_generations(
+            "users/bad", "orig-1", started_before=now, finished_after=now, limit=10, firestore_client=mock_client
+        )
 
     # Empty/invalid origin_id
     with pytest.raises(ValueError, match="origin_id must be a non-empty string"):
-        get_recording_generations("u1", "", started_before=now, finished_after=now, limit=10, firestore_client=mock_client)
+        get_recording_generations(
+            "u1", "", started_before=now, finished_after=now, limit=10, firestore_client=mock_client
+        )
 
     # Invalid datetime types
     with pytest.raises(ValueError, match="started_before must be a datetime"):
-        get_recording_generations("u1", "orig-1", started_before="2026-09-30", finished_after=now, limit=10, firestore_client=mock_client)  # type: ignore[arg-type]
+        get_recording_generations(
+            "u1", "orig-1", started_before="2026-09-30", finished_after=now, limit=10, firestore_client=mock_client  # type: ignore[arg-type]
+        )
 
     with pytest.raises(ValueError, match="finished_after must be a datetime"):
-        get_recording_generations("u1", "orig-1", started_before=now, finished_after=12345, limit=10, firestore_client=mock_client)  # type: ignore[arg-type]
+        get_recording_generations(
+            "u1", "orig-1", started_before=now, finished_after=12345, limit=10, firestore_client=mock_client  # type: ignore[arg-type]
+        )
 
     # Invalid limits (0, negative, bool)
     with pytest.raises(ValueError, match="limit must be a positive integer"):
-        get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=0, firestore_client=mock_client)
+        get_recording_generations(
+            "u1", "orig-1", started_before=now, finished_after=now, limit=0, firestore_client=mock_client
+        )
 
     with pytest.raises(ValueError, match="limit must be a positive integer"):
-        get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=-5, firestore_client=mock_client)
+        get_recording_generations(
+            "u1", "orig-1", started_before=now, finished_after=now, limit=-5, firestore_client=mock_client
+        )
 
     with pytest.raises(ValueError, match="limit must be a positive integer"):
-        get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=True, firestore_client=mock_client)  # type: ignore[arg-type]
+        get_recording_generations(
+            "u1", "orig-1", started_before=now, finished_after=now, limit=True, firestore_client=mock_client  # type: ignore[arg-type]
+        )
 
 
 def test_get_recording_generations_preserves_limit_plus_one_and_rejects_excess() -> None:
@@ -105,15 +121,26 @@ def test_get_recording_generations_preserves_limit_plus_one_and_rejects_excess()
     now = datetime.now(timezone.utc)
 
     # Valid limit requests limit + 1 documents
-    get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=8, firestore_client=mock_client)
+    get_recording_generations(
+        "u1", "orig-1", started_before=now, finished_after=now, limit=8, firestore_client=mock_client
+    )
     assert mock_query._limit == 9
 
-    get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=MAX_LINEAGE_LIMIT, firestore_client=mock_client)
+    get_recording_generations(
+        "u1", "orig-1", started_before=now, finished_after=now, limit=MAX_LINEAGE_LIMIT, firestore_client=mock_client
+    )
     assert mock_query._limit == MAX_LINEAGE_LIMIT + 1
 
     # Query with limit > MAX_LINEAGE_LIMIT raises ValueError
     with pytest.raises(ValueError, match=f"limit must not exceed {MAX_LINEAGE_LIMIT}"):
-        get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=MAX_LINEAGE_LIMIT + 1, firestore_client=mock_client)
+        get_recording_generations(
+            "u1",
+            "orig-1",
+            started_before=now,
+            finished_after=now,
+            limit=MAX_LINEAGE_LIMIT + 1,
+            firestore_client=mock_client,
+        )
 
 
 def test_get_origin_generation_validates_inputs() -> None:
@@ -143,4 +170,6 @@ def test_get_origin_generation_preserves_limit_plus_one_and_rejects_excess() -> 
     assert mock_query._limit == MAX_LINEAGE_LIMIT + 1
 
     with pytest.raises(ValueError, match=f"limit must not exceed {MAX_LINEAGE_LIMIT}"):
-        get_origin_generation("u1", "orig-1", limit=MAX_LINEAGE_LIMIT + 1, firestore_client=mock_client)
+        get_origin_generation(
+            "u1", "orig-1", limit=MAX_LINEAGE_LIMIT + 1, firestore_client=mock_client
+        )
