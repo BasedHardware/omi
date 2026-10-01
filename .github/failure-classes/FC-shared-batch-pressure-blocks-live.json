@@ -5,7 +5,6 @@
   "canonical_prevention": "Mark live requests explicitly, schedule live work ahead of backfill with a bounded aged-backfill turn, expose per-replica live pressure independently of total batch pressure, and fail closed when any replica lacks fresh valid live telemetry. Retain a per-listen-process session cap measured against pod CPU and memory limits.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_parakeet_batch_engine.py",
-    "backend/tests/unit/test_parakeet_batch_pressure.py",
     "backend/tests/unit/test_parakeet_window_live.py",
     "backend/scripts/benchmark_parakeet_window_capacity.py"
   ],
