@@ -3766,6 +3766,8 @@
     "speakerTagPromptNotMeAction": "Nejsem to já",
     "confidenceNextLabels": "{count, plural, =1{Označte je ještě v 1 konverzaci.} other{Označte je ještě v {count} konverzacích.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 mluvčí} other{Mluvčí: {count}}}",
+    "siriShortcutsSetupHint": "Zapněte Omi v Zkratkách → Siri. Řekněte „{askPhrase}“ nebo „{questionPhrase}“ a pak položte svou otázku.",
+    "siriShortcutsSearchHint": " Můžete také říct „{searchPhrase} for what I did today“.",
     "updateAvailableTitle": "Je k dispozici aktualizace",
     "updateAvailableMessage": "Nová verze Omi je připravená, s opravami a vylepšeními.",
     "updateRequiredTitle": "Vyžaduje se aktualizace",

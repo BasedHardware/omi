@@ -3766,6 +3766,8 @@
     "speakerTagPromptNotMeAction": "Не я",
     "confidenceNextLabels": "{count, plural, =1{Позначте їх ще в 1 розмові.} other{Позначте їх ще в {count} розмовах.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 учасник} other{Учасників: {count}}}",
+    "siriShortcutsSetupHint": "Увімкніть Omi у Командах → Siri. Скажіть «{askPhrase}» або «{questionPhrase}», а потім поставте своє запитання.",
+    "siriShortcutsSearchHint": " Також можна сказати «{searchPhrase} for what I did today».",
     "updateAvailableTitle": "Доступне оновлення",
     "updateAvailableMessage": "Нова версія Omi готова: з виправленнями та покращеннями.",
     "updateRequiredTitle": "Потрібне оновлення",

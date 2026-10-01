@@ -12679,6 +12679,16 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Укључите Omi у Пречицама → Siri. Реците „$askPhrase“ или „$questionPhrase“, а затим поставите своје питање.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Можете рећи и „$searchPhrase for what I did today“.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Доступно је ажурирање';
 
   @override

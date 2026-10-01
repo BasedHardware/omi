@@ -12502,6 +12502,16 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'شغّل Omi في الاختصارات ← Siri. قل “$askPhrase” أو “$questionPhrase” ثم اطرح سؤالك.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' يمكنك أيضًا قول “$searchPhrase for what I did today”.';
+  }
+
+  @override
   String get updateAvailableTitle => 'يتوفر تحديث';
 
   @override

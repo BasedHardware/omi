@@ -14447,6 +14447,27 @@
             }
         }
     },
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "@siriShortcutsSetupHint": {
+        "description": "Guidance for enabling Ask Omi in the iOS Shortcuts app; askPhrase/questionPhrase are literal English Siri phrases",
+        "placeholders": {
+            "askPhrase": {
+                "type": "String"
+            },
+            "questionPhrase": {
+                "type": "String"
+            }
+        }
+    },
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”",
+    "@siriShortcutsSearchHint": {
+        "description": "Optional iOS 27 search phrase guidance appended to the Shortcuts setup hint; searchPhrase is a literal English Siri phrase",
+        "placeholders": {
+            "searchPhrase": {
+                "type": "String"
+            }
+        }
+    },
     "updateAvailableTitle": "Update available",
     "@updateAvailableTitle": {
         "description": "Title of the pop-up that offers a newer version of the app"

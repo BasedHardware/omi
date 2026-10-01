@@ -12755,6 +12755,16 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Attiva Omi in Comandi rapidi → Siri. Dì “$askPhrase” o “$questionPhrase”, poi fai la tua domanda.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Puoi anche dire “$searchPhrase for what I did today”.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Aggiornamento disponibile';
 
   @override

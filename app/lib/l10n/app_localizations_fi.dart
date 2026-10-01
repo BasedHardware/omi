@@ -12679,6 +12679,16 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Ota Omi käyttöön Pikakomennot → Siri -kohdasta. Sano “$askPhrase” tai “$questionPhrase” ja esitä sitten kysymyksesi.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Voit myös sanoa “$searchPhrase for what I did today”.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Päivitys saatavilla';
 
   @override

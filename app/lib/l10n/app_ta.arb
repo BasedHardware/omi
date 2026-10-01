@@ -11323,6 +11323,8 @@
     "speakerTagPromptNotMeAction": "நான் இல்லை",
     "confidenceNextLabels": "{count, plural, =1{இன்னும் 1 உரையாடலில் அவர்களுக்கு லேபிள் இடுங்கள்.} other{இன்னும் {count} உரையாடல்களில் அவர்களுக்கு லேபிள் இடுங்கள்.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 பேச்சாளர்} other{{count} பேச்சாளர்கள்}}",
+    "siriShortcutsSetupHint": "ஷார்ட்கட்ஸ் → Siri-இல் Omi-ஐ இயக்கவும். “{askPhrase}” அல்லது “{questionPhrase}” என்று சொல்லி, பிறகு உங்கள் கேள்வியைக் கேளுங்கள்.",
+    "siriShortcutsSearchHint": " நீங்கள் “{searchPhrase} for what I did today” என்றும் சொல்லலாம்.",
     "updateAvailableTitle": "புதுப்பிப்பு கிடைக்கிறது",
     "updateAvailableMessage": "Omi-இன் புதிய பதிப்பு தயார், திருத்தங்களும் மேம்பாடுகளும் உடன்.",
     "updateRequiredTitle": "புதுப்பிப்பு தேவை",

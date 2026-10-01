@@ -12759,6 +12759,16 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Activați Omi în Comenzi rapide → Siri. Spuneți „$askPhrase” sau „$questionPhrase”, apoi puneți-vă întrebarea.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Puteți spune și „$searchPhrase for what I did today”.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Actualizare disponibilă';
 
   @override

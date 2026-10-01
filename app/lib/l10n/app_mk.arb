@@ -11323,6 +11323,8 @@
     "speakerTagPromptNotMeAction": "Не сум јас",
     "confidenceNextLabels": "{count, plural, =1{Означете ги во уште 1 разговор.} other{Означете ги во уште {count} разговори.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 говорник} other{{count} говорници}}",
+    "siriShortcutsSetupHint": "Вклучете Omi во Кратенки → Siri. Кажете „{askPhrase}“ или „{questionPhrase}“, а потоа поставете го вашето прашање.",
+    "siriShortcutsSearchHint": " Може да кажете и „{searchPhrase} for what I did today“.",
     "updateAvailableTitle": "Достапно е ажурирање",
     "updateAvailableMessage": "Нова верзија на Omi е подготвена, со поправки и подобрувања.",
     "updateRequiredTitle": "Потребно е ажурирање",

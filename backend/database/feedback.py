@@ -394,7 +394,7 @@ def list_report_dates(limit: int = 30) -> List[str]:
         docs = (
             get_firestore_client()
             .collection(FEEDBACK_REPORTS_COLLECTION)
-            .order_by(_DOCUMENT_ID_FIELD, direction='DESCENDING')
+            .order_by('date', direction='DESCENDING')
             .limit(limit)
             .stream()
         )

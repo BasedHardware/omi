@@ -12501,6 +12501,16 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'เปิด Omi ใน คำสั่งลัด → Siri พูดว่า “$askPhrase” หรือ “$questionPhrase” แล้วพูดคำถามของคุณ';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' คุณยังสามารถพูดว่า “$searchPhrase for what I did today” ได้อีกด้วย';
+  }
+
+  @override
   String get updateAvailableTitle => 'มีอัปเดตใหม่';
 
   @override

@@ -3766,6 +3766,8 @@
     "speakerTagPromptNotMeAction": "Ne es",
     "confidenceNextLabels": "{count, plural, =1{Atzīmējiet viņus vēl 1 sarunā.} other{Atzīmējiet viņus vēl {count} sarunās.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 runātājs} other{Runātāji: {count}}}",
+    "siriShortcutsSetupHint": "Ieslēdziet Omi sadaļā Saīsnes → Siri. Sakiet „{askPhrase}“ vai „{questionPhrase}“ un pēc tam uzdodiet savu jautājumu.",
+    "siriShortcutsSearchHint": " Varat arī teikt „{searchPhrase} for what I did today“.",
     "updateAvailableTitle": "Pieejams atjauninājums",
     "updateAvailableMessage": "Jaunā Omi versija ir gatava – ar labojumiem un uzlabojumiem.",
     "updateRequiredTitle": "Nepieciešams atjauninājums",

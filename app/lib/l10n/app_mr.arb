@@ -11323,6 +11323,8 @@
     "speakerTagPromptNotMeAction": "मी नाही",
     "confidenceNextLabels": "{count, plural, =1{त्यांना आणखी 1 संभाषणात लेबल करा.} other{त्यांना आणखी {count} संभाषणांमध्ये लेबल करा.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 वक्ता} other{{count} वक्ते}}",
+    "siriShortcutsSetupHint": "शॉर्टकट्स → Siri मध्ये Omi चालू करा. “{askPhrase}” किंवा “{questionPhrase}” म्हणा, नंतर तुमचा प्रश्न विचारा.",
+    "siriShortcutsSearchHint": " तुम्ही “{searchPhrase} for what I did today” असेही म्हणू शकता.",
     "updateAvailableTitle": "अपडेट उपलब्ध आहे",
     "updateAvailableMessage": "Omi ची नवीन आवृत्ती तयार आहे, दुरुस्त्या आणि सुधारणांसह.",
     "updateRequiredTitle": "अपडेट आवश्यक आहे",

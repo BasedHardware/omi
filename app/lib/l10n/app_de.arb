@@ -3766,6 +3766,8 @@
     "speakerTagPromptNotMeAction": "Nicht ich",
     "confidenceNextLabels": "{count, plural, =1{Markiere sie in 1 weiteren Gespräch.} other{Markiere sie in {count} weiteren Gesprächen.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 Sprecher} other{{count} Sprecher}}",
+    "siriShortcutsSetupHint": "Aktiviere Omi unter Kurzbefehle → Siri. Sage „{askPhrase}“ oder „{questionPhrase}“ und stelle dann deine Frage.",
+    "siriShortcutsSearchHint": " Du kannst außerdem „{searchPhrase} for what I did today“ sagen.",
     "updateAvailableTitle": "Update verfügbar",
     "updateAvailableMessage": "Eine neue Version von Omi ist bereit, mit Fehlerbehebungen und Verbesserungen.",
     "updateRequiredTitle": "Update erforderlich",

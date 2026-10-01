@@ -12649,6 +12649,16 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Lülitage Omi sisse jaotises Otseteed → Siri. Ütlege „$askPhrase“ või „$questionPhrase“ ja seejärel esitage oma küsimus.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Saate öelda ka „$searchPhrase for what I did today“.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Värskendus on saadaval';
 
   @override

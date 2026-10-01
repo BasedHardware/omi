@@ -3766,6 +3766,8 @@
     "speakerTagPromptNotMeAction": "不是我",
     "confidenceNextLabels": "{count, plural, =1{再在 1 个对话中为对方添加标签。} other{再在 {count} 个对话中为对方添加标签。}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 位发言人} other{{count} 位发言人}}",
+    "siriShortcutsSetupHint": "在快捷指令 → Siri 中开启 Omi。说“{askPhrase}”或“{questionPhrase}”，然后提出你的问题。",
+    "siriShortcutsSearchHint": " 你还可以说“{searchPhrase} for what I did today”。",
     "updateAvailableTitle": "有可用更新",
     "updateAvailableMessage": "Omi 新版本已就绪，包含问题修复和改进。",
     "updateRequiredTitle": "需要更新",

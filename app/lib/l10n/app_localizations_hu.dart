@@ -12731,6 +12731,16 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Kapcsolja be az Omi alkalmazást a Parancsikonok → Siri menüben. Mondja ki: „$askPhrase” vagy „$questionPhrase”, majd tegye fel kérdését.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Elmondhatja azt is: „$searchPhrase for what I did today”.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Frissítés érhető el';
 
   @override

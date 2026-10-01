@@ -3766,6 +3766,8 @@
     "speakerTagPromptNotMeAction": "Niet ik",
     "confidenceNextLabels": "{count, plural, =1{Label ze in nog 1 gesprek.} other{Label ze in nog {count} gesprekken.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 spreker} other{{count} sprekers}}",
+    "siriShortcutsSetupHint": "Zet Omi aan in Sneltoetsen → Siri. Zeg “{askPhrase}” of “{questionPhrase}” en stel daarna je vraag.",
+    "siriShortcutsSearchHint": " Je kunt ook “{searchPhrase} for what I did today” zeggen.",
     "updateAvailableTitle": "Update beschikbaar",
     "updateAvailableMessage": "Er staat een nieuwe versie van Omi klaar, met oplossingen en verbeteringen.",
     "updateRequiredTitle": "Update vereist",

@@ -11990,6 +11990,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return '在快捷指令 → Siri 中开启 Omi。说“$askPhrase”或“$questionPhrase”，然后提出你的问题。';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' 你还可以说“$searchPhrase for what I did today”。';
+  }
+
+  @override
   String get updateAvailableTitle => '有可用更新';
 
   @override

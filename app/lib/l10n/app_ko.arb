@@ -3766,6 +3766,8 @@
     "speakerTagPromptNotMeAction": "제가 아니에요",
     "confidenceNextLabels": "{count, plural, =1{대화 1개에서 더 라벨을 지정해 주세요.} other{대화 {count}개에서 더 라벨을 지정해 주세요.}}",
     "transcriptSpeakerCount": "{count, plural, =1{화자 1명} other{화자 {count}명}}",
+    "siriShortcutsSetupHint": "단축어 → Siri에서 Omi를 켜세요. “{askPhrase}” 또는 “{questionPhrase}”라고 말한 다음 질문하세요.",
+    "siriShortcutsSearchHint": " “{searchPhrase} for what I did today”라고 말할 수도 있습니다.",
     "updateAvailableTitle": "업데이트 가능",
     "updateAvailableMessage": "수정 사항과 개선 사항이 담긴 새 버전의 Omi가 준비되었습니다.",
     "updateRequiredTitle": "업데이트 필요",

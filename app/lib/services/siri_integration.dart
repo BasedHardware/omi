@@ -22,8 +22,8 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart' as siri_events;
-import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Small test seam for the conversation capture path used by Siri's foreground
@@ -162,7 +162,33 @@ class SiriIntegration extends SiriEventsApi {
   void installEvents() {
     if (!_isIOS) return;
     SiriEventsApi.setUp(this);
+    // Intents can finish while Flutter is absent; drain the native buffer on
+    // every launch, then again after the signed-in session mirror is refreshed.
+    _drainLaunchTelemetry();
     HomeNavigation.onHomeMounted = () => unawaited(deliverPendingRoute());
+  }
+
+  /// The launch drain destructively takes the native telemetry buffer, so it
+  /// must not race startup auth: events emitted before identity binding land in
+  /// the pre-auth analytics epoch and are discarded when bindIdentity clears
+  /// the queue. Wait for that bind (signed in or explicitly signed out) first.
+  void _drainLaunchTelemetry() {
+    void drain() {
+      unawaited(_flushTelemetry().catchError((Object error) {
+        Logger.debug('Siri launch telemetry drain failed: $error');
+      }));
+    }
+
+    if (AnalyticsManager.identityKnown) {
+      drain();
+      return;
+    }
+    final previous = AnalyticsManager.identityChanged;
+    AnalyticsManager.identityChanged = (identity, enabled) {
+      AnalyticsManager.identityChanged = previous;
+      previous?.call(identity, enabled);
+      drain();
+    };
   }
 
   int _accountGeneration = 0;
@@ -942,6 +968,19 @@ class SiriIntegration extends SiriEventsApi {
     if (!_isIOS) return false;
     // This reads only a persisted preference. Do not queue it behind indexing.
     return _host.isEnabled().timeout(_nativeTimeout);
+  }
+
+  /// Whether the running Runner can serve App Shortcuts UI. False on Android,
+  /// on stable-compiler (Xcode 26.6) builds where the Siri toolchain compiled
+  /// out, and whenever the native bridge cannot answer. Callers must treat
+  /// false or an error as "do not request omi/shortcuts_button".
+  Future<bool> appShortcutsAvailable() async {
+    if (!_isIOS) return false;
+    try {
+      return await _host.appShortcutsAvailable().timeout(_nativeTimeout);
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> setEnabled(bool enabled) async {

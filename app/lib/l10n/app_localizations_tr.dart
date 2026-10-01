@@ -12670,6 +12670,16 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Kısayollar → Siri içinde Omi’yi etkinleştirin. “$askPhrase” veya “$questionPhrase” deyin, sonra sorunuzu sorun.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Ayrıca “$searchPhrase for what I did today” diyebilirsiniz.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Güncelleme mevcut';
 
   @override

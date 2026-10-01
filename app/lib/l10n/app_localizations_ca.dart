@@ -12774,6 +12774,16 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Activa Omi a Dreceres → Siri. Digueu «$askPhrase» o «$questionPhrase» i feu la vostra pregunta.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' També podeu dir «$searchPhrase for what I did today».';
+  }
+
+  @override
   String get updateAvailableTitle => 'Actualització disponible';
 
   @override

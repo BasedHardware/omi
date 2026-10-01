@@ -11323,6 +11323,8 @@
     "speakerTagPromptNotMeAction": "আমি নই",
     "confidenceNextLabels": "{count, plural, =1{আরও 1টি কথোপকথনে তাদের লেবেল করুন।} other{আরও {count}টি কথোপকথনে তাদের লেবেল করুন।}}",
     "transcriptSpeakerCount": "{count, plural, =1{১ জন বক্তা} other{{count} জন বক্তা}}",
+    "siriShortcutsSetupHint": "শর্টকাট → Siri-তে Omi চালু করুন। “{askPhrase}” বা “{questionPhrase}” বলুন, তারপর আপনার প্রশ্ন করুন।",
+    "siriShortcutsSearchHint": " আপনি “{searchPhrase} for what I did today”-ও বলতে পারেন।",
     "updateAvailableTitle": "আপডেট উপলব্ধ",
     "updateAvailableMessage": "Omi-এর নতুন সংস্করণ প্রস্তুত, সংশোধন ও উন্নতিসহ।",
     "updateRequiredTitle": "আপডেট প্রয়োজন",

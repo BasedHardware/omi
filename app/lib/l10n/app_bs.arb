@@ -11323,6 +11323,8 @@
     "speakerTagPromptNotMeAction": "Nisam ja",
     "confidenceNextLabels": "{count, plural, =1{Označite ih u još 1 razgovoru.} other{Označite ih u još {count} razgovora.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 govornik} other{Govornika: {count}}}",
+    "siriShortcutsSetupHint": "Uključite Omi u Prečice → Siri. Recite „{askPhrase}“ ili „{questionPhrase}“, a zatim postavite pitanje.",
+    "siriShortcutsSearchHint": " Možete reći i „{searchPhrase} for what I did today“.",
     "updateAvailableTitle": "Dostupno je ažuriranje",
     "updateAvailableMessage": "Nova verzija Omija je spremna, s ispravkama i poboljšanjima.",
     "updateRequiredTitle": "Potrebno je ažuriranje",

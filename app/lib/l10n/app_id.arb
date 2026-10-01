@@ -3801,6 +3801,8 @@
     "speakerTagPromptNotMeAction": "Bukan saya",
     "confidenceNextLabels": "{count, plural, =1{Beri label pada 1 percakapan lagi.} other{Beri label pada {count} percakapan lagi.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 pembicara} other{{count} pembicara}}",
+    "siriShortcutsSetupHint": "Aktifkan Omi di Pintasan → Siri. Ucapkan “{askPhrase}” atau “{questionPhrase}”, lalu ajukan pertanyaan Anda.",
+    "siriShortcutsSearchHint": " Anda juga bisa mengatakan “{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "Pembaruan tersedia",
     "updateAvailableMessage": "Versi baru Omi sudah siap, dengan perbaikan dan peningkatan.",
     "updateRequiredTitle": "Pembaruan diperlukan",

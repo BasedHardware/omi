@@ -12636,6 +12636,16 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Zapnite Omi v Skratkách → Siri. Povedzte „$askPhrase“ alebo „$questionPhrase“ a potom položte svoju otázku.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Môžete povedať aj „$searchPhrase for what I did today“.';
+  }
+
+  @override
   String get updateAvailableTitle => 'K dispozícii je aktualizácia';
 
   @override

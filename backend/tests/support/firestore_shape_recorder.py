@@ -46,7 +46,7 @@ class Aggregation:
     alias: str | None = None
 
 
-def _document_path_template(collection_path: str) -> str:
+def document_path_template(collection_path: str) -> str:
     """Render a document path template from a collection path.
 
     Segments in document positions (odd indexes) become ``{uid}`` when the
@@ -163,6 +163,7 @@ class QueryShape:
     calling_function: str = ''
     driver_function: str = ''
     parameter_combo: dict = field(default_factory=dict)
+    serving: bool = True
 
     @property
     def uses_cursors(self) -> bool:
@@ -170,7 +171,7 @@ class QueryShape:
 
     @property
     def document_path_template(self) -> str:
-        return _document_path_template(self.collection_path)
+        return document_path_template(self.collection_path)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize deterministically with tagged representative values."""
@@ -194,6 +195,7 @@ class QueryShape:
             'calling_function': self.calling_function,
             'driver_function': self.driver_function,
             'parameter_combo': _encode_value(self.parameter_combo)['value'],
+            'serving': self.serving,
         }
 
     def signature(self) -> str:
@@ -207,6 +209,7 @@ class QueryShape:
         identity = {
             'collection_group': self.collection_group,
             'scope': self.scope,
+            'path_template': self.document_path_template,
             'filters': [{'field': f.field, 'operator': f.operator} for f in self.filters],
             'filter_tree': _filter_tree_skeleton(self.filter_tree),
             'orders': [list(o) for o in self.orders],

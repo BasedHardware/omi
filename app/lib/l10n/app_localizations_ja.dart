@@ -12141,6 +12141,16 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'ショートカット→SiriでOmiをオンにします。「$askPhrase」または「$questionPhrase」と言ってから、質問を話してください。';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' 「$searchPhrase for what I did today」と言うこともできます。';
+  }
+
+  @override
   String get updateAvailableTitle => 'アップデートがあります';
 
   @override

@@ -587,6 +587,9 @@ protocol SiriIndexApi {
   func finishPendingRoute(route: String, uid: String, generation: Int64, delivered: Bool) throws
   func isEnabled() throws -> Bool
   func takeTelemetry() throws -> [SiriTelemetryRecord]
+  /// True only when the Runner was compiled with the Siri toolchain, so Dart can
+  /// skip App Shortcuts UI (e.g. the Shortcuts button) in stable-compiler builds.
+  func appShortcutsAvailable() throws -> Bool
   func donateAction(uid: String, type: String, id: String, completion: @escaping (Result<Void, Error>) -> Void)
 }
 
@@ -901,6 +904,21 @@ class SiriIndexApiSetup {
       }
     } else {
       takeTelemetryChannel.setMessageHandler(nil)
+    }
+    /// True only when the Runner was compiled with the Siri toolchain, so Dart can
+    /// skip App Shortcuts UI (e.g. the Shortcuts button) in stable-compiler builds.
+    let appShortcutsAvailableChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.appShortcutsAvailable\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      appShortcutsAvailableChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.appShortcutsAvailable()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      appShortcutsAvailableChannel.setMessageHandler(nil)
     }
     let donateActionChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.donateAction\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

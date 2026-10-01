@@ -12811,6 +12811,16 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Ενεργοποιήστε το Omi στις Συντομεύσεις → Siri. Πείτε «$askPhrase» ή «$questionPhrase» και μετά κάντε την ερώτησή σας.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Μπορείτε επίσης να πείτε «$searchPhrase for what I did today».';
+  }
+
+  @override
   String get updateAvailableTitle => 'Διαθέσιμη ενημέρωση';
 
   @override

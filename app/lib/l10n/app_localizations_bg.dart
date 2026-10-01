@@ -12742,6 +12742,16 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Включете Omi в Команди → Siri. Кажете „$askPhrase“ или „$questionPhrase“ и след това задайте въпроса си.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Може да кажете и „$searchPhrase for what I did today“.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Налична е актуализация';
 
   @override

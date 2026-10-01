@@ -3862,6 +3862,8 @@
     "speakerTagPromptNotMeAction": "Nem én vagyok",
     "confidenceNextLabels": "{count, plural, =1{Címkézd meg őket még 1 beszélgetésben.} other{Címkézd meg őket még {count} beszélgetésben.}}",
     "transcriptSpeakerCount": "{count, plural, =1{1 beszélő} other{{count} beszélő}}",
+    "siriShortcutsSetupHint": "Kapcsolja be az Omi alkalmazást a Parancsikonok → Siri menüben. Mondja ki: „{askPhrase}” vagy „{questionPhrase}”, majd tegye fel kérdését.",
+    "siriShortcutsSearchHint": " Elmondhatja azt is: „{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "Frissítés érhető el",
     "updateAvailableMessage": "Elkészült az Omi új verziója, javításokkal és fejlesztésekkel.",
     "updateRequiredTitle": "Frissítés szükséges",

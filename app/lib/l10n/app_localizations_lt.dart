@@ -12693,6 +12693,16 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Įjunkite Omi skyriuje Sparčieji klavišai → Siri. Pasakykite „$askPhrase“ arba „$questionPhrase“, tada užduokite savo klausimą.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Taip pat galite pasakyti „$searchPhrase for what I did today“.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Yra naujinys';
 
   @override

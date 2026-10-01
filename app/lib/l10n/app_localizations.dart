@@ -21789,6 +21789,18 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 speaker} other{{count} speakers}}'**
   String transcriptSpeakerCount(int count);
 
+  /// Guidance for enabling Ask Omi in the iOS Shortcuts app; askPhrase/questionPhrase are literal English Siri phrases
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.'**
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase);
+
+  /// Optional iOS 27 search phrase guidance appended to the Shortcuts setup hint; searchPhrase is a literal English Siri phrase
+  ///
+  /// In en, this message translates to:
+  /// **' You can also say “{searchPhrase} for what I did today.”'**
+  String siriShortcutsSearchHint(String searchPhrase);
+
   /// Title of the pop-up that offers a newer version of the app
   ///
   /// In en, this message translates to:

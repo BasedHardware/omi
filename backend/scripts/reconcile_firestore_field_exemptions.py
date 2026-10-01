@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / 'backend'
 sys.path.insert(0, str(BACKEND_ROOT))
 
+from scripts import firestore_field_indexes as field_indexes  # noqa: E402
 from scripts.reconcile_firestore_indexes import DEFAULT_DATABASE, verify_manifest_source  # noqa: E402
 
 APPLY_CONFIRMATION = 'APPLY_FIRESTORE_FIELD_EXEMPTIONS'
@@ -34,6 +35,8 @@ def expected_field_exemptions(manifest: Mapping[str, Any]) -> tuple[FieldExempti
     if not isinstance(overrides, list):
         raise ValueError('Firestore manifest must contain a fieldOverrides list')
 
+    field_indexes.expected_field_requirements(manifest)
+
     exemptions: list[FieldExemption] = []
     for position, override in enumerate(overrides):
         if not isinstance(override, Mapping):
@@ -42,6 +45,8 @@ def expected_field_exemptions(manifest: Mapping[str, Any]) -> tuple[FieldExempti
         field_path = override.get('fieldPath')
         indexes = override.get('indexes')
         ttl = override.get('ttl', False)
+        if isinstance(indexes, list) and indexes:
+            continue
         if not isinstance(collection_group, str) or not collection_group:
             raise ValueError(f'Firestore field override {position} must contain collectionGroup')
         if not isinstance(field_path, str) or not field_path:

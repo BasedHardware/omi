@@ -12636,6 +12636,16 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Slå på Omi i Genvägar → Siri. Säg ”$askPhrase” eller ”$questionPhrase” och ställ sedan din fråga.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Du kan också säga ”$searchPhrase for what I did today”.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Uppdatering tillgänglig';
 
   @override
