@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-mouse-send-abandons-composer-focus",
+  "violated_contract": "A chat composer's Send action must leave keyboard focus on the composer's own input afterward. A plain <button> click moves native DOM focus to the clicked button itself; if nothing explicitly reclaims it, typing the next message silently goes nowhere until the user clicks the input again. Enter-to-send never moves focus away, so the bug is mouse/trackpad-only and easy to miss in keyboard-driven testing. Relying on an unrelated focus effect (e.g. a view-change or remount effect keyed on navigation) to incidentally restore focus is not a guarantee: it only covers the specific transition that effect targets (e.g. the first send that flips an idle view into an active one), and does nothing for a same-view follow-up send, which is the common repeat-message case.",
+  "canonical_prevention": "Every mouse-driven Send handler explicitly calls focus() on the composer's own input ref immediately after invoking the submit logic. The call is a harmless no-op on the Enter-to-send path, since focus never left the input there. A behavioral test drives Send via a real fireEvent.click (not keyDown) and asserts document.activeElement is the composer input afterward, so the regression can't hide behind keyboard-only coverage.",
+  "canonical_prevention_artifact": [
+    "desktop/windows/src/renderer/src/components/home/hub/HubAskBar.test.tsx",
+    "desktop/windows/src/renderer/src/components/bar/BarChatSurface.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/windows/src/renderer/src/components/home/hub/HubAskBar.tsx",
+    "desktop/windows/src/renderer/src/components/bar/BarChatSurface.tsx"
+  ],
+  "status": "open"
+}
