@@ -619,6 +619,7 @@ runs:
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
           --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_identity_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
@@ -688,6 +689,7 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         revision_suffix: ${{ steps.image-tag.outputs.revision_suffix }}
         cloud_run_flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
+        identity_flags: ${{ steps.runtime-env.outputs.backend_sync_backfill_identity_flags }}
         backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
         backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
         candidate_tag: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
@@ -706,6 +708,7 @@ runs:
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
           ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
@@ -779,6 +782,7 @@ runs:
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_integration_identity_flags }}
           --cpu=2
           --memory=2Gi
           --concurrency=40
