@@ -22,12 +22,14 @@ def target_circuit(target: Target | None, default):
     return _target_circuits[target.id]
 
 
-def select(targets, states, uid, language, *, features=frozenset({'streaming'}), recovery=None):
+def select(targets, states, uid, language, *, features=frozenset({'streaming'}), required_languages=(), recovery=None):
     result = []
     for target in sorted(targets, key=lambda item: item.cost_per_audio_hour):
         state = states.get(target.id, GateState())
         reason = None
-        if not target.capable(language, features):
+        if not target.capable(language, features) or any(
+            not target.capable(code, features) for code in required_languages
+        ):
             reason = 'capability'
         elif not assigned(uid, target.id, target.ramp()):
             reason = 'ramp_skip'
@@ -47,7 +49,7 @@ def select(targets, states, uid, language, *, features=frozenset({'streaming'}),
     return result
 
 
-def propose(health, configured_families, uid, language, static_primary, account_states=None):
+def propose(health, configured_families, uid, language, static_primary, account_states=None, required_languages=()):
     language = bounded_language(language)
     gate_rate()
     targets = [target for target in registry() if target.family in configured_families]
@@ -59,7 +61,9 @@ def propose(health, configured_families, uid, language, static_primary, account_
         account = account_states.get(target.family)
         if account and account.bench == 'account' and account.excluded:
             states[target.id] = GateState(stage=0, until=account.bench_until)
-    proposed = select(targets, states, uid, language, recovery=health.prefer_recovery)
+    proposed = select(
+        targets, states, uid, language, required_languages=required_languages, recovery=health.prefer_recovery
+    )
     chosen = proposed[0].id if proposed else 'unavailable'
     COST_SHADOW.labels(
         agreement=(

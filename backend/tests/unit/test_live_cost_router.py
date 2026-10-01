@@ -518,3 +518,31 @@ def test_gate_config_change_starts_fresh_evidence_generation(monkeypatch):
 def test_invalid_shared_gate_state_is_rejected():
     with pytest.raises(ValueError, match='invalid cost gate state'):
         GateState.decode({'stage': 50})
+
+
+def test_learned_language_capabilities_cannot_be_overridden_by_cost():
+    assert select(DEFAULT_TARGETS, {}, 'u', 'en', required_languages=('hi', 'en'))[0].id == 'modulate-velma-2'
+    assert select(DEFAULT_TARGETS, {}, 'u', 'en', required_languages=('fr', 'en'))[0].id == 'parakeet-window'
+    restricted = [Target('restricted', 'modulate', 0.01, languages=('en',)), DEFAULT_TARGETS[2]]
+    assert select(restricted, {}, 'u', 'en', required_languages=('ja', 'en'))[0].id == 'soniox'
+
+
+@pytest.mark.asyncio
+async def test_expected_languages_flow_through_dispatcher_to_cost_selection(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox'])
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    sock = SimpleNamespace(is_connection_dead=False)
+    parakeet = AsyncMock(return_value=sock)
+    _, service = await st.connect_stt_socket_with_fallback(
+        primary_service=st.STTService.parakeet,
+        connect_primary=parakeet,
+        connect_modulate=AsyncMock(return_value=sock),
+        use_config=True,
+        routing_uid='u',
+        routing_language='en',
+        routing_languages=('hi', 'en'),
+    )
+    assert service == st.STTService.modulate
+    parakeet.assert_not_awaited()

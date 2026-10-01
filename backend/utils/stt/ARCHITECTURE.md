@@ -186,7 +186,9 @@ code defaults. Deepgram availability includes its runtime endpoint.
 `live_router.py` filters capabilities, sorts by audio-hour cost (stable config
 order for ties), then skips ramp exclusions, capacity signals and fleet benches.
 The first surviving target is primary and the rest retain cost order for
-failover. Healthy cheaper targets take every eligible session within their
+failover. Capability checks include every expected language from the immutable
+declared/learned session profile, so a declared English account with a learned
+Hindi prior cannot enter an English-only target. Healthy cheaper targets take every eligible session within their
 configured ramp and capacity. There is no portfolio split or worst-provider
 probe. The existing Parakeet admission and batch-pressure gates still reject
 at connect and overflow into the next target. Target IDs are distinct from

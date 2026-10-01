@@ -83,7 +83,7 @@ async def connect_configured_chain(
     models: list[str],
     routing_uid: str | None = None,
     routing_language: str | None = None,
-    routing_pin_primary: bool = False,
+    routing_languages: tuple[str, ...] = (),
 ) -> tuple[STTSocket, STTService]:
     from utils.stt.streaming import STTService, _circuit_for_primary  # type: ignore[reportPrivateUsage]  # shared circuit owner
 
@@ -107,7 +107,15 @@ async def connect_configured_chain(
         try:
             configured = [service.value for service in candidates if callbacks.get(service) is not None]
             fleet_states = health.cached_snapshot(configured, routing_language)
-            proposed = propose(health, configured, routing_uid, routing_language, primary_service.value, fleet_states)
+            proposed = propose(
+                health,
+                configured,
+                routing_uid,
+                routing_language,
+                primary_service.value,
+                fleet_states,
+                routing_languages,
+            )
             active = routing_on(routing_uid)
             if active:
                 routes = [(STTService(target.family), target) for target in proposed]

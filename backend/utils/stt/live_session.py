@@ -286,8 +286,7 @@ class LiveChainSession:
                 use_config=True,
                 routing_uid=uid,
                 routing_language=host.language,
-                routing_pin_primary=host.stt_model == 'parakeet-window'
-                or getattr(host.language_profile, 'arm', None) == 'hintable',
+                routing_languages=tuple(getattr(host.language_profile, 'expected', ())),
             )
         host.stt_service = actual
         host.stt_model = {
