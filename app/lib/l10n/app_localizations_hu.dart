@@ -12203,4 +12203,16 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Helyi másolatok';
+
+  @override
+  String get singleTap => 'Egyszeres érintés';
+
+  @override
+  String get singleTapAction => 'Egyszeres érintés művelet';
+
+  @override
+  String get tripleTap => 'Tripla érintés';
+
+  @override
+  String get tripleTapAction => 'Tripla érintés művelet';
 }

@@ -12189,4 +12189,16 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Лакальныя копіі';
+
+  @override
+  String get singleTap => 'Адзінарны дотык';
+
+  @override
+  String get singleTapAction => 'Дзеянне адзінарнага дотыку';
+
+  @override
+  String get tripleTap => 'Трайны дотык';
+
+  @override
+  String get tripleTapAction => 'Дзеянне трайнага дотыку';
 }

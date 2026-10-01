@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Automaticky odstranit synchronizované kopie",
     "autoRemoveSyncedCopiesDays": "Synchronizované kopie se odstraní po {days} dnech",
     "autoRemoveSyncedCopiesDescription": "Odstraní místní kopie {days} dní po synchronizaci. Cloudové kopie zůstávají zachovány.",
-    "localCopiesSection": "Místní kopie"
+    "localCopiesSection": "Místní kopie",
+    "singleTap": "Jednoduché klepnutí",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Akce jednoduchého klepnutí",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trojité klepnutí",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Akce trojitého klepnutí",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

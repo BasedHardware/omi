@@ -12144,4 +12144,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Lokale kopier';
+
+  @override
+  String get singleTap => 'Enkelttryk';
+
+  @override
+  String get singleTapAction => 'Enkelttryk-handling';
+
+  @override
+  String get tripleTap => 'Tredobbelttryk';
+
+  @override
+  String get tripleTapAction => 'Tredobbelttryk-handling';
 }

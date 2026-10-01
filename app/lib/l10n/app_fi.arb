@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Poista synkronoidut kopiot automaattisesti",
     "autoRemoveSyncedCopiesDays": "Synkronoidut kopiot poistetaan {days} päivän jälkeen",
     "autoRemoveSyncedCopiesDescription": "Poistaa paikalliset kopiot {days} päivää synkronoinnin jälkeen. Pilvikopiot säilytetään.",
-    "localCopiesSection": "Paikalliset kopiot"
+    "localCopiesSection": "Paikalliset kopiot",
+    "singleTap": "Kertanapautus",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Kertanapautustoiminto",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Kolmoisnapautus",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Kolmoisnapautustoiminto",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

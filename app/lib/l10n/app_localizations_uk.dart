@@ -12182,4 +12182,16 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Локальні копії';
+
+  @override
+  String get singleTap => 'Одинарне натискання';
+
+  @override
+  String get singleTapAction => 'Дія одинарного натискання';
+
+  @override
+  String get tripleTap => 'Потрійне натискання';
+
+  @override
+  String get tripleTapAction => 'Дія потрійного натискання';
 }

@@ -12156,4 +12156,16 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'লোকাল কপি';
+
+  @override
+  String get singleTap => 'একক ট্যাপ';
+
+  @override
+  String get singleTapAction => 'একক ট্যাপ ক্রিয়া';
+
+  @override
+  String get tripleTap => 'তিনবার ট্যাপ';
+
+  @override
+  String get tripleTapAction => 'তিনবার ট্যাপ ক্রিয়া';
 }

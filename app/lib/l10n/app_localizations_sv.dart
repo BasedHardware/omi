@@ -12166,4 +12166,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Lokala kopior';
+
+  @override
+  String get singleTap => 'Enkeltryck';
+
+  @override
+  String get singleTapAction => 'Enkeltrycksåtgärd';
+
+  @override
+  String get tripleTap => 'Trippeltryck';
+
+  @override
+  String get tripleTapAction => 'Trippeltrycksåtgärd';
 }

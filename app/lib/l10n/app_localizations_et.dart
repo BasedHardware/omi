@@ -12155,4 +12155,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Kohalikud koopiad';
+
+  @override
+  String get singleTap => 'Ühekordne puudutus';
+
+  @override
+  String get singleTapAction => 'Ühekordse puudutuse tegevus';
+
+  @override
+  String get tripleTap => 'Kolmikpuudutus';
+
+  @override
+  String get tripleTapAction => 'Kolmikpuudutuse tegevus';
 }

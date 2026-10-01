@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Αυτόματη διαγραφή συγχρονισμένων αντιγράφων",
     "autoRemoveSyncedCopiesDays": "Τα συγχρονισμένα αντίγραφα διαγράφονται μετά από {days} ημέρες",
     "autoRemoveSyncedCopiesDescription": "Διαγράφει τα τοπικά αντίγραφα {days} ημέρες μετά τον συγχρονισμό. Τα αντίγραφα στο cloud διατηρούνται.",
-    "localCopiesSection": "Τοπικά αντίγραφα"
+    "localCopiesSection": "Τοπικά αντίγραφα",
+    "singleTap": "Απλό Πάτημα",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Ενέργεια Απλού Πατήματος",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Τριπλό Πάτημα",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Ενέργεια Τριπλού Πατήματος",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

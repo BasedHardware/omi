@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Tự động xóa bản sao đã đồng bộ",
     "autoRemoveSyncedCopiesDays": "Bản sao đã đồng bộ bị xóa sau {days} ngày",
     "autoRemoveSyncedCopiesDescription": "Xóa bản sao cục bộ {days} ngày sau khi đồng bộ. Bản sao trên đám mây được giữ lại.",
-    "localCopiesSection": "Bản sao cục bộ"
+    "localCopiesSection": "Bản sao cục bộ",
+    "singleTap": "Nhấn đơn",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Hành động nhấn đơn",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Nhấn ba lần",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Hành động nhấn ba lần",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

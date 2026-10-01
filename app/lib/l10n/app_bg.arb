@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Автоматично премахване на синхронизираните копия",
     "autoRemoveSyncedCopiesDays": "Синхронизираните копия се изтриват след {days} дни",
     "autoRemoveSyncedCopiesDescription": "Изтрива локалните копия {days} дни след синхронизация. Облачните копия се запазват.",
-    "localCopiesSection": "Локални копия"
+    "localCopiesSection": "Локални копия",
+    "singleTap": "Единично докосване",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Действие при единично докосване",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Тройно докосване",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Действие при тройно докосване",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

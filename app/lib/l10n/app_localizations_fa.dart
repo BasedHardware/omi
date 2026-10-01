@@ -12156,4 +12156,16 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'نسخه‌های محلی';
+
+  @override
+  String get singleTap => 'تک ضربه';
+
+  @override
+  String get singleTapAction => 'عمل تک ضربه';
+
+  @override
+  String get tripleTap => 'سه ضربه';
+
+  @override
+  String get tripleTapAction => 'عمل سه ضربه';
 }

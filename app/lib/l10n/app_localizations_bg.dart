@@ -12202,4 +12202,16 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Локални копия';
+
+  @override
+  String get singleTap => 'Единично докосване';
+
+  @override
+  String get singleTapAction => 'Действие при единично докосване';
+
+  @override
+  String get tripleTap => 'Тройно докосване';
+
+  @override
+  String get tripleTapAction => 'Действие при тройно докосване';
 }

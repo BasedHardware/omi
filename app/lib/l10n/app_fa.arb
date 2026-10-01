@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "حذف خودکار نسخه‌های همگام‌شده",
     "autoRemoveSyncedCopiesDays": "نسخه‌های همگام‌شده پس از {days} روز حذف می‌شوند",
     "autoRemoveSyncedCopiesDescription": "نسخه‌های محلی را {days} روز پس از همگام‌سازی حذف می‌کند. نسخه‌های ابری حفظ می‌شوند.",
-    "localCopiesSection": "نسخه‌های محلی"
+    "localCopiesSection": "نسخه‌های محلی",
+    "singleTap": "تک ضربه",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "عمل تک ضربه",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "سه ضربه",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "عمل سه ضربه",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

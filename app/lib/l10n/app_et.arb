@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Sünkroonitud koopiate automaatne eemaldamine",
     "autoRemoveSyncedCopiesDays": "Sünkroonitud koopiad kustutatakse pärast {days} päeva",
     "autoRemoveSyncedCopiesDescription": "Kustutab kohalikud koopiad {days} päeva pärast sünkroonimist. Pilvekoopiad jäävad alles.",
-    "localCopiesSection": "Kohalikud koopiad"
+    "localCopiesSection": "Kohalikud koopiad",
+    "singleTap": "Ühekordne puudutus",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Ühekordse puudutuse tegevus",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Kolmikpuudutus",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Kolmikpuudutuse tegevus",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

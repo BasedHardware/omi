@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "ಸಿಂಕ್ ಆದ ಪ್ರತಿಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ತೆಗೆದುಹಾಕಿ",
     "autoRemoveSyncedCopiesDays": "ಸಿಂಕ್ ಆದ ಪ್ರತಿಗಳು {days} ದಿನಗಳ ನಂತರ ಅಳಿಸಲ್ಪಡುತ್ತವೆ",
     "autoRemoveSyncedCopiesDescription": "ಸಿಂಕ್ ಆದ {days} ದಿನಗಳ ನಂತರ ಸ್ಥಳೀಯ ಪ್ರತಿಗಳನ್ನು ಅಳಿಸುತ್ತದೆ. ಕ್ಲೌಡ್ ಪ್ರತಿಗಳನ್ನು ಇರಿಸಲಾಗುತ್ತದೆ.",
-    "localCopiesSection": "ಸ್ಥಳೀಯ ಪ್ರತಿಗಳು"
+    "localCopiesSection": "ಸ್ಥಳೀಯ ಪ್ರತಿಗಳು",
+    "singleTap": "ಒಂದು ಟ್ಯಾಪ್",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "ಒಂದು ಟ್ಯಾಪ್ ಕ್ರಿಯೆ",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

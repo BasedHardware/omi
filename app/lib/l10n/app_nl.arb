@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Gesynchroniseerde kopieën automatisch verwijderen",
     "autoRemoveSyncedCopiesDays": "Gesynchroniseerde kopieën worden na {days} dagen verwijderd",
     "autoRemoveSyncedCopiesDescription": "Verwijdert lokale kopieën {days} dagen na synchronisatie. Cloudkopieën blijven bewaard.",
-    "localCopiesSection": "Lokale kopieën"
+    "localCopiesSection": "Lokale kopieën",
+    "singleTap": "Enkel tikken",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Enkel tikken actie",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Drie keer tikken",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Drie keer tikken actie",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

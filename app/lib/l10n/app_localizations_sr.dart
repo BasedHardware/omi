@@ -12172,4 +12172,16 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Локалне копије';
+
+  @override
+  String get singleTap => 'Један додир';
+
+  @override
+  String get singleTapAction => 'Акција једног додира';
+
+  @override
+  String get tripleTap => 'Троструки додир';
+
+  @override
+  String get tripleTapAction => 'Акција троструког додира';
 }

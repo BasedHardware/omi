@@ -12063,4 +12063,16 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'עותקים מקומיים';
+
+  @override
+  String get singleTap => 'לחץ בודד';
+
+  @override
+  String get singleTapAction => 'פעולת לחיצה בודדת';
+
+  @override
+  String get tripleTap => 'לחץ משולש';
+
+  @override
+  String get tripleTapAction => 'פעולת לחיצה משולשת';
 }

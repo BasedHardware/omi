@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Fjern synkroniserte kopier automatisk",
     "autoRemoveSyncedCopiesDays": "Synkroniserte kopier slettes etter {days} dager",
     "autoRemoveSyncedCopiesDescription": "Sletter lokale kopier {days} dager etter synkronisering. Skykopier beholdes.",
-    "localCopiesSection": "Lokale kopier"
+    "localCopiesSection": "Lokale kopier",
+    "singleTap": "Enkelttrykk",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Enkelttrykk-handling",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trippeltrykk",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Trippeltrykk-handling",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

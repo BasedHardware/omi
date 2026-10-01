@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "सिंक की गई कॉपियाँ स्वतः हटाएँ",
     "autoRemoveSyncedCopiesDays": "सिंक की गई कॉपियाँ {days} दिनों बाद हटा दी जाती हैं",
     "autoRemoveSyncedCopiesDescription": "सिंक के {days} दिन बाद लोकल कॉपियाँ हटा देता है। क्लाउड कॉपियाँ रखी जाती हैं।",
-    "localCopiesSection": "लोकल कॉपियाँ"
+    "localCopiesSection": "लोकल कॉपियाँ",
+    "singleTap": "सिंगल टैप",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "सिंगल टैप क्रिया",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "ट्रिपल टैप",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "ट्रिपल टैप क्रिया",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

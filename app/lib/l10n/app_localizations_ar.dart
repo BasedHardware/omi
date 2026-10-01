@@ -12085,4 +12085,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'النسخ المحلية';
+
+  @override
+  String get singleTap => 'نقرة مفردة';
+
+  @override
+  String get singleTapAction => 'إجراء النقر المفرد';
+
+  @override
+  String get tripleTap => 'نقرة ثلاثية';
+
+  @override
+  String get tripleTapAction => 'إجراء النقر الثلاثي';
 }

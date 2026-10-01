@@ -3810,5 +3810,21 @@
     "autoRemoveSyncedCopiesTitle": "Hapus Salinan Tersinkron Otomatis",
     "autoRemoveSyncedCopiesDays": "Salinan tersinkron dihapus setelah {days} hari",
     "autoRemoveSyncedCopiesDescription": "Menghapus salinan lokal {days} hari setelah sinkron. Salinan cloud disimpan.",
-    "localCopiesSection": "Salinan Lokal"
+    "localCopiesSection": "Salinan Lokal",
+    "singleTap": "Ketuk Tunggal",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Aksi Ketuk Tunggal",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Ketuk Tiga Kali",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Aksi Ketuk Tiga Kali",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

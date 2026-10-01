@@ -39,6 +39,7 @@ target_sources(app PRIVATE ${core_sources} ${app_sources})
 target_include_directories(app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/lib/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 
 if(CONFIG_OMI_CODEC_OPUS)

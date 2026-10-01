@@ -11966,4 +11966,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get localCopiesSection => '로컬 사본';
+
+  @override
+  String get singleTap => '싱글 탭';
+
+  @override
+  String get singleTapAction => '싱글 탭 동작';
+
+  @override
+  String get tripleTap => '트리플 탭';
+
+  @override
+  String get tripleTapAction => '트리플 탭 동작';
 }

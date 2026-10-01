@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Eliminare automată a copiilor sincronizate",
     "autoRemoveSyncedCopiesDays": "Copiile sincronizate se șterg după {days} zile",
     "autoRemoveSyncedCopiesDescription": "Șterge copiile locale la {days} zile după sincronizare. Copiile din cloud sunt păstrate.",
-    "localCopiesSection": "Copii locale"
+    "localCopiesSection": "Copii locale",
+    "singleTap": "Apăsare simplă",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Acțiune apăsare simplă",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Triplă apăsare",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Acțiune triplă apăsare",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "Automatski ukloni sinhronizirane kopije",
     "autoRemoveSyncedCopiesDays": "Sinhronizirane kopije se brišu nakon {days} dana",
     "autoRemoveSyncedCopiesDescription": "Briše lokalne kopije {days} dana nakon sinkronizacije. Cloud kopije se zadržavaju.",
-    "localCopiesSection": "Lokalne kopije"
+    "localCopiesSection": "Lokalne kopije",
+    "singleTap": "Jedan dodir",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Akcija jednog dodira",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trostruki dodir",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Akcija trostrukog dodira",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

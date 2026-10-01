@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Automatiškai šalinti sinchronizuotas kopijas",
     "autoRemoveSyncedCopiesDays": "Sinchronizuotos kopijos ištrinamos po {days} dienų",
     "autoRemoveSyncedCopiesDescription": "Ištrina vietines kopijas po {days} dienų nuo sinchronizavimo. Debesies kopijos išsaugomos.",
-    "localCopiesSection": "Vietinės kopijos"
+    "localCopiesSection": "Vietinės kopijos",
+    "singleTap": "Vienas bakstelėjimas",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Vieno bakstelėjimo veiksmas",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trigubas bakstelėjimas",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Trigubo bakstelėjimo veiksmas",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

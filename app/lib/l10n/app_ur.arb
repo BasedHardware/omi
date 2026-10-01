@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "سنک کی گئی کاپیاں خودکار طور پر ہٹائیں",
     "autoRemoveSyncedCopiesDays": "سنک کی گئی کاپیاں {days} دن بعد حذف ہو جاتی ہیں",
     "autoRemoveSyncedCopiesDescription": "سنک کے {days} دن بعد مقامی کاپیاں حذف کر دیتا ہے۔ کلاؤڈ کاپیاں محفوظ رہتی ہیں۔",
-    "localCopiesSection": "مقامی کاپیاں"
+    "localCopiesSection": "مقامی کاپیاں",
+    "singleTap": "ایک بار تھپتھپائیں",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "ایک بار تھپتھپانے کا عمل",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "تین بار تھپتھپائیں",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "تین بار تھپتھپانے کا عمل",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

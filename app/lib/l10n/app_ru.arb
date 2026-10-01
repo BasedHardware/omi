@@ -3810,5 +3810,21 @@
     "autoRemoveSyncedCopiesTitle": "Автоудаление синхронизированных копий",
     "autoRemoveSyncedCopiesDays": "Синхронизированные копии удаляются через {days} дней",
     "autoRemoveSyncedCopiesDescription": "Удаляет локальные копии через {days} дней после синхронизации. Облачные копии сохраняются.",
-    "localCopiesSection": "Локальные копии"
+    "localCopiesSection": "Локальные копии",
+    "singleTap": "Одиночное нажатие",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Действие при одиночном нажатии",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Тройное нажатие",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Действие при тройном нажатии",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "Awtomatikong Tanggalin ang mga Naka-sync na Kopya",
     "autoRemoveSyncedCopiesDays": "Binubura ang mga naka-sync na kopya pagkatapos ng {days} araw",
     "autoRemoveSyncedCopiesDescription": "Binubura ang mga lokal na kopya {days} araw pagkatapos mag-sync. Pinapanatili ang mga kopya sa cloud.",
-    "localCopiesSection": "Mga Lokal na Kopya"
+    "localCopiesSection": "Mga Lokal na Kopya",
+    "singleTap": "Single Tap",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Single Tap Action",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Triple Tap",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Triple Tap Action",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

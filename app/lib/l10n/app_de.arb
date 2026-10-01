@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Synchronisierte Kopien automatisch entfernen",
     "autoRemoveSyncedCopiesDays": "Synchronisierte Kopien werden nach {days} Tagen gelöscht",
     "autoRemoveSyncedCopiesDescription": "Löscht lokale Kopien {days} Tage nach der Synchronisierung. Cloud-Kopien bleiben erhalten.",
-    "localCopiesSection": "Lokale Kopien"
+    "localCopiesSection": "Lokale Kopien",
+    "singleTap": "Einfachtippen",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Einfachtippen-Aktion",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Dreifachtippen",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Dreifachtippen-Aktion",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

@@ -11941,4 +11941,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get localCopiesSection => '本地副本';
+
+  @override
+  String get singleTap => '单击';
+
+  @override
+  String get singleTapAction => '单击操作';
+
+  @override
+  String get tripleTap => '三击';
+
+  @override
+  String get tripleTapAction => '三击操作';
 }

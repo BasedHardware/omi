@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "ลบสำเนาที่ซิงค์แล้วอัตโนมัติ",
     "autoRemoveSyncedCopiesDays": "สำเนาที่ซิงค์แล้วจะถูกลบหลังจาก {days} วัน",
     "autoRemoveSyncedCopiesDescription": "ลบสำเนาในเครื่องหลังซิงค์ {days} วัน สำเนาบนคลาวด์จะถูกเก็บไว้",
-    "localCopiesSection": "สำเนาในเครื่อง"
+    "localCopiesSection": "สำเนาในเครื่อง",
+    "singleTap": "แตะครั้งเดียว",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "การดำเนินการแตะครั้งเดียว",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "แตะสามครั้ง",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "การดำเนินการแตะสามครั้ง",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

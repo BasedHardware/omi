@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "自动删除已同步副本",
     "autoRemoveSyncedCopiesDays": "已同步副本将在 {days} 天后删除",
     "autoRemoveSyncedCopiesDescription": "在同步 {days} 天后删除本地副本。云端副本会保留。",
-    "localCopiesSection": "本地副本"
+    "localCopiesSection": "本地副本",
+    "singleTap": "单击",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "单击操作",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "三击",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "三击操作",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

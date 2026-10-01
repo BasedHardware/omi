@@ -12158,4 +12158,16 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Lokale kopier';
+
+  @override
+  String get singleTap => 'Enkelttrykk';
+
+  @override
+  String get singleTapAction => 'Enkelttrykk-handling';
+
+  @override
+  String get tripleTap => 'Trippeltrykk';
+
+  @override
+  String get tripleTapAction => 'Trippeltrykk-handling';
 }

@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Automātiski noņemt sinhronizētās kopijas",
     "autoRemoveSyncedCopiesDays": "Sinhronizētās kopijas tiek dzēstas pēc {days} dienām",
     "autoRemoveSyncedCopiesDescription": "Dzēš vietējās kopijas {days} dienas pēc sinhronizācijas. Mākoņa kopijas tiek saglabātas.",
-    "localCopiesSection": "Vietējās kopijas"
+    "localCopiesSection": "Vietējās kopijas",
+    "singleTap": "Viens klikšķis",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Viena klikšķa darbība",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trīskāršs klikšķis",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Trīskārša klikšķa darbība",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

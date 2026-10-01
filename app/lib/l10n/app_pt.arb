@@ -3810,5 +3810,21 @@
     "autoRemoveSyncedCopiesTitle": "Remover cópias sincronizadas automaticamente",
     "autoRemoveSyncedCopiesDays": "As cópias sincronizadas são excluídas após {days} dias",
     "autoRemoveSyncedCopiesDescription": "Exclui cópias locais {days} dias após a sincronização. As cópias na nuvem são mantidas.",
-    "localCopiesSection": "Cópias locais"
+    "localCopiesSection": "Cópias locais",
+    "singleTap": "Toque único",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Ação de toque único",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Toque triplo",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Ação de toque triplo",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

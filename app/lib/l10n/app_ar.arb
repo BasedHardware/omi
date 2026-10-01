@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "إزالة النسخ المتزامنة تلقائيًا",
     "autoRemoveSyncedCopiesDays": "يتم حذف النسخ المتزامنة بعد {days} يومًا",
     "autoRemoveSyncedCopiesDescription": "يحذف النسخ المحلية بعد {days} يومًا من المزامنة. تبقى النسخ السحابية محفوظة.",
-    "localCopiesSection": "النسخ المحلية"
+    "localCopiesSection": "النسخ المحلية",
+    "singleTap": "نقرة مفردة",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "إجراء النقر المفرد",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "نقرة ثلاثية",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "إجراء النقر الثلاثي",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

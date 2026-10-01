@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Автоматичне видалення синхронізованих копій",
     "autoRemoveSyncedCopiesDays": "Синхронізовані копії видаляються через {days} днів",
     "autoRemoveSyncedCopiesDescription": "Видаляє локальні копії через {days} днів після синхронізації. Хмарні копії зберігаються.",
-    "localCopiesSection": "Локальні копії"
+    "localCopiesSection": "Локальні копії",
+    "singleTap": "Одинарне натискання",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Дія одинарного натискання",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Потрійне натискання",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Дія потрійного натискання",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "ஒத்திசைக்கப்பட்ட நகல்களை தானாக அகற்று",
     "autoRemoveSyncedCopiesDays": "ஒத்திசைக்கப்பட்ட நகல்கள் {days} நாட்களுக்குப் பிறகு நீக்கப்படும்",
     "autoRemoveSyncedCopiesDescription": "ஒத்திசைத்த {days} நாட்களுக்குப் பிறகு உள்ளூர் நகல்களை நீக்கும். கிளவுட் நகல்கள் வைக்கப்படும்.",
-    "localCopiesSection": "உள்ளூர் நகல்கள்"
+    "localCopiesSection": "உள்ளூர் நகல்கள்",
+    "singleTap": "ஒற்றை தட்டு",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "ஒற்றை தட்டு நடவடிக்கை",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "மூன்று முறை தட்டு",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "மூன்று முறை தட்டு நடவடிக்கை",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

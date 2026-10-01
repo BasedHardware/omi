@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "Аўтаматычна выдаляць сінхранізаваныя копіі",
     "autoRemoveSyncedCopiesDays": "Сінхранізаваныя копіі выдаляюцца праз {days} дзён",
     "autoRemoveSyncedCopiesDescription": "Выдаляе лакальныя копіі праз {days} дзён пасля сінхранізацыі. Воблачныя копіі захоўваюцца.",
-    "localCopiesSection": "Лакальныя копіі"
+    "localCopiesSection": "Лакальныя копіі",
+    "singleTap": "Адзінарны дотык",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Дзеянне адзінарнага дотыку",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Трайны дотык",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Дзеянне трайнага дотыку",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

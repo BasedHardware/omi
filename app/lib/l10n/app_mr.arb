@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "सिंक केलेल्या प्रती आपोआप काढा",
     "autoRemoveSyncedCopiesDays": "सिंक केलेल्या प्रती {days} दिवसांनंतर हटवल्या जातात",
     "autoRemoveSyncedCopiesDescription": "सिंकनंतर {days} दिवसांनी स्थानिक प्रती हटवते. क्लाउड प्रती ठेवल्या जातात.",
-    "localCopiesSection": "स्थानिक प्रती"
+    "localCopiesSection": "स्थानिक प्रती",
+    "singleTap": "एकेरी टॅप",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "एकेरी टॅप क्रिया",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "तिहेरी टॅप",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "तिहेरी टॅप क्रिया",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

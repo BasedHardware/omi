@@ -12208,4 +12208,16 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'స్థానిక కాపీలు';
+
+  @override
+  String get singleTap => 'సింగిల్ ట్యాప్';
+
+  @override
+  String get singleTapAction => 'సింగిల్ ట్యాప్ చర్య';
+
+  @override
+  String get tripleTap => 'ట్రిపుల్ ట్యాప్';
+
+  @override
+  String get tripleTapAction => 'ట్రిపుల్ ట్యాప్ చర్య';
 }

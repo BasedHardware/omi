@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "Ta bort synkroniserade kopior automatiskt",
     "autoRemoveSyncedCopiesDays": "Synkroniserade kopior raderas efter {days} dagar",
     "autoRemoveSyncedCopiesDescription": "Raderar lokala kopior {days} dagar efter synkronisering. Molnkopior behålls.",
-    "localCopiesSection": "Lokala kopior"
+    "localCopiesSection": "Lokala kopior",
+    "singleTap": "Enkeltryck",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Enkeltrycksåtgärd",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trippeltryck",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Trippeltrycksåtgärd",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

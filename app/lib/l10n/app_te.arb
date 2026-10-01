@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "సింక్ చేసిన కాపీలను స్వయంచాలకంగా తొలగించు",
     "autoRemoveSyncedCopiesDays": "సింక్ చేసిన కాపీలు {days} రోజుల తర్వాత తొలగించబడతాయి",
     "autoRemoveSyncedCopiesDescription": "సింక్ అయిన {days} రోజుల తర్వాత స్థానిక కాపీలను తొలగిస్తుంది. క్లౌడ్ కాపీలు ఉంచబడతాయి.",
-    "localCopiesSection": "స్థానిక కాపీలు"
+    "localCopiesSection": "స్థానిక కాపీలు",
+    "singleTap": "సింగిల్ ట్యాప్",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "సింగిల్ ట్యాప్ చర్య",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "ట్రిపుల్ ట్యాప్",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "ట్రిపుల్ ట్యాప్ చర్య",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

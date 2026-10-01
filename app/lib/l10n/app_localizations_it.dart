@@ -12226,4 +12226,16 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Copie locali';
+
+  @override
+  String get singleTap => 'Tocco Singolo';
+
+  @override
+  String get singleTapAction => 'Azione Tocco Singolo';
+
+  @override
+  String get tripleTap => 'Triplo Tocco';
+
+  @override
+  String get tripleTapAction => 'Azione Triplo Tocco';
 }

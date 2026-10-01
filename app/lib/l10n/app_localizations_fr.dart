@@ -12259,4 +12259,16 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Copies locales';
+
+  @override
+  String get singleTap => 'Appui simple';
+
+  @override
+  String get singleTapAction => 'Action appui simple';
+
+  @override
+  String get tripleTap => 'Triple appui';
+
+  @override
+  String get tripleTapAction => 'Action triple appui';
 }

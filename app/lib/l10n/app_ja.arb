@@ -3775,5 +3775,21 @@
     "autoRemoveSyncedCopiesTitle": "同期済みコピーを自動削除",
     "autoRemoveSyncedCopiesDays": "同期済みコピーは{days}日後に削除されます",
     "autoRemoveSyncedCopiesDescription": "同期後{days}日でローカルコピーを削除します。クラウドのコピーは保持されます。",
-    "localCopiesSection": "ローカルコピー"
+    "localCopiesSection": "ローカルコピー",
+    "singleTap": "シングルタップ",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "シングルタップアクション",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "トリプルタップ",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "トリプルタップアクション",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

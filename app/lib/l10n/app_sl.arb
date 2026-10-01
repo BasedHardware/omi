@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "Samodejno odstrani sinhronizirane kopije",
     "autoRemoveSyncedCopiesDays": "Sinhronizirane kopije se izbrišejo po {days} dneh",
     "autoRemoveSyncedCopiesDescription": "Izbriše lokalne kopije {days} dni po sinhronizaciji. Oblačne kopije ostanejo ohranjene.",
-    "localCopiesSection": "Lokalne kopije"
+    "localCopiesSection": "Lokalne kopije",
+    "singleTap": "Enojni dotik",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Dejanje enojnega dotika",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trojni dotik",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Dejanje trojnega dotika",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

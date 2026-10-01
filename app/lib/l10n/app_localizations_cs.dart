@@ -12156,4 +12156,16 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Místní kopie';
+
+  @override
+  String get singleTap => 'Jednoduché klepnutí';
+
+  @override
+  String get singleTapAction => 'Akce jednoduchého klepnutí';
+
+  @override
+  String get tripleTap => 'Trojité klepnutí';
+
+  @override
+  String get tripleTapAction => 'Akce trojitého klepnutí';
 }

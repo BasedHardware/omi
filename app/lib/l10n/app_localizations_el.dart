@@ -12238,4 +12238,16 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Τοπικά αντίγραφα';
+
+  @override
+  String get singleTap => 'Απλό Πάτημα';
+
+  @override
+  String get singleTapAction => 'Ενέργεια Απλού Πατήματος';
+
+  @override
+  String get tripleTap => 'Τριπλό Πάτημα';
+
+  @override
+  String get tripleTapAction => 'Ενέργεια Τριπλού Πατήματος';
 }

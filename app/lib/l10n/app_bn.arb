@@ -11332,5 +11332,21 @@
     "autoRemoveSyncedCopiesTitle": "সিঙ্ক করা কপি স্বয়ংক্রিয়ভাবে সরান",
     "autoRemoveSyncedCopiesDays": "{days} দিন পরে সিঙ্ক করা কপি মুছে যায়",
     "autoRemoveSyncedCopiesDescription": "সিঙ্কের {days} দিন পরে লোকাল কপি মুছে যায়। ক্লাউড কপি রাখা হয়।",
-    "localCopiesSection": "লোকাল কপি"
+    "localCopiesSection": "লোকাল কপি",
+    "singleTap": "একক ট্যাপ",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "একক ট্যাপ ক্রিয়া",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "তিনবার ট্যাপ",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "তিনবার ট্যাপ ক্রিয়া",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }
