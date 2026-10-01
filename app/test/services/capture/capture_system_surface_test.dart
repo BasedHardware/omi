@@ -129,6 +129,23 @@ void main() {
     expect(world.controller.isPaused, false);
   });
 
+  test('a running card is republished at each full hour so its timer runs past it', () async {
+    // A short Stop puts the hour mark between two 30 s health refreshes.
+    await sink.action(request('pause'));
+    await world.elapse(const Duration(seconds: 7));
+    await sink.action(request('resume'));
+    world.emitNativeState(PhoneMicCaptureState.running);
+    final session = world.hostApi.lastStartSessionId!;
+    final published = sink.states.length;
+    for (var frame = 40; (presentation.snapshot['elapsed'] as int) < 3630; frame += 20) {
+      world.injectAudioFrames(20, sessionId: session, firstFrameIndex: frame);
+      await world.elapse(const Duration(seconds: 1));
+    }
+    expect(presentation.snapshot['paused'], false);
+    final pastHour = sink.states.skip(published).firstWhere((s) => (s['elapsed'] as int) >= 3600);
+    expect(pastHour['elapsed'], 3600, reason: 'the update lands at the hour mark, not at the next refresh');
+  });
+
   test('user pause offers Resume; a call interruption freezes without offering it', () async {
     await sink.action(request('pause'));
     expect(presentation.snapshot['status'], 'paused');

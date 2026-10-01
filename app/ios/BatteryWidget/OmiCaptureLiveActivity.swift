@@ -316,7 +316,8 @@ private struct CaptureClockText: View {
                     : String(format: "%d:%02d", seconds / 60, seconds % 60))
             } else {
                 // A live timer reserves width for its range's longest value, so
-                // the range ends at the next hour; periodic updates extend it.
+                // the range ends at the next hour; the app republishes just after
+                // each hour to extend it.
                 let start = Date(timeIntervalSince1970: state.startedAt)
                 let hours = (max(0, Date().timeIntervalSince(start)) / 3600).rounded(.down) + 1
                 Text(timerInterval: start...start.addingTimeInterval(hours * 3600), countsDown: false)

@@ -29,6 +29,7 @@ class CaptureSystemSurface {
   bool _ready = false;
   CaptureOwned? _listener;
   Timer? _heartbeat;
+  Timer? _hourMark;
   Future<void> _delivery = Future.value();
 
   Future<void> start() async {
@@ -125,12 +126,24 @@ class CaptureSystemSurface {
     final key = fingerprint.toString();
     if (!force && key == _lastFingerprint) return;
     _lastFingerprint = key;
+    _armHourMark(value);
     _delivery = _delivery.then((_) async {
       if (!_closed) await sink.publish(value);
     }).catchError((Object error) {
       _lastFingerprint = null;
       Logger.debug('Live Activity update failed: $error');
     });
+  }
+
+  /// The card's timer stops at the end of its range, the next full hour, until an
+  /// update extends it, so a running card is republished just after each hour.
+  void _armHourMark(Map<String, Object?> value) {
+    _hourMark?.cancel();
+    final anchor = _anchor;
+    if (anchor == null || value['active'] != true || value['paused'] == true) return;
+    final elapsed = _now().difference(anchor);
+    final untilHour = Duration(hours: elapsed.inHours + 1) - elapsed;
+    _hourMark = capture.lifetime.once(untilHour + const Duration(milliseconds: 250), () => _changed(force: true));
   }
 
   Future<Map<String, Object?>> _act(Map<String, Object?> request) async {
@@ -167,6 +180,7 @@ class CaptureSystemSurface {
     if (_closed) return;
     _closed = true;
     _heartbeat?.cancel();
+    _hourMark?.cancel();
     await _listener?.release();
     await _delivery;
     try {
