@@ -187,6 +187,22 @@ its eight-candidate budget. It records the full owner distribution without
 changing capture output. Both shadows share `jev_shadow.py` admission/worker
 primitives and persist only numeric/enum/identifier metadata through
 `database/jev_shadow.py`; Redis unavailable fails closed before vendor egress.
-Their lazy four-worker `jev-shadow` executor is isolated from foreground LLM
+Their lazy ten-worker `jev-shadow` executor is isolated from foreground LLM
 work. Admission owns a bounded Redis client per attempt; vendor calls and
 retry-free Firestore writes consume only the remaining 2.5-second task budget.
+
+Owner shadows gather the full eligible batch, hash conversation ID + candidate
+SHA256 against the lane percentage, deduplicate identical hashes and select the
+eight lowest before submission. The owner bulkhead has eight slots (relevance
+two); per-conversation cap and cross-conversation saturation losses remain
+`dropped` coverage. Records include original zero-based `candidate_index` and
+pre-selection `eligible_count`, both integers. Dev's four live-flag hosts pin
+`MEMORY_OWNER_JEV_FLIP_PERCENT=0` to avoid starving the shadow. This control is
+universal: only 100 permits the flag; intermediate/invalid values disable it.
+Either malformed relevance arm percentage resolves everyone to nano.
+
+Firestore's deadline race bounds waiting; an already-started commit can persist
+later. Deterministic IDs include lane, conversation, content hash and question
+version. Transactional first-write-wins preserves scores and retention timestamps.
+Readouts include valid late writes once per (uid, document ID), independently of
+attempt `timeout`/`ok` counters. Account deletion remains transactionally fenced.

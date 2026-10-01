@@ -40,7 +40,8 @@ from utils.metrics import (
 
 Lane = Literal['relevance', 'owner']
 DEADLINE_SECONDS = 2.5
-_slots = {lane: threading.BoundedSemaphore(2) for lane in ('relevance', 'owner')}
+MAX_OWNER_SHADOWS_PER_CONVERSATION = 8
+_slots = {'relevance': threading.BoundedSemaphore(2), 'owner': threading.BoundedSemaphore(8)}
 _SOURCES = frozenset(source.value for source in ConversationSource)
 _SUBJECT_KINDS = frozenset({'speaker', 'person', 'user', 'entity', 'unknown', 'general_knowledge'})
 _ADMIT_LUA = """
@@ -58,13 +59,14 @@ def _sha(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def _in_cohort(lane: Lane, conversation_id: str) -> bool:
+def _in_cohort(lane: Lane, conversation_id: str, content_sha: str = '') -> bool:
     percent = (
         percentage('CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT')
         if lane == 'relevance'
         else percentage('MEMORY_OWNER_JEV_SHADOW_PERCENT')
     )
-    return uid_bucket(conversation_id, f'{lane}-shadow-v1') < percent
+    identity = conversation_id if lane == 'relevance' else f'{conversation_id}\0{content_sha}'
+    return uid_bucket(identity, f'{lane}-shadow-v1') < percent
 
 
 def _get_shadow_redis(deadline: float) -> Any:
@@ -124,7 +126,7 @@ def _admit(lane: Lane, uid: str, conversation_id: str, content_sha: str, version
 def _submit(
     lane: Lane, uid: str, conversation_id: str, content_sha: str, state: str, name: str | None, record: dict[str, Any]
 ) -> None:
-    if not _in_cohort(lane, conversation_id):
+    if not _in_cohort(lane, conversation_id, content_sha):
         record_jev_shadow_outcome(lane, 'cohort')
         return
     slot = _slots[lane]
@@ -163,7 +165,7 @@ def _run(
 ) -> None:
     model_called = False
     try:
-        if not _in_cohort(lane, conversation_id):
+        if not _in_cohort(lane, conversation_id, content_sha):
             record_jev_shadow_outcome(lane, 'cohort')
             return
         if time.monotonic() >= deadline:
@@ -295,8 +297,25 @@ def submit_relevance_shadow(
         record_jev_shadow_outcome('relevance', 'dropped')
 
 
-def owner_shadow_in_cohort(conversation_id: str) -> bool:
-    return _in_cohort('owner', conversation_id)
+def select_owner_shadow_indices(conversation_id: str, candidate_contents: list[str]) -> list[int]:
+    """Hash-select the entire eligible batch before any submissions, independent of position."""
+    ranked = []
+    seen_hashes: set[str] = set()
+    for index, content in enumerate(candidate_contents):
+        content_sha = _sha(content)
+        if content_sha in seen_hashes:
+            record_jev_shadow_outcome('owner', 'deduped')
+            continue
+        seen_hashes.add(content_sha)
+        if not _in_cohort('owner', conversation_id, content_sha):
+            record_jev_shadow_outcome('owner', 'cohort')
+            continue
+        rank = uid_bucket(f'{conversation_id}\0{content_sha}', 'owner-shadow-v1')
+        ranked.append((rank, content_sha, index))
+    ranked.sort()
+    for _ in ranked[MAX_OWNER_SHADOWS_PER_CONVERSATION:]:
+        record_jev_shadow_outcome('owner', 'dropped')
+    return [index for _, _, index in ranked[:MAX_OWNER_SHADOWS_PER_CONVERSATION]]
 
 
 def submit_owner_shadow(
@@ -310,6 +329,8 @@ def submit_owner_shadow(
     source: str,
     n_quotes: int,
     user_name_present: bool,
+    candidate_index: int,
+    eligible_count: int,
 ) -> None:
     """The caller has already excluded live-scored and non-third-party candidates."""
     try:
@@ -331,6 +352,8 @@ def submit_owner_shadow(
                 'source': source if source in _SOURCES else 'unknown',
                 'n_quotes': n_quotes,
                 'user_name_present': user_name_present,
+                'candidate_index': candidate_index,
+                'eligible_count': eligible_count,
             },
         )
     except Exception:

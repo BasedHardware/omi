@@ -211,6 +211,7 @@ def with_capture_jev_shadow_env(payload: str) -> str:
             r'\n        {"name": "CAPTURE_JEV_SHADOW_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},'
             r'\n        {"name": "CAPTURE_JEV_SHADOW_PERCENT", "value": "0"},'
             rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_PERCENT", "value": "0"}},'
+            r'\n        {"name": "MEMORY_OWNER_JEV_FLIP_PERCENT", "value": "0"},'
             rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
             rf'\n        {{"name": "MEMORY_OWNER_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
             r'\n        {"name": "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT", "value": "0"},'
@@ -3137,3 +3138,20 @@ def test_dev_jev_shadow_hosts_keep_a_nonempty_measurement_arm():
         assert (
             keep_all_percent + float(live['value']) < 100
         ), f'{scope} keep_all+jev must leave a nonempty nano arm for the shadow to measure'
+
+
+def test_dev_owner_shadow_hosts_disable_live_owner_scoring():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    dev = validator._get_env_config(manifest, 'dev')
+    live_hosts = 0
+    for scope, env_block in _manifest_env_blocks(dev):
+        live = env_block.get(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
+        shadow = env_block.get('MEMORY_OWNER_JEV_SHADOW_PERCENT')
+        if scope not in _JEV_PROCESS_CONVERSATION_HOSTS:
+            assert shadow is None or shadow.get('value') == '0'
+            continue
+        if live is not None:
+            live_hosts += 1
+            assert env_block.get('MEMORY_OWNER_JEV_FLIP_PERCENT', {}).get('value') == '0', scope
+    assert live_hosts == 4

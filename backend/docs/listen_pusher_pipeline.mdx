@@ -1965,16 +1965,24 @@ visibility edges but do not renew a lease or opt into detail translation.
 
 Conversation processing assigns stable per-user relevance arms (`relevance_arm`).
 The owner flip flag is universal when enabled (INV-MEM-5); owner *measurement*
-stays conversation-sampled. Existing live flags are dev-on,
-prod-off; unset live percentages preserve dev behavior. The ambiguous model tier
+stays candidate-sampled. Existing live flags are dev-on, prod-off; dev pins
+relevance and universal owner live percentages to zero for shadow coverage.
+Owner percentage permits only 100 (everyone) or 0 (off); invalid/intermediate
+values fail closed. Either malformed relevance arm percentage selects nano. The ambiguous model tier
 can be policy-kept by `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT`; deterministic
 rules, restores, calendar retention and plan gates retain their precedence.
 
 Both processing hosts submit advisory relevance/owner questions through
 `utils/conversations/jev_shadow.py` after the relevant live decision. Percentages
-sample conversation IDs, defaults are off, Redis atomically dedupes content hashes
-and caps daily calls (60000 per lane), and two slots per lane bound queued/active
-work. IO stays in the worker; slow or unavailable services drop measurement without
+sample conversation IDs for relevance and conversation+candidate hashes for
+owner, defaults are off, and Redis atomically dedupes content hashes and caps
+daily calls (60000 per lane). Owner hash selection sees the complete eligible
+batch before submission and selects at most eight unique candidates; eight owner
+slots and two relevance slots bound queued/active work on a ten-worker pool. IO stays in the worker; slow or unavailable services drop measurement without
 changing the conversation or memory. All durable `users/{uid}/jev_shadow` records
-are text-free and have a 60-day expiry. The protocol and TTL deployment prerequisite
+are text-free and have a 60-day expiry. Owner records carry integer candidate
+position/population metadata. First-write-wins records preserve scores and expiry
+on retries; late commits after a worker timeout are valid and counted once by
+(uid, document ID), separately from attempt metrics. Drops are coverage losses.
+The protocol and TTL deployment prerequisite
 are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).

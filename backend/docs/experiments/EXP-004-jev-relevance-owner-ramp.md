@@ -16,13 +16,15 @@ ranges: keep-all [0,K), Jev [K,min(100,K+J)), otherwise nano. K is
 `CONVERSATION_RELEVANCE_JEV_PERCENT` (unset means 100 when the existing enable
 flag is on, otherwise 0). A UID in `CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST`
 is Jev only while enabled and never overrides keep-all. Invalid percentages
-admit nobody. With K fixed, increasing J retains existing Jev users. Set K
+resolve every UID to the control nano arm, even with a live flag or allowlist. With K fixed, increasing J retains existing Jev users. Set K
 before J: increasing K moves the Jev window and may absorb Jev users into
 keep-all; the upper bound is capped at 100.
 
 Owner flip is universal when `MEMORY_OWNER_JEV_FLIP_ENABLED` is on; INV-MEM-5
-forbids UID cohorts in live owner attribution, so there is no owner-flip
-percentage or allowlist. Owner *measurement* stays conversation-sampled.
+forbids UID cohorts in live owner attribution. `MEMORY_OWNER_JEV_FLIP_PERCENT`
+is a universal control: 0 disables scoring, 100 permits it when the flag is on;
+unset preserves the flag, and intermediate or malformed values disable it.
+There is no owner UID allowlist. Owner *measurement* stays candidate-sampled.
 
 Rules, restores, policy KEEP and the plan gate precede arm treatment. Keep-all
 returns policy keep at the ambiguous model tier without calling nano or Jev.
@@ -39,8 +41,11 @@ locked classifier/label set; shadow scores alone are not nano counterfactuals.
 Both deployment stages declare keep-all percentage 0 and daily caps 60000. Dev
 runs both shadows at 100 on the scraped processing hosts (backend-listen, pusher
 and the Cloud Run backend service) and retains both live flags on with the live
-Jev percentage pinned to 0: unset would default to 100, which routes every UID
-to the live Jev arm and leaves the relevance shadow an empty population.
+relevance `CONVERSATION_RELEVANCE_JEV_PERCENT` and owner
+`MEMORY_OWNER_JEV_FLIP_PERCENT` pinned to 0 on all four live-flag hosts
+(backend-listen, pusher, Cloud Run backend and backend-sync). Unset would enable
+live scoring, emptying relevance measurement and excluding the first eight
+third-party candidates from owner measurement.
 backend-sync and backend-sync-backfill stay at 0: their Cloud
 Run revisions have no GMP sidecar/exporter allowlist entry, so their shadow
 outcomes and latency would be invisible (see utils/metrics.py). Prod declares
@@ -53,13 +58,19 @@ pre-bind.
 `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` samples the conversation ID with
 salt `relevance-shadow-v1`. Only the reached model tier, transcript-only,
 non-wake-word, nonempty <=100-word population outside the Jev arm is eligible.
-`MEMORY_OWNER_JEV_SHADOW_PERCENT` uses salt `owner-shadow-v1`. Only grounded
+`MEMORY_OWNER_JEV_SHADOW_PERCENT` hashes conversation ID + candidate SHA256
+with salt `owner-shadow-v1`. The extraction loop gathers the full eligible batch
+before submission, deduplicates candidate hashes, filters by percentage, and
+selects the eight lowest hashes per conversation. Selection is stable under
+reordering and independent of extraction position. Only grounded
 third-party candidates that the live path did not score (including those beyond
 its budget of 8) are eligible. State is assembled from already available values;
 workers receive strings and numeric/enum metadata, never conversation objects.
 
-Each lane has a process bound of two queued/active tasks. Queue-full work drops
-without waiting on a dedicated, lazily created four-worker `jev-shadow` executor.
+Relevance has a process bound of two queued/active tasks; owner has eight, so
+one selected conversation burst fits when the lane is idle. Both use a dedicated,
+lazily created ten-worker `jev-shadow` executor. Cross-conversation saturation
+and candidates above the per-conversation cap count as `dropped`, never scores.
 A 2.5-second task deadline includes queue, Redis, vendor and persistence time.
 Admission uses an attempt-owned Redis client with connect/read timeouts at most
 0.5 seconds and bounded by the remaining budget; Redis retries are disabled.
@@ -73,12 +84,19 @@ Redis admit nothing. Dedupe claims persist 60 days, including failed attempts.
 No shadow result or failure affects a relevance verdict or persisted memory.
 
 Server-owned records live at `users/{uid}/jev_shadow/{id}`. IDs are the first
-32 hex digits of SHA256(`lane|conversation_id|content_sha`). Relevance records
+32 hex digits of SHA256(`lane|conversation_id|content_sha|question_version`). Relevance records
 carry score, threshold, arm, raw nano verdict/reason, source, word count, trigger,
 served model and question version. Owner records carry candidate hash, all three
 owner probabilities, pipeline subject kind, source, quote count, user-name-present
-boolean, served model and question version. Both have `created_at` and `expire_at`
-60 days later. No transcript, candidate, quote, summary or name is stored or
+boolean, zero-based original extraction `candidate_index` and pre-selection
+`eligible_count` integers, served model and question version. Both have `created_at` and `expire_at`
+60 days later. Transactional first-write-wins preserves the original scores
+and timestamps on retries. A deadline bounds the worker wait, not an already
+started Firestore commit: a valid record may appear after a `timeout` outcome.
+Readers include late records and count each `(uid, document_id)` once; do not
+add timeout/ok counters to persisted score counts or require an ok outcome for
+a record to be valid. Metrics measure attempts and coverage separately.
+No transcript, candidate, quote, summary or name is stored or
 logged. Client Firestore rules already deny all user subcollections; backend IAM
 owns access, and account deletion enumerates and recursively wipes subcollections.
 No queries or composite indexes are introduced. Deployment must enable the
@@ -92,8 +110,11 @@ Static-label metrics report `ok`, `jev_failed`, `http_429`, `timeout`, `deduped`
 Relevance score bins are 0.5, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99, with the
 nano verdict x Jev strict-discard agreement matrix (plus `none`). Owner P(user)
 bins are 0.5, 0.7, 0.8, 0.9, 0.95. Drops and caps are part of coverage, not
-successful scores; capped/bounded 100% selection is not a census. Report actual
-inclusion probabilities and decision counts separately from unique conversations.
+successful scores; capped/bounded 100% selection is not a census. At 100%, each unique eligible owner candidate has pre-admission inclusion
+probability min(1, 8 / unique eligible count); at partial percentages report the
+percentage-plus-cap selection probability and actual coverage separately. Check
+score and coverage by candidate_index/eligible_count for residual position bias.
+Report decision counts separately from unique conversations.
 
 ## Acceptance bars
 

@@ -386,6 +386,9 @@ environments:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          MEMORY_OWNER_JEV_FLIP_PERCENT:
+            value: '0'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '0'
             category: rollout
@@ -523,6 +526,9 @@ environments:
             category: rollout
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_PERCENT:
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '0'
@@ -1021,6 +1027,9 @@ environments:
             MEMORY_OWNER_JEV_FLIP_ENABLED:
               value: 'true'
               category: rollout
+            MEMORY_OWNER_JEV_FLIP_PERCENT:
+              value: '0'
+              category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '0'
               category: rollout
@@ -1264,6 +1273,9 @@ environments:
               category: rollout
             MEMORY_OWNER_JEV_FLIP_ENABLED:
               value: 'true'
+              category: rollout
+            MEMORY_OWNER_JEV_FLIP_PERCENT:
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '0'

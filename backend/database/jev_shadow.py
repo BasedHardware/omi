@@ -10,7 +10,7 @@ from typing import Any, Callable, TypeVar
 
 from google.cloud import firestore
 
-from database._client import get_data_plane_firestore_client
+from database import _client
 
 RETENTION_DAYS = 60
 # Same plane the auth fence reads (database/account_deletion_marker.py); spelled
@@ -22,9 +22,15 @@ _ACCOUNT_DELETION_COLLECTION = 'account_deletions'
 # The SDK's @firestore.transactional wrapper calls transaction._commit() with
 # the client default timeout (~60 s), not the caller's deadline. Racing the
 # transactional call on a dedicated pool bounds the worker by the remaining
-# budget; the abandoned attempt keeps its lane slot only for its own commit.
+# budget. Already-started commits may finish after the worker reports timeout;
+# first-write-wins records make these late writes valid and idempotent.
 _T = TypeVar('_T')
 _commit_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='jev-shadow-commit')
+
+
+def get_data_plane_firestore_client() -> Any:
+    # Resolve at call time: other file-isolated suites stub database._client.
+    return _client.get_data_plane_firestore_client()
 
 
 def _bounded_call(fn: Callable[[], _T], *, timeout: float) -> _T:
@@ -49,6 +55,7 @@ def write_jev_shadow(
     """
     client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
     now = datetime.now(timezone.utc)
+    payload = {**record, 'created_at': now, 'expire_at': now + timedelta(days=RETENTION_DAYS)}
     ref = client.collection('users').document(uid).collection('jev_shadow').document(record_id)
     deletion_marker = client.collection(_ACCOUNT_DELETION_COLLECTION).document(uid)
 
@@ -59,7 +66,11 @@ def write_jev_shadow(
         # otherwise land after the sweep has passed this subcollection.
         if deletion_marker.get(transaction=transaction, retry=None, timeout=remaining).exists:
             return False
-        transaction.set(ref, {**record, 'created_at': now, 'expire_at': now + timedelta(days=RETENTION_DAYS)})
+        # Read before any write. Replays, including a late commit, never replace
+        # a score or extend retention for this deterministic measurement ID.
+        if ref.get(transaction=transaction, retry=None, timeout=remaining).exists:
+            return True
+        transaction.set(ref, payload)
         return True
 
     remaining = deadline - time.monotonic()
@@ -67,6 +78,6 @@ def write_jev_shadow(
         raise TimeoutError
     # max_attempts=1 disables the SDK's transaction-restart loop, and the
     # pool race bounds the SDK-default commit timeout by the same deadline:
-    # one slow marker read or commit cannot stretch a write past the task's
-    # 2.5s budget.
+    # one slow marker read or commit cannot stretch the worker's wait past
+    # 2.5s. Cancellation cannot stop an already-started transactional commit.
     return _bounded_call(lambda: write_if_not_deleting(client.transaction(max_attempts=1)), timeout=remaining)

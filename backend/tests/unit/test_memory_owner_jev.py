@@ -82,9 +82,10 @@ def capture(monkeypatch, pc):
     outcomes: list[str] = []
     answer: dict = {'p_user': None}
     shadowed = []
+    monkeypatch.setenv('MEMORY_OWNER_JEV_SHADOW_PERCENT', '100')
     real_shadow_helper = pc._shadow_owner_candidate
     monkeypatch.setattr(pc, '_real_owner_shadow_test_helper', real_shadow_helper, raising=False)
-    monkeypatch.setattr(pc, '_shadow_owner_candidate', lambda *args: shadowed.append(args))
+    monkeypatch.setattr(pc, '_shadow_owner_candidate', lambda *args, **kwargs: shadowed.append(args))
     monkeypatch.setattr(pc, '_owner_shadow_test_calls', shadowed, raising=False)
 
     def fake_ask(state, questions, *, lane):
@@ -266,13 +267,13 @@ def test_owner_shadow_builds_state_without_retaining_conversation(capture, pc, m
     run, _, _ = capture
     submitted = []
     monkeypatch.setattr(pc, '_shadow_owner_candidate', pc._real_owner_shadow_test_helper)
-    monkeypatch.setattr(pc, 'owner_shadow_in_cohort', lambda _cid: True)
     monkeypatch.setattr(pc, 'submit_owner_shadow', lambda **kwargs: submitted.append(kwargs))
     run(THIRD_PARTY, enabled=False)
     assert len(submitted) == 1
     assert all(isinstance(value, (str, int, bool)) or value is None for value in submitted[0].values())
     assert 'SPEAKER_01' in submitted[0]['state']
     assert submitted[0]['user_name_present'] is True
+    assert submitted[0]['candidate_index'] == 0 and submitted[0]['eligible_count'] == 1
 
 
 @pytest.mark.parametrize('failure', ['exception', 'timeout'])
@@ -324,3 +325,23 @@ def test_missing_profile_name_is_visible_in_owner_shadow(capture, pc, monkeypatc
     run(THIRD_PARTY, enabled=False)
     assert len(pc._owner_shadow_test_calls) == 1
     assert pc._owner_shadow_test_calls[0][-2] is False
+
+
+def test_extraction_hash_selects_entire_eligible_batch_before_submission(capture, pc, monkeypatch):
+    from utils.conversations import jev_shadow
+
+    candidates = [
+        _candidate(f'Synthetic candidate {i}.', about='speaker_1', speaker_label='speaker_1', quote=OTHER_TEXT)
+        for i in range(20)
+    ]
+    monkeypatch.setattr(pc, 'memory_owner_jev_flip_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', lambda *_a, **_k: iter(candidates))
+    calls = []
+    monkeypatch.setattr(pc, '_shadow_owner_candidate', lambda *args, **kwargs: calls.append((args, kwargs)))
+    pc._extract_memories_canonical('uid-synthetic', _conversation(), db_client=MagicMock())
+    expected = jev_shadow.select_owner_shadow_indices(_conversation().id, [c.content for c in candidates])
+    assert len(calls) == jev_shadow.MAX_OWNER_SHADOWS_PER_CONVERSATION
+    assert [kwargs['candidate_index'] for _, kwargs in calls] == expected
+    assert all(kwargs['eligible_count'] == 20 for _, kwargs in calls)
+    assert [args[2] for args, _ in calls] == [candidates[i].content for i in expected]
+    assert set(expected) != set(range(8))

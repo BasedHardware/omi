@@ -34,7 +34,7 @@ def test_shadow_pool_is_lazy_propagates_context_and_shuts_down_with_registered_p
     assert executors._ALL_EXECUTORS == []
     pool = executors.get_jev_shadow_executor()
     assert executors.get_jev_shadow_executor() is pool
-    assert pool._max_workers == 4 and executors._ALL_EXECUTORS == [pool]
+    assert pool._max_workers == 10 and executors._ALL_EXECUTORS == [pool]
     token = _test_ctxvar.set('shadow-context')
     try:
         future = submit_with_context(pool, lambda: (_test_ctxvar.get(), threading.current_thread().name))
