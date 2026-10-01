@@ -109,6 +109,12 @@ def merge():
     canonical_activation_stub = ModuleType("utils.memory.canonical_activation")
     setattr(canonical_activation_stub, "canonical_write_enabled", MagicMock(return_value=False))
 
+    # The restored-donor cleanup checks the legal-hold authority before it
+    # removes the survivor's copied audio; the pure merge functions under test
+    # never execute it, so a stub satisfies the import.
+    legal_holds_stub = ModuleType("database.legal_holds")
+    setattr(legal_holds_stub, "assert_account_deletion_permitted", MagicMock())
+
     # The retraction-scope helpers decide whether a source's canonical retraction
     # can be skipped; only the delete path in perform_merge_async calls them.
     retraction_scope_stub = ModuleType("utils.memory.retraction_scope")
@@ -122,6 +128,7 @@ def merge():
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
         "database.users": users_stub,
+        "database.legal_holds": legal_holds_stub,
         "utils.cloud_tasks": cloud_tasks_stub,
         "utils.conversations.lifecycle": lifecycle_stub,
         "utils.other.storage": storage_stub,
