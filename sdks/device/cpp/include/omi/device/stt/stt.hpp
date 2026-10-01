@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cctype>
 #include <string>
 
 namespace omi {
@@ -25,18 +26,25 @@ inline std::string ParakeetWsUrl(std::string api_url, int sample_rate = 16000) {
   };
   replace_prefix("https://", "wss://");
   replace_prefix("http://", "ws://");
-  std::string result = api_url + "/v3/stream?sample_rate=" + std::to_string(sample_rate);
+  std::string result = api_url + "/v3/stream?";
   for (std::size_t start = 0; start < query.size();) {
     const auto end = query.find('&', start);
     const auto param = query.substr(start, end == std::string::npos ? end : end - start);
+    auto key = param.substr(0, param.find('='));
+    for (std::size_t i = 0; i + 2 < key.size(); ++i) {
+      if (key[i] == '%' && std::isxdigit(static_cast<unsigned char>(key[i + 1])) &&
+          std::isxdigit(static_cast<unsigned char>(key[i + 2]))) {
+        key.replace(i, 3, 1, static_cast<char>(std::stoi(key.substr(i + 1, 2), nullptr, 16)));
+      }
+    }
     // Preserve encoded query values while replacing every stale sample rate.
-    if (!param.empty() && param.substr(0, param.find('=')) != "sample_rate") {
-      result += "&" + param;
+    if (!param.empty() && key != "sample_rate") {
+      result += param + "&";
     }
     if (end == std::string::npos) break;
     start = end + 1;
   }
-  return result;
+  return result + "sample_rate=" + std::to_string(sample_rate);
 }
 
 inline std::string DeepgramWsUrl(int sample_rate = 16000) {

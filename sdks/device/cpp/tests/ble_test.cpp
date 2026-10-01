@@ -176,15 +176,19 @@ void TestParakeetWsUrl() {
     const char* expected;
   } cases[] = {
       {"https://parakeet.example/proxy/?tenant=a%26b&mode=live",
-       "wss://parakeet.example/proxy/v3/stream?sample_rate=16000&tenant=a%26b&mode=live"},
+       "wss://parakeet.example/proxy/v3/stream?tenant=a%26b&mode=live&sample_rate=16000"},
+      {"https://parakeet.example/proxy?tenant=demo",
+       "wss://parakeet.example/proxy/v3/stream?tenant=demo&sample_rate=16000"},
       {"https://parakeet.example/proxy/#settings",
        "wss://parakeet.example/proxy/v3/stream?sample_rate=16000"},
       {"wss://parakeet.example/?tenant=demo#settings",
-       "wss://parakeet.example/v3/stream?sample_rate=16000&tenant=demo"},
+       "wss://parakeet.example/v3/stream?tenant=demo&sample_rate=16000"},
       {"ws://localhost:8000/?sample_rate=8000&tenant=demo&sample_rate=48000",
-       "ws://localhost:8000/v3/stream?sample_rate=16000&tenant=demo"},
+       "ws://localhost:8000/v3/stream?tenant=demo&sample_rate=16000"},
       {"https://parakeet.example/?sample_rate&sample_rate_extra=keep",
-       "wss://parakeet.example/v3/stream?sample_rate=16000&sample_rate_extra=keep"},
+       "wss://parakeet.example/v3/stream?sample_rate_extra=keep&sample_rate=16000"},
+      {"https://parakeet.example/?%73ample_rate=8000&sample%5Frate=48000&%2573ample_rate=keep",
+       "wss://parakeet.example/v3/stream?%2573ample_rate=keep&sample_rate=16000"},
       {"https://parakeet.example/?",
        "wss://parakeet.example/v3/stream?sample_rate=16000"},
   };

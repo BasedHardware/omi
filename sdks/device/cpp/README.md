@@ -12,7 +12,7 @@ parameters, replaces `sample_rate` with the requested rate, and omits fragments:
 #include "omi/device/stt/stt.hpp"
 
 auto url = omi::device::stt::ParakeetWsUrl("https://parakeet.example/proxy/?tenant=demo");
-// wss://parakeet.example/proxy/v3/stream?sample_rate=16000&tenant=demo
+// wss://parakeet.example/proxy/v3/stream?tenant=demo&sample_rate=16000
 ```
 
 ## Protocol only
