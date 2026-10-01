@@ -96,7 +96,7 @@ void main() {
     expect(sink.states.skip(resumeIndex).every((s) => s['active'] == true), true);
     await world.elapse(const Duration(seconds: 3));
     expect(presentation.snapshot['elapsed'], (elapsed as int) + 3);
-    expect(presentation.snapshot['waveTime'], (phase as double) + 3);
+    expect(presentation.snapshot['waveTime'], closeTo((phase as double) + 3, 0.001));
   });
 
   test('a repeated Pause does not issue a second mute intent', () async {
