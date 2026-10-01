@@ -33,23 +33,20 @@ def test_no_raw_stripe_error_leaked_into_response_detail():
 
 
 def test_stripe_error_handlers_use_the_safe_detail_helper():
+    import re
+
     source = _source()
-    idx = 0
-    found = 0
-    while True:
-        idx = source.find("except stripe.error.StripeError as e:", idx)
-        if idx == -1:
-            break
+    pattern = re.compile(r"except\s+(?:\([^)]*stripe\.error\.StripeError[^)]*\)|stripe\.error\.StripeError)\s+as\s+e:")
+    matches = list(pattern.finditer(source))
+    assert len(matches) >= 8
+    for m in matches:
+        idx = m.start()
         next_blank = source.find("\n\n", idx)
         block_end = next_blank if next_blank != -1 else len(source)
         block = source[idx:block_end]
         assert (
             "_stripe_client_error_detail(e," in block or "e.user_message" in block
         ), f"StripeError handler at offset {idx} raises detail without sanitizing it:\n{block}"
-        found += 1
-        idx = block_end
-    # All 8 Stripe-calling mutation/portal endpoints must shield with the helper
-    assert found >= 8
 
 
 def test_customer_portal_endpoint_shields_stripe_errors():
@@ -72,17 +69,19 @@ def test_checkout_and_upgrade_endpoints_shield_stripe_errors():
     chk_start = source.find("def create_checkout_session_endpoint")
     chk_end = source.find("\ndef ", chk_start + 1)
     chk_body = source[chk_start:chk_end]
-    assert "except stripe.error.StripeError as e:" in chk_body
+    assert "stripe.error.StripeError" in chk_body
+    assert "stripe.error.InvalidRequestError" in chk_body
     assert "_stripe_client_error_detail(e, \"Could not create checkout session.\")" in chk_body
-    assert "except stripe.error.InvalidRequestError" not in chk_body
+    assert "else str(e)" not in chk_body
 
     # Upgrade subscription endpoint
     upg_start = source.find("def upgrade_subscription_endpoint")
     upg_end = source.find("\nclass CancelSubscriptionRequest", upg_start + 1)
     upg_body = source[upg_start:upg_end]
-    assert "except stripe.error.StripeError as e:" in upg_body
+    assert "stripe.error.StripeError" in upg_body
+    assert "stripe.error.InvalidRequestError" in upg_body
     assert "_stripe_client_error_detail(e, \"Failed to process subscription change. Please try again.\")" in upg_body
-    assert "except stripe.error.InvalidRequestError" not in upg_body
+    assert "else str(e)" not in upg_body
 
 
 def test_stripe_client_error_detail_helper_behavior():

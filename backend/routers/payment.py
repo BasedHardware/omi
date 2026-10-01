@@ -647,7 +647,7 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
         return {"url": session.url, "session_id": session.id}
     except HTTPException:
         raise
-    except stripe.error.StripeError as e:
+    except (stripe.error.InvalidRequestError, stripe.error.StripeError) as e:
         logger.error(f"Stripe error creating checkout session for user {uid}: {sanitize(str(e))}")
         detail = _stripe_client_error_detail(e, "Could not create checkout session.")
         raise HTTPException(status_code=400, detail=detail)
@@ -823,7 +823,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
     except HTTPException:
         raise
-    except stripe.error.StripeError as e:
+    except (stripe.error.InvalidRequestError, stripe.error.StripeError) as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
         detail = _stripe_client_error_detail(e, "Failed to process subscription change. Please try again.")
         raise HTTPException(status_code=400, detail=detail)
