@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -187,6 +189,34 @@ void main() {
 
       expect(value.transcriptSegments.first.personId, 'jordan');
       expect(value.transcriptSegments.first.speakerLabelSource, 'auto');
+    });
+
+    test('a later rejection waits for an in-flight assignment', () async {
+      final value = conversation();
+      final assigned = Completer<bool>();
+      final calls = <String>[];
+      final detail = ConversationDetailProvider(
+        assignSpeaker: (_, __, {isUser, personId, speakerId}) {
+          calls.add('assign');
+          return assigned.future;
+        },
+        rejectSpeaker: (_, __, ___, {personId, segmentIds}) async {
+          calls.add('reject');
+          return ApiSuccess(value);
+        },
+      )
+        ..selectedDate = value.createdAt
+        ..setCachedConversation(value);
+      final first = detail.assignSpeaker(['a'], 'maya', speakerId: 1);
+      await Future<void>.delayed(Duration.zero);
+      final rejection = detail.rejectSpeakerLabel(value.transcriptSegments.first, SpeakerRejection.notPerson);
+      await Future<void>.delayed(Duration.zero);
+      expect(calls, ['assign']);
+      assigned.complete(true);
+      expect(await first, isTrue);
+      expect(await rejection, isTrue);
+      expect(calls, ['assign', 'reject']);
+      detail.dispose();
     });
 
     test('a saved tag is the user\'s own answer at once', () async {

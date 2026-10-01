@@ -241,22 +241,26 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       }
       return true;
     } finally {
-      _pendingSpeakerSaves--;
-      final remaining = _pendingSpeakerSavesByConversation[target.id]! - 1;
-      if (remaining == 0) {
-        _pendingSpeakerSavesByConversation.remove(target.id);
-      } else {
-        _pendingSpeakerSavesByConversation[target.id] = remaining;
-      }
-      if (_pendingSpeakerSaves == 0) {
-        final refreshId = _speakerRefreshId;
-        _speakerRefreshId = null;
-        if (!_isDisposed && refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
-      }
-      if (remaining == 0) {
-        _scheduleAutomaticSpeakerSummaryRefresh(target.id);
-        _pruneSpeakerSessionState(target.id);
-      }
+      await _finishSpeakerSave(target);
+    }
+  }
+
+  Future<void> _finishSpeakerSave(ServerConversation target) async {
+    _pendingSpeakerSaves--;
+    final remaining = _pendingSpeakerSavesByConversation[target.id]! - 1;
+    if (remaining == 0) {
+      _pendingSpeakerSavesByConversation.remove(target.id);
+    } else {
+      _pendingSpeakerSavesByConversation[target.id] = remaining;
+    }
+    if (_pendingSpeakerSaves == 0) {
+      final refreshId = _speakerRefreshId;
+      _speakerRefreshId = null;
+      if (!_isDisposed && refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
+    }
+    if (remaining == 0) {
+      _scheduleAutomaticSpeakerSummaryRefresh(target.id);
+      _pruneSpeakerSessionState(target.id);
     }
   }
 
@@ -352,6 +356,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final before = {for (final s in selected) s: (s.isUser, s.personId, s.speakerLabelSource)};
     final generation = ++_speakerEditGeneration;
     _speakerEditGenerationByConversation[target.id] = generation;
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
+    _pendingSpeakerSaves++;
+    _pendingSpeakerSavesByConversation.update(target.id, (count) => count + 1, ifAbsent: () => 1);
     for (final s in selected) {
       s.isUser = false;
       s.personId = null;
@@ -359,29 +367,62 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
     conversationProvider?.updateConversation(target);
     notifyListeners();
-    final result = await _rejectSpeaker(
-      target.id,
+    final pending = _persistSpeakerRejection(
+      target,
+      selected,
+      before,
+      generation,
       segment.speakerId,
       kind,
-      personId: kind == SpeakerRejection.notPerson ? rejectedPerson : null,
-      segmentIds: [for (final s in selected) s.id],
+      rejectedPerson,
+      _speakerSaveTail,
     );
-    if (result case ApiSuccess<ServerConversation>(:final data)) {
-      if (!_isDisposed &&
-          _speakerEditGenerationByConversation[target.id] == generation &&
-          identical(conversationOrNull, target)) {
-        if (data.id == target.id) {
-          conversationProvider?.updateConversation(data);
-        } else {
-          conversationProvider?.replaceBridgedConversation(target.id, data);
-          selectedDate = conversationLocalDayKey(data.startedAt ?? data.createdAt);
+    _speakerSaveTail = pending.then((_) {});
+    return pending;
+  }
+
+  Future<bool> _persistSpeakerRejection(
+    ServerConversation target,
+    List<TranscriptSegment> selected,
+    Map<TranscriptSegment, (bool, String?, String?)> before,
+    int generation,
+    int speakerId,
+    SpeakerRejection kind,
+    String? rejectedPerson,
+    Future<void> previousSave,
+  ) async {
+    try {
+      await previousSave;
+      if (_speakerEditGenerationByConversation[target.id] != generation) return false;
+      final result = await _rejectSpeaker(
+        target.id,
+        speakerId,
+        kind,
+        personId: kind == SpeakerRejection.notPerson ? rejectedPerson : null,
+        segmentIds: [for (final s in selected) s.id],
+      );
+      if (result case ApiSuccess<ServerConversation>(:final data)) {
+        if (!_isDisposed &&
+            _speakerEditGenerationByConversation[target.id] == generation &&
+            identical(conversationOrNull, target)) {
+          if (data.id == target.id) {
+            conversationProvider?.updateConversation(data);
+          } else {
+            conversationProvider?.replaceBridgedConversation(target.id, data);
+            selectedDate = conversationLocalDayKey(data.startedAt ?? data.createdAt);
+          }
+          setCachedConversation(data);
         }
-        setCachedConversation(data);
+        return true;
       }
-      return true;
+      _rollbackSpeakerAssignment(target, selected, before, generation, null);
+      return false;
+    } catch (_) {
+      _rollbackSpeakerAssignment(target, selected, before, generation, null);
+      return false;
+    } finally {
+      await _finishSpeakerSave(target);
     }
-    _rollbackSpeakerAssignment(target, selected, before, generation, null);
-    return false;
   }
 
   void _rollbackSpeakerAssignment(
