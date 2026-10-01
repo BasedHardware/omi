@@ -551,6 +551,7 @@ ACTION_ITEMS_LIST_SELECT_FIELDS = (
     'export_date',
     'export_platform',
     'apple_reminder_id',
+    'sync_requested',
 )
 
 

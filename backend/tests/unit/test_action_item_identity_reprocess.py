@@ -14,6 +14,7 @@ real ``utils.task_sync`` delivery with a fake task app. Nothing reaches a networ
 import asyncio
 import logging
 import os
+from copy import deepcopy
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -588,9 +589,120 @@ def test_apple_reminders_reprocess_keeps_todays_fresh_id_and_second_push(world):
     assert world.apple_pushes == [[budget_id], [new_budget_id, world.ids()[VENUE]]]
     fresh = world.store.tasks()[new_budget_id]
     assert not {'exported', 'export_platform', 'export_date', 'apple_reminder_id'} & set(fresh)
-    # The orphaned reminder is cancelled and the fresh id scheduled, exactly as before.
+    # Omi's local notification is cancelled; the old Apple copy is left alone, as on main.
     assert ('reconcile', budget_id) in [(kind, k['action_item_id']) for kind, k in world.reminders]
     assert ('schedule', new_budget_id) in [(kind, k['action_item_id']) for kind, k in world.reminders]
+
+
+def test_pending_apple_push_cannot_link_its_old_copy_to_the_reprocessed_row(world):
+    world.default_app = 'apple_reminders'
+    world.process('conv-1', [_item(BUDGET, DUE)])
+    old_id = world.ids()[BUDGET]
+    assert world.store.tasks()[old_id]['sync_requested'] is True
+    # Apple created the old copy, but its markExportedBatch callback is delayed.
+    world.process('conv-1', [_item(BUDGET, DUE + timedelta(days=1))])
+    new_id = world.ids()[BUDGET]
+    assert new_id != old_id
+    result = action_items_db.batch_sync_update_action_items(
+        UID,
+        [
+            {
+                'id': old_id,
+                'data': {'exported': True, 'export_platform': 'apple_reminders', 'apple_reminder_id': 'old-ek'},
+            }
+        ],
+    )
+    assert result.missing_ids == [old_id] and result.updated_ids == []
+    assert 'apple_reminder_id' not in world.store.tasks()[new_id]
+    assert world.apple_pushes == [[old_id], [new_id]]
+    assert ('reconcile', old_id) in [(kind, k['action_item_id']) for kind, k in world.reminders]
+
+
+@pytest.mark.parametrize(
+    'marker',
+    [
+        {'export_platform': 'apple_reminders'},
+        {'export_platform': 'apple_reminders', 'apple_reminder_id': ''},
+        {'export_platform': 'todoist', 'apple_reminder_id': 'ek-multi', 'exported': True},
+        {'export_platform': 'asana', 'sync_requested': True, 'exported': True},
+        {'sync_requested': True},
+    ],
+)
+def test_apple_states_recreate_without_carrying_stale_markers(world, marker):
+    world.default_app = 'apple_reminders'
+    world.process('conv-1', [_item(BUDGET, DUE)])
+    old_id = world.ids()[BUDGET]
+    action_items_db.update_action_item(UID, old_id, {**marker, 'completed': True})
+    world.process('conv-1', [_item(BUDGET, DUE)])
+    new_id = world.ids()[BUDGET]
+    assert new_id != old_id and old_id not in world.store.tasks()
+    row = world.store.tasks()[new_id]
+    assert not {'exported', 'export_platform', 'apple_reminder_id'} & row.keys()
+    assert row['completed'] is False  # main also resets completion to the extraction
+    assert world.apple_pushes == [[old_id], [new_id]]
+
+
+@pytest.mark.parametrize('platform', [None, '', 'apple_reminders_backup', 'apple', 'asana'])
+def test_non_apple_export_platforms_keep_identity(platform):
+    prior = [_row('cloud', BUDGET, exported=True, export_platform=platform, sync_requested=False)]
+    plan = plan_replacement('c', [{'description': BUDGET}], prior)
+    assert plan.document_ids == ['cloud'] and plan.outcomes == ['skipped_already_exported']
+
+
+def test_same_description_apple_and_cloud_rows_only_reuse_the_cloud_identity():
+    prior = [
+        _row('apple', BUDGET, exported=True, apple_reminder_id='ek', due_at=DUE),
+        _row('cloud', BUDGET, exported=True, export_platform='asana', due_at=DUE),
+    ]
+    plan = plan_replacement('c', [{'description': BUDGET, 'due_at': DUE}] * 2, prior)
+    assert plan.document_ids == ['cloud', None]
+    assert plan.outcomes == ['skipped_already_exported', 'new']
+    assert plan.reused_ids == {'cloud'}
+
+
+@pytest.mark.parametrize('error_type', [RuntimeError, TypeError, ValueError, AssertionError])
+def test_late_planner_error_has_flag_off_fields_and_does_not_mutate_inputs(monkeypatch, error_type):
+    items = [{'description': BUDGET, 'due_at': DUE, 'provenance': [{'source': 'synthetic'}]}]
+    prior = [_row('cloud', BUDGET, exported=True, export_platform='asana')]
+    snapshot = deepcopy((items, prior))
+    monkeypatch.setenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, 'false')
+    off = plan_replacement('c', items, prior)
+    monkeypatch.setenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, 'true')
+    calls = []
+    monkeypatch.setattr(action_item_identity, 'record_fallback', lambda **kw: calls.append(kw))
+
+    def fail_after_matching(plan, count):
+        assert plan.document_ids == ['cloud'] and plan.outcomes == ['skipped_already_exported']
+        raise error_type('synthetic late failure')
+
+    monkeypatch.setattr(action_item_identity, '_emit', fail_after_matching)
+    failed = plan_replacement('c', items, prior)
+    assert failed == off and (items, prior) == snapshot
+    assert failed.create_kwargs() == {} and failed.reused_ids == frozenset()
+    assert failed.deliverable(items) == items
+    assert calls == [
+        dict(component='other', from_mode='identity_preserve', to_mode='recreate', reason='other', outcome='degraded')
+    ]
+
+
+@pytest.mark.parametrize('error_type', [KeyboardInterrupt, SystemExit, asyncio.CancelledError])
+def test_planner_does_not_swallow_process_exit_or_async_cancellation(monkeypatch, error_type):
+    def cancelled(*args):
+        raise error_type()
+
+    monkeypatch.setattr(action_item_identity, '_plan', cancelled)
+    with pytest.raises(error_type):
+        plan_replacement('c', [{'description': BUDGET}], [])
+
+
+def test_task_write_failure_after_planning_still_escapes(world, monkeypatch):
+    def broken(*args, **kwargs):
+        raise RuntimeError('synthetic create failure')
+
+    monkeypatch.setattr(action_items_db, 'create_action_items_batch', broken)
+    with pytest.raises(RuntimeError, match='synthetic create failure'):
+        world.process('conv-1', [_item(BUDGET)])
+    assert not world.external
 
 
 @pytest.mark.parametrize(

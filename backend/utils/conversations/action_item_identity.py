@@ -6,7 +6,7 @@ dropped the ``exported`` marker that task-app delivery keys on, so every reproce
 (smart-merge survivor refresh, user reprocess, sync update, server recovery) offered
 unchanged tasks to the user's Todoist/Asana/ClickUp/Google Tasks again.
 
-Apple Reminders is deliberately NOT covered: a reprocess still gives an Apple-linked
+Apple Reminders is deliberately NOT covered: a reprocess still gives an Apple-linked or pending
 task a fresh id and pushes a second reminder, as before. Its client sync is
 last-writer-wins on Omi ``updated_at`` vs the reminder's ``lastModifiedDate``
 (``app/lib/services/integrations/apple_reminders_sync_service.dart:163-191``); the
@@ -173,8 +173,12 @@ class ReplacementPlan:
 
 
 def _apple_linked(row: Mapping[str, Any]) -> bool:
-    """A row tied to an Apple reminder, by id or by platform (``markExported`` may omit the id)."""
-    return bool(row.get('apple_reminder_id')) or row.get('export_platform') == 'apple_reminders'
+    """An Apple link or pending push whose delayed callback must not link a replacement row."""
+    return (
+        bool(row.get('apple_reminder_id'))
+        or row.get('export_platform') == 'apple_reminders'
+        or bool(row.get('sync_requested'))
+    )
 
 
 def _unchanged(items: Sequence[Dict[str, Any]]) -> ReplacementPlan:
