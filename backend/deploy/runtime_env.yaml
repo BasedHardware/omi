@@ -2838,6 +2838,8 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            FIREBASE_SIGNER_SERVICE_ACCOUNT:
+              value: backend-runtime@based-hardware.iam.gserviceaccount.com
             SCREEN_FRAME_EGRESS_ENABLED:
               value: 'true'
               category: rollout
@@ -2940,6 +2942,7 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: rollout
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
