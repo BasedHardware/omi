@@ -215,7 +215,10 @@ attempt `timeout`/`ok` counters. Account deletion remains transactionally fenced
 (the SDK wrapped-Aborted outcome) count as `deduped`, never scoring failures.
 
 The production shadow percentages are 100 in a separate config commit
-(all five processing hosts); keep-all remains 0, caps stay unchanged and
-live flags remain absent. The coordinator enabled `jev_shadow.expire_at` TTL
+(all five processing hosts). The production keep-all arm is live at 2 (started
+2026-10-01): a stable 2% of ambiguous model-tier conversations, chosen by
+conversation ID, are kept regardless of nano and record nano's would-be verdict;
+rollback is percent 0 and a redeploy. Caps stay unchanged and live flags remain
+absent. The coordinator enabled `jev_shadow.expire_at` TTL
 in `based-hardware` on 2026-10-01 and verified ACTIVE before the flip. Sync hosts have no exporter;
 readouts must distinguish their records from scraped attempt/latency coverage.

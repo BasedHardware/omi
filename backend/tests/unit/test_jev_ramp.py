@@ -160,13 +160,38 @@ def test_inactive_nano_record_is_byte_for_byte_unchanged():
     assert json.dumps(actual).encode() == json.dumps(expected).encode()
 
 
-def test_keep_all_bypasses_both_models_and_neighbor_lookup():
-    model, jev, neighbor = MagicMock(), MagicMock(), MagicMock()
-    result = decision(arm='keep_all', model_discards=model, jev_discard_probability=jev, neighbor=neighbor)
-    assert (result.verdict, result.decided_by, result.reason) == ('keep', 'policy', 'keep_all_arm')
-    assert result.model_tier_reached and result.as_record()['arm'] == 'keep_all'
-    for callback in (model, jev, neighbor):
-        callback.assert_not_called()
+def test_keep_all_keeps_and_never_calls_jev_but_records_the_nano_counterfactual():
+    jev = MagicMock()
+    for nano_discards, verdict, reason in ((True, 'discard', 'model_discard'), (False, 'keep', 'model_keep')):
+        result = decision(
+            arm='keep_all',
+            model_discards=lambda on_error, adjacent, d=nano_discards: d,
+            jev_discard_probability=jev,
+        )
+        assert (result.verdict, result.decided_by, result.reason) == ('keep', 'policy', 'keep_all_arm')
+        assert result.model_tier_reached and result.as_record()['arm'] == 'keep_all'
+        assert (result.nano_verdict, result.nano_reason) == (verdict, reason)
+    jev.assert_not_called()
+
+
+def test_keep_all_records_neighbor_fragment_counterfactual_and_keeps():
+    result = decision(
+        arm='keep_all',
+        model_discards=lambda on_error, adjacent: True,
+        neighbor=lambda: Neighbor('kept-neighbor', 20, 'before'),
+    )
+    assert result.verdict == 'keep' and result.reason == 'keep_all_arm'
+    assert (result.nano_verdict, result.nano_reason) == ('discard', 'neighbor_fragment')
+
+
+def test_keep_all_nano_failure_still_keeps_with_no_counterfactual():
+    def failing(on_error, adjacent):
+        on_error(RuntimeError('nano down'))
+        return False
+
+    result = decision(arm='keep_all', model_discards=failing)
+    assert result.verdict == 'keep' and result.reason == 'keep_all_arm'
+    assert result.nano_verdict is None and result.nano_reason is None
 
 
 @pytest.mark.parametrize(

@@ -48,14 +48,19 @@ unset preserves the flag, and intermediate or malformed values disable it.
 There is no owner UID allowlist. Owner *measurement* stays candidate-sampled.
 
 Rules, restores, policy KEEP and the plan gate precede arm treatment. Keep-all
-returns policy keep at the ambiguous model tier without calling nano or Jev.
+returns policy keep at the ambiguous model tier. It never calls Jev, but it still
+calls nano exactly as the control path does (no added spend or latency) and
+records nano's verdict and reason without acting on them.
 Calendar override remains unchanged. Active experiments store `arm` on every
 model-tier record; with all controls off, nano retains its exact legacy record.
 Shadow captures nano's raw verdict and reason before calendar override, including
 `neighbor_fragment` (nano links to a kept neighbor; Jev cannot reproduce this).
-Keep-all has no nano decision, so its agreement cell is `none`. Its counterfactual
-nano-discard population must be identified in the readout using an independent,
-locked classifier/label set; shadow scores alone are not nano counterfactuals.
+Keep-all records carry nano's would-be verdict, so the nano-discard
+counterfactual is measured directly: among keep_all conversations with
+`nano_verdict == 'discard'`, compare downstream engagement, deletes and restores
+with kept control conversations. A nano failure keeps the conversation and leaves
+`nano_verdict` null; those rows are excluded from the counterfactual and reported
+as coverage.
 
 ## Admission, durability and privacy
 
