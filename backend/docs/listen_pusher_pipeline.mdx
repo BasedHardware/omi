@@ -1484,13 +1484,25 @@ fill the 90-second window ring. A fresh 40 ms blip after a full silence ring
 previously admitted 280 ms with pre-roll and failed on the next packet,
 before the 12-second first-text deadline (armed on speech send) was due.
 
-Managed window sessions flush a stranded fragment only after **5 seconds of
-trailing capture silence**. This exceeds ordinary 1.5–4 second pauses and
-leaves seven seconds of the startup budget for pacing and the POST. VAD
-end-of-speech, 1.5 seconds of admitted silence, and the legacy 2-second
-wall-idle timer do not flush a managed fragment. If speech resumes before
-selection, it stays in the same sentence-anchored context. Direct socket
-callers retain their explicit finalize, idle and close behavior.
+Managed window sessions retain the original VAD end-of-speech POST and
+1.5-second provider-silence / 2-second wall-idle paths for ordinary utterances
+with **at least one second of unresolved VAD-admitted speech**. This uses the
+existing startup short-episode boundary, excluding retained answered-empty
+context: a prior answered clip cannot make a new blip eligible. Pause POSTs
+keep sentence anchoring; an empty managed idle answer also keeps its anchor,
+PCM and exact replay so a mid-utterance decode can recover with more context.
+The first-text rescue remains 12 seconds from the episode's first speech;
+there is no new forced-POST timer or POST-relative deadline extension.
+
+Short fragments below that boundary bypass the ordinary pause/idle
+paths and wait for **5 seconds of trailing capture silence** before their
+stranded flush. This exceeds ordinary 1.5–4 second pauses and leaves seven
+seconds of the startup budget for pacing and the POST. If speech resumes
+before selection, it stays in the same sentence-anchored context. Direct
+socket callers retain their explicit finalize, idle and close behavior.
+An ordinary utterance that remains unresolved after those earlier POSTs can
+still use the existing long-silence accounting path; restoring cadence does
+not remove its answered-empty replay retention.
 
 A stranded clip shorter than 1.5 seconds receives zero padding for its POST;
 timestamp validation, embeddings and replay still use its original duration
