@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Any, Dict
@@ -227,3 +228,28 @@ def test_claim_last_used_write_validation(monkeypatch: pytest.MonkeyPatch) -> No
     assert token_cache.claim_last_used_write("valid_token_123") is True
     # Immediate repeat claim is throttled
     assert token_cache.claim_last_used_write("valid_token_123") is False
+
+
+def test_fallback_ttls_log_warning(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setenv("ENCRYPTION_SECRET", "test_secret_key_12345678901234567890")
+    fake_redis = _FakeRedis()
+    monkeypatch.setattr(token_cache, "_redis", lambda: fake_redis)
+
+    identity = {
+        "uid": "user_123",
+        "client_id": "client_abc",
+        "resource": "https://api.example.com/mcp",
+        "scopes": ["mcp:full_access"],
+        "grant_id": "grant_xyz",
+    }
+
+    # Malformed index_ttl_seconds falls back to 3600 and logs warning
+    with caplog.at_level(logging.WARNING):
+        token_cache.fill_access_token("at_1", identity, time.time() + 100, index_ttl_seconds="invalid")  # type: ignore[arg-type]
+    assert "invalid index_ttl_seconds" in caplog.text
+
+    # Malformed marker_ttl_seconds falls back to 86400 and logs warning
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        token_cache.invalidate_grant("grant_xyz", marker_ttl_seconds="invalid")  # type: ignore[arg-type]
+    assert "invalid marker_ttl_seconds" in caplog.text

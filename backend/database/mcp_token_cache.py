@@ -21,9 +21,12 @@ identity; when the signing secret is absent the OAuth path fails closed.
 """
 
 import hashlib
+import logging
 import math
 import time
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 import database.mcp_cache_integrity as mcp_cache_integrity
 import database.redis_db as redis_db
@@ -198,6 +201,10 @@ def fill_access_token(
     try:
         clamped_index_ttl = max(1, int(index_ttl_seconds))
     except (ValueError, OverflowError, TypeError):
+        logger.warning(
+            "mcp_token_cache: invalid index_ttl_seconds=%r, falling back to default 3600s",
+            index_ttl_seconds,
+        )
         clamped_index_ttl = 3600
     token_hash = _sha256(access_token)
     entry = {
@@ -237,6 +244,10 @@ def invalidate_grant(grant_id: str, *, marker_ttl_seconds: int) -> None:
     try:
         clamped_marker_ttl = max(1, int(marker_ttl_seconds))
     except (ValueError, OverflowError, TypeError):
+        logger.warning(
+            "mcp_token_cache: invalid marker_ttl_seconds=%r, falling back to default 86400s",
+            marker_ttl_seconds,
+        )
         clamped_marker_ttl = 86400
     client = _redis()
     try:
