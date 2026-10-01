@@ -174,6 +174,9 @@ final class SiriBridge: SiriIndexApi {
     func takePendingRoute() throws -> String? { SiriSnapshotStore.shared.pendingRoute() }
     func isEnabled() throws -> Bool { SiriSnapshotStore.shared.enabled }
     func takeTelemetry() throws -> [SiriTelemetryRecord] { SiriTelemetry.take() }
+    /// This target is compiled by the Siri toolchain (compiler(>=6.4)), so the
+    /// omi/shortcuts_button platform view is registered and App Shortcuts ship.
+    func appShortcutsAvailable() throws -> Bool { true }
     func donateAction(uid: String, type: String, id: String, completion: @escaping (Result<Void, Error>) -> Void) {
         complete({
             guard SiriSnapshotStore.shared.allowsDonation(uid: uid), !id.isEmpty,
@@ -351,6 +354,9 @@ final class SiriBridge: SiriIndexApi {
     func takePendingRoute() throws -> String? { nil }
     func isEnabled() throws -> Bool { false }
     func takeTelemetry() throws -> [SiriTelemetryRecord] { [] }
+    /// Stable-compiler fallback: the Siri toolchain did not compile this build,
+    /// so omi/shortcuts_button is unregistered and Dart must not request it.
+    func appShortcutsAvailable() throws -> Bool { false }
     func donateAction(uid: String, type: String, id: String, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
 }
 #endif

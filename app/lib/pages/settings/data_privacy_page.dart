@@ -33,6 +33,23 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   late final bool _shortcutsHintSupported = PlatformService.isIOSAtLeast(16);
   late final bool _searchHintSupported = PlatformService.isIOSAtLeast(27);
 
+  // The native omi/shortcuts_button platform view is registered only by the
+  // Siri toolchain (Xcode 27). Stable-compiler (Xcode 26.6) builds compile the
+  // registration out, so requesting the view there cannot render; gate the
+  // section on the native capability probe. Fail closed: only render once the
+  // bridge confirms availability.
+  bool _appShortcutsAvailable = false;
+
+  Future<void> _loadAppShortcutsAvailability() async {
+    final revision = _siriRevision;
+    try {
+      final available = await SiriIntegration.instance.appShortcutsAvailable();
+      if (mounted && revision == _siriRevision) setState(() => _appShortcutsAvailable = available);
+    } catch (_) {
+      // Fail closed: leave the card hidden when the bridge cannot answer.
+    }
+  }
+
   Future<void> _loadSiriSetting() async {
     final revision = _siriRevision;
     try {
@@ -55,6 +72,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
     super.initState();
     PlatformManager.instance.analytics.dataPrivacyPageOpened();
     if (Platform.isIOS) _loadSiriSetting();
+    if (_shortcutsHintSupported) _loadAppShortcutsAvailability();
   }
 
   Widget _buildEncryptionBanner(BuildContext context) {
@@ -164,7 +182,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                         onChanged: _setSiriEnabled,
                       ),
                     ),
-                    if (_shortcutsHintSupported) ...[
+                    if (_shortcutsHintSupported && _appShortcutsAvailable) ...[
                       const SizedBox(height: OmiSpacing.md),
                       Container(
                         key: const Key('siri_shortcuts_settings'),

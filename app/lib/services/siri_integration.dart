@@ -963,6 +963,19 @@ class SiriIntegration extends SiriEventsApi {
     return _host.isEnabled().timeout(_nativeTimeout);
   }
 
+  /// Whether the running Runner can serve App Shortcuts UI. False on Android,
+  /// on stable-compiler (Xcode 26.6) builds where the Siri toolchain compiled
+  /// out, and whenever the native bridge cannot answer. Callers must treat
+  /// false or an error as "do not request omi/shortcuts_button".
+  Future<bool> appShortcutsAvailable() async {
+    if (!_isIOS) return false;
+    try {
+      return await _host.appShortcutsAvailable().timeout(_nativeTimeout);
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> setEnabled(bool enabled) async {
     if (!_isIOS) return;
     await _nativeOperation(() => _host.setEnabled(enabled));
