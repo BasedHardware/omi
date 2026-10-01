@@ -1660,16 +1660,29 @@ environments:
             --memory: 2Gi
             --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
           secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
-              version: latest
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
+              version: latest
           env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              category: integrations
+              value: memories-backend-dev
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -3556,16 +3569,29 @@ environments:
             --memory: 2Gi
             --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
           secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
-              version: latest
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
+              version: latest
           env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              category: integrations
+              value: memories-backend
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity

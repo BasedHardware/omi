@@ -318,19 +318,20 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'TYPESENSE_HOST',
         'TYPESENSE_HOST_PORT',
         'TYPESENSE_API_KEY',
-        'PINECONE_INDEX_NAME',
-        'OMI_BACKGROUND_FLEX_CAPABLE',
-        'OMI_LLM_GATEWAY_URL',
         'X_OAUTH_CLIENT_ID',
         'X_OAUTH_REDIRECT_URI',
         'RAPID_API_HOST',
     }
     assert forbidden_notifications_vars.isdisjoint(notifications_env)
+    assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
+    assert notifications_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
+    assert notifications_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
     assert notifications_env['OMI_CUSTOMER_DATA_PROJECT']['value'] == 'based-hardware'
     assert set(notifications_job['secrets']) == {
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
-        'SERVICE_ACCOUNT_JSON',
+        'PINECONE_API_KEY',
+        'OMI_LLM_GATEWAY_SERVICE_TOKEN',
     }
 
     x_sync_job = cloud_run['jobs']['x-connector-sync-job']

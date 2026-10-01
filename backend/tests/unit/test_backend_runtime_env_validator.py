@@ -2705,11 +2705,6 @@ def test_x_connector_sync_job_workflow_is_listed_and_targets_job():
         assert 'x-connector-sync-job' in manifest['environments'][env_name]['cloud_run']['jobs']
         notifications = manifest['environments'][env_name]['cloud_run']['jobs']['notifications-job']
         x_sync = manifest['environments'][env_name]['cloud_run']['jobs']['x-connector-sync-job']
-        assert 'PINECONE_API_KEY' not in notifications.get('secrets', {})
-        assert 'PINECONE_INDEX_NAME' not in notifications.get('env', {})
-        assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in notifications.get('secrets', {})
-        assert 'OMI_LLM_GATEWAY_URL' not in notifications.get('env', {})
-        assert 'OMI_BACKGROUND_FLEX_CAPABLE' not in notifications.get('env', {})
         assert 'X_OAUTH_CLIENT_SECRET' not in notifications.get('secrets', {})
         assert 'RAPID_API_KEY' not in notifications.get('secrets', {})
         assert 'X_OAUTH_CLIENT_ID' not in notifications.get('env', {})
