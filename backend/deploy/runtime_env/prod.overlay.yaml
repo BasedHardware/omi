@@ -151,6 +151,12 @@ overlay:
         CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
           value: '2'
           category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '1'
+          category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
@@ -224,6 +230,12 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
           value: '2'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '1'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
@@ -457,6 +469,12 @@ overlay:
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '2'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -583,6 +601,12 @@ overlay:
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '2'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
@@ -684,6 +708,12 @@ overlay:
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '2'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
