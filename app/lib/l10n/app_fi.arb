@@ -3771,5 +3771,9 @@
     "updateAvailableTitle": "Päivitys saatavilla",
     "updateAvailableMessage": "Omin uusi versio on valmis, ja siinä on korjauksia ja parannuksia.",
     "updateRequiredTitle": "Päivitys vaaditaan",
-    "updateRequiredMessage": "Tätä Omin versiota ei enää tueta. Päivitä, jotta voit jatkaa tallentamista ja synkronointia."
+    "updateRequiredMessage": "Tätä Omin versiota ei enää tueta. Päivitä, jotta voit jatkaa tallentamista ja synkronointia.",
+    "autoRemoveSyncedCopiesTitle": "Poista synkronoidut kopiot automaattisesti",
+    "autoRemoveSyncedCopiesDays": "Synkronoidut kopiot poistetaan {days} päivän jälkeen",
+    "autoRemoveSyncedCopiesDescription": "Poistaa paikalliset kopiot {days} päivää synkronoinnin jälkeen. Pilvikopiot säilytetään.",
+    "localCopiesSection": "Paikalliset kopiot"
 }

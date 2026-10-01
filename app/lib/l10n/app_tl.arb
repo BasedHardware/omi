@@ -11328,5 +11328,9 @@
     "updateAvailableTitle": "May available na update",
     "updateAvailableMessage": "Handa na ang bagong bersyon ng Omi, may mga ayos at pagpapahusay.",
     "updateRequiredTitle": "Kailangang mag-update",
-    "updateRequiredMessage": "Hindi na sinusuportahan ang bersyong ito ng Omi. Mag-update para patuloy na makapag-record at makapag-sync."
+    "updateRequiredMessage": "Hindi na sinusuportahan ang bersyong ito ng Omi. Mag-update para patuloy na makapag-record at makapag-sync.",
+    "autoRemoveSyncedCopiesTitle": "Awtomatikong Tanggalin ang mga Naka-sync na Kopya",
+    "autoRemoveSyncedCopiesDays": "Binubura ang mga naka-sync na kopya pagkatapos ng {days} araw",
+    "autoRemoveSyncedCopiesDescription": "Binubura ang mga lokal na kopya {days} araw pagkatapos mag-sync. Pinapanatili ang mga kopya sa cloud.",
+    "localCopiesSection": "Mga Lokal na Kopya"
 }

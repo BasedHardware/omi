@@ -11328,5 +11328,9 @@
     "updateAvailableTitle": "అప్‌డేట్ అందుబాటులో ఉంది",
     "updateAvailableMessage": "Omi కొత్త వెర్షన్ సిద్ధంగా ఉంది, సవరణలు మరియు మెరుగుదలలతో.",
     "updateRequiredTitle": "అప్‌డేట్ అవసరం",
-    "updateRequiredMessage": "Omi యొక్క ఈ వెర్షన్‌కు ఇకపై మద్దతు లేదు. రికార్డింగ్ మరియు సింక్ కొనసాగించడానికి అప్‌డేట్ చేయండి."
+    "updateRequiredMessage": "Omi యొక్క ఈ వెర్షన్‌కు ఇకపై మద్దతు లేదు. రికార్డింగ్ మరియు సింక్ కొనసాగించడానికి అప్‌డేట్ చేయండి.",
+    "autoRemoveSyncedCopiesTitle": "సింక్ చేసిన కాపీలను స్వయంచాలకంగా తొలగించు",
+    "autoRemoveSyncedCopiesDays": "సింక్ చేసిన కాపీలు {days} రోజుల తర్వాత తొలగించబడతాయి",
+    "autoRemoveSyncedCopiesDescription": "సింక్ అయిన {days} రోజుల తర్వాత స్థానిక కాపీలను తొలగిస్తుంది. క్లౌడ్ కాపీలు ఉంచబడతాయి.",
+    "localCopiesSection": "స్థానిక కాపీలు"
 }

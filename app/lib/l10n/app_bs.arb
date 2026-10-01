@@ -11328,5 +11328,9 @@
     "updateAvailableTitle": "Dostupno je ažuriranje",
     "updateAvailableMessage": "Nova verzija Omija je spremna, s ispravkama i poboljšanjima.",
     "updateRequiredTitle": "Potrebno je ažuriranje",
-    "updateRequiredMessage": "Ova verzija Omija više nije podržana. Ažurirajte da biste nastavili snimati i sinhronizovati."
+    "updateRequiredMessage": "Ova verzija Omija više nije podržana. Ažurirajte da biste nastavili snimati i sinhronizovati.",
+    "autoRemoveSyncedCopiesTitle": "Automatski ukloni sinhronizirane kopije",
+    "autoRemoveSyncedCopiesDays": "Sinhronizirane kopije se brišu nakon {days} dana",
+    "autoRemoveSyncedCopiesDescription": "Briše lokalne kopije {days} dana nakon sinkronizacije. Cloud kopije se zadržavaju.",
+    "localCopiesSection": "Lokalne kopije"
 }

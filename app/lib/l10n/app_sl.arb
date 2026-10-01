@@ -11328,5 +11328,9 @@
     "updateAvailableTitle": "Na voljo je posodobitev",
     "updateAvailableMessage": "Nova različica aplikacije Omi je pripravljena, s popravki in izboljšavami.",
     "updateRequiredTitle": "Potrebna je posodobitev",
-    "updateRequiredMessage": "Ta različica aplikacije Omi ni več podprta. Posodobite jo, da boste lahko še naprej snemali in sinhronizirali."
+    "updateRequiredMessage": "Ta različica aplikacije Omi ni več podprta. Posodobite jo, da boste lahko še naprej snemali in sinhronizirali.",
+    "autoRemoveSyncedCopiesTitle": "Samodejno odstrani sinhronizirane kopije",
+    "autoRemoveSyncedCopiesDays": "Sinhronizirane kopije se izbrišejo po {days} dneh",
+    "autoRemoveSyncedCopiesDescription": "Izbriše lokalne kopije {days} dni po sinhronizaciji. Oblačne kopije ostanejo ohranjene.",
+    "localCopiesSection": "Lokalne kopije"
 }

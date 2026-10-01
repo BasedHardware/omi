@@ -3806,5 +3806,9 @@
     "updateAvailableTitle": "Pembaruan tersedia",
     "updateAvailableMessage": "Versi baru Omi sudah siap, dengan perbaikan dan peningkatan.",
     "updateRequiredTitle": "Pembaruan diperlukan",
-    "updateRequiredMessage": "Versi Omi ini tidak lagi didukung. Perbarui untuk terus merekam dan menyinkronkan."
+    "updateRequiredMessage": "Versi Omi ini tidak lagi didukung. Perbarui untuk terus merekam dan menyinkronkan.",
+    "autoRemoveSyncedCopiesTitle": "Hapus Salinan Tersinkron Otomatis",
+    "autoRemoveSyncedCopiesDays": "Salinan tersinkron dihapus setelah {days} hari",
+    "autoRemoveSyncedCopiesDescription": "Menghapus salinan lokal {days} hari setelah sinkron. Salinan cloud disimpan.",
+    "localCopiesSection": "Salinan Lokal"
 }

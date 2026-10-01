@@ -447,6 +447,15 @@ class LocalWalSyncImpl implements LocalWalSync {
       await _saveWalsToFile(generation);
     }
 
+    // Expired synced-copy auto-remove runs before the ready gate, so the
+    // first list the user sees already reflects the retention policy. Never
+    // let a sweep failure hold the ready gate: records stay for the next hook.
+    try {
+      await _removeExpiredSyncedCopies();
+    } catch (e) {
+      Logger.debug('synced-copy auto-remove sweep failed: $e');
+    }
+
     if (!_walReady.isCompleted) _walReady.complete();
     _notifyUpdated(generation);
   }
@@ -678,6 +687,47 @@ class LocalWalSyncImpl implements LocalWalSync {
     return evicted;
   }
 
+  /// Auto-remove preference sweep: deletes phone-local copies of synced
+  /// recordings whose [Wal.syncedAt] is older than the retention window.
+  /// Cloud storage keeps the data — the server ack is what makes the local
+  /// copy redundant. Records with an unknown sync time (syncedAt == 0: synced
+  /// before the field existed) are deliberately never removed.
+  ///
+  /// Best-effort and quiet: a record whose file delete fails stays for the
+  /// next hook. Returns the number of local copies removed.
+  @visibleForTesting
+  Future<int> enforceSyncedCopyRetentionForTesting() => _removeExpiredSyncedCopies();
+
+  Future<int> _removeExpiredSyncedCopies() async {
+    final prefs = SharedPreferencesUtil();
+    if (!prefs.autoRemoveSyncedCopies) return 0;
+    final generation = _sessionGeneration;
+    final cutoff = _now().millisecondsSinceEpoch ~/ 1000 - prefs.autoRemoveSyncedCopiesDays * Duration.secondsPerDay;
+    final expired = _wals
+        .where((wal) =>
+            wal.storage == WalStorage.disk &&
+            wal.status == WalStatus.synced &&
+            wal.syncedAt > 0 &&
+            wal.syncedAt <= cutoff)
+        .toList();
+    if (expired.isEmpty) return 0;
+
+    var removed = 0;
+    for (final wal in expired) {
+      if (await _deleteWal(wal)) removed++;
+    }
+    if (removed == 0) return 0;
+
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+    DebugLogManager.logEvent('wal_synced_copy_autoremove', {
+      'policy': 'synced_age_days',
+      'days': prefs.autoRemoveSyncedCopiesDays,
+      'removed': removed,
+    });
+    return removed;
+  }
+
   @visibleForTesting
   Future<int> enforceRetentionPolicyForTesting() => _enforceRetentionPolicy();
 
@@ -759,6 +809,9 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<void> markWalSyncedAndPersist(Wal wal) async {
     final generation = _sessionGeneration;
     wal.status = WalStatus.synced;
+    if (wal.syncedAt == 0) {
+      wal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
+    }
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
   }
@@ -1205,6 +1258,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         if (result.completed != null) {
           // 200 fast-path: server processed synchronously and returned a result.
           final r = result.completed!;
+          final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
           resp.newConversationIds.addAll(r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
           resp.updatedConversationIds.addAll(
             r.updatedConversationIds.where(
@@ -1216,6 +1270,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             wal.isSyncing = false;
             wal.syncStartedAt = null;
             wal.syncEtaSeconds = null;
+            if (wal.syncedAt == 0) wal.syncedAt = nowSeconds;
             if (_isCurrent(generation)) listener.onWalSynced(wal);
           }
         } else {
@@ -1340,6 +1395,14 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     resp.localUploadFailures = batchesFailed;
     if (_isCurrent(generation)) progress?.onWalSyncedProgress(1.0);
+
+    // Uploads just confirmed; sweep expired synced copies now so auto-removal
+    // keeps pace with syncing instead of waiting for the next app start.
+    try {
+      await _removeExpiredSyncedCopies();
+    } catch (e) {
+      Logger.debug('synced-copy auto-remove sweep failed: $e');
+    }
     return resp;
   }
 
@@ -1444,6 +1507,9 @@ class LocalWalSyncImpl implements LocalWalSync {
         walToSync.isSyncing = false;
         walToSync.syncStartedAt = null;
         walToSync.syncEtaSeconds = null;
+        if (walToSync.syncedAt == 0) {
+          walToSync.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
+        }
         DebugLogManager.logInfo('Single WAL upload succeeded (fast-path)', {'walId': wal.id});
         if (_isCurrent(generation)) listener.onWalSynced(wal);
       } else {
@@ -1655,6 +1721,7 @@ class LocalWalSyncImpl implements LocalWalSync {
                 changed = true;
                 w.status = WalStatus.synced;
                 w.jobId = null;
+                if (w.syncedAt == 0) w.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
                 if (_isCurrent(generation)) listener.onWalSynced(w);
               }
             } else {

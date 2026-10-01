@@ -868,6 +868,41 @@ class SharedPreferencesUtil {
 
   bool get unlimitedLocalStorageEnabled => getBool('unlimitedLocalStorageEnabled');
 
+  /// Auto-remove synced phone-local recording copies after [autoRemoveSyncedCopiesDays].
+  /// Default ON for new users (no stored value): cloud storage keeps the data, the
+  /// local file is only a safety copy. Existing installs are pinned OFF once by
+  /// [migrateAutoRemoveSyncedCopiesDefault] so upgrading users keep today's
+  /// keep-everything behaviour until they opt in.
+  bool get autoRemoveSyncedCopies => getBool('autoRemoveSyncedCopies', defaultValue: true);
+
+  set autoRemoveSyncedCopies(bool value) => saveBool('autoRemoveSyncedCopies', value);
+
+  /// One-time split of the auto-remove default: installs that predate the
+  /// preference (onboarding already completed) are pinned OFF — they never saw
+  /// the setting, so silent deletion must not start under them. Fresh installs
+  /// keep the getter's ON default: their local copies are only a safety copy
+  /// of cloud data. Runs after SharedPreferencesUtil.init() on every launch;
+  /// the marker keeps it a single branch after the first pass.
+  Future<void> migrateAutoRemoveSyncedCopiesDefault() async {
+    const markerKey = 'autoRemoveSyncedCopiesDefaultMigrated';
+    final prefs = _preferences;
+    if (prefs == null) return;
+    if (prefs.getBool(markerKey) ?? false) return;
+    if (!(prefs.getBool('onboardingCompleted') ?? false)) {
+      // Not onboarded yet: a fresh install or a pre-onboarding launch. Leave
+      // the key unwritten so the ON default applies; re-evaluated next launch.
+      return;
+    }
+    await prefs.setBool(markerKey, true);
+    if (prefs.containsKey('autoRemoveSyncedCopies')) return;
+    await prefs.setBool('autoRemoveSyncedCopies', false);
+  }
+
+  /// Retention window, in days, for synced phone-local copies.
+  int get autoRemoveSyncedCopiesDays => getInt('autoRemoveSyncedCopiesDays', defaultValue: 30);
+
+  set autoRemoveSyncedCopiesDays(int value) => saveInt('autoRemoveSyncedCopiesDays', value);
+
   set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
 
   // Whether connected device supports new multi-file storage sync (persisted so it works when disconnected)

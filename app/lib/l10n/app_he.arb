@@ -11328,5 +11328,9 @@
     "updateAvailableTitle": "יש עדכון זמין",
     "updateAvailableMessage": "גרסה חדשה של Omi מוכנה, עם תיקונים ושיפורים.",
     "updateRequiredTitle": "נדרש עדכון",
-    "updateRequiredMessage": "הגרסה הזו של Omi כבר לא נתמכת. יש לעדכן כדי להמשיך להקליט ולסנכרן."
+    "updateRequiredMessage": "הגרסה הזו של Omi כבר לא נתמכת. יש לעדכן כדי להמשיך להקליט ולסנכרן.",
+    "autoRemoveSyncedCopiesTitle": "הסרה אוטומטית של עותקים מסונכרנים",
+    "autoRemoveSyncedCopiesDays": "עותקים מסונכרנים נמחקים לאחר {days} ימים",
+    "autoRemoveSyncedCopiesDescription": "מוחק עותקים מקומיים {days} ימים לאחר הסנכרון. עותקי הענן נשמרים.",
+    "localCopiesSection": "עותקים מקומיים"
 }

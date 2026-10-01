@@ -11328,5 +11328,9 @@
     "updateAvailableTitle": "Доступно је ажурирање",
     "updateAvailableMessage": "Нова верзија Omi-ја је спремна, са исправкама и побољшањима.",
     "updateRequiredTitle": "Потребно је ажурирање",
-    "updateRequiredMessage": "Ова верзија Omi-ја више није подржана. Ажурирајте да бисте наставили снимање и синхронизацију."
+    "updateRequiredMessage": "Ова верзија Omi-ја више није подржана. Ажурирајте да бисте наставили снимање и синхронизацију.",
+    "autoRemoveSyncedCopiesTitle": "Аутоматски уклони синхронизоване копије",
+    "autoRemoveSyncedCopiesDays": "Синхронизоване копије се бришу после {days} дана",
+    "autoRemoveSyncedCopiesDescription": "Брише локалне копије {days} дана после синхронизације. Облачне копије се задржавају.",
+    "localCopiesSection": "Локалне копије"
 }
