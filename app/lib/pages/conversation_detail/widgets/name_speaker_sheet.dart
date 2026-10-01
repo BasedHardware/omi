@@ -202,6 +202,11 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   String _personSearchQuery = '';
   bool _showAllPeople = false;
 
+  // A pinned near match reaches this sheet only when choosing alternatives;
+  // accepting it uses the inline Yes action. Never prefill or offer it here.
+  String? get _rejectedPersonId =>
+      widget.suggestion?.personId.isEmpty == true ? widget.suggestion?.suggestedPersonId : null;
+
   void setLoading(bool value) {
     if (loading == value) return;
     if (!mounted) return;
@@ -309,6 +314,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
       setState(() {
         speakerTextSample = sample.isNotEmpty ? '"$sample"' : null;
       });
+
+      if (_rejectedPersonId != null) return;
 
       // New person suggestion
       final suggestion = widget.suggestion;
@@ -508,7 +515,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     final List<Person> people = [
       Person(id: 'user', name: '$userName (You)', colorIdx: 0, createdAt: DateTime.now(), updatedAt: DateTime.now()),
     ];
-    people.addAll(ppl);
+    people.addAll(ppl.where((person) => person.id != _rejectedPersonId));
     people.sort(
       (a, b) => _comparePeopleForPicker(
         a,
