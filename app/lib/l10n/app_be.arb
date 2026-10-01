@@ -11328,5 +11328,16 @@
     "updateAvailableMessage": "Новая версія Omi гатовая: з выпраўленнямі і паляпшэннямі.",
     "updateRequiredTitle": "Патрабуецца абнаўленне",
     "updateRequiredMessage": "Гэтая версія Omi больш не падтрымліваецца. Абнавіце, каб працягваць запіс і сінхранізацыю.",
-    "exportingAllData": "Экспарт вашых даных… Не закрывайце Omi; вялікія ўліковыя запісы могуць патрабаваць некалькі хвілін."
+    "exportingAllData": "Экспарт вашых даных… Не закрывайце Omi; вялікія ўліковыя запісы могуць патрабаваць некалькі хвілін.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 удзельнік} other{Удзельнікаў: {count}}}",
+    "autoRemoveSyncedCopiesTitle": "Аўтаматычна выдаляць сінхранізаваныя копіі",
+    "autoRemoveSyncedCopiesDays": "Сінхранізаваныя копіі выдаляюцца праз {days} дзён",
+    "autoRemoveSyncedCopiesDescription": "Выдаляе лакальныя копіі праз {days} дзён пасля сінхранізацыі. Воблачныя копіі захоўваюцца.",
+    "localCopiesSection": "Лакальныя копіі",
+    "speakerLabelLinesLabeled": "Пазначана радкоў: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Голас запомнены} pending{Вывучэнне голасу…} disabled{Захаванне голасу выключана} other{Голас яшчэ не вывучаны}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi пазнае {name} наступным разам.} pending{Гэта зойме некалькі секунд.} disabled{Уключыце захаванне галасоў у Наладах, каб Omi мог пазнаваць {name}.} other{Omi патрэбна больш выразнай мовы ад {name}, і ён будзе працягваць спробы.}}",
+    "speakerLabelEarlierMatches": "Ранейшыя размовы з гэтым голасам: {count}",
+    "speakerLabelText": "{part, select, likely{Магчыма} soundsLike{Падобна на {name}} notPerson{Не {name}} carried{Усё яшчэ {name}. Перанесена з вашай апошняй размовы.} change{Змяніць} alsoTitle{Гэта таксама {name}?} alsoBody{Omi знайшоў такі ж голас у ранейшых размовах.} confirmed{Вы пацвердзілі гэту пазнаку} other{Праглядзець}}",
+    "speakerLabelTalkTime": "{duration} гэтага голасу"
 }

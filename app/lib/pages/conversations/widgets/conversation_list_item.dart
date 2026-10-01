@@ -12,6 +12,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -104,6 +105,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.captureGroup?.id,
         conversation.captureGroup?.revision,
         conversation.summaryRetryable,
+        conversation.isLocked,
       );
 
   @override
@@ -220,7 +222,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         // Search matches explicitly open Transcript. Other rows
         // let detail choose Transcript for retained fragments that
         // have no generated summary after hydration.
-        initialTabIndex: seek != null ? 0 : null,
+        initialTab: seek != null ? ConversationTab.transcript : null,
         initialSeekStart: seek?.start,
         initialSeekEnd: seek?.end,
       ),
@@ -323,22 +325,24 @@ class _ConversationListItemState extends State<ConversationListItem> {
           final isMerging = rowState.isMerging;
           final isEligible = rowState.isEligible;
 
-          return GestureDetector(
-            onTap: () async {
-              // If in selection mode, toggle selection only if eligible
-              if (isSelectionMode) {
-                if (!isEligible) {
-                  // Show feedback that this conversation cannot be selected
-                  HapticFeedback.lightImpact();
-                  OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
-                  return;
-                }
-                HapticFeedback.selectionClick();
-                provider.toggleConversationSelection(widget.conversation.id);
+          Future<void> onTap() async {
+            // If in selection mode, toggle selection only if eligible
+            if (isSelectionMode) {
+              if (!isEligible) {
+                // Show feedback that this conversation cannot be selected
+                HapticFeedback.lightImpact();
+                OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
                 return;
               }
-              await _open(context, provider);
-            },
+              HapticFeedback.selectionClick();
+              provider.toggleConversationSelection(widget.conversation.id);
+              return;
+            }
+            await _open(context, provider);
+          }
+
+          return GestureDetector(
+            onTap: onTap,
             onLongPress: isSelectionMode || isMerging ? null : () => _showActions(context, provider),
             child: Stack(
               children: [
@@ -386,10 +390,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           ),
                           child: ClipRRect(
                             borderRadius: OmiRadius.xlAll,
-                            child: Padding(
-                              padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
-                              child: _buildMobileLayout(context),
-                            ),
+                            child: _buildCardContent(context, onTap),
                           ),
                         ),
                       ),
@@ -417,6 +418,19 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+
+  Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
+    final content = Padding(
+      padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+      child: _buildMobileLayout(context),
+    );
+    if (!widget.conversation.isLocked) return content;
+    return OmiLockedPreview(
+      label: context.l10n.upgradeToUnlimited,
+      onPressed: onTap,
+      child: content,
+    );
+  }
 
   /// Time and length, with the New badge beside them (hub audit #16) and the star.
   Widget _buildMetaRow(BuildContext context) {
@@ -535,7 +549,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
             ),
           ],
         ),
-        if (widget.conversation.isLocked) _buildLockedOverlay(),
       ],
     );
   }
@@ -556,27 +569,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
       alignment: Alignment.center,
       decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: OmiRadius.xlAll),
       child: const MergingIndicator(),
-    );
-  }
-
-  Widget _buildLockedOverlay() {
-    return Positioned.fill(
-      child: ClipRRect(
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            // Avoid a live backdrop blur for every locked card. The opaque overlay
-            // preserves the locked affordance without making the scroll/route paint
-            // path sample and blur the entire card behind it.
-            color: Colors.black.withValues(alpha: 0.62),
-            borderRadius: OmiRadius.smAll,
-          ),
-          child: Text(
-            context.l10n.upgradeToUnlimited,
-            style: OmiType.callout.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-      ),
     );
   }
 

@@ -12127,4 +12127,93 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get exportingAllData => 'Đang xuất dữ liệu của bạn… Hãy giữ Omi mở; tài khoản lớn có thể mất vài phút.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count người nói',
+      one: '1 người nói',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Tự động xóa bản sao đã đồng bộ';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Bản sao đã đồng bộ bị xóa sau $days ngày';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Xóa bản sao cục bộ $days ngày sau khi đồng bộ. Bản sao trên đám mây được giữ lại.';
+  }
+
+  @override
+  String get localCopiesSection => 'Bản sao cục bộ';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Số dòng đã gắn nhãn: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Đã học giọng nói',
+        'pending': 'Đang học giọng nói…',
+        'disabled': 'Tính năng lưu giọng nói đang tắt',
+        'other': 'Chưa học giọng nói',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi sẽ nhận ra $name vào lần sau.',
+        'pending': 'Việc này mất vài giây.',
+        'disabled': 'Hãy bật lưu giọng nói trong Cài đặt để Omi có thể nhận ra $name.',
+        'other': 'Omi cần thêm giọng nói rõ ràng của $name và sẽ tiếp tục thử.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Số cuộc trò chuyện trước có giọng nói này: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Có thể',
+        'soundsLike': 'Nghe giống $name',
+        'notPerson': 'Không phải $name',
+        'carried': 'Vẫn là $name. Được giữ từ cuộc trò chuyện gần nhất của bạn.',
+        'change': 'Đổi',
+        'alsoTitle': 'Đây cũng là $name?',
+        'alsoBody': 'Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.',
+        'confirmed': 'Bạn đã xác nhận nhãn này',
+        'other': 'Xem lại',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration từ giọng nói này';
+  }
 }

@@ -294,50 +294,24 @@ jobs:
         with:
           ref: ${{ steps.admitted_source.outputs.admitted_sha }}
 
-      - name: Google Auth for read-only Firestore inventory
-        uses: 'google-github-actions/auth@v3'
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
         with:
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
 
       - name: Verify serving Firestore indexes
-        id: firestore_readiness
-        env:
-          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
-        run: |
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
-            --check-only \
-            --proposal-output "$FIRESTORE_PROPOSAL_PATH" \
-            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
-            --proposal-ttl-seconds 3600
-
-      - name: Validate blocked Firestore schema proposal
-        id: validate_firestore_proposal
-        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
-        env:
-          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
-        run: |
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
-            --validate-proposal "$FIRESTORE_PROPOSAL_PATH" \
-            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
-            --proposal-ttl-seconds 3600
-
-      - name: Preserve blocked Firestore schema proposal
-        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' && steps.validate_firestore_proposal.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        env:
-          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
         with:
-          name: firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
-          if-no-files-found: error
-          retention-days: 1
+          source_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
 
   # Kept out of firestore_readiness on purpose: that job is a least-privilege
   # release-proof boundary limited to actions:read/contents:read, so the audit

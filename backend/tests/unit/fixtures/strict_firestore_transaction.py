@@ -75,8 +75,14 @@ class StrictFirestoreDocument:
             transaction._assert_read_allowed()
         data = self._database.rows.get(self.path)
         if field_paths is not None and data is not None:
-            if field_paths not in (["is_locked"], ["folder_id"]):
-                raise UnsupportedFirestoreOperationError("only privacy and folder membership projections are supported")
+            if field_paths not in (
+                ["is_locked"],
+                ["folder_id"],
+                ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
+            ):
+                raise UnsupportedFirestoreOperationError(
+                    "only privacy, folder membership and speaker-receipt projections are supported"
+                )
             data = {key: value for key, value in data.items() if key in field_paths}
         return StrictFirestoreSnapshot(data)
 

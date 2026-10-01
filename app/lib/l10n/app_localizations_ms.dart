@@ -12167,4 +12167,93 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get exportingAllData =>
       'Mengeksport data anda… Biarkan Omi terbuka; akaun besar mungkin mengambil masa beberapa minit.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count penutur',
+      one: '1 penutur',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Buang Salinan Tersegerak Secara Automatik';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Salinan tersegerak dipadam selepas $days hari';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Memadam salinan setempat $days hari selepas segerak. Salinan awan dikekalkan.';
+  }
+
+  @override
+  String get localCopiesSection => 'Salinan Setempat';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Baris dilabel: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Suara dipelajari',
+        'pending': 'Mempelajari suara…',
+        'disabled': 'Penyimpanan suara dimatikan',
+        'other': 'Suara belum dipelajari',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi akan mengecam $name pada masa akan datang.',
+        'pending': 'Ini mengambil masa beberapa saat.',
+        'disabled': 'Hidupkan penyimpanan suara dalam Tetapan supaya Omi dapat mengecam $name.',
+        'other': 'Omi memerlukan lebih banyak pertuturan yang jelas daripada $name dan akan terus mencuba.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Perbualan terdahulu dengan suara ini: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Mungkin',
+        'soundsLike': 'Kedengaran seperti $name',
+        'notPerson': 'Bukan $name',
+        'carried': 'Masih $name. Dibawa daripada perbualan terakhir anda.',
+        'change': 'Tukar',
+        'alsoTitle': 'Adakah ini juga $name?',
+        'alsoBody': 'Omi menemui suara yang sama dalam perbualan terdahulu.',
+        'confirmed': 'Anda telah mengesahkan label ini',
+        'other': 'Semak',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration daripada suara ini';
+  }
 }

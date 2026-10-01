@@ -3771,5 +3771,16 @@
     "updateAvailableMessage": "Nauja Omi versija paruošta – su pataisymais ir patobulinimais.",
     "updateRequiredTitle": "Būtina atnaujinti",
     "updateRequiredMessage": "Ši Omi versija nebepalaikoma. Atnaujinkite, kad galėtumėte toliau įrašyti ir sinchronizuoti.",
-    "exportingAllData": "Eksportuojami jūsų duomenys… Palikite Omi atvertą; didelėms paskyroms tai gali užtrukti kelias minutes."
+    "exportingAllData": "Eksportuojami jūsų duomenys… Palikite Omi atvertą; didelėms paskyroms tai gali užtrukti kelias minutes.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 kalbėtojas} other{Kalbėtojų: {count}}}",
+    "autoRemoveSyncedCopiesTitle": "Automatiškai šalinti sinchronizuotas kopijas",
+    "autoRemoveSyncedCopiesDays": "Sinchronizuotos kopijos ištrinamos po {days} dienų",
+    "autoRemoveSyncedCopiesDescription": "Ištrina vietines kopijas po {days} dienų nuo sinchronizavimo. Debesies kopijos išsaugomos.",
+    "localCopiesSection": "Vietinės kopijos",
+    "speakerLabelLinesLabeled": "Pažymėtos eilutės: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Balsas išmoktas} pending{Mokomasi balso…} disabled{Balso išsaugojimas išjungtas} other{Balsas dar neišmoktas}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi kitą kartą atpažins {name}.} pending{Tai užtrunka kelias sekundes.} disabled{Įjunkite balsų išsaugojimą nustatymuose, kad Omi galėtų atpažinti {name}.} other{Omi reikia daugiau aiškios {name} kalbos ir toliau bandys.}}",
+    "speakerLabelEarlierMatches": "Ankstesni pokalbiai su šiuo balsu: {count}",
+    "speakerLabelText": "{part, select, likely{Tikėtina} soundsLike{Skamba kaip {name}} notPerson{Ne {name}} carried{Vis dar {name}. Perkelta iš paskutinio pokalbio.} change{Keisti} alsoTitle{Ar tai taip pat {name}?} alsoBody{Omi rado tą patį balsą ankstesniuose pokalbiuose.} confirmed{Patvirtinote šią žymą} other{Peržiūrėti}}",
+    "speakerLabelTalkTime": "{duration} šio balso"
 }

@@ -12171,4 +12171,93 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get exportingAllData =>
       'Izvoz vaših podataka… Držite Omi otvorenim; veliki računi mogu potrajati nekoliko minuta.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Govornika: $count',
+      one: '1 govornik',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Automatski ukloni sinkronizirane kopije';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Sinkronizirane kopije brišu se nakon $days dana';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Briše lokalne kopije $days dana nakon sinkronizacije. Oblačne kopije se zadržavaju.';
+  }
+
+  @override
+  String get localCopiesSection => 'Lokalne kopije';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Označeni retci: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Glas je naučen',
+        'pending': 'Učenje glasa…',
+        'disabled': 'Spremanje glasa je isključeno',
+        'other': 'Glas još nije naučen',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi će prepoznati osobu $name sljedeći put.',
+        'pending': 'To traje nekoliko sekundi.',
+        'disabled': 'Uključite spremanje glasova u postavkama kako bi Omi mogao prepoznati osobu $name.',
+        'other': 'Omi treba više jasnog govora osobe $name i nastavit će pokušavati.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Raniji razgovori s ovim glasom: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Vjerojatno',
+        'soundsLike': 'Zvuči kao $name',
+        'notPerson': 'Nije $name',
+        'carried': 'I dalje $name. Preneseno iz vašeg zadnjeg razgovora.',
+        'change': 'Promijeni',
+        'alsoTitle': 'Je li ovo također $name?',
+        'alsoBody': 'Omi je pronašao isti glas u ranijim razgovorima.',
+        'confirmed': 'Potvrdili ste ovu oznaku',
+        'other': 'Pregledaj',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration ovog glasa';
+  }
 }

@@ -3771,5 +3771,16 @@
     "updateAvailableMessage": "Omin uusi versio on valmis, ja siinä on korjauksia ja parannuksia.",
     "updateRequiredTitle": "Päivitys vaaditaan",
     "updateRequiredMessage": "Tätä Omin versiota ei enää tueta. Päivitä, jotta voit jatkaa tallentamista ja synkronointia.",
-    "exportingAllData": "Tietojasi viedään… Pidä Omi auki; suuret tilit voivat viedä useita minuutteja."
+    "exportingAllData": "Tietojasi viedään… Pidä Omi auki; suuret tilit voivat viedä useita minuutteja.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 puhuja} other{{count} puhujaa}}",
+    "autoRemoveSyncedCopiesTitle": "Poista synkronoidut kopiot automaattisesti",
+    "autoRemoveSyncedCopiesDays": "Synkronoidut kopiot poistetaan {days} päivän jälkeen",
+    "autoRemoveSyncedCopiesDescription": "Poistaa paikalliset kopiot {days} päivää synkronoinnin jälkeen. Pilvikopiot säilytetään.",
+    "localCopiesSection": "Paikalliset kopiot",
+    "speakerLabelLinesLabeled": "Nimetyt rivit: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Ääni opittu} pending{Opitaan ääntä…} disabled{Äänen tallennus on pois päältä} other{Ääntä ei ole vielä opittu}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi tunnistaa henkilön {name} ensi kerralla.} pending{Tämä kestää muutaman sekunnin.} disabled{Ota äänten tallennus käyttöön asetuksissa, jotta Omi voi tunnistaa henkilön {name}.} other{Omi tarvitsee lisää selkeää puhetta henkilöltä {name} ja yrittää edelleen.}}",
+    "speakerLabelEarlierMatches": "Aiemmat keskustelut tällä äänellä: {count}",
+    "speakerLabelText": "{part, select, likely{Todennäköinen} soundsLike{Kuulostaa henkilöltä {name}} notPerson{Ei {name}} carried{Edelleen {name}. Siirretty edellisestä keskustelustasi.} change{Vaihda} alsoTitle{Onko tämä myös {name}?} alsoBody{Omi löysi saman äänen aiemmista keskusteluista.} confirmed{Vahvistit tämän nimen} other{Tarkista}}",
+    "speakerLabelTalkTime": "{duration} tästä äänestä"
 }

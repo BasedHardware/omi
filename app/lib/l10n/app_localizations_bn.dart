@@ -12133,4 +12133,93 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get exportingAllData =>
       'আপনার ডেটা রপ্তানি করা হচ্ছে… Omi খোলা রাখুন; বড় অ্যাকাউন্টের ক্ষেত্রে কয়েক মিনিট লাগতে পারে।';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জন বক্তা',
+      one: '১ জন বক্তা',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'সিঙ্ক করা কপি স্বয়ংক্রিয়ভাবে সরান';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '$days দিন পরে সিঙ্ক করা কপি মুছে যায়';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'সিঙ্কের $days দিন পরে লোকাল কপি মুছে যায়। ক্লাউড কপি রাখা হয়।';
+  }
+
+  @override
+  String get localCopiesSection => 'লোকাল কপি';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'লেবেল করা লাইন: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'ভয়েস শেখা হয়েছে',
+        'pending': 'ভয়েস শেখা হচ্ছে…',
+        'disabled': 'ভয়েস সংরক্ষণ বন্ধ আছে',
+        'other': 'ভয়েস এখনও শেখা হয়নি',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi পরের বার $name-কে চিনতে পারবে।',
+        'pending': 'এতে কয়েক সেকেন্ড লাগবে।',
+        'disabled': 'Omi যাতে $name-কে চিনতে পারে, সেজন্য সেটিংসে ভয়েস সংরক্ষণ চালু করুন।',
+        'other': 'Omi-র $name-এর আরও স্পষ্ট কথা দরকার এবং সে চেষ্টা চালিয়ে যাবে।',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'এই ভয়েসের আগের কথোপকথন: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'সম্ভাব্য',
+        'soundsLike': '$name-এর মতো শোনাচ্ছে',
+        'notPerson': '$name নয়',
+        'carried': 'এখনও $name। আপনার আগের কথোপকথন থেকে নেওয়া হয়েছে।',
+        'change': 'পরিবর্তন',
+        'alsoTitle': 'এটিও কি $name?',
+        'alsoBody': 'Omi আগের কথোপকথনগুলোতে একই ভয়েস খুঁজে পেয়েছে।',
+        'confirmed': 'আপনি এই লেবেল নিশ্চিত করেছেন',
+        'other': 'পর্যালোচনা',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'এই ভয়েসের $duration';
+  }
 }

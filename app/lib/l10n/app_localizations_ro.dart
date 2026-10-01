@@ -12188,4 +12188,93 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get exportingAllData => 'Se exportă datele tale… Ține Omi deschis; conturile mari pot dura câteva minute.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vorbitori: $count',
+      one: '1 vorbitor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Eliminare automată a copiilor sincronizate';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Copiile sincronizate se șterg după $days zile';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Șterge copiile locale la $days zile după sincronizare. Copiile din cloud sunt păstrate.';
+  }
+
+  @override
+  String get localCopiesSection => 'Copii locale';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Rânduri etichetate: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Voce învățată',
+        'pending': 'Se învață vocea…',
+        'disabled': 'Salvarea vocii este dezactivată',
+        'other': 'Vocea nu a fost încă învățată',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi va recunoaște persoana $name data viitoare.',
+        'pending': 'Durează câteva secunde.',
+        'disabled': 'Activează salvarea vocilor în Setări ca Omi să poată recunoaște persoana $name.',
+        'other': 'Omi are nevoie de mai multă vorbire clară de la $name și va continua să încerce.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Conversații anterioare cu această voce: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Probabil',
+        'soundsLike': 'Sună ca $name',
+        'notPerson': 'Nu este $name',
+        'carried': 'Tot $name. Preluat din ultima ta conversație.',
+        'change': 'Schimbă',
+        'alsoTitle': 'Este și aceasta $name?',
+        'alsoBody': 'Omi a găsit aceeași voce în conversații anterioare.',
+        'confirmed': 'Ai confirmat această etichetă',
+        'other': 'Revizuiește',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration din această voce';
+  }
 }

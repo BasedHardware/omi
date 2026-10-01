@@ -3771,5 +3771,16 @@
     "updateAvailableMessage": "Нова версия на Omi е готова, с поправки и подобрения.",
     "updateRequiredTitle": "Нужна е актуализация",
     "updateRequiredMessage": "Тази версия на Omi вече не се поддържа. Актуализирайте, за да продължите да записвате и синхронизирате.",
-    "exportingAllData": "Експортиране на вашите данни… Не затваряйте Omi; при големи акаунти може да отнеме няколко минути."
+    "exportingAllData": "Експортиране на вашите данни… Не затваряйте Omi; при големи акаунти може да отнеме няколко минути.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 говорител} other{{count} говорители}}",
+    "autoRemoveSyncedCopiesTitle": "Автоматично премахване на синхронизираните копия",
+    "autoRemoveSyncedCopiesDays": "Синхронизираните копия се изтриват след {days} дни",
+    "autoRemoveSyncedCopiesDescription": "Изтрива локалните копия {days} дни след синхронизация. Облачните копия се запазват.",
+    "localCopiesSection": "Локални копия",
+    "speakerLabelLinesLabeled": "Означени редове: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Гласът е научен} pending{Научаване на гласа…} disabled{Запазването на глас е изключено} other{Гласът още не е научен}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi ще разпознае {name} следващия път.} pending{Това отнема няколко секунди.} disabled{Включете запазването на гласове в Настройки, за да може Omi да разпознава {name}.} other{Omi се нуждае от повече ясна реч от {name} и ще продължи да опитва.}}",
+    "speakerLabelEarlierMatches": "Предишни разговори с този глас: {count}",
+    "speakerLabelText": "{part, select, likely{Вероятно} soundsLike{Звучи като {name}} notPerson{Не е {name}} carried{Все още е {name}. Пренесено от последния ви разговор.} change{Промяна} alsoTitle{Това също ли е {name}?} alsoBody{Omi откри същия глас в предишни разговори.} confirmed{Потвърдихте този етикет} other{Преглед}}",
+    "speakerLabelTalkTime": "{duration} от този глас"
 }

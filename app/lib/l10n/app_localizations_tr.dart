@@ -12146,4 +12146,93 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get exportingAllData =>
       'Verileriniz dışa aktarılıyor… Omi\'yi açık tutun; büyük hesaplar birkaç dakika sürebilir.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşmacı',
+      one: '1 konuşmacı',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Senkronize Kopyaları Otomatik Kaldır';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Senkronize kopyalar $days gün sonra silinir';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Senkronizasyondan $days gün sonra yerel kopyaları siler. Bulut kopyaları saklanır.';
+  }
+
+  @override
+  String get localCopiesSection => 'Yerel Kopyalar';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Etiketlenen satırlar: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Ses öğrenildi',
+        'pending': 'Ses öğreniliyor…',
+        'disabled': 'Ses kaydetme kapalı',
+        'other': 'Ses henüz öğrenilmedi',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi bir dahaki sefere $name kişisini tanıyacak.',
+        'pending': 'Bu birkaç saniye sürer.',
+        'disabled': 'Omi $name kişisini tanıyabilsin diye Ayarlar’da ses kaydetmeyi açın.',
+        'other': 'Omi, $name kişisinin daha net konuşmasına ihtiyaç duyuyor ve denemeye devam edecek.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Bu sesle önceki sohbetler: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Muhtemel',
+        'soundsLike': '$name gibi duyuluyor',
+        'notPerson': '$name değil',
+        'carried': 'Hâlâ $name. Son sohbetinizden aktarıldı.',
+        'change': 'Değiştir',
+        'alsoTitle': 'Bu da $name mi?',
+        'alsoBody': 'Omi aynı sesi önceki sohbetlerde buldu.',
+        'confirmed': 'Bu etiketi onayladınız',
+        'other': 'İncele',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'Bu sesten $duration';
+  }
 }

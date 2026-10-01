@@ -151,14 +151,17 @@ overlay:
         CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
           value: '2'
           category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '1'
+          category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
         MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
           value: '60000'
-          category: rollout
-        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-          value: ''
           category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
@@ -228,14 +231,17 @@ overlay:
         CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
           value: '2'
           category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '1'
+          category: rollout
         CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
         MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
           value: '60000'
-          category: rollout
-        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-          value: ''
           category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
@@ -330,6 +336,8 @@ overlay:
           env_var: CLOUD_RUN_VPC_SUBNET
     services:
       backend:
+        # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         secrets:
           DESKTOP_PREVIEW_PUBLISH_KEY:
             secret: DESKTOP_PREVIEW_PUBLISH_KEY
@@ -344,6 +352,10 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          # Keyless custom tokens (/v1/auth/token) are signed through IAM signBlob as this account;
+          # naming it avoids relying on metadata discovery. Inert while a key credential is mounted.
+          FIREBASE_SIGNER_SERVICE_ACCOUNT:
+            value: backend-runtime@based-hardware.iam.gserviceaccount.com
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           SCREEN_FRAME_EGRESS_ENABLED:
@@ -457,14 +469,17 @@ overlay:
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '2'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
@@ -484,7 +499,7 @@ overlay:
       backend-sync:
         # Attached runtime identity (credential hygiene D4). The deploy pins it and removes
         # SERVICE_ACCOUNT_JSON/GOOGLE_APPLICATION_CREDENTIALS; every secret and bucket this
-        # service reads needs its own grant to this account. `backend` waits for its own cut-over.
+        # service reads needs its own grant to this account. Every backend Cloud Run service is pinned.
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -586,14 +601,17 @@ overlay:
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '2'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
@@ -691,14 +709,17 @@ overlay:
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '2'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
+            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'

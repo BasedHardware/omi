@@ -11917,4 +11917,93 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get exportingAllData => '正在导出您的数据… 请保持 Omi 打开；大型账户可能需要几分钟。';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 位发言人',
+      one: '1 位发言人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => '自动删除已同步副本';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '已同步副本将在 $days 天后删除';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return '在同步 $days 天后删除本地副本。云端副本会保留。';
+  }
+
+  @override
+  String get localCopiesSection => '本地副本';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return '已标记的行数：$count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '已学会声音',
+        'pending': '正在学习声音…',
+        'disabled': '声音保存已关闭',
+        'other': '尚未学会声音',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '下次 Omi 就能认出 $name。',
+        'pending': '这需要几秒钟。',
+        'disabled': '请在设置中开启声音保存，以便 Omi 能认出 $name。',
+        'other': 'Omi 需要 $name 更清晰的语音，并会继续尝试。',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return '与此声音的过往对话：$count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': '可能',
+        'soundsLike': '听起来像 $name',
+        'notPerson': '不是 $name',
+        'carried': '仍是 $name。沿用自你的上一段对话。',
+        'change': '更改',
+        'alsoTitle': '这也是 $name 吗？',
+        'alsoBody': 'Omi 在之前的对话中发现了相同的声音。',
+        'confirmed': '你已确认此标签',
+        'other': '查看',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '此声音共 $duration';
+  }
 }

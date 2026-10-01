@@ -11938,4 +11938,93 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get exportingAllData => 'データをエクスポートしています… Omi を開いたままにしてください。大きなアカウントでは数分かかることがあります。';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '話者 $count人',
+      one: '話者 1人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => '同期済みコピーを自動削除';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '同期済みコピーは$days日後に削除されます';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return '同期後$days日でローカルコピーを削除します。クラウドのコピーは保持されます。';
+  }
+
+  @override
+  String get localCopiesSection => 'ローカルコピー';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'ラベルを付けた行数：$count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '声を学習しました',
+        'pending': '声を学習中…',
+        'disabled': '声の保存はオフです',
+        'other': '声はまだ学習されていません',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': '次回から Omi が$nameさんを認識します。',
+        'pending': '数秒かかります。',
+        'disabled': 'Omi が$nameさんを認識できるように、設定で声の保存をオンにしてください。',
+        'other': 'Omi は$nameさんのはっきりした音声がもっと必要です。引き続き試みます。',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'この声の過去の会話数：$count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': '候補',
+        'soundsLike': '$nameさんの声に似ています',
+        'notPerson': '$nameさんではない',
+        'carried': '引き続き$nameさんです。前回の会話から引き継ぎました。',
+        'change': '変更',
+        'alsoTitle': 'これも$nameさんですか？',
+        'alsoBody': 'Omi は過去の会話で同じ声を見つけました。',
+        'confirmed': 'このラベルを確認済みです',
+        'other': '確認する',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'この声の$duration';
+  }
 }

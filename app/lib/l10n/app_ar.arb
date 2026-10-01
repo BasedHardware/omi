@@ -3771,5 +3771,16 @@
     "updateAvailableMessage": "إصدار جديد من Omi جاهز، مع إصلاحات وتحسينات.",
     "updateRequiredTitle": "التحديث مطلوب",
     "updateRequiredMessage": "لم يعد هذا الإصدار من Omi مدعومًا. حدّث التطبيق لمواصلة التسجيل والمزامنة.",
-    "exportingAllData": "جارٍ تصدير بياناتك… أبقِ Omi مفتوحًا؛ فالحسابات الكبيرة قد تستغرق عدة دقائق."
+    "exportingAllData": "جارٍ تصدير بياناتك… أبقِ Omi مفتوحًا؛ فالحسابات الكبيرة قد تستغرق عدة دقائق.",
+    "transcriptSpeakerCount": "{count, plural, =1{متحدث واحد} other{{count} متحدثين}}",
+    "autoRemoveSyncedCopiesTitle": "إزالة النسخ المتزامنة تلقائيًا",
+    "autoRemoveSyncedCopiesDays": "يتم حذف النسخ المتزامنة بعد {days} يومًا",
+    "autoRemoveSyncedCopiesDescription": "يحذف النسخ المحلية بعد {days} يومًا من المزامنة. تبقى النسخ السحابية محفوظة.",
+    "localCopiesSection": "النسخ المحلية",
+    "speakerLabelLinesLabeled": "الأسطر الموسومة: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{تم تعلّم الصوت} pending{جارٍ تعلّم الصوت…} disabled{حفظ الصوت متوقف} other{لم يتم تعلّم الصوت بعد}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{سيتعرّف Omi على {name} في المرة القادمة.} pending{يستغرق هذا بضع ثوانٍ.} disabled{فعّل حفظ الأصوات في الإعدادات ليتمكن Omi من التعرّف على {name}.} other{يحتاج Omi إلى مزيد من الكلام الواضح من {name} وسيواصل المحاولة.}}",
+    "speakerLabelEarlierMatches": "المحادثات السابقة بهذا الصوت: {count}",
+    "speakerLabelText": "{part, select, likely{محتمل} soundsLike{يشبه صوت {name}} notPerson{ليس {name}} carried{لا يزال {name}. تم نقله من محادثتك الأخيرة.} change{تغيير} alsoTitle{هل هذا أيضًا {name}؟} alsoBody{عثر Omi على الصوت نفسه في محادثات سابقة.} confirmed{لقد أكدت هذه التسمية} other{مراجعة}}",
+    "speakerLabelTalkTime": "{duration} من هذا الصوت"
 }

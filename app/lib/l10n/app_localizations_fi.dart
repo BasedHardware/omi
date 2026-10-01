@@ -12138,4 +12138,93 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get exportingAllData => 'Tietojasi viedään… Pidä Omi auki; suuret tilit voivat viedä useita minuutteja.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count puhujaa',
+      one: '1 puhuja',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Poista synkronoidut kopiot automaattisesti';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Synkronoidut kopiot poistetaan $days päivän jälkeen';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Poistaa paikalliset kopiot $days päivää synkronoinnin jälkeen. Pilvikopiot säilytetään.';
+  }
+
+  @override
+  String get localCopiesSection => 'Paikalliset kopiot';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Nimetyt rivit: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Ääni opittu',
+        'pending': 'Opitaan ääntä…',
+        'disabled': 'Äänen tallennus on pois päältä',
+        'other': 'Ääntä ei ole vielä opittu',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi tunnistaa henkilön $name ensi kerralla.',
+        'pending': 'Tämä kestää muutaman sekunnin.',
+        'disabled': 'Ota äänten tallennus käyttöön asetuksissa, jotta Omi voi tunnistaa henkilön $name.',
+        'other': 'Omi tarvitsee lisää selkeää puhetta henkilöltä $name ja yrittää edelleen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Aiemmat keskustelut tällä äänellä: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Todennäköinen',
+        'soundsLike': 'Kuulostaa henkilöltä $name',
+        'notPerson': 'Ei $name',
+        'carried': 'Edelleen $name. Siirretty edellisestä keskustelustasi.',
+        'change': 'Vaihda',
+        'alsoTitle': 'Onko tämä myös $name?',
+        'alsoBody': 'Omi löysi saman äänen aiemmista keskusteluista.',
+        'confirmed': 'Vahvistit tämän nimen',
+        'other': 'Tarkista',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration tästä äänestä';
+  }
 }

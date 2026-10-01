@@ -12238,4 +12238,93 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get exportingAllData =>
       'Ini-export ang iyong data… Panatilihing bukas ang Omi; ang malalaking account ay maaaring tumagal ng ilang minuto.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nagsasalita',
+      one: '1 nagsasalita',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Awtomatikong Tanggalin ang mga Naka-sync na Kopya';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Binubura ang mga naka-sync na kopya pagkatapos ng $days araw';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Binubura ang mga lokal na kopya $days araw pagkatapos mag-sync. Pinapanatili ang mga kopya sa cloud.';
+  }
+
+  @override
+  String get localCopiesSection => 'Mga Lokal na Kopya';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Mga linyang may label: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Natutunan na ang boses',
+        'pending': 'Tinututunan ang boses…',
+        'disabled': 'Naka-off ang pag-save ng boses',
+        'other': 'Hindi pa natutunan ang boses',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Makikilala ni Omi si $name sa susunod.',
+        'pending': 'Tatagal ito ng ilang segundo.',
+        'disabled': 'I-on ang pag-save ng mga boses sa Settings para makilala ni Omi si $name.',
+        'other': 'Kailangan ni Omi ng mas malinaw na pananalita mula kay $name at patuloy itong susubok.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Mga naunang usapan na may ganitong boses: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Posible',
+        'soundsLike': 'Parang si $name',
+        'notPerson': 'Hindi si $name',
+        'carried': 'Si $name pa rin. Dinala mula sa huli mong usapan.',
+        'change': 'Baguhin',
+        'alsoTitle': 'Si $name rin ba ito?',
+        'alsoBody': 'Nahanap ni Omi ang parehong boses sa mga naunang usapan.',
+        'confirmed': 'Kinumpirma mo ang label na ito',
+        'other': 'Suriin',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration ng boses na ito';
+  }
 }
