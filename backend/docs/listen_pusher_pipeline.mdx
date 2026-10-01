@@ -647,10 +647,68 @@ admissions at four live requests pending on any replica or 0.75 seconds of
 oldest live wait. A missing replica, old server revision without live fields,
 invalid response, or stale reading stands down all listen processes. The
 window POST explicitly marks its live lane; unmarked requests remain backfill.
-A partial replay retains its unaccepted tail and new audio
-for the next vendor leg while preserving capture sample offsets. Window POSTs mark their
+A partial replay retains **all un-emitted audio**, including bytes accepted by
+a replacement that dies before returning text, for the next vendor leg. The
+ring continues across downstream providers; emitted capture positions trim it.
+A failed replacement is excluded by its actual provider, including a rejection
+at the final health check, and the receiver tries the remaining eligible chain.
+Callbacks from an epoch retired for replay are fenced, including callbacks
+queued on the listen loop, so the failed epoch cannot duplicate replayed words.
+The retained window span bypasses downstream VAD gating and finalize signals
+during replay: speech admitted with window gain cannot be discarded by a
+different downstream VAD decision. Ordinary sends keep their existing gate.
+Each adopted replacement gets 15 seconds of new capture headroom while it
+processes a potentially full source backlog. The finite three-provider suffix
+bounds retention at 135 seconds; stalled un-emitted audio still fails over
+before eviction. This ceiling grows from the original 90-second ring only
+while a replacement is handling its replay obligation. As soon as transcript
+progress leaves at most 75 seconds of capture, the cap returns to 90 seconds
+without evicting pending audio, leaving the full 15-second headroom free.
+A later replacement can reserve headroom again.
+The ring survives until session teardown, but emitted text continuously settles
+its contents; healthy continuous speech normally retains only its current tail.
+135 seconds of mono PCM16 is 2.16 MB at 8 kHz, 4.32 MB at 16 kHz, or 12.96 MB
+at 48 kHz. With the ordinary 30ms flush floor, owned Python ring objects add
+about 0.565 MB per ring. At 60 sessions/pod and three post-failover sessions,
+the conservative 16 kHz planning allowance for these changes is about 16 MiB of added
+RSS (14 MiB of measured owned ring objects, plus shadow VAD and allocator margin). This is additional
+to the old post-adoption path, which cleared the ring; it is not merely the
+45-second increase. Provider queues and model memory are separate allocations.
+Replacements with ordinary VAD disabled use a shadow gate
+for replay accounting only: every byte is still forwarded, and it introduces
+no finalize signals. Settled silence retains the same recent 15-second tail
+instead of filling the ring on an otherwise healthy idle replacement.
+Downstream capture-progress bookkeeping activates when each window-origin
+replacement is created, even if the preceding epoch has fully settled the ring
+and its replay snapshot is empty. New speech still remains pending until that
+replacement emits text; silence trimming cannot discard it. A session that
+never fails over does not track that extra progress.
+`testing/bench_live_leg_send.py` compares real class implementations against a
+pinned pre-PR Git revision using identical synthetic PCM and deterministic
+dependencies; vendor I/O and ONNX inference are excluded. Its `--ring-memory`
+mode measures retained ring objects at the normal 30ms flush floor.
+Window POSTs mark their
 request so `parakeet_prerecorded_requests_total` excludes live canary errors
 while covering the batch path used by sync backfill.
+
+Previously `stt_live_session ... outcome=exhausted` meant an individual
+replacement hop died before producing text, even when selection continued.
+These failed hops now emit `degraded` when another candidate is being tried;
+`exhausted` is reserved for no remaining replacement path. Budget/auth deaths
+map to `quota`/`auth`; other typed deaths (and untyped closes) map to `other`,
+with a bounded log-only `subtype` (`modulate_serve_error`, `connection_lost`,
+etc., or `untyped`). The shared fallback metric dimensions remain unchanged.
+Only an actual failure to find a serving replacement terminates live STT,
+emitting `stt_failed` and closing the client WebSocket with 1011; recovery then
+requires a client reconnect. Configured and circuit-open candidate skipping
+continues to be enforced by the connector.
+Late upgrade rejection recovery also applies to control sessions that started
+on Soniox or Modulate: an eligible next provider is attempted before terminal
+closure. These sessions do not have the window replay ring, so preserving their
+un-emitted cross-provider tail remains outside this change. A follow-up would
+need a replay ring and emitted capture accounting for all managed sessions;
+60 filled 90-second PCM16 rings at 16 kHz require about 165 MiB of payload
+(about 186 MiB including normal ring objects), before allocator and VAD costs.
 Before the first window transcript, 12 seconds after the active speech episode
 starts or four consecutive empty speech-containing POSTs ends the Parakeet leg.
 A fully answered-empty episode with less than one admitted second and at least
