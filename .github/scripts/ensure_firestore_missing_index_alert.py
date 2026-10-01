@@ -77,7 +77,8 @@ def _verify_policy(policy: dict[str, object], channels: list[str]) -> None:
     actual_aggregation = threshold.get("aggregations") or []
     aggregation = actual_aggregation[0] if isinstance(actual_aggregation, list) and actual_aggregation else {}
     trigger = threshold.get("trigger") or {}
-    actual_threshold = threshold.get("thresholdValue")
+    # The Monitoring API omits proto3 default values, so a zero threshold is absent from describe output.
+    actual_threshold = threshold.get("thresholdValue", 0)
     actual_trigger_count = trigger.get("count") if isinstance(trigger, dict) else None
     checks = (
         (condition.get("displayName") == DISPLAY_NAME, "condition display name"),
