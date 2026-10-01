@@ -33,6 +33,59 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    # I024: database.conversations.get_conversations_count; macOS
+    # LiveConversationRemoteDataSource.count builds folder + starred + day bounds
+    # on GET /v1/conversations/count. Reachability report 871737adf7e87104.
+    FirestoreIndexRequirement(
+        'conversations_discarded_folder_starred_status_created_count',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('folder_id'), _asc('starred'), _asc('status'), _asc('created_at'), _asc('__name__')),
+    ),
+    # ADMIN-MESSAGES: web/admin/app/api/omi/stats/notifications/route.ts collectionGroup(messages)
+    # query for app_id + created_at bounds; GET /api/omi/stats/notifications.
+    # Reachability report 871737adf7e87104 (694 prod errors in September).
+    FirestoreIndexRequirement(
+        'admin_messages_app_created_at',
+        'messages',
+        'COLLECTION_GROUP',
+        (_asc('app_id'), _asc('created_at'), _asc('__name__')),
+    ),
+    # database.advice.get_advice via GET /v1/advice, category + dismissed=true.
+    # Reachability report 871737adf7e87104, suggestion I001.
+    FirestoreIndexRequirement(
+        'advice_category_created_at',
+        'advice',
+        'COLLECTION',
+        (_asc('category'), _desc('created_at'), _desc('__name__')),
+    ),
+    # database.advice.get_advice via GET /v1/advice, category + dismissed=false.
+    # Reachability report 871737adf7e87104, suggestion I002.
+    FirestoreIndexRequirement(
+        'advice_category_dismissed_created_at',
+        'advice',
+        'COLLECTION',
+        (_asc('category'), _asc('is_dismissed'), _desc('created_at'), _desc('__name__')),
+    ),
+    # database.advice.get_advice via GET /v1/advice, no category + dismissed=false.
+    # Reachability report 871737adf7e87104, suggestion I003.
+    FirestoreIndexRequirement(
+        'advice_dismissed_created_at',
+        'advice',
+        'COLLECTION',
+        (_asc('is_dismissed'), _desc('created_at'), _desc('__name__')),
+    ),
+    # I070 is declared by PR H as conversations (folder_id ASC, created_at DESC, __name__ DESC).
+    # database.folders.get_conversations_in_folder uses the identical COLLECTION index.
+    # Reachability report 871737adf7e87104, suggestion I070.
+    # database.frame_requests.enqueue_frame_request first transactional query via
+    # POST /v1/frame-requests. Reachability report 871737adf7e87104, suggestion I141.
+    FirestoreIndexRequirement(
+        'frame_requests_enqueue_dedupe_attempt',
+        'frame_requests',
+        'COLLECTION',
+        (_asc('account_generation'), _asc('dedupe_key'), _asc('device_id'), _desc('attempt_number'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'sync_backfill_pending_uid_sort',
         'sync_backfill_pending',
