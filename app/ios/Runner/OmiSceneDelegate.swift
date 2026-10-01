@@ -3,13 +3,26 @@ import UIKit
 import BackgroundTasks
 import app_links
 import UserNotifications
+#if compiler(>=6.4)
+import CoreSpotlight
+import AppIntents
+#endif
 
 /// Flutter owns the scene's implicit engine; process services remain in AppDelegate.
 final class OmiSceneDelegate: FlutterSceneDelegate {
     override func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
                         options connectionOptions: UIScene.ConnectionOptions) {
         #if OMI_SIRI_PROBE && compiler(>=6.4)
-        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("-omi-siri-probe") }),
+        for activity in connectionOptions.userActivities { logSpotlightProbe(activity, phase: "cold") }
+        #endif
+        #if compiler(>=6.4)
+        if #available(iOS 27.0, *) {
+            connectionOptions.userActivities.forEach(OmiSpotlightActivityRoute.handle)
+        }
+        #endif
+        #if OMI_SIRI_PROBE && compiler(>=6.4)
+        if SiriDebugProbe.spotlightModeActive ||
+           ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("-omi-siri-probe") }),
            let windowScene = scene as? UIWindowScene, #available(iOS 26.0, *) {
             window = UIWindow(windowScene: windowScene)
             SiriDebugProbe.runIfRequested() // No Flutter scene or engine has been created.
@@ -74,9 +87,34 @@ final class OmiSceneDelegate: FlutterSceneDelegate {
     }
 
     override func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        #if OMI_SIRI_PROBE && compiler(>=6.4)
+        logSpotlightProbe(userActivity, phase: "warm")
+        #endif
+        #if compiler(>=6.4)
+        if #available(iOS 27.0, *) { OmiSpotlightActivityRoute.handle(userActivity) }
+        #endif
         if let url = userActivity.webpageURL { OmiSceneLinkRouter.forward(url) }
         super.scene(scene, continue: userActivity)
     }
+
+    #if OMI_SIRI_PROBE && compiler(>=6.4)
+    private func logSpotlightProbe(_ activity: NSUserActivity, phase: String) {
+        let entityType: String
+        let entityID: String
+        if #available(iOS 18.2, *) {
+            let entity = activity.appEntityIdentifier
+            entityType = entity.map { String(describing: $0.entityType) } ?? "nil"
+            entityID = entity?.identifier ?? "nil"
+        } else {
+            entityType = "unavailable"
+            entityID = "unavailable"
+        }
+        NSLog("[SiriSceneProbe] phase=%@ type=%@ itemID=%@ entityType=%@ entityID=%@ userInfo=%@",
+              phase, activity.activityType,
+              activity.userInfo?[CSSearchableItemActivityIdentifier] as? String ?? "nil",
+              entityType, entityID, String(describing: activity.userInfo ?? [:]))
+    }
+    #endif
 
     private func forwardOAuthCallback(_ url: URL) {
         guard url.scheme?.hasPrefix("com.googleusercontent.apps.") == true,
@@ -94,3 +132,57 @@ enum OmiSceneLinkRouter {
         activities.compactMap(\.webpageURL).forEach(forward)
     }
 }
+
+#if compiler(>=6.4)
+/// The Spotlight activity contains an App Entity identifier, not an Omi URL.
+/// Only an entity still present in the current owner's snapshot may navigate.
+@available(iOS 27.0, *)
+enum OmiSpotlightActivityRoute {
+    struct Target: Equatable {
+        let kinds: [String]
+        let id: String
+    }
+
+    static func target(_ activity: NSUserActivity) -> Target? {
+        guard activity.activityType == CSSearchableItemActionType else { return nil }
+        let raw = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String
+        let entity = activity.appEntityIdentifier ?? raw.flatMap(EntityIdentifier.init(activityIdentifier:))
+        if let entity, !entity.identifier.isEmpty {
+            switch ObjectIdentifier(entity.entityType) {
+            case ObjectIdentifier(ConversationEntity.self):
+                return Target(kinds: ["conversation", "memory"], id: entity.identifier)
+            case ObjectIdentifier(MemoryEntity.self):
+                return Target(kinds: ["memory"], id: entity.identifier)
+            case ObjectIdentifier(TaskEntity.self):
+                return Target(kinds: ["task"], id: entity.identifier)
+            default: break
+            }
+        }
+        // Old iOS indexes included a URL as relatedUniqueIdentifier. Accept
+        // one if Spotlight supplies it as its activity identifier, but never
+        // trust it without the same current-owner snapshot check below.
+        guard let raw, let url = URLComponents(string: raw), url.scheme == "omi",
+              let kind = url.host, ["conversation", "memory", "task"].contains(kind),
+              let id = url.path.split(separator: "/").first.map(String.init),
+              url.path.split(separator: "/").count == 1, !id.isEmpty else { return nil }
+        return Target(kinds: [kind], id: id)
+    }
+
+    static func handle(_ activity: NSUserActivity) {
+        guard activity.activityType == CSSearchableItemActionType else { return }
+        let started = Date()
+        guard let target = target(activity) else {
+            SiriTelemetry.intent("open", outcome: "server", started: started, entryPath: "user_activity")
+            return
+        }
+        guard let kind = target.kinds.first(where: {
+            SiriSnapshotStore.shared.containsCurrentEntity(type: $0, id: target.id)
+        }) else {
+            SiriTelemetry.intent("open", outcome: "auth", started: started, entryPath: "user_activity")
+            return
+        }
+        _ = SiriBridge.shared.navigate(SiriBridge.entityRoute(kind: kind, id: target.id),
+                                       entryPath: "user_activity")
+    }
+}
+#endif

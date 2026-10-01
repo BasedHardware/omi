@@ -11,6 +11,101 @@ import ObjectiveC.runtime
 /// Simulator-only, opt-in probe for a Runner launch that has no Dart engine.
 /// It accepts only loopback, and uses a fake token against a local stub.
 enum SiriDebugProbe {
+    static var spotlightModeActive: Bool {
+        ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-spotlight") ||
+            UserDefaults.standard.bool(forKey: "omi.siri.spotlightProbe")
+    }
+
+    @available(iOS 26.0, *)
+    private static func runSpotlightProbe() async {
+        guard ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-spotlight") else {
+            NSLog("[SiriSceneProbe] coldProbeLaunch pendingRoute=%@",
+                  SiriSnapshotStore.shared.pendingRoute()?.route ?? "nil")
+            return
+        }
+        UserDefaults.standard.set(true, forKey: "omi.siri.spotlightProbe")
+        do {
+            let uid = "siri-spotlight-probe"
+            try await SiriSnapshotStore.shared.bind(uid: uid)
+            NSLog("[SiriSceneProbe] syntheticIndexStage=bound generation=%@",
+                  String(describing: SiriSnapshotStore.shared.generationForOwner(uid)))
+            let config = SiriSessionConfig(uid: uid,
+                generation: SiriSnapshotStore.shared.generationForOwner(uid) ?? 0,
+                baseUrl: "http://127.0.0.1:9", profile: "local_dev",
+                appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
+                token: "fake-siri-probe-token",
+                tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(3600)))
+            try SiriSession.shared.publish(config)
+            NSLog("[SiriSceneProbe] syntheticIndexStage=published")
+            let now = CheckedIntegerConversion.epochMs()
+            try await SiriSnapshotStore.shared.upsert([
+                SiriConversation(id: "spotlight-conversation", title: "Spotlight Omi Probe Conversation",
+                                 summary: "Synthetic probe", startedAtMs: now, updatedAtMs: now)
+            ], uid: uid)
+            NSLog("[SiriSceneProbe] syntheticIndexStage=conversation")
+            try await SiriSnapshotStore.shared.upsert([
+                SiriMemory(id: "spotlight-memory", content: "Spotlight Omi Probe Memory",
+                           createdAtMs: now, expiresAtMs: nil)
+            ], uid: uid)
+            NSLog("[SiriSceneProbe] syntheticIndexStage=memory")
+            try await SiriSnapshotStore.shared.upsert([
+                SiriTask(id: "spotlight-task", title: "Spotlight Omi Probe Task", completed: false,
+                         createdAtMs: now, dueAtMs: nil, completedAtMs: nil)
+            ], uid: uid)
+            try await SiriSnapshotStore.shared.rebuildIndex()
+            NSLog("[SiriSceneProbe] syntheticIndex=ready owner=%@", uid)
+            let found: Int = await withCheckedContinuation { continuation in
+                let query = CSSearchQuery(queryString: "title == \"Spotlight Omi Probe Conversation\"",
+                                          queryContext: nil)
+                query.completionHandler = { error in
+                    NSLog("[SiriSceneProbe] syntheticQueryError=%@", String(describing: error))
+                    continuation.resume(returning: query.foundItemCount)
+                }
+                query.start()
+            }
+            NSLog("[SiriSceneProbe] syntheticQueryCount=%d", found)
+            if #available(iOS 27.0, *) {
+                let conversation = ConversationEntity(id: "spotlight-conversation", name: "Probe",
+                    content: "Synthetic", creationDate: Date(), modificationDate: Date())
+                let memory = MemoryEntity(id: "spotlight-memory", content: "Synthetic", creationDate: Date())
+                let task = TaskEntity(id: "spotlight-task", title: "Probe", isCompleted: false,
+                    creationDate: Date(), dueDate: nil, completionDate: nil)
+                for (label, identifier, expectedRoute) in [
+                    ("conversation", EntityIdentifier(for: conversation), "/conversation/spotlight-conversation"),
+                    ("memory", EntityIdentifier(for: memory), "/memory/spotlight-memory"),
+                    ("task", EntityIdentifier(for: task), "/task/spotlight-task"),
+                    ("memoryNote", EntityIdentifier(for: ConversationEntity(
+                        memoryId: "spotlight-memory", content: "Synthetic", creationDate: Date())),
+                     "/memory/spotlight-memory"),
+                ] {
+                    let activity = NSUserActivity(activityType: CSSearchableItemActionType)
+                    activity.appEntityIdentifier = identifier
+                    activity.userInfo = [CSSearchableItemActivityIdentifier: identifier.description]
+                    SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(false) }
+                    OmiSpotlightActivityRoute.handle(activity)
+                    let pending = SiriSnapshotStore.shared.pendingRoute()
+                    NSLog("[SiriSceneProbe] syntheticActivity_%@=%@ target=%@",
+                          label, pending?.route == expectedRoute ? "PASS" : "FAIL",
+                          String(describing: OmiSpotlightActivityRoute.target(activity)))
+                    if let pending {
+                        SiriSnapshotStore.shared.finishPendingRoute(route: pending.route, uid: pending.uid,
+                            generation: pending.generation, delivered: true)
+                    }
+                }
+                SiriBridge.shared.routeDeliveryProbe = nil
+                let stale = NSUserActivity(activityType: CSSearchableItemActionType)
+                stale.appEntityIdentifier = EntityIdentifier(for: TaskEntity(id: "missing-task",
+                    title: "Gone", isCompleted: false, creationDate: Date(), dueDate: nil,
+                    completionDate: nil))
+                OmiSpotlightActivityRoute.handle(stale)
+                NSLog("[SiriSceneProbe] syntheticActivity_stale=%@",
+                      SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL")
+            }
+        } catch {
+            NSLog("[SiriSceneProbe] syntheticIndex=failed error=%@", String(describing: error))
+        }
+    }
+
     /// Compiles from the iOS 16 API floor; a 26-only intent or provider breaks
     /// the opt-in probe build before it can reach the simulator.
     @available(iOS 16.0, *)
@@ -35,6 +130,10 @@ enum SiriDebugProbe {
 
     @available(iOS 26.0, *)
     static func runIfRequested() {
+        if spotlightModeActive {
+            Task { await runSpotlightProbe() }
+            return
+        }
         if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-auth-seed") {
             Task { await runAuthFenceProbe(seed: true) }
             return
@@ -278,7 +377,11 @@ enum SiriDebugProbe {
                                                      creationDate: Date())
                     _ = try await open.perform()
                     NSLog("[SiriProbe] memoryNoteOpenRoute=%@",
-                          SiriSnapshotStore.shared.pendingRoute() ?? "nil")
+                          SiriSnapshotStore.shared.pendingRoute()?.route ?? "nil")
+                    if let pending = SiriSnapshotStore.shared.pendingRoute() {
+                        SiriSnapshotStore.shared.finishPendingRoute(route: pending.route, uid: pending.uid,
+                            generation: pending.generation, delivered: true)
+                    }
                     var invalidFolder = OpenOmiFolderIntent()
                     invalidFolder.target = OmiFolderEntity(id: "other", name: "Other")
                     do {
@@ -334,7 +437,7 @@ enum SiriDebugProbe {
                     SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(false) }
                     SiriBridge.shared.navigate("/task/cold-fallback")
                     NSLog("[SiriProbe] failedRoutePreserved=%@",
-                          SiriSnapshotStore.shared.pendingRoute() == "/task/cold-fallback" ? "PASS" : "FAIL")
+                          SiriSnapshotStore.shared.pendingRoute()?.route == "/task/cold-fallback" ? "PASS" : "FAIL")
                     SiriBridge.shared.routeDeliveryProbe = nil
                     let row = SiriMemory(id: "probe-memory", content: "probe-memory-native-index-2026", createdAtMs:
                         CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
