@@ -1053,7 +1053,7 @@ def _event_to_calendar_event_link(event: dict) -> Optional[CalendarEventLink]:
 
     return CalendarEventLink(
         event_id=event.get('id', ''),
-        title=event.get('summary', 'Untitled Event'),
+        title=(event.get('summary') or 'Untitled Event').strip() or 'Untitled Event',
         attendees=attendee_names,
         attendee_emails=attendee_emails,
         start_time=start_time,

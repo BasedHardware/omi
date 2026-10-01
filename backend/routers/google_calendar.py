@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 
 import logging
 
+import httpx
+
 logger = logging.getLogger(__name__)
 import database.conversations as conversations_db
 import database.users as users_db
@@ -26,11 +28,35 @@ from utils.integration_telemetry import (
     emit_sync_succeeded,
 )
 from utils.executors import db_executor, run_blocking
+from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.retrieval.tools.calendar_tools import get_google_calendar_events
-from utils.retrieval.tools.google_utils import refresh_google_token
+from utils.retrieval.tools.google_utils import GoogleAPIError, refresh_google_token
 
 router = APIRouter()
+
+
+def _is_google_auth_error(e: Exception) -> bool:
+    """Return True if an exception indicates expired/invalid Google authentication."""
+    if isinstance(e, GoogleAPIError) and e.is_auth_error:
+        return True
+    if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 401:
+        return True
+    error_msg = str(e).lower()
+    return (
+        "401" in error_msg
+        or "invalid_grant" in error_msg
+        or "authentication failed" in error_msg
+        or "unauthorized" in error_msg
+        or "token expired" in error_msg
+    )
+
+
+def _normalize_event_title(raw_title: Any) -> str:
+    """Safely extract event title, defaulting to 'Untitled Event' if None or blank."""
+    if isinstance(raw_title, str) and raw_title.strip():
+        return raw_title.strip()
+    return 'Untitled Event'
 
 
 class GoogleCalendarEvent(BaseModel):
@@ -80,6 +106,8 @@ def _get_google_calendar_token(uid: str) -> tuple[str, Dict[str, Any]]:
         raise HTTPException(status_code=400, detail="Google Calendar not connected")
     access_token = integration.get('access_token')
     if not access_token:
+        if integration.get('refresh_token'):
+            return '', integration
         raise HTTPException(status_code=400, detail="No access token found")
     return access_token, integration
 
@@ -96,8 +124,8 @@ def _event_to_response(event: Dict[str, Any]) -> Optional[GoogleCalendarEvent]:
     all_day = isinstance(start_raw, dict) and 'date' in start_raw and 'dateTime' not in start_raw
 
     return GoogleCalendarEvent(
-        event_id=event.get('id', ''),
-        title=event.get('summary', 'Untitled Event'),
+        event_id=str(event.get('id') or ''),
+        title=_normalize_event_title(event.get('summary')),
         attendees=attendee_names,
         attendee_emails=attendee_emails,
         start_time=start_time,
@@ -141,6 +169,14 @@ async def list_google_calendar_events(
     )
     emit_sync_attempted(telemetry_context)
 
+    if not access_token:
+        new_token = await refresh_google_token(uid, integration)
+        if new_token:
+            access_token = new_token
+        else:
+            emit_sync_failed(telemetry_context, "Google Calendar authentication expired. Please reconnect.")
+            raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
+
     if time_min and time_min.tzinfo is None:
         time_min = time_min.replace(tzinfo=timezone.utc)
     if time_max and time_max.tzinfo is None:
@@ -155,8 +191,7 @@ async def list_google_calendar_events(
             search_query=q,
         )
     except Exception as e:
-        error_msg = str(e)
-        if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
+        if _is_google_auth_error(e):
             new_token = await refresh_google_token(uid, integration)
             if new_token:
                 try:
@@ -169,14 +204,14 @@ async def list_google_calendar_events(
                     )
                 except Exception as retry_error:
                     emit_sync_failed(telemetry_context, retry_error)
-                    logger.error(f"Failed after token refresh: {retry_error}")
+                    logger.error(f"Failed after token refresh: {sanitize(str(retry_error))}")
                     raise HTTPException(status_code=500, detail="Failed to fetch calendar events after token refresh.")
             else:
                 emit_sync_failed(telemetry_context, e)
                 raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
         else:
             emit_sync_failed(telemetry_context, e)
-            logger.error(f"Failed to fetch calendar events: {e}")
+            logger.error(f"Failed to fetch calendar events: {sanitize(str(e))}")
             raise HTTPException(status_code=500, detail="Failed to fetch calendar events from provider.")
 
     converted_events = [converted for event in events if (converted := _event_to_response(event))]
@@ -217,6 +252,15 @@ async def get_calendar_capture_gaps(
         uid=uid,
     )
     emit_sync_attempted(telemetry_context)
+
+    if not access_token:
+        new_token = await refresh_google_token(uid, integration)
+        if new_token:
+            access_token = new_token
+        else:
+            emit_sync_failed(telemetry_context, "Google Calendar authentication expired. Please reconnect.")
+            raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
+
     try:
         events = await get_google_calendar_events(
             access_token=access_token,
@@ -225,8 +269,7 @@ async def get_calendar_capture_gaps(
             max_results=CAPTURE_GAPS_MAX_EVENTS,
         )
     except Exception as e:
-        error_msg = str(e)
-        if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
+        if _is_google_auth_error(e):
             new_token = await refresh_google_token(uid, integration)
             if new_token:
                 try:
@@ -238,14 +281,14 @@ async def get_calendar_capture_gaps(
                     )
                 except Exception as retry_error:
                     emit_sync_failed(telemetry_context, retry_error)
-                    logger.error(f"Failed after token refresh: {retry_error}")
+                    logger.error(f"Failed after token refresh: {sanitize(str(retry_error))}")
                     raise HTTPException(status_code=500, detail="Failed to fetch calendar events after token refresh.")
             else:
                 emit_sync_failed(telemetry_context, e)
                 raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
         else:
             emit_sync_failed(telemetry_context, e)
-            logger.error(f"Failed to fetch calendar events: {e}")
+            logger.error(f"Failed to fetch calendar events: {sanitize(str(e))}")
             raise HTTPException(status_code=500, detail="Failed to fetch calendar events from provider.")
 
     # include_discarded=True keeps this a single-field Firestore range read
