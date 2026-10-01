@@ -196,11 +196,13 @@ def _build_preview_pointer(
             raise ValueError("updated_at must be a datetime")
         if updated_at.tzinfo is None or updated_at.utcoffset() is None:
             updated_at = updated_at.replace(tzinfo=timezone.utc)
+        else:
+            updated_at = updated_at.astimezone(timezone.utc)
     return {
         "slug": manifest["slug"],
         "source_sha": manifest["source_sha"],
         "generation": current_generation + 1,
-        "updated_at": updated_at or datetime.now(timezone.utc),
+        "updated_at": updated_at if updated_at is not None else datetime.now(timezone.utc),
     }
 
 

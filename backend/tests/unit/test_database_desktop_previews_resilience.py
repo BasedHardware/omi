@@ -21,8 +21,8 @@ def _valid_manifest() -> dict:
         "slug": "feature-test",
         "source_sha": "0123456789abcdef0123456789abcdef01234567",
         "app_name": "Omi Preview (feature-test)",
-        "bundle_id": "com.omi.preview.p48ec788481",
-        "url_scheme": "omi-preview-p48ec788481",
+        "bundle_id": "com.omi.preview.p0375d1f909",
+        "url_scheme": "omi-preview-p0375d1f909",
         "built_at": "2026-09-30T12:00:00Z",
         "signer": "Developer ID Application: Based Hardware Inc (ABC123XYZ)",
         "notarization": "stapled",
@@ -93,6 +93,19 @@ def test_build_preview_pointer_naive_datetime_coercion():
     naive_dt = datetime(2026, 9, 30, 12, 0, 0)
     pointer = _build_preview_pointer(current, manifest, expected_generation=0, updated_at=naive_dt)
     assert pointer["updated_at"].tzinfo == timezone.utc
+    assert pointer["generation"] == 1
+
+
+def test_build_preview_pointer_aware_non_utc_conversion():
+    """Verify aware non-UTC datetime passed as updated_at is converted to UTC cleanly."""
+    from datetime import timedelta
+    current = {"generation": 0, "source_sha": "oldsha"}
+    manifest = {"slug": "feature-test", "source_sha": "newsha"}
+    tz_offset = timezone(timedelta(hours=5))
+    aware_dt = datetime(2026, 9, 30, 17, 0, 0, tzinfo=tz_offset)
+    pointer = _build_preview_pointer(current, manifest, expected_generation=0, updated_at=aware_dt)
+    assert pointer["updated_at"].tzinfo == timezone.utc
+    assert pointer["updated_at"] == datetime(2026, 9, 30, 12, 0, 0, tzinfo=timezone.utc)
     assert pointer["generation"] == 1
 
 
