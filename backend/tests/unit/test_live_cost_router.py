@@ -66,18 +66,14 @@ def test_hard_outage_detection_samples(warmup):
     assert state.stage == 0
 
 
-def test_three_percent_false_positive_and_simulation(capsys):
-    benches = 0
-    runs, sessions = 200, 5000
-    for seed in range(runs):
-        rng, state = random.Random(seed), GateState()
-        for _ in range(sessions):
-            state = transition(state, rng.random() < 0.03, 0)
-            if state.stage == 0:
-                benches += 1
-                break
-    print(f'3% baseline: {benches}/{runs} runs benched across {runs * sessions} synthetic sessions')
-    assert benches == 0
+@pytest.mark.parametrize('seed', range(200))
+def test_three_percent_false_positive_and_simulation(seed):
+    # Independent runs keep the million-outcome experiment within the per-case
+    # fast-unit CPU budget without weakening its sample count or transition path.
+    rng, state = random.Random(seed), GateState()
+    for _ in range(5000):
+        state = transition(state, rng.random() < 0.03, 0)
+        assert state.stage == 100, f'false bench in 3% baseline seed={seed}'
 
 
 def test_staged_recovery_and_exponential_backoff():
