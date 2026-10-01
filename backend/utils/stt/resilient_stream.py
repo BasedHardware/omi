@@ -121,7 +121,9 @@ def window_replay_action(
         return 'append'
     trim_window_replay_to_anchor(ring, socket)
     raw = getattr(socket, 'raw', None)
-    has_untranscribed_speech = getattr(raw, 'has_untranscribed_speech', None)
+    has_untranscribed_speech = getattr(socket, 'has_untranscribed_speech', None)
+    if not callable(has_untranscribed_speech):
+        has_untranscribed_speech = getattr(raw, 'has_untranscribed_speech', None)
     speech_pending = callable(has_untranscribed_speech) and has_untranscribed_speech()
     _, capture_end = ring.capture_bounds
     projected_end = max(capture_end, (start_sample or 0) + len(data) // 2)
@@ -170,7 +172,8 @@ def window_replay_action(
         if callable(snapshot):
             first, end = ring.capture_bounds
             raw.replay_lag_diagnostics = snapshot(first, end, ring.projected_span_samples(data, start_sample))
-        raw.fail('capacity_full', capacity_subtype='replay_ring_cap')
+        fail = getattr(socket, 'fail', None) or raw.fail
+        fail('capacity_full', capacity_subtype='replay_ring_cap')
     return 'failover'
 
 
@@ -198,13 +201,26 @@ class ReplayFilterMixin:
     host: Any
 
     def _window_ring(self) -> ResilientAudio | None:
-        return (
-            getattr(self, '_window_replay_audio', None)
-            if getattr(self.host, 'stt_model', None) == 'parakeet-window'
-            else None
-        )
+        if getattr(self.host, 'stt_model', None) == 'parakeet-window':
+            self._window_replay_started = True
+        # A replacement accepting bytes is not proof that it transcribed them.
+        # Keep this session's replay obligation through every downstream leg.
+        return getattr(self, '_window_replay_audio', None) if getattr(self, '_window_replay_started', False) else None
 
     def _filter_replayed_segments(self, segments: list[dict[str, Any]], provider: str | None) -> list[dict[str, Any]]:
+        ring = self._window_ring()
+        if ring is not None and provider != 'parakeet':
+            cutoff = getattr(self, '_window_replay_cutoff_sample', 0)
+            kept = []
+            for segment in segments:
+                end = segment.get('_capture_end_sample')
+                if isinstance(end, int) and end <= cutoff:
+                    continue
+                if isinstance(end, int) and str(segment.get('text') or '').strip():
+                    if ring.finalize_through(end):
+                        WINDOW_REPLAY_SAFE_TRIMS.inc()
+                kept.append(segment)
+            segments = kept
         return filter_replayed_segments(
             segments,
             provider,

@@ -647,10 +647,35 @@ admissions at four live requests pending on any replica or 0.75 seconds of
 oldest live wait. A missing replica, old server revision without live fields,
 invalid response, or stale reading stands down all listen processes. The
 window POST explicitly marks its live lane; unmarked requests remain backfill.
-A partial replay retains its unaccepted tail and new audio
-for the next vendor leg while preserving capture sample offsets. Window POSTs mark their
+A partial replay retains **all un-emitted audio**, including bytes accepted by
+a replacement that dies before returning text, for the next vendor leg. The
+ring continues across downstream providers; emitted capture positions trim it.
+A failed replacement is excluded by its actual provider, including a rejection
+at the final health check, and the receiver tries the remaining eligible chain.
+Callbacks from an epoch retired for replay are fenced, including callbacks
+queued on the listen loop, so the failed epoch cannot duplicate replayed words.
+Each adopted replacement gets 15 seconds of new capture headroom while it
+processes a potentially full source backlog. The finite three-provider suffix
+bounds retention at 135 seconds; stalled un-emitted audio still fails over
+before eviction. Replacements with ordinary VAD disabled use a shadow gate
+for replay accounting only: every byte is still forwarded, and it introduces
+no finalize signals. Settled silence retains the same recent 15-second tail
+instead of filling the ring on an otherwise healthy idle replacement.
+Window POSTs mark their
 request so `parakeet_prerecorded_requests_total` excludes live canary errors
 while covering the batch path used by sync backfill.
+
+Previously `stt_live_session ... outcome=exhausted` meant an individual
+replacement hop died before producing text, even when selection continued.
+These failed hops now emit `degraded` when another candidate is being tried;
+`exhausted` is reserved for no remaining replacement path. Budget/auth deaths
+map to `quota`/`auth`; other typed deaths (and untyped closes) map to `other`,
+with a bounded log-only `subtype` (`modulate_serve_error`, `connection_lost`,
+etc., or `untyped`). The shared fallback metric dimensions remain unchanged.
+Only an actual failure to find a serving replacement terminates live STT,
+emitting `stt_failed` and closing the client WebSocket with 1011; recovery then
+requires a client reconnect. Configured and circuit-open candidate skipping
+continues to be enforced by the connector.
 Before the first window transcript, 12 seconds after the active speech episode
 starts or four consecutive empty speech-containing POSTs ends the Parakeet leg.
 A fully answered-empty episode with less than one admitted second and at least
