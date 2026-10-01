@@ -19,6 +19,7 @@ from utils.executors import db_executor, run_blocking
 from utils.task_integrations_ops import (
     OAUTH_CONFIGS,
     close_http_client,
+    compute_expires_at,
     create_task_internal,
     ensure_valid_oauth_token,
     get_http_client,
@@ -122,7 +123,7 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
             return None
         return state_data
     except Exception as e:
-        logger.error(f"Error parsing state data: {e}")
+        logger.error(f"Error parsing state data: {sanitize(str(e))}")
         return None
 
 
@@ -746,22 +747,23 @@ async def handle_oauth_callback(
             if refresh_token and supports_refresh:
                 integration_data['refresh_token'] = refresh_token
 
-            if expires_in and supports_refresh:
-                expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-                integration_data['expires_at'] = expires_at.isoformat()
+            if supports_refresh:
+                expires_at = compute_expires_at(expires_in)
+                if expires_at:
+                    integration_data['expires_at'] = expires_at
 
             try:
                 additional_data = await provider_config.fetch_additional_data(client, access_token)
                 integration_data.update(additional_data)
             except Exception as e:
-                logger.error(f'{app_key}: Error fetching additional data: {e}')
+                logger.error(f'{app_key}: Error fetching additional data: {sanitize(str(e))}')
 
             # Store in Firebase
             try:
                 await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, integration_data)
                 logger.info(f'{app_key}: Successfully stored tokens for user {uid}')
             except Exception as e:
-                logger.error(f'{app_key}: Error storing tokens in Firebase: {e}')
+                logger.error(f'{app_key}: Error storing tokens in Firebase: {sanitize(str(e))}')
                 deep_link = f'omi://{app_key}/callback?error=storage_failed'
                 return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
@@ -775,7 +777,7 @@ async def handle_oauth_callback(
             return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
     except Exception as e:
-        logger.error(f'{app_key}: Unexpected error during OAuth callback: {e}')
+        logger.error(f'{app_key}: Unexpected error during OAuth callback: {sanitize(str(e))}')
         deep_link = f'omi://{app_key}/callback?error=server_error'
         return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
@@ -845,7 +847,7 @@ async def asana_oauth_callback(
                     user_gid = user_data.get('data', {}).get('gid')
                     return {'user_gid': user_gid} if user_gid else {}
             except Exception as e:
-                logger.error(f'asana: Failed to fetch user GID: {e}')
+                logger.error(f'asana: Failed to fetch user GID: {sanitize(str(e))}')
             return {}
 
     config = AsanaConfig(
@@ -902,7 +904,7 @@ async def google_tasks_oauth_callback(
                             'default_list_title': items[0].get('title'),
                         }
             except Exception as e:
-                logger.error(f'google_tasks: Failed to fetch task lists: {e}')
+                logger.error(f'google_tasks: Failed to fetch task lists: {sanitize(str(e))}')
             return {}
 
     config = GoogleTasksConfig(
