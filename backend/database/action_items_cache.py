@@ -63,6 +63,32 @@ _VERSION_TTL_SECONDS = 7 * 24 * 3600
 
 _VERSION_KEY_PREFIX = 'ail:ver'
 _ENTRY_KEY_PREFIX = 'ail'
+MAX_UID_LENGTH = 128
+MAX_KEY_LENGTH = 256
+
+
+def _clean_uid(uid: Any) -> str:
+    """Sanitize and validate user ID before Redis key formation."""
+    if not isinstance(uid, str):
+        return ""
+    cleaned = uid.strip()
+    if not cleaned or len(cleaned) > MAX_UID_LENGTH:
+        return ""
+    if any(c in cleaned for c in ('\r', '\n', '\0', '..')):
+        return ""
+    return cleaned
+
+
+def _clean_key(key: Any) -> str:
+    """Sanitize and validate cache keys."""
+    if not isinstance(key, str):
+        return ""
+    cleaned = key.strip()
+    if not cleaned or len(cleaned) > MAX_KEY_LENGTH:
+        return ""
+    if any(c in cleaned for c in ('\r', '\n', '\0')):
+        return ""
+    return cleaned
 
 
 def list_cache_ttl_seconds() -> int:
@@ -79,7 +105,8 @@ def list_cache_ttl_seconds() -> int:
 
 
 def _version_key(uid: str) -> str:
-    return f'{_VERSION_KEY_PREFIX}:{uid}'
+    clean_uid = _clean_uid(uid)
+    return f'{_VERSION_KEY_PREFIX}:{clean_uid}' if clean_uid else ''
 
 
 def bump_action_items_list_version(uid: str) -> None:
@@ -89,15 +116,19 @@ def bump_action_items_list_version(uid: str) -> None:
     mutation has committed. Fail-open: a Redis outage means the cache simply
     keeps serving until its short TTL expires.
     """
-    if not uid:
+    key = _version_key(uid)
+    if not key:
         return
     try:
-        key = _version_key(uid)
-        pipe = redis_db.r.pipeline()
+        client = getattr(redis_db, 'r', None)
+        if client is None:
+            logger.warning('action-items list cache: redis client uninitialized for bump uid=%s', uid)
+            return
+        pipe = client.pipeline()
         pipe.incr(key)
         pipe.expire(key, _VERSION_TTL_SECONDS)
         pipe.execute()
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
         logger.warning('action-items list cache: version bump failed uid=%s: %s', uid, e)
 
 
@@ -107,38 +138,57 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
     ``None`` means "do not use the cache for this request" — it is not the same
     as version 0, which is a legitimate never-written-yet user.
     """
+    key = _version_key(uid)
+    if not key:
+        return 0
     try:
-        raw = redis_db.r.get(_version_key(uid))
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
+        client = getattr(redis_db, 'r', None)
+        if client is None:
+            logger.warning('action-items list cache: redis client uninitialized for version read uid=%s', uid)
+            return None
+        raw = client.get(key)
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
         logger.warning('action-items list cache: version read failed uid=%s: %s', uid, e)
         return None
     if raw is None:
         return 0
     try:
-        return int(raw)
+        val = int(raw)
+        return max(0, val)
     except (TypeError, ValueError):
         return 0
 
 
 def list_cache_key(uid: str, version: int, params: Dict[str, Any]) -> str:
     """Address one list page. Params are hashed so the key length is bounded."""
+    clean_uid = _clean_uid(uid) or 'anonymous'
+    safe_version = max(0, int(version)) if isinstance(version, int) and not isinstance(version, bool) else 0
+    safe_params = dict(params) if isinstance(params, dict) else {}
     fingerprint = hashlib.sha256(
-        json.dumps(params, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
+        json.dumps(safe_params, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
     ).hexdigest()[:16]
-    return f'{_ENTRY_KEY_PREFIX}:{uid}:{version}:{fingerprint}'
+    return f'{_ENTRY_KEY_PREFIX}:{clean_uid}:{safe_version}:{fingerprint}'
 
 
 def compute_etag(body: Dict[str, Any]) -> str:
     """Weak ETag over the exact bytes the route would return."""
-    digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8'))
+    safe_body = dict(body) if isinstance(body, dict) else {}
+    digest = hashlib.sha256(json.dumps(safe_body, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8'))
     return f'W/"{digest.hexdigest()[:32]}"'
 
 
 def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
     """Return ``{"etag": str, "body": dict}`` or ``None``. Never raises."""
+    clean_key = _clean_key(key)
+    if not clean_key:
+        return None
     try:
-        raw = redis_db.r.get(key)
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
+        client = getattr(redis_db, 'r', None)
+        if client is None:
+            logger.warning('action-items list cache: redis client uninitialized for read')
+            return None
+        raw = client.get(clean_key)
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
         logger.warning('action-items list cache: read failed: %s', e)
         return None
     if not raw:
@@ -147,18 +197,33 @@ def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
         payload = json.loads(raw)
     except (TypeError, ValueError):
         return None
-    if not isinstance(payload, dict) or 'body' not in payload or 'etag' not in payload:
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(payload.get('body'), dict)
+        or not isinstance(payload.get('etag'), str)
+    ):
         return None
     return payload
 
 
 def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) -> None:
     """Store one list page. Never raises; a failed write just means a later miss."""
-    if ttl <= 0:
+    clean_key = _clean_key(key)
+    if not clean_key:
         return
+    if not isinstance(body, dict) or not isinstance(etag, str) or not etag:
+        return
+    if isinstance(ttl, bool) or not isinstance(ttl, int) or ttl <= 0:
+        return
+    # Guard against arbitrarily long staleness beyond operational maximum
+    effective_ttl = min(ttl, _TTL_MAX_SECONDS)
     try:
-        redis_db.r.set(key, json.dumps({'etag': etag, 'body': body}, default=str), ex=ttl)
-    except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
+        client = getattr(redis_db, 'r', None)
+        if client is None:
+            logger.warning('action-items list cache: redis client uninitialized for write')
+            return
+        client.set(clean_key, json.dumps({'etag': etag, 'body': body}, default=str), ex=effective_ttl)
+    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
         logger.warning('action-items list cache: write failed: %s', e)
     except (TypeError, ValueError) as e:
         logger.warning('action-items list cache: body not serializable: %s', e)
@@ -166,14 +231,20 @@ def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) ->
 
 def if_none_match_matches(header_value: Optional[str], etag: str) -> bool:
     """RFC 9110 If-None-Match comparison (weak comparison, ``*`` matches)."""
-    if not header_value:
+    if not header_value or not etag:
         return False
     candidates = [c.strip() for c in header_value.split(',')]
     if '*' in candidates:
         return True
-    normalized = etag[2:] if etag.startswith('W/') else etag
+
+    def _normalize(tag: str) -> str:
+        s = tag.strip()
+        if s.startswith('W/'):
+            s = s[2:].strip()
+        return s.strip('"')
+
+    normalized_etag = _normalize(etag)
     for candidate in candidates:
-        stripped = candidate[2:] if candidate.startswith('W/') else candidate
-        if stripped == normalized:
+        if _normalize(candidate) == normalized_etag:
             return True
     return False
