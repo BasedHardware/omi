@@ -2,6 +2,12 @@
 
 Convert conversation history into Jupyter notebooks for interactive analysis, pandas querying, and visualization.
 
+## Requirements
+
+- Python 3.10+
+- An authenticated `omi-cli` session (`omi auth login` or API key configured)
+- `pandas` (optional, for notebook data analysis)
+
 ## Quickstart
 
 ```bash

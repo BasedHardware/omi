@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Union
@@ -37,14 +39,23 @@ def is_completed(value: Any) -> bool:
     return False
 
 
+def clean_float(val: Any, default: float = 0.0) -> float:
+    """Safely parse and guard float values against NaN and Infinity."""
+    if val is None:
+        return default
+    try:
+        f = float(val)
+        return f if math.isfinite(f) else default
+    except (ValueError, TypeError):
+        return default
+
+
 def format_timestamp(seconds: float | int | None) -> str:
     """Format seconds into MM:SS or HH:MM:SS format."""
     if seconds is None:
         return "00:00"
-    try:
-        total_seconds = int(seconds)
-    except (ValueError, TypeError):
-        return "00:00"
+    cleaned = clean_float(seconds, 0.0)
+    total_seconds = int(cleaned)
     hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
     secs = total_seconds % 60
@@ -80,8 +91,8 @@ def extract_conversations(data: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def create_markdown_cell(source: Union[str, List[str]]) -> Dict[str, Any]:
-    """Create an nbformat-4 markdown cell."""
+def create_markdown_cell(source: Union[str, List[str]], cell_id: str | None = None) -> Dict[str, Any]:
+    """Create an nbformat-4 markdown cell with a unique ID."""
     if isinstance(source, str):
         lines = [line + "\n" for line in source.split("\n")]
         if lines and lines[-1] == "\n":
@@ -92,13 +103,14 @@ def create_markdown_cell(source: Union[str, List[str]]) -> Dict[str, Any]:
 
     return {
         "cell_type": "markdown",
+        "id": cell_id or uuid.uuid4().hex[:8],
         "metadata": {},
         "source": source_lines,
     }
 
 
-def create_code_cell(source: Union[str, List[str]]) -> Dict[str, Any]:
-    """Create an nbformat-4 code cell."""
+def create_code_cell(source: Union[str, List[str]], cell_id: str | None = None) -> Dict[str, Any]:
+    """Create an nbformat-4 code cell with a unique ID."""
     if isinstance(source, str):
         lines = [line + "\n" for line in source.split("\n")]
         if lines and lines[-1] == "\n":
@@ -109,6 +121,7 @@ def create_code_cell(source: Union[str, List[str]]) -> Dict[str, Any]:
 
     return {
         "cell_type": "code",
+        "id": cell_id or uuid.uuid4().hex[:8],
         "execution_count": None,
         "metadata": {},
         "outputs": [],
@@ -187,8 +200,8 @@ def conversation_to_notebook_cells(conv: Dict[str, Any], include_header: bool = 
             continue
         speaker = seg.get("speaker", "Speaker")
         speaker_label = f"Speaker {speaker}" if isinstance(speaker, int) else (str(speaker) if speaker else "Speaker")
-        start = seg.get("start", 0.0)
-        end = seg.get("end", 0.0)
+        start = clean_float(seg.get("start"), 0.0)
+        end = clean_float(seg.get("end"), 0.0)
         text = str(seg.get("text") or "").strip()
         normalized_transcript.append({
             "speaker": speaker_label,
@@ -197,7 +210,7 @@ def conversation_to_notebook_cells(conv: Dict[str, Any], include_header: bool = 
             "text": text,
         })
 
-    transcript_json = json.dumps(normalized_transcript, ensure_ascii=False, indent=2)
+    transcript_json = json.dumps(normalized_transcript, ensure_ascii=False, allow_nan=False, indent=2)
     code_lines = [
         "# Transcript data for analysis (e.g. import pandas as pd; df = pd.DataFrame(transcript))\n",
         f"transcript = {transcript_json}\n",
@@ -221,6 +234,31 @@ def build_notebook(cells: List[Dict[str, Any]]) -> Dict[str, Any]:
         "nbformat": 4,
         "nbformat_minor": 5,
     }
+
+
+def write_notebook_file(filepath: Path, nb: Dict[str, Any], overwrite: bool = False) -> Path:
+    """Safely write notebook JSON with optional exclusive-creation write protection."""
+    content = json.dumps(nb, indent=2, ensure_ascii=False, allow_nan=False)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+
+    if not overwrite:
+        base_dir = filepath.parent
+        stem = filepath.stem
+        suffix = filepath.suffix
+        candidate = filepath
+        counter = 1
+
+        while True:
+            try:
+                with open(candidate, "x", encoding="utf-8") as f:
+                    f.write(content)
+                return candidate
+            except FileExistsError:
+                counter += 1
+                candidate = base_dir / f"{stem}_{counter}{suffix}"
+    else:
+        filepath.write_text(content, encoding="utf-8")
+        return filepath
 
 
 def export_notebooks(
@@ -250,11 +288,11 @@ def export_notebooks(
         base_name = f"{date_prefix}_{slug}_{short_id}"
         filepath = output_dir / f"{base_name}.ipynb"
 
-        if not overwrite:
-            counter = 1
-            while filepath in used_paths or filepath.exists():
-                counter += 1
-                filepath = output_dir / f"{base_name}_{counter}.ipynb"
+        # Always track in-batch collisions to prevent identical IDs in same batch overwriting each other
+        counter = 1
+        while filepath in used_paths or (filepath.exists() and not overwrite):
+            counter += 1
+            filepath = output_dir / f"{base_name}_{counter}.ipynb"
 
         used_paths.add(filepath)
 
@@ -264,9 +302,9 @@ def export_notebooks(
         cells.extend(conversation_to_notebook_cells(conv))
         nb = build_notebook(cells)
 
-        filepath.write_text(json.dumps(nb, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"Exported: {filepath}")
-        exported_paths.append(filepath)
+        written_path = write_notebook_file(filepath, nb, overwrite=overwrite)
+        print(f"Exported: {written_path}")
+        exported_paths.append(written_path)
 
     return exported_paths
 
@@ -334,8 +372,7 @@ def main() -> None:
             all_cells.extend(conversation_to_notebook_cells(conv))
 
         nb = build_notebook(all_cells)
-        out_file.parent.mkdir(parents=True, exist_ok=True)
-        out_file.write_text(json.dumps(nb, indent=2, ensure_ascii=False), encoding="utf-8")
+        write_notebook_file(out_file, nb, overwrite=args.overwrite)
         print(f"Exported combined notebook with {len(items)} conversation(s) to {out_file}")
 
 
