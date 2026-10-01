@@ -201,13 +201,13 @@
       "budget_p50_minutes": 3,
       "display_name": "Backend unit guardrails",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 65,
+      "expected_runs_per_day": 66,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; budget one additional daily run until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -219,7 +219,7 @@
       "budget_p50_minutes": 9,
       "display_name": "Backend unit shard ${{ matrix.shard }}/4",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 107,
+      "expected_runs_per_day": 108,
       "if": null,
       "matrix": {
         "shard": [
@@ -232,7 +232,7 @@
       "matrix_size": 4,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; budget one additional daily run until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -244,7 +244,7 @@
       "budget_p50_minutes": 1,
       "display_name": "Backend unit suite",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 105,
+      "expected_runs_per_day": 106,
       "if": "${{ always() && !cancelled() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -254,7 +254,7 @@
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; budget one additional daily run until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -266,13 +266,13 @@
       "budget_p50_minutes": 1,
       "display_name": "Resolve CI Tier",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 107,
+      "expected_runs_per_day": 108,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "New in #19593: one label read; 2026-09-28 PR run took 23s",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; budget one additional daily label read until the next weekly audit",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1607,6 +1607,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_x_connector_sync_job.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend maintainers",
+      "rationale": "#11183 manual-only X connector job deploy; allow five minutes per operator-triggered deployment and no routine daily run",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "jit_qa_cloud_run.yml/admit": {
       "budget_p50_minutes": 5,
       "display_name": "Admit exact proven main source",
@@ -2741,7 +2759,7 @@
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run is budgeted conservatively",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -2780,6 +2798,7 @@
             ".github/workflows/gcp_memory_maintenance_job.yml",
             ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
             ".github/workflows/gcp_notifications_job.yml",
+            ".github/workflows/gcp_x_connector_sync_job.yml",
             ".github/scripts/check_backend_deploy_source_admission.py",
             ".github/scripts/verify_auto_backend_release_admission.py",
             ".github/scripts/verify_backend_release_admission.py",
@@ -2833,6 +2852,7 @@
             ".github/workflows/gcp_memory_maintenance_job.yml",
             ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
             ".github/workflows/gcp_notifications_job.yml",
+            ".github/workflows/gcp_x_connector_sync_job.yml",
             ".github/scripts/check_backend_deploy_source_admission.py",
             ".github/scripts/verify_auto_backend_release_admission.py",
             ".github/scripts/verify_backend_release_admission.py",
@@ -4395,6 +4415,40 @@
               "description": "Exact current main SHA (prod only)",
               "required": "false",
               "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "gcp_x_connector_sync_job.yml": {
+      "name": "Deploy X Connector Sync Job to Cloud RUN",
+      "owner": "Backend maintainers",
+      "rationale": "#11183 manual-only deployment workflow for the dedicated X connector sync Cloud Run Job",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "allow_missing_scheduler": {
+              "default": "false",
+              "description": "First deploy only: the x-connector-sync-6h Scheduler job does not exist yet",
+              "required": "false",
+              "type": "boolean"
+            },
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true",
+              "type": "string"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "required": "true",
+              "type": "string"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
             }
           }
         }
