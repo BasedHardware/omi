@@ -5,6 +5,7 @@
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
   - id: api-key-management-sanitization-tests
+    reason: "Hermetic unit tests for API key error sanitization"
     command: ["python3", "backend/tests/unit/test_api_key_management_error_sanitization.py"]
     triggers: ["backend/routers/api_key_management.py", "backend/tests/unit/test_api_key_management_error_sanitization.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
