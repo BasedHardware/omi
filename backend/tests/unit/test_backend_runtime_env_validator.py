@@ -3155,3 +3155,25 @@ def test_dev_owner_shadow_hosts_disable_live_owner_scoring():
             live_hosts += 1
             assert env_block.get('MEMORY_OWNER_JEV_FLIP_PERCENT', {}).get('value') == '0', scope
     assert live_hosts == 4
+
+
+def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = validator._get_env_config(manifest, 'prod')
+    hosts = set()
+    for scope, env_block in _manifest_env_blocks(prod):
+        assert CONVERSATION_RELEVANCE_JEV_ENABLED_ENV not in env_block, scope
+        assert MEMORY_OWNER_JEV_FLIP_ENABLED_ENV not in env_block, scope
+        if scope not in _JEV_PROCESS_CONVERSATION_HOSTS:
+            continue
+        hosts.add(scope)
+        expected = {
+            'CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT': '100',
+            'MEMORY_OWNER_JEV_SHADOW_PERCENT': '100',
+            'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT': '0',
+            'CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP': '60000',
+            'MEMORY_OWNER_JEV_SHADOW_DAILY_CAP': '60000',
+        }
+        assert {name: env_block.get(name, {}).get('value') for name in expected} == expected, scope
+    assert hosts == _JEV_PROCESS_CONVERSATION_HOSTS

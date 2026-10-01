@@ -46,13 +46,19 @@ relevance `CONVERSATION_RELEVANCE_JEV_PERCENT` and owner
 (backend-listen, pusher, Cloud Run backend and backend-sync). Unset would enable
 live scoring, emptying relevance measurement and excluding the first eight
 third-party candidates from owner measurement.
-backend-sync and backend-sync-backfill stay at 0: their Cloud
+Dev backend-sync and backend-sync-backfill stay at 0: their Cloud
 Run revisions have no GMP sidecar/exporter allowlist entry, so their shadow
 outcomes and latency would be invisible (see utils/metrics.py). Prod declares
-shadow percentages 0 and live flags absent: the Firestore TTL policy on
-collection group `jev_shadow` (field `expire_at`) must be provisioned and
-verified before any prod shadow percentage is raised, or the 60-day retention
-promise is inert. The new settings are literals, requiring no Secret Manager
+both shadow percentages 100 on backend-listen, pusher and Cloud Run backend,
+backend-sync and backend-sync-backfill, with live flags absent, keep-all 0 and
+caps unchanged. The production configuration is in its own removable commit.
+The Firestore TTL policy on collection group `jev_shadow`, field `expire_at`,
+in project `based-hardware` was enabled 2026-10-01 and verified ACTIVE by the
+coordinator before the flip; the production flip is no longer held on TTL.
+Production sync hosts likewise have no exporter; their persisted measurements
+are valid but their attempt/coverage and latency metrics are not scraped.
+Readouts must report that visibility limit instead of claiming fleet-wide
+failure/latency bars from scraped hosts alone. The new settings are literals, requiring no Secret Manager
 pre-bind.
 
 `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` samples the conversation ID with
@@ -99,11 +105,10 @@ a record to be valid. Metrics measure attempts and coverage separately.
 No transcript, candidate, quote, summary or name is stored or
 logged. Client Firestore rules already deny all user subcollections; backend IAM
 owns access, and account deletion enumerates and recursively wipes subcollections.
-No queries or composite indexes are introduced. Deployment must enable the
-Firestore TTL policy on collection group `jev_shadow`, field `expire_at`, before
-measurement; the current index reconciler deliberately cannot enable TTL policies.
-TTL serving state must be verified by the coordinator; this PR performs no cloud
-schema mutations. Inspect aggregate scores and behavior only for other accounts.
+No queries or composite indexes are introduced. The coordinator enabled the
+Firestore TTL policy on collection group `jev_shadow`, field `expire_at`, on
+2026-10-01 and verified ACTIVE before the flip. The current index reconciler
+deliberately cannot enable TTL policies; this PR performs no cloud schema mutations. Inspect aggregate scores and behavior only for other accounts.
 
 Static-label metrics report `ok`, `jev_failed`, `http_429`, `timeout`, `deduped`,
 `cap`, `cohort`, `dropped`, `redis_unavailable`; latency includes queue time.
