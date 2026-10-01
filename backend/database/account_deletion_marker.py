@@ -16,6 +16,22 @@ from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadS
 ACCOUNT_DELETION_COLLECTION = "account_deletions"
 
 
+def _clean_uid(uid: Any) -> str | None:
+    """Validate and sanitize user identifier for Firestore document paths."""
+    if not isinstance(uid, str):
+        return None
+    cleaned = uid.strip()
+    if not cleaned or len(cleaned) > 128:
+        return None
+    if any(c in cleaned for c in ('/', '\\', '\0')):
+        return None
+    if '..' in cleaned:
+        return None
+    if any(ord(c) < 32 or ord(c) == 127 for c in cleaned):
+        return None
+    return cleaned
+
+
 def account_deletion_firestore_client(*, firestore_client: Any | None = None) -> Any:
     """The Firestore client that owns account_deletions/{uid}.
 
@@ -33,7 +49,10 @@ def account_deletion_collection(*, firestore_client: Any | None = None) -> Any:
 
 
 def account_deletion_document(uid: str, *, firestore_client: Any | None = None) -> Any:
-    return account_deletion_collection(firestore_client=firestore_client).document(uid)
+    clean = _clean_uid(uid)
+    if not clean:
+        raise ValueError(f"Invalid uid for account deletion document: {uid!r}")
+    return account_deletion_collection(firestore_client=firestore_client).document(clean)
 
 
 def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
@@ -43,20 +62,27 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     access barrier on the very next request, and a cached pre-delete miss would
     reopen the exact half-deleted-account window this marker closes.
     """
+    clean = _clean_uid(uid)
+    if not clean:
+        return None
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    snapshot = account_deletion_document(uid, firestore_client=client).get()
+    snapshot = account_deletion_document(clean, firestore_client=client).get()
+    exists = bool(getattr(snapshot, 'exists', False))
     record_document_read(
         FirestoreReadSite.USER_DELETION_WIPE_STATUS,
-        FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
+        FirestoreReadOutcome.HIT if exists else FirestoreReadOutcome.MISS,
     )
-    if not snapshot.exists:
+    if not exists:
         return None
-    status = (snapshot.to_dict() or {}).get("wipe_status")
+    to_dict = getattr(snapshot, 'to_dict', None)
+    data = to_dict() if callable(to_dict) else {}
+    status = (data or {}).get("wipe_status")
     return normalize_account_deletion_status(marker_exists=True, raw_status=status)
 
 
 __all__ = [
     "ACCOUNT_DELETION_COLLECTION",
+    "_clean_uid",
     "account_deletion_collection",
     "account_deletion_document",
     "account_deletion_firestore_client",
