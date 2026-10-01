@@ -4,11 +4,19 @@
 before with the new extraction. It used to recreate all of them under fresh ids, which
 dropped the ``exported`` marker that task-app delivery keys on, so every reprocess
 (smart-merge survivor refresh, user reprocess, sync update, server recovery) offered
-unchanged tasks to the user's Todoist/Asana/ClickUp/Google Tasks again and pushed them
-to Apple Reminders again.
+unchanged tasks to the user's Todoist/Asana/ClickUp/Google Tasks again.
+
+Apple Reminders is deliberately NOT covered: a reprocess still gives an Apple-linked
+task a fresh id and pushes a second reminder, as before. Its client sync is
+last-writer-wins on Omi ``updated_at`` vs the reminder's ``lastModifiedDate``
+(``app/lib/services/integrations/apple_reminders_sync_service.dart:163-191``); the
+replaced row has no ``updated_at`` edit history, so keeping the link would let the
+extraction overwrite a title/due edit the user made in Reminders. A duplicate keeps
+that edited copy; a kept link could silently lose it.
 
 Identity rule. A new item is the same task as a prior row only when both belong to the
-same conversation and their ``identity_key`` values are equal and non-empty. The key is
+same conversation, the prior row is not Apple-linked, and their ``identity_key`` values
+are equal and non-empty. The key is
 an exact canonical form of the description: Unicode width/typography normalized,
 ordinary text case-folded, zero-width space/BOM removed, sentence punctuation and
 whitespace collapsed. Internal punctuation,
@@ -26,6 +34,9 @@ Ordering. When prior rows exist, delivery is queued only after the task vectors 
 written, so an attempt that fails there queues nothing for its retry to repeat.
 This is best-effort export: overlapping deliveries and an unconfirmed provider create
 still need provider-side idempotency. First processing keeps today's order and arguments.
+
+An unexpected planner exception falls back to the kill-switch plan (fresh ids, every
+row delivered, today's order), so the planner can never cost a conversation its tasks.
 """
 
 from __future__ import annotations
@@ -38,12 +49,13 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from config.action_item_identity import action_item_identity_preserve_enabled
 from utils.metrics import OMI_ACTION_ITEM_IDENTITY_TOTAL
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
-# The export marker written by task delivery (utils/task_sync.py) and the Apple
-# Reminders client callback. Nothing else on the prior row is carried forward.
-CARRIED_FIELDS = ('exported', 'export_platform', 'export_date', 'apple_reminder_id')
+# The cloud export marker written by task delivery (utils/task_sync.py). Nothing else
+# on the prior row is carried forward; Apple-linked rows are never matched (_apple_linked).
+CARRIED_FIELDS = ('exported', 'export_platform', 'export_date')
 
 REUSED = 'reused_identity'
 NEW = 'new'
@@ -160,20 +172,61 @@ class ReplacementPlan:
         return True
 
 
+def _apple_linked(row: Mapping[str, Any]) -> bool:
+    """A row tied to an Apple reminder, by id or by platform (``markExported`` may omit the id)."""
+    return bool(row.get('apple_reminder_id')) or row.get('export_platform') == 'apple_reminders'
+
+
+def _unchanged(items: Sequence[Dict[str, Any]]) -> ReplacementPlan:
+    """The kill-switch plan: today's replace, fresh ids, every row delivered before the vectors."""
+    return ReplacementPlan(list(items), None, [DISABLED] * len(items), {}, False)
+
+
 def plan_replacement(
     conversation_id: str,
     items: Sequence[Dict[str, Any]],
     prior_rows: Sequence[Mapping[str, Any]],
 ) -> ReplacementPlan:
-    """Pair the new extraction with this conversation's prior rows (see module docstring)."""
+    """Pair the new extraction with this conversation's prior rows (see module docstring).
+
+    Runs on every task write, first processing included, so it never raises: an
+    unexpected error falls back to the kill-switch plan.
+    """
+    try:
+        return _plan(conversation_id, items, prior_rows)
+    except Exception as error:
+        try:
+            logger.error('event=action_item_identity outcome=planner_error cause=%s', type(error).__name__)
+            record_fallback(
+                component='other', from_mode='identity_preserve', to_mode='recreate', reason='other', outcome='degraded'
+            )
+        except Exception:
+            pass
+        return _unchanged(items)
+
+
+def _plan(
+    conversation_id: str,
+    items: Sequence[Dict[str, Any]],
+    prior_rows: Sequence[Mapping[str, Any]],
+) -> ReplacementPlan:
     new_items = list(items)
     if not action_item_identity_preserve_enabled():
-        return _emit(ReplacementPlan(new_items, None, [DISABLED] * len(new_items), {}, False), len(prior_rows))
+        return _emit(_unchanged(new_items), len(prior_rows))
 
     pools: Dict[str, List[Mapping[str, Any]]] = {}
     for row in prior_rows:
         row_id, key = row.get('id'), identity_key(row.get('description'))
-        if key and isinstance(row_id, str) and row_id and row.get('conversation_id') == conversation_id:
+        # Apple-linked rows keep today's fresh id + second push: the Reminders sync is
+        # last-writer-wins on updated_at (apple_reminders_sync_service.dart:163-191), so a
+        # kept link would let this extraction overwrite the user's edit made in Reminders.
+        if (
+            key
+            and isinstance(row_id, str)
+            and row_id
+            and row.get('conversation_id') == conversation_id
+            and not _apple_linked(row)
+        ):
             pools.setdefault(key, []).append(row)
     for pool in pools.values():
         pool.sort(key=_preference)

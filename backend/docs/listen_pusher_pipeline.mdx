@@ -837,12 +837,20 @@ sentence punctuation and whitespace collapsed; internal punctuation, numeric sig
 numeric compatibility symbols and Unicode joiners retained; code-bearing descriptions
 retain case) as a prior
 row of the same conversation keeps that row's id and export
-marker (`utils/conversations/action_item_identity.py`), so its task-app copy is
-not created again and Apple Reminders is not pushed again; reworded or new items
-are delivered as before. With prior rows, delivery is queued only after the task
-vectors are written. `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` (unset = on, any
-unrecognized value = off) restores recreate-under-fresh-ids;
-`event=action_item_identity` logs the per-replace counts.
+marker (`utils/conversations/action_item_identity.py`), so its cloud task-app
+copy (Todoist, Asana, ClickUp, Google Tasks) is not created again; reworded or
+new items are delivered as before. Apple Reminders keeps the previous behavior:
+an Apple-linked row (`apple_reminder_id` set or `export_platform` =
+`apple_reminders`) never lends its id, so a reprocess pushes a second reminder.
+The Reminders sync is last-writer-wins on Omi `updated_at` vs the reminder's
+`lastModifiedDate`, and the replaced row has no edit timestamp, so a kept link
+would let the extraction overwrite a title or due date the user edited in
+Reminders; the duplicate keeps that edited copy. With prior rows, delivery is
+queued only after the task vectors are written. An unexpected planner error
+falls back to the kill-switch plan (`outcome=planner_error`).
+`ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` (unset = on, any unrecognized value =
+off) restores recreate-under-fresh-ids; `event=action_item_identity` logs the
+per-replace counts.
 
 With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant

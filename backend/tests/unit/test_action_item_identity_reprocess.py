@@ -3,8 +3,8 @@
 ``_write_action_items`` replaces a conversation's tasks on every reprocess (smart-merge
 survivor refresh, user reprocess, sync update, server recovery). It recreated them under
 fresh ids, and the only duplicate guard is the ``exported`` marker looked up by id, so
-every reprocess created the same tasks again in Todoist/Asana/... and pushed them to
-Apple Reminders again.
+every reprocess created the same tasks again in Todoist/Asana/... Apple Reminders keeps
+that behavior on purpose (a second reminder per reprocess; see the module docstring).
 
 These tests run the real replace writer, the real ``database.action_items`` functions on
 an in-memory Firestore that evaluates the production filters and projection, and the
@@ -339,6 +339,23 @@ def test_n_reprocesses_with_llm_casing_and_punctuation_noise_still_deliver_once(
     assert sorted(world.ids().values()) == first_ids
 
 
+def test_already_exported_tasks_are_left_out_of_delivery_on_reprocess(world, monkeypatch):
+    """The per-id guard would skip them too, but only after one read and one provider lookup each."""
+    world.process('conv-1', [_item(BUDGET), _item(VENUE)])
+    delivered: List[List[str]] = []
+    real = process_conversation.auto_sync_action_items_batch
+
+    async def recording(uid, items):
+        delivered.append([item['description'] for item in items])
+        return await real(uid, items)
+
+    monkeypatch.setattr(process_conversation, 'auto_sync_action_items_batch', recording)
+    world.process('conv-1', [_item(BUDGET), _item(VENUE), _item(NOTES)])
+
+    assert delivered == [[NOTES]]
+    assert world.external == [BUDGET, VENUE, NOTES]
+
+
 def test_reworded_and_new_tasks_are_sent_and_dropped_tasks_are_deleted(world):
     world.process('conv-1', [_item(BUDGET), _item(VENUE), _item(NOTES)])
     reworded_budget = 'Send the revised budget to Maria'
@@ -387,12 +404,10 @@ def test_vector_failure_after_delivery_was_queued_then_retry_delivers_once(world
     assert sorted(world.external) == sorted([BUDGET, VENUE])
 
 
-def test_reprocess_failure_before_the_vectors_queues_no_delivery_for_apple_reminders(world):
-    """Apple Reminders has no server-side exported guard: a second push is a second reminder."""
-    world.default_app = 'apple_reminders'
+def test_reprocess_failure_before_the_vectors_queues_no_delivery_for_its_retry_to_repeat(world):
+    """A new task's id is not exported yet, so a queued delivery plus the retry's would send it twice."""
     world.process('conv-1', [_item(BUDGET)])
-    world.client_marks_apple_exported()
-    assert world.apple_pushes == [[world.ids()[BUDGET]]]
+    assert world.external == [BUDGET]
 
     world.deferred = True
     world.vector_error = RuntimeError('external write fence unavailable')
@@ -404,13 +419,11 @@ def test_reprocess_failure_before_the_vectors_queues_no_delivery_for_apple_remin
     world.process('conv-1', [_item(BUDGET), _item(VENUE)])
     world.drain()
 
-    assert world.apple_pushes == [[world.ids()[BUDGET]], [world.ids()[VENUE]]]
+    assert world.external == [BUDGET, VENUE]
 
 
 def test_real_vector_write_fence_failure_prevents_reprocess_delivery(world, monkeypatch):
-    world.default_app = 'apple_reminders'
     world.process('conv-1', [_item(BUDGET)])
-    world.client_marks_apple_exported()
     world.deferred = True
     monkeypatch.setattr(
         process_conversation, 'upsert_action_item_vectors_batch', vector_db.upsert_action_item_vectors_batch
@@ -428,7 +441,7 @@ def test_real_vector_write_fence_failure_prevents_reprocess_delivery(world, monk
     monkeypatch.setattr(vector_db, 'external_write_fence', lambda *a, **k: nullcontext())
     world.process('conv-1', [_item(BUDGET), _item(VENUE)])
     world.drain()
-    assert world.apple_pushes == [[world.ids()[BUDGET]], [world.ids()[VENUE]]]
+    assert world.external == [BUDGET, VENUE]
 
 
 # --------------------------------------------------------------------------- smart merge refresh
@@ -525,24 +538,81 @@ def test_first_processing_is_identical_with_the_flag_on_and_off(monkeypatch):
     assert [event[0] for event in events].index('deliver_queued') < [event[0] for event in events].index('vectors')
 
 
+def _process_and_reprocess_trace(monkeypatch, flag: Optional[str]):
+    world = World(monkeypatch)
+    if flag is None:
+        monkeypatch.delenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, raising=False)
+    else:
+        monkeypatch.setenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, flag)
+    world.process('conv-1', [_item(BUDGET, DUE), _item(VENUE)])
+    world.process('conv-1', [_item(BUDGET, DUE), _item(VENUE), _item(NOTES)])
+    trace = (world.events, world.reminders, world.external, world.creates, world.store.docs, world.store.events)
+    return world, _scrub(trace)
+
+
+def test_a_planner_error_falls_back_to_the_kill_switch_plan_and_still_writes_the_tasks(monkeypatch, caplog):
+    _, off = _process_and_reprocess_trace(monkeypatch, 'false')
+
+    def broken(description):
+        raise RuntimeError('synthetic planner defect')
+
+    monkeypatch.setattr(action_item_identity, 'identity_key', broken)
+    with caplog.at_level(logging.INFO, logger=action_item_identity.__name__):
+        world, failed = _process_and_reprocess_trace(monkeypatch, None)
+
+    # First processing and the reprocess both match the flag-off writer call for call.
+    assert failed == off
+    assert sorted(data['description'] for data in world.store.tasks('conv-1').values()) == sorted(
+        [BUDGET, VENUE, NOTES]
+    )
+    assert world.external == [BUDGET, VENUE, BUDGET, VENUE, NOTES]  # today's behavior, not a lost write
+    errors = [r.getMessage() for r in caplog.records if 'planner_error' in r.getMessage()]
+    assert errors == ['event=action_item_identity outcome=planner_error cause=RuntimeError'] * 2
+    assert not any(text in caplog.text for text in (BUDGET, VENUE, NOTES, 'synthetic planner defect'))
+
+
 # --------------------------------------------------------------------------- Apple Reminders + reminders
 
 
-def test_apple_reminders_reprocess_pushes_only_the_new_task_and_keeps_the_link(world):
+def test_apple_reminders_reprocess_keeps_todays_fresh_id_and_second_push(world):
+    """A kept link would let the next last-writer-wins sync overwrite the user's Reminders edit."""
     world.default_app = 'apple_reminders'
-    world.process('conv-1', [_item(BUDGET)])
+    world.process('conv-1', [_item(BUDGET, DUE)])
     world.client_marks_apple_exported()
     budget_id = world.ids()[BUDGET]
 
-    world.process('conv-1', [_item(BUDGET), _item(VENUE)])
+    world.process('conv-1', [_item(BUDGET, DUE), _item(VENUE)])
 
-    assert world.apple_pushes == [[budget_id], [world.ids()[VENUE]]]
-    kept = world.store.tasks()[budget_id]
-    assert (kept['exported'], kept['export_platform'], kept['apple_reminder_id']) == (
-        True,
-        'apple_reminders',
-        f'ek-{budget_id}',
-    )
+    new_budget_id = world.ids()[BUDGET]
+    assert new_budget_id != budget_id and budget_id not in world.store.tasks()
+    assert world.apple_pushes == [[budget_id], [new_budget_id, world.ids()[VENUE]]]
+    fresh = world.store.tasks()[new_budget_id]
+    assert not {'exported', 'export_platform', 'export_date', 'apple_reminder_id'} & set(fresh)
+    # The orphaned reminder is cancelled and the fresh id scheduled, exactly as before.
+    assert ('reconcile', budget_id) in [(kind, k['action_item_id']) for kind, k in world.reminders]
+    assert ('schedule', new_budget_id) in [(kind, k['action_item_id']) for kind, k in world.reminders]
+
+
+@pytest.mark.parametrize(
+    'apple_marker',
+    [
+        {'exported': True, 'export_platform': 'apple_reminders', 'apple_reminder_id': 'ek-1'},
+        {'exported': True, 'export_platform': 'apple_reminders'},  # markExported without an id
+        {'apple_reminder_id': 'ek-1'},
+    ],
+)
+def test_apple_linked_rows_never_lend_identity_while_cloud_exports_do(apple_marker):
+    prior = [
+        _row('apple-row', 'Call mom', due_at=DUE, **apple_marker),
+        _row('asana-row', 'Pay rent', exported=True, export_platform='asana', export_date=DUE),
+    ]
+    items = [{'description': 'Call mom', 'due_at': DUE}, {'description': 'Pay rent'}]
+    plan = plan_replacement('c', items, prior)
+
+    assert plan.outcomes == ['new', 'skipped_already_exported']
+    assert plan.document_ids == [None, 'asana-row']
+    assert plan.items[0] == items[0]  # no marker fields carried onto the Apple item
+    assert 'apple-row' not in plan.kept_reminders and 'asana-row' in plan.kept_reminders
 
 
 def test_a_kept_task_reschedules_its_reminder_in_one_message_and_dropped_ones_cancel(world):
