@@ -4258,7 +4258,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get secureEncryption => '安全加密';
 
   @override
-  String get secureEncryptionDescription => '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
+  String get secureEncryptionDescription =>
+      '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
 
   @override
   String get endToEndEncryption => '端到端加密';
@@ -4943,7 +4944,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get additionalSpeechSampleRemoved => '已删除附加语音样本';
 
   @override
-  String get consentDataMessage => '继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。';
+  String get consentDataMessage =>
+      '继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。';
 
   @override
   String get tasksEmptyStateMessage => '开始对话以创建任务。';
@@ -8649,7 +8651,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firmwareWarningTitle => '重要：更新前请阅读';
 
   @override
-  String get firmwareFormatWarning => '此固件将格式化SD卡。请确保在升级前同步所有离线数据。\n\n如果安装此版本后看到红灯闪烁，请不要担心。只需将设备连接到应用程序，它应该会变成蓝色。红灯表示设备的时钟尚未同步。';
+  String get firmwareFormatWarning =>
+      '此固件将格式化SD卡。请确保在升级前同步所有离线数据。\n\n如果安装此版本后看到红灯闪烁，请不要担心。只需将设备连接到应用程序，它应该会变成蓝色。红灯表示设备的时钟尚未同步。';
 
   @override
   String get continueAnyway => '继续';
@@ -9828,7 +9831,8 @@ class AppLocalizationsZh extends AppLocalizations {
       part,
       {
         'title': 'Let Omi get to know you',
-        'intro': 'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
         'hint': 'Say the whole sentence and finish it in your own words.',
         'name': 'My name is ___, and I spend most of my time ___.',
         'work': 'Right now, I am working on ___.',
@@ -9843,7 +9847,8 @@ class AppLocalizationsZh extends AppLocalizations {
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
         'review': 'Here is what I heard',
-        'reviewHint': 'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
+        'reviewHint':
+            'Edit or uncheck anything below. Personal details become memories; your goal is saved separately.',
         'saveVoice': 'Save voice profile',
         'savingVoice': 'Saving your voice profile…',
         'savedVoice': 'Voice profile saved',
@@ -9860,9 +9865,11 @@ class AppLocalizationsZh extends AppLocalizations {
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
         'savedGoal': 'Your goal is saved',
-        'goalError': 'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
-        'voiceUnavailable': 'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
         'saveFinish': 'Save and finish',
         'retryRemaining': 'Retry remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
@@ -10929,7 +10936,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get leaveBlank => '留空';
 
   @override
-  String get mcpOAuthSetup => '在 claude.ai 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
+  String get mcpOAuthSetup =>
+      '在 claude.ai 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
 
   @override
   String get claudeCode => 'Claude Code';
@@ -10938,7 +10946,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addToClaudeCodeConfig => '添加到 ~/.claude.json';
 
   @override
-  String get claudeDesktopConnectorSetup => '在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
+  String get claudeDesktopConnectorSetup =>
+      '在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
 
   @override
   String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
@@ -11187,13 +11196,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override
-  String get siriIndexSettingDescription => 'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
 
   @override
   String get sendToSupport => 'Send to support';
 
   @override
-  String get deviceDiagnosticsUploadDescription => 'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
 
   @override
   String get deviceDiagnosticsTicket => 'Support ticket code';
