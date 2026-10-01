@@ -1177,7 +1177,7 @@ def clear_desktop_cache(secret_key: str = Header(...)):
     This forces the next appcast.xml request to fetch fresh data from GitHub.
     Last-known-good entries are deliberately preserved for incident recovery.
     """
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     delete_generic_cache("github_releases_desktop")
     for platform in ("macos", "windows", "linux"):
@@ -1189,7 +1189,7 @@ def clear_desktop_cache(secret_key: str = Header(...)):
 @router.post("/v2/desktop/releases", status_code=201)
 async def register_desktop_release(request: Dict[str, Any], secret_key: str = Header(...)):
     """Register an immutable release manifest without making it user-visible."""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     try:
         manifest = await run_blocking(db_executor, register_release_manifest, request)
@@ -1313,7 +1313,7 @@ async def set_beta_admission(
 @router.get("/v2/desktop/releases/{release_id}")
 async def get_desktop_release_manifest(release_id: str, secret_key: str = Header(...)):
     """Return the retained manifest used for a pointer transition, not GitHub metadata."""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     manifest = await run_blocking(db_executor, get_release_manifest, release_id)
     if manifest is None:
@@ -1325,7 +1325,7 @@ async def get_desktop_release_manifest(release_id: str, secret_key: str = Header
 @router.post("/v2/desktop/channels/promote")
 async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secret_key: str = Header(...)):
     """Atomically advance or repoint one explicit qualified channel pointer."""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if request.channel != "stable":
         # This generic ADMIN_KEY route is deliberately unable to reach Beta's

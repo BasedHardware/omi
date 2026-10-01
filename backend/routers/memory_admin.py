@@ -28,7 +28,7 @@ def _parse_expected_source_ids(expected_source_ids: Optional[str]) -> Optional[L
 
 
 def _require_admin_key(secret_key: str) -> None:
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
 
