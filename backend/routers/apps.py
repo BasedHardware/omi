@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
+from utils.admin_key import admin_key_matches
 from utils.executors import (
     critical_executor,
     db_executor,
@@ -2300,7 +2301,7 @@ def disable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.
 
 @router.post('/v1/apps/tester', tags=['v1'], response_model=AppMutationResponse)
 def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2314,7 +2315,7 @@ def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2326,7 +2327,7 @@ def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(..
 
 @router.delete('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def remove_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2345,7 +2346,7 @@ def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v1/apps/public/unapproved', tags=['v1'], response_model=List[UnapprovedPublicAppResponse])
 def get_unapproved_public_apps(secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     apps = get_unapproved_public_apps_db()
     return apps
@@ -2353,7 +2354,7 @@ def get_unapproved_public_apps(secret_key: str = Header(...)):
 
 @router.patch('/v1/apps/{app_id}/popular', tags=['v1'], response_model=AppMutationResponse)
 def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     set_app_popular_db(app_id, value)
     delete_app_cache_by_id(app_id)
@@ -2363,7 +2364,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
 
 @router.post('/v1/apps/{app_id}/approve', tags=['v1'], response_model=AppMutationResponse)
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
     invalidate_approved_apps_cache()  # App is now public, invalidate cache
@@ -2379,7 +2380,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
@@ -2429,7 +2430,7 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppMutationResponse)
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     personas = get_persona_by_id_db(persona_id)
     if not personas:
@@ -2440,7 +2441,7 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
 
 @router.get('/v1/personas/{persona_id}', tags=['v1'], response_model=List[PersonaRecordResponse])
 def get_personas(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     persona = get_personas_by_username_db(persona_id)
     if not persona:
@@ -2505,7 +2506,7 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
 @router.get('/v1/summary-app-ids', tags=['v1'], response_model=ConversationSummaryAppIdsResponse)
 def get_summary_app_ids(secret_key: str = Header(...)):
     """Get all conversation summary app IDs from Redis"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     app_ids = get_conversation_summary_app_ids()
@@ -2516,7 +2517,7 @@ def get_summary_app_ids(secret_key: str = Header(...)):
 @router.post('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Add an app ID to the conversation summary apps list"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     success = add_conversation_summary_app_id(app_id)
@@ -2529,7 +2530,7 @@ def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
 @router.delete('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def delete_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Remove an app ID from the conversation summary apps list"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     success = remove_conversation_summary_app_id(app_id)

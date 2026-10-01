@@ -1,4 +1,3 @@
-import os
 from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -10,6 +9,7 @@ from utils.apps import (
     verify_api_key,
     get_available_app_by_id,
 )
+from utils.admin_key import admin_key_matches
 import database.notifications as notification_db
 from utils.integration_telemetry import emit_posthog_event
 from models.other import FcmTokenResponse, SaveFcmTokenRequest, SyncUserTimeZoneRequest
@@ -78,7 +78,7 @@ def sync_user_time_zone(
 
 @router.post('/v1/notification')
 def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...)) -> Dict[str, str]:
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not admin_key_matches(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
         raise HTTPException(status_code=400, detail='uid is required')
