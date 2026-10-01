@@ -3190,35 +3190,35 @@ def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
     assert backfill['CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT']['value'] == '2'
 
 
-@pytest.mark.parametrize(
-    'kind,service',
-    [
-        ('gke', 'backend-listen'),
-        ('gke', 'pusher'),
-        ('services', 'backend'),
-        ('services', 'backend-sync'),
-        ('services', 'backend-sync-backfill'),
-        ('services', 'backend-integration'),
-        ('jobs', 'notifications-job'),
-        ('desktop_backend', ''),
-    ],
-)
-@pytest.mark.parametrize('binding', [{'value': ''}, {'value': 'synthetic-user'}, {'secret': 'synthetic-secret'}])
-def test_prod_rejects_jev_uid_allowlist_declarations(tmp_path, kind, service, binding):
+def test_prod_rejects_jev_uid_allowlist_declared_on_every_host(tmp_path):
+    # One full validation with the declaration on every prod host: the walk reaches each scope.
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     prod = validator._get_env_config(manifest, 'prod')
-    if kind == 'gke':
-        host = prod['gke'][service]
-    elif kind == 'desktop_backend':
-        host = prod[kind]
-    else:
-        host = prod['cloud_run'][kind][service]
-    host.setdefault('env', {})['CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'] = binding
+    hosts = [
+        *prod['gke'].values(),
+        *prod['cloud_run']['services'].values(),
+        *prod['cloud_run']['jobs'].values(),
+        prod['desktop_backend'],
+    ]
+    for host in hosts:
+        host.setdefault('env', {})['CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'] = {'value': ''}
     path = tmp_path / 'manifest.yaml'
     write_yaml(path, manifest)
     errors = validator.validate_runtime_env(env='prod', manifest_path=path)
-    assert any('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in error.message for error in errors)
+    rejected = [e for e in errors if 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in e.message]
+    assert len(rejected) >= len(hosts)
+
+
+@pytest.mark.parametrize('binding', [{'value': ''}, {'value': 'synthetic-user'}, {'secret': 'synthetic-secret'}])
+def test_jev_uid_allowlist_contract_rejects_every_binding_shape(binding):
+    from scripts.runtime_env_jev_contract import JEV_UID_ALLOWLIST, validate_jev_uid_allowlist
+
+    errors = validate_jev_uid_allowlist(stage='prod', scope='gke/pusher', config={'env': {JEV_UID_ALLOWLIST: binding}})
+    assert errors and 'dev-only' in errors[0].message
+    assert (
+        validate_jev_uid_allowlist(stage='dev', scope='gke/pusher', config={'env': {JEV_UID_ALLOWLIST: binding}}) == []
+    )
 
 
 def test_prod_rejects_jev_uid_allowlist_undeclared_in_chart(tmp_path):
