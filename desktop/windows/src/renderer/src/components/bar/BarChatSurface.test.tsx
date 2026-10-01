@@ -308,6 +308,18 @@ describe('BarChatSurface', () => {
     expect(props.setDraft).toHaveBeenCalledWith('')
   })
 
+  it('conversation: a mouse-clicked Send returns focus to the composer (regression: Send used to leave focus on the button)', async () => {
+    renderSurface({ view: 'conversation', draft: 'hello there' })
+    const input = screen.getByPlaceholderText(/Ask Omi/i)
+    fireEvent.click(screen.getByText('Send'))
+    // Focus restore is rAF-deferred so it lands after any remount the submit
+    // triggers — flush two frames before asserting.
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))
+    )
+    expect(document.activeElement).toBe(input)
+  })
+
   it('conversation: an IN-QUOTA send clears the input and leaves it cleared (no restore)', async () => {
     const props = renderSurface({ view: 'conversation', draft: 'hello there' })
     fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Enter' })

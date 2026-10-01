@@ -107,6 +107,18 @@ describe('HubAskBar — attachments', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
+  it('returns focus to the input after a mouse-clicked Send (regression: Send used to leave focus on the button)', async () => {
+    mockPending = [att({ id: 'x1' })]
+    renderBar({ value: '', onSubmit: vi.fn() })
+    const input = screen.getByLabelText('Ask omi anything')
+    fireEvent.click(screen.getByLabelText('Send'))
+    // Focus is rAF-deferred (same reasoning as focusFromPill) — flush two frames.
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))
+    )
+    expect(document.activeElement).toBe(input)
+  })
+
   it('disables the paperclip at the 4-file cap', () => {
     mockPending = [1, 2, 3, 4].map((i) => att({ id: `x${i}`, name: `f${i}.png` }))
     renderBar()

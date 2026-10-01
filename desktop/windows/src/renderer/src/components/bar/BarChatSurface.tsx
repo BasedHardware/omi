@@ -339,6 +339,13 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
     // usage limit still lands here and surfaces its notice + restored text inline,
     // exactly as an in-conversation refusal does.
     if (p.view === 'list') p.onOpenConversation()
+    // Enter-to-send never loses focus (the keydown fires on the textarea
+    // itself), but a mouse click on the Send button moves focus to the button.
+    // Return it to the composer so the next message can be typed immediately.
+    // Deferred to the next frame so it lands after any view remount the submit
+    // above triggers; by then a closed/navigated-away surface has already
+    // nulled this ref, so it never steals focus onto a hidden surface.
+    requestAnimationFrame(() => inputRef.current?.focus())
     const seq = ++submitSeq.current
     void p.onSubmit(text).then((notice) => {
       // A REFUSED send never reaches the transcript, so clearing the input would

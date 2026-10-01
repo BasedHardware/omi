@@ -217,7 +217,16 @@ export function HubAskBar(props: {
         ) : canSend ? (
           <button
             type="button"
-            onClick={onSubmit}
+            onClick={() => {
+              onSubmit()
+              // A mouse click naturally moves focus to this button; a keyboard
+              // Enter-to-send never does (the keydown fires on the input itself).
+              // Return focus to the input on the next frame — same deferral as
+              // focusFromPill above, and for the same reason: an inputRef.current
+              // that has since unmounted (surface closed/navigated away) is simply
+              // null by then, so this never steals focus onto a hidden surface.
+              requestAnimationFrame(() => inputRef.current?.focus())
+            }}
             aria-label="Send"
             className="focus-ring flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-home-paper transition-opacity duration-150 hover:opacity-90"
           >
