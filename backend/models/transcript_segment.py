@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import Any, Dict, Optional, List, Tuple
+from typing import Any, Dict, Literal, Optional, List, Tuple
 import uuid
 import re
 from pydantic import BaseModel, Field, PrivateAttr, model_serializer
@@ -71,6 +71,7 @@ class TranscriptSegment(BaseModel):
     speaker_id: Optional[int] = None
     is_user: bool
     person_id: Optional[str] = None
+    speaker_label_source: Optional[Literal['manual', 'auto', 'carried']] = None
     start: float
     end: float
     translations: Optional[List[Translation]] = Field(default_factory=list)

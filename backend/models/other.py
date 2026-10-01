@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 import math
-from typing import Any, Callable, Iterable, List, Mapping, Optional
+from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional
 
 from zoneinfo import ZoneInfo
 
@@ -139,6 +139,9 @@ class Person(BaseModel):
     speech_sample_transcripts: Optional[List[str]] = None
     speech_samples_version: int = 3
     voice_readiness: VoiceReadiness = VoiceReadiness.unknown
+    voice_learning_state: Literal['learned', 'pending', 'needs_more_speech', 'disabled', 'unknown'] = 'unknown'
+    voice_speech_seconds: Optional[float] = None
+    voice_needed_seconds: Optional[float] = None
     # Pinned people are kept out of bulk clean-up and expected in conversations.
     pinned: bool = False
     pinned_at: Optional[datetime] = None

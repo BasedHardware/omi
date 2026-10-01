@@ -22024,9 +22024,43 @@
             ],
             "title": "Updated At"
           },
+          "voice_learning_state": {
+            "default": "unknown",
+            "enum": [
+              "learned",
+              "pending",
+              "needs_more_speech",
+              "disabled",
+              "unknown"
+            ],
+            "title": "Voice Learning State",
+            "type": "string"
+          },
+          "voice_needed_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Needed Seconds"
+          },
           "voice_readiness": {
             "$ref": "#/components/schemas/VoiceReadiness",
             "default": "unknown"
+          },
+          "voice_speech_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Speech Seconds"
           }
         },
         "required": [
@@ -23659,6 +23693,49 @@
           "referral_url"
         ],
         "title": "ReferralLinkResponse",
+        "type": "object"
+      },
+      "RejectSpeakerRequest": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "not_me",
+              "not_person",
+              "not_a_person"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "segment_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Ids"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "RejectSpeakerRequest",
         "type": "object"
       },
       "ReorderFoldersRequest": {
@@ -29462,6 +29539,22 @@
             ],
             "title": "Speaker Id"
           },
+          "speaker_label_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "manual",
+                  "auto",
+                  "carried"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label Source"
+          },
           "speech_profile_processed": {
             "default": true,
             "title": "Speech Profile Processed",
@@ -31572,6 +31665,80 @@
           "status"
         ],
         "title": "VerifyPhoneNumberResponse",
+        "type": "object"
+      },
+      "VoiceMatch": {
+        "properties": {
+          "clip_end": {
+            "title": "Clip End",
+            "type": "number"
+          },
+          "clip_start": {
+            "title": "Clip Start",
+            "type": "number"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "match_level": {
+            "enum": [
+              "strong",
+              "likely"
+            ],
+            "title": "Match Level",
+            "type": "string"
+          },
+          "segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Segment Ids",
+            "type": "array"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "talk_seconds": {
+            "title": "Talk Seconds",
+            "type": "number"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "title",
+          "started_at",
+          "speaker_id",
+          "talk_seconds",
+          "segment_ids",
+          "clip_start",
+          "clip_end",
+          "match_level"
+        ],
+        "title": "VoiceMatch",
+        "type": "object"
+      },
+      "VoiceMatchesResponse": {
+        "properties": {
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceMatch"
+            },
+            "title": "Matches",
+            "type": "array"
+          }
+        },
+        "title": "VoiceMatchesResponse",
         "type": "object"
       },
       "VoiceMessageTranscriptionResponse": {
@@ -44948,6 +45115,111 @@
         "summary": "Get Shared Conversation Screenshots",
         "tags": [
           "screen_frames"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject": {
+      "post": {
+        "operationId": "reject_speaker_label_v1_conversations__conversation_id__speakers__speaker_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "speaker_id",
+            "required": true,
+            "schema": {
+              "title": "Speaker Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectSpeakerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Reject Speaker Label",
+        "tags": [
+          "conversations"
         ]
       }
     },
@@ -66407,6 +66679,95 @@
           }
         ],
         "summary": "Delete Person Speech Sample Endpoint",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/people/{person_id}/voice-matches": {
+      "get": {
+        "operationId": "get_person_voice_matches_v1_users_people__person_id__voice_matches_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "person_id",
+            "required": true,
+            "schema": {
+              "title": "Person Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceMatchesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Person Voice Matches",
         "tags": [
           "v1"
         ]
