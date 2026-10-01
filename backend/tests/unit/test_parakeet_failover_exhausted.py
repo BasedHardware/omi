@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 import routers.listen.receiver as receiver_module
-from tests.unit.test_parakeet_window_live import Client, _flush_capture, _receiver_for_anchor_replay, runtime
+from tests.unit.test_parakeet_window_live import Client, _flush_capture, _receiver_for_anchor_replay, runtime, window
 from utils.stt import streaming as st
 from utils.stt import vad_gate
 from utils.stt.live_session import LiveLegSocket
@@ -63,6 +63,8 @@ async def test_delayed_modulate_death_replays_window_capture_on_soniox(monkeypat
         assert await actual._failover_stt_socket()
         assert actual.host.stt_service == st.STTService.modulate
         modulate = legs['modulate'][0]
+        assert not previous._tracks_window_replay
+        assert actual.stt_socket._tracks_window_replay
         assert b''.join(modulate.sent) == capture
         modulate.is_connection_dead = True
         modulate.typed_death_reason = 'modulate_serve_error'
@@ -97,6 +99,78 @@ async def test_replacement_dying_at_final_liveness_check_continues_to_soniox(mon
         assert len(legs['modulate']) == len(legs['soniox']) == 1
         assert b''.join(legs['soniox'][0].sent) == capture
         assert not actual.host.state.stt_terminal_failure
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_every_replacement_late_rejects_once_then_terminates_when_chain_exhausted(monkeypatch, caplog):
+    initial_connections = []
+    connect_window = window.connect_window
+
+    def initial(callback, sample_rate):
+        socket = connect_window(callback, sample_rate)
+        initial_connections.append(socket)
+        return socket
+
+    monkeypatch.setattr(window, 'connect_window', initial)
+    actual, base, previous, legs, capture = await setup_chain(monkeypatch)
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
+    legs['deepgram'] = []
+
+    async def deepgram(callback, *args, **kwargs):
+        leg = Replacement(callback)
+        legs['deepgram'].append(leg)
+        return leg
+
+    monkeypatch.setattr(st, 'process_audio_dg', deepgram)
+    checked = []
+
+    async def reject(socket):
+        assert isinstance(socket, LiveLegSocket)
+        checked.append(socket.service.value)
+        socket.raw.is_connection_dead = True
+        socket.raw.typed_death_reason = 'connection_lost'
+        return False
+
+    monkeypatch.setattr(receiver_module, 'fallback_socket_is_serving', reject)
+    try:
+        # Exercise the real supervisor's terminal path after recursive retries.
+        await actual._monitor_stt_death()
+        assert initial_connections == [previous.raw]
+        assert checked == ['modulate', 'soniox', 'deepgram']
+        assert len(legs['modulate']) == len(legs['soniox']) == len(legs['deepgram']) == 1
+        assert actual._stt_failed_providers == {'parakeet', 'modulate', 'soniox', 'deepgram_cloud'}
+        assert previous.raw.is_connection_dead
+        assert all(leg.is_connection_dead for group in legs.values() for leg in group)
+        assert base.emitted == []
+        assert actual._window_ring().snapshot() == tuple(
+            (n * 640, capture[n * 1280 : (n + 1) * 1280]) for n in range(3)
+        )
+        assert actual.host.state.stt_terminal_failure
+        assert not actual.host.state.active
+        actual.host.request.websocket.close.assert_awaited_once_with(
+            code=1011, reason='transcription_service_unavailable'
+        )
+        events = actual.host.request.websocket.send_json.await_args_list
+        assert len(events) == 1
+        assert events[0].args[0]['status'] == 'stt_failed'
+        assert [r.message for r in caplog.records if 'component=stt_live_session' in r.message] == [
+            'omi_fallback_event component=stt_live_session from=parakeet to=modulate '
+            'reason=other outcome=degraded subtype=connection_lost',
+            'omi_fallback_event component=stt_live_session from=modulate to=soniox '
+            'reason=other outcome=degraded subtype=connection_lost',
+            'omi_fallback_event component=stt_live_session from=soniox to=deepgram '
+            'reason=other outcome=exhausted subtype=connection_lost',
+        ]
+        # An additional recovery attempt cannot loop or settle either hop again.
+        assert not await actual._failover_stt_socket()
+        assert initial_connections == [previous.raw]
+        assert checked == ['modulate', 'soniox', 'deepgram']
+        assert len(legs['modulate']) == len(legs['soniox']) == len(legs['deepgram']) == 1
+        actual.host.request.websocket.close.assert_awaited_once()
+        assert len([r for r in caplog.records if 'component=stt_live_session' in r.message]) == 3
     finally:
         await actual._drain_stt_sockets()
 
@@ -201,7 +275,7 @@ async def test_five_minutes_on_replacement_trim_on_text_and_remain_bounded(monke
         assert len(legs['modulate']) == 1
         assert legs['soniox'] == []
         assert len(base.emitted) == 301
-        assert actual._window_ring().ring_seconds == 105
+        assert actual._window_ring().ring_seconds == 90
     finally:
         await actual._drain_stt_sockets()
 
@@ -300,5 +374,33 @@ async def test_window_replay_is_not_gated_again_when_replacement_vad_misses_sour
         monkeypatch.setattr(actual.stt_socket.gate, '_run_vad', lambda _pcm: True)
         await _flush_capture(actual, b'\x04\x00' * 640, 2560)
         assert b''.join(legs['soniox'][0].sent) == capture + b'\x03\x00' * 640 + b'\x04\x00' * 640
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_replay_tracking_survives_downstream_vad_fail_open(monkeypatch):
+    actual, base, previous, legs, capture = await setup_chain(monkeypatch)
+    try:
+        assert await actual._failover_stt_socket()
+        replacement = actual.stt_socket
+        assert replacement._tracks_window_replay
+
+        def broken(_pcm):
+            raise RuntimeError('synthetic scoring failure')
+
+        monkeypatch.setattr(replacement.gate, '_run_vad', broken)
+        pcm = b'\x03\x00' * 640
+        await _flush_capture(actual, pcm, 1920)
+        assert replacement.gate is None
+        await _flush_capture(actual, pcm, 2560)
+        assert replacement._speech_capture_end == 3200
+        assert b''.join(legs['modulate'][0].sent) == capture + pcm * 2
+        legs['modulate'][0].is_connection_dead = True
+        legs['modulate'][0].typed_death_reason = 'connection_lost'
+        assert await actual._failover_stt_socket()
+        assert b''.join(legs['soniox'][0].sent) == capture + pcm * 2
+        assert actual._window_ring().capture_bounds == (0, 3200)
+        assert base.emitted == []
     finally:
         await actual._drain_stt_sockets()

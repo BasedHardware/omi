@@ -338,15 +338,8 @@ class LiveLegSocket(STTSocket):
         # accepted sends and maps provider times to the capture timeline.
         self._send_tracker = send_tracker
         self._dead = False
-        self.retired_for_replay = False
-        self._replay_failure_reason: str | None = None
-        self._replay_capacity_subtype: str | None = None
-        self._emitted_capture_sample = 0
-        self._pending_capture_sample: int | None = None
-        self._speech_capture_end = 0
         self._seconds = 0.0
         self._replaying = False
-        self._replay_passthrough = False
         self._pending_selection: PendingLiveFailover | None = None
         self._ingest_gain: SessionPcmGain | None = None
         self._open_gauge_released = False
@@ -355,6 +348,14 @@ class LiveLegSocket(STTSocket):
         self._transcript_outcome: str | None = None
         self._health_success: Callable[[], None] = lambda: None
         self._health_close: Callable[[], None] = lambda: None
+        self.retired_for_replay = False
+        self._replay_failure_reason: str | None = None
+        self._replay_capacity_subtype: str | None = None
+        self._emitted_capture_sample = 0
+        self._pending_capture_sample: int | None = None
+        self._speech_capture_end = 0
+        self._tracks_window_replay = False
+        self._replay_passthrough = False
         record_live_stt_socket_open(service.value)
         if window:
             from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC, WindowedParakeetSocket
@@ -467,7 +468,7 @@ class LiveLegSocket(STTSocket):
         self._pending_selection = pending
 
     def note_selection_transcript(self, segments: list[dict[str, Any]]) -> None:
-        if not self.window:
+        if self._tracks_window_replay:
             for segment in segments:
                 end = segment.get('_capture_end_sample')
                 if isinstance(end, int) and str(segment.get('text') or '').strip():
@@ -517,6 +518,53 @@ class LiveLegSocket(STTSocket):
         elif isinstance(self.raw, WindowedParakeetSocket):
             self.raw.set_health_callbacks(on_success, on_close)
 
+    def _note_replay_capture(self, data: bytes, start_sample: int | None) -> None:
+        if start_sample is None:
+            return
+        if self._pending_capture_sample is None:
+            self._pending_capture_sample = max(start_sample, self._emitted_capture_sample)
+        self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
+
+    def _send_unscored_replay_capture(self, data: bytes, start_sample: int | None = None) -> bool:
+        self._note_replay_capture(data, start_sample)
+        return LiveLegSocket.send(self, data, start_sample=start_sample)
+
+    def _enable_window_replay_tracking(self) -> None:
+        if self._tracks_window_replay:
+            return
+        self._tracks_window_replay = True
+        gate = self.gate
+        if gate is None:
+            # Only a window-origin replacement without VAD uses this wrapper.
+            setattr(self, 'send', self._send_unscored_replay_capture)
+            return
+        process = gate.process_audio
+
+        def process_replay_capture(data, wall_time, score_pcm=None, *, start_sample=None):
+            try:
+                if self._replay_passthrough:
+                    mode = gate.mode
+                    gate.mode = 'shadow'
+                    try:
+                        output = process(data, wall_time, score_pcm, start_sample=start_sample)
+                    finally:
+                        gate.mode = mode
+                else:
+                    output = process(data, wall_time, score_pcm, start_sample=start_sample)
+            except Exception:
+                # send() keeps its existing VAD fail-open policy. Account this
+                # unscored packet and future direct packets conservatively.
+                self._note_replay_capture(data, start_sample)
+                setattr(self, 'send', self._send_unscored_replay_capture)
+                raise
+            if output.is_speech:
+                self._note_replay_capture(data, start_sample)
+            return output
+
+        # Install once, after failover. Never-failed sessions retain the original
+        # send path, with no additional per-send branches or progress writes.
+        setattr(gate, 'process_audio', process_replay_capture)
+
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
         if self.is_connection_dead:
             return False
@@ -531,13 +579,6 @@ class LiveLegSocket(STTSocket):
                 self.raw.observe_session_peak(self._ingest_gain.peak)
         output = None
         if self.gate is not None:
-            replay_gate = self.gate
-            gate_mode = replay_gate.mode if self._replay_passthrough else None
-            if self._replay_passthrough:
-                # Replay was already admitted upstream. Score it for accounting
-                # without caching it in active VAD's pre-roll: a later utterance
-                # must not resend an already accepted replay prefix.
-                replay_gate.mode = 'shadow'
             try:
                 # Synthetic wall clock follows received audio. Positive epoch
                 # avoids VAD's zero sentinel. Silero scores the level-corrected
@@ -564,18 +605,11 @@ class LiveLegSocket(STTSocket):
                 self.gate.mode = 'off'
                 self.gate = None
                 self.session.vad_mode = 'off'
-            finally:
-                if gate_mode is not None and self.gate is replay_gate:
-                    replay_gate.mode = gate_mode
-        audio = data if output is None or self.passthrough or self._replay_passthrough else output.audio_to_send
+        audio = data if output is None or self.passthrough else output.audio_to_send
         if output is not None and output.is_speech and self._first_speech_at is None:
             self._first_speech_at = time.monotonic()
         if output is not None and output.is_speech:
             self._speech_ms_for_health += int(len(data) / (self.sample_rate * 2) * 1000)
-        if not self.window and start_sample is not None and (output is None or output.is_speech):
-            if self._pending_capture_sample is None:
-                self._pending_capture_sample = max(start_sample, self._emitted_capture_sample)
-            self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
         self._check_no_text_deadline()
         if self.window and output is not None and output.is_speech:
             if isinstance(self.raw, WindowedParakeetSocket):
@@ -591,7 +625,7 @@ class LiveLegSocket(STTSocket):
                 self.finish()
                 self._dead = True
                 return False
-            if output is not None and output.should_finalize and not self._replay_passthrough:
+            if output is not None and output.should_finalize:
                 if self.window and isinstance(self.raw, WindowedParakeetSocket):
                     self.raw.finalize(vad_pause=True)
                 else:
@@ -621,17 +655,18 @@ class LiveLegSocket(STTSocket):
         return True
 
     def replay_send(self, data: bytes, start_sample: int) -> bool:
-        if not self.window:
+        ring = getattr(self.session.receiver, '_window_ring', None)
+        # Source admission and capture retention already decided this replay
+        # span. A different VAD score must not discard or finalize its middle.
+        self._replay_passthrough = callable(ring) and ring() is not None
+        if self._replay_passthrough and not self.window:
+            self._enable_window_replay_tracking()
             # The source epoch admitted this span. A different VAD decision
             # during replay cannot erase its still-unfulfilled obligation.
             if self._pending_capture_sample is None:
                 self._pending_capture_sample = start_sample
             self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
         self._replaying = True
-        ring = getattr(self.session.receiver, '_window_ring', None)
-        # Source admission and capture retention already decided this replay
-        # span. A different VAD score must not discard or finalize its middle.
-        self._replay_passthrough = callable(ring) and ring() is not None
         try:
             return self.send(data, start_sample=start_sample)
         finally:

@@ -660,10 +660,29 @@ different downstream VAD decision. Ordinary sends keep their existing gate.
 Each adopted replacement gets 15 seconds of new capture headroom while it
 processes a potentially full source backlog. The finite three-provider suffix
 bounds retention at 135 seconds; stalled un-emitted audio still fails over
-before eviction. Replacements with ordinary VAD disabled use a shadow gate
+before eviction. This ceiling grows from the original 90-second ring only
+while a replacement is handling its replay obligation. As soon as transcript
+progress leaves at most 90 seconds of capture, the cap returns to 90 seconds
+without evicting pending audio. A later replacement can reserve headroom again.
+The ring survives until session teardown, but emitted text continuously settles
+its contents; healthy continuous speech normally retains only its current tail.
+135 seconds of mono PCM16 is 2.16 MB at 8 kHz, 4.32 MB at 16 kHz, or 12.96 MB
+at 48 kHz. With the ordinary 30ms flush floor, owned Python ring objects add
+about 0.565 MB per ring. At 60 sessions/pod and three post-failover sessions,
+the conservative 16 kHz planning allowance for these changes is about 16 MiB of added
+RSS (14 MiB of measured owned ring objects, plus shadow VAD and allocator margin). This is additional
+to the old post-adoption path, which cleared the ring; it is not merely the
+45-second increase. Provider queues and model memory are separate allocations.
+Replacements with ordinary VAD disabled use a shadow gate
 for replay accounting only: every byte is still forwarded, and it introduces
 no finalize signals. Settled silence retains the same recent 15-second tail
 instead of filling the ring on an otherwise healthy idle replacement.
+Downstream capture-progress bookkeeping activates lazily on window-origin
+replay, so a session that never fails over does not track that extra progress.
+`testing/bench_live_leg_send.py` compares real class implementations against a
+pinned pre-PR Git revision using identical synthetic PCM and deterministic
+dependencies; vendor I/O and ONNX inference are excluded. Its `--ring-memory`
+mode measures retained ring objects at the normal 30ms flush floor.
 Window POSTs mark their
 request so `parakeet_prerecorded_requests_total` excludes live canary errors
 while covering the batch path used by sync backfill.

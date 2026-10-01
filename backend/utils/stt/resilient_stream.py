@@ -31,6 +31,7 @@ class ResilientAudio:
     def __init__(self, sample_rate: int, *, ring_seconds: int = RING_SECONDS, strict_replay: bool = False) -> None:
         self.sample_rate = sample_rate
         self.ring_seconds = ring_seconds
+        self._base_ring_seconds = ring_seconds
         self.strict_replay = strict_replay
         self._chunks: deque[tuple[int, bytes]] = deque()
         self._end_sample = 0
@@ -67,8 +68,15 @@ class ResilientAudio:
 
     def finalize_through(self, sample: int) -> int:
         before = self.buffered_bytes
+        previous = self.finalized_sample
         self.finalized_sample = max(self.finalized_sample, sample)
         self._trim()
+        if self.ring_seconds > self._base_ring_seconds and self.finalized_sample > previous:
+            first, end = self.capture_bounds
+            if end - first <= self._base_ring_seconds * self.sample_rate:
+                # Replacement headroom is temporary. Once progress has freed
+                # enough capture, restore the original horizon without eviction.
+                self.ring_seconds = self._base_ring_seconds
         return before - self.buffered_bytes
 
     def _trim(self) -> None:

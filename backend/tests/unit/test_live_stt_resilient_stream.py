@@ -478,3 +478,19 @@ def test_5xx_is_reconnectable_only_with_flag(monkeypatch):
     assert soniox_death_reason(503, 'server_error') == 'provider_5xx'
     monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'false')
     assert soniox_death_reason(503, 'server_error') == 'connection_lost'
+
+
+@pytest.mark.parametrize('sample_rate', [8000, 16000, 48000])
+def test_replacement_headroom_shrinks_only_after_progress_frees_base_horizon(sample_rate):
+    ring = ResilientAudio(sample_rate, ring_seconds=90, strict_replay=True)
+    ring.reserve_replacement_headroom()
+    capture = b'\x01\x00' * (105 * sample_rate)
+    ring.append(capture, 0)
+    assert ring.ring_seconds == 105
+    assert ring.finalize_through(14 * sample_rate) == 14 * sample_rate * 2
+    assert ring.ring_seconds == 105
+    assert ring.capture_bounds == (14 * sample_rate, 105 * sample_rate)
+    assert ring.finalize_through(15 * sample_rate) == sample_rate * 2
+    assert ring.ring_seconds == 90
+    assert ring.snapshot() == ((15 * sample_rate, capture[15 * sample_rate * 2 :]),)
+    assert ring.would_overflow(b'\x02\x00', 105 * sample_rate)
