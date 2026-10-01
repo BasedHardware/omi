@@ -418,6 +418,19 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
 
+  Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
+    final content = Padding(
+      padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+      child: _buildMobileLayout(context),
+    );
+    if (!widget.conversation.isLocked) return content;
+    return OmiLockedPreview(
+      label: context.l10n.upgradeToUnlimited,
+      onPressed: onTap,
+      child: content,
+    );
+  }
+
   /// Time and length, with the New badge beside them (hub audit #16) and the star.
   Widget _buildMetaRow(BuildContext context) {
     final duration = _getConversationDuration(context);
@@ -535,7 +548,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
             ),
           ],
         ),
-        if (widget.conversation.isLocked) _buildLockedOverlay(),
       ],
     );
   }
@@ -556,27 +568,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
       alignment: Alignment.center,
       decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: OmiRadius.xlAll),
       child: const MergingIndicator(),
-    );
-  }
-
-  Widget _buildLockedOverlay() {
-    return Positioned.fill(
-      child: ClipRRect(
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            // Avoid a live backdrop blur for every locked card. The opaque overlay
-            // preserves the locked affordance without making the scroll/route paint
-            // path sample and blur the entire card behind it.
-            color: Colors.black.withValues(alpha: 0.62),
-            borderRadius: OmiRadius.smAll,
-          ),
-          child: Text(
-            context.l10n.upgradeToUnlimited,
-            style: OmiType.callout.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-      ),
     );
   }
 
