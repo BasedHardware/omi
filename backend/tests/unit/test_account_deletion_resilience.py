@@ -5,13 +5,12 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 import pytest
 
+from database import account_deletion_marker
 from database.account_deletion_marker import (
     ACCOUNT_DELETION_COLLECTION,
     MAX_UID_LENGTH,
     _clean_uid,
-    account_deletion_collection,
     account_deletion_document,
-    account_deletion_firestore_client,
     get_user_deletion_wipe_status,
 )
 from database.account_deletion_transitions import (
@@ -24,27 +23,19 @@ from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadS
 
 
 # ---------------------------------------------------------------------------
-# Fake Transaction Double for @transactional
+# Helpers unwrapping @transactional decorators (matching repo test precedent)
 # ---------------------------------------------------------------------------
+raw_mark_wipe_completed = getattr(mark_wipe_completed, "to_wrap", mark_wipe_completed)
+raw_record_late_cleanup = getattr(record_late_agent_vm_cleanup, "to_wrap", record_late_agent_vm_cleanup)
+raw_adopt_legacy_cleanup = getattr(adopt_legacy_late_agent_vm_cleanup, "to_wrap", adopt_legacy_late_agent_vm_cleanup)
+
+
 class FakeTransaction:
+    """Lightweight test double for unwrapped transactional callbacks."""
+
     def __init__(self):
-        self._max_attempts = 1
-        self._read_only = False
-        self._id = b"fake-account-deletion-txn"
         self.sets = []
         self.updates = []
-
-    def _clean_up(self):
-        pass
-
-    def _begin(self, retry_id=None):
-        pass
-
-    def _commit(self):
-        return []
-
-    def _rollback(self):
-        pass
 
     def set(self, doc_ref, data, merge=False):
         self.sets.append((doc_ref, data, merge))
@@ -60,15 +51,14 @@ def test_clean_uid_validation():
     assert _clean_uid(None) == ""
     assert _clean_uid(12345) == ""
     assert _clean_uid("") == ""
-    assert _clean_uid("   ") == ""
     assert _clean_uid("u" * (MAX_UID_LENGTH + 1)) == ""
     assert _clean_uid("user/slash") == ""
     assert _clean_uid("user\\backslash") == ""
     assert _clean_uid("user\0null") == ""
     assert _clean_uid("user..traversal") == ""
 
+    # Exact UID representation is preserved
     assert _clean_uid("user_123") == "user_123"
-    assert _clean_uid("  user_456  ") == "user_456"
     assert _clean_uid("u" * MAX_UID_LENGTH) == "u" * MAX_UID_LENGTH
 
 
@@ -96,12 +86,36 @@ def test_account_deletion_document_and_client_injection():
         account_deletion_document("bad..path", firestore_client=mock_client)
 
 
-def test_get_user_deletion_wipe_status_invalid_uid_returns_none():
+def test_get_user_deletion_wipe_status_invalid_uid_fails_closed():
     mock_client = MagicMock()
-    assert get_user_deletion_wipe_status("", firestore_client=mock_client) is None
-    assert get_user_deletion_wipe_status("   ", firestore_client=mock_client) is None
-    assert get_user_deletion_wipe_status("bad/uid", firestore_client=mock_client) is None
+    # Must raise ValueError so auth fence fails closed with 503 instead of passing through
+    with pytest.raises(ValueError, match="uid must be a non-empty string"):
+        get_user_deletion_wipe_status("", firestore_client=mock_client)
+
+    with pytest.raises(ValueError, match="uid must be a non-empty string"):
+        get_user_deletion_wipe_status("bad/uid", firestore_client=mock_client)
+
+    with pytest.raises(ValueError, match="uid must be a non-empty string"):
+        get_user_deletion_wipe_status("bad..uid", firestore_client=mock_client)
+
     mock_client.collection.assert_not_called()
+
+
+def test_get_user_deletion_wipe_status_malformed_snapshot_raises(monkeypatch):
+    mock_client = MagicMock()
+    mock_coll = MagicMock()
+    mock_doc = MagicMock()
+    mock_snapshot = MagicMock()
+    # exists is not a boolean
+    del mock_snapshot.exists
+
+    mock_client.collection.return_value = mock_coll
+    mock_coll.document.return_value = mock_doc
+    mock_doc.get.return_value = mock_snapshot
+
+    # Must raise RuntimeError so auth fence fails closed with 503
+    with pytest.raises(RuntimeError, match="Malformed Firestore snapshot"):
+        get_user_deletion_wipe_status("user_123", firestore_client=mock_client)
 
 
 def test_get_user_deletion_wipe_status_miss(monkeypatch):
@@ -120,7 +134,8 @@ def test_get_user_deletion_wipe_status_miss(monkeypatch):
     def fake_record(site, outcome):
         recorded_metrics.append((site, outcome))
 
-    monkeypatch.setattr("database.account_deletion_marker.record_document_read", fake_record)
+    # Object-based monkeypatching per repo standard
+    monkeypatch.setattr(account_deletion_marker, "record_document_read", fake_record)
 
     status = get_user_deletion_wipe_status("user_123", firestore_client=mock_client)
     assert status is None
@@ -144,7 +159,8 @@ def test_get_user_deletion_wipe_status_hit(monkeypatch):
     def fake_record(site, outcome):
         recorded_metrics.append((site, outcome))
 
-    monkeypatch.setattr("database.account_deletion_marker.record_document_read", fake_record)
+    # Object-based monkeypatching per repo standard
+    monkeypatch.setattr(account_deletion_marker, "record_document_read", fake_record)
 
     status = get_user_deletion_wipe_status("user_123", firestore_client=mock_client)
     assert status == "wiping"
@@ -160,12 +176,12 @@ def test_read_agent_vm_migration_journals_validation():
         read_agent_vm_migration_journals("", firestore_client=mock_client)
 
     with pytest.raises(ValueError, match="uid is required"):
-        read_agent_vm_migration_journals(None, firestore_client=mock_client)  # type: ignore[arg-type]
+        read_agent_vm_migration_journals(None, firestore_client=mock_client)
 
-    with pytest.raises(ValueError, match="uid must be a valid identifier"):
+    with pytest.raises(ValueError, match="uid is required and must be a valid identifier"):
         read_agent_vm_migration_journals("user/subpath", firestore_client=mock_client)
 
-    with pytest.raises(ValueError, match="uid must be a valid identifier"):
+    with pytest.raises(ValueError, match="uid is required and must be a valid identifier"):
         read_agent_vm_migration_journals("user..traversal", firestore_client=mock_client)
 
 
@@ -215,6 +231,28 @@ def test_read_agent_vm_migration_journals_malformed_record():
         read_agent_vm_migration_journals("user_123", firestore_client=mock_client)
 
 
+def test_mark_wipe_completed_malformed_snapshot_raises():
+    txn = FakeTransaction()
+    doc_ref = MagicMock()
+
+    # Case 1: snapshot without boolean exists
+    snapshot_bad_exists = MagicMock()
+    del snapshot_bad_exists.exists
+    doc_ref.get.return_value = snapshot_bad_exists
+
+    with pytest.raises(RuntimeError, match="Malformed snapshot"):
+        raw_mark_wipe_completed(txn, doc_ref)
+
+    # Case 2: snapshot exists but data is not dict
+    snapshot_corrupt_data = MagicMock()
+    snapshot_corrupt_data.exists = True
+    snapshot_corrupt_data.to_dict.return_value = "not_a_dict"
+    doc_ref.get.return_value = snapshot_corrupt_data
+
+    with pytest.raises(RuntimeError, match="Malformed account deletion marker data"):
+        raw_mark_wipe_completed(txn, doc_ref)
+
+
 def test_mark_wipe_completed_with_and_without_late_cleanup():
     txn = FakeTransaction()
     doc_ref = MagicMock()
@@ -225,7 +263,7 @@ def test_mark_wipe_completed_with_and_without_late_cleanup():
     snapshot1.to_dict.return_value = {"late_agent_vm_cleanup": {"vmName": "vm1"}}
     doc_ref.get.return_value = snapshot1
 
-    success1 = mark_wipe_completed(txn, doc_ref)
+    success1 = raw_mark_wipe_completed(txn, doc_ref)
     assert success1 is False
     assert len(txn.sets) == 1
     assert txn.sets[0][1]["wipe_status"] == "failed"
@@ -237,7 +275,7 @@ def test_mark_wipe_completed_with_and_without_late_cleanup():
     snapshot2.to_dict.return_value = {}
     doc_ref.get.return_value = snapshot2
 
-    success2 = mark_wipe_completed(txn, doc_ref)
+    success2 = raw_mark_wipe_completed(txn, doc_ref)
     assert success2 is True
     assert len(txn.sets) == 1
     assert txn.sets[0][1]["wipe_status"] == "completed"
@@ -249,13 +287,13 @@ def test_record_late_agent_vm_cleanup():
 
     # Input validation
     with pytest.raises(ValueError, match="vm_name must be a non-empty string"):
-        record_late_agent_vm_cleanup(txn, doc_ref, "", "us-central1-a")
+        raw_record_late_cleanup(txn, doc_ref, "", "us-central1-a")
 
     with pytest.raises(ValueError, match="zone must be a non-empty string"):
-        record_late_agent_vm_cleanup(txn, doc_ref, "vm-1", "   ")
+        raw_record_late_cleanup(txn, doc_ref, "vm-1", "   ")
 
     with pytest.raises(ValueError, match="late Agent VM cleanup instance identity must be numeric"):
-        record_late_agent_vm_cleanup(txn, doc_ref, "vm-1", "us-central1-a", expected_instance_id="abc-not-num")
+        raw_record_late_cleanup(txn, doc_ref, "vm-1", "us-central1-a", expected_instance_id="abc-not-num")
 
     # Happy path: blocks access status (e.g. wiping / pending)
     snapshot = MagicMock()
@@ -263,7 +301,7 @@ def test_record_late_agent_vm_cleanup():
     snapshot.to_dict.return_value = {"wipe_status": "wiping"}
     doc_ref.get.return_value = snapshot
 
-    recorded = record_late_agent_vm_cleanup(
+    recorded = raw_record_late_cleanup(
         txn,
         doc_ref,
         "  vm-1  ",
@@ -288,7 +326,7 @@ def test_adopt_legacy_late_agent_vm_cleanup():
 
     # Input validation
     with pytest.raises(ValueError, match="late Agent VM cleanup instance identity must be numeric"):
-        adopt_legacy_late_agent_vm_cleanup(txn, doc_ref, "vm-1", "zone-1", expected_instance_id="not-num")
+        raw_adopt_legacy_cleanup(txn, doc_ref, "vm-1", "zone-1", expected_instance_id="not-num")
 
     # Access allowed status (cancelled) -> returns False
     snapshot_cancelled = MagicMock()
@@ -299,7 +337,7 @@ def test_adopt_legacy_late_agent_vm_cleanup():
     }
     doc_ref.get.return_value = snapshot_cancelled
 
-    res = adopt_legacy_late_agent_vm_cleanup(txn, doc_ref, "vm-1", "zone-1", expected_instance_id="12345")
+    res = raw_adopt_legacy_cleanup(txn, doc_ref, "vm-1", "zone-1", expected_instance_id="12345")
     assert res is False
 
     # Happy path adopt: updates doc_ref with expectedInstanceId
@@ -311,7 +349,7 @@ def test_adopt_legacy_late_agent_vm_cleanup():
     }
     doc_ref.get.return_value = snapshot_wiping
 
-    res2 = adopt_legacy_late_agent_vm_cleanup(txn, doc_ref, "vm-1", "zone-1", expected_instance_id="998877")
+    res2 = raw_adopt_legacy_cleanup(txn, doc_ref, "vm-1", "zone-1", expected_instance_id="998877")
     assert res2 is True
     assert len(txn.updates) == 1
     assert txn.updates[0][1] == {"late_agent_vm_cleanup.expectedInstanceId": "998877"}

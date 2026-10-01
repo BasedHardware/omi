@@ -6,6 +6,7 @@ from typing import Any
 from database._client import get_firestore_client
 from google.cloud.firestore_v1 import transactional
 
+from database.account_deletion_marker import _clean_uid
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 
@@ -16,11 +17,9 @@ def read_agent_vm_migration_journals(uid: Any, *, firestore_client: Any | None =
     during an Agent VM migration.  Callers must validate each returned record
     against the provider before issuing destructive requests.
     """
-    if not isinstance(uid, str) or not uid.strip():
-        raise ValueError('uid is required')
-    clean_uid = uid.strip()
-    if any(c in clean_uid for c in ("/", "\\", "\0", "..")) or len(clean_uid) > 128:
-        raise ValueError('uid must be a valid identifier without path traversal')
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        raise ValueError('uid is required and must be a valid identifier without path traversal')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     migration_ref = client.collection('users').document(clean_uid).collection('agentVmMigrations')
     journals: list[dict[str, Any]] = []
@@ -40,7 +39,14 @@ def read_agent_vm_migration_journals(uid: Any, *, firestore_client: Any | None =
 @transactional
 def mark_wipe_completed(transaction, doc_ref) -> bool:
     snapshot = doc_ref.get(transaction=transaction)
-    data = (snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    if not hasattr(snapshot, 'exists') or not isinstance(snapshot.exists, bool):
+        raise RuntimeError('Malformed snapshot for account deletion marker')
+    if snapshot.exists:
+        data = snapshot.to_dict()
+        if not isinstance(data, dict):
+            raise RuntimeError('Malformed account deletion marker data')
+    else:
+        data = {}
     if data.get('late_agent_vm_cleanup'):
         transaction.set(
             doc_ref,
@@ -68,18 +74,25 @@ def record_late_agent_vm_cleanup(
         raise ValueError('vm_name must be a non-empty string')
     if not isinstance(zone, str) or not zone.strip():
         raise ValueError('zone must be a non-empty string')
-    snapshot = doc_ref.get(transaction=transaction)
-    exists = getattr(snapshot, 'exists', False)
-    raw_status = (snapshot.to_dict() or {}).get('wipe_status') if exists else None
-    status = normalize_account_deletion_status(marker_exists=exists, raw_status=raw_status)
-    if not account_deletion_blocks_access(status):
-        return False
     if expected_instance_id is not None and (
         not isinstance(expected_instance_id, str)
         or not expected_instance_id.isascii()
         or not expected_instance_id.isdigit()
     ):
         raise ValueError('late Agent VM cleanup instance identity must be numeric')
+    snapshot = doc_ref.get(transaction=transaction)
+    if not hasattr(snapshot, 'exists') or not isinstance(snapshot.exists, bool):
+        raise RuntimeError('Malformed snapshot for account deletion marker')
+    if snapshot.exists:
+        data = snapshot.to_dict()
+        if not isinstance(data, dict):
+            raise RuntimeError('Malformed account deletion marker data')
+        raw_status = data.get('wipe_status')
+    else:
+        raw_status = None
+    status = normalize_account_deletion_status(marker_exists=snapshot.exists, raw_status=raw_status)
+    if not account_deletion_blocks_access(status):
+        return False
     pending: dict[str, Any] = {'vmName': vm_name.strip(), 'zone': zone.strip()}
     if expected_instance_id is not None:
         pending['expectedInstanceId'] = expected_instance_id
@@ -115,10 +128,16 @@ def adopt_legacy_late_agent_vm_cleanup(
     ):
         raise ValueError('late Agent VM cleanup instance identity must be numeric')
     snapshot = doc_ref.get(transaction=transaction)
-    exists = getattr(snapshot, 'exists', False)
-    data = (snapshot.to_dict() or {}) if exists else {}
+    if not hasattr(snapshot, 'exists') or not isinstance(snapshot.exists, bool):
+        raise RuntimeError('Malformed snapshot for account deletion marker')
+    if snapshot.exists:
+        data = snapshot.to_dict()
+        if not isinstance(data, dict):
+            raise RuntimeError('Malformed account deletion marker data')
+    else:
+        data = {}
     raw_status = data.get('wipe_status')
-    status = normalize_account_deletion_status(marker_exists=exists, raw_status=raw_status)
+    status = normalize_account_deletion_status(marker_exists=snapshot.exists, raw_status=raw_status)
     pending = data.get('late_agent_vm_cleanup')
     if not account_deletion_blocks_access(status) or not isinstance(pending, dict):
         return False

@@ -21,15 +21,18 @@ MAX_UID_LENGTH = 128
 
 
 def _clean_uid(uid: Any) -> str:
-    """Sanitize and validate UID before forming Firestore document paths."""
+    """Sanitize and validate UID before forming Firestore document paths.
+
+    Preserves exact UID representation without stripping whitespace, while rejecting
+    path traversal, path separators, null bytes, and length violations.
+    """
     if not isinstance(uid, str):
         return ""
-    cleaned = uid.strip()
-    if not cleaned or len(cleaned) > MAX_UID_LENGTH:
+    if not uid or len(uid) > MAX_UID_LENGTH:
         return ""
-    if any(c in cleaned for c in ("/", "\\", "\0", "..")):
+    if any(c in uid for c in ("/", "\\", "\0", "..")):
         return ""
-    return cleaned
+    return uid
 
 
 def account_deletion_firestore_client(*, firestore_client: Any | None = None) -> Any:
@@ -61,30 +64,40 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     This intentionally bypasses caches: an accepted deletion must become an
     access barrier on the very next request, and a cached pre-delete miss would
     reopen the exact half-deleted-account window this marker closes.
+
+    Fails closed on malformed UIDs or corrupt snapshots by raising an error that
+    the auth fence translates to an access denial (HTTP 503).
     """
     clean_uid = _clean_uid(uid)
     if not clean_uid:
-        return None
+        raise ValueError("uid must be a non-empty string without path separators or traversal characters")
 
     client = account_deletion_firestore_client(firestore_client=firestore_client)
     doc_ref = account_deletion_document(clean_uid, firestore_client=client)
     snapshot = doc_ref.get()
-    exists = getattr(snapshot, "exists", False)
+    if not hasattr(snapshot, "exists") or not isinstance(snapshot.exists, bool):
+        raise RuntimeError("Malformed Firestore snapshot for account deletion marker")
+
     record_document_read(
         FirestoreReadSite.USER_DELETION_WIPE_STATUS,
-        FirestoreReadOutcome.HIT if exists else FirestoreReadOutcome.MISS,
+        FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
     )
-    if not exists:
+    if not snapshot.exists:
         return None
+
     to_dict_fn = getattr(snapshot, "to_dict", None)
     raw_dict = to_dict_fn() if callable(to_dict_fn) else None
-    status = (raw_dict or {}).get("wipe_status") if isinstance(raw_dict, dict) else None
+    if not isinstance(raw_dict, dict):
+        return normalize_account_deletion_status(marker_exists=True, raw_status=None)
+
+    status = raw_dict.get("wipe_status")
     return normalize_account_deletion_status(marker_exists=True, raw_status=status)
 
 
 __all__ = [
     "ACCOUNT_DELETION_COLLECTION",
     "MAX_UID_LENGTH",
+    "_clean_uid",
     "account_deletion_collection",
     "account_deletion_document",
     "account_deletion_firestore_client",
