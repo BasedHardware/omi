@@ -5,7 +5,7 @@ Inference must never create or replace these explicit user decisions.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Annotated, Optional
 import uuid
 
 from pydantic import BaseModel, Field, StrictStr
@@ -13,13 +13,19 @@ from pydantic import BaseModel, Field, StrictStr
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
 TEACHING_CANDIDATE_LIMIT = 3
-LIVE_TRANSCRIPT_REPLAY_RECEIPT_LIMIT = 4096
+LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT = 2
+LIVE_TRANSCRIPT_REPLAY_RECEIPT_BATCH_LIMIT = 128
+LIVE_TRANSCRIPT_REPLAY_RECEIPT_LIMIT = (
+    LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT * LIVE_TRANSCRIPT_REPLAY_RECEIPT_BATCH_LIMIT
+)
 
 
 class LiveTranscriptReplayReceipt(BaseModel):
     model_config = {'extra': 'forbid'}
 
-    absorbed_ids: list[StrictStr] = Field(max_length=LIVE_TRANSCRIPT_REPLAY_RECEIPT_LIMIT)
+    commits: list[Annotated[list[StrictStr], Field(max_length=LIVE_TRANSCRIPT_REPLAY_RECEIPT_BATCH_LIMIT)]] = Field(
+        max_length=LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT
+    )
 
 
 def manual_owner_reserved(receipt: dict) -> bool:
@@ -238,10 +244,13 @@ def merge_live_segments(
     # same words a second time. Also dedupe repeated IDs in one fresh batch.
     seen_ids = {str(segment['id']) for segment in persisted if segment.get('id')}
     seen_ids.update(str(absorbed_id) for absorbed_id in (absorbed_ids or []))
+    prior_ids = set(seen_ids)
     unique_fresh = []
+    replayed_commit = False
     for segment in fresh:
         segment_id = segment.get('id')
         if segment_id and str(segment_id) in seen_ids:
+            replayed_commit = replayed_commit or str(segment_id) in prior_ids
             continue
         unique_fresh.append(segment)
         if segment_id:
@@ -262,6 +271,8 @@ def merge_live_segments(
     # preceding unplaced tail, or a committed retry would no longer find its
     # ID in the next transaction snapshot.
     covered.update(s.id for s in incoming if s.audio_alignment == 'unplaced' and s.id)
+    if replayed_commit or len(incoming) > LIVE_TRANSCRIPT_REPLAY_RECEIPT_BATCH_LIMIT:
+        covered.update(s.id for s in [*tail, *incoming] if s.id)
     combined = TranscriptSegment.combine_segments(
         tail, incoming, protected_segment_ids=covered, speaker_bound_ids=speaker_bound
     )

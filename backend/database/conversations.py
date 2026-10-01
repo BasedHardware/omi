@@ -27,7 +27,7 @@ from utils.observability.speaker_identification import record_speaker_review
 from models.person_confidence import SOURCE_MANUAL
 from utils.person_evidence import person_updates_for_assignment
 from utils.manual_speaker_assignments import (
-    LIVE_TRANSCRIPT_REPLAY_RECEIPT_LIMIT,
+    LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
     LiveTranscriptMerge,
     LiveTranscriptReplayReceipt,
     apply_manual_assignments,
@@ -2746,18 +2746,23 @@ def update_conversation_segments(
             uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
         )
         planned = None
-        prior_absorbed_ids: list[str] = []
+        prior_commits: list[list[str]] = []
         if live_segments is not None:
             persisted = _decode_transcript_segments_strict(
                 uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
             )
             if 'live_transcript_replay_receipt' in current:
-                prior_absorbed_ids = parse_payload_strict(
+                prior_commits = parse_payload_strict(
                     LiveTranscriptReplayReceipt,
                     _reveal_json_value(current['live_transcript_replay_receipt'], uid, True),
                     document_path=doc_ref.path,
-                ).absorbed_ids
-            planned = merge_live_segments(persisted, live_segments, receipt, absorbed_ids=prior_absorbed_ids)
+                ).commits
+            planned = merge_live_segments(
+                persisted,
+                live_segments,
+                receipt,
+                absorbed_ids=[absorbed_id for commit in prior_commits for absorbed_id in commit],
+            )
         remap = planned.absorbed_into if planned is not None else {}
         if remap:
             receipt = remap_absorbed_receipt(receipt, remap)
@@ -2826,13 +2831,11 @@ def update_conversation_segments(
             update_payload['capture_evidence'] = capture_evidence
         if remap:
             update_payload['manual_speaker_assignments'] = receipt
-            absorbed_ids = list(prior_absorbed_ids)
-            known_ids = set(absorbed_ids)
-            absorbed_ids.extend(absorbed_id for absorbed_id in remap if absorbed_id not in known_ids)
-            if len(absorbed_ids) > len(prior_absorbed_ids):
-                update_payload['live_transcript_replay_receipt'] = _protect_json_value(
-                    {'absorbed_ids': absorbed_ids[-LIVE_TRANSCRIPT_REPLAY_RECEIPT_LIMIT:]}, uid, 'enhanced'
-                )
+            update_payload['live_transcript_replay_receipt'] = _protect_json_value(
+                {'commits': [*prior_commits, list(remap)][-LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT:]},
+                uid,
+                'enhanced',
+            )
         if finished_at:
             update_payload['finished_at'] = finished_at
         pinned_timeline = isinstance(current.get('audio_timeline'), dict) and current.get('audio_timeline')
