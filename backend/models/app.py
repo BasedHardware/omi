@@ -84,6 +84,33 @@ class AppReview(BaseModel):
                 items.append(safe)
         return items
 
+    @classmethod
+    def compute_rating_stats(cls, records: Any) -> tuple[Optional[float], int]:
+        """Safely compute (rating_avg, rating_count) from raw review records,
+        tolerating missing 'score' fields and malformed records without raising KeyError."""
+        if not records or isinstance(records, (str, bytes)):
+            return None, 0
+        if isinstance(records, Mapping):
+            records = records.values()
+        try:
+            iterator = iter(records)
+        except TypeError:
+            return None, 0
+        scores: List[float] = []
+        for r in iterator:
+            if isinstance(r, cls):
+                scores.append(r.score)
+            elif isinstance(r, Mapping):
+                score_val = r.get('score')
+                if score_val is not None:
+                    try:
+                        scores.append(max(0.0, min(5.0, float(score_val))))
+                    except (TypeError, ValueError):
+                        pass
+        if not scores:
+            return None, 0
+        return sum(scores) / len(scores), len(scores)
+
 
 class AuthStep(BaseModel):
     name: str
