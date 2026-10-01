@@ -43,6 +43,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
+from utils.conversations.onopen_translation import translate_open_page
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
     merge_typesense_page_with_transcript_hits,
@@ -84,6 +85,7 @@ from utils.conversations.search import (
     clamp_conversation_search_pagination,
     conversation_matches_date_range,
     conversation_matches_speaker,
+    browse_conversations_by_speaker,
     parse_exact_conversation_reference,
     search_conversations,
 )
@@ -981,6 +983,9 @@ def get_conversation_by_id(
     source: Optional[str] = Query(None, description="Optional provenance constraint for a detail read"),
     include_discarded: bool = Query(True),
     uid: str = Depends(auth.get_current_user_uid),
+    include_translations: bool = Query(False),
+    translation_cursor: Optional[str] = Query(None),
+    response: Response = None,
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
@@ -997,6 +1002,18 @@ def get_conversation_by_id(
         conversation = _enrich_deferred_conversation(uid, conversation)
     else:
         _dispatch_first_open_work(uid, conversation)
+    if include_translations is True:
+        try:
+            conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail='Invalid translation cursor') from error
+        except Exception as error:
+            logger.error('On-open translation unavailable type=%s', type(error).__name__)
+            translation_status, next_cursor = 'unavailable', None
+        if response is not None:
+            response.headers['X-Translation-Status'] = translation_status
+            if next_cursor is not None:
+                response.headers['X-Translation-Cursor'] = next_cursor
     return conversation
 
 
@@ -1966,6 +1983,31 @@ def search_conversations_endpoint(
             'current_page': exact_page,
             'per_page': exact_per_page,
         }
+
+    if search_request.speaker_id and not (search_request.query or '').strip():
+        # Browsing one speaker's conversations: Typesense cannot filter by speaker, so walk Firestore
+        # (a post-filter over Typesense's first page only ever found the latest 20 conversations).
+        browse_page, browse_per_page = clamp_conversation_search_pagination(
+            search_request.page, search_request.per_page
+        )
+        include_discarded = bool(search_request.include_discarded)
+        start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
+        end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
+        browse_results = browse_conversations_by_speaker(
+            lambda limit, offset: conversations_db.get_conversations_without_photos(
+                uid,
+                limit=limit,
+                offset=offset,
+                include_discarded=include_discarded,
+                start_date=start_dt,
+                end_date=end_dt,
+            ),
+            search_request.speaker_id,
+            page=browse_page,
+            per_page=browse_per_page,
+        )
+        redact_conversations_for_list(browse_results['items'])
+        return browse_results
 
     try:
         search_results = search_conversations(

@@ -546,12 +546,30 @@ def _cached_anthropic_chat(model: str, api_key: str, ctor_kwargs: Dict[str, Any]
 
 
 def _create_byok_client(
-    model: str, provider: str, byok_key: str, streaming: bool = False, feature: str = ''
+    model: str,
+    provider: str,
+    byok_key: str,
+    streaming: bool = False,
+    feature: str = '',
+    request_timeout: float | None = None,
+    max_retries: int | None = None,
 ) -> Optional[BaseChatModel]:
-    """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
+    """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider.
+
+    Callers that need a bounded transport deadline (e.g. viewed-lane translation)
+    pass request_timeout/max_retries explicitly; these override the chat-agent
+    defaults. The cache key includes ctor kwargs, so bounded and default clients
+    never collide.
+    """
     callback_provider = _effective_byok_provider(model, provider)
     kwargs: Dict[str, Any] = _with_llm_callbacks(
-        {'request_timeout': 120, 'max_retries': 1}, callback_provider, model=model, feature=feature
+        {
+            'request_timeout': 120 if request_timeout is None else request_timeout,
+            'max_retries': 1 if max_retries is None else max_retries,
+        },
+        callback_provider,
+        model=model,
+        feature=feature,
     )
     if supports_cache_retention(model):
         kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
@@ -781,7 +799,9 @@ def get_llm(
             feature=feature,
         )
     elif byok_key:
-        byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
+        byok_client = _create_byok_client(
+            model, provider, byok_key, streaming, feature, request_timeout=request_timeout, max_retries=max_retries
+        )
         result = (
             byok_client
             if byok_client is not None

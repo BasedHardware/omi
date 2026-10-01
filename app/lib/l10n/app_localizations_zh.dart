@@ -9911,12 +9911,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusUnsupportedAudio => '无法读取音频，无法同步';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11295,6 +11289,612 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get searchPartialFailure => '部分结果无法加载';
+
+  @override
+  String get peopleSearchPlaceholder => '搜索人物';
+
+  @override
+  String get peopleNotHeardYet => '尚未听过';
+
+  @override
+  String get peopleRecent => '最近';
+
+  @override
+  String get deletePeopleMessage => '这将删除他们的声音样本，且无法撤销。他们在过往对话中的发言将变为未命名的说话人。';
+
+  @override
+  String get personTalkTime => '说话时长';
+
+  @override
+  String get personLastHeard => '最近一次听到';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 个人？',
+      one: '删除 1 个人？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => '需要声音';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 人',
+      one: '1 人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '没有匹配的人';
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
+  String get voiceRecognitionSettings => '声音识别';
+
+  @override
+  String get greetingMorning => '早上好';
+
+  @override
+  String get greetingAfternoon => '下午好';
+
+  @override
+  String get greetingEvening => '晚上好';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting，$name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => '你想知道什么？';
+
+  @override
+  String get askSuggestDecide => '我今天决定了什么？';
+
+  @override
+  String get askSuggestOwe => '我还欠别人什么？';
+
+  @override
+  String get askSuggestNotice => 'Omi 注意到了什么？';
+
+  @override
+  String get pastChats => '过往聊天';
+
+  @override
+  String get newChat => '新聊天';
+
+  @override
+  String get startFresh => '重新开始';
+
+  @override
+  String get noPastChats => '你和 Omi 的聊天会显示在这里。';
+
+  @override
+  String get deleteChatQuestion => '删除这个聊天？';
+
+  @override
+  String get deleteChatMessage => '它会从过往聊天中永久消失。';
+
+  @override
+  String get deleteChat => '删除聊天';
+
+  @override
+  String get appsAskWith => '用这些向 Omi 提问';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '今天有 $count 段对话。',
+      one: '今天有 1 段对话。',
+      zero: '今天还没有对话。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => '屏幕上显示的内容';
+
+  @override
+  String get meetingScreenshotFallbackCaption => '本次会议的屏幕截图';
+
+  @override
+  String get deleteMeetingScreenshotTitle => '删除屏幕截图？';
+
+  @override
+  String get deleteMeetingScreenshotMessage => '这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。';
+
+  @override
+  String get conversationSummaryFailed => '摘要生成失败';
+
+  @override
+  String get reconnectionsRecent => '重新连接（过去 7 天）';
+
+  @override
+  String get failedConnections => '连接失败';
+
+  @override
+  String get failedConnectionsRecent => '连接失败（过去 7 天）';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '配对以来 $count';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => '低可信度';
+
+  @override
+  String get peopleFilterPinned => '已置顶';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个已置顶',
+      one: '1 个已置顶',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => '已确认';
+
+  @override
+  String get confidenceLikely => '可能';
+
+  @override
+  String get confidenceUnverified => '未验证';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return '可信度：$level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '你标记过 $count 次',
+      one: '你标记过 1 次',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '在 $count 条建议中被选中',
+      one: '在 1 条建议中被选中',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '你确认过 $count 次匹配',
+      one: '你确认过 1 次匹配',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => '仅自动匹配，从未确认';
+
+  @override
+  String get confidenceReasonNeverConfirmed => '从未确认';
+
+  @override
+  String get confidenceReasonCorrected => '你更正了它的匹配';
+
+  @override
+  String get confidenceReasonVoiceReady => '声音已就绪';
+
+  @override
+  String get confidenceReasonNeedsVoice => '需要声音';
+
+  @override
+  String get confidenceReasonNotHeard => '尚未听到';
+
+  @override
+  String get confidenceSheetTitle => '可信度';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi 能识别 $name 的声音，而且你已确认。';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi 通常能识别 $name 的声音，但你只确认过几次。';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return '你还没有做过任何能佐证 $name 的操作。';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => '依据';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '你在 $count 段对话中标记过',
+      one: '你在 1 段对话中标记过',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '对 $count 条建议回答了“是”',
+      one: '对 1 条建议回答了“是”',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '在 $count 条建议中被选中',
+      one: '在 1 条建议中被选中',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已确认 $count 次自动匹配',
+      one: '已确认 1 次自动匹配',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 次匹配已改给其他人',
+      one: '1 次匹配已改给其他人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 次无人确认的自动匹配',
+      one: '1 次无人确认的自动匹配',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => '声音样本已就绪';
+
+  @override
+  String get evidenceNoVoice => '暂无声音样本';
+
+  @override
+  String get evidenceNotHeard => '尚未在任何对话中听到';
+
+  @override
+  String get evidenceNothing => '你还没有标记或确认过这个人';
+
+  @override
+  String get effectCountsALot => '作用很大';
+
+  @override
+  String get effectCounts => '有作用';
+
+  @override
+  String get effectCountsALittle => '作用较小';
+
+  @override
+  String get effectBarelyCounts => '几乎没作用';
+
+  @override
+  String get effectCountsAgainst => '会降低';
+
+  @override
+  String get effectNeeded => '达到“已确认”所需';
+
+  @override
+  String get confidenceToReachConfirmed => '如何达到“已确认”';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi 还需要 $name 的声音样本。请在开启“记住声音”的情况下进行标记。';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name 已确认。Omi 会继续从每次标记中学习。';
+  }
+
+  @override
+  String get confidenceFootnote => '只有你的回答才会明显提升可信度。仅靠自动匹配几乎不起作用。';
+
+  @override
+  String get personWhyConfidence => '为什么？';
+
+  @override
+  String pinPersonTitle(String name) {
+    return '置顶 $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '保留 $name，并预期对方会出现在你的对话中';
+  }
+
+  @override
+  String get pinPersonHonestLine => '对于相近的匹配，Omi 会请你确认，而不是自行猜测。';
+
+  @override
+  String get pinAction => '置顶';
+
+  @override
+  String get unpinAction => '取消置顶';
+
+  @override
+  String personPinnedToast(String name) {
+    return '已置顶 $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '已取消置顶 $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return '为什么是$level？';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return '删除 $name？';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name 已置顶。其声音样本将被删除，Omi 将不再识别此人，过往转录中也会显示为未命名的说话人。此操作无法撤销。';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return '删除 $name';
+  }
+
+  @override
+  String get selectPeople => '选择人物';
+
+  @override
+  String get cleanUpEllipsis => '清理…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 位 Omi 不确定的人',
+      one: '1 位 Omi 不确定的人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => '多数是听错的名字。查看并移除不真实的那些。';
+
+  @override
+  String get reviewAction => '查看';
+
+  @override
+  String get cleanUpTitle => '清理';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omi 不确定这 $count 个人。多数是从转录中听错的名字。取消勾选你想保留的人。',
+      one: 'Omi 不确定这个人。取消勾选即可保留。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => '已置顶的人物绝不会出现在清理中。';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 人',
+      one: '删除 1 人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已删除 $count 人',
+      one: '已删除 1 人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => '无需清理';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi 目前没有不确定的人。';
+
+  @override
+  String get selectAllSkipsPinned => '“全选”会跳过已置顶的人物。请在其个人页面中逐个删除。';
+
+  @override
+  String get pinnedNotSelectable => '已置顶，无法选择';
+
+  @override
+  String get ignoredVoicesTitle => '已忽略的声音';
+
+  @override
+  String get ignoredVoicesSubtitle => '你标记为“不是真人”的电视、播客及其他声音';
+
+  @override
+  String get ignoredVoicesEmpty => '没有已忽略的声音';
+
+  @override
+  String get restoreAction => '恢复';
+
+  @override
+  String get voiceRestoredToast => 'Omi 可能会再次询问这个声音';
+
+  @override
+  String get speakerTagPromptSomeoneElse => '其他人…';
+
+  @override
+  String get speakerTagPromptNotAPerson => '不是真人';
+
+  @override
+  String get speakerTagPromptNotSureAction => '不确定';
+
+  @override
+  String get speakerTagPromptThatsMeAction => '这是我';
+
+  @override
+  String get speakerTagPromptClosestVoices => '最接近的声音';
+
+  @override
+  String get speakerTagPromptRecentPeople => '你最近交谈过的人';
+
+  @override
+  String get voiceMatchClose => '高度匹配';
+
+  @override
+  String get voiceMatchPossible => '可能匹配';
+
+  @override
+  String get voiceMatchWeak => '匹配度低';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return '声音匹配：$level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => '每次回答都会让 Omi 学会一个声音，并提升此人的可信度。';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '选“是”会提升 $name 的可信度。';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner => '让你自己的声音档案保持精准，这样 Omi 就不会把你认成别人。';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return '已保存为 $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => '已保存为你';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi 不会再询问这个声音';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return '已标记为 $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => '已标记为你';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => '已标记为不是真人';
+
+  @override
+  String get speakerTagPromptRejectedToast => '已移除标记';
+
+  @override
+  String get whoIsItTitle => '这是谁？';
+
+  @override
+  String get newPersonEllipsis => '新建人物…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return '添加“$name”';
+  }
+
+  @override
+  String get everyoneHeader => '所有人';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name？';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => '适用于该说话人的每一行';
+
+  @override
+  String get collapseAction => '收起';
+
+  @override
+  String get speakerTagPromptNotMeAction => '不是我';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '再在 $count 个对话中为对方添加标签。',
+      one: '再在 1 个对话中为对方添加标签。',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get singleTap => '单击';

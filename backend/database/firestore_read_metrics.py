@@ -19,6 +19,7 @@ class FirestoreReadFamily(StrEnum):
     ALL_TIME_USAGE = 'all_time_usage'
     CHAT_QUOTA_MONTHLY_USAGE = 'chat_quota_monthly_usage'
     RELAY_RESPONSE_MONTHLY_COUNT = 'relay_response_monthly_count'
+    SYNC_RECORDING_LINEAGE = 'sync_recording_lineage'
 
 
 class FirestoreReadMode(StrEnum):
@@ -55,6 +56,7 @@ class FirestoreReadSite(StrEnum):
     RAG_HYDRATION = 'rag_hydration'
     TRANSCRIPT_CHUNK_HYDRATION = 'transcript_chunk_hydration'
     USER_DELETION_WIPE_STATUS = 'user_deletion_wipe_status'
+    SMART_MERGE = 'smart_merge'
     UNATTRIBUTED = 'unattributed'
 
 

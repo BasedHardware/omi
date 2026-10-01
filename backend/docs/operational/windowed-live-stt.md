@@ -97,7 +97,10 @@ over sessions with VAD speech, and the `capacity_full` ratio from
 `omi_stt_window_admissions_total{outcome="overflow"}`. Require no sustained
 capacity overflow or no-text increase relative to the control SLI. First-text
 p50 and p95 come from `omi_stt_window_first_text_seconds_bucket`; p95 must
-remain below 30 seconds and p50 must not drift upward through the bake.
+remain below 30 seconds and p50 must not drift upward through the bake. This
+histogram measures from the session's first VAD speech, so sparse quiet gaps
+can push elapsed first-VAD-to-text beyond 12 seconds without indicating a
+stall; the p95 threshold remains the bake gate.
 Compare `omi_stt_window_sessions_active` with the summed process caps, TDT
 POST p50/p95 from `omi_stt_window_post_seconds_bucket`, and
 `DCGM_FI_DEV_GPU_UTIL`/free GPU memory on the Parakeet pool. The same GPUs
@@ -196,16 +199,44 @@ inference plus ingest AGC on 512-sample chunks, or ~5.8–6.2% of one core for e
 continuously active sessions. This excludes HTTP/serialization and other
 listen work and is a local CPU result, not a pod RSS or production p95 measure.
 
-The 60 s cushion absorbs a catch-up burst while one POST is in flight.
-Before its first emitted text, a window leg fails at 12 seconds from the first
-VAD speech mark or after four consecutive speech-containing empty POSTs, whichever
-comes first. The timer also fires during a slow POST. The existing listen death
-monitor selects the next vendor and replays the untranscribed capture from the
-90-second ring; the failed Parakeet leg is excluded for the rest of that session.
-Once text has been emitted, these startup bounds are disarmed. No sentence anchor
-or emitted text is changed. `omi_stt_window_session_outcome_total` retains
+The 60 s cushion absorbs a catch-up burst while one POST is in flight. Before
+its first emitted text, a window leg has a 12-second rescue deadline. The
+deadline is retired after an answered-empty short episode: less than 1 s of
+admitted provider audio followed by at least 5 s of silence. Retirements share
+a cumulative 3.0 s budget of answered-empty admitted audio; only emitted text
+resets it. Once that budget is exhausted, the deadline remains armed. The
+timer also fires during a slow POST or after four consecutive speech-containing
+empty POSTs, whichever comes first. The existing listen death monitor selects
+the next vendor and replays the untranscribed capture from the 90-second ring;
+failover happens at most once per session, and the failed Parakeet leg is
+excluded for the rest of that session. Once text has been emitted, these
+startup bounds are disarmed. No sentence anchor or emitted text is changed.
+`omi_stt_window_session_outcome_total` retains
 `outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
 the matching recovered failover uses the same reason on `omi_fallback_total`.
+The 90-second replay ring follows the window's last emitted sentence anchor.
+The accepted-send map translates that provider anchor to a capture sample, so
+VAD-gated gaps cannot shift the cut. Audio before the anchor is already text;
+speech from the anchor onward stays available even while a POST is in flight.
+The ring never evicts that pending span solely because capture time passed.
+Speech-free capture can still roll off, and the current chunk must fit. The
+`omi_stt_window_replay_safe_trims_total` counter records actual anchor and
+speech-free trims. If pending audio itself exceeds the ring, the leg fails
+with `capacity_full` and replays from the anchor onto the next vendor.
+The window socket separately retains PCM from its POST anchor. Its VAD speech
+spans are pruned on each POST-anchor advance; rapid speech/silence toggles
+coalesce the closest adjacent spans at the 1,024-entry bound rather than
+ending an otherwise healthy session. Coalescing retains every speech sample
+and may conservatively include the short silence between two spans. The PCM
+buffer's 60-second bound still fails over when un-emitted audio outgrows it.
+Near the 60-second PCM buffer limit, a 24-second context with a short emitted
+prefix followed by a long unfinished TDT segment is forced out if the prefix
+would advance the anchor by less than one 6-second pace. Earlier windows keep
+their sentence boundary, and windows with enough progress still hold the last
+segment. This extends the forced cut already used for one unfinished segment.
+Fallback logs keep `reason=capacity_full` and add a bounded `subtype` of
+`buffer_cap`, `replay_ring_cap`, or `admission` (or `unknown`); the shared
+fallback metric gains no new label.
 Growing windows re-post overlapping context. A minimum 6 s interval between
 POST starts bounds sustained requests to eight per listen pod per 6 s, with
 up to 216–320 synchronized sessions fleet-wide at the current pod count.
@@ -327,7 +358,12 @@ budget/quota and authentication refusals at the provider boundary;
 `omi_stt_window_admissions_total{outcome}`, `omi_stt_window_posts_total{outcome}`
 (success/empty/error/cancelled/queue_timeout), `omi_stt_window_post_seconds`,
 `omi_stt_window_context_seconds` (posted context duration), and
-`omi_stt_window_forced_cuts_total` expose TDT load. `empty` means the posted
+`omi_stt_window_forced_cuts_total` expose TDT load. The forced-cut counter includes
+held tails cut at max context or when un-emitted capture reaches two thirds of
+the 90-second replay ring. The latter is measured on capture time: VAD can admit
+less audio to the provider while the replay ring still protects the full capture.
+If a POST stalls or returns no usable text, the ring remains strict and fails
+over before un-emitted audio is evicted. `empty` means the posted
 context contained VAD speech and the model returned no text — not "we held the
 last sentence". No UID, transcript, URL or exception text is a metric label.
 Non-terminal configured-chain skips and failed legs emit

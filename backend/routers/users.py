@@ -637,9 +637,20 @@ def get_single_person(
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
+def get_all_people(
+    include_speech_samples: bool = True,
+    include_stats: bool = False,
+    uid: str = Depends(auth.get_current_user_uid),
+):
     logger.info(f'get_all_people {include_speech_samples}')
     people = Person.deserialize_many_safe(get_people(uid))
+    if include_stats and people:
+        from utils.people_stats import apply_people_stats, collect_people_stats
+
+        stats = collect_people_stats(
+            lambda limit, offset: conversations_db.get_conversations_without_photos(uid, limit=limit, offset=offset)
+        )
+        apply_people_stats(people, stats)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):

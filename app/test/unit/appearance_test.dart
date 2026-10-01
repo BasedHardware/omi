@@ -16,6 +16,11 @@ import 'package:omi/ui/omi_tokens.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('the palette starts light before the appearance provider resolves', () {
+    // The app is light until someone picks Dark or System; the first frame must not flash dark.
+    expect(OmiColors.active, OmiPalette.light);
+  });
+
   test('appearance preference defaults to Light and round trips', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();

@@ -105,8 +105,18 @@ runs:
           --region=${{ inputs.region }} \
           --project=${{ inputs.project_id }} \
           --format=json > /tmp/backend-sync-live.json
+        # The worker's own live identity decides whether backend-sync's key-credential refs may be
+        # cloned: a worker already moved to a dedicated runtime SA cannot read them. A first deploy
+        # has no live worker, so nothing is dropped.
+        target_args=()
+        if gcloud run services describe ${{ inputs.service }}-sync-backfill \
+          --region=${{ inputs.region }} \
+          --project=${{ inputs.project_id }} \
+          --format=json > /tmp/backend-sync-backfill-live.json 2>/dev/null; then
+          target_args=(--target-json /tmp/backend-sync-backfill-live.json)
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPT_DIR/render_cloud_run_clone_env.py" \
-          --source-json /tmp/backend-sync-live.json >> "$GITHUB_OUTPUT"
+          --source-json /tmp/backend-sync-live.json "${target_args[@]}" >> "$GITHUB_OUTPUT"
 
     - name: Render optional candidate tag
       if: ${{ inputs.mode == 'worker' }}
@@ -130,10 +140,12 @@ runs:
         flags: >-
           --revision-suffix=${{ inputs.revision_suffix }}
           ${{ steps.candidate-tag.outputs.flag }}
-          --min-instances=1
-          --max-instances=30
-          --max=30
-          --concurrency=1
+          --min-instances=2
+          --max-instances=20
+          --max=20
+          --concurrency=2
+          --cpu=2
+          --memory=8Gi
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ inputs.cloud_run_flags }}
         env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
@@ -169,8 +181,9 @@ runs:
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
       run: |
-        # Dispatch concurrency must match the worker's --max-instances and
-        # service-level --max above; the service cap wins when it is lower.
+        # Dispatch concurrency must not exceed the worker's capacity:
+        # --max-instances x --concurrency (service-level --max above; the
+        # service cap wins when it is lower).
         # Offering more than the worker can admit makes Cloud Run reject the
         # surplus with "no available instance", and Cloud Tasks then retries
         # each rejection with exponential backoff. At the previous four-worker

@@ -10041,12 +10041,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'อ่านเสียงไม่ได้ — ซิงค์ไม่ได้';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11440,6 +11434,616 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'โหลดผลลัพธ์บางส่วนไม่ได้';
+
+  @override
+  String get peopleSearchPlaceholder => 'ค้นหาบุคคล';
+
+  @override
+  String get peopleNotHeardYet => 'ยังไม่เคยได้ยิน';
+
+  @override
+  String get peopleRecent => 'ล่าสุด';
+
+  @override
+  String get deletePeopleMessage =>
+      'การดำเนินการนี้จะลบตัวอย่างเสียงของบุคคลนั้นและย้อนกลับไม่ได้ คำพูดในบทสนทนาที่ผ่านมาจะกลายเป็นผู้พูดที่ไม่มีชื่อ';
+
+  @override
+  String get personTalkTime => 'เวลาที่พูด';
+
+  @override
+  String get personLastHeard => 'ได้ยินล่าสุด';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ลบ $count คนหรือไม่?',
+      one: 'ลบ 1 คนหรือไม่?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'ต้องการเสียง';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count คน',
+      one: '1 คน',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'ไม่พบบุคคลที่ตรงกัน';
+
+  @override
+  String get deselectAll => 'ยกเลิกการเลือกทั้งหมด';
+
+  @override
+  String get voiceRecognitionSettings => 'การจดจำเสียง';
+
+  @override
+  String get greetingMorning => 'สวัสดีตอนเช้า';
+
+  @override
+  String get greetingAfternoon => 'สวัสดีตอนบ่าย';
+
+  @override
+  String get greetingEvening => 'สวัสดีตอนเย็น';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting คุณ$name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'อยากรู้อะไร';
+
+  @override
+  String get askSuggestDecide => 'วันนี้ฉันตัดสินใจอะไรบ้าง';
+
+  @override
+  String get askSuggestOwe => 'ฉันยังค้างอะไรใครอยู่บ้าง';
+
+  @override
+  String get askSuggestNotice => 'Omi สังเกตเห็นอะไร';
+
+  @override
+  String get pastChats => 'แชตที่ผ่านมา';
+
+  @override
+  String get newChat => 'แชตใหม่';
+
+  @override
+  String get startFresh => 'เริ่มใหม่';
+
+  @override
+  String get noPastChats => 'แชตของคุณกับ Omi จะแสดงที่นี่';
+
+  @override
+  String get deleteChatQuestion => 'ลบแชตนี้ไหม';
+
+  @override
+  String get deleteChatMessage => 'แชตนี้จะหายไปจากแชตที่ผ่านมาถาวร';
+
+  @override
+  String get deleteChat => 'ลบแชต';
+
+  @override
+  String get appsAskWith => 'ถาม Omi ด้วย';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'วันนี้มี $count บทสนทนา',
+      one: 'วันนี้มี 1 บทสนทนา',
+      zero: 'วันนี้ยังไม่มีบทสนทนา',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'สิ่งที่อยู่บนหน้าจอ';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'ภาพหน้าจอจากการประชุมนี้';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'ลบภาพหน้าจอหรือไม่';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้';
+
+  @override
+  String get conversationSummaryFailed => 'สร้างสรุปไม่สำเร็จ';
+
+  @override
+  String get reconnectionsRecent => 'การเชื่อมต่อใหม่ (7 วันที่ผ่านมา)';
+
+  @override
+  String get failedConnections => 'การเชื่อมต่อที่ล้มเหลว';
+
+  @override
+  String get failedConnectionsRecent => 'การเชื่อมต่อที่ล้มเหลว (7 วันที่ผ่านมา)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count ตั้งแต่จับคู่';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'ความมั่นใจต่ำ';
+
+  @override
+  String get peopleFilterPinned => 'ปักหมุดแล้ว';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ปักหมุด $count คน',
+      one: 'ปักหมุด 1 คน',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'ยืนยันแล้ว';
+
+  @override
+  String get confidenceLikely => 'น่าจะใช่';
+
+  @override
+  String get confidenceUnverified => 'ยังไม่ยืนยัน';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'ความมั่นใจ: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'คุณระบุชื่อ $count ครั้ง',
+      one: 'คุณระบุชื่อ 1 ครั้ง',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'เลือกในคำแนะนำ $count รายการ',
+      one: 'เลือกในคำแนะนำ 1 รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'คุณยืนยันการจับคู่ $count รายการ',
+      one: 'คุณยืนยันการจับคู่ 1 รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'จับคู่อัตโนมัติเท่านั้น ยังไม่เคยยืนยัน';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'ยังไม่เคยยืนยัน';
+
+  @override
+  String get confidenceReasonCorrected => 'คุณแก้ไขการจับคู่แล้ว';
+
+  @override
+  String get confidenceReasonVoiceReady => 'มีเสียงแล้ว';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'ต้องการเสียง';
+
+  @override
+  String get confidenceReasonNotHeard => 'ยังไม่เคยได้ยิน';
+
+  @override
+  String get confidenceSheetTitle => 'ความมั่นใจ';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi จำเสียงของ $name ได้ และคุณยืนยันแล้ว';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'โดยทั่วไป Omi จำเสียงของ $name ได้ แต่คุณยืนยันเพียงไม่กี่ครั้ง';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'ยังไม่มีสิ่งที่คุณทำที่ยืนยัน $name';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'หลักฐาน';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'คุณระบุชื่อใน $count บทสนทนา',
+      one: 'คุณระบุชื่อใน 1 บทสนทนา',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ตอบใช่ใน $count คำแนะนำ',
+      one: 'ตอบใช่ใน 1 คำแนะนำ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'เลือกในคำแนะนำ $count รายการ',
+      one: 'เลือกในคำแนะนำ 1 รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ยืนยันการจับคู่อัตโนมัติ $count รายการ',
+      one: 'ยืนยันการจับคู่อัตโนมัติ 1 รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ย้ายการจับคู่ $count รายการไปยังคนอื่น',
+      one: 'ย้ายการจับคู่ 1 รายการไปยังคนอื่น',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'การจับคู่อัตโนมัติ $count รายการที่ยังไม่มีใครยืนยัน',
+      one: 'การจับคู่อัตโนมัติ 1 รายการที่ยังไม่มีใครยืนยัน',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'ตัวอย่างเสียงพร้อมแล้ว';
+
+  @override
+  String get evidenceNoVoice => 'ยังไม่มีตัวอย่างเสียง';
+
+  @override
+  String get evidenceNotHeard => 'ยังไม่เคยได้ยินในบทสนทนาใด';
+
+  @override
+  String get evidenceNothing => 'คุณยังไม่ได้ระบุชื่อหรือยืนยัน';
+
+  @override
+  String get effectCountsALot => 'มีน้ำหนักมาก';
+
+  @override
+  String get effectCounts => 'มีน้ำหนัก';
+
+  @override
+  String get effectCountsALittle => 'มีน้ำหนักเล็กน้อย';
+
+  @override
+  String get effectBarelyCounts => 'แทบไม่มีน้ำหนัก';
+
+  @override
+  String get effectCountsAgainst => 'ลดความมั่นใจ';
+
+  @override
+  String get effectNeeded => 'จำเป็นสำหรับระดับยืนยันแล้ว';
+
+  @override
+  String get confidenceToReachConfirmed => 'เพื่อให้ถึงระดับยืนยันแล้ว';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi ต้องมีตัวอย่างเสียงของ $name ด้วย ระบุชื่อขณะเปิด “จดจำเสียง” ไว้';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name ยืนยันแล้ว Omi จะเรียนรู้จากทุกครั้งที่คุณระบุชื่อ';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'มีแค่คำตอบของคุณที่เปลี่ยนความมั่นใจได้มาก การจับคู่อัตโนมัติอย่างเดียวแทบไม่มีน้ำหนัก';
+
+  @override
+  String get personWhyConfidence => 'ทำไม?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'ปักหมุด $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'เก็บ $name ไว้ และคาดว่าจะเจอในบทสนทนาของคุณ';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi จะขอให้คุณยืนยันการจับคู่ที่ใกล้เคียงแทนการเดา';
+
+  @override
+  String get pinAction => 'ปักหมุด';
+
+  @override
+  String get unpinAction => 'เลิกปักหมุด';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'ปักหมุด $name แล้ว';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'เลิกปักหมุด $name แล้ว';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'ทำไมถึงเป็น $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'ลบ $name ไหม';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name ถูกปักหมุดอยู่ ตัวอย่างเสียงจะถูกลบ Omi จะไม่จำเสียงนี้อีก และทรานสคริปต์เก่าจะแสดงเป็นผู้พูดไม่ระบุชื่อ การกระทำนี้ย้อนกลับไม่ได้';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'ลบ $name';
+  }
+
+  @override
+  String get selectPeople => 'เลือกบุคคล';
+
+  @override
+  String get cleanUpEllipsis => 'ล้างรายการ…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count คนที่ Omi ไม่แน่ใจ',
+      one: '1 คนที่ Omi ไม่แน่ใจ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'ส่วนใหญ่เป็นชื่อที่ฟังผิด ตรวจดูแล้วลบชื่อที่ไม่ใช่ของจริงออก';
+
+  @override
+  String get reviewAction => 'ตรวจดู';
+
+  @override
+  String get cleanUpTitle => 'ล้างรายการ';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi ไม่แน่ใจเกี่ยวกับ $count คนนี้ ส่วนใหญ่เป็นชื่อที่ฟังผิดจากทรานสคริปต์ เอาเครื่องหมายถูกออกจากคนที่ต้องการเก็บไว้',
+      one: 'Omi ไม่แน่ใจเกี่ยวกับคนนี้ เอาเครื่องหมายถูกออกหากต้องการเก็บไว้',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'คนที่ปักหมุดจะไม่ถูกรวมในการล้างรายการ';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ลบ $count คน',
+      one: 'ลบ 1 คน',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ลบ $count คนแล้ว',
+      one: 'ลบ 1 คนแล้ว',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'ไม่มีอะไรให้ล้าง';
+
+  @override
+  String get cleanUpNothingMessage => 'ตอนนี้ Omi ไม่มีคนที่ไม่แน่ใจ';
+
+  @override
+  String get selectAllSkipsPinned => 'เลือกทั้งหมดจะข้ามคนที่ปักหมุด ลบทีละคนได้จากหน้าของคนนั้น';
+
+  @override
+  String get pinnedNotSelectable => 'ปักหมุดอยู่ เลือกไม่ได้';
+
+  @override
+  String get ignoredVoicesTitle => 'เสียงที่ละเว้น';
+
+  @override
+  String get ignoredVoicesSubtitle => 'ทีวี พอดแคสต์ และเสียงอื่นที่คุณระบุว่าไม่ใช่คน';
+
+  @override
+  String get ignoredVoicesEmpty => 'ไม่มีเสียงที่ละเว้น';
+
+  @override
+  String get restoreAction => 'กู้คืน';
+
+  @override
+  String get voiceRestoredToast => 'Omi อาจถามเกี่ยวกับเสียงนี้อีก';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'คนอื่น…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'ไม่ใช่คน';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'ไม่แน่ใจ';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'นี่คือฉัน';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'เสียงที่ใกล้เคียงที่สุด';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'คนที่คุณคุยด้วยล่าสุด';
+
+  @override
+  String get voiceMatchClose => 'ใกล้เคียงมาก';
+
+  @override
+  String get voiceMatchPossible => 'อาจตรงกัน';
+
+  @override
+  String get voiceMatchWeak => 'ตรงกันน้อย';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'การจับคู่เสียง: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'ทุกคำตอบสอนเสียงให้ Omi และเพิ่มความมั่นใจของคนนั้น';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'ตอบใช่จะเพิ่มความมั่นใจของ $name';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner => 'ช่วยให้โปรไฟล์เสียงของคุณแม่นยำ Omi จะได้ไม่เรียกคุณเป็นคนอื่น';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'บันทึกเป็น $name แล้ว';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'บันทึกเป็นคุณแล้ว';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi จะไม่ถามเกี่ยวกับเสียงนี้อีก';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'ระบุเป็น $name แล้ว';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'ระบุเป็นคุณแล้ว';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'ทำเครื่องหมายว่าไม่ใช่คนแล้ว';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'เอาป้ายชื่อออกแล้ว';
+
+  @override
+  String get whoIsItTitle => 'ใครกันนะ?';
+
+  @override
+  String get newPersonEllipsis => 'บุคคลใหม่…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'เพิ่ม “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'ทุกคน';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'ใช้กับทุกบรรทัดจากผู้พูดคนนี้';
+
+  @override
+  String get collapseAction => 'ย่อ';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'ไม่ใช่ฉัน';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ติดป้ายชื่อคนนี้ในการสนทนาอีก $count รายการ',
+      one: 'ติดป้ายชื่อคนนี้ในการสนทนาอีก 1 รายการ',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get singleTap => 'แตะครั้งเดียว';

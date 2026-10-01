@@ -139,6 +139,8 @@ env:
         # this, a pusher rollout that races the backend lane's first ConfigMap
         # write fails to start instead of starting dark.
         optional: true
+  - name: BUCKET_SCREEN_FRAMES
+    value: "based-hardware-dev-screen-frames"
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles-dev"
   - name: GITHUB_TOKEN
@@ -194,6 +196,10 @@ env:
     value: "true"
   - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
     value: "true"
+  - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
+    value: "true"
+  - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
+    value: "25"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED

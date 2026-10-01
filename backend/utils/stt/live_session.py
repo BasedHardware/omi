@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import os
 import time
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_rollout import window_allocation, window_language_supported
+from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, mode as routing_mode
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
@@ -329,10 +330,69 @@ class LiveLegSocket(STTSocket):
         self._health_close: Callable[[], None] = lambda: None
         record_live_stt_socket_open(service.value)
         if window:
-            from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC
+            from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC, WindowedParakeetSocket
 
+            if isinstance(raw, WindowedParakeetSocket):
+                raw.set_replay_progress_callback(self._trim_window_replay_to_anchor)
             if WINDOW_INGEST_AGC:
                 self._ingest_gain = SessionPcmGain()
+
+    def window_replay_anchor_sample(self) -> int | None:
+        from utils.stt.parakeet_window import WindowedParakeetSocket
+
+        if not isinstance(self.raw, WindowedParakeetSocket) or self._send_tracker is None:
+            return None
+        provider_sample = self.raw.replay_anchor_sample()
+        if provider_sample is None:
+            return None
+        return self._send_tracker.send_map.map_sample(provider_sample)
+
+    def window_replay_pending_sample(self) -> int | None:
+        boundary = getattr(self.raw, 'replay_pending_sample', None)
+        if not self.window or self._send_tracker is None or not callable(boundary):
+            return None
+        sample = cast(Callable[[], int | None], boundary)()
+        return self._send_tracker.send_map.map_sample(sample) if sample is not None else None
+
+    def window_replay_accounted_span(self) -> tuple[int, int] | None:
+        boundary = getattr(self.raw, 'replay_accounted_span', None)
+        if not self.window or self._send_tracker is None or not callable(boundary):
+            return None
+        span = cast(Callable[[], tuple[int, int] | None], boundary)()
+        if span is None:
+            return None
+        # Map the last included sample, avoiding the next accepted span across
+        # a gated gap at a provider boundary. An evicted start keeps more audio.
+        first = self._send_tracker.send_map.map_sample(span[0])
+        last = self._send_tracker.send_map.map_sample(span[1] - 1)
+        if last is None:
+            return None
+        return (0 if first is None else first, last + 1)
+
+    def window_replay_diagnostics(self, first: int, end: int, projected_samples: int) -> ReplayLagDiagnostics | None:
+        from utils.stt.parakeet_window import WindowedParakeetSocket
+
+        if not isinstance(self.raw, WindowedParakeetSocket) or self._send_tracker is None:
+            return None
+        send_map = self._send_tracker.send_map
+        admitted = send_map.accepted_samples_in_capture_range(first, end)
+        rate = send_map.provider_sample_rate
+        return self.raw.replay_diagnostics(projected_samples / rate, admitted / rate)
+
+    @property
+    def replay_lag_diagnostics(self) -> ReplayLagDiagnostics | None:
+        return getattr(self.raw, 'replay_lag_diagnostics', None)
+
+    @property
+    def first_text_diagnostics(self) -> FirstTextDeadlineDiagnostics | None:
+        return getattr(self.raw, 'first_text_diagnostics', None)
+
+    @property
+    def capacity_subtype(self) -> str | None:
+        return getattr(self.raw, 'capacity_subtype', None)
+
+    def _trim_window_replay_to_anchor(self) -> None:
+        trim_window_replay_to_anchor(self.session.receiver._window_ring(), self)
 
     @property
     def is_connection_dead(self) -> bool:
@@ -459,7 +519,7 @@ class LiveLegSocket(STTSocket):
                 self.finish()
                 self._dead = True
                 return False
-            if output is not None and output.should_finalize:
+            if output is not None and output.should_finalize and not self.window:
                 self.raw.finalize()
         except Exception:
             self._dead = True
@@ -469,6 +529,8 @@ class LiveLegSocket(STTSocket):
             self._send_tracker.send_path = 'managed_chain'
             self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
+        if self.window and output is not None and isinstance(self.raw, WindowedParakeetSocket):
+            self.raw.observe_capture(output.is_speech, duration)
         self._seconds += duration
         speech_ms = self.gate.consume_speech_ms_delta() if self.gate is not None else 0
         if not self._replaying:

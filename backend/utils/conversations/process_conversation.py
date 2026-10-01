@@ -97,6 +97,7 @@ from utils.conversations.relevance_io import (
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
+    clear_summary_retryable,
     client_processing_mutation,
     omit_null_processing_state,
     sanitize_untrusted_provenance_field,
@@ -426,8 +427,13 @@ def _get_structured(
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
     relevance_observer: Optional[Callable[[RelevanceDecision], None]] = None,
+    recovery_transcript_decoded: bool = True,
 ) -> Tuple[Structured, bool]:
     try:
+        if trigger is ProcessingTrigger.SERVER_RECOVERY and not recovery_transcript_decoded:
+            # An unreadable stored blob is never evidence of an empty capture.
+            # Keep the pre-discard typed minimum failure before persistence.
+            return Structured(), False
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
@@ -468,7 +474,7 @@ def _get_structured(
                     roster: Optional[MeetingRoster] = None
                     meeting_context_block: Optional[str] = None
                     if _meeting_notes_rich_context_enabled():
-                        roster, meeting_context_block, _desktop_capture = rich_notes_inputs(
+                        roster, meeting_context_block, _desktop_capture, _frames = rich_notes_inputs(
                             uid,
                             conversation,
                             calendar_context,
@@ -578,10 +584,11 @@ def _get_structured(
         # Only described photos reach the model (ConversationPhoto.photos_as_string).
         has_described_photos = any((photo.description or '').strip() for photo in main_conv.photos or [])
         if trigger is ProcessingTrigger.SERVER_RECOVERY and recovery_minimum_terminal_enabled():
-            # Recovery must preserve the row, but a clear rule-level discard
-            # would never reach the notes model during ordinary capture-end
-            # processing. Return a minimum so the worker closes the job with
-            # the transcript visible, without paying for a futile LLM call.
+            # A clear rule-level discard (empty transcript, filler, mic check)
+            # is what ordinary capture-end processing would have concluded, so
+            # recovery records the same verdict as an explicit server-recovery
+            # discard instead of surfacing an untitled row with nothing in it.
+            # Discard stays restorable (Show discarded), and no paid LLM call runs.
             ordinary = decide_relevance(
                 trigger=ProcessingTrigger.CAPTURE_END,
                 texts=[segment.text for segment in segments],
@@ -599,7 +606,11 @@ def _get_structured(
             )
             if ordinary.discard and ordinary.decided_by == 'rule':
                 logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
-                return Structured(), False
+                if relevance_observer is not None:
+                    relevance_observer(
+                        RelevanceDecision('discard', 'rule', ordinary.reason, ProcessingTrigger.SERVER_RECOVERY)
+                    )
+                return Structured(), True
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).
@@ -646,9 +657,9 @@ def _get_structured(
         if _conversation_notes_v2_enabled():
             roster: Optional[MeetingRoster] = None
             meeting_context_block: Optional[str] = None
-            desktop_capture = False
+            desktop_capture, screen_frames = False, ()
             if _meeting_notes_rich_context_enabled():
-                roster, meeting_context_block, desktop_capture = rich_notes_inputs(
+                roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
                     uid,
                     main_conv,
                     calendar_context,
@@ -682,6 +693,7 @@ def _get_structured(
                     meeting_context=meeting_context_block,
                     rich_context_enabled=roster is not None,
                     roster=roster,
+                    screen_frames=screen_frames,
                 )
             validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
@@ -2370,7 +2382,7 @@ def _terminal_persist_payload(conversation: Conversation) -> dict[str, Any]:
     payload = conversation.dict()
     payload['jit_first_open'] = None
     payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
-    return omit_null_processing_state(strip_client_processing(payload))
+    return clear_summary_retryable(omit_null_processing_state(strip_client_processing(payload)))
 
 
 def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker: bool) -> dict[str, Any]:
@@ -2404,7 +2416,7 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
         payload.pop('processing_state', None)
     else:
         payload['processing_state'] = None
-    return strip_client_processing(payload)
+    return clear_summary_retryable(strip_client_processing(payload))
 
 
 def _store_deterministic_minimum(
@@ -2467,6 +2479,7 @@ def _store_deterministic_minimum(
     conversation.processing_state = ConversationProcessingState(minimum_state) if minimum_state else None
     _attach_client_projection(conversation, client_projection)
     payload = _terminal_persist_payload(conversation)
+    conversation.summary_retryable = None  # a new processing pass answers the dead-letter retry
     apply_relevance(conversation, payload, decision)
     if is_initial_creation and client_projection is not None:
         payload.update(client_processing_mutation(client_projection))
@@ -2682,6 +2695,8 @@ def process_conversation(
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
     speaker_receipt_observer: Callable[[bool], None] | None = None,
+    smart_merge_refresh: tuple[int, str] | None = None,
+    recovery_transcript_decoded: bool = True,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, JIT bypass, and relevance policy together.
@@ -2940,6 +2955,7 @@ def process_conversation(
         trigger=trigger,
         user_kept=user_kept,
         relevance_observer=decisions.append,
+        recovery_transcript_decoded=recovery_transcript_decoded,
     )
     conversation = _get_conversation_obj(
         uid,
@@ -3000,8 +3016,13 @@ def process_conversation(
         # minimum's local_pending); the object the caller returns must agree,
         # not answer the stale pending state back to the client.
         conversation.processing_state = None
+    conversation.summary_retryable = None  # merge-cleared by the payload the same way
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
+    elif smart_merge_refresh is not None:
+        persisted = lifecycle_service.persist_processed_conversation(
+            uid, payload, smart_merge_refresh=smart_merge_refresh
+        )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     report_persistence(persisted, completed=conversation)

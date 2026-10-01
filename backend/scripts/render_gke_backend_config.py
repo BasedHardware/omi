@@ -16,6 +16,7 @@ if str(ROOT / 'backend') not in sys.path:
     sys.path.insert(0, str(ROOT / 'backend'))
 
 from config.free_tier_rollout import validate_free_tier_deploy_value  # noqa: E402
+from scripts.render_backend_runtime_env import require_sync_lineage_rollout  # noqa: E402
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 
@@ -105,6 +106,8 @@ def config_map_entries(env: str, manifest_path: Path = DEFAULT_MANIFEST) -> tupl
     env_config = _as_config_dict(environments.get(env))
     if env_config is None:
         raise ValueError(f'manifest has no environments.{env}')
+
+    require_sync_lineage_rollout(env, env_config)
 
     gke = _as_config_dict(env_config.get('gke')) or {}
     config_map = _as_config_dict(gke.get('config_map'))

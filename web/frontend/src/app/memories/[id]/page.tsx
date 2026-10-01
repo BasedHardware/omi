@@ -1,4 +1,5 @@
 import getSharedMemory from '@/src/actions/memories/get-shared-memory';
+import getSharedScreenshots from '@/src/actions/memories/get-shared-screenshots';
 import Memory from '@/src/components/memories/memory';
 import MemoryHeader from '@/src/components/memories/memory-header';
 import SharedConversationInstallCta, {
@@ -137,7 +138,12 @@ export default async function MemoryPage(props: MemoryPageProps) {
   const searchParams = await props.searchParams;
   const params = await props.params;
   const memoryId = params.id;
-  const memory = await getSharedMemory(memoryId);
+  // Screenshots are fetched per request, never cached: their signed URLs
+  // expire after 60 minutes (see get-shared-screenshots).
+  const [memory, screenshots] = await Promise.all([
+    getSharedMemory(memoryId),
+    getSharedScreenshots(memoryId),
+  ]);
   if (!memory) {
     notFound();
   }
@@ -153,7 +159,7 @@ export default async function MemoryPage(props: MemoryPageProps) {
         <ShareTopbar installHref={installHref} />
         <section className="sn-page">
           <MemoryHeader />
-          <Memory memory={memory} searchParams={searchParams} />
+          <Memory memory={memory} searchParams={searchParams} screenshots={screenshots} />
           <SharedConversationInstallCta openInOmiHref={openInOmiHref} />
           <p className="sn-footer">Captured and summarized by Omi</p>
         </section>

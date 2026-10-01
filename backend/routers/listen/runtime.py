@@ -215,7 +215,14 @@ class ListenSessionRuntime:
         if self.state.active:
             self.spawn(self.asend_event(event), name='message_event')
 
-    def emit_speaker_suggestion(self, speaker_id: int, person_id: str, person_name: str, segment_id: str) -> None:
+    def emit_speaker_suggestion(
+        self,
+        speaker_id: int,
+        person_id: str,
+        person_name: str,
+        segment_id: str,
+        suggested_person_id: Optional[str] = None,
+    ) -> None:
         emit_product_event(
             uid=self.request.uid,
             event='Speaker Identity Proposed',
@@ -238,6 +245,7 @@ class ListenSessionRuntime:
                 ),
                 person_name=person_name,
                 segment_id=segment_id,
+                suggested_person_id=suggested_person_id,
             )
         )
 

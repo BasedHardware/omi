@@ -14,6 +14,48 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          TRANSLATION_DEMAND_SHADOW_ENABLED:
+            value: 'false'
+            category: rollout
+          TRANSLATION_DEMAND_GATE_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONOPEN_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_COHORT_PERCENT:
+            value: '100'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+            value: '50'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CHARS:
+            value: '12000'
+            category: rollout
+          TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+            value: '3'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+            value: '4096'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+            value: '10000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+            value: '1000000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+            value: '4'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -188,6 +230,12 @@ environments:
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
@@ -292,6 +340,9 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -394,12 +445,21 @@ environments:
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omiapi.com:80
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -694,6 +754,48 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            TRANSLATION_DEMAND_SHADOW_ENABLED:
+              value: 'false'
+              category: rollout
+            TRANSLATION_DEMAND_GATE_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONOPEN_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_COHORT_PERCENT:
+              value: '100'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+              value: ''
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+              value: '50'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CHARS:
+              value: '12000'
+              category: rollout
+            TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+              value: '3'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+              value: '4096'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+              value: '10000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+              value: '1000000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+              value: '4'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -727,6 +829,12 @@ environments:
               category: rollout
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
               value: 'true'
+              category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
@@ -1017,6 +1125,12 @@ environments:
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
               value: 'true'
               category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
@@ -1027,6 +1141,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            BUCKET_SCREEN_FRAMES:
+              value: based-hardware-dev-screen-frames
+              category: storage_retention
             TRANSCRIPTION_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -1743,6 +1860,48 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          TRANSLATION_DEMAND_SHADOW_ENABLED:
+            value: 'false'
+            category: rollout
+          TRANSLATION_DEMAND_GATE_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONOPEN_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_COHORT_PERCENT:
+            value: '100'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+            value: '50'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CHARS:
+            value: '12000'
+            category: rollout
+          TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+            value: '3'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+            value: '4096'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+            value: '10000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+            value: '1000000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+            value: '4'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -1843,7 +2002,7 @@ environments:
             value: 'true'
             category: rollout
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-            value: '50'
+            value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
             value: '5'
@@ -1905,15 +2064,21 @@ environments:
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -2027,6 +2192,9 @@ environments:
             category: reliability
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+            category: storage_retention
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
             value: based-hardware
           ACCOUNT_DELETION_DISPATCH_MODE:
@@ -2089,6 +2257,9 @@ environments:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -2127,15 +2298,21 @@ environments:
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -2160,6 +2337,9 @@ environments:
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+            category: storage_retention
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -2322,7 +2502,52 @@ environments:
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
+            SCREEN_FRAME_SIGNING_SECRET:
+              secret: SCREEN_FRAME_SIGNING_SECRET
+              version: latest
           env:
+            TRANSLATION_DEMAND_SHADOW_ENABLED:
+              value: 'false'
+              category: rollout
+            TRANSLATION_DEMAND_GATE_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONOPEN_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_COHORT_PERCENT:
+              value: '100'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+              value: ''
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+              value: '50'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CHARS:
+              value: '12000'
+              category: rollout
+            TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+              value: '3'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+              value: '4096'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+              value: '10000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+              value: '1000000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+              value: '4'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -2346,15 +2571,21 @@ environments:
               category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
@@ -2445,8 +2676,14 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            SCREEN_FRAME_EGRESS_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            BUCKET_SCREEN_FRAMES:
+              value: based-hardware-prod-screen-frames
+              category: storage_retention
             ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
               value: '1'
               category: rollout
@@ -2519,6 +2756,9 @@ environments:
               category: rollout
             CAPTURE_JEV_SHADOW_PERCENT:
               value: '0'
+              category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: rollout
         backend-sync:
           capabilities:
@@ -2643,15 +2883,21 @@ environments:
               category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
-              value: 'false'
+              value: 'true'
             MEETING_NOTES_RICH_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-              value: 'false'
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
@@ -2671,6 +2917,9 @@ environments:
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            BUCKET_SCREEN_FRAMES:
+              value: based-hardware-prod-screen-frames
+              category: storage_retention
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -2723,6 +2972,9 @@ environments:
               category: rollout
             CAPTURE_JEV_SHADOW_PERCENT:
               value: '0'
+              category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: rollout
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -2906,6 +3158,9 @@ environments:
             CAPTURE_JEV_SHADOW_PERCENT:
               value: '0'
               category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
           provisional: true
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -3035,6 +3290,9 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
+              category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: rollout
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH

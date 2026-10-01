@@ -844,6 +844,26 @@ CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
 )
 
 
+# `GET /v1/conversations/count?include_discarded=false&start_date=...&end_date=...`
+# (`get_conversations_count`, added to the mobile app shell in #19730) filters
+# `discarded == False` plus a `created_at` range and runs a `count()` aggregation
+# with no ordering. Firestore serves an aggregation over a range from an index
+# whose range field is ASCENDING, so the list-side `(discarded ASC, created_at
+# DESC)` composite above does not cover it: prod returned FailedPrecondition
+# ("The query requires an index") and the route 500ed. A start-only or end-only
+# range needs the same composite (equality prefix, then the one range field).
+CONVERSATIONS_COUNT_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_count_discarded_created_range',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('created_at', '>=', 'start_date'),
+        FirestoreQueryFilter('created_at', '<=', 'end_date'),
+    ),
+    index_fields=(_asc('discarded'), _asc('created_at'), _asc('__name__')),
+)
+
 MCP_CONVERSATION_CARD_QUERY_SPECS: dict[tuple[bool, bool, bool], FirestoreQuerySpec] = {}
 for _has_categories in (False, True):
     for _has_start_date in (False, True):
@@ -872,6 +892,25 @@ for _has_categories in (False, True):
                 filters=tuple(_filters),
                 index_fields=tuple((*_index_fields, _desc('created_at'), _desc('__name__'))),
             )
+
+# Sync safety-WAL binding: the newest rollover generations of one recording that
+# started before the upload's audio ends (utils/sync/recording_lineage.py).
+SYNC_RECORDING_LINEAGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_recording_lineage',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('external_data.recording_origin_id', '==', 'recording_origin_id'),
+        FirestoreQueryFilter('started_at', '<=', 'started_before'),
+        FirestoreQueryFilter('finished_at', '>=', 'finished_after'),
+    ),
+    index_fields=(
+        _asc('external_data.recording_origin_id'),
+        _desc('started_at'),
+        _desc('finished_at'),
+        _desc('__name__'),
+    ),
+)
 
 ENTITY_TIMELINE_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='conversations_entity_timeline_completed',
@@ -1311,6 +1350,23 @@ DAILY_SUMMARY_RECIPIENTS_QUERY = FirestoreQuerySpec(
 )
 
 
+# Smart merge (utils/conversations/smart_merge.py): the newest visible rows of one
+# source before a just-finished conversation. Same signature as the existing
+# `conversations_discarded_source_status_created` index, so nothing new is provisioned.
+CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY = FirestoreQuerySpec(
+    identifier='conversations_smart_merge_preceding',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('source', '==', 'source'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+        FirestoreQueryFilter('created_at', '<', 'created_before'),
+    ),
+    index_fields=(_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
+)
+
+
 CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     identifier='conversation_photos_name_range_export',
     collection_group='photos',
@@ -1384,7 +1440,9 @@ QUERY_SPECS = (
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
+    CONVERSATIONS_COUNT_CREATED_RANGE_QUERY,
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
+    SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
@@ -1394,6 +1452,7 @@ QUERY_SPECS = (
     DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
     DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
     DAILY_SUMMARY_RECIPIENTS_QUERY,
+    CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

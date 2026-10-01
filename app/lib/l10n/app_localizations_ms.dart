@@ -10129,12 +10129,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio tidak dapat dibaca — tidak boleh disegerakkan';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11537,6 +11531,619 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Sesetengah hasil tidak dapat dimuatkan';
+
+  @override
+  String get peopleSearchPlaceholder => 'Cari orang';
+
+  @override
+  String get peopleNotHeardYet => 'Belum didengar';
+
+  @override
+  String get peopleRecent => 'Terkini';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ini akan mengalih keluar sampel suara mereka dan tidak boleh dibuat asal. Ucapan mereka dalam perbualan lalu menjadi penutur tanpa nama.';
+
+  @override
+  String get personTalkTime => 'Masa bercakap';
+
+  @override
+  String get personLastHeard => 'Terakhir didengar';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Padam $count orang?',
+      one: 'Padam 1 orang?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Perlu Suara';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count orang',
+      one: '1 orang',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Tiada Orang yang Sepadan';
+
+  @override
+  String get deselectAll => 'Nyahpilih Semua';
+
+  @override
+  String get voiceRecognitionSettings => 'Pengecaman Suara';
+
+  @override
+  String get greetingMorning => 'Selamat pagi';
+
+  @override
+  String get greetingAfternoon => 'Selamat petang';
+
+  @override
+  String get greetingEvening => 'Selamat malam';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Apa yang anda ingin tahu?';
+
+  @override
+  String get askSuggestDecide => 'Apa yang saya putuskan hari ini?';
+
+  @override
+  String get askSuggestOwe => 'Apa yang masih saya berhutang kepada orang?';
+
+  @override
+  String get askSuggestNotice => 'Apa yang Omi perasan?';
+
+  @override
+  String get pastChats => 'Sembang lepas';
+
+  @override
+  String get newChat => 'Sembang baharu';
+
+  @override
+  String get startFresh => 'Mula semula';
+
+  @override
+  String get noPastChats => 'Sembang anda dengan Omi dipaparkan di sini.';
+
+  @override
+  String get deleteChatQuestion => 'Padam sembang ini?';
+
+  @override
+  String get deleteChatMessage => 'Ia hilang daripada sembang lepas buat selamanya.';
+
+  @override
+  String get deleteChat => 'Padam sembang';
+
+  @override
+  String get appsAskWith => 'Tanya Omi dengan';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count perbualan hari ini.',
+      one: '1 perbualan hari ini.',
+      zero: 'Tiada perbualan hari ini.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get meetingScreenshotsTitle => 'Apa yang ada di skrin';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Tangkapan skrin daripada mesyuarat ini';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Padam tangkapan skrin?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ini akan mengalih keluar tangkapan skrin daripada nota mesyuarat ini. Tindakan ini tidak boleh dibuat asal.';
+
+  @override
+  String get conversationSummaryFailed => 'Ringkasan gagal';
+
+  @override
+  String get reconnectionsRecent => 'Sambungan semula (7 hari lepas)';
+
+  @override
+  String get failedConnections => 'Sambungan gagal';
+
+  @override
+  String get failedConnectionsRecent => 'Sambungan gagal (7 hari lepas)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count sejak pemasangan';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Keyakinan rendah';
+
+  @override
+  String get peopleFilterPinned => 'Disemat';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count disemat',
+      one: '1 disemat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Disahkan';
+
+  @override
+  String get confidenceLikely => 'Mungkin';
+
+  @override
+  String get confidenceUnverified => 'Belum disahkan';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Keyakinan: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Anda melabel $count kali',
+      one: 'Anda melabel sekali',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dipilih dalam $count cadangan',
+      one: 'Dipilih dalam 1 cadangan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Anda mengesahkan $count padanan',
+      one: 'Anda mengesahkan 1 padanan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Dipadankan secara automatik sahaja, tidak pernah disahkan';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Tidak pernah disahkan';
+
+  @override
+  String get confidenceReasonCorrected => 'Anda membetulkan padanannya';
+
+  @override
+  String get confidenceReasonVoiceReady => 'suara sedia';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'perlukan suara';
+
+  @override
+  String get confidenceReasonNotHeard => 'belum didengar';
+
+  @override
+  String get confidenceSheetTitle => 'Keyakinan';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi mengenali suara $name, dan anda telah mengesahkannya.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi biasanya mengenali suara $name, tetapi anda baru mengesahkannya beberapa kali.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Belum ada apa yang anda lakukan yang menyokong $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Bukti';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dilabel oleh anda dalam $count perbualan',
+      one: 'Dilabel oleh anda dalam 1 perbualan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ya pada $count cadangan',
+      one: 'Ya pada 1 cadangan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dipilih dalam $count cadangan',
+      one: 'Dipilih dalam 1 cadangan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count padanan automatik disahkan',
+      one: '1 padanan automatik disahkan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count padanan dialihkan kepada orang lain',
+      one: '1 padanan dialihkan kepada orang lain',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count padanan automatik yang tiada siapa sahkan',
+      one: '1 padanan automatik yang tiada siapa sahkan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Sampel suara sedia';
+
+  @override
+  String get evidenceNoVoice => 'Belum ada sampel suara';
+
+  @override
+  String get evidenceNotHeard => 'Belum didengar dalam perbualan';
+
+  @override
+  String get evidenceNothing => 'Anda belum melabel atau mengesahkan mereka';
+
+  @override
+  String get effectCountsALot => 'Sangat bernilai';
+
+  @override
+  String get effectCounts => 'Bernilai';
+
+  @override
+  String get effectCountsALittle => 'Sedikit bernilai';
+
+  @override
+  String get effectBarelyCounts => 'Hampir tidak bernilai';
+
+  @override
+  String get effectCountsAgainst => 'Bertentangan';
+
+  @override
+  String get effectNeeded => 'Diperlukan untuk Disahkan';
+
+  @override
+  String get confidenceToReachConfirmed => 'Untuk mencapai Disahkan';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi juga memerlukan sampel suara $name. Labelkan mereka dengan “Ingat suara” dihidupkan.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name telah disahkan. Omi terus belajar daripada setiap label.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Hanya jawapan anda yang banyak mengubah keyakinan. Padanan automatik sahaja hampir tidak dikira.';
+
+  @override
+  String get personWhyConfidence => 'Kenapa?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Semat $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Simpan $name dan jangka mereka dalam perbualan anda';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi akan meminta anda mengesahkan padanan yang hampir tepat dan bukannya meneka.';
+
+  @override
+  String get pinAction => 'Semat';
+
+  @override
+  String get unpinAction => 'Nyahsemat';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name disemat';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name dinyahsemat';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Kenapa $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Padam $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name disemat. Sampel suara mereka dibuang, Omi berhenti mengenali mereka, dan transkrip lama memaparkan mereka sebagai penutur tanpa nama. Tindakan ini tidak boleh dibatalkan.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Padam $name';
+  }
+
+  @override
+  String get selectPeople => 'Pilih orang';
+
+  @override
+  String get cleanUpEllipsis => 'Bersihkan…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count orang yang Omi tidak pasti',
+      one: '1 orang yang Omi tidak pasti',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Kebanyakannya nama yang tersalah dengar. Semak dan buang yang bukan sebenar.';
+
+  @override
+  String get reviewAction => 'Semak';
+
+  @override
+  String get cleanUpTitle => 'Pembersihan';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi tidak pasti tentang $count orang ini. Kebanyakannya nama yang tersalah dengar daripada transkrip. Nyahtanda sesiapa yang anda mahu kekalkan.',
+      one: 'Omi tidak pasti tentang orang ini. Nyahtanda untuk mengekalkannya.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Orang yang disemat tidak pernah disertakan dalam Pembersihan.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Padam $count orang',
+      one: 'Padam 1 orang',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count orang dipadam',
+      one: '1 orang dipadam',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Tiada apa untuk dibersihkan';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi tidak ragu tentang sesiapa sekarang.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Pilih Semua melangkau orang yang disemat. Padamkan mereka satu demi satu dari halaman mereka.';
+
+  @override
+  String get pinnedNotSelectable => 'Disemat, tidak boleh dipilih';
+
+  @override
+  String get ignoredVoicesTitle => 'Suara diabaikan';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcast dan suara lain yang anda tandakan sebagai “Bukan orang”';
+
+  @override
+  String get ignoredVoicesEmpty => 'Tiada suara diabaikan';
+
+  @override
+  String get restoreAction => 'Pulihkan';
+
+  @override
+  String get voiceRestoredToast => 'Omi mungkin bertanya tentang suara ini lagi';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Orang lain…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Bukan orang';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Tidak pasti';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Itu saya';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Suara terdekat';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Orang yang anda bualkan baru-baru ini';
+
+  @override
+  String get voiceMatchClose => 'Padanan rapat';
+
+  @override
+  String get voiceMatchPossible => 'Padanan mungkin';
+
+  @override
+  String get voiceMatchWeak => 'Padanan lemah';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Padanan suara: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify =>
+      'Setiap jawapan mengajar Omi satu suara dan meningkatkan keyakinan terhadap orang itu.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ya meningkatkan keyakinan terhadap $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Memastikan profil suara anda tepat, supaya Omi tidak pernah menamakan anda sebagai orang lain.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Disimpan sebagai $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Disimpan sebagai anda';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi tidak akan bertanya tentang suara ini lagi';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Dilabel sebagai $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Dilabel sebagai anda';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Ditandakan sebagai bukan orang';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Label dibuang';
+
+  @override
+  String get whoIsItTitle => 'Siapa ini?';
+
+  @override
+  String get newPersonEllipsis => 'Orang baharu…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Tambah “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Semua orang';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Terpakai pada setiap baris daripada penutur ini';
+
+  @override
+  String get collapseAction => 'Runtuhkan';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Bukan saya';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Labelkan mereka dalam $count lagi perbualan.',
+      one: 'Labelkan mereka dalam 1 lagi perbualan.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get singleTap => 'Ketik Sekali';

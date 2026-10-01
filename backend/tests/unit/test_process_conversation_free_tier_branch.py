@@ -221,6 +221,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.app_integrations', AutoMockModule('utils.app_integrations'))
     add('utils.conversations.location', AutoMockModule('utils.conversations.location'))
     add('utils.conversations.meeting_receipt', AutoMockModule('utils.conversations.meeting_receipt'))
+    # The finalizer's smart-merge step is off by default; its own tests drive it.
+    smart_merge = add('utils.conversations.smart_merge', AutoMockModule('utils.conversations.smart_merge'))
+    smart_merge.smart_merge_step = AsyncMock(return_value=False)
     add('utils.jit_rollout', AutoMockModule('utils.jit_rollout'))
     add('utils.log_sanitizer', AutoMockModule('utils.log_sanitizer'))
     add('utils.retrieval.frame_request_authority', AutoMockModule('utils.retrieval.frame_request_authority'))
@@ -1533,6 +1536,31 @@ def test_paid_reprocess_merge_clears_stale_local_pending_and_resets_the_object(m
     # The object the caller returns must agree — not answer a stale pending
     # state back to the client on an enriched conversation.
     assert result.processing_state is None
+
+
+# red-proof: drop `conversation.summary_retryable = None` or `clear_summary_retryable` on the
+# enrichment persist → the Retry chip survives a successful user reprocess
+def test_paid_reprocess_clears_a_dead_letter_summary_retryable_marker(monkeypatch, pc) -> None:
+    _disable_flag(monkeypatch, pc)
+    _spy_managed_effects(monkeypatch, pc)
+    monkeypatch.setattr(
+        managed_compute,
+        'authorize_managed_compute',
+        lambda *_a, **_k: _memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
+    )
+    uid = 'retry-uid'
+    conv_id = 'dead-lettered-then-retried'
+    path = ('users', uid, 'conversations', conv_id)
+    store = StrictFirestore({path: {'id': conv_id, 'status': 'completed', 'summary_retryable': True}})
+    payloads = _capture_all_persists(monkeypatch, pc, store=store, path=path)
+    conversation = _existing_desktop(conv_id)
+    conversation.summary_retryable = True
+
+    result = _drive_reprocess(pc, conversation, uid=uid)
+
+    assert payloads[-1]['summary_retryable'] is None
+    assert store.rows[path]['summary_retryable'] is None
+    assert result.summary_retryable is None
 
 
 def test_flag_on_minimum_writes_local_pending_and_a_delivered_projection_stays_absent(monkeypatch, pc) -> None:
