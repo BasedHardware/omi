@@ -43,7 +43,8 @@ struct BatteryTimelineProvider: TimelineProvider {
         let entry = current()
         // 5-minute fallback refresh; the app pushes instant updates via
         // WidgetCenter.shared.reloadAllTimelines on battery or mute state changes.
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 5, to: Date())!
+        let now = Date()
+        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 5, to: now) ?? now
         completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
     }
 }

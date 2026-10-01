@@ -123,6 +123,29 @@ class TestCaptureTimelineExactPosition:
         _, _, anchored = timeline.accept(_pcm(3200), arrival_wall=110.1, arrival_monotonic=0.1)
         assert anchored is False
 
+    def test_compaction_advances_compacted_below_sample_and_fails_closed_in_wall_strict(self):
+        """Monotonically advance compacted_below_sample so wall_strict refuses evicted interior intervals."""
+        timeline = CaptureTimeline(sample_rate=RATE)
+        wall = 1000.0
+        frame = _pcm(1600)
+
+        # Trigger first compaction (> MAX_ANCHORS)
+        for _ in range(70):
+            timeline.accept(frame, arrival_wall=wall + 3.0, arrival_monotonic=wall + 3.0)
+            wall += 4.0
+        assert timeline.compacted_below_sample is not None
+        first_compacted = timeline.compacted_below_sample
+        assert timeline.wall_strict(first_compacted - 100) is None
+
+        # Trigger second compaction
+        for _ in range(70):
+            timeline.accept(frame, arrival_wall=wall + 3.0, arrival_monotonic=wall + 3.0)
+            wall += 4.0
+        assert timeline.compacted_below_sample > first_compacted
+        # Sample evicted during second compaction must fail closed in wall_strict
+        evicted_sample = (first_compacted + timeline.compacted_below_sample) // 2
+        assert timeline.wall_strict(evicted_sample) is None
+
 
 class TestSendMap:
     def test_map_interval_through_preroll_and_skipped_silence(self):
@@ -406,3 +429,12 @@ class TestWallWindowAndCoverage:
     def test_anchor_gap_constant_is_jitter_guard(self):
         # The 2 s trigger is only an initial jitter guard, documented as such.
         assert ANCHOR_GAP_SECONDS == 2.0
+
+
+def test_admitted_capture_seconds_exclude_vad_gaps_and_clip_ring_edges():
+    from utils.audio_timeline import SendMap
+
+    send_map = SendMap(16000)
+    send_map.add_accepted_spans(((0, 16000), (10 * 16000, 16000), (20 * 16000, 16000)))
+    assert send_map.accepted_samples_in_capture_range(8000, 20 * 16000 + 8000) == 2 * 16000
+    assert send_map.accepted_samples_in_capture_range(2 * 16000, 9 * 16000) == 0

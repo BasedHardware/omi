@@ -107,6 +107,9 @@ final class SiriBridge: SiriIndexApi {
     func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void) {
         complete({ try await SiriSnapshotStore.shared.delete(type: type, ids: ids, uid: uid) }, completion: completion)
     }
+    func repairOwnerIndex(uid: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        complete({ try await SiriSnapshotStore.shared.repairOwnerIndex(uid: uid) }, completion: completion)
+    }
     func wipe(completion: @escaping (Result<Int64, Error>) -> Void) {
         Task {
             do { completion(.success(try await SiriSnapshotStore.shared.wipeForAccountTransition())) }
@@ -252,11 +255,11 @@ enum SiriTelemetry {
     }
     static func intent(_ name: String, outcome: String, started: Date) {
         append(kind: "intent", intent: name, outcome: outcome,
-               latencyMs: Int64(max(0, Date().timeIntervalSince(started) * 1000)), entityCounts: 0)
+               latencyMs: CheckedIntegerConversion.int64(max(0, Date().timeIntervalSince(started) * 1000)) ?? 0, entityCounts: 0)
     }
     static func index(outcome: String, started: Date, count: Int) {
         append(kind: "index", intent: "", outcome: outcome,
-               latencyMs: Int64(max(0, Date().timeIntervalSince(started) * 1000)), entityCounts: Int64(count))
+               latencyMs: CheckedIntegerConversion.int64(max(0, Date().timeIntervalSince(started) * 1000)) ?? 0, entityCounts: Int64(count))
     }
     private static func append(kind: String, intent: String, outcome: String,
                                latencyMs: Int64, entityCounts: Int64) {
@@ -265,7 +268,17 @@ enum SiriTelemetry {
         var rows = defaults.array(forKey: key) as? [[String: Any]] ?? []
         rows.append(["uid": uid, "kind": kind, "intent": intent, "outcome": outcome,
                      "latencyMs": latencyMs, "entityCounts": entityCounts])
-        defaults.set(Array(rows.suffix(100)), forKey: key)
+        let records: [[String: PlistValue]] = rows.suffix(100).map { row in
+            var record: [String: PlistValue] = [:]
+            record["uid"] = .string(row["uid"] as? String ?? "")
+            record["kind"] = .string(row["kind"] as? String ?? "")
+            record["intent"] = .string(row["intent"] as? String ?? "")
+            record["outcome"] = .string(row["outcome"] as? String ?? "")
+            record["latencyMs"] = .int64(row["latencyMs"] as? Int64 ?? 0)
+            record["entityCounts"] = .int64(row["entityCounts"] as? Int64 ?? 0)
+            return record
+        }
+        try? SafeDefaults.setPlistRecords(records, forKey: key, in: defaults)
     }
     static func take() -> [SiriTelemetryRecord] {
         guard let defaults, let uid = SiriSession.shared.currentConfig()?.uid else { return [] }
@@ -305,6 +318,7 @@ final class SiriBridge: SiriIndexApi {
     func upsertTasks(uid: String, tasks: [SiriTask], completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func reconcileTasks(uid: String, tasks: [SiriTask], includeCompleted: Bool, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func repairOwnerIndex(uid: String, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func wipe(completion: @escaping (Result<Int64, Error>) -> Void) { completion(.success(0)) }
     func prepareForSignOut(completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func generationForOwner(uid: String, completion: @escaping (Result<Int64?, Error>) -> Void) { completion(.success(nil)) }

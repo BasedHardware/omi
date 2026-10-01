@@ -14,7 +14,7 @@ Same class as #15041 (conversation delete), #15043 (developer API delete), #1498
 import os
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
@@ -23,6 +23,7 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
+from config.action_item_identity import ACTION_ITEM_IDENTITY_PRESERVE_ENV
 from utils.conversations import process_conversation
 
 DUE = datetime(2026, 9, 21, 9, tzinfo=timezone.utc)
@@ -58,18 +59,24 @@ def writer(monkeypatch):
     monkeypatch.setattr(process_conversation, "submit_with_context", MagicMock())
     monkeypatch.setattr(process_conversation, "sync_action_item_reminder", MagicMock(), raising=False)
     monkeypatch.setattr(
-        process_conversation.action_items_db, "create_action_items_batch", lambda uid, data: ["new-task"][: len(data)]
+        process_conversation.action_items_db,
+        "create_action_items_batch",
+        lambda uid, data, document_ids=None: [(document_ids or [None])[0] or "new-task"][: len(data)],
     )
     monkeypatch.setattr(process_conversation.action_items_db, "delete_action_items_for_conversation", MagicMock())
     return process_conversation
 
 
 def _write(monkeypatch, writer, old_items):
-    monkeypatch.setattr(writer.action_items_db, "get_action_items_by_conversation", lambda uid, cid: list(old_items))
+    monkeypatch.setattr(
+        writer.action_items_db, "get_action_items_by_conversation", lambda uid, cid, **kw: list(old_items)
+    )
     writer._write_action_items("uid-1", _conversation())
 
 
 def test_replacing_a_conversation_task_cancels_the_replaced_reminder(monkeypatch, writer):
+    # Kill switch off: every replaced row is cancelled and re-created under a fresh id.
+    monkeypatch.setenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, "false")
     _write(
         monkeypatch,
         writer,
@@ -85,6 +92,25 @@ def test_replacing_a_conversation_task_cancels_the_replaced_reminder(monkeypatch
     )
 
 
+def test_a_kept_task_is_rescheduled_once_and_only_dropped_rows_are_cancelled(monkeypatch, writer):
+    """Identity kept: no separate cancel for the kept id, which FCM could deliver after the reschedule."""
+    monkeypatch.delenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, raising=False)
+    _write(
+        monkeypatch,
+        writer,
+        [
+            {"id": "old-open", "conversation_id": "conv-1", "description": "Send the budget", "due_at": DUE},
+            {"id": "old-dropped", "conversation_id": "conv-1", "description": "Dropped", "due_at": DUE},
+        ],
+    )
+
+    assert writer.sync_action_item_reminder.call_args_list == [
+        call(user_id="uid-1", action_item_id="old-dropped", description="", completed=True, due_at=None),
+        call(user_id="uid-1", action_item_id="old-open", description="Send the budget", completed=False, due_at=DUE),
+    ]
+    writer.send_action_item_data_message.assert_not_called()
+
+
 def test_a_first_processing_with_no_previous_tasks_cancels_nothing(monkeypatch, writer):
     _write(monkeypatch, writer, [])
 
@@ -93,6 +119,7 @@ def test_a_first_processing_with_no_previous_tasks_cancels_nothing(monkeypatch, 
 
 def test_a_failing_reminder_cancel_does_not_skip_the_new_tasks(monkeypatch, writer):
     """The old rows are already deleted at this point; the new extraction must still be written."""
+    monkeypatch.setenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, "false")
     writer.sync_action_item_reminder.side_effect = RuntimeError("fcm unavailable")
     create = MagicMock(return_value=["new-task"])
     monkeypatch.setattr(writer.action_items_db, "create_action_items_batch", create)

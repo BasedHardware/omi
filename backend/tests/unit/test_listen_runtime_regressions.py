@@ -14,6 +14,8 @@ from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
 from utils.async_tasks import WebSocketTaskSupervisor
 from utils.listen_session_bootstrap import ListenConnectBase
+from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
+from utils.stt.live_failure import terminate_live_stt_backoff
 from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
 from utils.stt.streaming import STTService
 from starlette.websockets import WebSocketState
@@ -379,6 +381,7 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
 
     assert runtime.onboarding_admitted is True
+
     assert runtime.onboarding_session_id is None
     # OnboardingHandler still mints its own internal session id when none is
     # supplied (it needs one for its own question/answer bookkeeping) — this
@@ -391,6 +394,49 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     assert resolve_onboarding_provenance_marker(runtime) is None
     assert [event['type'] for event in sent_events] == ['onboarding_question']
     assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
+
+
+@pytest.mark.anyio
+async def test_reconnect_budget_returns_terminal_backoff_before_entitlement_work(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    request = ListenRequest(websocket=websocket, uid='budget-user')
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.state = SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1001)
+    monkeypatch.setattr(runtime_module.listen_reconnect_budget, 'admit', lambda *_args: (False, 17))
+    paywall = AsyncMock()
+    monkeypatch.setattr(runtime_module, 'run_blocking', paywall)
+    before = OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason='reconnect_budget')._value.get()
+
+    assert not await runtime._admit()
+
+    payload = websocket.send_json.await_args.args[0]
+    assert payload['type'] == 'service_status'
+    assert payload['status'] == 'stt_failed'
+    assert payload['reason'] == 'reconnect_budget'
+    assert payload['retry_after'] == 17
+    assert websocket.close.await_args.kwargs['code'] == 1011
+    assert paywall.await_count == 0
+    assert OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason='reconnect_budget')._value.get() == before + 1
+
+
+@pytest.mark.anyio
+async def test_provider_unavailable_uses_terminal_status_with_retry_hint():
+    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    state = SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1001)
+
+    assert await terminate_live_stt_backoff(websocket, state, reason='provider_unavailable', retry_after=45)
+
+    payload = websocket.send_json.await_args.args[0]
+    assert payload['status'] == 'stt_failed'
+    assert payload['retryable'] is True
+    assert payload['reason'] == 'provider_unavailable'
+    assert payload['retry_after'] == 45
+    assert state.active is False
+    assert state.close_code == 1011
+    assert websocket.close.await_args.kwargs['reason'] == 'transcription_service_unavailable'
 
 
 @pytest.mark.anyio
@@ -599,7 +645,7 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
 
 
 def test_runtime_emits_speaker_suggestion_event(monkeypatch):
-    import routers.listen.runtime as runtime_module
+    import utils.live_speaker_suggestions as suggestion_module
 
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = SimpleNamespace(uid='user-1', speaker_auto_assign_enabled=True)
@@ -608,7 +654,7 @@ def test_runtime_emits_speaker_suggestion_event(monkeypatch):
     emitted_events = []
     product_events = []
     runtime.send_event = emitted_events.append
-    monkeypatch.setattr(runtime_module, 'emit_product_event', lambda **event: product_events.append(event))
+    monkeypatch.setattr(suggestion_module, 'emit_product_event', lambda **event: product_events.append(event))
 
     runtime.emit_speaker_suggestion(4, 'person-123', 'Avery', 'segment-123')
 
@@ -629,6 +675,12 @@ def test_runtime_emits_speaker_suggestion_event(monkeypatch):
             },
         }
     ]
+
+    assert 'retracted' not in emitted_events[0].to_json()
+    runtime.emit_speaker_suggestion(4, '', '', 'segment-456', retracted=True)
+    assert emitted_events[-1].to_json()['retracted'] is True
+    assert emitted_events[-1].person_id == ''
+    assert len(product_events) == 1, 'a retraction is not another proposed identity'
 
 
 class _LiveSTTAttempt:

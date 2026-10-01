@@ -29,13 +29,10 @@ jobs:
 
   image-smoke:
     needs: source-closure
-    # Fork PRs never receive the GCR credential. They still run source-closure;
-    # maintainer/dispatch runs smoke exact private-base images when the credential
-    # is configured, and otherwise skip the optional image probe without failing
-    # the source-closure contract.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    # PRs run source-closure only. The old PR matrix consumed runners merely
+    # to print "Skipping" without credentials. Explicit dispatch retains the
+    # authenticated private-base smoke when that credential is configured.
+    if: github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write

@@ -5,11 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:omi/backend/schema/action_item.dart';
+import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
 import 'package:omi/services/siri_integration.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' as siri_events;
 
 class RecordingSiriHost extends SiriIndexApi {
   String? owner;
@@ -63,8 +66,9 @@ class _RaceToken implements IdTokenResult {
 }
 
 class _RaceUser implements User {
+  _RaceUser([this.uid = 'owner-race']);
   @override
-  String get uid => 'owner-race';
+  final String uid;
   @override
   Future<IdTokenResult> getIdTokenResult([bool forceRefresh = false]) async => _RaceToken();
   @override
@@ -134,7 +138,257 @@ class _ColdOwnerHost extends SiriIndexApi {
   Future<List<SiriTelemetryRecord>> takeTelemetry() async => [];
 }
 
+class _HungIndexHost extends SiriIndexApi {
+  final release = Completer<void>();
+  int calls = 0;
+
+  @override
+  Future<void> deleteEntities(String uid, String type, List<String> ids) async {
+    calls++;
+    await release.future;
+  }
+}
+
+class _CooldownHost extends RecordingSiriHost {
+  final firstDelete = Completer<void>();
+  final deletions = <(String, String, List<String>)>[];
+  int calls = 0;
+  int repairs = 0;
+  int repairFailuresRemaining = 0;
+  int memoryReconciles = 0;
+  int taskReconciles = 0;
+  int conversationReconciles = 0;
+
+  @override
+  Future<void> deleteEntities(String uid, String type, List<String> ids) async {
+    calls++;
+    if (calls == 1) await firstDelete.future;
+    deletions.add((uid, type, ids));
+  }
+
+  @override
+  Future<void> reconcileMemories(String uid, List<SiriMemory> rows) async {
+    memoryReconciles++;
+    await super.reconcileMemories(uid, rows);
+  }
+
+  @override
+  Future<void> reconcileTasks(String uid, List<SiriTask> rows, bool includeCompleted) async {
+    taskReconciles++;
+    tasks = rows;
+  }
+
+  @override
+  Future<void> reconcileConversations(String uid, List<SiriConversation> rows, int? coveredAfterMs) async {
+    conversationReconciles++;
+    conversations = rows;
+  }
+
+  @override
+  Future<void> repairOwnerIndex(String uid) async {
+    repairs++;
+    if (repairFailuresRemaining > 0) {
+      repairFailuresRemaining--;
+      throw StateError('Spotlight removal failed');
+    }
+    memories = [];
+    tasks = [];
+    conversations = [];
+  }
+
+  @override
+  Future<int> wipe() async => 1;
+
+  @override
+  Future<void> publishSessionConfig(SiriSessionConfig config) async {}
+
+  @override
+  Future<List<SiriTelemetryRecord>> takeTelemetry() async => [];
+}
+
 void main() {
+  test('native openChat telemetry maps to the registered Siri intent', () {
+    final intent = siri_events.SiriIntentPerformedIntent.values.singleWhere((value) => value.name == 'openChat');
+    expect(intent.wireName, 'open_chat');
+  });
+
+  test('removal repair retries keep a capped interval without a terminal attempt', () {
+    const base = Duration(seconds: 1);
+    expect(siriRemovalRetryDelay(base, 0), const Duration(seconds: 1));
+    expect(siriRemovalRetryDelay(base, 8), const Duration(seconds: 256));
+    expect(siriRemovalRetryDelay(base, 9), const Duration(seconds: 256));
+    expect(siriRemovalRetryDelay(const Duration(seconds: 2), 100), const Duration(minutes: 5));
+  });
+
+  test('a hung native index call releases the Dart queue and starts a cooldown', () async {
+    final host = _HungIndexHost();
+    addTearDown(() => host.release.complete());
+    final siri = SiriIntegration.forTest(host, 'owner-a', nativeTimeout: const Duration(milliseconds: 20));
+
+    siri.queueDelete('memory', 'first');
+    await siri.drainIndexForTest().timeout(const Duration(seconds: 1));
+    siri.queueDelete('memory', 'second');
+    await siri.drainIndexForTest().timeout(const Duration(seconds: 1));
+    expect(host.calls, 1, reason: 'cooldown must not pile up calls behind a wedged native operation');
+  });
+
+  test('delete and newly locked memory submitted during cooldown reach Spotlight after cooldown', () async {
+    final host = _CooldownHost();
+    addTearDown(() => host.firstDelete.complete());
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        nativeTimeout: const Duration(milliseconds: 20), indexCooldown: const Duration(milliseconds: 80));
+    siri.queueDelete('memory', 'timed-out');
+    await siri.drainIndexForTest();
+    siri.queueDelete('memory', 'confirmed-delete');
+    siri.queueDeleteMany('task', ['confirmed-batch-delete']);
+    siri.queueUpsertMemories([
+      Memory(
+          id: 'newly-locked',
+          uid: 'owner-a',
+          content: 'Private',
+          category: MemoryCategory.manual,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          visibility: MemoryVisibility.private,
+          isLocked: true)
+    ]);
+    await siri.drainIndexForTest();
+    expect(host.calls, 1);
+    await Future<void>.delayed(const Duration(milliseconds: 130));
+    await siri.drainIndexForTest();
+    expect(host.deletions.where((call) => call.$1 == 'owner-a' && call.$2 == 'memory').expand((call) => call.$3),
+        containsAll(['confirmed-delete', 'newly-locked']));
+    expect(host.deletions.where((call) => call.$1 == 'owner-a' && call.$2 == 'task').expand((call) => call.$3),
+        contains('confirmed-batch-delete'));
+  });
+
+  test('latest authoritative reconciliation for each type survives cooldown', () async {
+    final host = _CooldownHost();
+    final date = DateTime.now();
+    addTearDown(() => host.firstDelete.complete());
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        nativeTimeout: const Duration(milliseconds: 20), indexCooldown: const Duration(milliseconds: 80));
+    siri.queueDelete('memory', 'trigger-timeout');
+    await siri.drainIndexForTest();
+    Memory memory(String id) => Memory(
+        id: id,
+        uid: 'owner-a',
+        content: id,
+        category: MemoryCategory.manual,
+        createdAt: date,
+        updatedAt: date,
+        visibility: MemoryVisibility.private);
+    ActionItemWithMetadata task(String id) =>
+        ActionItemWithMetadata(id: id, description: id, completed: false, createdAt: date);
+    ServerConversation conversation(String id) => ServerConversation(
+        id: id, createdAt: date, structured: Structured(id, id), status: ConversationStatus.completed);
+    await siri.reconcileMemories([memory('obsolete')]);
+    await siri.reconcileMemories([memory('current')]);
+    await siri.reconcileTasks([task('obsolete')], includeCompleted: true);
+    await siri.reconcileTasks([task('current')], includeCompleted: true);
+    await siri.reconcileConversations([conversation('obsolete')]);
+    await siri.reconcileConversations([conversation('current')]);
+    expect(host.memoryReconciles, 0);
+    expect(host.taskReconciles, 0);
+    expect(host.conversationReconciles, 0);
+    await Future<void>.delayed(const Duration(milliseconds: 130));
+    await siri.drainIndexForTest();
+    expect(host.memories.map((row) => row.id), ['current']);
+    expect(host.tasks.map((row) => row.id), ['current']);
+    expect(host.conversations.map((row) => row.id), ['current']);
+    expect(host.memoryReconciles, 1);
+    expect(host.taskReconciles, 1);
+    expect(host.conversationReconciles, 1);
+  });
+
+  test('removal ledger cap requests an owner repair and fresh traversal', () async {
+    final host = _CooldownHost();
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        taskPageFetcher: ({required limit, required offset, required completed}) async =>
+            const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
+        conversationPageFetcher: ({required limit, required offset, required startDate}) async =>
+            const ApiSuccess<List<ServerConversation>>([]),
+        memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true));
+    siri.queueDeleteMany('memory', List.generate(257, (i) => 'private-$i'));
+    await siri.drainIndexForTest();
+    expect(host.repairs, 1);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await siri.drainIndexForTest();
+    expect(host.memoryReconciles, 1, reason: 'repair refills from a fresh complete snapshot');
+    expect(host.calls, 0, reason: 'an oversized id ledger is replaced by an owner index wipe');
+  });
+
+  test('failed owner repair keeps the obligation and retries after cooldown', () async {
+    final host = _CooldownHost()..repairFailuresRemaining = 1;
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        retryBase: const Duration(milliseconds: 20),
+        taskPageFetcher: ({required limit, required offset, required completed}) async =>
+            const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
+        conversationPageFetcher: ({required limit, required offset, required startDate}) async =>
+            const ApiSuccess<List<ServerConversation>>([]),
+        memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true));
+    siri.queueDeleteMany('memory', List.generate(257, (i) => 'private-$i'));
+    await siri.drainIndexForTest();
+    expect(host.repairs, 1);
+    expect(host.memoryReconciles, 0);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await siri.drainIndexForTest();
+    expect(host.repairs, 2);
+    expect(host.memoryReconciles, 1);
+  });
+
+  test('pending removals from the old account are discarded on account change', () async {
+    final host = _CooldownHost();
+    addTearDown(() => host.firstDelete.complete());
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        nativeTimeout: const Duration(milliseconds: 20),
+        indexCooldown: const Duration(milliseconds: 80),
+        sessionConfig: (user, token, generation) => SiriSessionConfig(
+            uid: user.uid,
+            generation: generation,
+            baseUrl: 'http://127.0.0.1:8977',
+            profile: 'local_dev',
+            appVersion: 'test',
+            appBuild: '0',
+            deviceIdHash: 'test',
+            token: token.token,
+            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+    siri.queueDelete('memory', 'timed-out');
+    await siri.drainIndexForTest();
+    siri.queueDelete('memory', 'old-private');
+    await siri.drainIndexForTest();
+    await siri.accountChanged(_RaceUser('owner-b'));
+    await Future<void>.delayed(const Duration(milliseconds: 130));
+    await siri.drainIndexForTest();
+    expect(host.deletions.where((call) => call.$3.contains('old-private')), isEmpty);
+  });
+
+  test('same-owner session refresh retains pending removals', () async {
+    final host = _CooldownHost();
+    addTearDown(() => host.firstDelete.complete());
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        nativeTimeout: const Duration(milliseconds: 20),
+        indexCooldown: const Duration(milliseconds: 80),
+        sessionConfig: (user, token, generation) => SiriSessionConfig(
+            uid: user.uid,
+            generation: generation,
+            baseUrl: 'http://127.0.0.1:8977',
+            profile: 'local_dev',
+            appVersion: 'test',
+            appBuild: '0',
+            deviceIdHash: 'test',
+            token: token.token,
+            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+    siri.queueDelete('memory', 'timed-out');
+    await siri.drainIndexForTest();
+    siri.queueDelete('memory', 'still-private');
+    await siri.drainIndexForTest();
+    await siri.accountChanged(_RaceUser('owner-a'));
+    await Future<void>.delayed(const Duration(milliseconds: 130));
+    await siri.drainIndexForTest();
+    expect(host.deletions.where((call) => call.$3.contains('still-private')), isNotEmpty);
+  });
+
   test('iOS reindex callbacks do not bypass the owner-fenced Spotlight queue', () {
     final source = File('ios/Runner/SiriIntegration/SiriEntities.swift').readAsStringSync();
     for (final name in ['ConversationQuery', 'MemoryQuery', 'TaskQuery']) {

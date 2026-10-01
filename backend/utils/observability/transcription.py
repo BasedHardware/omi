@@ -38,6 +38,7 @@ from utils.metrics import (
 from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
+from utils.stt.soniox_runway import meter_audio_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -352,6 +353,8 @@ def record_live_stt_audio_seconds(*, provider: str | None, platform: str | None,
         client_platform=_bounded_platform(platform),
         deployment_environment=_deployment_environment(),
     ).inc(seconds)
+    if provider == 'soniox':
+        meter_audio_seconds(seconds)
 
 
 def record_live_stt_failover_accepted(*, provider: str | None, platform: str | None) -> None:
@@ -370,7 +373,7 @@ def record_live_stt_failover_accepted(*, provider: str | None, platform: str | N
 
 
 def record_listen_session_accepted(*, source: str | None, platform: str | None, app_build: str | None = None) -> None:
-    """Count one accepted /v4/listen socket with bounded labels only.
+    """Count one /v4/listen session admitted through STT setup with bounded labels only.
 
     WebSocket accept paths omit app_build (unknown): the handshake does not
     carry a trusted version contract.

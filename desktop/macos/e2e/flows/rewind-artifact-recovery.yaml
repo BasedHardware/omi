@@ -10,6 +10,7 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindRepository.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabaseRecovery.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/StorageFailureDiagnostics.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindStorage.swift

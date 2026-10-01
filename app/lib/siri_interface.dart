@@ -82,6 +82,10 @@ abstract class SiriIndexApi {
   void reconcileTasks(String uid, List<SiriTask> tasks, bool includeCompleted);
   @async
   void deleteEntities(String uid, String type, List<String> ids);
+
+  /// Clear one owner's persisted snapshot and Spotlight index before a fresh authoritative traversal.
+  @async
+  void repairOwnerIndex(String uid);
   @async
   int wipe();
 

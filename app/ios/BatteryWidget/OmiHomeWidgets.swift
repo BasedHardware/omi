@@ -82,7 +82,7 @@ struct NextDeviceIntent: AppIntent {
         let devices = SharedWidgetStore.devices()
         guard devices.count > 1 else { return .result() }
         let next = devices[(SharedWidgetStore.selectedDevice(in: devices) + 1) % devices.count]
-        SharedWidgetStore.defaults?.set(next.id, forKey: HomeWidgetKeys.selectedDevice)
+        SharedWidgetStore.defaults.map { try? SafeDefaults.store(.string(next.id), forKey: HomeWidgetKeys.selectedDevice, in: $0) }
         return .result()
     }
 }

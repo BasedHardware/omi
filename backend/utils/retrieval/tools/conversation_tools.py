@@ -293,38 +293,42 @@ def get_conversations_tool(
     if statuses:
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
 
-    scoped_id = (scope or {}).get("conversation_id") if scope else None
-    if scoped_id:
-        conversations_data, scoped_err = _scoped_conversation_fetch(
-            uid,
-            str(scoped_id),
-            start_dt=start_dt,
-            end_dt=end_dt,
-            include_discarded=include_discarded,
-            statuses=status_list or None,
-        )
-        if scoped_err:
-            logger.info(f"⚠️ get_conversations_tool - {scoped_err}")
-            return scoped_err
-        if offset > 0:
-            conversations_data = []
+    try:
+        scoped_id = (scope or {}).get("conversation_id") if scope else None
+        if scoped_id:
+            conversations_data, scoped_err = _scoped_conversation_fetch(
+                uid,
+                str(scoped_id),
+                start_dt=start_dt,
+                end_dt=end_dt,
+                include_discarded=include_discarded,
+                statuses=status_list or None,
+            )
+            if scoped_err:
+                logger.info(f"⚠️ get_conversations_tool - {scoped_err}")
+                return scoped_err
+            if offset > 0:
+                conversations_data = []
+            else:
+                conversations_data = conversations_data[:limit]
         else:
-            conversations_data = conversations_data[:limit]
-    else:
-        # Get conversations
-        conversations_data = conversations_db.get_conversations(
-            uid,
-            limit=limit,
-            offset=offset,
-            start_date=start_dt,
-            end_date=end_dt,
-            include_discarded=include_discarded,
-            statuses=status_list,
-        )
+            # Get conversations
+            conversations_data = conversations_db.get_conversations(
+                uid,
+                limit=limit,
+                offset=offset,
+                start_date=start_dt,
+                end_date=end_dt,
+                include_discarded=include_discarded,
+                statuses=status_list,
+            )
 
-        # Filter out locked conversations (paid plan required)
-        if conversations_data:
-            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+            # Filter out locked conversations (paid plan required)
+            if conversations_data:
+                conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+    except Exception as e:
+        logger.error(f"❌ Unexpected error retrieving conversations: {e}", exc_info=True)
+        return "An unexpected error occurred while fetching conversations. Please try again later."
 
     # Bound how many conversations are formatted for the chat model so a wide date range cannot
     # flood its context and freeze it (#4927). Newest-first, so this keeps the most recent.
@@ -418,12 +422,8 @@ def get_conversations_tool(
         return result
 
     except Exception as e:
-        error_msg = f"Error formatting conversations: {str(e)}"
-        logger.info(f"❌ get_conversations_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Found {len(conversations_data)} conversations but encountered an error formatting them: {str(e)}"
+        logger.error(f"❌ Unexpected error in get_conversations_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while fetching conversations. Please try again later."
 
 
 @tool

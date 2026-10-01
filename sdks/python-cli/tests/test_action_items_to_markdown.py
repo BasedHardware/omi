@@ -273,6 +273,29 @@ class TestActionItemsToMarkdown(unittest.TestCase):
         self.assertIn("string one", completed_section)
         self.assertIn("boolean true", completed_section)
 
+    def test_load_input_data_envelopes(self):
+        """Ensure load_input_data unwraps action_items, items, data and handles empty envelopes."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            for key in ("action_items", "items", "data"):
+                # Non-empty
+                f = tmp_path / f"test_{key}.json"
+                f.write_text(json.dumps({key: [{"id": f"{key}_1", "description": f"task {key}"}]}), encoding="utf-8")
+                loaded = ai2m.load_input_data(str(f))
+                self.assertEqual(len(loaded), 1)
+                self.assertEqual(loaded[0]["id"], f"{key}_1")
+
+                # Empty envelope must return [] and NOT create phantom item
+                f_empty = tmp_path / f"empty_{key}.json"
+                f_empty.write_text(json.dumps({key: []}), encoding="utf-8")
+                loaded_empty = ai2m.load_input_data(str(f_empty))
+                self.assertEqual(loaded_empty, [])
+
+            # Empty dict should return []
+            f_empty_dict = tmp_path / "empty_dict.json"
+            f_empty_dict.write_text("{}", encoding="utf-8")
+            self.assertEqual(ai2m.load_input_data(str(f_empty_dict)), [])
+
 
 if __name__ == "__main__":
     unittest.main()

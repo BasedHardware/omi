@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-stale-selection-used-as-write-authority",
+  "violated_contract": "A record discovered by an earlier query may have moved out of the selected set or been deleted before cleanup commits. Treating that snapshot as unconditional write authority overwrites newer user decisions or lets a missing record reject the whole cleanup chunk.",
+  "canonical_prevention": "Discover bounded candidate references, then reread only the predicate fields inside the write transaction and mutate only existing records that still satisfy the selection predicate. Complete all reads before writes, preserve unrelated fields, and propagate genuine storage failures rather than deleting the parent after incomplete cleanup.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_folder_delete_membership.py",
+    "backend/tests/unit/fixtures/strict_firestore_transaction.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/database/folders.py"],
+  "status": "open"
+}

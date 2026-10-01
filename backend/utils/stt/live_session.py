@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+import time
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_rollout import window_allocation, window_language_supported
+from utils.stt.resilient_stream import trim_window_replay_to_anchor
+from utils.stt.live_health import health, mode as routing_mode
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
@@ -216,7 +219,9 @@ class LiveChainSession:
                 elif service == st.STTService.parakeet:
                     raw = await st.process_audio_parakeet(callback, language, sample_rate, 1, keywords=keywords)
                 elif service == st.STTService.soniox:
-                    raw = await st.process_audio_soniox(callback, sample_rate, language, profile=host.language_profile)
+                    raw = await st.process_audio_soniox(
+                        callback, sample_rate, language, profile=host.language_profile, keywords=keywords
+                    )
                 elif service == st.STTService.modulate:
                     raw = await st.process_audio_modulate(callback, sample_rate, language)
                 else:
@@ -276,6 +281,10 @@ class LiveChainSession:
                 connect_deepgram=callbacks[st.STTService.deepgram],
                 failed=self.receiver._stt_failed_providers,
                 use_config=True,
+                routing_uid=uid,
+                routing_language=host.language,
+                routing_pin_primary=host.stt_model == 'parakeet-window'
+                or getattr(host.language_profile, 'arm', None) == 'hintable',
             )
         host.stt_service = actual
         host.stt_model = {
@@ -314,12 +323,76 @@ class LiveLegSocket(STTSocket):
         self._pending_selection: PendingLiveFailover | None = None
         self._ingest_gain: SessionPcmGain | None = None
         self._open_gauge_released = False
+        self._first_speech_at: float | None = None
+        self._speech_ms_for_health = 0
+        self._transcript_outcome: str | None = None
+        self._health_success: Callable[[], None] = lambda: None
+        self._health_close: Callable[[], None] = lambda: None
         record_live_stt_socket_open(service.value)
         if window:
-            from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC
+            from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC, WindowedParakeetSocket
 
+            if isinstance(raw, WindowedParakeetSocket):
+                raw.set_replay_progress_callback(self._trim_window_replay_to_anchor)
             if WINDOW_INGEST_AGC:
                 self._ingest_gain = SessionPcmGain()
+
+    def window_replay_anchor_sample(self) -> int | None:
+        from utils.stt.parakeet_window import WindowedParakeetSocket
+
+        if not isinstance(self.raw, WindowedParakeetSocket) or self._send_tracker is None:
+            return None
+        provider_sample = self.raw.replay_anchor_sample()
+        if provider_sample is None:
+            return None
+        return self._send_tracker.send_map.map_sample(provider_sample)
+
+    def window_replay_pending_sample(self) -> int | None:
+        boundary = getattr(self.raw, 'replay_pending_sample', None)
+        if not self.window or self._send_tracker is None or not callable(boundary):
+            return None
+        sample = cast(Callable[[], int | None], boundary)()
+        return self._send_tracker.send_map.map_sample(sample) if sample is not None else None
+
+    def window_replay_accounted_span(self) -> tuple[int, int] | None:
+        boundary = getattr(self.raw, 'replay_accounted_span', None)
+        if not self.window or self._send_tracker is None or not callable(boundary):
+            return None
+        span = cast(Callable[[], tuple[int, int] | None], boundary)()
+        if span is None:
+            return None
+        # Map the last included sample, avoiding the next accepted span across
+        # a gated gap at a provider boundary. An evicted start keeps more audio.
+        first = self._send_tracker.send_map.map_sample(span[0])
+        last = self._send_tracker.send_map.map_sample(span[1] - 1)
+        if last is None:
+            return None
+        return (0 if first is None else first, last + 1)
+
+    def window_replay_diagnostics(self, first: int, end: int, projected_samples: int) -> ReplayLagDiagnostics | None:
+        from utils.stt.parakeet_window import WindowedParakeetSocket
+
+        if not isinstance(self.raw, WindowedParakeetSocket) or self._send_tracker is None:
+            return None
+        send_map = self._send_tracker.send_map
+        admitted = send_map.accepted_samples_in_capture_range(first, end)
+        rate = send_map.provider_sample_rate
+        return self.raw.replay_diagnostics(projected_samples / rate, admitted / rate)
+
+    @property
+    def replay_lag_diagnostics(self) -> ReplayLagDiagnostics | None:
+        return getattr(self.raw, 'replay_lag_diagnostics', None)
+
+    @property
+    def first_text_diagnostics(self) -> FirstTextDeadlineDiagnostics | None:
+        return getattr(self.raw, 'first_text_diagnostics', None)
+
+    @property
+    def capacity_subtype(self) -> str | None:
+        return getattr(self.raw, 'capacity_subtype', None)
+
+    def _trim_window_replay_to_anchor(self) -> None:
+        trim_window_replay_to_anchor(self.session.receiver._window_ring(), self)
 
     @property
     def is_connection_dead(self) -> bool:
@@ -345,17 +418,45 @@ class LiveLegSocket(STTSocket):
         self._pending_selection = pending
 
     def note_selection_transcript(self, segments: list[dict[str, Any]]) -> None:
+        if any(str(segment.get('text') or '').strip() for segment in segments) and self._transcript_outcome is None:
+            deadline = max(1.0, float(os.getenv('STT_NO_TEXT_SECONDS', '30')))
+            if self._first_speech_at is not None and time.monotonic() - self._first_speech_at <= deadline:
+                self._record_transcript_outcome('text')
+            elif self._first_speech_at is not None:
+                self._record_transcript_outcome('no_text')
         if self._pending_selection is not None:
             self._pending_selection.note_transcript(segments)
 
+    def _record_transcript_outcome(self, outcome: str) -> None:
+        if self._transcript_outcome is not None:
+            return
+        self._transcript_outcome = outcome
+        health.record(self.service.value, self.session.receiver.host.language, outcome)
+        if routing_mode() == 'on':
+            if outcome == 'text':
+                self._health_success()
+            else:
+                self._health_close()
+                circuit = st._circuit_for_primary(self.service)  # type: ignore[reportPrivateUsage]
+                circuit.record_serve_failure()
+                health.quarantine(self.service.value, 'selection', circuit.serve_error_bench_seconds)
+
+    def _check_no_text_deadline(self) -> None:
+        if self._first_speech_at is None or self._transcript_outcome is not None:
+            return
+        if time.monotonic() - self._first_speech_at >= max(1.0, float(os.getenv('STT_NO_TEXT_SECONDS', '30'))):
+            self._record_transcript_outcome('no_text')
+
     @property
     def defers_selection_success(self) -> bool:
-        return self.window
+        return self.window or routing_mode() == 'on'
 
     def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
         from utils.stt.parakeet_window import WindowedParakeetSocket
 
-        if isinstance(self.raw, WindowedParakeetSocket):
+        if routing_mode() == 'on':
+            self._health_success, self._health_close = on_success, on_close
+        elif isinstance(self.raw, WindowedParakeetSocket):
             self.raw.set_health_callbacks(on_success, on_close)
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
@@ -399,6 +500,11 @@ class LiveLegSocket(STTSocket):
                 self.gate = None
                 self.session.vad_mode = 'off'
         audio = data if output is None or self.passthrough else output.audio_to_send
+        if output is not None and output.is_speech and self._first_speech_at is None:
+            self._first_speech_at = time.monotonic()
+        if output is not None and output.is_speech:
+            self._speech_ms_for_health += int(len(data) / (self.sample_rate * 2) * 1000)
+        self._check_no_text_deadline()
         if self.window and output is not None and output.is_speech:
             if isinstance(self.raw, WindowedParakeetSocket):
                 self.raw.mark_speech()
@@ -414,7 +520,10 @@ class LiveLegSocket(STTSocket):
                 self._dead = True
                 return False
             if output is not None and output.should_finalize:
-                self.raw.finalize()
+                if self.window and isinstance(self.raw, WindowedParakeetSocket):
+                    self.raw.finalize(vad_pause=True)
+                else:
+                    self.raw.finalize()
         except Exception:
             self._dead = True
             self.finish()
@@ -423,6 +532,8 @@ class LiveLegSocket(STTSocket):
             self._send_tracker.send_path = 'managed_chain'
             self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
+        if self.window and output is not None and isinstance(self.raw, WindowedParakeetSocket):
+            self.raw.observe_capture(output.is_speech, duration)
         self._seconds += duration
         speech_ms = self.gate.consume_speech_ms_delta() if self.gate is not None else 0
         if not self._replaying:
@@ -453,6 +564,15 @@ class LiveLegSocket(STTSocket):
                 self._pending_selection.note_failure(self.typed_death_reason)
             self.raw.finish()
         finally:
+            self._check_no_text_deadline()
+            if (
+                self._transcript_outcome is None
+                and self._first_speech_at is not None
+                and self._speech_ms_for_health >= 1000
+            ):
+                self._record_transcript_outcome('no_text')
+            elif self._transcript_outcome is None and routing_mode() == 'on':
+                self._health_close()
             self._release_open_gauge()
 
     async def drain_and_close(self) -> None:

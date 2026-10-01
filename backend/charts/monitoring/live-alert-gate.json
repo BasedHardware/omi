@@ -1,5 +1,5 @@
 {
-  "description": "UIDs that fail-closed live Grafana coverage. Widen only after a token-backed run proves the rule is live, unpaused, and definition-equal to the committed file. The pusher release gate still checks this same set plus pusher-specific scrape and metric health; do not add UIDs here to make pusher deploys fail-closed on the rest of the fleet.",
+  "description": "UIDs that fail-closed live Grafana coverage. The monitoring workflow imports the live-STT allowlist before its token-backed fleet verification proves each gated rule is live, unpaused, and definition-equal to the committed file. The pusher release gate still checks this same set plus pusher-specific scrape and metric health; do not add UIDs here to make pusher deploys fail-closed on the rest of the fleet.",
   "uids": [
     "omi-capture-finalization-memory-fence",
     "omi-journey-capture-success-critical",
@@ -7,6 +7,21 @@
     "omi-capture-oldest-nonterminal",
     "omi-capture-dead-letter-surge",
     "omi-journey-scrape-missing",
-    "omi-journey-capture-fail"
+    "omi-journey-capture-fail",
+    "omi-stt-account-state",
+    "omi-stt-window-overflow",
+    "omi-stt-window-saturated",
+    "omi-stt-window-post-errors",
+    "omi-stt-leg-error-rate",
+    "omi-live-transcription-success-low",
+    "omi-soniox-rate-limited",
+    "omi-stt-single-leg-risk",
+    "omi-soniox-budget-exhausted",
+    "omi-modulate-failing-soniox",
+    "omi-stt-window-no-text",
+    "omi-stt-window-first-text",
+    "omi-stt-batch-queue-depth",
+    "omi-stt-batch-queue-latency",
+    "omi-stt-sync-prerecorded-errors"
   ]
 }

@@ -41,6 +41,7 @@ class _FakeRedis:
 @pytest.fixture
 def fake_redis(monkeypatch):
     fake = _FakeRedis()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(backfill, 'redis_client', fake)
     return fake
 

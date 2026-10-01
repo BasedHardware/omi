@@ -193,9 +193,9 @@ jobs:
           if [[ "$SCHEDULER_ENVIRONMENT" == dev ]]; then
             python3 backend/scripts/scheduler_reconcile.py \
               --environment dev --project "${{ vars.GCP_PROJECT_ID }}" --apply --jobs "$SCHEDULER_JOB"
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment dev --project "${{ vars.GCP_PROJECT_ID }}" --check --jobs "$SCHEDULER_JOB"
           fi
-          python3 backend/scripts/scheduler_reconcile.py \
-            --environment "$SCHEDULER_ENVIRONMENT" --project "${{ vars.GCP_PROJECT_ID }}" --check
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

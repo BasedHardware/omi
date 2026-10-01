@@ -55,12 +55,14 @@ def rows_from(pages: Sequence[str]) -> List[Tuple]:
     for path in pages:
         raw = Path(path).read_text(encoding="utf-8").lstrip("\ufeff")
         items = json.loads(raw)
-        # Support both bare array and wrapped {"conversations": [...]} shape
+        # Support both bare array, wrapped {"conversations": [...]} shape, and single objects
         if isinstance(items, dict):
             for key in ("conversations", "items", "data"):
                 if isinstance(items.get(key), list):
                     items = items[key]
                     break
+            else:
+                items = [items]
         if not isinstance(items, list):
             raise ValueError(f"{path}: expected a JSON array or wrapped object")
         for item in items:
@@ -70,17 +72,19 @@ def rows_from(pages: Sequence[str]) -> List[Tuple]:
             if not conv_id:
                 raise ValueError(f"{path}: conversation missing required 'id' field")
             structured: Dict[str, Any] = item.get("structured") or {}
-            rows.append((
-                str(conv_id),
-                structured.get("title"),
-                structured.get("category"),
-                item.get("source"),
-                utc_stamp(item.get("started_at")),
-                utc_stamp(item.get("created_at")),
-                utc_stamp(item.get("updated_at")),
-                item.get("transcript"),
-                json.dumps(item, ensure_ascii=False),
-            ))
+            rows.append(
+                (
+                    str(conv_id),
+                    structured.get("title"),
+                    structured.get("category"),
+                    item.get("source"),
+                    utc_stamp(item.get("started_at")),
+                    utc_stamp(item.get("created_at")),
+                    utc_stamp(item.get("updated_at")),
+                    item.get("transcript"),
+                    json.dumps(item, ensure_ascii=False),
+                )
+            )
     return rows
 
 
@@ -97,10 +101,7 @@ def validate_db_path(db_path: str) -> None:
     """
     p = Path(db_path)
     if ".." in p.parts:
-        raise ValueError(
-            f"Output path {db_path!r} contains '..'; refusing to write outside "
-            "the intended directory."
-        )
+        raise ValueError(f"Output path {db_path!r} contains '..'; refusing to write outside " "the intended directory.")
     if p.exists():
         try:
             with p.open("rb") as fh:
@@ -108,10 +109,7 @@ def validate_db_path(db_path: str) -> None:
         except OSError as exc:
             raise ValueError(f"Cannot read existing file {db_path!r}") from exc
         if header != _SQLITE_MAGIC:
-            raise ValueError(
-                f"{db_path!r} already exists but is not a SQLite database; "
-                "refusing to overwrite it."
-            )
+            raise ValueError(f"{db_path!r} already exists but is not a SQLite database; " "refusing to overwrite it.")
 
 
 def load(db_path: str, json_paths: Sequence[str]) -> Tuple[int, int, int]:
@@ -150,7 +148,7 @@ if __name__ == "__main__":
     if "-o" in args:
         idx = args.index("-o")
         db_path = args[idx + 1]
-        json_paths = args[:idx] + args[idx + 2:]
+        json_paths = args[:idx] + args[idx + 2 :]
     elif len(args) >= 2:
         db_path = args[-1]
         json_paths = args[:-1]

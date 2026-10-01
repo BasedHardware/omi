@@ -24,6 +24,7 @@ cross-platform decision instead of a single-platform drive-by.
 | `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads                                    |
 | `conversation_duration.json`       | The one duration a conversation reports: transcript span when segments exist, wall window only for transcript-free records   |
 | `capture_group_collapse.json`      | One list row per recorded event: which loaded member represents a capture group, and that a lone loaded member is never hidden |
+| `deterministic_title.json`         | The model-free title: first sentence of the joined transcript, 60 code points cut on a word boundary (the clients' last-resort title for an untitled legacy row) |
 
 The [conversation summary contract](conversation-summary.md) and `conversation_summary.json`
 define one primary body across backend, Flutter, macOS, and web, including edited overviews,

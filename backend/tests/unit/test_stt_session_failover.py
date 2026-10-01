@@ -407,3 +407,31 @@ async def test_failed_ramped_rebuild_keeps_the_dead_provider_attribution(monkeyp
         assert await receiver._failover_stt_socket() is False
     assert receiver.host.stt_service == STTService.modulate
     assert receiver.host.stt_model == 'velma-2'
+
+
+@pytest.mark.asyncio
+async def test_exhausted_ramped_rebuild_sends_retry_after_backoff(monkeypatch):
+    from types import SimpleNamespace
+
+    from utils.stt.live_chain import ProviderChainUnavailable
+
+    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
+    receiver.host.stt_language, receiver.host.stt_model = 'multi', 'velma-2'
+    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    receiver.host.request.websocket = websocket
+    receiver.host.state.close_code = 1001
+    receiver._create_stt_socket = AsyncMock(side_effect=ProviderChainUnavailable(47))
+    monkeypatch.setattr('routers.listen.receiver.managed_chain_enabled', lambda _host: True)
+
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language', return_value=(STTService.soniox, 'multi', 'soniox')
+    ):
+        assert await receiver._failover_stt_socket() is False
+
+    payload = websocket.send_json.await_args.args[0]
+    assert payload['status'] == 'stt_failed'
+    assert payload['reason'] == 'provider_unavailable'
+    assert payload['retry_after'] == 47
+    assert receiver.host.state.stt_terminal_failure is True
+    assert receiver.host.state.close_code == 1011

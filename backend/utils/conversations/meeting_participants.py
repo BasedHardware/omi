@@ -281,12 +281,42 @@ def _is_freemail_domain(domain: str) -> bool:
     return domain in _FREEMAIL_DOMAINS
 
 
+# Whole-token markers of a bot tile ("Otter Bot", "Tomorrow Inc - NoteTaker",
+# "Meetbot Recorder"). Whole tokens only: "James Talbot" and "Agent Smith" are people.
+_AI_AGENT_TOKENS = frozenset(
+    {'bot', 'chatbot', 'meetbot', 'notebot', 'notetaker', 'note-taker', 'recorder', 'assistant', 'companion'}
+)
+# Agents that join to record and never speak: they cannot be a speaker cluster.
+_SILENT_RECORDER_TOKENS = frozenset({'notetaker', 'note-taker', 'recorder', 'meetbot', 'notebot'})
+_RECORDER_DOMAINS = frozenset({'otter.ai', 'fireflies.ai', 'read.ai', 'fathom.video', 'tldv.io'})
+
+
+def _name_tokens(name: Optional[str]) -> list[str]:
+    return [token.strip(".'’-") for token in (name or '').casefold().split()]
+
+
+def looks_like_ai_agent_name(name: Optional[str]) -> bool:
+    """Whether the roster would classify a bare name (no email, no catalog entry) as an AI agent."""
+    return _looks_ai_agent(name, None, None)
+
+
+def is_silent_recorder(entry: RosterEntry) -> bool:
+    """A note-taking bot: present on the call, never a voice on it."""
+    if entry.kind != 'ai_agent':
+        return False
+    if _email_domain(entry.email) in _RECORDER_DOMAINS:
+        return True
+    return bool(set(_name_tokens(entry.display_name)) & _SILENT_RECORDER_TOKENS)
+
+
 def _looks_ai_agent(name: Optional[str], email: Optional[str], person: Optional[Mapping[str, Any]]) -> bool:
     domain = _email_domain(email)
     if domain.endswith('.local') or domain in _AI_DOMAINS:
         return True
     hay = (name or '').strip().casefold()
     if hay in _AI_AGENT_NAMES or hay.endswith(' notetaker'):
+        return True
+    if set(_name_tokens(name)) & _AI_AGENT_TOKENS:
         return True
     tokens = hay.split()
     if tokens and tokens[0] in _AI_AGENT_FIRST_TOKENS:
@@ -614,5 +644,7 @@ __all__ = [
     'MeetingRoster',
     'RosterEntry',
     'clean_display_title',
+    'is_silent_recorder',
+    'looks_like_ai_agent_name',
     'normalize_meeting_participants',
 ]

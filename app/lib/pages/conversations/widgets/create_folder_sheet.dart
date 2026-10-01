@@ -186,7 +186,8 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
             TextField(
               controller: _descriptionController,
               style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
-              decoration: _fieldDecoration(context.l10n.descriptionOptional),
+              decoration: _fieldDecoration(context.l10n.descriptionOptional).copyWith(hintMaxLines: 1),
+              minLines: 1,
               maxLines: 2,
               maxLength: 100,
               buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,

@@ -43,7 +43,7 @@ from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
     SourceState,
 )
-from utils.log_sanitizer import sanitize_validation_error
+from utils.log_sanitizer import sanitize, sanitize_validation_error
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
 from utils.memory.canonical_memory_adapter import (
     CanonicalBatchMutationLimitError,
@@ -4008,7 +4008,15 @@ class MemoryService:
         except HTTPException:
             raise
         except CanonicalBatchMutationLimitError as exc:
-            raise HTTPException(status_code=413, detail=str(exc)) from exc
+            logger.error(
+                "Canonical memory batch delete exceeded the transaction limit: %s",
+                sanitize(str(exc)),
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=413,
+                detail="Memory batch exceeds the supported size limit",
+            ) from exc
         except CanonicalMemoryNotFoundError as exc:
             # A concurrent canonical change can invalidate the prevalidation;
             # expose the same released not-found contract without per-ID fallback.

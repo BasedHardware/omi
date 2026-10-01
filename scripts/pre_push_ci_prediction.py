@@ -32,7 +32,9 @@ PHASE_ORDER = (
     *LOCAL_CHECK_ORDER,
     "app-analysis-tests",
     "app-journeys-hermetic",
+    "app-journeys-pr",
     "app-compile-smoke",
+    "app-android-pr",
     "app-ios-compile",
     "desktop-agent-runtime",
     "desktop-swift-tests",
@@ -136,6 +138,21 @@ DESKTOP_NOTIFICATION_REGRESSION_INPUTS = {
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift",
     "desktop/macos/Desktop/Sources/Providers/DeviceProvider.swift",
 }
+
+DESKTOP_RELEASE_PR_INPUTS = {
+    "desktop/macos/Desktop/Package.swift",
+    "desktop/macos/Desktop/Package.resolved",
+    "desktop/macos/ci/xcode-pin.json",
+    "desktop/macos/scripts/run-swift-ci.sh",
+    "codemagic.yaml",
+    ".github/workflows/desktop-swift-ci.yml",
+    ".github/workflows/desktop_auto_release.yml",
+    ".github/scripts/plan-desktop-release.py",
+    ".github/scripts/desktop-release-source-identity.py",
+    ".github/scripts/publish-desktop-candidate-tag.py",
+}
+
+DESKTOP_RELEASE_SCRIPT_MARKERS = ("release", "bundle", "artifact", "notar", "sign", "packag")
 
 DESKTOP_AGENT_RUNTIME_INPUTS = {
     "desktop/macos/run.sh",
@@ -268,6 +285,28 @@ def _is_app_compile_smoke_input(path: str) -> bool:
     }
 
 
+def _is_app_android_pr_input(path: str) -> bool:
+    """Inputs that can change Android's build graph or native interface on a PR."""
+    return path.startswith(("app/android/", "app/setup/prebuilt/", "app/setup/scripts/")) or path in {
+        "app/lib/pigeon_interfaces.dart", "app/lib/phone_mic_interface.dart",
+        "app/pubspec.yaml", "app/pubspec.lock", "app/build.yaml",
+        ".github/workflows/mobile-app-checks.yml",
+    }
+
+
+def _is_app_journeys_pr_input(path: str) -> bool:
+    """Journey definitions, their harness, and direct capture/dev-control inputs."""
+    return path.startswith((
+        "app/integration_test/journeys/", "app/test/support/capture/",
+        "app/lib/services/dev_controls/", "app/lib/services/capture/",
+    )) or path in {
+        "contracts/session/session-evidence-v1.schema.json",
+        "scripts/dev-harness/mobile-verify.sh",
+        "scripts/dev-harness/dev_harness/mobile_verify.py",
+        ".github/workflows/mobile-app-checks.yml",
+    }
+
+
 IOS_PIGEON_DEFINITIONS = {
     "app/lib/pigeon_interfaces.dart",
     "app/lib/phone_mic_interface.dart",
@@ -362,6 +401,19 @@ def _is_desktop_notification_input(path: str) -> bool:
     )
 
 
+def _is_desktop_release_pr_input(path: str) -> bool:
+    if path in DESKTOP_RELEASE_PR_INPUTS or _is_desktop_notification_input(path):
+        return True
+    if not path.startswith("desktop/macos/"):
+        return False
+    if path.endswith((".entitlements", ".xcconfig", ".pbxproj")) or Path(path).name == "Info.plist":
+        return True
+    return path.startswith("desktop/macos/scripts/") and (
+        any(marker in Path(path).name for marker in DESKTOP_RELEASE_SCRIPT_MARKERS)
+        or Path(path).name == "embed-app-intents-metadata.sh"
+    )
+
+
 def _is_desktop_agent_runtime_input(path: str) -> bool:
     return path in DESKTOP_AGENT_RUNTIME_INPUTS or path.startswith(
         ("desktop/macos/agent/", "desktop/macos/pi-mono-extension/")
@@ -400,6 +452,10 @@ def resolve_impact(
     )
 
     for path in normalized_paths:
+        if _is_app_android_pr_input(path):
+            selected.add("app-android-pr")
+        if _is_app_journeys_pr_input(path):
+            selected.add("app-journeys-pr")
         # The hermetic journey lane owns inputs beyond app/ (the evidence
         # contract and the verify entrypoint), so it is resolved per path
         # before the component blocks.
@@ -425,9 +481,11 @@ def resolve_impact(
                 selected.add("desktop-ci-only")
             if _is_desktop_swift_test_input(path):
                 selected.add("desktop-swift-tests")
-            # Every source/test input can expose a DEBUG-only seam to the
-            # release test target (#13123, #13467), regardless of its name.
-            if _is_desktop_release_test_input(path):
+            # The full main/health lane compiles the complete release test
+            # target. PRs reserve that build for release-specific inputs.
+            if _is_desktop_release_test_input(path) and (
+                event != "pull_request" or _is_desktop_release_pr_input(path)
+            ):
                 selected.add("desktop-swift-release-test-compile")
             if _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
@@ -454,14 +512,17 @@ def resolve_impact(
                 "app-ci-only",
                 "app-analysis-tests",
                 "app-journeys-hermetic",
+                "app-journeys-pr",
                 "app-compile-smoke",
+                "app-android-pr",
                 "app-ios-compile",
                 "desktop-ci-only",
                 "desktop-flow-lint",
                 "desktop-swift-tests",
-                "desktop-swift-release-test-compile",
             }
         )
+        if event != "pull_request" or ".github/workflows/desktop-swift-ci.yml" in normalized_paths:
+            selected.add("desktop-swift-release-test-compile")
 
     if event in FULL_DESKTOP_HEALTH_EVENTS:
         # Manual dispatch is the exact-SHA recovery hatch and the scheduled run
@@ -477,17 +538,13 @@ def resolve_impact(
         )
 
     releasable_desktop = any(_is_releasable_desktop_path(path) for path in normalized_paths) or selector_changed
-    package_changed = any(
-        path in {"desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Package.resolved"}
-        for path in normalized_paths
-    )
+    release_pr_input = any(_is_desktop_release_pr_input(path) for path in normalized_paths)
     if releasable_desktop:
         selected.add("desktop-ci-only")
-    # Source/test PRs compile the complete release test target in the existing
-    # release job. It builds the app and tests once, then reuses those artifacts
-    # for the narrow notification regression (#13481). Non-target release inputs
-    # retain the cheaper app-only main-push check; pre-push stays debug-only.
-    if package_changed:
+    # Ordinary source/test PRs use the debug lane; release settings, packaging,
+    # package manifests, notification regression inputs, and this workflow
+    # retain the release compile on PRs. Main keeps full release evidence.
+    if event == "pull_request" and release_pr_input:
         selected.add("desktop-swift-release-compile")
     if event == "push" and releasable_desktop:
         selected.add("desktop-swift-release-compile")
@@ -512,9 +569,11 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "has_app_l10n": str(plan.includes("flutter-l10n")).lower(),
         "has_flutter_generated": str(plan.includes("flutter-codegen") or plan.includes("flutter-l10n")).lower(),
         "has_app_compile_smoke": str(plan.includes("app-compile-smoke")).lower(),
+        "has_app_android_pr": str(plan.includes("app-android-pr")).lower(),
         "has_app_ios_compile": str(plan.includes("app-ios-compile")).lower(),
         "has_app_dart": str(plan.includes("app-analysis-tests")).lower(),
         "has_app_journeys": str(plan.includes("app-journeys-hermetic")).lower(),
+        "has_app_journeys_pr": str(plan.includes("app-journeys-pr")).lower(),
         "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),
         "should_run": str(plan.includes("desktop-ci-only")).lower(),
         "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),

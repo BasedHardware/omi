@@ -63,16 +63,16 @@ void main() {
     for (final hasData in [false, true]) {
       await tester.pumpWidget(_app(MediaQuery(
         data: const MediaQueryData(textScaler: TextScaler.linear(2)),
-        child: ChatStarters(hasExistingData: hasData, isConnected: true, onSelected: (value) => selected = value),
+        child: ChatSuggestions(hasExistingData: hasData, isConnected: true, onSelected: (value) => selected = value),
       )));
-      final key = Key(hasData ? 'chat_starter_activity' : 'chat_starter_goal');
+      final key = Key(hasData ? 'chat_starter_decide' : 'chat_starter_goal');
       await tester.ensureVisible(find.byKey(key));
       await tester.tap(find.byKey(key));
-      expect(selected, hasData ? 'Summarize my recent activity' : 'Help me set a goal');
-      expect(find.text(hasData ? 'What can you do for me?' : 'Summarize my recent activity'), findsNothing);
+      expect(selected, hasData ? 'What did I decide today?' : 'Help me set a goal');
+      expect(find.text(hasData ? 'What can you do for me?' : 'What did I decide today?'), findsNothing);
       expect(tester.takeException(), isNull);
     }
-    await tester.pumpWidget(_app(ChatStarters(hasExistingData: true, isConnected: false, onSelected: (_) {})));
+    await tester.pumpWidget(_app(ChatSuggestions(hasExistingData: true, isConnected: false, onSelected: (_) {})));
     expect(find.byType(OutlinedButton), findsNothing);
   });
 

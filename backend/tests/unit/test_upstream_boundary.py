@@ -197,7 +197,7 @@ class TestExtractionSeamFanOut:
         assert "_extract_memories(uid, conversation)" in source
         assert "submit_with_context(postprocess_executor, _extract_memories" not in source
         assert "submit_with_context(postprocess_executor, _save_action_items" in source
-        assert "_save_action_items(uid, conversation, people)" in source
+        assert "_save_action_items(uid, conversation, people, trigger)" in source
         assert "submit_with_context(postprocess_executor, update_goal_progress" in source
 
     def test_fan_out_invokes_memory_action_item_and_goal_paths_separately(self):
@@ -262,6 +262,7 @@ class TestExtractionSeamFanOut:
         save_action_items.assert_called_once()
         assert save_action_items.call_args.args[0] == "uid-boundary"
         assert save_action_items.call_args.args[1] is conversation
+        assert save_action_items.call_args.args[3] is pc.ProcessingTrigger.USER_REPROCESS  # logged by the identity plan
         assert "_save_action_items" not in submitted_fns
         assert "update_goal_progress" in submitted_fns
         assert "_extract_memories" not in submitted_fns

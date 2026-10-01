@@ -35,6 +35,15 @@ SCHEMA_GROUPS = {
             'ScreenActivitySyncResponse',
         ),
     },
+    'screen_frames': {
+        'output': DEFAULT_OUTPUT_DIR / 'screen_frames_wire.g.dart',
+        'schemas': (
+            'NormalizedRect',
+            'ScreenFrameGround',
+            'ConversationScreenFrame',
+            'ConversationScreenFrameSet',
+        ),
+    },
     'conversation': {
         'output': DEFAULT_OUTPUT_DIR / 'conversation_wire.g.dart',
         'schemas': (
@@ -80,6 +89,10 @@ SCHEMA_GROUPS = {
             'SyncCaptureManifestRequest',
             'SyncCaptureManifestResponse',
         ),
+    },
+    'chat_sessions': {
+        'output': DEFAULT_OUTPUT_DIR / 'chat_sessions_wire.g.dart',
+        'schemas': ('ChatSessionResponse',),
     },
     'messages': {
         'output': DEFAULT_OUTPUT_DIR / 'messages_wire.g.dart',
@@ -208,11 +221,12 @@ SCHEMA_GROUPS = {
     },
     'people': {
         'output': DEFAULT_OUTPUT_DIR / 'people_wire.g.dart',
-        'schemas': ('Person',),
+        'schemas': ('Person', 'PersonConfidenceReason'),
     },
     'speaker_tag_prompts': {
         'output': DEFAULT_OUTPUT_DIR / 'speaker_tag_prompts_wire.g.dart',
         'schemas': (
+            'SpeakerTagCandidate',
             'SpeakerTagPrompt',
             'SpeakerTagPromptsResponse',
             'SpeakerTagPromptsShownRequest',
@@ -220,8 +234,23 @@ SCHEMA_GROUPS = {
             'SpeakerTagPromptAnswerRequest',
             'SpeakerTagPromptAnswerResponse',
             'SpeakerTagPromptClip',
+            'IgnoredVoice',
+            'IgnoredVoicesResponse',
             'VoiceProfileSettings',
             'VoiceProfileSettingsUpdate',
+        ),
+    },
+    'search': {
+        'output': DEFAULT_OUTPUT_DIR / 'search_wire.g.dart',
+        'schemas': (
+            'SearchOverviewFolder',
+            'SearchOverviewResponse',
+            'ProductMemorySearchItem',
+            'MemorySearchPolicyPayload',
+            'MemoryGlobalReadGateObservability',
+            'ReadRolloutCapabilities',
+            'ProductRolloutObservability',
+            'ProductMemorySearchResponse',
         ),
     },
     'imports_integrations': {

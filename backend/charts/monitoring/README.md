@@ -616,12 +616,16 @@ The same script can classify every committed rule in `alerts/*.json` against
 live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent,
 live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
 `--fail-on none` reports drift without failing; `--fail-on gated` fails only on
-UIDs listed in `live-alert-gate.json`, which starts as the proven Pusher set and
-widens only after a token-backed proof. Do not wire `--fail-on all` into a
-backend or Pusher deploy until that proof exists: a large unimported set would
-block every release. Nothing in CI or deploy currently POSTs these JSON files to
-Grafana; they remain a manual import until that write path is an explicit
-decision. Split-vs-combined equality in unit tests is not evidence a rule is live.
+UIDs listed in `live-alert-gate.json`. The monitoring workflow uses `--mode
+import` to upsert only committed rules in `live-stt.json` by stable UID (POST
+when absent, PUT when present), then runs `--mode fleet --alert-set live-stt
+--fail-on gated`. The import verifies each rule's `alert_identity` and Telegram
+receiver and confirms that receiver exists with resolve notifications enabled;
+it never deletes or pauses other rules. Soniox runway UIDs remain pending until
+their metrics have a data source. The token is read from a mode-0600 file and
+neither token material nor contact-point settings are logged. Split-vs-combined
+equality in unit tests is not evidence a rule is live; only the workflow's
+token-backed fleet verification proves that.
 
 Every rule carries these notification fields:
 
