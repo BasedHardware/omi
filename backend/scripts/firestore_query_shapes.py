@@ -20,7 +20,12 @@ from typing import Any, Iterable, Mapping
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tests.support.firestore_index_rules import IndexSpec, candidate_index, is_served, required_index
+from tests.support.firestore_index_rules import (
+    IndexSpec,
+    is_served,
+    required_index,
+    resolved_candidate_index,
+)
 from tests.support.firestore_query_driver_registry import COVERED_BY, DRIVERS, SKIPS
 from tests.support.firestore_query_drivers import DriverResult, calling_key, run_all_drivers, shape_id
 from tests.support.firestore_shape_recorder import QueryShape, _encode_value
@@ -50,7 +55,7 @@ def _canonical(value: Any) -> str:
 
 def shape_verdict(shape: QueryShape, manifest: Mapping[str, Any]) -> dict[str, Any]:
     """Compute the export verdict for one recorded shape."""
-    spec = candidate_index(shape)
+    spec = resolved_candidate_index(shape, manifest)
     required = required_index(shape)
     encoded = shape.to_dict()
     return {
@@ -130,12 +135,12 @@ def evaluate_shapes(entries: Iterable[Mapping[str, Any]]) -> dict[str, dict[str,
     uncertain: dict[str, dict[str, Any]] = {}
     seen: set[str] = set()
     for entry in entries:
+        if entry['served']:
+            continue
         entry_id = entry['id']
         if entry_id in seen:
             continue
         seen.add(entry_id)
-        if entry['served']:
-            continue
         row = ledger_entry(entry)
         if entry['uncertain']:
             uncertain[entry_id] = row

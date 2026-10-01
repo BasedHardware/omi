@@ -18,6 +18,8 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 from scripts import firestore_index_oracle as oracle
 from tests.support import firestore_index_rules as rules
+from tests.support.firestore_query_driver_registry import DRIVERS
+from tests.support.firestore_query_drivers import run_driver
 from tests.support.firestore_shape_recorder import QueryFilter, QueryShape, _encode_value
 
 NAMESPACE = "index-oracle-fixture"
@@ -349,6 +351,157 @@ def test_execute_query_malformed_suggestion_is_decode_error_not_guess():
     result = oracle.execute_query(FakeQuery(_precondition("%%%")), 1.0)
     assert result["status"] == "error"
     assert result["error_type"] == "SuggestionDecodeError"
+
+
+def _exemption_message(token):
+    return f"index is exempted; create it here: https://x/?create_exemption={token}"
+
+
+def _exemption_token(field, collection="conversations", scope="COLLECTION_GROUP", mode="ASCENDING", leaf=None):
+    index = firestore_admin_v1.Index(
+        name=f"projects/{PROJECT}/databases/{DATABASE}/collectionGroups/{collection}/fields/{leaf or field}",
+        query_scope=scope,
+        fields=[firestore_admin_v1.Index.IndexField(field_path=field, order=mode)],
+    )
+    return base64.urlsafe_b64encode(firestore_admin_v1.Index.serialize(index)).decode()
+
+
+EXEMPTION_TOKENS = {
+    "96bb4f6af065cbe3": (
+        "candidate_integration_outbox",
+        "status",
+        "Cmhwcm9qZWN0cy9iYXNlZC1oYXJkd2FyZS1kZXYvZGF0YWJhc2VzL2ppdC1xYS9jb2xsZWN0aW9uR3JvdXBzL2NhbmRpZGF0ZV9pbnRlZ3JhdGlvbl9vdXRib3gvZmllbGRzL3N0YXR1cxACGgoKBnN0YXR1cxAB",
+    ),
+    "1616723a69adb00c": (
+        "chat_first_proactive_intents",
+        "delivery_state",
+        "CnBwcm9qZWN0cy9iYXNlZC1oYXJkd2FyZS1kZXYvZGF0YWJhc2VzL2ppdC1xYS9jb2xsZWN0aW9uR3JvdXBzL2NoYXRfZmlyc3RfcHJvYWN0aXZlX2ludGVudHMvZmllbGRzL2RlbGl2ZXJ5X3N0YXRlEAIaEgoOZGVsaXZlcnlfc3RhdGUQAQ",
+    ),
+    "3999cbd3c1d1f287": (
+        "fcm_tokens",
+        "token",
+        "ClVwcm9qZWN0cy9iYXNlZC1oYXJkd2FyZS1kZXYvZGF0YWJhc2VzL2ppdC1xYS9jb2xsZWN0aW9uR3JvdXBzL2ZjbV90b2tlbnMvZmllbGRzL3Rva2VuEAIaCQoFdG9rZW4QAQ",
+    ),
+    "89fa7f36c3668de0": (
+        "fcm_tokens",
+        "token",
+        "ClVwcm9qZWN0cy9iYXNlZC1oYXJkd2FyZS1kZXYvZGF0YWJhc2VzL2ppdC1xYS9jb2xsZWN0aW9uR3JvdXBzL2ZjbV90b2tlbnMvZmllbGRzL3Rva2VuEAIaCQoFdG9rZW4QAQ",
+    ),
+    "26cf2251c7e5c9a5": (
+        "llm_usage",
+        "date",
+        "ClNwcm9qZWN0cy9iYXNlZC1oYXJkd2FyZS1kZXYvZGF0YWJhc2VzL2ppdC1xYS9jb2xsZWN0aW9uR3JvdXBzL2xsbV91c2FnZS9maWVsZHMvZGF0ZRACGggKBGRhdGUQAQ",
+    ),
+    "f9179fb85d7f9f79": (
+        "memory_outbox",
+        "status",
+        "Cllwcm9qZWN0cy9iYXNlZC1oYXJkd2FyZS1kZXYvZGF0YWJhc2VzL2ppdC1xYS9jb2xsZWN0aW9uR3JvdXBzL21lbW9yeV9vdXRib3gvZmllbGRzL3N0YXR1cxACGgoKBnN0YXR1cxAB",
+    ),
+    "822d5b56e5c6c5b5": (
+        "projection_repairs",
+        "status",
+        "Cl5wcm9qZWN0cy9iYXNlZC1oYXJkd2FyZS1kZXYvZGF0YWJhc2VzL2ppdC1xYS9jb2xsZWN0aW9uR3JvdXBzL3Byb2plY3Rpb25fcmVwYWlycy9maWVsZHMvc3RhdHVzEAIaCgoGc3RhdHVzEAE",
+    ),
+    "ef5612c842c5106b": (
+        "task_recurrence_inbox",
+        "status",
+        "CmFwcm9qZWN0cy9iYXNlZC1oYXJkd2FyZS1kZXYvZGF0YWJhc2VzL2ppdC1xYS9jb2xsZWN0aW9uR3JvdXBzL3Rhc2tfcmVjdXJyZW5jZV9pbmJveC9maWVsZHMvc3RhdHVzEAIaCgoGc3RhdHVzEAE",
+    ),
+}
+
+
+@pytest.mark.parametrize("query_id", sorted(EXEMPTION_TOKENS))
+def test_decode_suggested_index_decodes_real_create_exemption_tokens(query_id):
+    collection, field, token = EXEMPTION_TOKENS[query_id]
+    suggestion = oracle.decode_suggested_index(_exemption_message(token))
+    assert suggestion == {
+        "collectionGroup": collection,
+        "queryScope": "COLLECTION_GROUP",
+        "fields": [{"fieldPath": field, "order": "ASCENDING"}],
+    }
+
+
+@pytest.mark.parametrize("mode", ["ASCENDING", "DESCENDING"])
+def test_decode_suggested_index_accepts_exemption_order_modes(mode):
+    suggestion = oracle.decode_suggested_index(_exemption_message(_exemption_token("status", mode=mode)))
+    assert suggestion["fields"] == [{"fieldPath": "status", "order": mode}]
+
+
+def test_decode_suggested_index_accepts_exemption_array_mode():
+    index = firestore_admin_v1.Index(
+        name=f"projects/{PROJECT}/databases/{DATABASE}/collectionGroups/conversations/fields/tags",
+        query_scope="COLLECTION",
+        fields=[_contains("tags")],
+    )
+    token = base64.urlsafe_b64encode(firestore_admin_v1.Index.serialize(index)).decode()
+    suggestion = oracle.decode_suggested_index(_exemption_message(token))
+    assert suggestion["fields"] == [{"fieldPath": "tags", "arrayConfig": "CONTAINS"}]
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "%%%",
+        base64.b64encode(b"\x08").decode(),
+        _exemption_token("other", leaf="status"),
+        _exemption_token("status", leaf="fields/too/deep"),
+    ],
+)
+def test_decode_suggested_index_rejects_malformed_exemptions(token):
+    with pytest.raises(Exception):
+        oracle.decode_suggested_index(_exemption_message(token))
+
+
+def test_decode_suggested_index_rejects_multi_field_exemption():
+    index = firestore_admin_v1.Index(
+        name=f"projects/{PROJECT}/databases/{DATABASE}/collectionGroups/conversations/fields/status",
+        query_scope="COLLECTION_GROUP",
+        fields=[_asc("status"), _asc("other")],
+    )
+    token = base64.urlsafe_b64encode(firestore_admin_v1.Index.serialize(index)).decode()
+    with pytest.raises(ValueError):
+        oracle.decode_suggested_index(_exemption_message(token))
+
+
+def test_decode_suggested_index_rejects_exemption_kind_mismatch():
+    suggestion_kind = _token([_asc("a"), _asc("__name__")])
+    with pytest.raises(ValueError):
+        oracle.decode_suggested_index(_exemption_message(suggestion_kind))
+    exemption_kind = _exemption_token("status")
+    with pytest.raises(ValueError):
+        oracle.decode_suggested_index(_message(exemption_kind))
+
+
+def test_execute_query_unserved_decodes_exemption_suggestion():
+    token = _exemption_token("status", collection="memory_outbox")
+    result = oracle.execute_query(FakeQuery(FailedPrecondition(_exemption_message(token))), 1.0)
+    assert result["status"] == "unserved"
+    assert result["suggested_index"] == {
+        "collectionGroup": "memory_outbox",
+        "queryScope": "COLLECTION_GROUP",
+        "fields": [{"fieldPath": "status", "order": "ASCENDING"}],
+    }
+
+
+def test_execute_query_malformed_exemption_is_decode_error():
+    result = oracle.execute_query(FakeQuery(FailedPrecondition(_exemption_message("%%%"))), 1.0)
+    assert result["status"] == "error"
+    assert result["error_type"] == "SuggestionDecodeError"
+
+
+def test_registry_cursor_driver_exports_snapshot_cursor(sdk_client, monkeypatch):
+    """The compatibility-page driver passes a real snapshot, not a scalar cursor."""
+    result = run_driver(DRIVERS["database.candidates.list_candidates_compatibility_page"])
+    assert not result.errors
+    cursor_shapes = [shape for shape in result.shapes if shape.cursors]
+    assert cursor_shapes
+    encoded = cursor_shapes[0].to_dict()
+    cursor = next(item for item in encoded["cursors"] if item["kind"] == "start_after")
+    assert cursor["value"]["type"] == "snapshot"
+    assert "created_at" in cursor["value"]["value"]
+    shape = oracle.hydrate_shape(encoded, sdk_client, NAMESPACE)
+    pb = oracle.build_query(shape, sdk_client)._to_protobuf()
+    assert pb.start_at.values
 
 
 def test_execute_query_real_sdk_query_propagates_iterator_failure_once(monkeypatch):
@@ -1433,7 +1586,7 @@ def test_main_detects_inventory_change_and_invalidates_resolutions(tmp_path, mon
     _install_factories(monkeypatch, tracked, admin, [])
     uncertain = _encoded_shape(
         filters=[_leaf("a", "==", 1), _leaf("b", "==", 2)],
-        orders=[],
+        orders=[{"field": "__name__", "direction": "DESCENDING"}],
     )
     export_path = _write_export(tmp_path, [_entry("s1", uncertain)])
     code = oracle.main(_argv(tmp_path, export_path))

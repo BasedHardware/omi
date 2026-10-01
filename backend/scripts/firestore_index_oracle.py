@@ -28,12 +28,13 @@ from google.protobuf.json_format import MessageToDict
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tests.support.firestore_index_rules import candidate_index, is_served, required_index
+from tests.support.firestore_index_rules import is_served, required_index, resolved_candidate_index
 from tests.support.firestore_shape_recorder import Aggregation, QueryFilter, QueryShape
 
 SCHEMA_VERSION = 1
 RESOURCE = re.compile(r'^projects/([^/]+)/databases/([^/]+)/collectionGroups/([^/]+)/(indexes|fields)/(.+)$')
 COMPOSITE = re.compile(r'create_composite=([A-Za-z0-9_%=-]+)')
+EXEMPTION = re.compile(r'create_exemption=([A-Za-z0-9_%=-]+)')
 MODES = {'ASCENDING', 'DESCENDING', 'CONTAINS'}
 NO_RETRY = Retry(predicate=lambda exc: False)
 
@@ -51,14 +52,25 @@ def resource_parts(name: str, project: str | None = None, database: str | None =
 
 def decode_suggested_index(message: str) -> dict[str, Any]:
     match = COMPOSITE.search(message)
+    kind = 'indexes'
     if not match:
-        raise ValueError('FailedPrecondition has no create_composite suggestion')
+        match = EXEMPTION.search(message)
+        kind = 'fields'
+    if not match:
+        raise ValueError('FailedPrecondition has no create_composite or create_exemption suggestion')
     token = unquote(match[1])
     raw = base64.b64decode(token + '=' * (-len(token) % 4), altchars=b'-_', validate=True)
     index = firestore_admin_v1.Index.deserialize(raw)
-    collection, _ = resource_parts(index.name)
+    resource = RESOURCE.fullmatch(index.name)
+    if not resource:
+        raise ValueError('index/field resource has an unexpected database identity')
+    if resource[4] != kind:
+        raise ValueError('suggestion kind does not match its resource path')
+    collection, leaf = resource[3], resource[5]
     payload = MessageToDict(firestore_admin_v1.Index.pb(index))
     fields = payload.get('fields', [])
+    if kind == 'fields' and (len(fields) != 1 or fields[0].get('fieldPath') != leaf):
+        raise ValueError('exemption must carry exactly its resource field')
     if not fields or any(
         not field.get('fieldPath')
         or (field.get('order') or field.get('arrayConfig')) not in MODES
@@ -82,7 +94,7 @@ def execute_query(query: Any, timeout: float) -> dict[str, Any]:
         rows = query.get(retry=NO_RETRY, timeout=timeout)
         return {'status': 'served', 'result_rows': len(rows)}
     except FailedPrecondition as exc:
-        if not COMPOSITE.search(str(exc)):
+        if not COMPOSITE.search(str(exc)) and not EXEMPTION.search(str(exc)):
             return error_result(exc)
         try:
             return {'status': 'unserved', 'suggested_index': decode_suggested_index(str(exc))}
@@ -387,7 +399,7 @@ def equivalent_suggestion(required: Any, suggested: Mapping[str, Any]) -> bool:
 
 
 def compare_prediction(shape: QueryShape, manifest: Mapping[str, Any], observed: Mapping[str, Any]) -> dict[str, Any]:
-    candidate = candidate_index(shape)
+    candidate = resolved_candidate_index(shape, manifest)
     required = required_index(shape)
     predicted = is_served(shape, manifest)
     failures, reports = [], []
