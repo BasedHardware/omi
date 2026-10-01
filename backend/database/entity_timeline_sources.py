@@ -53,6 +53,7 @@ def _bounded_identity_segments(uid: str, data: Dict[str, Any]) -> List[Dict[str,
     """Decode only bounded speaker identity fields, never transcript text."""
     if not isinstance(uid, str) or not uid.strip():
         return []
+    clean_uid = uid.strip()
     if not isinstance(data, dict):
         return []
 
@@ -67,7 +68,7 @@ def _bounded_identity_segments(uid: str, data: Dict[str, Any]) -> List[Dict[str,
                 max_encrypted_chars = (((_MAX_TRANSCRIPT_STORED_BYTES * 2) + 28 + 2) // 3) * 4
                 if not raw.isascii() or len(raw) > max_encrypted_chars:
                     return []
-                decrypted_hex = encryption.decrypt(raw, uid)
+                decrypted_hex = encryption.decrypt(raw, clean_uid)
                 if len(decrypted_hex) > _MAX_TRANSCRIPT_STORED_BYTES * 2 or len(decrypted_hex) % 2:
                     return []
                 compressed = bytes.fromhex(decrypted_hex)
@@ -125,6 +126,7 @@ def list_entity_timeline_conversations(
     """
     if not isinstance(uid, str) or not uid.strip():
         raise ValueError("uid must be a non-empty string")
+    clean_uid = uid.strip()
     if db_client is None:
         raise ValueError("db_client must not be None")
     if not isinstance(limit, int) or isinstance(limit, bool):
@@ -137,7 +139,7 @@ def list_entity_timeline_conversations(
     if norm_start is not None and norm_end is not None and norm_start > norm_end:
         raise ValueError("start_date cannot be after end_date")
 
-    collection = db_client.collection('users').document(uid.strip()).collection(conversations_collection)
+    collection = db_client.collection('users').document(clean_uid).collection(conversations_collection)
     query = ENTITY_TIMELINE_CONVERSATIONS_QUERY.build(
         collection,
         {
@@ -161,7 +163,7 @@ def list_entity_timeline_conversations(
         if data is None:
             continue
         data['id'] = snapshot.id
-        data['transcript_segments'] = _bounded_identity_segments(uid, data)
+        data['transcript_segments'] = _bounded_identity_segments(clean_uid, data)
         conversations.append(data)
     return conversations
 

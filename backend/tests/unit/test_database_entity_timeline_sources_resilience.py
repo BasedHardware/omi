@@ -109,3 +109,80 @@ def test_list_meetings_and_screen_activity_guards():
         list_entity_timeline_screen_activity("usr-1", db_client=mock_db, limit="invalid")  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="limit must be between 1 and 501"):
         list_entity_timeline_screen_activity("usr-1", db_client=mock_db, limit=600)
+
+
+def test_bounded_identity_segments_normalizes_whitespace_uid():
+    """Verify whitespace-padded uid is normalized and successfully decrypts compressed segments."""
+    from database.conversations import encode_conversation_for_write
+
+    clean_uid = "usr-whitespace-1"
+    encoded = encode_conversation_for_write(
+        clean_uid,
+        {"transcript_segments": [{"person_id": "person-42", "is_user": False, "text": "secret"}]},
+    )
+    # Pass padded uid with leading and trailing spaces
+    padded_uid = f"   {clean_uid}   "
+    doc_data = {
+        "status": "completed",
+        "discarded": False,
+        **encoded,
+    }
+    segments = _bounded_identity_segments(padded_uid, doc_data)
+    assert len(segments) == 1
+    assert segments[0]["person_id"] == "person-42"
+    assert segments[0]["is_user"] is False
+    assert "text" not in segments[0]
+
+
+def test_bounded_identity_segments_handles_decode_failures():
+    """Verify decode and decompression failure modes safely degrade to empty list."""
+    import zlib
+
+    clean_uid = "usr-test-decode"
+
+    # Case 1: Compressed flag is True but raw is non-ascii string
+    data_non_ascii = {
+        "transcript_segments_compressed": True,
+        "transcript_segments": "corrupted_non_ascii_§§§",
+    }
+    assert _bounded_identity_segments(clean_uid, data_non_ascii) == []
+
+    # Case 2: Compressed flag is True but raw string is invalid hex / decrypt failure
+    data_bad_hex = {
+        "transcript_segments_compressed": True,
+        "transcript_segments": "invalid_not_hex_payload",
+    }
+    assert _bounded_identity_segments(clean_uid, data_bad_hex) == []
+
+    # Case 3: Raw is bytes but corrupted zlib payload
+    data_corrupt_zlib = {
+        "transcript_segments_compressed": True,
+        "transcript_segments": b"\x00\x01\x02\x03\x04\x05_corrupt_zlib",
+    }
+    assert _bounded_identity_segments(clean_uid, data_corrupt_zlib) == []
+
+    # Case 4: Valid zlib compression but decompresses to non-JSON string
+    bad_json_bytes = zlib.compress(b"not valid json {{{")
+    data_bad_json = {
+        "transcript_segments_compressed": True,
+        "transcript_segments": bad_json_bytes,
+    }
+    assert _bounded_identity_segments(clean_uid, data_bad_json) == []
+
+    # Case 5: Valid zlib and valid JSON but JSON root is not a list (e.g. dict or integer)
+    non_list_json_bytes = zlib.compress(b'{"key": "not a list"}')
+    data_non_list = {
+        "transcript_segments_compressed": True,
+        "transcript_segments": non_list_json_bytes,
+    }
+    assert _bounded_identity_segments(clean_uid, data_non_list) == []
+
+    # Case 6: Decompressed list exceeds MAX_TRANSCRIPT_SEGMENTS (4096)
+    oversized_list = [{"person_id": f"p-{i}", "is_user": False} for i in range(4097)]
+    import json
+    oversized_bytes = zlib.compress(json.dumps(oversized_list).encode("utf-8"))
+    data_oversized = {
+        "transcript_segments_compressed": True,
+        "transcript_segments": oversized_bytes,
+    }
+    assert _bounded_identity_segments(clean_uid, data_oversized) == []
