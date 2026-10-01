@@ -2762,7 +2762,7 @@ def process_conversation(
                 conversation.status = ConversationStatus.completed
             except Exception:
                 pass
-        report_persistence(False)
+        report_persistence(False, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
         return cast(Conversation, conversation)
 
     # Free-tier local processing (S6): when the rollout flag is on, desktop

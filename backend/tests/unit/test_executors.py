@@ -409,3 +409,31 @@ async def test_log_executor_health_swallows_exceptions(caplog):
             except asyncio.CancelledError:
                 pass
     assert call_count == 2, f"Expected 2 calls before cancel, got {call_count}"
+
+
+def test_drain_submitted_waits_for_outstanding_work():
+    """A one-shot CLI must not restore output while fire-and-forget work still runs."""
+    import threading
+
+    executor = MonitoredThreadPoolExecutor(name="test-drain", max_workers=2)
+    try:
+        started = threading.Event()
+        release = threading.Event()
+        executor.submit(lambda: (started.set(), release.wait(30)))
+        started.wait(5)
+        assert executor.drain_submitted(timeout=0.05) is False  # work still running
+        release.set()
+        assert executor.drain_submitted(timeout=5) is True
+    finally:
+        executor.shutdown(wait=True)
+
+
+def test_drain_submitted_tracks_every_submission_and_recovers():
+    executor = MonitoredThreadPoolExecutor(name="test-drain2", max_workers=1)
+    try:
+        for _ in range(3):
+            executor.submit(lambda: None)
+        assert executor.drain_submitted(timeout=5) is True
+        assert executor.drain_submitted() is True  # empty pool drains instantly
+    finally:
+        executor.shutdown(wait=True)

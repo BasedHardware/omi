@@ -328,6 +328,21 @@ def assert_no_destructive_operation_transaction(
         raise DestructiveOperationInProgress("canonical mutation blocked by destructive operation")
 
 
+def assert_no_legal_hold_transaction(transaction: Any, client: Any, *, uid: str) -> None:
+    """Fence an in-transaction mutation against an active legal hold.
+
+    ``assert_no_destructive_operation_transaction`` reads only the account
+    deletion gate: a legal hold placed without any destructive operation in
+    flight does not own the gate, so irreversible surgery (smart-merge undo
+    and its follow-up deletions) must additionally read the hold itself inside
+    the same transaction. Malformed hold authority fails closed exactly like
+    the destructive-operation gate.
+    """
+
+    hold_ref = _document(client, f"{LEGAL_HOLDS_COLLECTION}/{uid}")
+    _assert_hold_inactive(hold_ref.get(transaction=transaction))
+
+
 @contextmanager
 def destructive_operation_gate(
     uid: str,
@@ -416,6 +431,7 @@ __all__ = [
     "assert_account_deletion_permitted",
     "assert_destructive_operation_transaction",
     "assert_no_destructive_operation_transaction",
+    "assert_no_legal_hold_transaction",
     "current_destructive_operation_token",
     "destructive_operation_gate",
     "external_write_fence",

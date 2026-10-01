@@ -1943,3 +1943,14 @@ source-fenced display materialization, and an explicit bounded detail-read
 request. Per the owner decision of 2026-09-29 these switches ship enabled
 (default on) with kill switches back to legacy behavior. Current clients send
 visibility edges but do not renew a lease or opt into detail translation.
+<!-- Admin undo and audit do not change listen admission or wire messages. -->
+
+Smart-merge administrative undo is described in [smart_merge_unmerge.md](smart_merge_unmerge.md).
+Restored donors retain live sync dedup and are excluded from automatic sync absorption.
+Undo checkpoints installed integration delivery with a stable undo key; deleted donors
+are terminal. Exact copied-audio filenames survive donor deletion in the undo receipt,
+and source deletion removes survivor copies before removing donor originals.
+It restores the selected donor and any later ledger fragments, fences the survivor
+revision, and replays survivor refresh and each donor's first processing. Audit
+rows are content-free siblings outside conversation deletion cascades; the
+merge cutoff, runtime mode default, and capture-end eligibility are unchanged.

@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from database import conversations as conversations_db
+from utils.conversations import merge_conversations
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -210,3 +211,70 @@ def test_failed_ancestor_purge_keeps_survivor_for_retry(store, monkeypatch):
     with pytest.raises(RuntimeError, match='retraction unavailable'):
         merge_conversations.delete_conversation_with_sync_sources('uid-1', 'conv-1')
     assert conversation.exists
+
+
+def test_smart_merge_audit_survives_real_survivor_and_donor_delete_primitives(store, monkeypatch):
+    survivor = _seed_conversation(store)
+    user = store.collection('users').document('uid-1')
+    donor = user.collection('conversations').document('donor-a')
+    donor.data = {'deleted': True, 'smart_merge': {'role': 'donor', 'survivor_id': 'conv-1'}}
+    audit = user.collection('smart_merge_audit').document('donor-a')
+    audit.data = {'donor_id': 'donor-a', 'survivor_id': 'conv-1', 'p_same': 0.5}
+    survivor.data['sync_merged_from'] = ['donor-a']
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, cid: survivor.data)
+    monkeypatch.setattr(
+        merge_conversations,
+        '_delete_conversation_and_related_data',
+        lambda uid, cid, **kw: conversations_db.delete_conversation(uid, cid),
+    )
+    merge_conversations.delete_conversation_with_sync_sources('uid-1', 'conv-1')
+    assert not survivor.exists and not donor.exists
+    assert audit.exists and audit.data['p_same'] == 0.5
+
+
+def test_restored_donor_cleanup_runs_exactly_once_through_the_delegation(store, monkeypatch):
+    """The inner _delete_conversation_and_related_data hook and the delegated
+    delete_conversation_with_sync_sources must not both run the restored-donor
+    cleanup: the second pass would rescan GCS and rebuild audio for a donor
+    whose originals are already gone, and its failure would leave a visible
+    but partially purged donor."""
+    from types import SimpleNamespace
+
+    from utils.conversations import merge_conversations
+
+    conversation = _seed_conversation(store)
+    conversation.data['smart_merge'] = {'role': 'unmerged', 'survivor_id': 'survivor-1'}
+    conversation.data['id'] = 'conv-1'
+    calls = []
+    monkeypatch.setattr(merge_conversations, 'cleanup_restored_donor', lambda uid, donor: calls.append(donor['id']))
+    # Keep the heavyweight inner seams inert; only the handoff is under test.
+    monkeypatch.setattr(
+        merge_conversations,
+        'MemoryService',
+        lambda **kw: SimpleNamespace(retract_conversation_memories=lambda *a, **kw: None),
+    )
+    monkeypatch.setattr(merge_conversations, 'retraction_can_be_skipped', lambda *a, **kw: True)
+    monkeypatch.setattr(merge_conversations, 'delete_conversation_audio_files', lambda uid, cid: None)
+    monkeypatch.setattr(merge_conversations, 'delete_vector', lambda uid, cid: None)
+    monkeypatch.setattr(conversations_db, 'delete_conversation_photos', lambda uid, cid: None)
+    import database.action_items as action_items_db
+
+    monkeypatch.setattr(action_items_db, 'get_action_items_by_conversation', lambda uid, cid: [])
+    monkeypatch.setattr(action_items_db, 'delete_action_items_for_conversation', lambda uid, cid: None)
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, cid: conversation.data)
+
+    # Direct route (router/frame evidence): the entry hook owns the cleanup.
+    merge_conversations.delete_conversation_with_sync_sources('uid-1', 'conv-1')
+    assert calls == ['conv-1']
+
+    # Internal delegation from _delete_conversation_and_related_data: the inner
+    # hook already ran; the delegated entry must not repeat it.
+    delegated = []
+    monkeypatch.setattr(
+        merge_conversations,
+        'delete_conversation_with_sync_sources',
+        lambda uid, cid, **kw: delegated.append(kw.get('_restored_donor_cleaned')),
+    )
+    merge_conversations._delete_conversation_and_related_data('uid-1', 'conv-1')
+    assert calls == ['conv-1', 'conv-1']
+    assert delegated == [True]

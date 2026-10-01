@@ -32,6 +32,7 @@ from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.smart_merge_unmerge_audio import cleanup_restored_donor
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
     compute_audio_files_fingerprint,
@@ -53,6 +54,7 @@ except ImportError:
 
 import logging
 from utils.conversations.capture_shadow_outcomes import record_capture_outcome
+from utils.metrics import record_smart_merge_survivor_deleted
 
 logger = logging.getLogger(__name__)
 
@@ -683,13 +685,39 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True)
 
 
-def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> None:
-    """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
+def delete_conversation_with_sync_sources(
+    uid: str, conversation_id: str, *, _restored_donor_cleaned: bool = False
+) -> None:
+    """User/source deletion owns retained bridge artifacts, unlike raw DB deletion.
+
+    ``_restored_donor_cleaned`` marks the internal delegation from
+    ``_delete_conversation_and_related_data``, which already ran the restored-donor
+    cleanup before deleting the donor's own audio: exactly one layer owns it.
+    """
     row = conversations_db.get_conversation(uid, conversation_id) or {}
+    if not _restored_donor_cleaned:
+        cleanup_restored_donor(uid, row)
+    merged_at = None
+    try:
+        state = row.get('smart_merge') or {}
+        fragments = state.get('fragments') or []
+        if fragments:
+            merged_at = state.get('last_merged_at')
+            if not isinstance(merged_at, datetime) and len(fragments) > 1:
+                # Legacy survivors predate last_merged_at; their donor retains it.
+                donor = conversations_db.get_conversation(uid, fragments[-1]['id']) or {}
+                merged_at = (donor.get('smart_merge') or {}).get('merged_at')
+    except Exception:
+        pass  # Optional measurement cannot prevent deletion or source purging.
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
             _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
     conversations_db.delete_conversation(uid, conversation_id)
+    if isinstance(merged_at, datetime):
+        try:
+            record_smart_merge_survivor_deleted(merged_at)
+        except Exception:
+            pass
 
     folder_id = row.get('folder_id')
     if folder_id:
@@ -724,6 +752,8 @@ def _delete_conversation_and_related_data(
     - Vector embedding
     - Conversation document
     """
+    if not retain_capture and purge_sync_sources:
+        cleanup_restored_donor(uid, conversations_db.get_conversation(uid, conversation_id) or {})
     # Import here to avoid circular imports
     import database.action_items as action_items_db
 
@@ -810,7 +840,7 @@ def _delete_conversation_and_related_data(
         # Purge retained bridge sources only for a real source/user deletion.
         # Rollback of a newly created merge target still uses raw DB deletion.
         if purge_sync_sources:
-            delete_conversation_with_sync_sources(uid, conversation_id)
+            delete_conversation_with_sync_sources(uid, conversation_id, _restored_donor_cleaned=True)
         else:
             conversations_db.delete_conversation(uid, conversation_id)
     except Exception as e:

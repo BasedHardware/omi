@@ -6,6 +6,7 @@ conversation codec (encryption on), the redirect resolver and the decision
 logic run for real. All text is synthetic.
 """
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -62,10 +63,18 @@ class World:
         self.vector_error = None
         self.process_error = None
         self.process_persisted = True
+        self.process_disposition = smart_merge.DerivedEffectsDisposition.RUN
         self.retract_error = None
         self.on_ask = None
         for module in (smart_merge_db, sync_bridges, conversations_db):
             monkeypatch.setattr(module, 'get_firestore_client', lambda: self.store)
+        # The unmerge follow-up acquires the account-wide destructive gate;
+        # run its real transactional logic against the strict store.
+        from database import legal_holds as legal_holds_db
+
+        monkeypatch.setattr(
+            legal_holds_db, 'account_deletion_firestore_client', lambda firestore_client=None: self.store
+        )
         monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda uid, cid: None)
         monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda uid, cid: None)
         monkeypatch.setattr(conversations_db, 'get_conversation', self.get)
@@ -581,7 +590,11 @@ def test_seven_fragment_evening_becomes_one_survivor_with_six_redirects(world):
     # Later decisions saw the stretch: the last state lists the four fragments before A.
     last_state = world.jev_calls[-1]['state']
     assert last_state.count('\n- ') == 4 and 'Title: title f5' in last_state and 'Title: title f6' in last_state
-    visible = [key[-1] for key, row in world.store.rows.items() if not row.get('deleted')]
+    visible = [
+        key[-1]
+        for key, row in world.store.rows.items()
+        if key[:3] == ('users', UID, 'conversations') and not row.get('deleted')
+    ]
     assert visible == ['f0']
 
 
@@ -622,3 +635,31 @@ def test_preceding_query_uses_the_registered_spec_and_an_existing_index():
     assert ('limit', (6,), {}) in log
     selected = next(args[0] for name, args, _ in log if name == 'select')
     assert 'transcript_segments' not in selected
+
+
+def test_absorb_fenced_while_account_wipe_runs(world):
+    """The sibling audit created by absorb is user-scoped data the account wipe
+    owns; a live wipe gate must reject the absorb instead of recreating it."""
+    from database.legal_holds import LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION
+
+    world.store.rows[('legal_hold_deletion_gates', UID)] = {
+        'schema_version': LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+        'uid': UID,
+        'kind': 'account_data_wipe',
+        'token': 'live-wipe',
+        'state': 'running',
+        'started_at': datetime.now(timezone.utc),
+        'finished_at': None,
+    }
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    assert world.finish('n') is False
+    # Rejection still records the keep decision, but must not absorb: no donor
+    # tombstone, no survivor transcript change, and above all no audit sibling.
+    assert ('users', UID, 'smart_merge_audit', 'n') not in world.store.rows
+    assert not world.raw('n').get('deleted')
+    assert len(world.transcript('p')) == 2
+    world.store.rows.pop(('legal_hold_deletion_gates', UID))
+    assert world.finish('n') is True  # gate released: absorb proceeds
+    assert ('users', UID, 'smart_merge_audit', 'n') in world.store.rows
+    assert len(world.transcript('p')) == 4
