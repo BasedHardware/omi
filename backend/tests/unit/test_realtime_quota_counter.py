@@ -174,14 +174,18 @@ class _FrozenDatetime(datetime):
         return NOW if tz is None else NOW.astimezone(tz)
 
 
+@pytest.fixture(autouse=True)
+def freeze_usage_clock(monkeypatch) -> None:
+    # The relay's admission reads and writers resolve "this month" through
+    # llm_usage and user_usage. Freeze both so tests run deterministically
+    # regardless of calendar month boundaries.
+    monkeypatch.setattr(llm_usage_db, 'datetime', _FrozenDatetime)
+    monkeypatch.setattr(user_usage_db, 'datetime', _FrozenDatetime)
+
+
 @pytest.fixture
 def store(monkeypatch) -> _Store:
     store = _Store()
-    monkeypatch.setattr(llm_usage_db, 'datetime', _FrozenDatetime)
-    # The relay's admission reads resolve "this month" through user_usage too,
-    # so freeze it alongside the writers or the seeded 2026-09-01 buckets are
-    # only visible in September.
-    monkeypatch.setattr(user_usage_db, 'datetime', _FrozenDatetime)
     monkeypatch.setattr(desktop_realtime, 'get_customer_firestore_client', lambda: store)
     return store
 
@@ -400,6 +404,8 @@ async def _run_relay(
     monkeypatch.setattr(omni_relay, 'get_chat_quota_snapshot', snapshot)
     # The relay's own persisted response count and its reader run for real against `store`;
     # the only writer that must never fire is the question writer (the chat request owns it).
+    monkeypatch.setattr(llm_usage_db, 'datetime', _FrozenDatetime)
+    monkeypatch.setattr(user_usage_db, 'datetime', _FrozenDatetime)
     monkeypatch.setattr(omni_relay, 'get_customer_firestore_client', lambda: store)
     monkeypatch.setattr(llm_usage_db, 'record_chat_quota_question', lambda *a, **k: writes.append('question'))
     monkeypatch.setattr(omni_relay, 'schedule_managed_attempt', lambda _attempt: True)
