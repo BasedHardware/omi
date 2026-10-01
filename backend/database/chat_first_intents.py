@@ -922,9 +922,23 @@ def fetch_ready_intent_batch(
     firestore_client: Any = None,
 ) -> ReadyIntentBatch:
     """Fetch a priority batch while bounding poison retries and reconciling stable rows."""
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if isinstance(account_generation, bool) or not isinstance(account_generation, int) or account_generation < 0:
+        raise ValueError("account_generation must be a non-negative integer")
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        limit = 8
+    else:
+        limit = min(limit, 64)
+
+    if now is not None:
+        if not isinstance(now, datetime):
+            raise ValueError("now must be a datetime")
+        fetched_at = now if (now.tzinfo is not None and now.utcoffset() is not None) else now.replace(tzinfo=timezone.utc)
+    else:
+        fetched_at = datetime.now(timezone.utc)
 
     client = _db(firestore_client)
-    fetched_at = now or datetime.now(timezone.utc)
     _require_current_control(uid, account_generation=account_generation, firestore_client=client)
     collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
     lifecycle_events: list[IntentLifecycleEvent] = []
@@ -1415,6 +1429,13 @@ def release_due_deferrals(
     deferral collection is unbounded, and streaming released or future rows on
     every foreground wake turns old history into the hot path.
     """
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if isinstance(account_generation, bool) or not isinstance(account_generation, int) or account_generation < 0:
+        raise ValueError("account_generation must be a non-negative integer")
+    if not isinstance(now, datetime):
+        raise ValueError("now must be a datetime")
+    checked_now = now if (now.tzinfo is not None and now.utcoffset() is not None) else now.replace(tzinfo=timezone.utc)
 
     client = _db(firestore_client)
     _require_current_control(uid, account_generation=account_generation, firestore_client=client)
@@ -1422,7 +1443,7 @@ def release_due_deferrals(
     if subject is None:
         query = CHAT_FIRST_DEFERRALS_DUE_QUERY.build(
             collection,
-            {'account_generation': account_generation, 'state': 'pending', 'due_at': now},
+            {'account_generation': account_generation, 'state': 'pending', 'due_at': checked_now},
             field_filter_factory=FieldFilter,
         )
     else:
