@@ -86,8 +86,14 @@ def write_jev_shadow(
         return _bounded_call(lambda: write_if_not_deleting(client.transaction(max_attempts=1)), timeout=remaining)
     except (google_api_exceptions.Aborted, ValueError) as exc:
         # The SDK wraps exhausted commit contention in ValueError from Aborted.
-        # A losing transaction writes nothing; classify this admission collision
-        # as deduped, not vendor failure. Keep deletion fencing and bounded waits.
+        # A losing transaction writes nothing. Report 'deduped' only when the
+        # winning writer's record for this deterministic ID exists; an abort
+        # during a marker read or unrelated contention is a lost measurement
+        # and must stay a failure so coverage is not overstated.
         if isinstance(exc, google_api_exceptions.Aborted) or isinstance(exc.__cause__, google_api_exceptions.Aborted):
-            return 'deduped'
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError from None
+            if ref.get(retry=None, timeout=left).exists:
+                return 'deduped'
         raise

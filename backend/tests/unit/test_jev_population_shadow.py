@@ -784,7 +784,8 @@ def test_concurrent_retry_commit_loser_is_deduped_not_failed(harness, monkeypatc
 
     def read(**kwargs):
         snapshot = MagicMock(exists=bool(persisted))
-        reads.wait(timeout=5)
+        if kwargs.get('transaction') is not None:
+            reads.wait(timeout=5)  # only the two transactional reads rendezvous
         return snapshot
 
     def transaction(*, max_attempts):
@@ -810,9 +811,29 @@ def test_concurrent_retry_commit_loser_is_deduped_not_failed(harness, monkeypatc
             call.result(timeout=5)
     assert sorted(harness[3]) == [('relevance', 'deduped'), ('relevance', 'ok')]
     assert persisted['lane'] == 'relevance' and persisted['p_discard'] == pytest.approx(0.98)
-    assert marker.get.call_count == ref.get.call_count == 2
+    # two transactional marker reads, two transactional record reads, plus the loser's winner-exists check
+    assert marker.get.call_count == 2 and ref.get.call_count == 3
     assert [tx.set.call_count for tx in transactions] == [1, 1]
     assert sum(tx._rollback.call_count for tx in transactions) == 1
+
+
+def test_aborted_without_a_winning_record_is_a_failure_not_deduped(monkeypatch):
+    """An abort with no same-ID record (e.g. during a marker read) is a lost measurement."""
+    client, ref, _, _ = _fenced_store_client(monkeypatch, deleting=False)
+    client.transaction.side_effect = google_api_exceptions.Aborted('synthetic abort during marker read')
+    ref.get.return_value = MagicMock(exists=False)
+    with pytest.raises(google_api_exceptions.Aborted):
+        store.write_jev_shadow('user', 'id', {}, deadline=time.monotonic() + 1, firestore_client=client)
+    ref.get.assert_called_once()
+    assert ref.get.call_args.kwargs['retry'] is None
+    assert 0 < ref.get.call_args.kwargs['timeout'] <= 1
+
+
+def test_aborted_with_a_winning_record_is_deduped(monkeypatch):
+    client, ref, _, _ = _fenced_store_client(monkeypatch, deleting=False)
+    client.transaction.side_effect = google_api_exceptions.Aborted('synthetic contention')
+    ref.get.return_value = MagicMock(exists=True)
+    assert store.write_jev_shadow('user', 'id', {}, deadline=time.monotonic() + 1, firestore_client=client) == 'deduped'
 
 
 def test_noncontention_store_value_error_is_not_deduped(monkeypatch):
