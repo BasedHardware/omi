@@ -12141,6 +12141,16 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Уключыце Omi ў Камандах → Siri. Скажыце «$askPhrase» або «$questionPhrase», а затым задайце сваё пытанне.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Также можно сказать «$searchPhrase for what I did today».';
+  }
+
+  @override
   String get updateAvailableTitle => 'Даступнае абнаўленне';
 
   @override

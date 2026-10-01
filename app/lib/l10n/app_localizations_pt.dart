@@ -12127,6 +12127,16 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Ative o Omi em Atalhos → Siri. Diga “$askPhrase” ou “$questionPhrase” e faça sua pergunta.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Também pode dizer “$searchPhrase for what I did today”.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Atualização disponível';
 
   @override

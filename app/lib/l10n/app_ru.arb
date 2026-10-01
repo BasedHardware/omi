@@ -3800,6 +3800,8 @@
     "collapseAction": "Свернуть",
     "speakerTagPromptNotMeAction": "Не я",
     "confidenceNextLabels": "{count, plural, =1{Отметьте их ещё в 1 разговоре.} other{Отметьте их ещё в {count} разговорах.}}",
+    "siriShortcutsSetupHint": "Включите Omi в Командах → Siri. Скажите «{askPhrase}» или «{questionPhrase}», затем задайте свой вопрос.",
+    "siriShortcutsSearchHint": " Также можно сказать «{searchPhrase} for what I did today».",
     "updateAvailableTitle": "Доступно обновление",
     "updateAvailableMessage": "Новая версия Omi готова: с исправлениями и улучшениями.",
     "updateRequiredTitle": "Требуется обновление",

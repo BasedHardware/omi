@@ -12108,6 +12108,16 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Omi را در میان‌برها ← Siri روشن کنید. «$askPhrase» یا «$questionPhrase» بگویید و سپس سؤال خود را بپرسید.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' همچنین می‌توانید بگویید «$searchPhrase for what I did today».';
+  }
+
+  @override
   String get updateAvailableTitle => 'به‌روزرسانی در دسترس است';
 
   @override

@@ -11322,6 +11322,8 @@
     "collapseAction": "కుదించు",
     "speakerTagPromptNotMeAction": "నేను కాదు",
     "confidenceNextLabels": "{count, plural, =1{ఇంకా 1 సంభాషణలో వారికి లేబుల్ చేయండి.} other{ఇంకా {count} సంభాషణల్లో వారికి లేబుల్ చేయండి.}}",
+    "siriShortcutsSetupHint": "షార్ట్‌కట్స్ → Siri లో Omi ని ఆన్ చేయండి. “{askPhrase}” లేదా “{questionPhrase}” అని చెప్పి, ఆపై మీ ప్రశ్న అడగండి.",
+    "siriShortcutsSearchHint": " మీరు “{searchPhrase} for what I did today” అని కూడా చెప్పవచ్చు.",
     "updateAvailableTitle": "అప్‌డేట్ అందుబాటులో ఉంది",
     "updateAvailableMessage": "Omi కొత్త వెర్షన్ సిద్ధంగా ఉంది, సవరణలు మరియు మెరుగుదలలతో.",
     "updateRequiredTitle": "అప్‌డేట్ అవసరం",

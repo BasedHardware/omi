@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
 import 'package:omi/services/siri_integration.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart' as siri_events;
 
 class RecordingSiriHost extends SiriIndexApi {
@@ -206,6 +207,21 @@ class _CooldownHost extends RecordingSiriHost {
   Future<List<SiriTelemetryRecord>> takeTelemetry() async => [];
 }
 
+class _TelemetryDrainHost extends SiriIndexApi {
+  _TelemetryDrainHost(this.pending);
+
+  final List<SiriTelemetryRecord> pending;
+  int takes = 0;
+
+  @override
+  Future<List<SiriTelemetryRecord>> takeTelemetry() async {
+    takes++;
+    final rows = List<SiriTelemetryRecord>.of(pending);
+    pending.clear();
+    return rows;
+  }
+}
+
 class _PendingRouteHost extends SiriIndexApi {
   SiriPendingRoute? pending;
   final acknowledgments = <bool>[];
@@ -222,6 +238,8 @@ class _PendingRouteHost extends SiriIndexApi {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('pending Spotlight route is acknowledged only after its exact owner route opens', () async {
     final host = _PendingRouteHost()
       ..pending = SiriPendingRoute(route: '/conversation/c-1', uid: 'owner-a', generation: 4);
@@ -247,6 +265,43 @@ void main() {
     expect(intent.wireName, 'open_chat');
     expect(siri_events.SiriIntentPerformedInvokedVia.appIntent.wireName, 'app_intent');
     expect(siri_events.SiriIntentPerformedInvokedVia.userActivity.wireName, 'user_activity');
+  });
+
+  test('launch telemetry drain waits for the analytics identity bind', () async {
+    AnalyticsManager.resetForTesting();
+    addTearDown(AnalyticsManager.resetForTesting);
+    final host = _TelemetryDrainHost([
+      SiriTelemetryRecord(
+          kind: 'intent', intent: 'askOmi', outcome: 'ok', latencyMs: 5, entityCounts: 0, entryPath: 'unknown')
+    ]);
+    final siri = SiriIntegration.forTest(host, 'owner-a');
+
+    expect(AnalyticsManager.identityKnown, isFalse, reason: 'cold start must begin unbound');
+    siri.installEvents();
+    await Future<void>.delayed(Duration.zero);
+    expect(host.takes, 0,
+        reason: 'the destructive native drain must not run before identity binding'
+            ' would discard the emitted events');
+
+    AnalyticsManager().bindIdentity('owner-a');
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.takes, 1, reason: 'the buffered launch telemetry drains once identity is bound');
+  });
+
+  test('launch telemetry drains immediately when identity is already bound', () async {
+    AnalyticsManager.resetForTesting();
+    addTearDown(AnalyticsManager.resetForTesting);
+    AnalyticsManager().bindIdentity('owner-a');
+    final host = _TelemetryDrainHost([
+      SiriTelemetryRecord(
+          kind: 'intent', intent: 'askOmi', outcome: 'ok', latencyMs: 5, entityCounts: 0, entryPath: 'unknown')
+    ]);
+    final siri = SiriIntegration.forTest(host, 'owner-a');
+
+    siri.installEvents();
+    await Future<void>.delayed(Duration.zero);
+    expect(host.takes, 1);
   });
 
   test('removal repair retries keep a capped interval without a terminal attempt', () {

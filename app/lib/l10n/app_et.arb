@@ -3765,6 +3765,8 @@
     "collapseAction": "Ahenda",
     "speakerTagPromptNotMeAction": "Pole mina",
     "confidenceNextLabels": "{count, plural, =1{Märgi nad veel 1 vestluses.} other{Märgi nad veel {count} vestluses.}}",
+    "siriShortcutsSetupHint": "Lülitage Omi sisse jaotises Otseteed → Siri. Ütlege „{askPhrase}“ või „{questionPhrase}“ ja seejärel esitage oma küsimus.",
+    "siriShortcutsSearchHint": " Saate öelda ka „{searchPhrase} for what I did today“.",
     "updateAvailableTitle": "Värskendus on saadaval",
     "updateAvailableMessage": "Omi uus versioon on valmis – parandused ja täiustused.",
     "updateRequiredTitle": "Värskendus on vajalik",
