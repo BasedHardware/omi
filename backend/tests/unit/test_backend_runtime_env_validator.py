@@ -1119,8 +1119,8 @@ def test_manual_firestore_readiness_contract_allows_one_staged_workflow_control_
 def test_firestore_readiness_contract_requires_validation_before_artifact_upload(workflow_name):
     validator = load_validator()
     workflow_path = ROOT.parent / '.github/workflows' / workflow_name
-    workflow = validator._load_yaml(workflow_path)
-    steps = workflow['jobs']['firestore_readiness']['steps']
+    action = validator._load_yaml(ROOT.parent / '.github/actions/firestore-readiness/action.yml')
+    steps = action['runs']['steps']
     upload_index = next(index for index, step in enumerate(steps) if step.get('uses') == 'actions/upload-artifact@v7')
     upload = steps.pop(upload_index)
     validation_index = next(
@@ -1128,7 +1128,7 @@ def test_firestore_readiness_contract_requires_validation_before_artifact_upload
     )
     steps.insert(validation_index, upload)
 
-    errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
+    errors = validator._validate_firestore_readiness_composite(f'cloud_run_workflow/{workflow_path}', action)
 
     assert any('only a successfully validated bounded proposal may be uploaded' in error.message for error in errors)
 
@@ -1138,12 +1138,12 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
     validator = load_validator()
     workflow_path = ROOT.parent / '.github/workflows' / workflow_name
     workflow = validator._load_yaml(workflow_path)
-    auth = next(
+    gate = next(
         step
         for step in workflow['jobs']['firestore_readiness']['steps']
-        if step.get('uses') == 'google-github-actions/auth@v3'
+        if 'firestore-readiness' in str(step.get('uses', ''))
     )
-    auth['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
+    gate['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
 
     errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
 
