@@ -13,12 +13,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     PackageInfo.setMockInitialValues(
-      appName: 'Omi Test',
-      packageName: 'com.omi.test',
-      version: '1.0.543',
-      buildNumber: '992',
-      buildSignature: '',
-    );
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
   });
 
   group('Device Disconnected Detailed registry shape', () {
@@ -29,7 +24,11 @@ void main() {
         appState: DeviceDisconnectedDetailedAppState.background,
       );
       expect(event.wireName, 'Device Disconnected Detailed');
-      expect(event.properties, {'reason': 'connection_timeout', 'reason_code': 8, 'app_state': 'background'});
+      expect(event.properties, {
+        'reason': 'connection_timeout',
+        'reason_code': 8,
+        'app_state': 'background',
+      });
     });
 
     test('enum values carry the native reason vocabulary', () {
@@ -47,18 +46,10 @@ void main() {
         'gatt_error',
         'unknown',
       ]);
-      expect(DeviceDisconnectedDetailedAppState.values.map((s) => s.wireName), [
-        'foreground',
-        'background',
-        'inactive',
-        'unknown',
-      ]);
-      expect(DiagnosticsSendFailedFailureStage.values.map((s) => s.wireName), [
-        'build_bundle',
-        'dialog_cancelled',
-        'upload',
-        'ticket_parse',
-      ]);
+      expect(DeviceDisconnectedDetailedAppState.values.map((s) => s.wireName),
+          ['foreground', 'background', 'inactive', 'unknown']);
+      expect(DiagnosticsSendFailedFailureStage.values.map((s) => s.wireName),
+          ['build_bundle', 'dialog_cancelled', 'upload', 'ticket_parse']);
     });
 
     test('TypedEvents routes the event through the manager queue', () async {
@@ -111,13 +102,9 @@ void main() {
 
     test('app state maps with unknown fallback', () {
       expect(
-        AnalyticsManager.disconnectAppStateFromNative('foreground'),
-        DeviceDisconnectedDetailedAppState.foreground,
-      );
+          AnalyticsManager.disconnectAppStateFromNative('foreground'), DeviceDisconnectedDetailedAppState.foreground);
       expect(
-        AnalyticsManager.disconnectAppStateFromNative('background'),
-        DeviceDisconnectedDetailedAppState.background,
-      );
+          AnalyticsManager.disconnectAppStateFromNative('background'), DeviceDisconnectedDetailedAppState.background);
       expect(AnalyticsManager.disconnectAppStateFromNative('inactive'), DeviceDisconnectedDetailedAppState.inactive);
       expect(AnalyticsManager.disconnectAppStateFromNative(''), DeviceDisconnectedDetailedAppState.unknown);
       expect(AnalyticsManager.disconnectAppStateFromNative(null), DeviceDisconnectedDetailedAppState.unknown);

@@ -22,7 +22,11 @@ class _NoConnectivityPlatform extends ConnectivityPlatform {
   Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
 }
 
-BleDisconnectEvent _event(int timestamp, {String eventType = 'disconnect', int timeToReconnectMs = 0}) {
+BleDisconnectEvent _event(
+  int timestamp, {
+  String eventType = 'disconnect',
+  int timeToReconnectMs = 0,
+}) {
   return BleDisconnectEvent(
     timestamp: timestamp,
     reason: eventType == 'fail_to_connect' ? 'connection_timeout' : 'clean_disconnect',

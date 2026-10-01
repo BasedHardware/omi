@@ -88,22 +88,22 @@ class _ConversationListItemState extends State<ConversationListItem> {
   bool _reprocessing = false;
 
   int _visualSignature(ServerConversation conversation) => Object.hash(
-    conversation.structured.title,
-    conversation.structured.emoji,
-    conversation.structured.category,
-    conversation.status,
-    conversation.discarded,
-    conversation.starred,
-    conversation.folderId,
-    conversation.visibility,
-    conversation.startedAt,
-    conversation.finishedAt,
-    conversation.photos.length,
-    conversation.transcriptSegments.length,
-    conversation.captureGroup?.id,
-    conversation.captureGroup?.revision,
-    conversation.summaryRetryable,
-  );
+        conversation.structured.title,
+        conversation.structured.emoji,
+        conversation.structured.category,
+        conversation.status,
+        conversation.discarded,
+        conversation.starred,
+        conversation.folderId,
+        conversation.visibility,
+        conversation.startedAt,
+        conversation.finishedAt,
+        conversation.photos.length,
+        conversation.transcriptSegments.length,
+        conversation.captureGroup?.id,
+        conversation.captureGroup?.revision,
+        conversation.summaryRetryable,
+      );
 
   @override
   void dispose() {
@@ -206,7 +206,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
       );
     });
 
-    final seek = searchMomentSeekFromSnippets(snippets: widget.conversation.matchSnippets, searchQuery: searchQuery);
+    final seek = searchMomentSeekFromSnippets(
+      snippets: widget.conversation.matchSnippets,
+      searchQuery: searchQuery,
+    );
 
     final resultFuture = routeToPage(
       context,
@@ -237,15 +240,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   static ConversationActionAction _rowActionAnalytics(ConversationRowAction action, bool starred) => switch (action) {
-    ConversationRowAction.open => ConversationActionAction.open,
-    ConversationRowAction.star => starred ? ConversationActionAction.unstar : ConversationActionAction.star,
-    ConversationRowAction.move => ConversationActionAction.moveFolder,
-    ConversationRowAction.share => ConversationActionAction.share,
-    ConversationRowAction.recordings => ConversationActionAction.recordingsOpen,
-    ConversationRowAction.separate => ConversationActionAction.separate,
-    ConversationRowAction.select => ConversationActionAction.select,
-    ConversationRowAction.delete => ConversationActionAction.delete,
-  };
+        ConversationRowAction.open => ConversationActionAction.open,
+        ConversationRowAction.star => starred ? ConversationActionAction.unstar : ConversationActionAction.star,
+        ConversationRowAction.move => ConversationActionAction.moveFolder,
+        ConversationRowAction.share => ConversationActionAction.share,
+        ConversationRowAction.recordings => ConversationActionAction.recordingsOpen,
+        ConversationRowAction.separate => ConversationActionAction.separate,
+        ConversationRowAction.select => ConversationActionAction.select,
+        ConversationRowAction.delete => ConversationActionAction.delete,
+      };
 
   /// Long-press: the row's one context menu (hub audit #7). Multi-select is one of its entries.
   Future<void> _showActions(BuildContext context, ConversationProvider provider) async {
@@ -301,130 +304,124 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
 
     return RepaintBoundary(
-      child:
-          Selector<
-            ConversationProvider,
-            ({int visualSignature, bool isSelectionMode, bool isSelected, bool isMerging, bool isEligible})
-          >(
-            selector: (context, provider) => (
-              // ServerConversation is mutable. Select the visible primitive fields
-              // instead of object identity so star/title/status updates are not lost.
-              visualSignature: _visualSignature(widget.conversation),
-              isSelectionMode: provider.isSelectionModeActive,
-              isSelected: provider.isConversationSelected(widget.conversation.id),
-              isMerging: provider.isConversationMerging(widget.conversation.id),
-              isEligible: provider.isConversationEligibleForMerge(widget.conversation.id),
-            ),
-            builder: (context, rowState, child) {
-              final provider = context.read<ConversationProvider>();
-              final isSelectionMode = rowState.isSelectionMode;
-              final isSelected = rowState.isSelected;
-              final isMerging = rowState.isMerging;
-              final isEligible = rowState.isEligible;
+      child: Selector<ConversationProvider,
+          ({int visualSignature, bool isSelectionMode, bool isSelected, bool isMerging, bool isEligible})>(
+        selector: (context, provider) => (
+          // ServerConversation is mutable. Select the visible primitive fields
+          // instead of object identity so star/title/status updates are not lost.
+          visualSignature: _visualSignature(widget.conversation),
+          isSelectionMode: provider.isSelectionModeActive,
+          isSelected: provider.isConversationSelected(widget.conversation.id),
+          isMerging: provider.isConversationMerging(widget.conversation.id),
+          isEligible: provider.isConversationEligibleForMerge(widget.conversation.id),
+        ),
+        builder: (context, rowState, child) {
+          final provider = context.read<ConversationProvider>();
+          final isSelectionMode = rowState.isSelectionMode;
+          final isSelected = rowState.isSelected;
+          final isMerging = rowState.isMerging;
+          final isEligible = rowState.isEligible;
 
-              return GestureDetector(
-                onTap: () async {
-                  // If in selection mode, toggle selection only if eligible
-                  if (isSelectionMode) {
-                    if (!isEligible) {
-                      // Show feedback that this conversation cannot be selected
-                      HapticFeedback.lightImpact();
-                      OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
-                      return;
-                    }
-                    HapticFeedback.selectionClick();
-                    provider.toggleConversationSelection(widget.conversation.id);
-                    return;
-                  }
-                  await _open(context, provider);
-                },
-                onLongPress: isSelectionMode || isMerging ? null : () => _showActions(context, provider),
-                child: Stack(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.only(
-                        top: 8,
-                        left: widget.isFromOnboarding ? 0 : 16,
-                        right: widget.isFromOnboarding ? 0 : 16,
-                      ),
-                      child: AnimatedOpacity(
+          return GestureDetector(
+            onTap: () async {
+              // If in selection mode, toggle selection only if eligible
+              if (isSelectionMode) {
+                if (!isEligible) {
+                  // Show feedback that this conversation cannot be selected
+                  HapticFeedback.lightImpact();
+                  OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
+                  return;
+                }
+                HapticFeedback.selectionClick();
+                provider.toggleConversationSelection(widget.conversation.id);
+                return;
+              }
+              await _open(context, provider);
+            },
+            onLongPress: isSelectionMode || isMerging ? null : () => _showActions(context, provider),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(
+                    top: 8,
+                    left: widget.isFromOnboarding ? 0 : 16,
+                    right: widget.isFromOnboarding ? 0 : 16,
+                  ),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
+                    child: Semantics(
+                      selected: isSelectionMode ? isSelected : null,
+                      child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
-                        child: Semantics(
-                          selected: isSelectionMode ? isSelected : null,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: double.maxFinite,
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? OmiColors.surface3
-                                  : (isSelectionMode && !isEligible)
+                        width: double.maxFinite,
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? OmiColors.surface3
+                              : (isSelectionMode && !isEligible)
                                   ? OmiColors.surface2
                                   : OmiColors.surface1,
-                              borderRadius: OmiRadius.xlAll,
-                              border: isSelected
-                                  ? Border.all(color: OmiColors.accent, width: 2)
-                                  : (isSelectionMode && !isEligible)
+                          borderRadius: OmiRadius.xlAll,
+                          border: isSelected
+                              ? Border.all(color: OmiColors.accent, width: 2)
+                              : (isSelectionMode && !isEligible)
                                   ? Border.all(color: OmiColors.border, width: 1)
                                   : null,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: OmiRadius.xlAll,
+                          child: Dismissible(
+                            // Keep the dismissible state stable when the conversation provider
+                            // refreshes. A UniqueKey here recreated every row during unrelated
+                            // notifications, forcing extra layout/paint work while scrolling.
+                            key: ValueKey('conversation_dismissible_${widget.conversation.id}'),
+                            direction:
+                                isSelectionMode || isMerging ? DismissDirection.none : DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20.0),
+                              color: OmiColors.danger,
+                              child: const Icon(Icons.delete, color: Colors.white),
                             ),
-                            child: ClipRRect(
-                              borderRadius: OmiRadius.xlAll,
-                              child: Dismissible(
-                                // Keep the dismissible state stable when the conversation provider
-                                // refreshes. A UniqueKey here recreated every row during unrelated
-                                // notifications, forcing extra layout/paint work while scrolling.
-                                key: ValueKey('conversation_dismissible_${widget.conversation.id}'),
-                                direction: isSelectionMode || isMerging
-                                    ? DismissDirection.none
-                                    : DismissDirection.endToStart,
-                                background: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 20.0),
-                                  color: OmiColors.danger,
-                                  child: const Icon(Icons.delete, color: Colors.white),
-                                ),
-                                // One delete path (D5): confirm unless opted out, then Undo.
-                                confirmDismiss: (direction) async {
-                                  HapticFeedback.mediumImpact();
-                                  trackConversationAction(
-                                    ConversationActionAction.delete,
-                                    ConversationActionSurface.rowSwipe,
-                                  );
-                                  return confirmConversationDelete(context);
-                                },
-                                onDismissed: (direction) {
-                                  final conversation = widget.conversation;
-                                  PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
-                                  unawaited(deleteConversationsWithUndo(context, [conversation]));
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
-                                  child: _buildMobileLayout(context),
-                                ),
-                              ),
+                            // One delete path (D5): confirm unless opted out, then Undo.
+                            confirmDismiss: (direction) async {
+                              HapticFeedback.mediumImpact();
+                              trackConversationAction(
+                                  ConversationActionAction.delete, ConversationActionSurface.rowSwipe);
+                              return confirmConversationDelete(context);
+                            },
+                            onDismissed: (direction) {
+                              final conversation = widget.conversation;
+                              PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
+                              unawaited(deleteConversationsWithUndo(context, [conversation]));
+                            },
+                            child: Padding(
+                              padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+                              child: _buildMobileLayout(context),
                             ),
                           ),
                         ),
                       ),
                     ),
-                    // Merging overlay covering the full card
-                    if (isMerging)
-                      Positioned.fill(
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            top: 8,
-                            left: widget.isFromOnboarding ? 0 : 16,
-                            right: widget.isFromOnboarding ? 0 : 16,
-                          ),
-                          child: _buildMergingOverlay(),
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
-              );
-            },
-          ),
+                // Merging overlay covering the full card
+                if (isMerging)
+                  Positioned.fill(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        top: 8,
+                        left: widget.isFromOnboarding ? 0 : 16,
+                        right: widget.isFromOnboarding ? 0 : 16,
+                      ),
+                      child: _buildMergingOverlay(),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -440,7 +437,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
           style: _metaStyle,
           maxLines: 1,
         ),
-        if (duration.isNotEmpty) ...[Text(' • ', style: _metaStyle), Text(duration, style: _metaStyle, maxLines: 1)],
+        if (duration.isNotEmpty) ...[
+          Text(' • ', style: _metaStyle),
+          Text(duration, style: _metaStyle, maxLines: 1),
+        ],
         // One row stands for an event several devices recorded.
         if (_captureSources.length > 1) ...[
           Text(' • ', style: _metaStyle),
@@ -580,7 +580,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
             color: Colors.black.withValues(alpha: 0.62),
             borderRadius: OmiRadius.smAll,
           ),
-          child: Text(context.l10n.upgradeToUnlimited, style: OmiType.callout.copyWith(fontWeight: FontWeight.bold)),
+          child: Text(
+            context.l10n.upgradeToUnlimited,
+            style: OmiType.callout.copyWith(fontWeight: FontWeight.bold),
+          ),
         ),
       ),
     );

@@ -36,67 +36,67 @@ void fireC8Slice3(AnalyticsManager analytics) {
 }
 
 List<List<Object>> c8Slice3Goldens(Map<String, Object> globals) => [
-  [
-    'Phone Call Page Opened',
-    {...globals},
-  ],
-  [
-    'Phone Call Verification Started',
-    {...globals},
-  ],
-  [
-    'Phone Call Verification Completed',
-    {...globals},
-  ],
-  [
-    'Phone Call Connected',
-    {...globals},
-  ],
-  [
-    'Phone Call Dialpad Opened',
-    {...globals},
-  ],
-  [
-    'Phone Call Upsell Upgrade Tapped',
-    {...globals},
-  ],
-  [
-    'Phone Call Upsell Dismissed',
-    {...globals},
-  ],
-  [
-    'Device Disconnected Detailed',
-    {...globals, 'reason': 'unknown', 'reason_code': -1, 'app_state': 'unknown'},
-  ],
-  [
-    'Speech Profile Capture Page Clicked',
-    {...globals},
-  ],
-  [
-    'Speech Profile Skipped',
-    {...globals},
-  ],
-  [
-    'Speech Profile Upload Succeeded',
-    {...globals},
-  ],
-  [
-    'Speech Profile Embedding Stored',
-    {...globals},
-  ],
-  [
-    'Onboarding Step Speech Profile Continued',
-    {...globals},
-  ],
-  [
-    'Use Without Device Onboarding Welcome',
-    {...globals},
-  ],
-  [
-    'Use Without Device Onboarding Find Devices',
-    {...globals},
-  ],
-];
+      [
+        'Phone Call Page Opened',
+        {...globals}
+      ],
+      [
+        'Phone Call Verification Started',
+        {...globals}
+      ],
+      [
+        'Phone Call Verification Completed',
+        {...globals}
+      ],
+      [
+        'Phone Call Connected',
+        {...globals}
+      ],
+      [
+        'Phone Call Dialpad Opened',
+        {...globals}
+      ],
+      [
+        'Phone Call Upsell Upgrade Tapped',
+        {...globals}
+      ],
+      [
+        'Phone Call Upsell Dismissed',
+        {...globals}
+      ],
+      [
+        'Device Disconnected Detailed',
+        {...globals, 'reason': 'unknown', 'reason_code': -1, 'app_state': 'unknown'}
+      ],
+      [
+        'Speech Profile Capture Page Clicked',
+        {...globals}
+      ],
+      [
+        'Speech Profile Skipped',
+        {...globals}
+      ],
+      [
+        'Speech Profile Upload Succeeded',
+        {...globals}
+      ],
+      [
+        'Speech Profile Embedding Stored',
+        {...globals}
+      ],
+      [
+        'Onboarding Step Speech Profile Continued',
+        {...globals}
+      ],
+      [
+        'Use Without Device Onboarding Welcome',
+        {...globals}
+      ],
+      [
+        'Use Without Device Onboarding Find Devices',
+        {...globals}
+      ],
+    ];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -104,12 +104,7 @@ void main() {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
-      appName: 'Omi Test',
-      packageName: 'com.omi.test',
-      version: '1.0.543',
-      buildNumber: '992',
-      buildSignature: '',
-    );
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
     await SharedPreferencesUtil.init();
   });
   tearDown(AnalyticsManager.resetForTesting);
@@ -122,7 +117,11 @@ void main() {
     await AnalyticsManager.flushPending(force: true);
     await AnalyticsManager.flushPending(force: true);
     final platformName = PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown');
-    final globals = <String, Object>{'app_platform': platformName, 'app_version': '1.0.543', 'app_build': '992'};
+    final globals = <String, Object>{
+      'app_platform': platformName,
+      'app_version': '1.0.543',
+      'app_build': '992',
+    };
     expect(emissionPayloads(adapter.events), c8Slice3Goldens(globals));
     expect(adapter.events.every((event) => !event.$2.containsKey('correlation_id')), isTrue);
     // Provenance globals ride on every slice-3 emission; only the registry-enriched

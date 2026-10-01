@@ -84,11 +84,7 @@ class SearchDropRoute<T> extends PageRoute<T> {
 
   @override
   Widget buildTransitions(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
+      BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
     return SearchDropTransition(animation: animation, child: child);
   }
 }
@@ -108,10 +104,7 @@ class SearchDropTransition extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         IgnorePointer(
-          child: FadeTransition(
-            opacity: dim,
-            child: ColoredBox(color: Colors.black.withValues(alpha: 0.18)),
-          ),
+          child: FadeTransition(opacity: dim, child: ColoredBox(color: Colors.black.withValues(alpha: 0.18))),
         ),
         SlideTransition(
           position: Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(drop),
@@ -510,12 +503,8 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     ];
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: EdgeInsets.fromLTRB(
-        OmiSpacing.md,
-        OmiSpacing.xs,
-        OmiSpacing.md,
-        MediaQuery.paddingOf(context).bottom + 24,
-      ),
+      padding:
+          EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, MediaQuery.paddingOf(context).bottom + 24),
       children: [
         GridView.count(
           crossAxisCount: 2,

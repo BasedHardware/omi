@@ -44,13 +44,13 @@ ServerConversation _conversation({
 }
 
 Map<String, dynamic> _wire({Object? summaryRetryable, bool includeKey = true}) => {
-  'id': 'c1',
-  'created_at': '2026-09-30T12:00:00Z',
-  'started_at': '2026-09-30T12:00:00Z',
-  'finished_at': '2026-09-30T12:05:00Z',
-  'structured': {'title': 'Venue planning', 'overview': ''},
-  if (includeKey) 'summary_retryable': summaryRetryable,
-};
+      'id': 'c1',
+      'created_at': '2026-09-30T12:00:00Z',
+      'started_at': '2026-09-30T12:00:00Z',
+      'finished_at': '2026-09-30T12:05:00Z',
+      'structured': {'title': 'Venue planning', 'overview': ''},
+      if (includeKey) 'summary_retryable': summaryRetryable,
+    };
 
 void main() {
   final l10n = lookupAppLocalizations(const Locale('en'));
@@ -90,7 +90,10 @@ void main() {
     test('discarded, locked and in-flight rows stay quiet', () {
       expect(_conversation(summaryRetryable: true, discarded: true).showsSummaryRetry, isFalse);
       expect(_conversation(summaryRetryable: true, isLocked: true).showsSummaryRetry, isFalse);
-      expect(_conversation(summaryRetryable: true, status: ConversationStatus.processing).showsSummaryRetry, isFalse);
+      expect(
+        _conversation(summaryRetryable: true, status: ConversationStatus.processing).showsSummaryRetry,
+        isFalse,
+      );
     });
   });
 

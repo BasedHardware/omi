@@ -173,28 +173,25 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           .where((e) => (e['timestamp'] as num? ?? 0) >= sinceMs && e['eventType'] == 'fail_to_connect')
           .length,
       'rssi_samples': extended['rssi_samples'] ?? [],
-      'battery_history':
-          extended['battery_history_v2'] ??
+      'battery_history': extended['battery_history_v2'] ??
           _batteryHistory.map((p) => {'ts': p.timestamp, 'level': p.level, 'charging': null}).toList(),
       'disconnect_history': disconnects
-          .map(
-            (e) => {
-              'ts': e['timestamp'],
-              'reason': e['reason'],
-              'code': e['reasonCode'],
-              'manual': e['isManual'],
-              'event_type': e['eventType'],
-              'last_rssi': e['lastRssi'],
-              'last_rssi_age_ms': e['lastRssiAgeMs'],
-              'connection_duration_ms': e['connectionDurationMs'],
-              'app_state': e['appState'],
-              'time_to_reconnect_ms': e['timeToReconnectMs'],
-              'rssi_trend': e['rssiTrend'],
-              'lost_audio_seconds': e['lostAudioSeconds'],
-              'audio_packets_received': e['audioPacketsReceived'],
-              'audio_packets_expected': e['audioPacketsExpected'],
-            },
-          )
+          .map((e) => {
+                'ts': e['timestamp'],
+                'reason': e['reason'],
+                'code': e['reasonCode'],
+                'manual': e['isManual'],
+                'event_type': e['eventType'],
+                'last_rssi': e['lastRssi'],
+                'last_rssi_age_ms': e['lastRssiAgeMs'],
+                'connection_duration_ms': e['connectionDurationMs'],
+                'app_state': e['appState'],
+                'time_to_reconnect_ms': e['timeToReconnectMs'],
+                'rssi_trend': e['rssiTrend'],
+                'lost_audio_seconds': e['lostAudioSeconds'],
+                'audio_packets_received': e['audioPacketsReceived'],
+                'audio_packets_expected': e['audioPacketsExpected'],
+              })
           .toList(),
       'audio_packets_received_current': extended['audio_packets_received'],
       'audio_packets_expected_current': extended['audio_packets_expected'],
@@ -280,9 +277,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       json = const JsonEncoder.withIndent('  ').convert(bundle);
     } catch (e) {
       Logger.debug('Failed to build diagnostics bundle: $e');
-      PlatformManager.instance.analytics.diagnosticsSendFailed(
-        failureStage: DiagnosticsSendFailedFailureStage.buildBundle,
-      );
+      PlatformManager.instance.analytics
+          .diagnosticsSendFailed(failureStage: DiagnosticsSendFailedFailureStage.buildBundle);
       if (mounted) OmiFeedback.error(context, context.l10n.deviceDiagnosticsUploadFailed);
       return;
     }
@@ -294,13 +290,11 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         content: SizedBox(
           width: 520,
           height: 400,
-          child: Column(
-            children: [
-              Text(context.l10n.deviceDiagnosticsUploadDescription),
-              const SizedBox(height: 12),
-              Expanded(child: SingleChildScrollView(child: SelectableText(json))),
-            ],
-          ),
+          child: Column(children: [
+            Text(context.l10n.deviceDiagnosticsUploadDescription),
+            const SizedBox(height: 12),
+            Expanded(child: SingleChildScrollView(child: SelectableText(json))),
+          ]),
         ),
         actions: [
           OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),

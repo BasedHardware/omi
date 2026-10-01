@@ -143,10 +143,7 @@ void main() {
   });
 
   testWidgets('a legacy untitled row without transcript text is the one Untitled case, and it reports', (tester) async {
-    await _pumpRow(
-      tester,
-      conversation: _conversation(title: '', summaryRetryable: false, segments: const []),
-    );
+    await _pumpRow(tester, conversation: _conversation(title: '', summaryRetryable: false, segments: const []));
 
     expect(find.text(_l10n(tester).untitledConversation), findsOneWidget);
     expect(emitted, hasLength(1));

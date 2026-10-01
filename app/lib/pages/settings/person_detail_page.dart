@@ -157,11 +157,7 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
         child: ListView(
           controller: _scroll,
           padding: EdgeInsets.fromLTRB(
-            OmiSpacing.md,
-            0,
-            OmiSpacing.md,
-            MediaQuery.paddingOf(context).bottom + OmiSpacing.xl,
-          ),
+              OmiSpacing.md, 0, OmiSpacing.md, MediaQuery.paddingOf(context).bottom + OmiSpacing.xl),
           children: [
             _Header(person: person),
             const SizedBox(height: OmiSpacing.lg),
@@ -195,29 +191,26 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
             ),
             const SizedBox(height: OmiSpacing.xl),
             OmiSectionHeader(l10n.speechProfile),
-            _Card(
-              children: [
-                if (samples.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(OmiSpacing.md),
-                    child: Text(
-                      l10n.voiceSettingsSaveOthersSubtitle,
-                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                    ),
+            _Card(children: [
+              if (samples.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(OmiSpacing.md),
+                  child: Text(
+                    l10n.voiceSettingsSaveOthersSubtitle,
+                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                   ),
-                for (final (j, sample) in samples.indexed)
-                  PersonSampleRow(
-                    title: l10n.sampleNumber(j + 1),
-                    transcript: j < transcripts.length ? transcripts[j] : null,
-                    playing:
-                        provider.currentPlayingPersonIndex == index &&
-                        provider.currentPlayingIndex == j &&
-                        provider.isPlaying,
-                    onPlayPause: () => provider.playPause(index, j, sample),
-                    onDelete: () => _confirmDeleteSample(provider, index, person, j),
-                  ),
-              ],
-            ),
+                ),
+              for (final (j, sample) in samples.indexed)
+                PersonSampleRow(
+                  title: l10n.sampleNumber(j + 1),
+                  transcript: j < transcripts.length ? transcripts[j] : null,
+                  playing: provider.currentPlayingPersonIndex == index &&
+                      provider.currentPlayingIndex == j &&
+                      provider.isPlaying,
+                  onPlayPause: () => provider.playPause(index, j, sample),
+                  onDelete: () => _confirmDeleteSample(provider, index, person, j),
+                ),
+            ]),
             const SizedBox(height: OmiSpacing.xl),
             OmiSectionHeader(l10n.conversations),
             if (_conversations.isEmpty && _failed)
@@ -225,17 +218,11 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
             else if (_conversations.isEmpty && !_loading)
               OmiEmptyState(icon: Icons.forum_outlined, title: l10n.noConversationsYet)
             else if (_conversations.isNotEmpty)
-              _Card(
-                children: [
-                  for (final conversation in _conversations)
-                    _ConversationRow(conversation: conversation, onTap: () => _open(conversation)),
-                ],
-              ),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(OmiSpacing.lg),
-                child: Center(child: OmiSpinner()),
-              ),
+              _Card(children: [
+                for (final conversation in _conversations)
+                  _ConversationRow(conversation: conversation, onTap: () => _open(conversation)),
+              ]),
+            if (_loading) const Padding(padding: EdgeInsets.all(OmiSpacing.lg), child: Center(child: OmiSpinner())),
             if (_failed && _conversations.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: OmiSpacing.md),

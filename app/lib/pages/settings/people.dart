@@ -168,7 +168,10 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
             ),
         ],
         trailing: [
-          if (!selecting) ...[const SizedBox(height: OmiSpacing.lg), const VoiceProfileSettingsSection()],
+          if (!selecting) ...[
+            const SizedBox(height: OmiSpacing.lg),
+            const VoiceProfileSettingsSection(),
+          ],
         ],
       ),
     );

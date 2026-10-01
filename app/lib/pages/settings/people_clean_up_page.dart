@@ -87,11 +87,7 @@ class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
             )
           : ListView(
               padding: EdgeInsets.fromLTRB(
-                OmiSpacing.md,
-                OmiSpacing.xs,
-                OmiSpacing.md,
-                MediaQuery.paddingOf(context).bottom + OmiSpacing.xl,
-              ),
+                  OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, MediaQuery.paddingOf(context).bottom + OmiSpacing.xl),
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, 0, OmiSpacing.xxs, OmiSpacing.sm),
@@ -108,7 +104,11 @@ class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
                       children: [
                         for (final (i, person) in _candidates.indexed) ...[
                           if (i > 0) Divider(height: 1, thickness: 1, indent: 108, color: OmiColors.border),
-                          _ReviewRow(person: person, ticked: _ticked.contains(person.id), onTap: () => _toggle(person)),
+                          _ReviewRow(
+                            person: person,
+                            ticked: _ticked.contains(person.id),
+                            onTap: () => _toggle(person),
+                          ),
                         ],
                       ],
                     ),
@@ -116,7 +116,10 @@ class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
-                  child: Text(l10n.cleanUpPinnedNote, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                  child: Text(
+                    l10n.cleanUpPinnedNote,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
                 ),
               ],
             ),
