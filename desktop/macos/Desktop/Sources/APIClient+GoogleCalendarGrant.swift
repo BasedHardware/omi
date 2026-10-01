@@ -33,6 +33,11 @@ extension APIClient {
     return url
   }
 
+  /// Revoke the backend-owned Google Calendar grant for the current account.
+  func disconnectGoogleCalendarGrant() async throws {
+    try await delete("v1/integrations/\(googleCalendarAppKey)")
+  }
+
   /// Read events through the backend grant. Mirrors the window the cookie
   /// reader uses so both sources produce the same shape for callers.
   func googleCalendarGrantEvents(

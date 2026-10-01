@@ -145,7 +145,7 @@ enum ConnectorImportOperations {
   @MainActor
   static func disconnectCalendar(
     performDelete: @escaping @MainActor () async throws -> Void = {
-      try await APIClient.shared.delete("v1/integrations/google_calendar")
+      try await APIClient.shared.disconnectGoogleCalendarGrant()
     }
   ) async -> Outcome {
     do {
