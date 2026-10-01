@@ -43,7 +43,7 @@ and background processing.
   `conv_discard`. The record carries the probability under `jev`. EXP-004 uses
   `relevance_arm(uid, conversation_id)`: a stable per-conversation keep-all
   sample takes precedence over the per-conversation Jev ramp (salt
-  `relevance-arm-v2`, range [K,min(100,K+J))); other conversations use nano. Keep-all bypasses only the reached model tier;
+  `relevance-arm-v2`, range [K,min(100,K+J)); other conversations use nano. Keep-all bypasses only the reached model tier;
   restores/rules/plan gates remain first. Both samples and the shadow receive the same conversation ID, independent
   of account identity; increasing J with K fixed retains existing Jev conversations.
   The UID allowlist is read only with `OMI_ENV_STAGE=dev`; prod declarations

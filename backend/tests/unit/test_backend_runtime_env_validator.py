@@ -3246,3 +3246,13 @@ def test_prod_rejects_jev_uid_allowlist_undeclared_in_cloud_run_state(tmp_path, 
     path.write_text(json.dumps(state))
     errors = validator.validate_runtime_env(env='prod', cloud_run_state_path=path)
     assert any('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in error.message for error in errors)
+
+
+def test_jev_uid_allowlist_contract_survives_cyclic_yaml_aliases():
+    from scripts.runtime_env_jev_contract import JEV_UID_ALLOWLIST, validate_jev_uid_allowlist
+
+    cyclic: dict = {'env': []}
+    cyclic['env'].append(cyclic)
+    assert validate_jev_uid_allowlist(stage='prod', scope='cloud_run/backend', config=cyclic) == []
+    cyclic['env'].append({JEV_UID_ALLOWLIST: {'value': ''}})
+    assert len(validate_jev_uid_allowlist(stage='prod', scope='cloud_run/backend', config=cyclic)) >= 1
