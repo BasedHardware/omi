@@ -280,6 +280,7 @@ def test_covered_by_helpers_observed_in_named_driver(driver_results):
     assert not missing, f'covered-by helpers not observed in any named covering driver: {missing}'
 
 
+@pytest.mark.slow
 def test_digest_pinned_entries_unchanged():
     """Reviewed bodies of non-observed covered-by helpers and skips are digest-pinned."""
     bad = []

@@ -79,6 +79,12 @@ VECTOR_REPAIR_INVENTORIES = (
 )
 VECTOR_REPAIR_NEEDLES = ('memory_vector_repair_outbox_worker', 'vector_repair_outbox_worker_entrypoint')
 
+# Driver captures depend only on the registered entry. Sentinel checks compare
+# that same capture against several manifests, so retain the entry alongside
+# its result to keep the cache valid across monkeypatched registry entries.
+_DRIVER_RESULT_CACHE: dict[tuple[str, int], tuple[object, object]] = {}
+_CURRENT_INDEX_MANIFEST = firebase_index_manifest()
+
 _CANDIDATE_STATUSES = [None, *CandidateStatus]
 _CANDIDATE_GENERATIONS = (0, 1)
 _CANDIDATE_SURFACES = (None, 'suggested')
@@ -129,7 +135,13 @@ def _run_historical_read(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture
 
 
 def _run_internal_forward(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
-    trial(capture, memories_db.get_memories, 'u1', sort='updated_or_created_desc')
+    trial(
+        capture,
+        memories_db.get_memories,
+        'u1',
+        sort='updated_or_created_desc',
+        firestore_client=RecordingFirestore(),
+    )
 
 
 def _profiles(target: str):
@@ -186,7 +198,13 @@ def _serving_profiles_covering(target: str, fields: set[str], manifest: dict) ->
     entry = DRIVERS.get(target)
     if entry is None:
         return set()
-    result = run_driver(entry)
+    cache_key = (target, id(entry))
+    cached = _DRIVER_RESULT_CACHE.get(cache_key)
+    if cached is not None and cached[0] is entry:
+        result = cached[1]
+    else:
+        result = run_driver(entry)
+        _DRIVER_RESULT_CACHE[cache_key] = (entry, result)
     if result.errors:
         return set()
     covered = set()
@@ -306,7 +324,7 @@ def _vector_repair_wiring_errors(references: dict, registrations: dict, manifest
     real captured shapes serve BOTH the pending (``available_at``) and expired
     (``lease_expires_at``) branches."""
     if manifest is None:
-        manifest = firebase_index_manifest()
+        manifest = _CURRENT_INDEX_MANIFEST
     new_wiring: list[str] = []
     for key in sorted(references):
         if key in VECTOR_REPAIR_ALLOWED_BINDINGS:

@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import copy
 import datetime as datetime_module
+import functools
 import hashlib
 import importlib
 import inspect
@@ -713,6 +714,22 @@ def discover_textual_registrations(paths: Iterable[str | Path], needles: Iterabl
     return found
 
 
+@functools.lru_cache(maxsize=256)
+def _source_function_nodes(path: str, mtime_ns: int, size: int) -> dict[str, ast.AST]:
+    """Parse and index a stable source snapshot once for repeated digest checks."""
+    del mtime_ns, size  # Included in the cache key to invalidate edited files.
+    tree = ast.parse(Path(path).read_text())
+    candidates: dict[str, ast.AST] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            candidates[node.name] = node
+        elif isinstance(node, ast.ClassDef):
+            for member in node.body:
+                if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    candidates[f'{node.name}.{member.name}'] = member
+    return candidates
+
+
 def function_body_digest(dotted: str, database_root: str | Path | None = None) -> str:
     """SHA-256 of the normalized AST dump of the whole function node.
 
@@ -729,15 +746,8 @@ def function_body_digest(dotted: str, database_root: str | Path | None = None) -
         path = root / (module_rel + '.py')
         if path.exists():
             break
-    tree = ast.parse(path.read_text())
-    candidates: dict[str, ast.AST] = {}
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            candidates[node.name] = node
-        elif isinstance(node, ast.ClassDef):
-            for member in node.body:
-                if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    candidates[f'{node.name}.{member.name}'] = member
+    stat = path.stat()
+    candidates = _source_function_nodes(str(path.resolve()), stat.st_mtime_ns, stat.st_size)
     node = candidates[attr_path]
     dump = ast.dump(node, annotate_fields=False, include_attributes=False)
     return hashlib.sha256(dump.encode('utf-8')).hexdigest()
