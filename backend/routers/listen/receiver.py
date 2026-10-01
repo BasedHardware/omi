@@ -69,8 +69,8 @@ from utils.stt.live_metrics import RECONNECT
 from utils.stt.brand_terms import normalize_brand_segments
 from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
 from utils.stt.resilient_stream import (
-    RING_SECONDS,
     enabled as resilient_reconnect_enabled,
+    retry_failed_replacement,
     trim_window_replay_to_anchor,
     window_replay_action,
 )
@@ -1359,8 +1359,7 @@ class ListenReceiver(ReplayFilterMixin):
         if service is None or provider_for_service(service) in self._stt_failed_providers:
             self._settle_pending_live_failover_failure()
             return False
-        # A failed hop is degraded while the chain continues. Exhausted is
-        # reserved for a session with no remaining replacement path.
+        # A failed hop is degraded while the chain continues; exhausted means no replacement path.
         self._settle_pending_live_failover_failure(continuing=True)
         parakeet_callback, modulate_callback, epoch = rebuild[0]()
         sample_rate = rebuild[1]
@@ -1414,7 +1413,7 @@ class ListenReceiver(ReplayFilterMixin):
         hop.to_mode = self.host.stt_service.value
         # A provider can reject shortly after upgrade; never adopt a dead leg.
         if not await fallback_socket_is_serving(raw):
-            return await self._retry_failed_replacement(raw, epoch, hop, previous)
+            return await retry_failed_replacement(self, raw, epoch, hop, previous)
         self._pending_live_failover = hop
         # Replay capture positions after the last emitted segment.
         rejected_sample = replay_chunks(
@@ -1427,14 +1426,10 @@ class ListenReceiver(ReplayFilterMixin):
         if rejected_sample is not None and window_ring is not None:
             # Accepted bytes have not necessarily produced text. The next
             # candidate needs the entire remaining span, including that prefix.
-            return await self._retry_failed_replacement(raw, epoch, hop, previous)
+            return await retry_failed_replacement(self, raw, epoch, hop, previous)
         self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
         if window_ring is not None:
-            # A full source backlog must not make the first live packet kill
-            # its replacement before replay can produce text. Reserve one
-            # normal 15s tail per adopted downstream leg; the finite provider
-            # chain bounds total retention to 90s + 3 * 15s.
-            window_ring.ring_seconds = min(90 + 3 * RING_SECONDS, window_ring.ring_seconds + RING_SECONDS)
+            window_ring.reserve_replacement_headroom()
         self._record_selected_epoch(epoch, self.stt_socket)
         record_live_connection(self.host, self._serving_provider())
         self._pending_live_failover = None if hop.settled else hop
@@ -1448,25 +1443,6 @@ class ListenReceiver(ReplayFilterMixin):
             finally:
                 release_live_stt_socket(previous)
         return True
-
-    async def _retry_failed_replacement(self, raw: Any, epoch: Any, hop: PendingLiveFailover, previous: Any) -> bool:
-        """Walk past a late rejection without discarding its un-emitted replay."""
-        retire = getattr(raw, 'retire_for_replay', None)
-        if self._window_ring() is not None and callable(retire):
-            retire()
-        self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
-        self._pending_live_failover = hop
-        # Keep the actual selected provider on host: the connector may already
-        # have walked past the initially requested candidate.
-        close_rejected_socket(raw)
-        try:
-            return await self._rebuild_stt_socket_locked()
-        finally:
-            if previous is not None:
-                try:
-                    previous.finish()
-                finally:
-                    release_live_stt_socket(previous)
 
     async def _monitor_stt_death(self) -> None:
         """Terminate the client session promptly when the provider STT socket dies.

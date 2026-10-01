@@ -8,6 +8,8 @@ from collections import deque
 from typing import Any, Callable, Literal, cast
 
 from utils.stt.live_metrics import RECONNECT, REPLAY_SECONDS, WINDOW_REPLAY_SAFE_TRIMS
+from utils.stt.provider_resilience import close_rejected_socket
+from utils.stt.socket import release_live_stt_socket
 
 RING_SECONDS = 15
 # Keep a full default replay horizon of recent VAD-negative capture, not just pre-roll.
@@ -101,6 +103,12 @@ class ResilientAudio:
 
     def close(self) -> None:
         self._chunks.clear()
+
+    def reserve_replacement_headroom(self) -> None:
+        # A full source backlog must not make the first live packet kill its
+        # replacement before replay can produce text. Reserve one normal
+        # tail per adopted downstream leg; the finite chain bounds retention.
+        self.ring_seconds = min(90 + 3 * RING_SECONDS, self.ring_seconds + RING_SECONDS)
 
 
 def trim_window_replay_to_anchor(ring: ResilientAudio | None, socket: Any) -> None:
@@ -245,6 +253,26 @@ def socket_is_finishing(socket: Any) -> bool:
         except Exception:
             continue
     return False
+
+
+async def retry_failed_replacement(receiver: Any, raw: Any, epoch: Any, hop: Any, previous: Any) -> bool:
+    """Walk past a late rejection without discarding its un-emitted replay."""
+    retire = getattr(raw, 'retire_for_replay', None)
+    if receiver._window_ring() is not None and callable(retire):
+        retire()
+    receiver.stt_socket = receiver._wrap_legacy_stt_socket(raw, epoch)
+    receiver._pending_live_failover = hop
+    # Keep the actual selected provider on host: the connector may already
+    # have walked past the initially requested candidate.
+    close_rejected_socket(raw)
+    try:
+        return await receiver._rebuild_stt_socket_locked()
+    finally:
+        if previous is not None:
+            try:
+                previous.finish()
+            finally:
+                release_live_stt_socket(previous)
 
 
 def replay_chunks(
