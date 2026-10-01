@@ -714,4 +714,67 @@ void main() {
     expect(stale.existsSync(), isFalse);
     expect(harness.exportedCalls, 1);
   });
+
+  testWidgets('captured share retry is a no-op after the settings route unmounts', (tester) async {
+    await _pumpApp(tester);
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
+    harness.exportDirImpl = () async => harness.exportDir;
+    harness.shareImpl = (params) async => throw StateError('share failed');
+    harness.downloadImpl = _successDownload;
+
+    await _finishRun(tester, _run(tester, harness));
+    final retry = tester.widget<SnackBarAction>(find.widgetWithText(SnackBarAction, l10n.tryAgain)).onPressed;
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+
+    retry();
+    for (var i = 0; i < 50; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+
+    expect(DataExport.exportInProgress.value, isFalse);
+    expect(harness.sharedPaths.length, 1);
+    expect(harness.downloadCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a second run during a held share does not sweep, delete, or download', (tester) async {
+    await _pumpApp(tester);
+    final dirA = harness.exportDir;
+    dirA.createSync(recursive: true);
+    harness.exportDirImpl = () async => dirA;
+    var sweepCalls = 0;
+    harness.sweepImpl = (protectedPaths) async {
+      sweepCalls++;
+      return 0;
+    };
+    final shareGate = Completer<ShareResult>();
+    harness.shareImpl = (params) => shareGate.future;
+    harness.downloadImpl = (path, {onProgress, abortTrigger, authorizationSnapshot}) async {
+      await File(path).create(recursive: true);
+      return path;
+    };
+
+    final running = _run(tester, harness);
+    for (var i = 0; i < 300 && harness.sharedPaths.isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+      if (i % 5 == 0) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+      }
+    }
+    expect(harness.sharedPaths, isNotEmpty);
+    expect(DataExport.exportInProgress.value, isTrue);
+
+    await _run(tester, harness);
+    expect(sweepCalls, 1);
+    expect(harness.downloadCalls, 1);
+    expect(harness.exportDirCalls, 1);
+    expect(harness.deletedDirs, isEmpty);
+    expect(File(harness.sharedPaths.single).existsSync(), isTrue);
+
+    shareGate.complete(const ShareResult('test', ShareResultStatus.success));
+    await _finishRun(tester, running);
+    expect(harness.exportedCalls, 1);
+  });
 }

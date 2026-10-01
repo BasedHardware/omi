@@ -61,7 +61,7 @@ class DataExport {
     StaleExportSweep? sweepStaleExports,
     ShareLeaseTouch? shareLease,
   }) async {
-    if (exportInProgress.value) return;
+    if (!context.mounted || exportInProgress.value) return;
     exportInProgress.value = true;
     final l10n = context.l10n;
     final exportTitle = l10n.exportAllData;
@@ -325,7 +325,7 @@ class DataExport {
     required StaleExportSweep? sweepStaleExports,
     required ShareLeaseTouch? shareLease,
   }) async {
-    if (exportInProgress.value) return;
+    if (!context.mounted || exportInProgress.value) return;
     exportInProgress.value = true;
     try {
       final l10n = context.l10n;
