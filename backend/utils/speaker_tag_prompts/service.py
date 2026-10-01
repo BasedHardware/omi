@@ -546,15 +546,21 @@ def apply_answer(
             voice_sample_queued = True
     elif clears_auto_label or answer == SpeakerTagPromptAnswer.not_a_person:
         # The automatic label was wrong: record an explicit "not the owner / not them".
-        conversation, _resolved = _assign(uid, request, is_user=False, person_id=None, train=False)
+        conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False)
         if answer == SpeakerTagPromptAnswer.not_a_person:
-            voice_profiles_db.record_ignored_voice(
-                uid,
-                request.conversation_id,
-                request.speaker_id,
-                now,
-                assignment_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation'),
-            )
+            speaker_ids = {
+                sid
+                for segment in conversation.get('transcript_segments') or []
+                if segment.get('id') in set(resolved) and (sid := speaker_id_of(segment)) is not None
+            }
+            for speaker_id in sorted(speaker_ids):
+                voice_profiles_db.record_ignored_voice(
+                    uid,
+                    conversation['id'],
+                    speaker_id,
+                    now,
+                    assignment_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation'),
+                )
 
     outcome = quality_outcome(
         request.origin,
@@ -612,7 +618,7 @@ IGNORED_VOICES_LIST_LIMIT = 50
 
 
 def list_ignored_voices(uid: str) -> IgnoredVoicesResponse:
-    entries = voice_profiles_db.ignored_voices(voice_profiles_db.get_tag_prompt_state(uid))[:IGNORED_VOICES_LIST_LIMIT]
+    entries = voice_profiles_db.ignored_voices(voice_profiles_db.get_tag_prompt_state(uid))
     ids = list(dict.fromkeys(entry['conversation_id'] for entry in entries))
     conversations = (
         {c.get('id'): c for c in conversations_db.get_conversations_by_id_without_photos(uid, ids) if c} if ids else {}
@@ -633,6 +639,8 @@ def list_ignored_voices(uid: str) -> IgnoredVoicesResponse:
                 ),
             )
         )
+        if len(voices) == IGNORED_VOICES_LIST_LIMIT:
+            break
     return IgnoredVoicesResponse(voices=voices)
 
 
