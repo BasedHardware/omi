@@ -3775,5 +3775,11 @@
     "autoRemoveSyncedCopiesTitle": "Buang Salinan Tersegerak Secara Automatik",
     "autoRemoveSyncedCopiesDays": "Salinan tersegerak dipadam selepas {days} hari",
     "autoRemoveSyncedCopiesDescription": "Memadam salinan setempat {days} hari selepas segerak. Salinan awan dikekalkan.",
-    "localCopiesSection": "Salinan Setempat"
+    "localCopiesSection": "Salinan Setempat",
+    "speakerLabelLinesLabeled": "Baris dilabel: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Suara dipelajari} pending{Mempelajari suara…} disabled{Penyimpanan suara dimatikan} other{Suara belum dipelajari}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi akan mengecam {name} pada masa akan datang.} pending{Ini mengambil masa beberapa saat.} disabled{Hidupkan penyimpanan suara dalam Tetapan supaya Omi dapat mengecam {name}.} other{Omi memerlukan lebih banyak pertuturan yang jelas daripada {name} dan akan terus mencuba.}}",
+    "speakerLabelEarlierMatches": "Perbualan terdahulu dengan suara ini: {count}",
+    "speakerLabelText": "{part, select, likely{Mungkin} soundsLike{Kedengaran seperti {name}} notPerson{Bukan {name}} carried{Masih {name}. Dibawa daripada perbualan terakhir anda.} change{Tukar} alsoTitle{Adakah ini juga {name}?} alsoBody{Omi menemui suara yang sama dalam perbualan terdahulu.} confirmed{Anda telah mengesahkan label ini} other{Semak}}",
+    "speakerLabelTalkTime": "{duration} daripada suara ini"
 }

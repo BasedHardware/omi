@@ -3775,5 +3775,11 @@
     "autoRemoveSyncedCopiesTitle": "Автоматичне видалення синхронізованих копій",
     "autoRemoveSyncedCopiesDays": "Синхронізовані копії видаляються через {days} днів",
     "autoRemoveSyncedCopiesDescription": "Видаляє локальні копії через {days} днів після синхронізації. Хмарні копії зберігаються.",
-    "localCopiesSection": "Локальні копії"
+    "localCopiesSection": "Локальні копії",
+    "speakerLabelLinesLabeled": "Позначено рядків: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Голос запам’ятано} pending{Вивчення голосу…} disabled{Збереження голосу вимкнено} other{Голос ще не запам’ятано}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi впізнає {name} наступного разу.} pending{Це займе кілька секунд.} disabled{Увімкніть збереження голосів у налаштуваннях, щоб Omi міг впізнавати {name}.} other{Omi потрібно більше чіткого мовлення від {name}, і він продовжить спроби.}}",
+    "speakerLabelEarlierMatches": "Попередні розмови з цим голосом: {count}",
+    "speakerLabelText": "{part, select, likely{Імовірно} soundsLike{Схоже на {name}} notPerson{Не {name}} carried{Досі {name}. Перенесено з вашої останньої розмови.} change{Змінити} alsoTitle{Це теж {name}?} alsoBody{Omi знайшов такий самий голос у попередніх розмовах.} confirmed{Ви підтвердили цю мітку} other{Переглянути}}",
+    "speakerLabelTalkTime": "{duration} цього голосу"
 }

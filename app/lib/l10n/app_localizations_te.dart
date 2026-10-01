@@ -12208,4 +12208,66 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'స్థానిక కాపీలు';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'లేబుల్ వేసిన లైన్లు: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'వాయిస్ నేర్చుకుంది',
+        'pending': 'వాయిస్‌ను నేర్చుకుంటోంది…',
+        'disabled': 'వాయిస్ సేవింగ్ ఆఫ్‌లో ఉంది',
+        'other': 'వాయిస్ ఇంకా నేర్చుకోలేదు',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi వచ్చే సారి $name ను గుర్తిస్తుంది.',
+        'pending': 'దీనికి కొన్ని సెకన్లు పడుతుంది.',
+        'disabled': 'Omi $name ను గుర్తించేందుకు సెట్టింగ్‌లలో వాయిస్ సేవింగ్ ఆన్ చేయండి.',
+        'other': 'Omi కి $name యొక్క మరింత స్పష్టమైన మాట అవసరం, అది ప్రయత్నిస్తూనే ఉంటుంది.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'ఈ వాయిస్‌తో మునుపటి సంభాషణలు: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'అవకాశం',
+        'soundsLike': '$name లాగా వినిపిస్తోంది',
+        'notPerson': '$name కాదు',
+        'carried': 'ఇప్పటికీ $name. మీ చివరి సంభాషణ నుండి కొనసాగింది.',
+        'change': 'మార్చండి',
+        'alsoTitle': 'ఇది కూడా $name యేనా?',
+        'alsoBody': 'Omi మునుపటి సంభాషణల్లో ఇదే వాయిస్‌ను కనుగొంది.',
+        'confirmed': 'మీరు ఈ లేబుల్‌ను నిర్ధారించారు',
+        'other': 'సమీక్షించండి',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'ఈ వాయిస్ యొక్క $duration';
+  }
 }

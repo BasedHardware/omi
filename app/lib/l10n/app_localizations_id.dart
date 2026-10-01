@@ -12169,4 +12169,66 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'Salinan Lokal';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Baris diberi label: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Suara dikenali',
+        'pending': 'Mempelajari suara…',
+        'disabled': 'Penyimpanan suara nonaktif',
+        'other': 'Suara belum dipelajari',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi akan mengenali $name lain kali.',
+        'pending': 'Ini butuh beberapa detik.',
+        'disabled': 'Aktifkan penyimpanan suara di Pengaturan agar Omi dapat mengenali $name.',
+        'other': 'Omi butuh lebih banyak ucapan jelas dari $name dan akan terus mencoba.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Percakapan sebelumnya dengan suara ini: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Mungkin',
+        'soundsLike': 'Terdengar seperti $name',
+        'notPerson': 'Bukan $name',
+        'carried': 'Masih $name. Dilanjutkan dari percakapan terakhir Anda.',
+        'change': 'Ubah',
+        'alsoTitle': 'Apakah ini juga $name?',
+        'alsoBody': 'Omi menemukan suara yang sama di percakapan sebelumnya.',
+        'confirmed': 'Anda telah mengonfirmasi label ini',
+        'other': 'Tinjau',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration dari suara ini';
+  }
 }

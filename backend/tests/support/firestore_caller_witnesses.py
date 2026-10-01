@@ -43,6 +43,7 @@ import utils.people_stats as people_stats
 import utils.retrieval.tool_services.conversations as tool_conversations
 import utils.retrieval.tools.conversation_tools as conversation_tools
 import utils.speaker_tag_prompts.service as speaker_tag_service
+import utils.speaker_voice_matches as speaker_voice_matches
 import utils.wrapped.generate_2025 as wrapped_2025
 from models.conversation import SearchRequest
 from tests.support.firestore_conversation_profiles import PROFILES
@@ -465,6 +466,14 @@ def _run_speaker_prompts(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture
     trial(capture, speaker_tag_service.get_prompts, 'u1', now=FROZEN_NOW)
 
 
+def _run_speaker_voice_matches(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    trial(capture, speaker_voice_matches._recent_conversations, 'u1', FROZEN_LATER)
+    call = capture.calls[-1]
+    assert call['limit'] == speaker_voice_matches.MAX_CONVERSATIONS == 25
+    assert call['start_date'] == FROZEN_LATER - speaker_voice_matches.LOOKBACK
+    assert call['end_date'] == FROZEN_LATER
+
+
 def _run_calendar_gaps(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, google_calendar_router, 'run_blocking', _inline_run_blocking)
     _stub(monkeypatch, google_calendar_router, '_get_google_calendar_token', lambda uid: ('token', None))
@@ -659,6 +668,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('speaker-prompts',),
             1,
             _run_speaker_prompts,
+        ),
+        CallerWitness(
+            'utils/speaker_voice_matches.py:_recent_conversations:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('speaker-voice-matches',),
+            1,
+            _run_speaker_voice_matches,
         ),
         CallerWitness(
             'utils/wrapped/generate_2025.py:generate_wrapped_2025:database.conversations.get_conversations_without_photos',

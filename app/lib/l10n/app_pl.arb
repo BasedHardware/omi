@@ -3810,5 +3810,11 @@
     "autoRemoveSyncedCopiesTitle": "Automatyczne usuwanie zsynchronizowanych kopii",
     "autoRemoveSyncedCopiesDays": "Zsynchronizowane kopie są usuwane po {days} dniach",
     "autoRemoveSyncedCopiesDescription": "Usuwa lokalne kopie {days} dni po synchronizacji. Kopie w chmurze pozostają.",
-    "localCopiesSection": "Kopie lokalne"
+    "localCopiesSection": "Kopie lokalne",
+    "speakerLabelLinesLabeled": "Oznaczone wiersze: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Głos poznany} pending{Poznawanie głosu…} disabled{Zapisywanie głosu jest wyłączone} other{Głos jeszcze nie poznany}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi rozpozna osobę {name} następnym razem.} pending{To potrwa kilka sekund.} disabled{Włącz zapisywanie głosów w Ustawieniach, aby Omi mógł rozpoznać osobę {name}.} other{Omi potrzebuje wyraźniejszej mowy osoby {name} i będzie próbować dalej.}}",
+    "speakerLabelEarlierMatches": "Wcześniejsze rozmowy z tym głosem: {count}",
+    "speakerLabelText": "{part, select, likely{Prawdopodobnie} soundsLike{Brzmi jak {name}} notPerson{To nie {name}} carried{Nadal {name}. Przeniesiono z ostatniej rozmowy.} change{Zmień} alsoTitle{Czy to też {name}?} alsoBody{Omi znalazł ten sam głos we wcześniejszych rozmowach.} confirmed{Potwierdzono tę etykietę} other{Sprawdź}}",
+    "speakerLabelTalkTime": "{duration} tego głosu"
 }

@@ -11332,5 +11332,11 @@
     "autoRemoveSyncedCopiesTitle": "Samodejno odstrani sinhronizirane kopije",
     "autoRemoveSyncedCopiesDays": "Sinhronizirane kopije se izbrišejo po {days} dneh",
     "autoRemoveSyncedCopiesDescription": "Izbriše lokalne kopije {days} dni po sinhronizaciji. Oblačne kopije ostanejo ohranjene.",
-    "localCopiesSection": "Lokalne kopije"
+    "localCopiesSection": "Lokalne kopije",
+    "speakerLabelLinesLabeled": "Označene vrstice: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Glas je naučen} pending{Učenje glasu…} disabled{Shranjevanje glasu je izklopljeno} other{Glas še ni naučen}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi bo osebo {name} prepoznal prihodnjič.} pending{To traja nekaj sekund.} disabled{V nastavitvah vklopite shranjevanje glasov, da bo Omi lahko prepoznal osebo {name}.} other{Omi potrebuje več jasnega govora osebe {name} in bo poskušal še naprej.}}",
+    "speakerLabelEarlierMatches": "Prejšnji pogovori s tem glasom: {count}",
+    "speakerLabelText": "{part, select, likely{Verjetno} soundsLike{Zveni kot {name}} notPerson{Ni {name}} carried{Še vedno {name}. Preneseno iz vašega zadnjega pogovora.} change{Spremeni} alsoTitle{Je to tudi {name}?} alsoBody{Omi je našel isti glas v prejšnjih pogovorih.} confirmed{Potrdili ste to oznako} other{Preglej}}",
+    "speakerLabelTalkTime": "{duration} tega glasu"
 }

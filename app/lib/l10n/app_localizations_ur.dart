@@ -12168,4 +12168,66 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get localCopiesSection => 'مقامی کاپیاں';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'لیبل شدہ لائنیں: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'آواز سیکھ لی گئی',
+        'pending': 'آواز سیکھی جا رہی ہے…',
+        'disabled': 'آواز محفوظ کرنا بند ہے',
+        'other': 'آواز ابھی نہیں سیکھی گئی',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi اگلی بار $name کو پہچان لے گا۔',
+        'pending': 'اس میں چند سیکنڈ لگتے ہیں۔',
+        'disabled': 'ترتیبات میں آوازیں محفوظ کرنا آن کریں تاکہ Omi $name کو پہچان سکے۔',
+        'other': 'Omi کو $name کی مزید واضح گفتگو درکار ہے اور وہ کوشش جاری رکھے گا۔',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'اس آواز کے ساتھ پچھلی گفتگوئیں: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'ممکنہ',
+        'soundsLike': '$name جیسی لگتی ہے',
+        'notPerson': '$name نہیں',
+        'carried': 'اب بھی $name۔ آپ کی پچھلی گفتگو سے جاری۔',
+        'change': 'تبدیل کریں',
+        'alsoTitle': 'کیا یہ بھی $name ہیں؟',
+        'alsoBody': 'Omi کو یہی آواز پچھلی گفتگوؤں میں ملی۔',
+        'confirmed': 'آپ نے اس لیبل کی تصدیق کی',
+        'other': 'جائزہ لیں',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'اس آواز کا $duration';
+  }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,6 +37,10 @@ import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 
 import 'capture_state_header.dart';
+import 'package:omi/backend/http/api/speaker_labels.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/widgets/speaker_label_badge.dart';
+import 'widgets/carried_speaker_banner.dart';
 import 'widgets/speaker_suggestion_chip.dart';
 
 /// Switch the home IndexedStack to Home (the conversation list) *before* popping the capturing
@@ -46,7 +52,9 @@ void switchHomeToConversationsTab(BuildContext context) {
 class ConversationCapturingPage extends StatefulWidget {
   final String? topConversationId;
 
-  const ConversationCapturingPage({super.key, this.topConversationId});
+  final SpeakerRejectionCall? rejectSpeaker;
+
+  const ConversationCapturingPage({super.key, this.topConversationId, this.rejectSpeaker});
 
   @override
   State<ConversationCapturingPage> createState() => _ConversationCapturingPageState();
@@ -57,6 +65,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool _mutePending = false;
+  bool _rejectingSuggestion = false;
+  final Set<String> _closedCarriedSpeakers = {};
 
   @override
   void initState() {
@@ -154,6 +164,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
             children: [
               const CaptureRecoveryBanner(),
               _buildUnsyncedWalIndicator(provider),
+              ..._buildCarriedSpeakerBanner(provider),
               Expanded(
                 child: provider.segments.isEmpty && provider.photos.isEmpty
                     ? Center(
@@ -445,14 +456,75 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       suggestion: suggestion,
       defaultApplyToSpeaker: true,
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
-        return provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds,
+        final saved = await provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds,
             applyToSpeaker: applyToSpeaker);
+        if (saved) {
+          // The user's own answer now: no longer a label Omi carried over.
+          for (final segment in provider.segments) {
+            if (segmentIds.contains(segment.id) || (applyToSpeaker && segment.speakerId == speakerId)) {
+              segment.speakerLabelSource = SpeakerLabelSource.manual;
+            }
+          }
+          if (mounted) setState(() {});
+        }
+        return saved;
       },
     );
   }
 
   void _editSegmentSpeaker(TranscriptSegment segment, CaptureProvider provider) =>
       _nameSpeaker(segment.id, segment.speakerId, provider);
+
+  /// The first label Omi carried into this conversation from the user's answer earlier in the
+  /// same recording, until the user changes it or closes the note.
+  List<Widget> _buildCarriedSpeakerBanner(CaptureProvider provider) {
+    final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
+    for (final segment in carriedSpeakerSegments(provider.segments)) {
+      final key = '${segment.speakerId}:${segment.personId}';
+      final person = personById(people, segment.personId);
+      if (person == null || _closedCarriedSpeakers.contains(key)) continue;
+      return [
+        CarriedSpeakerBanner(
+          name: person.name,
+          onChange: () => _editSegmentSpeaker(segment, provider),
+          onClose: () => setState(() => _closedCarriedSpeakers.add(key)),
+        ),
+      ];
+    }
+    return const [];
+  }
+
+  /// "Someone Else…" on a suggestion is an answer too: tell Omi this voice is not that person,
+  /// then let the user say who it is.
+  Future<void> _rejectSuggestion(TranscriptSegment segment, Person person, CaptureProvider provider) async {
+    if (_rejectingSuggestion) return;
+    final conversationId = widget.topConversationId ?? provider.topConversationId;
+    final sessionId = provider.activeCaptureSessionId;
+    if (conversationId != null) {
+      _rejectingSuggestion = true;
+      try {
+        final result = await (widget.rejectSpeaker ?? rejectConversationSpeaker)(
+          conversationId,
+          segment.speakerId,
+          SpeakerRejection.notPerson,
+          personId: person.id,
+        );
+        if (!mounted ||
+            provider.activeCaptureSessionId != sessionId ||
+            (widget.topConversationId ?? provider.topConversationId) != conversationId) return;
+        if (result is! ApiSuccess<ServerConversation>) {
+          OmiFeedback.error(context, context.l10n.speakerTagPromptAnswerFailed);
+          return;
+        }
+      } catch (_) {
+        if (mounted) OmiFeedback.error(context, context.l10n.speakerTagPromptAnswerFailed);
+        return;
+      } finally {
+        _rejectingSuggestion = false;
+      }
+    }
+    if (mounted) _editSegmentSpeaker(segment, provider);
+  }
 
   /// A pinned near-miss the backend asked about for this unlabeled segment, if its person is known.
   Person? _pinnedSuggestion(TranscriptSegment segment, CaptureProvider provider, List<Person> people) {
@@ -529,7 +601,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                         key: ValueKey('suggestion_${segment.id}'),
                         person: suggested,
                         onYes: () => _acceptSuggestion(segment, suggested, provider),
-                        onSomeoneElse: () => _editSegmentSpeaker(segment, provider),
+                        onSomeoneElse: () => _rejectSuggestion(segment, suggested, provider),
                       ),
                     const SizedBox(height: 4),
                     Text(segment.text, style: OmiType.subhead.copyWith(height: 1.4)),

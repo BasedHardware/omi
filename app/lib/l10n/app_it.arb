@@ -3775,5 +3775,11 @@
     "autoRemoveSyncedCopiesTitle": "Rimozione automatica delle copie sincronizzate",
     "autoRemoveSyncedCopiesDays": "Le copie sincronizzate vengono eliminate dopo {days} giorni",
     "autoRemoveSyncedCopiesDescription": "Elimina le copie locali {days} giorni dopo la sincronizzazione. Le copie sul cloud vengono conservate.",
-    "localCopiesSection": "Copie locali"
+    "localCopiesSection": "Copie locali",
+    "speakerLabelLinesLabeled": "Righe etichettate: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Voce appresa} pending{Apprendimento della voce…} disabled{Il salvataggio della voce è disattivato} other{Voce non ancora appresa}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi riconoscerà {name} la prossima volta.} pending{Ci vogliono pochi secondi.} disabled{Attiva il salvataggio delle voci nelle Impostazioni così Omi potrà riconoscere {name}.} other{Omi ha bisogno di più parlato chiaro da {name} e continuerà a provare.}}",
+    "speakerLabelEarlierMatches": "Conversazioni precedenti con questa voce: {count}",
+    "speakerLabelText": "{part, select, likely{Probabile} soundsLike{Somiglia a {name}} notPerson{Non è {name}} carried{È ancora {name}. Riportato dalla tua ultima conversazione.} change{Cambia} alsoTitle{È anche {name}?} alsoBody{Omi ha trovato la stessa voce in conversazioni precedenti.} confirmed{Hai confermato questa etichetta} other{Rivedi}}",
+    "speakerLabelTalkTime": "{duration} di questa voce"
 }

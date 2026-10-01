@@ -1274,24 +1274,24 @@ sequenceDiagram
 
 All three REST assignment forms use `database.conversations.assign_conversation_speaker`.
 It persists manual overrides/defaults, invalidates contributing profiles, and clears
-client projections atomically. Live/sync writers overlay those decisions; live
-writers preserve unseen appends and explicitly identify merged-away segments.
-Manually curated conversations cannot be automatic sync bridge donors.
-When a sync bridge retires an ID already open on a client, its tombstone is
-followed on detail reads. Assignment follows the same owner-scoped redirect
-inside its transaction. A donor speaker number is translated through its
+client projections atomically; live/sync writers overlay decisions, keep unseen
+appends, and identify merged-away segments. When a sync bridge retires an ID already
+open on a client, its tombstone is followed on detail reads. Manually curated
+conversations are never sync bridge donors, and a same-stream rollover carries the
+active scope's winning manual decisions as `source:'carried'` generation-1 entries.
+Assignment follows the same owner-scoped redirect inside its transaction. A donor speaker number is translated through its
 stable segment IDs before updating the survivor, because bridge allocation
 can give that number to another voice. A missing or user-deleted survivor
 remains a 404; missing selected segments fail instead of labeling another
 speaker. The returned conversation carries the survivor ID for client refresh.
 
-Enrollment remains **best-effort**. Pusher publishes `audio_files` during capture
-as well as at finalization. REST tries immediately; the acknowledged socket path
-queues a delayed attempt. A crash after the saved edit, missing/tail audio at the
-attempt, or a failed extraction can still lose that attempt: there is no durable
-job, lease, retry, or reconciliation worker. Reassigning the label can retry.
-Stored MANUAL decisions include concrete segment IDs and a generation; automatic
-matches and text suggestions do not create teaching receipts.
+Enrollment stays fire-and-forget, now receipt-driven: `extract_speaker_samples`
+pools clean same-scope speech (10 s min, 30 s / 12 clips / 10 s each), verifies
+one pooled WAV under the unchanged gates, and records one outcome on
+`voice_learning_*`. `audio_files` publish during capture and at finalization;
+REST tries immediately, sockets queue a delayed attempt, and fanout completion
+schedules a bounded retry for receipt-named people lacking a usable voiceprint
+(≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
 
 Owner display names share `database.auth.get_user_name`: Firebase display name,
 Firestore `name`, then an explicit identity bullet on the first line of
@@ -1394,15 +1394,15 @@ sets in a row (`POST /dismiss`) back off to 7 days, and an empty scan is cached
 for 2 h so repeated app opens do not rescan 30 conversations.
 
 Answers apply through the same `assign_conversation_speaker` transaction as the
-transcript tag sheet (scope: that diarized speaker in that conversation), so a
-prompt answer is an ordinary manual receipt. Rejecting an automatic label writes
-an explicit unknown decision. `someone_else` with a `person_id` or `name` is the correction
-path and labels that person. `not_a_person` (TV, podcast) clears an automatic
-label and stores an ignored-voice marker (`ignored_voices` in the prompt state,
-newest 200) so that conversation speaker is never asked about again;
-`GET /v1/speaker-tag-prompts/ignored-voices` lists markers and `DELETE
-.../ignored-voices/{conversation_id}/{speaker_id}` undoes one (and forgets its
-answered prompt ids).
+transcript tag sheet, and `POST /v1/conversations/{id}/speakers/{speaker_id}/reject`
+writes that same ledger (optionally per `segment_ids` of that speaker).
+`someone_else` with a `person_id`/`name` labels that person. Every negative
+answer writes `rejection: {kind, person_id}` on the receipt decision —
+`not_person` earns `AUTO_CORRECTED` once per conversation, `not_a_person`
+stores an ignored-voice marker (`ignored_voices`, newest 200) — and the voice is
+filtered from live matching, resolution, and prompt selection until a newer
+positive decision wins. A segment's `speaker_label_source` projects provenance:
+`manual`/`carried` under a winning decision, `auto` for match-only evidence.
 
 The same transaction keeps each person's `label_evidence` tally
 (`models/person_confidence.py`, `utils/person_evidence.py`): hand labels, card confirms and picks,
@@ -1426,12 +1426,12 @@ voice match, pinned first within a level. Auto-label threshold and margin never 
   that function now returns early when the user turned off
   `users/{uid}.save_other_voice_profiles` (default on). Every teaching path (tag
   sheet, tag prompts, live socket) reaches it, so the switch is enforced once.
-- **Owner** ("That's me"): the confirmed clip must be the owner's only voice for
-  5-10 s and pass `verify_and_transcribe_sample`; its embedding is pooled into
+- **Owner** ("That's me" prompt or `is_user` tag-sheet assignment): the
+  confirmed clip is the longest clean same-voice run, 5-10 s of distinct owner
+  speech, passing `verify_and_transcribe_sample`; its embedding pools into
   `users/{uid}.speaker_embedding` as the normalized mean of the enrollment
-  voiceprint (`speaker_embedding_base`, refreshed whenever another writer
-  replaced `speaker_embedding` after the last pooling) plus the last 5
-  confirmations (`owner_voice_confirmations`).
+  voiceprint (`speaker_embedding_base`, refreshed when another writer replaced
+  `speaker_embedding` after the last pooling) plus the last 5 confirmations.
 
 `GET /v1/speaker-tag-prompts/clip` streams at most 12 s of the user's own stored
 audio as WAV (`speaker_tag_prompts:clip` rate limit). Instrumentation is
@@ -1896,10 +1896,10 @@ counter (label = reason only) plus one log line:
 drop (it logs and decides on the next clip). `speaker_id_evidence` /
 `speaker_id_decision` / the exit line carry `session=<recording session id>`
 — never uid, never transcript content — so one user's report is attributable
-without replaying the saved conversation. "That's me" outcomes are likewise
-attributable: `store_owner_voice_sample` logs one
-`owner sample outcome=… conversation=<id>` line per outcome next to the
-existing counter.
+without replaying the saved conversation. "That's me" outcomes are likewise attributable:
+`store_owner_voice_sample` logs one `owner sample outcome=… conversation=<id>` line next to the counter.
+Owner confirmation publication reads the current conversation receipt in the pooling transaction:
+a deleted/missing conversation or changed receipt generation drops the attempt as `stale_assignment`.
 
 Provider segment IDs are normalized once at `TranscriptProcessor.enqueue`
 admission: a raw segment arriving with a missing or empty `id` is minted a

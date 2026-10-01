@@ -54,7 +54,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod.get_data_plane_firestore_client = lambda: client_mod.db
     client_mod.document_id_from_seed = lambda seed: 'seed-id'
     add('database._client', client_mod)
-
     vector_db = add('database.vector_db', AutoMockModule('database.vector_db'))
     for attr in (
         'find_similar_memories',
@@ -161,7 +160,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     byok.get_byok_key = lambda _provider: None
     byok.has_validated_byok_keys = lambda: False
     add('utils.byok', byok)
-
+    speaker_id = add('utils.speaker_identification', AutoMockModule('utils.speaker_identification'))
+    speaker_id.extract_speaker_samples = AsyncMock()
     executors = add('utils.executors', AutoMockModule('utils.executors'))
     executors.db_executor = MagicMock()
     executors.llm_executor = MagicMock()
