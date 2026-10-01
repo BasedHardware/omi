@@ -1,7 +1,10 @@
+import inspect
+from unittest.mock import MagicMock
+
 import pytest
 from fastapi import HTTPException
+from fastapi.params import Header
 from pydantic_core import PydanticUndefined
-from unittest.mock import MagicMock, patch
 
 import routers.fair_use_admin as fua
 
@@ -26,19 +29,19 @@ def test_verify_admin_key_invalid(monkeypatch):
 
 
 def test_verify_admin_key_success(monkeypatch):
-    """Matching key returns admin audit identity with truncated sha256 hash."""
+    """Matching key returns admin audit identity with exact truncated sha256 hash."""
     monkeypatch.setattr(fua, 'ADMIN_KEY', 'secret_admin_key_abc')
 
     res = fua._verify_admin_key(x_admin_key='secret_admin_key_abc')
-    assert res.startswith('admin:')
-    assert len(res) == len('admin:') + 8
+    assert res == 'admin:352d6b69'
 
 
 def test_verify_admin_key_header_is_required_in_signature():
-    """Verify that x_admin_key is marked as required via Header(...)."""
-    import inspect
+    """Verify that x_admin_key is marked as required via Header(alias='X-Admin-Key')."""
     sig = inspect.signature(fua._verify_admin_key)
     param = sig.parameters['x_admin_key']
+    assert isinstance(param.default, Header)
+    assert param.default.alias == 'X-Admin-Key'
     assert param.default.default is PydanticUndefined or param.default.default is ...
 
 
