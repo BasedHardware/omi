@@ -102,20 +102,28 @@ can prioritize Parakeet only when that live-model capability matches; it never
 overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
-When `STT_ROUTING_MODE=shadow`, listen computes a fleet score from bounded
-provider/language transcript outcomes but still connects in configured order.
-`on` ranks only the legs that were already eligible for the session. The
-windowed Parakeet allocation and the language arm keep their selected primary;
-account benches exclude a provider regardless of score. A 2% deterministic
-probe floor lets lower-score eligible providers demonstrate recovery. The
-background Redis refresh has a 75 ms default deadline; stale cache falls back
-to process-local health. Neither Redis reads nor writes run on the connection
-path. `off` returns to configured
-order without a code change. Each leg emits `text` only when it produces its
-first nonempty text within `STT_NO_TEXT_SECONDS` of VAD-confirmed speech;
-eligible legs that miss the deadline emit `no_text`. The existing terminal
-session metric below remains the user-facing SLI. See the
-[live STT routing runbook](runbooks/live-stt-routing.md).
+When `STT_ROUTING_MODE=shadow`, listen computes the cost-ordered, capability-
+filtered primary against static selection and counts agreement without changing
+connections. `on` applies that policy only to the stable UID cohort selected by
+`STT_ROUTING_ON_PERCENT` (default zero). Fleet health is a binary gate on
+speech-session disruptions, including no text and death after text, with shared
+5%/25%/100% recovery trials. The existing Parakeet allocation hash and capacity
+admission stay intact. Redis refresh/write work stays off connect with a 75 ms
+default deadline; faults use local evidence and known benches, and router errors
+restore configured order. No worst-provider probes or score ranking remain in
+the active router. Legacy first-text counters remain diagnostics rather than
+additional health samples. Failed recovery trials require the same failure-user
+breadth as fleet benches; narrow failing cohorts retain their trial share with
+bounded per-user voting windows, while healthy small cohorts can promote.
+Each user has one majority-outcome vote and at most three sequential-evidence
+outcomes per trial window. Terminal
+legs honor capacity signals and a five-second process-local cooldown after
+`capacity_full`, without treating capacity as provider disruption. If every
+candidate is capacity-blocked, one least-recently-refused candidate may dial
+through its normal circuit/admission gate so a sole recovered target can serve.
+Global stage and transition metrics plus static/proposed shadow pairs are
+documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
+and [live STT routing runbook](runbooks/live-stt-routing.md).
 
 Soniox streams final token deltas whose network-frame boundaries can split a
 word. Its adapter retains the pending word across frames, preserving subword

@@ -136,9 +136,15 @@ environments:
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
-          STT_ROUTING_PROBE_PERCENT:
-            value: '2'
+          STT_ROUTING_ON_PERCENT:
+            value: '0'
             category: rollout
+          STT_ROUTING_TARGETS_JSON:
+            value: ''
+            category: rollout
+          STT_ROUTING_DISRUPTION_GATE:
+            value: '0.08'
+            category: reliability
           STT_NO_TEXT_SECONDS:
             value: '30'
             category: rollout
@@ -2094,9 +2100,15 @@ environments:
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
-          STT_ROUTING_PROBE_PERCENT:
-            value: '2'
+          STT_ROUTING_ON_PERCENT:
+            value: '0'
             category: rollout
+          STT_ROUTING_TARGETS_JSON:
+            value: ''
+            category: rollout
+          STT_ROUTING_DISRUPTION_GATE:
+            value: '0.08'
+            category: reliability
           STT_NO_TEXT_SECONDS:
             value: '30'
             category: rollout
@@ -2826,6 +2838,8 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            FIREBASE_SIGNER_SERVICE_ACCOUNT:
+              value: backend-runtime@based-hardware.iam.gserviceaccount.com
             SCREEN_FRAME_EGRESS_ENABLED:
               value: 'true'
               category: rollout
@@ -2928,6 +2942,7 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: rollout
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
           - conversation.finalize.persisted

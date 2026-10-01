@@ -174,6 +174,8 @@ Runtime-selected providers must keep model-token parsing and required environmen
 
 See [Firestore queries and indexes](../.github/agent-docs/firestore-queries-and-indexes.md) for query-driver, index-declaration, deployment, oracle, and alert-response workflow.
 
+The changed-file backend unit selector runs the Firestore guard set for every serving-query inventory Python source change, including router/helper changes, and for manifest, registry, and guard-support changes. `Backend unit suite` is not a required branch-protection status check today; making it required is an owner decision. The readiness-gate workflow callsites are listed and discoverable in the linked Firestore guide.
+
 **Redis** (cache/rate-limiting/locks): `from database import redis_db` — **fail-open** (all errors caught and logged, requests proceed). Rate limiting via Lua scripts. `try_acquire_listen_lock(uid)` prevents duplicate WS connections.
 
 ## Auth

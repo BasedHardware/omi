@@ -1,6 +1,7 @@
 """Window recovery must survive an unhealthy first replacement; no network."""
 
 import asyncio
+import json
 
 import pytest
 
@@ -9,6 +10,10 @@ from tests.unit.test_parakeet_window_live import Client, _flush_capture, _receiv
 from utils.stt import streaming as st
 from utils.stt import provider_resilience, vad_gate
 from utils.stt.live_session import LiveLegSocket
+from utils.stt import live_session, live_chain, live_health, live_router
+from utils.stt.live_router import connecting_target
+from utils.stt.provider_resilience import ProviderCircuitBreaker
+from tests.unit.test_live_cost_router import MemoryRedis
 
 
 class Replacement:
@@ -471,5 +476,67 @@ async def test_replay_tracking_survives_downstream_vad_fail_open(monkeypatch):
         assert b''.join(legs['soniox'][0].sent) == capture + pcm * 2
         assert actual._window_ring().capture_bounds == (0, 3200)
         assert base.emitted == []
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('account_failure', [False, True])
+async def test_mid_session_modulate_endpoint_failure_preserves_healthy_sibling(monkeypatch, account_failure):
+    monkeypatch.setattr(live_router, '_target_circuits', {})
+    pod = live_health.FleetHealth(redis_client=MemoryRedis())
+    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(live_chain, 'health', pod)
+    monkeypatch.setattr(live_session, 'health', pod)
+    for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
+        monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv(
+        'STT_ROUTING_TARGETS_JSON',
+        json.dumps(
+            [
+                {'id': 'parakeet-window', 'family': 'parakeet', 'cost_per_audio_hour': 0.02},
+                {
+                    'id': 'modulate-next',
+                    'family': 'modulate',
+                    'cost_per_audio_hour': 0.05,
+                    'endpoint': 'wss://example.invalid/stream',
+                },
+                {'id': 'modulate-velma-2', 'family': 'modulate', 'cost_per_audio_hour': 0.055},
+                {'id': 'soniox', 'family': 'soniox', 'cost_per_audio_hour': 0.0754},
+            ]
+        ),
+    )
+    actual, _, previous, legs, capture = await setup_chain(monkeypatch)
+    selected = []
+
+    async def connect(callback, *args, **kwargs):
+        target = connecting_target.get()
+        selected.append(target.id)
+        raw = Replacement(callback)
+        raw.routing_endpoint = target.endpoint
+        legs['modulate'].append(raw)
+        return raw
+
+    monkeypatch.setattr(live_session, 'connect_modulate', connect)
+    try:
+        assert await actual._failover_stt_socket()
+        assert selected == ['modulate-next']
+        dead = actual.stt_socket.raw
+        dead.is_connection_dead = True
+        dead.typed_death_reason = 'provider_budget_exhausted' if account_failure else 'modulate_serve_error'
+        assert await actual._failover_stt_socket()
+        if account_failure:
+            assert actual.host.stt_service == st.STTService.soniox
+            assert 'modulate' in actual._stt_failed_providers
+            assert selected == ['modulate-next']
+        else:
+            assert actual.host.stt_service == st.STTService.modulate
+            assert actual.stt_socket.routing_target == 'modulate-velma-2'
+            assert selected == ['modulate-next', 'modulate-velma-2']
+            assert 'modulate-next' in actual._stt_failed_targets
+            assert 'modulate' not in actual._stt_failed_providers
+        assert b''.join(actual.stt_socket.raw.sent) == capture
     finally:
         await actual._drain_stt_sockets()

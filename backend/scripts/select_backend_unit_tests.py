@@ -8,12 +8,17 @@ from typing import Any, Dict, List, Set, Tuple, cast
 import argparse
 import fnmatch
 import json
+import sys
 from pathlib import Path
 from pathlib import PurePosixPath
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = BACKEND_DIR.parent
 WORKFLOW_CONTRACTS_PATH = BACKEND_DIR / 'testing' / 'workflow_contracts.json'
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from tests.support.firestore_serving_query_inventory import is_serving_query_inventory_path  # noqa: E402
 
 FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
@@ -110,6 +115,23 @@ MONITORING_CONTRACT_SOURCES = (
     'backend/charts/monitoring/live-alert-gate.json',
     'backend/charts/monitoring/prometheus-stackdriver-exporter/',
     'backend/charts/parakeet/templates/servicemonitor.yaml',
+)
+
+# Serving query contract checks are a cross-cutting guard, not an area-specific
+# selection. Keep this list complete even when a change also selects narrower
+# tests. The inventory predicate below is shared with the AST inventory's scope.
+FIRESTORE_INDEX_GUARD_TESTS = (
+    'tests/unit/test_firestore_query_shapes.py',
+    'tests/unit/test_firestore_outside_query_contract.py',
+    'tests/unit/test_firestore_caller_witnesses.py',
+    'tests/unit/test_firestore_runtime_witnesses.py',
+    'tests/unit/test_firestore_index_rules.py',
+    'tests/unit/test_firestore_query_contract.py',
+)
+
+FIRESTORE_INDEX_GUARD_SUPPORT_PREFIX = 'backend/tests/support/firestore_'
+FIRESTORE_INDEX_GUARD_SCHEMA_PATHS = frozenset(
+    {'firestore.indexes.json', 'backend/database/firestore_index_registry.py'}
 )
 
 AREA_TESTS = (
@@ -442,6 +464,13 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         return all_tests, 'no changed paths were provided'
 
     selected: set[str] = set()
+    if any(
+        path in FIRESTORE_INDEX_GUARD_SCHEMA_PATHS
+        or path.startswith(FIRESTORE_INDEX_GUARD_SUPPORT_PREFIX)
+        or is_serving_query_inventory_path(path)
+        for path in changed_paths
+    ):
+        selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
     backend_paths = [path for path in changed_paths if is_selectable_backend_path(path)]
     test_paths = [path for path in backend_paths if path.startswith('backend/tests/') and path.endswith('.py')]
 

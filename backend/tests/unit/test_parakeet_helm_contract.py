@@ -43,7 +43,7 @@ def test_prod_parakeet_autoscaling_and_zone_spread_contract():
     values = _values('prod')
 
     assert values['autoscaling']['minReplicas'] == 3
-    assert values['autoscaling']['maxReplicas'] == 6
+    assert values['autoscaling']['maxReplicas'] == 7
     assert values['topologySpreadConstraints'] == [
         {
             'maxSkew': 1,
@@ -103,7 +103,7 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
         document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'HorizontalPodAutoscaler'
     )
     assert hpa['spec']['minReplicas'] == 3
-    assert hpa['spec']['maxReplicas'] == 6
+    assert hpa['spec']['maxReplicas'] == 7
     assert 'progressDeadlineSeconds' not in deployment['spec']
     container = deployment['spec']['template']['spec']['containers'][0]
     assert container['readinessProbe']['httpGet']['path'] == '/health'
