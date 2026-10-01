@@ -9,8 +9,10 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import database.firestore_index_registry as firestore_index_registry
 import database.action_items as action_items_db
+import database.advice as advice_db
 import database.chat as chat_db
 import database.conversations as conversations_db
+import database.frame_requests as frame_requests_db
 import database.folders as folders_db
 import database.memories as memories_db
 import database.task_recommendations as task_recommendations_db
@@ -527,7 +529,7 @@ class _StreamRecordingQuery:
     def limit(self, _n):
         return self
 
-    def stream(self):
+    def stream(self, **_kwargs):
         self._recorder.append((self._filters, self._orders))
         return []
 
@@ -562,7 +564,12 @@ class _StreamRecordingUserRef:
 
     def collection(self, name):
         assert name == self._collection_name
-        return _StreamRecordingQuery(self._recorder)
+        return _StreamRecordingCollection(self._recorder)
+
+
+class _StreamRecordingCollection(_StreamRecordingQuery):
+    def document(self, _document_id):
+        return SimpleNamespace()
 
 
 class _StreamRecordingFirestore:
@@ -573,6 +580,9 @@ class _StreamRecordingFirestore:
     def collection(self, name):
         assert name == 'users'
         return SimpleNamespace(document=lambda _uid: _StreamRecordingUserRef(self._recorder, self._collection_name))
+
+    def transaction(self):
+        return SimpleNamespace(create=lambda *_args, **_kwargs: None)
 
 
 def _declared_index_signatures():
@@ -804,6 +814,113 @@ def test_conversations_in_folder_has_the_prod_observed_composite(monkeypatch):
             ('created_at', 'DESCENDING'),
             ('__name__', 'DESCENDING'),
         ),
+    )
+    assert signature in _declared_index_signatures()
+
+
+@pytest.mark.parametrize(
+    ('category', 'include_dismissed', 'filters', 'signature'),
+    [
+        (
+            'meeting',
+            True,
+            (('category', '=='),),
+            (
+                'advice',
+                'COLLECTION',
+                (('category', 'ASCENDING'), ('created_at', 'DESCENDING'), ('__name__', 'DESCENDING')),
+            ),
+        ),
+        (
+            'meeting',
+            False,
+            (('category', '=='), ('is_dismissed', '==')),
+            (
+                'advice',
+                'COLLECTION',
+                (
+                    ('category', 'ASCENDING'),
+                    ('is_dismissed', 'ASCENDING'),
+                    ('created_at', 'DESCENDING'),
+                    ('__name__', 'DESCENDING'),
+                ),
+            ),
+        ),
+        (
+            None,
+            False,
+            (('is_dismissed', '=='),),
+            (
+                'advice',
+                'COLLECTION',
+                (('is_dismissed', 'ASCENDING'), ('created_at', 'DESCENDING'), ('__name__', 'DESCENDING')),
+            ),
+        ),
+    ],
+)
+def test_advice_serving_shapes_have_declared_composites(monkeypatch, category, include_dismissed, filters, signature):
+    recorder = []
+    monkeypatch.setattr(advice_db, '_user_col', lambda _uid, collection: _StreamRecordingCollection(recorder))
+
+    advice_db.get_advice('index-contract-user', category=category, include_dismissed=include_dismissed)
+
+    assert recorder == [(filters, (('created_at', 'DESCENDING'),))]
+    assert signature in _declared_index_signatures()
+
+
+def test_folder_include_discarded_shape_has_declared_composite(monkeypatch):
+    recorder = []
+    monkeypatch.setattr(folders_db, 'db', _StreamRecordingFirestore(recorder, collection_name='conversations'))
+
+    folders_db.get_conversations_in_folder('index-contract-user', 'folder-123', include_discarded=True)
+
+    assert recorder == [((('folder_id', '=='),), (('created_at', 'DESCENDING'),))]
+    signature = (
+        'conversations',
+        'COLLECTION',
+        (('folder_id', 'ASCENDING'), ('created_at', 'DESCENDING'), ('__name__', 'DESCENDING')),
+    )
+    assert signature in _declared_index_signatures()
+
+
+def test_frame_enqueue_first_query_has_declared_composite(monkeypatch):
+    recorder = []
+    client = _StreamRecordingFirestore(recorder, collection_name='frame_requests')
+    monkeypatch.setattr(frame_requests_db.firestore, 'transactional', lambda fn: fn)
+
+    frame_requests_db.enqueue_frame_request(
+        'index-contract-user',
+        device_id='device-123',
+        dedupe_key='intent-123',
+        account_generation=4,
+        now=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        firestore_client=client,
+    )
+
+    assert recorder[0] == (
+        (('device_id', '=='), ('account_generation', '=='), ('dedupe_key', '==')),
+        (('attempt_number', 'DESCENDING'),),
+    )
+    signature = (
+        'frame_requests',
+        'COLLECTION',
+        (
+            ('account_generation', 'ASCENDING'),
+            ('dedupe_key', 'ASCENDING'),
+            ('device_id', 'ASCENDING'),
+            ('attempt_number', 'DESCENDING'),
+            ('__name__', 'DESCENDING'),
+        ),
+    )
+    assert signature in _declared_index_signatures()
+
+
+def test_admin_notification_messages_index_is_declared():
+    # Query lives in web/admin/app/api/omi/stats/notifications/route.ts.
+    signature = (
+        'messages',
+        'COLLECTION_GROUP',
+        (('app_id', 'ASCENDING'), ('created_at', 'ASCENDING'), ('__name__', 'ASCENDING')),
     )
     assert signature in _declared_index_signatures()
 
