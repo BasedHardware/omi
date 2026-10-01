@@ -323,22 +323,24 @@ class _ConversationListItemState extends State<ConversationListItem> {
           final isMerging = rowState.isMerging;
           final isEligible = rowState.isEligible;
 
-          return GestureDetector(
-            onTap: () async {
-              // If in selection mode, toggle selection only if eligible
-              if (isSelectionMode) {
-                if (!isEligible) {
-                  // Show feedback that this conversation cannot be selected
-                  HapticFeedback.lightImpact();
-                  OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
-                  return;
-                }
-                HapticFeedback.selectionClick();
-                provider.toggleConversationSelection(widget.conversation.id);
+          Future<void> onTap() async {
+            // If in selection mode, toggle selection only if eligible
+            if (isSelectionMode) {
+              if (!isEligible) {
+                // Show feedback that this conversation cannot be selected
+                HapticFeedback.lightImpact();
+                OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
                 return;
               }
-              await _open(context, provider);
-            },
+              HapticFeedback.selectionClick();
+              provider.toggleConversationSelection(widget.conversation.id);
+              return;
+            }
+            await _open(context, provider);
+          }
+
+          return GestureDetector(
+            onTap: onTap,
             onLongPress: isSelectionMode || isMerging ? null : () => _showActions(context, provider),
             child: Stack(
               children: [
@@ -386,10 +388,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           ),
                           child: ClipRRect(
                             borderRadius: OmiRadius.xlAll,
-                            child: Padding(
-                              padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
-                              child: _buildMobileLayout(context),
-                            ),
+                            child: _buildCardContent(context, onTap),
                           ),
                         ),
                       ),

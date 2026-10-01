@@ -33,6 +33,7 @@ export 'components/omi_button.dart';
 export 'components/omi_edit_sheet.dart';
 export 'components/omi_filter_chip.dart';
 export 'components/omi_level_meter.dart';
+export 'components/omi_locked_preview.dart';
 export 'components/omi_icon_button.dart';
 export 'components/omi_nav_buttons.dart';
 export 'components/omi_page_states.dart';

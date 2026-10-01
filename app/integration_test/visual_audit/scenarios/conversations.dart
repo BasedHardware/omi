@@ -44,6 +44,30 @@ const _twoSourceGroup = CaptureGroup(id: 'group-1', primaryId: 'grouped-a', memb
 
 final conversationsScenarios = <AuditScenario>[
   AuditScenario(
+    id: 'conversations-locked-preview',
+    title: 'Locked conversations with an upgrade action',
+    page: _page,
+    state: 'An unlocked conversation followed by three locked previews; synthetic titles only',
+    run: (a) async {
+      final items = [
+        auditConversation('unlocked', title: 'Design catch-up with Alex'),
+        for (var i = 0; i < 3; i++)
+          ServerConversation(
+            id: 'locked-$i',
+            createdAt: DateTime(2026, 9, 20, 10 - i),
+            startedAt: DateTime(2026, 9, 20, 10 - i),
+            finishedAt: DateTime(2026, 9, 20, 10 - i, 3),
+            structured: Structured('Planning the next team meeting', 'Overview', emoji: '📝'),
+            isLocked: true,
+          ),
+      ];
+      await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders(items));
+      expect(find.byType(ConversationListItem), findsNWidgets(4));
+      expect(find.text('Upgrade to Unlimited'), findsNWidgets(3));
+      await a.shot('Conversation list with frosted locked previews');
+    },
+  ),
+  AuditScenario(
     id: 'conversations-list',
     title: 'Conversations list, row menu and swipe to delete',
     page: _page,
