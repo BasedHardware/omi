@@ -176,7 +176,6 @@ def _cleanup_expired_snapshot_receipts(uid: str, *, now: datetime, firestore_cli
         snapshot.reference.delete()
 
 
-
 def get_intervention(
     uid: str,
     intervention_id: str,
@@ -466,7 +465,6 @@ def _valid_evaluation_projection(
     if projection.evaluation_id != evaluation_id or projection.expires_at <= normalized_now:
         return None
     return projection
-
 
 
 def get_evaluation_projection(
