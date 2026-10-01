@@ -2530,7 +2530,7 @@
       "runs_on": "ubuntu-latest"
     },
     "sync_ledger_fence_cutover.yml/activate": {
-      "budget_p50_minutes": 6,
+      "budget_p50_minutes": 5,
       "display_name": "activate",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -2539,7 +2539,7 @@
       "matrix_size": 1,
       "needs": "stage",
       "owner": "CI maintainers",
-      "rationale": "PR M rechecks exact-source/digest identity and runtime/customer-data readiness at the existing activation approval. Reserve one p50 minute above the prior 5-minute placeholder; manual-only execution and zero estimated PR-event runs are unchanged.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2548,7 +2548,7 @@
       "runs_on": "ubuntu-latest"
     },
     "sync_ledger_fence_cutover.yml/stage": {
-      "budget_p50_minutes": 6,
+      "budget_p50_minutes": 5,
       "display_name": "stage",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -2557,7 +2557,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "PR M adds exact-source/digest validation and runtime/customer-data read-only readiness before staging. Reserve one p50 minute above the prior 5-minute placeholder for these checks; manual-only execution and zero estimated PR-event runs are unchanged.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4968,7 +4968,7 @@
     "sync_ledger_fence_cutover.yml": {
       "name": "Sync ledger fence cutover",
       "owner": "CI maintainers",
-      "rationale": "PR M adds a required release_sha input to bind the candidate digest to its Firestore manifest. Manual-only stage/activate approval and concurrency are unchanged; reserve one additional p50 minute per stage for the read-only readiness checks. No PR-event runs are added.",
+      "rationale": "Initial workflow inventory",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4991,11 +4991,6 @@
               ],
               "required": "true",
               "type": "choice"
-            },
-            "release_sha": {
-              "description": "Full main commit SHA the candidate backend image was built from (its short tag must resolve to this digest)",
-              "required": "true",
-              "type": "string"
             }
           }
         }

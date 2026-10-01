@@ -928,14 +928,6 @@ _SYNTHETIC_GATE = """      - uses: actions/checkout@v7
           source_sha: ${{ github.sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
           credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
-      - name: Verify customer-data Firestore indexes
-        if: ${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}
-        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
-        with:
-          source_sha: ${{ github.sha }}
-          project_id: based-hardware
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
-          artifact_suffix: -customer-data
 """
 
 
@@ -1101,19 +1093,6 @@ def test_firestore_gate_policy_rejects_or_dependency_bypass():
     )
     synthetic = _synthetic_deploy('      - uses: actions/checkout@v7\n', extra_jobs=false_gate_job + false_deploy)
     assert policy.workflow_gate_violations(synthetic, name='falsegate.yml', dockerfiles=dockerfiles)
-
-
-def test_firestore_gate_policy_requires_customer_gate_before_shipments():
-    policy = _workflow_policy()
-    repo = BACKEND_DIR.parent
-    dockerfiles = policy._runtime_images(repo)
-    workflow = (repo / '.github/workflows/gcp_memory_maintenance_job.yml').read_text(encoding='utf-8')
-    customer_block = re.search(
-        r'      - name: Verify customer-data Firestore indexes\n(?:        .*\n)+', workflow
-    ).group(0)
-    push_step = re.search(r'      - name: Push verified runtime image\n(?:        .*\n)+', workflow).group(0)
-    moved = workflow.replace(customer_block, '').replace(push_step, push_step + customer_block)
-    assert policy.workflow_gate_violations(moved, name='moved.yml', dockerfiles=dockerfiles)
 
 
 def test_firestore_gate_policy_step_working_directory_overrides_job_defaults():
@@ -1346,7 +1325,6 @@ _LANE_SOURCE_BINDINGS = {
     'gcp_backend_listen_helm.yml': '${{ env.BACKEND_LISTEN_SOURCE_SHA }}',
     'jit_qa_cloud_run.yml': '${{ needs.admit.outputs.source_sha }}',
     'jit_qa_typesense_projection.yml': '${{ needs.admit.outputs.source_sha }}',
-    'sync_ledger_fence_cutover.yml': '${{ github.event.inputs.release_sha }}',
 }
 
 
@@ -1370,21 +1348,24 @@ def test_firestore_gate_lane_source_and_target_bindings():
     assert 'source_sha: ${{ env.CHECKED_OUT_SHA }}' not in pusher
 
     listen = (workflows / 'gcp_backend_listen_helm.yml').read_text(encoding='utf-8')
-    assert 'echo "BACKEND_LISTEN_SOURCE_SHA=$SELECTED_SHA"' in listen
-    assert 'echo "BACKEND_LISTEN_SOURCE_SHA=$ROLLBACK_SHA"' in listen
+    assert 'echo "BACKEND_LISTEN_SOURCE_SHA=$(git rev-parse "${REQUESTED_TAG}^{commit}")" >> "$GITHUB_ENV"' in listen
     assert 'BACKEND_LISTEN_SOURCE_SHA=$CHECKED_OUT_SHA' not in listen
-    assert 'rollback "$RELEASE" "$BACKEND_LISTEN_ROLLBACK_REVISION"' in listen
-    assert 'echo "BACKEND_LISTEN_ROLLBACK_REVISION=$RESOLVED_REVISION"' in listen
-    assert 'helm -n "$NS" get values "$RELEASE" --revision "$RESOLVED_REVISION" -o json' in listen
+    assert 'BACKEND_LISTEN_SOURCE_SHA=$ROLLBACK_SHA' not in listen
+    assert 'BACKEND_LISTEN_SOURCE_SHA=$SELECTED_SHA' not in listen
+    # Rollback replays the operator's requested Helm revision verbatim; there is
+    # no resolver step and no source-sha derivation on that lane.
+    assert 'helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 30m' in listen
+    assert 'helm -n "$NS" rollback "$RELEASE" --wait --timeout 30m' in listen
+    assert 'TARGET_REVISION: ${{ github.event.inputs.helm_revision }}' in listen
+    assert 'BACKEND_LISTEN_ROLLBACK_REVISION' not in listen
+    assert 'BACKEND_LISTEN_SOURCE_SHA=$RUNNING_TAG' not in listen
+    gate_condition = "if: ${{ env.BACKEND_LISTEN_SOURCE_SHA != '' }}"
+    assert listen.count(gate_condition) == 2
 
     for jit_name in ('jit_qa_cloud_run.yml', 'jit_qa_typesense_projection.yml'):
         jit = (workflows / jit_name).read_text(encoding='utf-8')
         assert 'project_id: ${{ env.QA_PROJECT }}' in jit, jit_name
         assert 'database: ${{ env.QA_FIRESTORE_DATABASE }}' in jit, jit_name
-
-    cutover = (workflows / 'sync_ledger_fence_cutover.yml').read_text(encoding='utf-8')
-    assert cutover.count('source_sha: ${{ github.event.inputs.release_sha }}') == 4
-    assert 'gcloud container images describe' in cutover
 
     auto_dev = (workflows / 'gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
     assert "verify_credential_project: 'true'" in auto_dev
@@ -1399,110 +1380,207 @@ def test_firestore_gate_lane_source_and_target_bindings():
         assert re.search(pattern, gate_path), f'auto deploy scope regex must match {gate_path}'
 
 
-_CUSTOMER_DATA_LANES = {
-    'desktop_backend_prod.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'desktop_backend_auto_dev.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'gcp_llm_gateway.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'gcp_memory_maintenance_job.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'gcp_memory_maintenance_job_auto_dev.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'gcp_notifications_job.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'gcp_daily_memory_sweep_job.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'gcp_daily_memory_sweep_job_auto_dev.yml': [
-        "${{ steps.admitted_source.outputs.superseded != 'true' && vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"
-    ],
-    'gcp_day3_reengagement_email_job.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'gcp_day3_reengagement_email_job_auto_dev.yml': [
-        "${{ steps.admitted_source.outputs.superseded != 'true' && vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"
-    ],
-    'gcp_frame_request_retention_job.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'gcp_backend_pusher.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'gcp_backend_pusher_auto_deploy.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'gcp_backend_listen_helm.yml': ["${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}"],
-    'sync_ledger_fence_cutover.yml': [
-        "${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}",
-        "${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}",
-    ],
-}
-
-_COMPOSITE_USES = './.github/firestore-workflow/.github/actions/firestore-readiness'
-
-
-def _gate_steps(workflow_name: str):
-    document = yaml.safe_load((BACKEND_DIR.parent / '.github/workflows' / workflow_name).read_text(encoding='utf-8'))
-    steps = []
-    for job_name, job in document['jobs'].items():
-        for index, step in enumerate(job.get('steps') or []):
-            if isinstance(step, dict) and step.get('uses') == _COMPOSITE_USES:
-                steps.append((job_name, index, step))
-    return steps
-
-
-@pytest.mark.parametrize('workflow_name', sorted(_CUSTOMER_DATA_LANES))
-def test_customer_data_gate_pairs_the_runtime_gate(workflow_name):
-    gates = _gate_steps(workflow_name)
-    expected_conditions = _CUSTOMER_DATA_LANES[workflow_name]
-    assert len(gates) == 2 * len(expected_conditions), f'{workflow_name}: {[(j, i) for j, i, _ in gates]}'
-    primaries, customers = gates[::2], gates[1::2]
-    for (primary_job, primary_index, primary), (job_name, index, customer), condition in zip(
-        primaries, customers, expected_conditions
-    ):
-        assert job_name == primary_job
-        assert index == primary_index + 1
-        assert customer.get('if') == condition
-        customer_with = customer['with']
-        primary_with = primary['with']
-        assert customer_with['project_id'] == 'based-hardware'
-        assert customer_with['source_sha'] == primary_with['source_sha']
-        assert customer_with['credentials_json'] == primary_with['credentials_json']
-        assert customer_with.get('database', '(default)') == '(default)'
-        assert str(customer_with['artifact_suffix']).endswith('-customer-data')
-        assert customer_with['artifact_suffix'] != primary_with.get('artifact_suffix')
-
-
-def test_customer_data_gate_target_matches_runtime_manifest():
-    manifest = yaml.safe_load((BACKEND_DIR / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
-    for environment in ('dev', 'prod'):
-        values = manifest['environments'][environment]
-        assert values['data_plane_project'] == 'based-hardware'
-        assert values['runtime_gcp_project'] == 'based-hardware'
-
-
-@pytest.mark.parametrize(
-    'mutate',
-    [
-        lambda text: text.replace(
-            """      - name: Verify customer-data Firestore indexes
-        if: ${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}
-        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
-        with:
-          source_sha: ${{ env.CHECKED_OUT_SHA }}
-          project_id: based-hardware
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
-          artifact_suffix: -customer-data
-""",
-            '',
-        ),
-        lambda text: text.replace('project_id: based-hardware', 'project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}'),
-        lambda text: text.replace("        if: ${{ vars.RUNTIME_GCP_PROJECT_ID != 'based-hardware' }}\n", ''),
-        lambda text: text.replace('artifact_suffix: -customer-data', 'artifact_suffix: -runtime'),
-        lambda text: text.replace(
-            'source_sha: ${{ env.CHECKED_OUT_SHA }}\n          project_id: based-hardware',
-            'source_sha: ${{ github.sha }}\n          project_id: based-hardware',
-        ),
-    ],
-    ids=['removed', 'wrong-project', 'unconditional', 'duplicate-suffix', 'wrong-source'],
-)
-def test_customer_data_gate_policy_rejects_unpaired_or_mismatched_gate(mutate):
+def test_listen_gate_is_the_conditional_source_sha_gate():
     policy = _workflow_policy()
     repo = BACKEND_DIR.parent
     dockerfiles = policy._runtime_images(repo)
-    workflow = (repo / '.github/workflows/gcp_memory_maintenance_job.yml').read_text(encoding='utf-8')
-    mutated = mutate(workflow)
-    assert mutated != workflow
-    assert policy.workflow_gate_violations(mutated, name='mutated.yml', dockerfiles=dockerfiles)
+    name = 'gcp_backend_listen_helm.yml'
+    workflow = (repo / '.github/workflows' / name).read_text(encoding='utf-8')
+    assert policy.workflow_gate_violations(workflow, name=name, dockerfiles=dockerfiles) == []
+
+    gate_block = re.search(r'      - name: Verify serving Firestore indexes\n(?:        .*\n)+', workflow).group(0)
+    removed = workflow.replace(gate_block, '')
+    assert policy.workflow_gate_violations(removed, name=name, dockerfiles=dockerfiles)
+
+    tolerated = workflow.replace(
+        '        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness',
+        '        continue-on-error: true\n        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness',
+        1,
+    )
+    assert policy.workflow_gate_violations(tolerated, name=name, dockerfiles=dockerfiles)
+
+    unconditional = workflow.replace(
+        gate_block, gate_block.replace("        if: ${{ env.BACKEND_LISTEN_SOURCE_SHA != '' }}\n", ''), 1
+    )
+    assert any(
+        'listen readiness gate must be conditioned' in violation
+        for violation in policy.workflow_gate_violations(unconditional, name=name, dockerfiles=dockerfiles)
+    )
+
+    control_block = re.search(
+        r'      - name: Checkout immutable Firestore gate controls\n(?:        .*\n|          .*\n)+', workflow
+    ).group(0)
+    control_after = workflow.replace(control_block, '', 1).replace(gate_block, gate_block + control_block, 1)
+    assert policy.workflow_gate_violations(control_after, name=name, dockerfiles=dockerfiles)
+
+    unconditional_control = workflow.replace(
+        control_block,
+        control_block.replace("        if: ${{ env.BACKEND_LISTEN_SOURCE_SHA != '' }}\n", ''),
+        1,
+    )
+    assert policy.workflow_gate_violations(unconditional_control, name=name, dockerfiles=dockerfiles)
+
+    gate_steps = control_block + '\n' + gate_block
+    assert gate_steps in workflow
+    late = workflow.replace(gate_steps, '', 1).replace(
+        '      - name: Upgrade backend-listen Helm chart',
+        gate_steps + '      - name: Upgrade backend-listen Helm chart',
+        1,
+    )
+    assert policy.workflow_gate_violations(late, name=name, dockerfiles=dockerfiles)
+
+    after_config = workflow.replace(gate_steps, '', 1).replace(
+        '      - name: Upgrade backend-secrets Helm chart',
+        gate_steps + '      - name: Upgrade backend-secrets Helm chart',
+        1,
+    )
+    assert policy.workflow_gate_violations(after_config, name=name, dockerfiles=dockerfiles)
+
+    no_source = workflow.replace(
+        '          echo "BACKEND_LISTEN_SOURCE_SHA=$(git rev-parse "${REQUESTED_TAG}^{commit}")" >> "$GITHUB_ENV"\n',
+        '',
+        1,
+    )
+    assert policy.workflow_gate_violations(no_source, name=name, dockerfiles=dockerfiles)
+
+    kept_write = workflow.replace(
+        '            echo "BACKEND_LISTEN_IMAGE_TAG=$RUNNING_TAG" >> "$GITHUB_ENV"\n            exit 0',
+        '            echo "BACKEND_LISTEN_IMAGE_TAG=$RUNNING_TAG" >> "$GITHUB_ENV"\n'
+        '            echo "BACKEND_LISTEN_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"\n            exit 0',
+        1,
+    )
+    assert kept_write != workflow
+    assert policy.workflow_gate_violations(kept_write, name=name, dockerfiles=dockerfiles)
+
+    resolver = workflow + "\n        # helm -n ns get values rel --revision 2\n"
+    assert policy.workflow_gate_violations(resolver, name=name, dockerfiles=dockerfiles)
+
+    built = workflow.replace(
+        '      - name: Carry forward config this workflow does not own',
+        '      - run: docker push gcr.io/example/backend:abc1234\n'
+        '      - name: Carry forward config this workflow does not own',
+        1,
+    )
+    assert policy.workflow_gate_violations(built, name=name, dockerfiles=dockerfiles)
 
 
-def test_customer_data_gate_not_required_for_central_or_qa():
+def test_firestore_gate_checkouts_are_sparse():
+    """Controls and admitted-source checkouts fetch only what the gate needs."""
+    repo = BACKEND_DIR.parent
+    controls_sparse = (
+        '          path: .github/firestore-workflow\n'
+        '          persist-credentials: false\n'
+        '          fetch-depth: 1\n'
+        '          sparse-checkout: |\n'
+        '            .github/actions/firestore-readiness\n'
+        '            backend/scripts\n'
+        '            backend/database\n'
+    )
+    gated = 0
+    for path in (repo / '.github/workflows').glob('*.yml'):
+        text = path.read_text(encoding='utf-8')
+        count = text.count('path: .github/firestore-workflow')
+        assert text.count(controls_sparse) == count, path
+        gated += count
+    assert gated == len(_LANE_SOURCE_BINDINGS)
+
+    action = (repo / '.github/actions/firestore-readiness/action.yml').read_text(encoding='utf-8')
+    assert (
+        '        path: .github/firestore-source\n'
+        '        persist-credentials: false\n'
+        '        fetch-depth: 1\n'
+        '        sparse-checkout: backend/database\n'
+    ) in action
+
+
+def _local_actions(repo):
+    actions_dir = repo / '.github/actions'
+    return {
+        str(path.relative_to(repo)): path.read_text(encoding='utf-8')
+        for pattern in ('action.yml', 'action.yaml')
+        for path in actions_dir.rglob(pattern)
+    }
+
+
+def test_backend_gcr_publishers_are_exactly_the_gated_builders():
+    """Only the gated builder workflows may publish the backend GCR repository."""
+    policy = _workflow_policy()
+    repo = BACKEND_DIR.parent
+    dockerfiles = policy._runtime_images(repo)
+    known = policy._known_image_names(dockerfiles)
+    local_actions = _local_actions(repo)
+    # Workflows publish only by pushing gcr.io refs directly or through local
+    # composites that do so (transitively); anything else cannot ship an image.
+    push_actions = {key for key, body in local_actions.items() if 'gcr.io' in body}
+    while True:
+        push_names = {key.rsplit('/', 2)[-2] for key in push_actions}
+        grown = push_actions | {
+            key
+            for key, body in local_actions.items()
+            if any(f'./.github/actions/{action_name}' in body for action_name in push_names)
+        }
+        if grown == push_actions:
+            break
+        push_actions = grown
+    push_refs = {f'./.github/actions/{key.rsplit("/", 2)[-2]}' for key in push_actions}
+    publishers: set[str] = set()
+    for path in sorted((repo / '.github/workflows').glob('*.yml')):
+        text = path.read_text(encoding='utf-8')
+        if 'gcr.io' not in text and not any(ref in text for ref in push_refs):
+            continue
+        document = policy._yaml_document(text)
+        for job_id, job in (document.get('jobs') or {}).items():
+            if not isinstance(job, dict) or not isinstance(job.get('steps'), list):
+                continue
+            errors: list[str] = []
+            expanded = policy._expand_steps(job['steps'], local_actions, path.name, job_id, errors)
+            job_state = {'var_images': {}, 'tag_images': {}, 'env': {}, 'built_firestore': False}
+            for step in expanded:
+                _shipments, _unregistered, published = policy._step_shipments(
+                    step, document, job, dockerfiles, known, job_state
+                )
+                if 'backend' in published:
+                    publishers.add(path.name)
+    assert publishers == {'gcp_backend.yml', 'gcp_backend_auto_dev.yml'}
+
+
+def test_cutover_consumes_gated_images_without_building():
+    """Cutover is exempt only because it consumes; adding a build/push fails."""
+    policy = _workflow_policy()
+    repo = BACKEND_DIR.parent
+    dockerfiles = policy._runtime_images(repo)
+    local_actions = _local_actions(repo)
+    name = 'sync_ledger_fence_cutover.yml'
+    workflow = (repo / '.github/workflows' / name).read_text(encoding='utf-8')
+    assert (
+        policy.workflow_gate_violations(workflow, name=name, local_actions=local_actions, dockerfiles=dockerfiles) == []
+    )
+
+    built = workflow.replace(
+        '      - name: Upload standby cutover state',
+        '      - run: docker push gcr.io/example/backend:abc1234\n      - name: Upload standby cutover state',
+        1,
+    )
+    assert built != workflow
+    assert policy.workflow_gate_violations(built, name=name, local_actions=local_actions, dockerfiles=dockerfiles)
+
+    # Only the named cutover workflow may invoke the consume helper ungated.
+    renamed = policy.workflow_gate_violations(
+        workflow, name='renamed_cutover.yml', local_actions=local_actions, dockerfiles=dockerfiles
+    )
+    assert renamed
+
+
+def test_new_workflow_pushing_backend_repository_is_ungated_violation():
+    policy = _workflow_policy()
+    dockerfiles = policy._runtime_images(BACKEND_DIR.parent)
+    synthetic = _synthetic_deploy(
+        '      - uses: actions/checkout@v7\n      - run: docker push gcr.io/example/backend:anytag\n'
+    )
+    assert policy.workflow_gate_violations(synthetic, name='synthetic.yml', dockerfiles=dockerfiles)
+
+
+def test_no_customer_data_gate_for_central_or_qa():
     policy = _workflow_policy()
     repo = BACKEND_DIR.parent
     dockerfiles = policy._runtime_images(repo)
@@ -1593,22 +1671,6 @@ if cmd == 'rev-parse':
 sys.exit(1)
 """
 
-_HELM_STUB = """#!/usr/bin/env python3
-import os, sys
-args = sys.argv[1:]
-if 'history' in args:
-    sys.stdout.write(open(os.environ['STUB_HELM_HISTORY']).read())
-    sys.exit(0)
-if 'get' in args and 'values' in args:
-    revision = args[args.index('--revision') + 1]
-    path = os.path.join(os.environ['STUB_HELM_VALUES'], revision + '.json')
-    if not os.path.exists(path):
-        sys.exit(1)
-    sys.stdout.write(open(path).read())
-    sys.exit(0)
-sys.exit(1)
-"""
-
 _KUBECTL_STUB = """#!/usr/bin/env python3
 import os, sys
 if 'get' in sys.argv and 'deploy/' in ' '.join(sys.argv):
@@ -1645,7 +1707,6 @@ def _stub_bin(tmp_path: Path) -> Path:
     bin_dir.mkdir(parents=True, exist_ok=True)
     for name, body in (
         ('git', _GIT_STUB),
-        ('helm', _HELM_STUB),
         ('kubectl', _KUBECTL_STUB),
         ('gcloud', _GCLOUD_STUB),
     ):
@@ -1674,22 +1735,17 @@ def _run_step(run: str, env: dict[str, str], substitutions: dict[str, str], tmp_
     return proc, outputs
 
 
-def _listen_env(tmp_path: Path, tags: dict, *, history=(), values=None, image='', ancestors=None):
+def _listen_env(tmp_path: Path, tags: dict, *, image='', ancestors=None):
     tmp_path.mkdir(parents=True, exist_ok=True)
     (tmp_path / 'tags.json').write_text(json.dumps(tags), encoding='utf-8')
-    (tmp_path / 'ancestors.json').write_text(json.dumps(ancestors or list(tags.values())), encoding='utf-8')
-    (tmp_path / 'history.json').write_text(json.dumps(history), encoding='utf-8')
-    values_dir = tmp_path / 'values'
-    values_dir.mkdir(exist_ok=True)
-    for revision, body in (values or {}).items():
-        (values_dir / f'{revision}.json').write_text(json.dumps(body), encoding='utf-8')
+    (tmp_path / 'ancestors.json').write_text(
+        json.dumps(ancestors if ancestors is not None else list(tags) + list(tags.values())), encoding='utf-8'
+    )
     return {
         'STUB_GIT_TAGS': str(tmp_path / 'tags.json'),
         'STUB_GIT_ANCESTORS': str(tmp_path / 'ancestors.json'),
         'STUB_GIT_HEAD': 'f' * 40,
         'STUB_GIT_MAIN': 'f' * 40,
-        'STUB_HELM_HISTORY': str(tmp_path / 'history.json'),
-        'STUB_HELM_VALUES': str(values_dir),
         'STUB_KUBECTL_IMAGE': image,
     }
 
@@ -1699,75 +1755,6 @@ _LISTEN_SUBSTITUTIONS = {
     'vars.GCP_PROJECT_ID': 'test-project',
     'github.event.inputs.environment': 'prod',
 }
-
-
-def test_listen_rollback_resolution_executes_against_stubbed_tools(tmp_path):
-    step = _workflow_run_step('gcp_backend_listen_helm.yml', 'Resolve backend-listen rollback target')
-    run = step['run']
-    bin_dir = _stub_bin(tmp_path)
-    base_env = {'PATH': f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-
-    good_values = {'image': {'repository': 'gcr.io/test-project/backend', 'tag': 'aaaaaaa'}}
-
-    case = tmp_path / 'default-revision'
-    env = (
-        base_env
-        | _listen_env(
-            case,
-            {'aaaaaaa': 'a' * 40},
-            history=[{'revision': 1}, {'revision': 2}, {'revision': 3}],
-            values={2: good_values},
-        )
-        | {'TARGET_REVISION': ''}
-    )
-    proc, outputs = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
-    assert proc.returncode == 0, proc.stderr
-    assert outputs['BACKEND_LISTEN_ROLLBACK_REVISION'] == '2'
-    assert outputs['BACKEND_LISTEN_SOURCE_SHA'] == 'a' * 40
-
-    case = tmp_path / 'explicit-revision'
-    env = (
-        base_env
-        | _listen_env(
-            case,
-            {'bbbbbbb': 'b' * 40},
-            values={5: {'image': {'repository': 'gcr.io/test-project/backend', 'tag': 'bbbbbbb'}}},
-        )
-        | {'TARGET_REVISION': '5'}
-    )
-    proc, outputs = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
-    assert proc.returncode == 0, proc.stderr
-    assert outputs['BACKEND_LISTEN_ROLLBACK_REVISION'] == '5'
-    assert outputs['BACKEND_LISTEN_SOURCE_SHA'] == 'b' * 40
-
-    case = tmp_path / 'bad-revision'
-    env = base_env | _listen_env(case, {}, values={}) | {'TARGET_REVISION': 'abc'}
-    proc, _ = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
-    assert proc.returncode == 1
-
-    case = tmp_path / 'short-history'
-    env = base_env | _listen_env(case, {}, history=[{'revision': 1}]) | {'TARGET_REVISION': ''}
-    proc, _ = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
-    assert proc.returncode != 0
-
-    for label, bad_values in (
-        ('latest-tag', {'image': {'repository': 'gcr.io/test-project/backend', 'tag': 'latest'}}),
-        ('missing-tag', {'image': {'repository': 'gcr.io/test-project/backend'}}),
-        ('wrong-repository', {'image': {'repository': 'gcr.io/other/backend', 'tag': 'aaaaaaa'}}),
-        ('unresolved-tag', {'image': {'repository': 'gcr.io/test-project/backend', 'tag': 'ddddddd'}}),
-    ):
-        case = tmp_path / label
-        env = (
-            base_env
-            | _listen_env(
-                case,
-                {'aaaaaaa': 'a' * 40},
-                values={3: bad_values},
-            )
-            | {'TARGET_REVISION': '3'}
-        )
-        proc, _ = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
-        assert proc.returncode == 1, f'{label} must fail closed: {proc.stdout}'
 
 
 def test_listen_deploy_tag_resolution_executes_against_stubbed_tools(tmp_path):
@@ -1785,7 +1772,17 @@ def test_listen_deploy_tag_resolution_executes_against_stubbed_tools(tmp_path):
     proc, outputs = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
     assert proc.returncode == 0, proc.stderr
     assert outputs['BACKEND_LISTEN_IMAGE_TAG'] == 'abc1234'
-    assert outputs['BACKEND_LISTEN_SOURCE_SHA'] == 'c' * 40
+    # The kept lane replays an already-gated image; it must not resolve a SHA.
+    assert 'BACKEND_LISTEN_SOURCE_SHA' not in outputs
+
+    # Even when the kept tag cannot be resolved locally, the kept lane exits
+    # before any git lookup and still emits no source SHA.
+    case = tmp_path / 'kept-tag-unresolvable'
+    env = base_env | _listen_env(case, {}, image='gcr.io/test-project/backend:eeeeeee') | {'REQUESTED_TAG': ''}
+    proc, outputs = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
+    assert proc.returncode == 0, proc.stderr
+    assert outputs['BACKEND_LISTEN_IMAGE_TAG'] == 'eeeeeee'
+    assert 'BACKEND_LISTEN_SOURCE_SHA' not in outputs
 
     case = tmp_path / 'explicit-tag'
     env = (

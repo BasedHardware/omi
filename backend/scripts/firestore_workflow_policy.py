@@ -192,7 +192,6 @@ READINESS_CREDENTIALS = '${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}'
 RUNTIME_PROJECT_INPUT = '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
 QA_PROJECT_INPUT = '${{ env.QA_PROJECT }}'
 QA_DATABASE_INPUT = '${{ env.QA_FIRESTORE_DATABASE }}'
-CUSTOMER_DATA_PROJECT = 'based-hardware'
 DEPLOY_ENVIRONMENT = re.compile(
     r"^\$\{\{\s*github\.event\.inputs\.environment\s*==\s*'prod'\s*&&\s*'prod'\s*\|\|\s*'development'\s*\}\}$"
 )
@@ -220,11 +219,23 @@ SERVICE_IMAGE_NAMES = {
 
 _DOCKERFILE_FLAG = re.compile(r'(?:--file|--dockerfile|-f|file:)\s*=?["\']?([^\s"\']*Dockerfile[^\s"\']*)')
 _GCR_IMAGE = re.compile(r'gcr\.io/[A-Za-z0-9_.${} /-]+?/([A-Za-z0-9_-]+)(?=[@:\s]|$)')
+_GCR_REPO = re.compile(r"gcr\.io/(?:\$\{\{[^}]*\}\}|[^\s:/'\"])+?/([A-Za-z0-9_-]+)")
 _RUN_DEPLOY = re.compile(r'gcloud\s+run\s+(?:deploy|jobs\s+(?:deploy|update))\s+["\']?([^\s"\']+)')
-_TRAFFIC_ONLY = re.compile(r'gcloud\s+run\s+(?:services\s+)?update-traffic\b')
 _HELM_MUTATION = re.compile(r'\bhelm\s+(?:upgrade|rollback)\b')
 _RUN_SERVICES_UPDATE = re.compile(r'gcloud\s+run\s+services\s+update\s')
+# sync_ledger_fence_cutover.py stage/activate only consumes a backend image that
+# was already built by a gated builder (operator backend-image contract; the
+# generic @sha256 digest check does not enforce the repository). The named
+# cutover workflow is the only file allowed to invoke it without its own gate;
+# any other workflow doing so produces an uncovered 'backend' shipment.
 _CUTOVER = re.compile(r'sync_ledger_fence_cutover\.py\s+(?:stage|activate)')
+_CUTOVER_WORKFLOW = 'sync_ledger_fence_cutover.yml'
+_LISTEN_REPLAY = re.compile(r'BACKEND_LISTEN_IMAGE_TAG|\brollback\b')
+_LISTEN_MUTATION_RUN = re.compile(
+    r'deploy-backend-config\.sh|deploy-backend-secrets\.sh|\bhelm\s+(?:upgrade|rollback)\b'
+)
+_LISTEN_SELECT_STEP = 'Resolve backend-listen image tag'
+_LISTEN_DEPLOY_IF = "${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}"
 _DOCKER_PUSH = re.compile(r'\b(?:docker|podman)\s+push\s+([^\s;&|]+)')
 _DOCKER_BUILD = re.compile(r'\b(?:docker|podman)\s+(?:buildx\s+)?build\b')
 _SHELL_IF = re.compile(
@@ -238,44 +249,28 @@ _ATOM_DETAIL = re.compile(r"([A-Za-z_][A-Za-z0-9_.\-]*)\s*(==|!=)\s*(?:'([^']*)'
 _EXPR_ATOM = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-]*\s*(?:==|!=)\s*(?:'[^']*'|[A-Za-z0-9_.]+(?![A-Za-z0-9_.(]))")
 _KNOWN_NAME_BOUNDARY = r'(?<![A-Za-z0-9_-]){}(?![A-Za-z0-9_-])'
 
-_CUSTOMER_DATA_ATOM = ('vars.RUNTIME_GCP_PROJECT_ID', '!=', 'based-hardware')
+# gcp_backend_listen_helm.yml gates only the explicit-tag deploy path: kept and
+# rollback lanes redeploy an image already served in the same environment, and
+# the index pipeline is create-only, so its readiness gate is conditioned on
+# env.BACKEND_LISTEN_SOURCE_SHA != '' and rollback gains no new failure mode.
+LISTEN_WORKFLOW = 'gcp_backend_listen_helm.yml'
+_LISTEN_SOURCE_ATOM = ('env.BACKEND_LISTEN_SOURCE_SHA', '!=', '')
 _SUPPORTED_GATE_ATOMS = frozenset(
     {
         ('steps.admitted_source.outputs.superseded', '!=', 'true'),
         ('inputs.mode', '==', 'prove'),
-        _CUSTOMER_DATA_ATOM,
+        _LISTEN_SOURCE_ATOM,
     }
 )
 _UNSUPPORTED_SCOPE = frozenset({('@unsupported', '==', '@')})
 _UNBOUND_IMAGE = '__unbound__'
 
 _BUILD_VALUE_FLAGS = frozenset(
-    {
-        '--build-arg',
-        '--platform',
-        '--target',
-        '--label',
-        '--cache-from',
-        '--cache-to',
-        '--add-host',
-        '--network',
-        '--memory',
-        '--shm-size',
-        '--output',
-        '-o',
-        '--secret',
-        '--ssh',
-        '--ulimit',
-        '--iidfile',
-        '--progress',
-        '--builder',
-        '--attest',
-        '--provenance',
-        '--sbom',
-        '--pull',
-        '--load',
-        '-c',
-    }
+    (
+        '--build-arg --platform --target --label --cache-from --cache-to --add-host --network '
+        '--memory --shm-size --output -o --secret --ssh --ulimit --iidfile --progress --builder '
+        '--attest --provenance --sbom --pull --load -c'
+    ).split()
 )
 
 
@@ -492,9 +487,8 @@ def _command_fragment(text: str, position: int) -> str:
 
 
 def _working_directory(document: dict, job: dict, step: dict) -> str:
-    defaults = document.get('defaults') or {}
-    job_defaults = job.get('defaults') or {}
-    for layer in (step, job_defaults.get('run'), defaults.get('run')):
+    layers = (step, (job.get('defaults') or {}).get('run'), (document.get('defaults') or {}).get('run'))
+    for layer in layers:
         if isinstance(layer, dict) and layer.get('working-directory'):
             return str(layer['working-directory'])
     return ''
@@ -554,18 +548,21 @@ def _parse_docker_build(fragment: str, workdir: str):
 
 def _dockerfile_for_action(with_block: dict) -> str:
     file_ref = str(with_block.get('file', '') or '')
-    context = str(with_block.get('context', '') or '')
     if file_ref:
         return _norm_path(file_ref)
-    if context:
-        return _norm_path(context + '/Dockerfile')
-    return 'Dockerfile'
+    return _norm_path(f"{with_block.get('context', '') or ''}/Dockerfile")
 
 
 def _step_shipments(
-    step: dict, document: dict, job: dict, dockerfiles: dict[str, set[str]], known: frozenset[str], job_state: dict
+    step: dict,
+    document: dict,
+    job: dict,
+    dockerfiles: dict[str, set[str]],
+    known: frozenset[str],
+    job_state: dict,
+    workflow_name: str = '',
 ):
-    """Return (shipments, unregistered); job_state carries tag provenance across steps."""
+    """Return (shipments, unregistered, published); job_state carries tag provenance across steps."""
 
     run = step.get('run') or ''
     with_block = step.get('with') or {}
@@ -574,6 +571,7 @@ def _step_shipments(
     env = _step_env(document, job, step, run_text)
     env.update(job_state['env'])
     unregistered: list[str] = []
+    published: set[str] = set()
     shipments: list[tuple[frozenset, frozenset[str]]] = []
     workdir = _norm_path(_working_directory(document, job, step)) if _working_directory(document, job, step) else ''
 
@@ -588,6 +586,11 @@ def _step_shipments(
         names = frozenset(set(names) | set(tag_names))
         if push == 'true' or 'type=registry' in cache_to:
             shipments.append((_scope_for(step, None), frozenset() if is_excluded else names))
+            for match in _GCR_REPO.finditer(_substitute(str(with_block.get('tags', '')), env)):
+                published.add(match.group(1))
+            cache_ref = _GCR_REPO.search(_substitute(cache_to, env))
+            if cache_ref:
+                published.add(cache_ref.group(1))
 
     if uses.startswith('google-github-actions/deploy-cloudrun'):
         image = _substitute(str(with_block.get('image', '') or ''), env)
@@ -601,7 +604,7 @@ def _step_shipments(
             shipments.append((_scope_for(step, None), frozenset(deploy_names)))
 
     if not run_text:
-        return shipments, unregistered
+        return shipments, unregistered, published
 
     resolved = _substitute(run_text, env)
     scopes = _scope_blocks(resolved, env)
@@ -642,11 +645,16 @@ def _step_shipments(
                 job_state['tag_images'][tag.strip('"\'')] = (merged, is_excluded)
         if pushed and not is_excluded:
             shipments.append((scope_at(match.start()), build_names))
+            for tag in tags:
+                for repo_match in _GCR_REPO.finditer(_substitute(tag, env)):
+                    published.add(repo_match.group(1))
 
     for match in _DOCKER_PUSH.finditer(resolved):
         fragment = _command_fragment(resolved, match.start())
         arg = match.group(1).strip('"\'')
         var = _var_reference(arg)
+        for repo_match in _GCR_REPO.finditer(env.get(var, '') if var else _substitute(arg, env)):
+            published.add(repo_match.group(1))
         if var and var in job_state['var_images']:
             names, is_excluded = job_state['var_images'][var]
             if is_excluded:
@@ -679,7 +687,14 @@ def _step_shipments(
 
     for pattern in (_RUN_DEPLOY, _HELM_MUTATION, _CUTOVER, _RUN_SERVICES_UPDATE):
         for match in pattern.finditer(resolved):
+            if pattern is _CUTOVER and workflow_name == _CUTOVER_WORKFLOW:
+                continue
             fragment = _command_fragment(resolved, match.start())
+            if workflow_name == LISTEN_WORKFLOW and pattern is _HELM_MUTATION and _LISTEN_REPLAY.search(fragment):
+                # backend-listen's kept/rollback lanes replay an image already
+                # served in the same environment; only its explicit-tag path
+                # resolves a new source SHA, and the conditional gate covers it.
+                continue
             if pattern is _RUN_SERVICES_UPDATE and '--image' not in fragment:
                 continue
             inc, exc, unreg = _attribute(fragment, dockerfiles, known)
@@ -692,16 +707,14 @@ def _step_shipments(
                     names = {_UNBOUND_IMAGE}
             shipments.append((scope_at(match.start()), frozenset(names)))
 
-    return shipments, unregistered
+    return shipments, unregistered, published
 
 
 def _environment_ok(environment) -> bool:
     if isinstance(environment, dict):
         environment = environment.get('name', '')
     value = str(environment).strip()
-    if value in {'prod', 'development'}:
-        return True
-    return bool(DEPLOY_ENVIRONMENT.fullmatch(value))
+    return value in {'prod', 'development'} or bool(DEPLOY_ENVIRONMENT.fullmatch(value))
 
 
 def _checkout_is_control(step: dict) -> bool:
@@ -717,27 +730,18 @@ def _checkout_is_control(step: dict) -> bool:
 def _checkout_erases_controls(step: dict) -> bool:
     if not str(step.get('uses', '')).startswith('actions/checkout@'):
         return False
-    with_block = step.get('with') or {}
-    path = str(with_block.get('path', '')).strip()
-    return path in {'', '.', './'}
+    return str((step.get('with') or {}).get('path', '')).strip() in {'', '.', './'}
 
 
 def _continue_on_error(value) -> bool:
-    if value is None or value is False:
-        return False
-    return str(value).strip().lower() not in {'', 'false'}
+    return value not in (None, False) and str(value).strip().lower() not in {'', 'false'}
 
 
 def _condition_enabled(step: dict) -> bool:
     if _continue_on_error(step.get('continue-on-error')):
         return False
     condition = step.get('if')
-    if condition is None:
-        return True
-    raw = re.sub(r'\$\{\{|\}\}', '', str(condition)).strip()
-    if raw in {'false', "'false'", '"false"'}:
-        return False
-    return True
+    return condition is None or re.sub(r'\$\{\{|\}\}|\'|"|\s', '', str(condition)) != 'false'
 
 
 def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id: str, name: str) -> list[str]:
@@ -748,9 +752,14 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
         errors.append('readiness gate must not be disabled or tolerated')
     if _continue_on_error(job.get('continue-on-error')):
         errors.append('readiness gate job must not be continue-on-error')
+    is_listen = pathlib.Path(name).name == LISTEN_WORKFLOW
     gate_key = _gate_scope(step)
     if gate_key is None:
         errors.append('readiness gate condition must be unconditional or a supported lane predicate')
+    elif _LISTEN_SOURCE_ATOM in gate_key and not is_listen:
+        errors.append('env.BACKEND_LISTEN_SOURCE_SHA gating is only valid in gcp_backend_listen_helm.yml')
+    if is_listen and gate_key != frozenset({_LISTEN_SOURCE_ATOM}):
+        errors.append('listen readiness gate must be conditioned on env.BACKEND_LISTEN_SOURCE_SHA != \'\'')
     with_block = step.get('with') or {}
     source_sha = str(with_block.get('source_sha', ''))
     if not source_sha:
@@ -766,23 +775,13 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
     if project == RUNTIME_PROJECT_INPUT:
         if database and database != '(default)':
             errors.append('readiness gate on the runtime project must use the (default) database')
-        if _CUSTOMER_DATA_ATOM in (gate_key or frozenset()):
-            errors.append('the primary runtime-project readiness gate must stay unconditional about the project split')
     elif project == QA_PROJECT_INPUT:
         if database != QA_DATABASE_INPUT:
             errors.append('QA readiness gate must set database: ${{ env.QA_FIRESTORE_DATABASE }}')
-    elif project == CUSTOMER_DATA_PROJECT:
-        if _CUSTOMER_DATA_ATOM not in (gate_key or frozenset()):
-            errors.append('customer-data readiness gate must require vars.RUNTIME_GCP_PROJECT_ID != based-hardware')
-        if database and database != '(default)':
-            errors.append('customer-data readiness gate must use the (default) database')
-        suffix = str(with_block.get('artifact_suffix', ''))
-        if not suffix.endswith('customer-data'):
-            errors.append('customer-data readiness gate must set a unique -customer-data artifact_suffix')
     else:
-        errors.append(
-            'readiness gate project_id must be vars.RUNTIME_GCP_PROJECT_ID, env.QA_PROJECT, or based-hardware'
-        )
+        errors.append('readiness gate project_id must be vars.RUNTIME_GCP_PROJECT_ID or env.QA_PROJECT')
+    if is_listen and source_sha != '${{ env.BACKEND_LISTEN_SOURCE_SHA }}':
+        errors.append('listen readiness gate source_sha must be env.BACKEND_LISTEN_SOURCE_SHA')
     if not _environment_ok(job.get('environment')):
         errors.append('readiness gate must run inside a prod/development deployment environment')
 
@@ -791,10 +790,15 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
         if _checkout_is_control(earlier):
             control_index = earlier_index
             control_condition = earlier.get('if')
+            control_atoms = None
             if control_condition is not None:
                 control_atoms, ok = _condition_atoms(control_condition)
                 if not ok or control_atoms - (gate_key or frozenset()):
                     errors.append('control checkout must share the gate condition or be unconditional')
+            if is_listen and control_atoms != gate_key:
+                errors.append(
+                    "listen control checkout must carry exactly the env.BACKEND_LISTEN_SOURCE_SHA != '' condition"
+                )
             if not _condition_enabled(earlier):
                 errors.append('control checkout must not be disabled or tolerated')
     if control_index < 0:
@@ -811,11 +815,8 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
 
 def _job_needs(job: dict) -> set[str]:
     needs = job.get('needs')
-    if isinstance(needs, str):
-        return {needs}
-    if isinstance(needs, list):
-        return {str(item) for item in needs}
-    return set()
+    items = needs if isinstance(needs, list) else [needs]
+    return {str(item) for item in items if isinstance(item, str)}
 
 
 _INPUT_REF = re.compile(r'\$\{\{\s*inputs\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}')
@@ -892,14 +893,6 @@ def _split_top_level(expression: str, operator: str) -> list[str]:
     return parts
 
 
-def _split_top_level_or(expression: str) -> list[str]:
-    return _split_top_level(expression, '|')
-
-
-def _split_top_level_and(expression: str) -> list[str]:
-    return _split_top_level(expression, '&')
-
-
 def _unwrap_outer(expression: str) -> str:
     text = expression.strip()
     if not (text.startswith('(') and text.endswith(')')):
@@ -917,33 +910,29 @@ def _unwrap_outer(expression: str) -> str:
     return text
 
 
-def _has_success_conjunct(alternative: str, dep_id: str) -> bool:
-    target = f"needs.{dep_id}.result=='success'"
-    for conjunct in _split_top_level_and(_unwrap_outer(alternative)):
-        normalized = re.sub(r'\$\{\{|\}\}', '', conjunct)
-        normalized = re.sub(r'\s+', '', normalized).replace('"', "'")
-        if normalized == target or re.sub(r'\s+', '', _unwrap_outer(conjunct)).replace('"', "'") == target:
-            return True
-    return False
-
-
 def _dependency_allows(job: dict, dep_condition_atoms, dep_id: str) -> bool:
     raw = re.sub(r'\$\{\{|\}\}', '', str(job.get('if', '') or '')).strip()
     if not raw:
         return True
-    alternatives = _split_top_level_or(raw)
+    alternatives = _split_top_level(raw, '|')
     override = (
         len(alternatives) > 1
         or re.search(r'\b(?:always|failure|cancelled)\(\)', raw) is not None
         or re.search(r'needs\.[\w.-]*\.result\s*!=', raw) is not None
         or re.search(r'!(?!=)', raw) is not None
     )
+    target = f"needs.{dep_id}.result=='success'"
     for alternative in alternatives:
         atoms, supported = _condition_atoms(alternative, allow_or=True)
         if not supported or not dep_condition_atoms <= atoms:
             return False
-        if override and not _has_success_conjunct(alternative, dep_id):
-            return False
+        if override:
+            conjuncts = (_unwrap_outer(c) for c in _split_top_level(_unwrap_outer(alternative), '&'))
+            if not any(
+                re.sub(r'\s+', '', re.sub(r'\$\{\{|\}\}', '', conjunct)).replace('"', "'") == target
+                for conjunct in conjuncts
+            ):
+                return False
     return True
 
 
@@ -965,6 +954,31 @@ def workflow_gate_violations(
     local_actions = local_actions or {}
     dockerfiles = dockerfiles or {}
     known = _known_image_names(dockerfiles)
+
+    is_listen = pathlib.Path(name).name == LISTEN_WORKFLOW
+    if is_listen and ('BACKEND_LISTEN_ROLLBACK_REVISION' in text or '--revision' in text):
+        errors.append(
+            f'{name}: backend-listen must not reintroduce a rollback-target resolver; '
+            'rollback reuses the requested Helm revision directly'
+        )
+    if is_listen:
+        select_runs = [
+            str(step.get('run', ''))
+            for job in jobs.values()
+            if isinstance(job, dict)
+            for step in (job.get('steps') or [])
+            if isinstance(step, dict)
+            and step.get('name') == _LISTEN_SELECT_STEP
+            and str(step.get('if', '')).strip() == _LISTEN_DEPLOY_IF
+        ]
+        select_run = select_runs[0] if len(select_runs) == 1 else ''
+        if not (0 <= select_run.find('exit 0') < select_run.find('BACKEND_LISTEN_SOURCE_SHA')) or (
+            select_run.count('BACKEND_LISTEN_SOURCE_SHA') != 1
+        ):
+            errors.append(
+                f'{name}: {_LISTEN_SELECT_STEP!r} must be deploy-conditioned and write '
+                'BACKEND_LISTEN_SOURCE_SHA exactly once after the kept-tag exit'
+            )
 
     gate_jobs: set[str] = set()
     uncovered: dict[str, list[frozenset[str]]] = {}
@@ -1005,47 +1019,30 @@ def workflow_gate_violations(
                 valid_gates.append((index, step, scope))
                 gate_jobs.add(job_id)
 
-        pair_position: dict[int, int] = {}
-        if job_id != 'firestore_readiness':
-            primaries = [
-                (index, step, scope)
-                for index, step, scope in valid_gates
-                if str((step.get('with') or {}).get('project_id', '')) == RUNTIME_PROJECT_INPUT
-            ]
-            customer_data_gates = [
-                (index, step, scope)
-                for index, step, scope in valid_gates
-                if str((step.get('with') or {}).get('project_id', '')) == CUSTOMER_DATA_PROJECT
-            ]
-            for index, step, scope in primaries:
-                expected_scope = scope | {_CUSTOMER_DATA_ATOM}
-                source_sha = str((step.get('with') or {}).get('source_sha', ''))
-                suffix = str((step.get('with') or {}).get('artifact_suffix', ''))
-                match = next(
-                    (
-                        (gate_index, gate)
-                        for gate_index, gate, gate_scope in customer_data_gates
-                        if gate_index > index
-                        and gate_scope == expected_scope
-                        and str((gate.get('with') or {}).get('source_sha', '')) == source_sha
-                        and str((gate.get('with') or {}).get('artifact_suffix', '')) != suffix
-                    ),
-                    None,
+        gate_positions = [(index, scope) for index, _step, scope in valid_gates]
+        if is_listen:
+            gate_index = next((index for index, _step, scope in valid_gates if scope == {_LISTEN_SOURCE_ATOM}), None)
+            if gate_index is None:
+                errors.append(
+                    f'{name}:{job_id}: listen requires the env.BACKEND_LISTEN_SOURCE_SHA-conditional readiness gate'
                 )
-                if match is None:
-                    errors.append(
-                        f'{name}:{job_id}: runtime-project readiness gate must be followed by a customer-data '
-                        'gate on project_id based-hardware with the same source_sha and a -customer-data suffix'
-                    )
-                else:
-                    pair_position[index] = match[0]
-
-        gate_positions = [(pair_position.get(index, index), scope) for index, _step, scope in valid_gates]
+            mutations = [
+                index
+                for index, step in enumerate(expanded)
+                if isinstance(step.get('run'), str) and _LISTEN_MUTATION_RUN.search(step['run'])
+            ]
+            if mutations and (gate_index is None or gate_index > min(mutations)):
+                errors.append(
+                    f'{name}:{job_id}: the conditional readiness gate must run before any '
+                    'backend config, secret, or Helm mutation step'
+                )
 
         for index, step in enumerate(expanded):
             if 'actions/firestore-readiness' in str(step.get('uses', '')):
                 continue
-            shipments, unregistered = _step_shipments(step, document, job, dockerfiles, known, job_state)
+            shipments, unregistered, _published = _step_shipments(
+                step, document, job, dockerfiles, known, job_state, workflow_name=pathlib.Path(name).name
+            )
             for dockerfile in unregistered:
                 errors.append(f'{name}:{job_id}: {dockerfile} is an unregistered backend Dockerfile')
             for scope, names in shipments:

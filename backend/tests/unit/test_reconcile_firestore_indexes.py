@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -1611,3 +1612,443 @@ def test_source_root_cli_end_to_end_with_stub_gcloud(tmp_path):
         text=True,
     )
     assert validated.returncode == 0, validated.stderr
+
+
+def _preregistry_source_root(tmp_path, manifest=None):
+    root = tmp_path / 'pre-registry-source'
+    (root / 'backend' / 'database').mkdir(parents=True)
+    if manifest is not None:
+        (root / 'firestore.indexes.json').write_text(json.dumps(manifest), encoding='utf-8')
+    return root
+
+
+_PREREGISTRY_INDEX = {
+    'collectionGroup': 'target_group',
+    'queryScope': 'COLLECTION_GROUP',
+    'fields': [
+        {'fieldPath': 'a', 'order': 'ASCENDING'},
+        {'fieldPath': 'b', 'arrayConfig': 'CONTAINS'},
+    ],
+}
+
+
+def test_source_root_preregistry_manifest_validates_as_is_without_field_overrides(tmp_path, capsys):
+    manifest = {'indexes': [_PREREGISTRY_INDEX]}
+    source_root = _preregistry_source_root(tmp_path, manifest)
+
+    verified = reconcile_firestore_indexes.verify_manifest_source(
+        source_root / 'firestore.indexes.json', source_root=source_root
+    )
+
+    # Returned verbatim: no fieldOverrides key is synthesized into the hashed payload.
+    assert verified == manifest
+    assert reconcile_firestore_indexes.expected_field_requirements(verified) == ()
+    assert 'predates the index registry' in capsys.readouterr().out
+
+
+def test_source_root_preregistry_missing_manifest_declares_nothing(tmp_path, capsys):
+    source_root = _preregistry_source_root(tmp_path, None)
+    manifest_path = source_root / 'firestore.indexes.json'
+
+    verified = reconcile_firestore_indexes.verify_manifest_source(manifest_path, source_root=source_root)
+
+    assert verified == {'indexes': [], 'fieldOverrides': []}
+    out = capsys.readouterr().out
+    assert 'predates the index registry' in out and 'declares no manifest' in out
+
+
+@pytest.mark.parametrize(
+    'manifest',
+    [
+        {'indexes': 'nope'},
+        {'indexes': ['nope']},
+        {'indexes': [{'queryScope': 'COLLECTION', 'fields': []}]},
+        {'indexes': [{**_PREREGISTRY_INDEX, 'collectionGroup': ''}]},
+        {'indexes': [{**_PREREGISTRY_INDEX, 'queryScope': 'BOGUS'}]},
+        {'indexes': [{**_PREREGISTRY_INDEX, 'fields': 'x'}]},
+        {
+            'indexes': [
+                {**_PREREGISTRY_INDEX, 'fields': [{'order': 'ASCENDING'}]},
+            ]
+        },
+        {
+            'indexes': [
+                {**_PREREGISTRY_INDEX, 'fields': [{'fieldPath': 'a'}]},
+            ]
+        },
+        {
+            'indexes': [
+                {
+                    **_PREREGISTRY_INDEX,
+                    'fields': [{'fieldPath': 'a', 'order': 'ASCENDING', 'arrayConfig': 'CONTAINS'}],
+                }
+            ]
+        },
+        {
+            'indexes': [
+                {**_PREREGISTRY_INDEX, 'fields': [{'fieldPath': 'a', 'order': 'SIDEWAYS'}]},
+            ]
+        },
+        {
+            'indexes': [
+                {**_PREREGISTRY_INDEX, 'fields': [{'fieldPath': 'a', 'arrayConfig': 'MAYBE'}]},
+            ]
+        },
+        {'indexes': [], 'fieldOverrides': 'nope'},
+        {'indexes': [], 'fieldOverrides': [{'collectionGroup': 'g', 'fieldPath': 'f'}]},
+        [],
+        [{'collectionGroup': 'g'}],
+        {'indexes': [{**_PREREGISTRY_INDEX, 'queryScope': ['COLLECTION']}]},
+        {'indexes': [{**_PREREGISTRY_INDEX, 'fields': [{'fieldPath': 'a', 'order': ['ASCENDING']}]}]},
+    ],
+    ids=[
+        'indexes-not-list',
+        'entry-not-object',
+        'missing-collection-group',
+        'empty-collection-group',
+        'bad-query-scope',
+        'fields-not-list',
+        'missing-field-path',
+        'no-mode',
+        'both-modes',
+        'bad-order',
+        'bad-array-config',
+        'overrides-not-list',
+        'override-missing-indexes',
+        'root-not-object',
+        'root-list-of-objects',
+        'query-scope-not-string',
+        'order-not-string',
+    ],
+)
+def test_source_root_preregistry_rejects_malformed_manifest(tmp_path, manifest):
+    source_root = _preregistry_source_root(tmp_path, manifest)
+    with pytest.raises(ValueError):
+        reconcile_firestore_indexes.verify_manifest_source(
+            source_root / 'firestore.indexes.json', source_root=source_root
+        )
+
+
+def test_source_root_registry_failure_reports_bounded_stderr_tail(tmp_path):
+    source_root = tmp_path / 'target-source'
+    registry_dir = source_root / 'backend' / 'database'
+    registry_dir.mkdir(parents=True)
+    (registry_dir / '__init__.py').write_text('', encoding='utf-8')
+    (registry_dir / 'firestore_index_registry.py').write_text(
+        "import sys\nsys.stderr.write('x' * 8000 + '\\nIMPORT-MARKER\\n')\nsys.exit(3)\n",
+        encoding='utf-8',
+    )
+    (source_root / 'firestore.indexes.json').write_text(json.dumps(_TARGET_MANIFEST), encoding='utf-8')
+
+    with pytest.raises(ValueError) as raised:
+        reconcile_firestore_indexes.verify_manifest_source(
+            source_root / 'firestore.indexes.json', source_root=source_root
+        )
+    message = str(raised.value)
+    assert 'IMPORT-MARKER' in message
+    assert len(message) < 4300
+    assert 'x' * 5000 not in message
+
+
+def test_source_root_registry_import_error_reports_module_name(tmp_path):
+    source_root = tmp_path / 'target-source'
+    registry_dir = source_root / 'backend' / 'database'
+    registry_dir.mkdir(parents=True)
+    (registry_dir / '__init__.py').write_text('', encoding='utf-8')
+    (registry_dir / 'firestore_index_registry.py').write_text(
+        'import omitted_registry_dependency_for_test\n', encoding='utf-8'
+    )
+    (source_root / 'firestore.indexes.json').write_text(json.dumps(_TARGET_MANIFEST), encoding='utf-8')
+
+    with pytest.raises(ValueError) as raised:
+        reconcile_firestore_indexes.verify_manifest_source(
+            source_root / 'firestore.indexes.json', source_root=source_root
+        )
+    message = str(raised.value)
+    assert 'ModuleNotFoundError' in message
+    assert 'omitted_registry_dependency_for_test' in message
+
+
+def _check_runner(results):
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append((command, kwargs))
+        outcome = results[len(calls) - 1]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    runner.calls = calls
+    return runner
+
+
+def _ok_listing():
+    return SimpleNamespace(returncode=0, stdout=json.dumps(_ready_indexes()))
+
+
+def _failing_listing(stderr, returncode=1):
+    return SimpleNamespace(returncode=returncode, stdout='', stderr=stderr)
+
+
+_MANIFEST_PATH = Path(__file__).resolve().parents[3] / 'firestore.indexes.json'
+_FIELD_REQUIREMENT = next(iter(_FIELD_REQUIREMENTS.values()))
+
+
+def _check_only(tmp_path, runner, field_request=None, sleeps=None):
+    reconcile_firestore_indexes.reconcile(
+        project='dev-project',
+        database='(default)',
+        manifest_path=_MANIFEST_PATH,
+        timeout_seconds=30,
+        poll_interval_seconds=1,
+        check_only=True,
+        proposal_output=tmp_path / 'proposal.json',
+        source_commit=SOURCE_COMMIT,
+        runner=runner,
+        field_request=field_request or _field_request(),
+        sleep=sleeps.append if isinstance(sleeps, list) else (sleeps or (lambda _s: None)),
+    )
+
+
+def test_check_only_list_retries_transient_failures_with_injected_sleep(tmp_path):
+    sleeps: list[float] = []
+    runner = _check_runner(
+        [
+            _failing_listing('ERROR: 503 UNAVAILABLE'),
+            _failing_listing('DEADLINE_EXCEEDED'),
+            _failing_listing('connection reset by peer'),
+            _ok_listing(),
+        ]
+    )
+
+    _check_only(tmp_path, runner, sleeps=sleeps)
+
+    assert len(runner.calls) == 4
+    assert sleeps == [2.0, 5.0, 10.0]
+    assert all(kwargs.get('timeout') == 120 for _command, kwargs in runner.calls)
+
+
+def test_check_only_list_succeeds_on_second_attempt(tmp_path):
+    sleeps: list[float] = []
+    runner = _check_runner([_failing_listing('RESOURCE_EXHAUSTED 429'), _ok_listing()])
+    _check_only(tmp_path, runner, sleeps=sleeps)
+    assert len(runner.calls) == 2
+    assert sleeps == [2.0]
+
+
+@pytest.mark.parametrize(
+    'stderr',
+    ['HTTP 429', 'HTTP 500', 'HTTP 502', 'HTTP 503', 'HTTP 504', 'request timed out', 'UNAVAILABLE'],
+)
+def test_check_only_list_exhausts_retries_on_persistent_transients(tmp_path, stderr):
+    runner = _check_runner([_failing_listing(stderr)] * 4)
+    with pytest.raises(RuntimeError, match='listing failed'):
+        _check_only(tmp_path, runner, sleeps=(lambda _s: None))
+    assert len(runner.calls) == 4
+
+
+@pytest.mark.parametrize(
+    'stderr', ['HTTP 401 unauthorized', 'HTTP 403 forbidden', 'HTTP 404 not found', 'totally opaque failure']
+)
+def test_check_only_list_permanent_failures_are_not_retried(tmp_path, stderr):
+    runner = _check_runner([_failing_listing(stderr)])
+    with pytest.raises(RuntimeError, match='listing failed'):
+        _check_only(tmp_path, runner)
+    assert len(runner.calls) == 1
+
+
+def _http(code):
+    return urllib.error.HTTPError('https://firestore.googleapis.com/x', code, 'm', {}, None)
+
+
+@pytest.mark.parametrize(
+    'failure,calls',
+    [
+        (_http(503), 2),
+        (_http(403), 1),
+        (_http(404), 1),
+        (urllib.error.URLError('connection refused'), 2),
+        (TimeoutError('timed out'), 2),
+        (subprocess.TimeoutExpired('gcloud', 120), 2),
+    ],
+    ids=['http-503-retried', 'http-403-once', 'http-404-once', 'url-error', 'timeout-error', 'timeout-expired'],
+)
+def test_check_only_list_runner_exception_classification(tmp_path, failure, calls):
+    runner = _check_runner([failure, _ok_listing()])
+    if calls == 1:
+        with pytest.raises(RuntimeError, match='listing failed'):
+            _check_only(tmp_path, runner, sleeps=(lambda _s: None))
+    else:
+        _check_only(tmp_path, runner, sleeps=(lambda _s: None))
+    assert len(runner.calls) == calls
+
+
+def test_check_only_list_malformed_json_is_not_retried(tmp_path):
+    runner = _check_runner([SimpleNamespace(returncode=0, stdout='{oops')])
+    with pytest.raises(RuntimeError, match='did not return JSON'):
+        _check_only(tmp_path, runner)
+    assert len(runner.calls) == 1
+
+
+def _http_error(code):
+    exc = reconcile_firestore_indexes.field_indexes.FieldIndexError('boom')
+    exc.__cause__ = _http(code)
+    return exc
+
+
+def _flaky_field_request(failures):
+    inner = _field_request()
+    calls = []
+
+    def request(method, url, payload=None):
+        calls.append(method)
+        if len(calls) <= len(failures):
+            raise failures[len(calls) - 1]
+        return inner(method, url, payload)
+
+    request.calls = calls
+    return request
+
+
+def _field_check(tmp_path, request, sleeps=None):
+    reconcile_firestore_indexes.check_indexes_and_write_proposal(
+        expected=(),
+        manifest={},
+        field_requirements=[_FIELD_REQUIREMENT],
+        project='dev-project',
+        database='(default)',
+        proposal_output=tmp_path / 'proposal.json',
+        source_commit=SOURCE_COMMIT,
+        proposal_ttl_seconds=3600,
+        runner=_check_runner([_ok_listing()]),
+        field_request=request,
+        sleep=sleeps.append if isinstance(sleeps, list) else (lambda _s: None),
+    )
+
+
+def test_check_only_field_get_retries_transient_http_status(tmp_path):
+    sleeps: list[float] = []
+    request = _flaky_field_request([_http_error(503)])
+    _field_check(tmp_path, request, sleeps=sleeps)
+    assert request.calls == ['GET', 'GET']
+    assert sleeps == [2.0]
+
+
+@pytest.mark.parametrize('code', [429, 500, 502, 503, 504])
+def test_check_only_field_get_exhausts_retries_on_persistent_status(tmp_path, code):
+    request = _flaky_field_request([_http_error(code)] * 4)
+    with pytest.raises(reconcile_firestore_indexes.field_indexes.FieldIndexError):
+        _field_check(tmp_path, request)
+    assert request.calls == ['GET'] * 4
+
+
+@pytest.mark.parametrize('code', [401, 403, 404])
+def test_check_only_field_get_permanent_status_fails_immediately(tmp_path, code):
+    request = _flaky_field_request([_http_error(code)])
+    with pytest.raises(reconcile_firestore_indexes.field_indexes.FieldIndexError):
+        _field_check(tmp_path, request)
+    assert request.calls == ['GET']
+
+
+def _url_error():
+    exc = reconcile_firestore_indexes.field_indexes.FieldIndexError('unavailable')
+    exc.__cause__ = urllib.error.URLError('connection refused')
+    return exc
+
+
+@pytest.mark.parametrize('failure', [_url_error, TimeoutError], ids=['url-error', 'timeout-error'])
+def test_check_only_field_get_retries_url_and_timeout_failures(tmp_path, failure):
+    request = _flaky_field_request([failure()])
+    _field_check(tmp_path, request)
+    assert request.calls == ['GET', 'GET']
+
+
+def test_check_only_field_get_malformed_response_fails_immediately(tmp_path):
+    request = _flaky_field_request([reconcile_firestore_indexes.field_indexes.FieldIndexError('invalid JSON')])
+    with pytest.raises(reconcile_firestore_indexes.field_indexes.FieldIndexError):
+        _field_check(tmp_path, request)
+    assert request.calls == ['GET']
+
+
+def test_check_only_field_reads_are_get_only(tmp_path):
+    request = _field_request()
+    _check_only(tmp_path, _check_runner([_ok_listing()]), field_request=request)
+    assert set(request.calls and [call[0] for call in request.calls]) <= {'GET'}
+
+
+def test_provision_patch_transient_fails_after_one_patch():
+    """Shared provisioning writes never retry: PATCH 503 surfaces after one call."""
+    field_indexes = reconcile_firestore_indexes.field_indexes
+    requirement = _FIELD_REQUIREMENT
+    ancestor = 'projects/dev-project/databases/(default)/collectionGroups/__default__/fields/__default__'
+    calls: list[str] = []
+
+    def request(method, url, payload=None):
+        calls.append(method)
+        if method == 'PATCH':
+            raise _http_error(503)
+        name = url.split('?')[0].removeprefix(field_indexes.FIRESTORE_ADMIN_API + '/')
+        if name == ancestor:
+            return {'name': ancestor, 'indexConfig': {'usesAncestorConfig': False, 'indexes': []}}
+        return {
+            'name': field_indexes.field_resource_name(
+                project='dev-project',
+                database='(default)',
+                collection_group=requirement.collection_group,
+                field_path=requirement.field_path,
+            ),
+            'indexConfig': {'usesAncestorConfig': True, 'ancestorField': ancestor},
+        }
+
+    with pytest.raises(field_indexes.FieldIndexError):
+        field_indexes.provision_field_requirements(
+            requirements=(requirement,),
+            project='dev-project',
+            database='(default)',
+            request=request,
+            timeout_seconds=60,
+            poll_interval_seconds=1,
+            sleep=lambda _s: pytest.fail('provision must not sleep'),
+            monotonic=lambda: 0.0,
+        )
+    assert calls == ['GET', 'GET', 'PATCH']
+
+
+def test_provision_missing_list_transient_fails_after_one_call(tmp_path):
+    runner = _check_runner([_failing_listing('503 UNAVAILABLE')])
+    with pytest.raises(RuntimeError, match='listing failed'):
+        reconcile_firestore_indexes.reconcile(
+            project='dev-project',
+            database='(default)',
+            manifest_path=_MANIFEST_PATH,
+            timeout_seconds=1,
+            poll_interval_seconds=1,
+            provision_missing=True,
+            runner=runner,
+            field_request=_field_request(),
+            sleep=lambda _s: None,
+        )
+    assert len(runner.calls) == 1
+    assert 'timeout' not in runner.calls[0][1]
+
+
+def test_provision_field_get_transient_fails_after_one_call(tmp_path):
+    request = _flaky_field_request([_http_error(503)])
+
+    def runner(command, **kwargs):
+        return SimpleNamespace(returncode=0, stdout='[]' if 'list' in command else '')
+
+    with pytest.raises(reconcile_firestore_indexes.field_indexes.FieldIndexError):
+        reconcile_firestore_indexes.reconcile(
+            project='dev-project',
+            database='(default)',
+            manifest_path=_MANIFEST_PATH,
+            timeout_seconds=1,
+            poll_interval_seconds=1,
+            provision_missing=True,
+            runner=runner,
+            field_request=request,
+            sleep=lambda _s: None,
+        )
+    assert request.calls == ['GET']

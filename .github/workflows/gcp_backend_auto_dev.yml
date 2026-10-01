@@ -228,6 +228,11 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: .github/firestore-workflow
           persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
 
       - name: Verify serving Firestore indexes
         uses: ./.github/firestore-workflow/.github/actions/firestore-readiness

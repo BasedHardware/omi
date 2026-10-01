@@ -64,6 +64,8 @@ runs:
         ref: ${{ inputs.source_sha }}
         path: .github/firestore-source
         persist-credentials: false
+        fetch-depth: 1
+        sparse-checkout: backend/database
 
     - name: Verify admitted Firestore source identity
       shell: bash
