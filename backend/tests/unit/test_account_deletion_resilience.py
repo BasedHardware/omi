@@ -7,6 +7,10 @@ from database.account_deletion_marker import (
     account_deletion_document,
     get_user_deletion_wipe_status,
 )
+from database.account_deletion_policy import (
+    ACCOUNT_DELETION_INVALID_STATUS,
+    account_deletion_blocks_access,
+)
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup,
     mark_wipe_completed,
@@ -14,6 +18,11 @@ from database.account_deletion_transitions import (
     record_late_agent_vm_cleanup,
 )
 from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite
+
+
+def _unwrap(fn: Any) -> Any:
+    """Unwrap Firestore @transactional wrapper for hermetic unit testing."""
+    return getattr(fn, '__wrapped__', getattr(fn, 'to_wrap', fn))
 
 
 class _MockDocRef:
@@ -71,6 +80,8 @@ class _MockTransaction:
     def __init__(self):
         self.sets = []
         self.updates = []
+        self.in_progress = True
+        self.id = b'mock_tx_1'
 
     def set(self, ref, data, merge=False):
         self.sets.append((ref, data, merge))
@@ -85,31 +96,39 @@ class TestAccountDeletionResilience(unittest.TestCase):
 
     def test_clean_uid_valid(self):
         self.assertEqual(_clean_uid("user_12345"), "user_12345")
-        self.assertEqual(_clean_uid("  user_abc  "), "user_abc")
+        # Preserves whitespace to prevent identity aliasing
+        self.assertEqual(_clean_uid(" alice "), " alice ")
+        # Allows .. inside string ID
+        self.assertEqual(_clean_uid("alice..legacy"), "alice..legacy")
 
     def test_clean_uid_rejects_invalids(self):
         self.assertIsNone(_clean_uid(None))
         self.assertIsNone(_clean_uid(12345))
         self.assertIsNone(_clean_uid(""))
         self.assertIsNone(_clean_uid("   "))
+        self.assertIsNone(_clean_uid("."))
+        self.assertIsNone(_clean_uid(".."))
         self.assertIsNone(_clean_uid("user/slash"))
         self.assertIsNone(_clean_uid("user\\backslash"))
         self.assertIsNone(_clean_uid("user\0null"))
-        self.assertIsNone(_clean_uid("../traversal"))
         self.assertIsNone(_clean_uid("x" * 129))
 
     def test_account_deletion_document_enforces_clean_uid(self):
         doc = account_deletion_document("alice", firestore_client=self.client)
         self.assertEqual(doc.uid, "alice")
         with self.assertRaises(ValueError):
-            account_deletion_document("../traversal", firestore_client=self.client)
+            account_deletion_document("user/slash", firestore_client=self.client)
         with self.assertRaises(ValueError):
             account_deletion_document("", firestore_client=self.client)
 
-    def test_get_user_deletion_wipe_status_graceful_on_invalid_uid(self):
-        self.assertIsNone(get_user_deletion_wipe_status(None, firestore_client=self.client))
-        self.assertIsNone(get_user_deletion_wipe_status("../bad", firestore_client=self.client))
-        self.assertIsNone(get_user_deletion_wipe_status("", firestore_client=self.client))
+    def test_get_user_deletion_wipe_status_blocks_on_invalid_uid(self):
+        res = get_user_deletion_wipe_status(None, firestore_client=self.client)
+        self.assertEqual(res, ACCOUNT_DELETION_INVALID_STATUS)
+        self.assertTrue(account_deletion_blocks_access(res))
+
+        res2 = get_user_deletion_wipe_status("", firestore_client=self.client)
+        self.assertEqual(res2, ACCOUNT_DELETION_INVALID_STATUS)
+        self.assertTrue(account_deletion_blocks_access(res2))
 
     def test_get_user_deletion_wipe_status_hit_and_miss(self):
         doc = self.client.collection(ACCOUNT_DELETION_COLLECTION).document("bob")
@@ -129,7 +148,7 @@ class TestAccountDeletionResilience(unittest.TestCase):
         with self.assertRaises(ValueError):
             read_agent_vm_migration_journals("   ", firestore_client=self.client)
         with self.assertRaises(ValueError):
-            read_agent_vm_migration_journals("../bad", firestore_client=self.client)
+            read_agent_vm_migration_journals("user/bad", firestore_client=self.client)
 
     def test_read_agent_vm_migration_journals_success(self):
         mig_col = self.client.collection('users').document('user1').collection('agentVmMigrations')
@@ -148,33 +167,36 @@ class TestAccountDeletionResilience(unittest.TestCase):
     def test_mark_wipe_completed_normal_and_late_vm(self):
         tx = _MockTransaction()
         doc = _MockDocRef("u1", exists=True, data={"wipe_status": "pending"})
-        ok = mark_wipe_completed(tx, doc)
+        ok = _unwrap(mark_wipe_completed)(tx, doc)
         self.assertTrue(ok)
         self.assertEqual(tx.sets[0][1]["wipe_status"], "completed")
 
         tx2 = _MockTransaction()
-        doc_late = _MockDocRef("u2", exists=True, data={"wipe_status": "pending", "late_agent_vm_cleanup": {"vm": "x"}})
-        ok2 = mark_wipe_completed(tx2, doc_late)
+        doc_late = _MockDocRef("u2", exists=True, data={"wipe_status": "pending", "late_agent_vm_cleanup": {"vmName": "vm1", "zone": "us-central1-a"}})
+        ok2 = _unwrap(mark_wipe_completed)(tx2, doc_late)
         self.assertFalse(ok2)
         self.assertEqual(tx2.sets[0][1]["wipe_status"], "failed")
 
-    def test_record_late_agent_vm_cleanup_input_validation(self):
+    def test_record_late_agent_vm_cleanup_gce_validation(self):
         tx = _MockTransaction()
         doc = _MockDocRef("u1", exists=True, data={"wipe_status": "pending"})
         with self.assertRaises(ValueError):
-            record_late_agent_vm_cleanup(tx, doc, "", "us-central1-a")
+            _unwrap(record_late_agent_vm_cleanup)(tx, doc, "INVALID_VM!", "us-central1-a")
         with self.assertRaises(ValueError):
-            record_late_agent_vm_cleanup(tx, doc, "vm1", "   ")
+            _unwrap(record_late_agent_vm_cleanup)(tx, doc, "vm1", "invalid_zone")
         with self.assertRaises(ValueError):
-            record_late_agent_vm_cleanup(tx, doc, "vm1", "us-central1-a", expected_instance_id="non-numeric")
+            _unwrap(record_late_agent_vm_cleanup)(tx, doc, "vm1", "us-central1-a", expected_instance_id="non-numeric")
+
+        ok = _unwrap(record_late_agent_vm_cleanup)(tx, doc, "vm-1", "us-central1-a", expected_instance_id="12345")
+        self.assertTrue(ok)
 
     def test_adopt_legacy_late_agent_vm_cleanup_validation(self):
         tx = _MockTransaction()
         doc = _MockDocRef("u1", exists=True, data={"wipe_status": "pending"})
         with self.assertRaises(ValueError):
-            adopt_legacy_late_agent_vm_cleanup(tx, doc, "", "zone", "12345")
+            _unwrap(adopt_legacy_late_agent_vm_cleanup)(tx, doc, "BAD_VM", "us-central1-a", "12345")
         with self.assertRaises(ValueError):
-            adopt_legacy_late_agent_vm_cleanup(tx, doc, "vm", "zone", "abc_not_numeric")
+            _unwrap(adopt_legacy_late_agent_vm_cleanup)(tx, doc, "vm-1", "us-central1-a", "abc_not_numeric")
 
     def test_adopt_legacy_late_agent_vm_cleanup_match(self):
         tx = _MockTransaction()
@@ -183,9 +205,9 @@ class TestAccountDeletionResilience(unittest.TestCase):
             exists=True,
             data={
                 "wipe_status": "pending",
-                "late_agent_vm_cleanup": {"vmName": "vm1", "zone": "zone1"},
+                "late_agent_vm_cleanup": {"vmName": "vm-1", "zone": "us-central1-a"},
             },
         )
-        ok = adopt_legacy_late_agent_vm_cleanup(tx, doc, "vm1", "zone1", "98765")
+        ok = _unwrap(adopt_legacy_late_agent_vm_cleanup)(tx, doc, "vm-1", "us-central1-a", "98765")
         self.assertTrue(ok)
         self.assertEqual(tx.updates[0][1], {'late_agent_vm_cleanup.expectedInstanceId': '98765'})
