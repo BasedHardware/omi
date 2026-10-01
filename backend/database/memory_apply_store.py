@@ -726,13 +726,21 @@ def apply_long_term_patch_firestore(
     adapter owns authoritative Firestore reads/writes and never trusts caller
     snapshots for control state, operation state, or evidence/source state.
     """
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if not isinstance(operation_id, str) or not operation_id.strip():
+        raise ValueError("operation_id must be a non-empty string")
+    if not isinstance(patch_payload, dict):
+        raise TypeError("patch_payload must be a dictionary")
+    if db_client is None:
+        raise ValueError("db_client must not be None")
     _require_canonical_intake_enabled()
     transaction = db_client.transaction()
     return _apply_long_term_patch_firestore_transaction(
         transaction,
         db_client,
-        uid,
-        operation_id,
+        uid.strip(),
+        operation_id.strip(),
         patch_payload,
         proposed_operation,
         proposed_evidence,
@@ -811,15 +819,25 @@ def replace_conversation_source_firestore(
     canonical write therefore restarts planning instead of committing a partial
     or stale replacement.
     """
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if not isinstance(conversation_id, str) or not conversation_id.strip():
+        raise ValueError("conversation_id must be a non-empty string")
+    if not isinstance(replacement_id, str) or not replacement_id.strip():
+        raise ValueError("replacement_id must be a non-empty string")
+    if not isinstance(replacement_digest, str) or not replacement_digest.strip():
+        raise ValueError("replacement_digest must be a non-empty string")
+    if db_client is None:
+        raise ValueError("db_client must not be None")
     _require_canonical_intake_enabled()
     transaction = db_client.transaction()
     return _replace_conversation_source_firestore_transaction(
         transaction,
         db_client,
-        uid,
-        conversation_id,
-        replacement_id,
-        replacement_digest,
+        uid.strip(),
+        conversation_id.strip(),
+        replacement_id.strip(),
+        replacement_digest.strip(),
         replacement_operation,
         observed_control,
         expected_source_items,
@@ -842,12 +860,18 @@ def tombstone_memory_items_firestore(
     db_client: Any = db,
 ) -> CanonicalMemoryTombstoneResult:
     """Atomically journal and tombstone one bounded authoritative item set."""
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError("reason must be a non-empty string")
+    if db_client is None:
+        raise ValueError("db_client must not be None")
     transaction = db_client.transaction()
     return _tombstone_memory_items_firestore_transaction(
         transaction,
         db_client,
-        uid,
-        reason,
+        uid.strip(),
+        reason.strip(),
         observed_control,
         expected_items,
         frozenset(preserved_evidence_ids),
@@ -858,16 +882,21 @@ def tombstone_memory_items_firestore(
 
 def privacy_deletion_receipt_id(uid: str, memory_id: str) -> str:
     """Return a server-keyed, non-enumerable anti-resurrection identity."""
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if not isinstance(memory_id, str) or not memory_id.strip():
+        raise ValueError("memory_id must be a non-empty string")
 
     secret = (os.getenv("ENCRYPTION_SECRET") or "").encode("utf-8")
     if len(secret) < 32:
         raise MemoryFirestoreApplyError("privacy deletion receipt secret is unavailable")
     digest = hmac.new(
         secret,
-        f"memory-privacy-receipt.v2\n{uid}\n{memory_id}".encode("utf-8"),
+        f"memory-privacy-receipt.v2\n{uid.strip()}\n{memory_id.strip()}".encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
     return f"receipt_{digest}"
+
 
 
 def _control_fence(control: MemoryControlState) -> _MemoryControlFence:
@@ -2235,8 +2264,13 @@ def _replace_conversation_source_firestore_transaction(
 
 def atomic_bump_source_generation(uid: str, *, db_client: Any) -> MemoryControlState:
     """Atomically advance canonical apply ``source_generation`` (Q7 reprocess)."""
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if db_client is None:
+        raise ValueError("db_client must not be None")
     transaction = db_client.transaction()
-    return _atomic_bump_source_generation_transaction(transaction, db_client, uid)
+    return _atomic_bump_source_generation_transaction(transaction, db_client, uid.strip())
+
 
 
 @transactional
@@ -3298,7 +3332,7 @@ def cleanup_expired_memory_deletion_receipts(
     uid: str,
     *,
     db_client: Any = db,
-    now: datetime | None = None,
+    now: datetime | str | None = None,
     limit: int = 128,
 ) -> int:
     """Remove only expired, content-free anti-resurrection receipts.
@@ -3307,10 +3341,38 @@ def cleanup_expired_memory_deletion_receipts(
     V1 receipts remain readable until their own expiry so rollout never drops
     an existing deletion fence. Any malformed row fails closed.
     """
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if db_client is None:
+        raise ValueError("db_client must not be None")
+    if not isinstance(limit, int) or isinstance(limit, bool):
+        raise TypeError("limit must be an integer")
+    bounded_limit = max(1, min(256, limit))
 
-    cutoff = now or datetime.now(timezone.utc)
-    bounded_limit = max(1, min(256, int(limit)))
-    collection = db_client.collection(MemoryCollections(uid=uid).memory_deletion_receipts)
+    if now is None:
+        cutoff = datetime.now(timezone.utc)
+    elif isinstance(now, str):
+        cleaned = now.strip()
+        if not cleaned:
+            raise ValueError("timestamp string cannot be empty or whitespace")
+        try:
+            parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid ISO timestamp string: {now}") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            cutoff = parsed.replace(tzinfo=timezone.utc)
+        else:
+            cutoff = parsed.astimezone(timezone.utc)
+    elif isinstance(now, datetime):
+        if now.tzinfo is None or now.utcoffset() is None:
+            cutoff = now.replace(tzinfo=timezone.utc)
+        else:
+            cutoff = now.astimezone(timezone.utc)
+    else:
+        raise TypeError("now must be a datetime, ISO timestamp string, or None")
+
+    collection = db_client.collection(MemoryCollections(uid=uid.strip()).memory_deletion_receipts)
+
     try:
         query = collection.where("expires_at", "<=", cutoff).limit(bounded_limit)
         rows = list(query.stream())
