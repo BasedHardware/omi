@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 from unittest.mock import MagicMock, patch
-import pytest
-import redis as redis_pkg
+
+from redis.exceptions import ConnectionError, RedisError, TimeoutError
 
 from database.action_items_cache import (
     MAX_KEY_LENGTH,
@@ -97,7 +97,7 @@ def test_bump_action_items_list_version_happy_path():
 
 def test_bump_action_items_list_version_fail_open_redis_error():
     fake_client = MagicMock()
-    fake_client.pipeline.side_effect = redis_pkg.exceptions.ConnectionError("Redis down")
+    fake_client.pipeline.side_effect = ConnectionError("Redis down")
 
     with patch("database.action_items_cache.redis_db.r", fake_client):
         # Must swallow RedisError and fail open
@@ -135,7 +135,7 @@ def test_get_action_items_list_version_happy_path():
 
 def test_get_action_items_list_version_fail_open_redis_error():
     fake_client = MagicMock()
-    fake_client.get.side_effect = redis_pkg.exceptions.TimeoutError("Redis timeout")
+    fake_client.get.side_effect = TimeoutError("Redis timeout")
 
     with patch("database.action_items_cache.redis_db.r", fake_client):
         assert get_action_items_list_version("user123") is None
@@ -157,7 +157,7 @@ def test_list_cache_key_generation():
     assert key1 == key2
 
     # Invalid UID produces empty key to bypass cache
-    key3 = list_cache_key("", -5, None)  # type: ignore[arg-type]
+    key3 = list_cache_key("", -5, None)
     assert key3 == ""
     assert list_cache_key("bad\nuid", 1, {}) == ""
 
@@ -173,7 +173,7 @@ def test_compute_etag():
     assert etag1 == etag2
 
     # Non-dict body fallback
-    etag3 = compute_etag(None)  # type: ignore[arg-type]
+    etag3 = compute_etag(None)
     assert etag3.startswith('W/"')
 
 
@@ -218,7 +218,7 @@ def test_read_cached_list_corrupted_payload():
 
 def test_read_cached_list_fail_open():
     fake_client = MagicMock()
-    fake_client.get.side_effect = redis_pkg.exceptions.RedisError("Err")
+    fake_client.get.side_effect = RedisError("Err")
 
     with patch("database.action_items_cache.redis_db.r", fake_client):
         assert read_cached_list("ail:u1:1:abc") is None
@@ -259,7 +259,7 @@ def test_write_cached_list_happy_path_and_ttl_clamping():
 
 def test_write_cached_list_fail_open():
     fake_client = MagicMock()
-    fake_client.set.side_effect = redis_pkg.exceptions.RedisError("Err")
+    fake_client.set.side_effect = RedisError("Err")
 
     with patch("database.action_items_cache.redis_db.r", fake_client):
         # Must not raise

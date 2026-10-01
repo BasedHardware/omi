@@ -45,7 +45,7 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
-import redis as redis_pkg
+from redis.exceptions import RedisError
 
 from database import redis_db
 
@@ -128,7 +128,7 @@ def bump_action_items_list_version(uid: str) -> None:
         pipe.incr(key)
         pipe.expire(key, _VERSION_TTL_SECONDS)
         pipe.execute()
-    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
+    except (RedisError, AttributeError) as e:
         logger.warning('action-items list cache: version bump failed uid=%s: %s', uid, e)
 
 
@@ -148,7 +148,7 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
             logger.warning('action-items list cache: redis client uninitialized for version read uid=%s', clean_uid)
             return None
         raw = client.get(key)
-    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
+    except (RedisError, AttributeError) as e:
         logger.warning('action-items list cache: version read failed uid=%s: %s', clean_uid, e)
         return None
     if raw is None:
@@ -160,7 +160,7 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
         return 0
 
 
-def list_cache_key(uid: str, version: int, params: Dict[str, Any]) -> str:
+def list_cache_key(uid: str, version: Any, params: Any = None) -> str:
     """Address one list page. Params are hashed so the key length is bounded."""
     clean_uid = _clean_uid(uid)
     if not clean_uid:
@@ -173,7 +173,7 @@ def list_cache_key(uid: str, version: int, params: Dict[str, Any]) -> str:
     return f'{_ENTRY_KEY_PREFIX}:{clean_uid}:{safe_version}:{fingerprint}'
 
 
-def compute_etag(body: Dict[str, Any]) -> str:
+def compute_etag(body: Any) -> str:
     """Weak ETag over the exact bytes the route would return."""
     safe_body = dict(body) if isinstance(body, dict) else {}
     digest = hashlib.sha256(json.dumps(safe_body, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8'))
@@ -191,7 +191,7 @@ def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
             logger.warning('action-items list cache: redis client uninitialized for read')
             return None
         raw = client.get(clean_key)
-    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
+    except (RedisError, AttributeError) as e:
         logger.warning('action-items list cache: read failed: %s', e)
         return None
     if not raw:
@@ -209,7 +209,7 @@ def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
     return payload
 
 
-def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) -> None:
+def write_cached_list(key: str, *, body: Any, etag: Any, ttl: Any) -> None:
     """Store one list page. Never raises; a failed write just means a later miss."""
     clean_key = _clean_key(key)
     if not clean_key:
@@ -226,7 +226,7 @@ def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) ->
             logger.warning('action-items list cache: redis client uninitialized for write')
             return
         client.set(clean_key, json.dumps({'etag': etag, 'body': body}, default=str), ex=effective_ttl)
-    except (redis_pkg.exceptions.RedisError, AttributeError) as e:
+    except (RedisError, AttributeError) as e:
         logger.warning('action-items list cache: write failed: %s', e)
     except (TypeError, ValueError) as e:
         logger.warning('action-items list cache: body not serializable: %s', e)
