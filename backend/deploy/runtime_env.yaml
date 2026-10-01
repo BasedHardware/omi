@@ -2363,10 +2363,10 @@ environments:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '0'
+            value: '100'
             category: rollout
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '0'
+            value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '0'
@@ -2473,10 +2473,10 @@ environments:
             value: based-hardware-prod-screen-frames
             category: storage_retention
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '0'
+            value: '100'
             category: rollout
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '0'
+            value: '100'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '0'
@@ -2899,10 +2899,10 @@ environments:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '0'
+              value: '100'
               category: rollout
             MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '0'
+              value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
               value: '0'
@@ -3133,10 +3133,10 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '0'
+              value: '100'
               category: rollout
             MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '0'
+              value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
               value: '0'
@@ -3336,10 +3336,10 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '0'
+              value: '100'
               category: rollout
             MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '0'
+              value: '100'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
               value: '0'

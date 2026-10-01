@@ -8,6 +8,7 @@ logged or persisted. Failed attempts consume their dedupe claim and daily cap.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
 import re
@@ -229,7 +230,11 @@ def _run(
                 record[f'p_{option}'] = answers.choice_probability(owner_jev.QUESTION_NAME, option)
             OWNER_JEV_SHADOW_SCORE.observe(record['p_user'])
         record_id = _sha(f'{lane}|{conversation_id}|{content_sha}|{record["question_version"]}')[:32]
-        if not write_jev_shadow(uid, record_id, record, deadline=deadline):
+        persisted = write_jev_shadow(uid, record_id, record, deadline=deadline)
+        if persisted == 'deduped':
+            record_jev_shadow_outcome(lane, 'deduped')
+            return
+        if not persisted:
             # A deleting account fences the write; the record is intentionally absent.
             record_jev_shadow_outcome(lane, 'dropped')
             return
@@ -297,12 +302,27 @@ def submit_relevance_shadow(
         record_jev_shadow_outcome('relevance', 'dropped')
 
 
-def select_owner_shadow_indices(conversation_id: str, candidate_contents: list[str]) -> list[int]:
+def owner_shadow_identity(
+    *,
+    candidate_content: str,
+    state: str,
+    user_name: str | None,
+    pipeline_subject_kind: str,
+    pipeline_subject_entity_id: str | None,
+) -> str:
+    """Hash the complete scoring state/questions and original subject metadata; never persist text."""
+    return _sha(
+        json.dumps(
+            [candidate_content, state, user_name, pipeline_subject_kind, pipeline_subject_entity_id], ensure_ascii=False
+        )
+    )
+
+
+def select_owner_shadow_indices(conversation_id: str, candidate_identities: list[str]) -> tuple[list[int], int]:
     """Hash-select the entire eligible batch before any submissions, independent of position."""
     ranked = []
     seen_hashes: set[str] = set()
-    for index, content in enumerate(candidate_contents):
-        content_sha = _sha(content)
+    for index, content_sha in enumerate(candidate_identities):
         if content_sha in seen_hashes:
             record_jev_shadow_outcome('owner', 'deduped')
             continue
@@ -315,7 +335,7 @@ def select_owner_shadow_indices(conversation_id: str, candidate_contents: list[s
     ranked.sort()
     for _ in ranked[MAX_OWNER_SHADOWS_PER_CONVERSATION:]:
         record_jev_shadow_outcome('owner', 'dropped')
-    return [index for _, _, index in ranked[:MAX_OWNER_SHADOWS_PER_CONVERSATION]]
+    return [index for _, _, index in ranked[:MAX_OWNER_SHADOWS_PER_CONVERSATION]], len(seen_hashes)
 
 
 def submit_owner_shadow(
@@ -326,6 +346,7 @@ def submit_owner_shadow(
     state: str,
     user_name: str | None,
     pipeline_subject_kind: str,
+    pipeline_subject_entity_id: str | None,
     source: str,
     n_quotes: int,
     user_name_present: bool,
@@ -334,17 +355,25 @@ def submit_owner_shadow(
 ) -> None:
     """The caller has already excluded live-scored and non-third-party candidates."""
     try:
+        scoring_sha = owner_shadow_identity(
+            candidate_content=candidate_content,
+            state=state,
+            user_name=user_name,
+            pipeline_subject_kind=pipeline_subject_kind,
+            pipeline_subject_entity_id=pipeline_subject_entity_id,
+        )
         _submit(
             'owner',
             uid,
             conversation_id,
-            _sha(candidate_content),
+            scoring_sha,
             str(state),
             user_name,
             {
                 'lane': 'owner',
                 'conversation_id': conversation_id,
                 'candidate_sha': _sha(candidate_content),
+                'scoring_sha': scoring_sha,
                 'question_version': owner_jev.QUESTION_VERSION,
                 'pipeline_subject_kind': (
                     pipeline_subject_kind if pipeline_subject_kind in _SUBJECT_KINDS else 'unknown'

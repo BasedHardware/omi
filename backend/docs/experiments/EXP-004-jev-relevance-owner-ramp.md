@@ -46,22 +46,32 @@ relevance `CONVERSATION_RELEVANCE_JEV_PERCENT` and owner
 (backend-listen, pusher, Cloud Run backend and backend-sync). Unset would enable
 live scoring, emptying relevance measurement and excluding the first eight
 third-party candidates from owner measurement.
-backend-sync and backend-sync-backfill stay at 0: their Cloud
+Dev backend-sync and backend-sync-backfill stay at 0: their Cloud
 Run revisions have no GMP sidecar/exporter allowlist entry, so their shadow
 outcomes and latency would be invisible (see utils/metrics.py). Prod declares
-shadow percentages 0 and live flags absent: the Firestore TTL policy on
-collection group `jev_shadow` (field `expire_at`) must be provisioned and
-verified before any prod shadow percentage is raised, or the 60-day retention
-promise is inert. The new settings are literals, requiring no Secret Manager
+both shadow percentages 100 on backend-listen, pusher and Cloud Run backend,
+backend-sync and backend-sync-backfill, with live flags absent, keep-all 0 and
+caps unchanged. The production configuration is in its own removable commit.
+The Firestore TTL policy on collection group `jev_shadow`, field `expire_at`,
+in project `based-hardware` was enabled 2026-10-01 and verified ACTIVE by the
+coordinator before the flip; the production flip is no longer held on TTL.
+Production sync hosts likewise have no exporter; their persisted measurements
+are valid but their attempt/coverage and latency metrics are not scraped.
+Readouts must report that visibility limit instead of claiming fleet-wide
+failure/latency bars from scraped hosts alone. The new settings are literals, requiring no Secret Manager
 pre-bind.
 
 `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` samples the conversation ID with
 salt `relevance-shadow-v1`. Only the reached model tier, transcript-only,
 non-wake-word, nonempty <=100-word population outside the Jev arm is eligible.
-`MEMORY_OWNER_JEV_SHADOW_PERCENT` hashes conversation ID + candidate SHA256
+`MEMORY_OWNER_JEV_SHADOW_PERCENT` hashes conversation ID + scoring SHA256
 with salt `owner-shadow-v1`. The extraction loop gathers the full eligible batch
-before submission, deduplicates candidate hashes, filters by percentage, and
-selects the eight lowest hashes per conversation. Selection is stable under
+before submission, deduplicates full scoring identities, filters by percentage, and
+selects the eight lowest hashes per conversation. An owner identity includes
+candidate text, the complete `owner_state` (speaker-labelled quotes, title,
+overview, source and owner label), question user name, and pipeline subject kind
+and entity ID. Identical text with different scoring evidence remains distinct.
+Selection is stable under
 reordering and independent of extraction position. Only grounded
 third-party candidates that the live path did not score (including those beyond
 its budget of 8) are eligible. State is assembled from already available values;
@@ -77,21 +87,27 @@ Admission uses an attempt-owned Redis client with connect/read timeouts at most
 The vendor gets one attempt, and Firestore writes disable SDK retries and bound
 even the SDK-default commit timeout by racing the transactional call with the
 remaining task budget. Redis atomically claims UID + conversation ID +
-content SHA256 + question version and increments a global UTC-day cap.
+scoring SHA256 (content SHA256 for relevance) + question version and increments a global UTC-day cap.
 `CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP` and
 `MEMORY_OWNER_JEV_SHADOW_DAILY_CAP` default to 60000. Bad caps or unavailable
 Redis admit nothing. Dedupe claims persist 60 days, including failed attempts.
 No shadow result or failure affects a relevance verdict or persisted memory.
 
 Server-owned records live at `users/{uid}/jev_shadow/{id}`. IDs are the first
-32 hex digits of SHA256(`lane|conversation_id|content_sha|question_version`). Relevance records
+32 hex digits of SHA256(`lane|conversation_id|identity_sha|question_version`),
+where identity is transcript content for relevance and full scoring identity
+for owner. Relevance records
 carry score, threshold, arm, raw nano verdict/reason, source, word count, trigger,
-served model and question version. Owner records carry candidate hash, all three
+served model and question version. Owner records carry candidate and scoring hashes, all three
 owner probabilities, pipeline subject kind, source, quote count, user-name-present
 boolean, zero-based original extraction `candidate_index` and pre-selection
-`eligible_count` integers, served model and question version. Both have `created_at` and `expire_at`
+`eligible_count` integers (unique scoring identities before percentage filtering
+and the cap, rather than raw extraction rows), served model and question version. Both have `created_at` and `expire_at`
 60 days later. Transactional first-write-wins preserves the original scores
-and timestamps on retries. A deadline bounds the worker wait, not an already
+and timestamps on retries. An aborted concurrent transaction writes nothing
+and counts as `deduped`, including the SDK wrapped-Aborted exception, rather
+than `timeout` or `jev_failed`; the deletion-marker fence stays transactional.
+A deadline bounds the worker wait, not an already
 started Firestore commit: a valid record may appear after a `timeout` outcome.
 Readers include late records and count each `(uid, document_id)` once; do not
 add timeout/ok counters to persisted score counts or require an ok outcome for
@@ -99,18 +115,18 @@ a record to be valid. Metrics measure attempts and coverage separately.
 No transcript, candidate, quote, summary or name is stored or
 logged. Client Firestore rules already deny all user subcollections; backend IAM
 owns access, and account deletion enumerates and recursively wipes subcollections.
-No queries or composite indexes are introduced. Deployment must enable the
-Firestore TTL policy on collection group `jev_shadow`, field `expire_at`, before
-measurement; the current index reconciler deliberately cannot enable TTL policies.
-TTL serving state must be verified by the coordinator; this PR performs no cloud
-schema mutations. Inspect aggregate scores and behavior only for other accounts.
+No queries or composite indexes are introduced. The coordinator enabled the
+Firestore TTL policy on collection group `jev_shadow`, field `expire_at`, on
+2026-10-01 and verified ACTIVE before the flip. The current index reconciler
+deliberately cannot enable TTL policies; this PR performs no cloud schema mutations. Inspect aggregate scores and behavior only for other accounts.
 
 Static-label metrics report `ok`, `jev_failed`, `http_429`, `timeout`, `deduped`,
 `cap`, `cohort`, `dropped`, `redis_unavailable`; latency includes queue time.
 Relevance score bins are 0.5, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99, with the
 nano verdict x Jev strict-discard agreement matrix (plus `none`). Owner P(user)
 bins are 0.5, 0.7, 0.8, 0.9, 0.95. Drops and caps are part of coverage, not
-successful scores; capped/bounded 100% selection is not a census. At 100%, each unique eligible owner candidate has pre-admission inclusion
+successful scores. Legacy owner records without `scoring_sha` use text-only
+identity; analyze them separately from this full-identity population. Capped/bounded 100% selection is not a census. At 100%, each unique eligible owner candidate has pre-admission inclusion
 probability min(1, 8 / unique eligible count); at partial percentages report the
 percentage-plus-cap selection probability and actual coverage separately. Check
 score and coverage by candidate_index/eligible_count for residual position bias.
