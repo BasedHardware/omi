@@ -3,6 +3,7 @@
 from typing import Any, Mapping
 
 from database import conversations as conversations_db
+from database.legal_holds import assert_account_deletion_permitted
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
     compute_audio_files_fingerprint,
@@ -35,6 +36,13 @@ def cleanup_restored_donor(uid: str, donor: Mapping[str, Any]) -> None:
 
     Do not checkpoint processing here: the undo worker still owns survivor refresh
     and terminal receipt convergence. Errors leave originals available for retry.
+
+    Removing the survivor's copied audio modifies evidence a legal hold
+    protects; check the hold authority before any mutation, so a hold placed
+    after the undo transaction stops the cleanup before it touches the
+    survivor, not after. A later layer (`retract_conversation_memories`)
+    still owns the exclusive gate; this is the same point preflight the
+    sync-bridge derived-cleanup path uses.
     """
     state = donor.get('smart_merge') or {}
     survivor_id = state.get('survivor_id')
@@ -44,6 +52,7 @@ def cleanup_restored_donor(uid: str, donor: Mapping[str, Any]) -> None:
     filenames = state.get('unmerge_audio_filenames')
     if filenames is None:
         filenames = copied_audio_filenames(uid, donor, survivor_id)
+    assert_account_deletion_permitted(uid)
     delete_copied_smart_merge_audio(uid, cid, survivor_id, filenames=filenames)
     survivor = conversations_db.get_conversation(uid, survivor_id)
     if survivor and not survivor.get('deleted'):

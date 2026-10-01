@@ -150,11 +150,23 @@ class World:
             return None
         return SimpleNamespace(noul=lambda name: answer)
 
-    def process(self, uid, language, conversation, *, trigger, persistence_observer, smart_merge_refresh):
+    def process(
+        self,
+        uid,
+        language,
+        conversation,
+        *,
+        trigger,
+        persistence_observer,
+        smart_merge_refresh,
+        derived_effects_disposition_observer=None,
+    ):
         if self.process_error:
             raise self.process_error
         if not self.process_persisted:
             persistence_observer(False)
+            if derived_effects_disposition_observer is not None:
+                derived_effects_disposition_observer(self.process_disposition)
             return conversation
         assert trigger is ProcessingTrigger.SMART_MERGE
         assert smart_merge_refresh[0] == self.raw(conversation.id)['smart_merge']['revision']
@@ -162,6 +174,8 @@ class World:
         raw = self.raw(conversation.id)
         raw['structured'] = dict(raw['structured'], title=f'refreshed {len(self.processed)}')
         persistence_observer(True)
+        if derived_effects_disposition_observer is not None:
+            derived_effects_disposition_observer(self.process_disposition)
         return conversation
 
     def retract(self, uid, cid):

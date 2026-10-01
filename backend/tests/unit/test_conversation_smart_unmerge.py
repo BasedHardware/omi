@@ -785,3 +785,52 @@ def test_cli_stays_suppressed_when_drain_times_out(world, monkeypatch, capsys):
     assert exit_info.value.code == 1
     output = capsys.readouterr()
     assert output.out == '' and output.err == ''
+
+
+def test_paywalled_survivor_refresh_completes_instead_of_retrying_forever(world, monkeypatch):
+    """A paywall that terminalizes the survivor refresh must converge the
+    receipt: the donors are already restored and visible, so a permanent
+    ``refresh_not_persisted`` would leave ``unmerge_pending`` unretirable and
+    every retry re-reporting the same fenced refresh."""
+
+    def process(uid, language, conversation, *, trigger, persistence_observer, **kwargs):
+        if trigger is ProcessingTrigger.SMART_UNMERGE:
+            world.restored.append(conversation.id)
+            persistence_observer(True)
+            return conversation
+        assert trigger is ProcessingTrigger.SMART_MERGE
+        persistence_observer(False)  # the paywall early-return reports not-owned
+        observer = kwargs.get('derived_effects_disposition_observer')
+        assert observer is not None
+        observer(smart_merge.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+        return conversation
+
+    monkeypatch.setattr(smart_merge, 'process_conversation', process)
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).outcome == 'ok'
+    assert 'unmerge_pending' not in world.raw('p')['smart_merge']
+    assert world.restored == ['n']
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).reason == 'already_unmerged'
+
+
+def test_deletion_cleanup_refuses_under_legal_hold_before_touching_survivor(world, monkeypatch):
+    """A hold active when a restored donor is deleted must stop the cascade's
+    copied-audio cleanup before it removes the survivor's evidence, not only
+    at the later retraction gate: the cleanup runs first, so it must carry the
+    same hold preflight itself."""
+
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).outcome == 'ok'
+    from database.legal_holds import LEGAL_HOLD_SCHEMA_VERSION
+
+    world.store.rows[('legal_holds', UID)] = {
+        'schema_version': LEGAL_HOLD_SCHEMA_VERSION,
+        'issuer': 'admin',
+        'active': True,
+        'updated_at': datetime.now(timezone.utc),
+    }
+    cleaned = []
+    monkeypatch.setattr(unmerge_audio, 'delete_copied_smart_merge_audio', lambda *a, **k: cleaned.append(a))
+    monkeypatch.setattr(unmerge_audio, 'rebuild_audio', lambda uid, cid: cleaned.append(('rebuild', cid)))
+    with pytest.raises(Exception):
+        merge_conversations.delete_conversation_with_sync_sources(UID, 'n')
+    assert not cleaned  # survivor evidence untouched before the authority raise
+    assert _path('n') in world.store.rows  # donor undeleted: retry after the hold clears

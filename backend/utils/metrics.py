@@ -557,7 +557,9 @@ CONVERSATION_SMART_MERGE_REASONS = frozenset(
         'error',
     }
 )
-CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES = frozenset({'refreshed', 'fenced', 'lease_busy', 'failed'})
+CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES = frozenset(
+    {'refreshed', 'fenced', 'lease_busy', 'failed', 'terminal_no_derived_effects'}
+)
 
 CONVERSATION_SMART_MERGE_DECISION_TOTAL = Counter(
     'omi_conversation_smart_merge_decision_total',

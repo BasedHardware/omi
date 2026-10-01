@@ -437,3 +437,36 @@ def test_drain_submitted_tracks_every_submission_and_recovers():
         assert executor.drain_submitted() is True  # empty pool drains instantly
     finally:
         executor.shutdown(wait=True)
+
+
+def test_drain_submitted_catches_work_submitted_by_drained_tasks():
+    """A task that submits a child while running must keep the drain open.
+
+    A restored donor's action items can enqueue an auto-sync on the same pool
+    mid-drain; a one-shot snapshot would restore the CLI's stdio while that
+    child is still running. The drain re-snapshots until a full pass is empty.
+    """
+    import threading
+
+    executor = MonitoredThreadPoolExecutor(name="test-drain-nested", max_workers=2)
+    try:
+        parent_started = threading.Event()
+        child_started = threading.Event()
+        release_child = threading.Event()
+
+        def child():
+            child_started.set()
+            release_child.wait(30)
+
+        def parent():
+            parent_started.set()
+            executor.submit(child)
+
+        executor.submit(parent)
+        parent_started.wait(5)
+        child_started.wait(5)
+        assert executor.drain_submitted(timeout=0.05) is False  # child still running
+        release_child.set()
+        assert executor.drain_submitted(timeout=5) is True
+    finally:
+        executor.shutdown(wait=True)

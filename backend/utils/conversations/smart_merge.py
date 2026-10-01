@@ -521,6 +521,7 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
         return
     conversation = deserialize_conversation(row)
     persistence = {'owned': True}
+    disposition = [DerivedEffectsDisposition.RUN]
     try:
         processed = process_conversation(
             uid,
@@ -528,28 +529,37 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
             conversation,
             trigger=ProcessingTrigger.SMART_MERGE,
             persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
+            derived_effects_disposition_observer=lambda value: disposition.__setitem__(0, value),
             smart_merge_refresh=(claimed, owner),
         )
     except Exception:
         record_conversation_smart_merge_refresh('failed')
         raise
-    if not persistence['owned']:
+    if disposition[0] is DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS:
+        # Trial paywall / free-tier terminal policy: the account's own policy
+        # suppressed derived effects for this survivor, exactly as it does for
+        # a restored donor. Treat the policy result as the completed refresh
+        # (it never reprocesses either) instead of raising forever — the
+        # pending undo receipt must be able to converge for paywalled accounts.
+        record_conversation_smart_merge_refresh('terminal_no_derived_effects')
+    elif not persistence['owned']:
         # Deleted, or a sync append moved the transcript on; the next decision
         # against this survivor pays the refresh it still owes.
         record_conversation_smart_merge_refresh('fenced')
         raise SmartMergeIncomplete('refresh_not_persisted')
-    try:
-        # Reprocess never re-embeds; the merged occasion must be findable as a whole.
-        save_structured_vector(uid, processed)
-    except Exception as error:
-        logger.warning(
-            'event=smart_merge outcome=vector_failed exception_type=%s uid=%s survivor=%s',
-            type(error).__name__,
-            uid,
-            survivor_id,
-        )
-        record_conversation_smart_merge_refresh('failed')
-        raise SmartMergeIncomplete('survivor_vector_failed') from error
+    else:
+        try:
+            # Reprocess never re-embeds; the merged occasion must be findable as a whole.
+            save_structured_vector(uid, processed)
+        except Exception as error:
+            logger.warning(
+                'event=smart_merge outcome=vector_failed exception_type=%s uid=%s survivor=%s',
+                type(error).__name__,
+                uid,
+                survivor_id,
+            )
+            record_conversation_smart_merge_refresh('failed')
+            raise SmartMergeIncomplete('survivor_vector_failed') from error
     if smart_merge_db.complete_survivor_refresh(uid, survivor_id, owner=owner, revision=claimed):
         record_conversation_smart_merge_refresh('refreshed')
     else:

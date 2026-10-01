@@ -33,6 +33,7 @@ import contextvars
 import functools
 import logging
 import threading
+import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar
 
@@ -104,13 +105,24 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
         all submitted work finished within ``timeout``. Callers that must not
         outlive their output redirection (one-shot admin CLIs) use this instead
         of ``shutdown``, which would kill the shared pool for later runs.
+
+        A drained task can itself submit more work (a restored donor's action
+        items enqueue an auto-sync on the same pool), so re-snapshot until a
+        full pass finds nothing outstanding; a single snapshot would restore a
+        CLI's stdio while that freshly submitted child is still running.
         """
-        with self._active_lock:
-            pending = set(self._submitted)
-        if not pending:
-            return True
-        _done, still_pending = wait(pending, timeout=timeout)
-        return not still_pending
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while True:
+            with self._active_lock:
+                pending = set(self._submitted)
+            if not pending:
+                return True
+            remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+            _done, still_pending = wait(pending, timeout=remaining)
+            if still_pending:
+                return False
+            # Everything from this snapshot finished; look again in case those
+            # tasks submitted children before completing.
 
     def _tracked(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         with self._active_lock:
