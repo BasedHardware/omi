@@ -3998,9 +3998,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Νέα έκδοση διαθέσιμη';
-
-  @override
   String get no => 'Όχι';
 
   @override
@@ -5094,8 +5091,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Συνεχίζοντας, οι συνομιλίες, οι εγγραφές και τα προσωπικά σας στοιχεία θα αποθηκευτούν με ασφάλεια στους διακομιστές μας. Οι ηχογραφήσεις και τα μεταγραφές σας επεξεργάζονται από υπηρεσίες τεχνητής νοημοσύνης τρίτων (συμπεριλαμβανομένων των Deepgram για μεταγραφή και OpenAI για ανάλυση) για να σας παρέχουν γνώσεις βασισμένες σε AI και να ενεργοποιήσουν όλες τις λειτουργίες της εφαρμογής.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Οι εργασίες από τις συνομιλίες σας θα εμφανιστούν εδώ.\nΠατήστε + για χειροκίνητη δημιουργία.';
+  String get tasksEmptyStateMessage => 'Ξεκινήστε μια συνομιλία για να δημιουργήσετε μια εργασία.';
 
   @override
   String get clearChatAction => 'Διαγραφή συνομιλίας';
@@ -12202,4 +12198,17 @@ class AppLocalizationsEl extends AppLocalizations {
   String siriShortcutsSearchHint(String searchPhrase) {
     return ' Μπορείτε επίσης να πείτε «$searchPhrase for what I did today».';
   }
+
+  @override
+  String get updateAvailableTitle => 'Διαθέσιμη ενημέρωση';
+
+  @override
+  String get updateAvailableMessage => 'Μια νέα έκδοση του Omi είναι έτοιμη, με διορθώσεις και βελτιώσεις.';
+
+  @override
+  String get updateRequiredTitle => 'Απαιτείται ενημέρωση';
+
+  @override
+  String get updateRequiredMessage =>
+      'Αυτή η έκδοση του Omi δεν υποστηρίζεται πλέον. Κάντε ενημέρωση για να συνεχίσετε την εγγραφή και τον συγχρονισμό.';
 }

@@ -1220,7 +1220,6 @@
     "appsCount": "Додатки ({count})",
     "privateAppsCount": "Приватні додатки ({count})",
     "publicAppsCount": "Публічні додатки ({count})",
-    "newVersionAvailable": "Доступна нова версія",
     "no": "Ні",
     "subscriptionCancelledSuccessfully": "Підписку успішно скасовано. Вона залишиться активною до кінця поточного розрахункового періоду.",
     "failedToCancelSubscription": "Не вдалося скасувати підписку. Будь ласка, спробуйте ще раз.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Тривалість: {seconds} секунд",
     "additionalSpeechSampleRemoved": "Додатковий зразок голосу видалено",
     "consentDataMessage": "Продовжуючи, ваші розмови, записи та особиста інформація будуть надійно зберігатися на наших серверах. Ваші аудіозаписи та транскрипції обробляються сторонніми AI-сервісами (включаючи Deepgram для транскрипції та OpenAI для аналізу), щоб надати вам аналітику на основі ШІ та увімкнути всі функції додатку.",
-    "tasksEmptyStateMessage": "Завдання з ваших розмов з'являться тут.\nНатисніть +, щоб створити вручну.",
+    "tasksEmptyStateMessage": "Почніть розмову, щоб створити завдання.",
     "clearChatAction": "Очистити чат",
     "enableApps": "Увімкнути додатки",
     "omiAppName": "Omi",
@@ -3767,5 +3766,9 @@
     "speakerTagPromptNotMeAction": "Не я",
     "confidenceNextLabels": "{count, plural, =1{Позначте їх ще в 1 розмові.} other{Позначте їх ще в {count} розмовах.}}",
     "siriShortcutsSetupHint": "Увімкніть Omi у Командах → Siri. Скажіть «{askPhrase}» або «{questionPhrase}», а потім поставте своє запитання.",
-    "siriShortcutsSearchHint": " Також можна сказати «{searchPhrase} for what I did today»."
+    "siriShortcutsSearchHint": " Також можна сказати «{searchPhrase} for what I did today».",
+    "updateAvailableTitle": "Доступне оновлення",
+    "updateAvailableMessage": "Нова версія Omi готова: з виправленнями та покращеннями.",
+    "updateRequiredTitle": "Потрібне оновлення",
+    "updateRequiredMessage": "Ця версія Omi більше не підтримується. Оновіть, щоб і далі записувати та синхронізувати."
 }

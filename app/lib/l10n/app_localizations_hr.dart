@@ -3981,9 +3981,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Nova verzija dostupna';
-
-  @override
   String get no => 'Ne';
 
   @override
@@ -5072,8 +5069,7 @@ class AppLocalizationsHr extends AppLocalizations {
       'Nastavljanjem, vaši razgovori, snimke i osobni podaci bit će sigurno pohranjeni na našim poslužiteljima. Vaši audio zapisi i transkripti obrađuju se od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane umjetnom inteligencijom i omogućili sve značajke aplikacije.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Zadaci iz vaših razgovora će se pojavljati ovdje.\nDodirnite + da biste ručno kreirali jedan.';
+  String get tasksEmptyStateMessage => 'Započnite razgovor da biste stvorili zadatak.';
 
   @override
   String get clearChatAction => 'Očisti razgovor';
@@ -12158,4 +12154,17 @@ class AppLocalizationsHr extends AppLocalizations {
   String siriShortcutsSearchHint(String searchPhrase) {
     return ' Možete reći i „$searchPhrase for what I did today“.';
   }
+
+  @override
+  String get updateAvailableTitle => 'Dostupno je ažuriranje';
+
+  @override
+  String get updateAvailableMessage => 'Nova verzija Omija je spremna, s ispravcima i poboljšanjima.';
+
+  @override
+  String get updateRequiredTitle => 'Potrebno je ažuriranje';
+
+  @override
+  String get updateRequiredMessage =>
+      'Ova verzija Omija više nije podržana. Ažurirajte kako biste nastavili snimati i sinkronizirati.';
 }

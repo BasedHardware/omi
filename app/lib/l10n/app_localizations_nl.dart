@@ -3982,9 +3982,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Nieuwe versie beschikbaar';
-
-  @override
   String get no => 'Nee';
 
   @override
@@ -5069,8 +5066,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Door verder te gaan worden uw gesprekken, opnames en persoonlijke informatie veilig opgeslagen op onze servers. Uw audio-opnames en transcripties worden verwerkt door AI-diensten van derden (waaronder Deepgram voor transcriptie en OpenAI voor analyse) om u AI-gestuurde inzichten te bieden en alle app-functies mogelijk te maken.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Taken uit je gesprekken verschijnen hier.\nTik op + om er handmatig een te maken.';
+  String get tasksEmptyStateMessage => 'Begin een gesprek om een taak aan te maken.';
 
   @override
   String get clearChatAction => 'Chat wissen';
@@ -12160,4 +12156,17 @@ class AppLocalizationsNl extends AppLocalizations {
   String siriShortcutsSearchHint(String searchPhrase) {
     return ' Je kunt ook “$searchPhrase for what I did today” zeggen.';
   }
+
+  @override
+  String get updateAvailableTitle => 'Update beschikbaar';
+
+  @override
+  String get updateAvailableMessage => 'Er staat een nieuwe versie van Omi klaar, met oplossingen en verbeteringen.';
+
+  @override
+  String get updateRequiredTitle => 'Update vereist';
+
+  @override
+  String get updateRequiredMessage =>
+      'Deze versie van Omi wordt niet meer ondersteund. Update om te blijven opnemen en synchroniseren.';
 }

@@ -3971,9 +3971,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'نسخه جدید دردسترس است';
-
-  @override
   String get no => 'نه';
 
   @override
@@ -5055,8 +5052,7 @@ class AppLocalizationsFa extends AppLocalizations {
       'با ادامه دادن، مکالمات، ضبط‌ها و اطلاعات شخصی شما به طور ایمن در سرورهای ما ذخیره می‌شود. ضبط‌های صوتی و رونوشت‌های شما توسط سرویس‌های هوش مصنوعی شخص ثالث (از جمله Deepgram برای رونویسی و OpenAI برای تحلیل) پردازش می‌شوند تا بینش‌های مبتنی بر هوش مصنوعی را به شما ارائه دهند و تمام ویژگی‌های برنامه را فعال کنند.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'وظایف از مکالمات شما اینجا ظاهر خواهند شد.\n+ را ضربه بزنید تا یکی به‌صورت دستی ایجاد کنید.';
+  String get tasksEmptyStateMessage => 'برای ایجاد یک کار، گفتگو را شروع کنید.';
 
   @override
   String get clearChatAction => 'پاک‌کردن چت';
@@ -12120,4 +12116,17 @@ class AppLocalizationsFa extends AppLocalizations {
   String siriShortcutsSearchHint(String searchPhrase) {
     return ' همچنین می‌توانید بگویید «$searchPhrase for what I did today».';
   }
+
+  @override
+  String get updateAvailableTitle => 'به‌روزرسانی در دسترس است';
+
+  @override
+  String get updateAvailableMessage => 'نسخهٔ جدید Omi آماده است، همراه با رفع اشکال‌ها و بهبودها.';
+
+  @override
+  String get updateRequiredTitle => 'به‌روزرسانی لازم است';
+
+  @override
+  String get updateRequiredMessage =>
+      'این نسخه از Omi دیگر پشتیبانی نمی‌شود. برای ادامهٔ ضبط و همگام‌سازی، به‌روزرسانی کنید.';
 }

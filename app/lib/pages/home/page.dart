@@ -830,7 +830,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _openChat({bool voice = false}) {
     OmiHaptics.selection();
     PlatformManager.instance.analytics.bottomNavigationTabClicked(voice ? 'Chat Voice' : 'Chat');
-    openChatSheet(context, ChatPage(isPivotBottom: false, startFresh: true, autoStartVoice: voice));
+    openChatSheet(context, ChatPage(isPivotBottom: false, autoStartVoice: voice));
   }
 
   Widget _buildChatBar(BuildContext context) {

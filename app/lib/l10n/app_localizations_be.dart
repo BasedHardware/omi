@@ -3976,9 +3976,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Даступна новая версія';
-
-  @override
   String get no => 'Не';
 
   @override
@@ -5065,8 +5062,7 @@ class AppLocalizationsBe extends AppLocalizations {
       'Працягваючы, вашы размовы, запісы і асабістая інфармацыя будуць надзейна захоўвацца на нашых серверах. Вашы аўдыязапісы і транскрыпцыі апрацоўваюцца староннімі сэрвісамі ШІ (уключаючы Deepgram для транскрыпцыі і OpenAI для аналізу), каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі праграмы.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Задачы з вашых разговораў пояўляцца тут.\nТапніце + каб стварыць адну ручнічна.';
+  String get tasksEmptyStateMessage => 'Пачніце размову, каб стварыць задачу.';
 
   @override
   String get clearChatAction => 'Очыстіць Чат';
@@ -12153,4 +12149,17 @@ class AppLocalizationsBe extends AppLocalizations {
   String siriShortcutsSearchHint(String searchPhrase) {
     return ' Также можно сказать «$searchPhrase for what I did today».';
   }
+
+  @override
+  String get updateAvailableTitle => 'Даступнае абнаўленне';
+
+  @override
+  String get updateAvailableMessage => 'Новая версія Omi гатовая: з выпраўленнямі і паляпшэннямі.';
+
+  @override
+  String get updateRequiredTitle => 'Патрабуецца абнаўленне';
+
+  @override
+  String get updateRequiredMessage =>
+      'Гэтая версія Omi больш не падтрымліваецца. Абнавіце, каб працягваць запіс і сінхранізацыю.';
 }

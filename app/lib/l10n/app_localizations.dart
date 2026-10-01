@@ -7641,12 +7641,6 @@ abstract class AppLocalizations {
   /// **'Public Apps ({count})'**
   String publicAppsCount(String count);
 
-  /// Dialog title when a new app version is available
-  ///
-  /// In en, this message translates to:
-  /// **'New Version Available'**
-  String get newVersionAvailable;
-
   /// Button text to decline or dismiss
   ///
   /// In en, this message translates to:
@@ -9585,10 +9579,10 @@ abstract class AppLocalizations {
   /// **'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.'**
   String get consentDataMessage;
 
-  /// Empty state message shown when there are no tasks, with instruction to tap + button
+  /// Guidance on the empty Tasks tab: start a conversation to create a task.
   ///
   /// In en, this message translates to:
-  /// **'Tasks from your conversations will appear here.\nTap + to create one manually.'**
+  /// **'Start a conversation to create a task.'**
   String get tasksEmptyStateMessage;
 
   /// Menu item text for clearing chat history
@@ -21794,6 +21788,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **' You can also say “{searchPhrase} for what I did today.”'**
   String siriShortcutsSearchHint(String searchPhrase);
+
+  /// Title of the pop-up that offers a newer version of the app
+  ///
+  /// In en, this message translates to:
+  /// **'Update available'**
+  String get updateAvailableTitle;
+
+  /// Message of the pop-up that offers a newer version of the app
+  ///
+  /// In en, this message translates to:
+  /// **'A new version of Omi is ready, with fixes and improvements.'**
+  String get updateAvailableMessage;
+
+  /// Title of the pop-up when this app version is no longer supported and must be updated
+  ///
+  /// In en, this message translates to:
+  /// **'Update required'**
+  String get updateRequiredTitle;
+
+  /// Message of the pop-up when this app version is no longer supported and must be updated
+  ///
+  /// In en, this message translates to:
+  /// **'This version of Omi is no longer supported. Update to keep recording and syncing.'**
+  String get updateRequiredMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -21805,167 +21823,72 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
   }
 
   @override
-  bool isSupported(Locale locale) => <String>[
-        'ar',
-        'be',
-        'bg',
-        'bn',
-        'bs',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fa',
-        'fi',
-        'fr',
-        'he',
-        'hi',
-        'hr',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'kn',
-        'ko',
-        'lt',
-        'lv',
-        'mk',
-        'mr',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sl',
-        'sr',
-        'sv',
-        'ta',
-        'te',
-        'th',
-        'tl',
-        'tr',
-        'uk',
-        'ur',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>['ar', 'be', 'bg', 'bn', 'bs', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fa', 'fi', 'fr', 'he', 'hi', 'hr', 'hu', 'id', 'it', 'ja', 'kn', 'ko', 'lt', 'lv', 'mk', 'mr', 'ms', 'nl', 'no', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sr', 'sv', 'ta', 'te', 'th', 'tl', 'tr', 'uk', 'ur', 'vi', 'zh'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
 }
 
 AppLocalizations lookupAppLocalizations(Locale locale) {
+
+
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
-    case 'ar':
-      return AppLocalizationsAr();
-    case 'be':
-      return AppLocalizationsBe();
-    case 'bg':
-      return AppLocalizationsBg();
-    case 'bn':
-      return AppLocalizationsBn();
-    case 'bs':
-      return AppLocalizationsBs();
-    case 'ca':
-      return AppLocalizationsCa();
-    case 'cs':
-      return AppLocalizationsCs();
-    case 'da':
-      return AppLocalizationsDa();
-    case 'de':
-      return AppLocalizationsDe();
-    case 'el':
-      return AppLocalizationsEl();
-    case 'en':
-      return AppLocalizationsEn();
-    case 'es':
-      return AppLocalizationsEs();
-    case 'et':
-      return AppLocalizationsEt();
-    case 'fa':
-      return AppLocalizationsFa();
-    case 'fi':
-      return AppLocalizationsFi();
-    case 'fr':
-      return AppLocalizationsFr();
-    case 'he':
-      return AppLocalizationsHe();
-    case 'hi':
-      return AppLocalizationsHi();
-    case 'hr':
-      return AppLocalizationsHr();
-    case 'hu':
-      return AppLocalizationsHu();
-    case 'id':
-      return AppLocalizationsId();
-    case 'it':
-      return AppLocalizationsIt();
-    case 'ja':
-      return AppLocalizationsJa();
-    case 'kn':
-      return AppLocalizationsKn();
-    case 'ko':
-      return AppLocalizationsKo();
-    case 'lt':
-      return AppLocalizationsLt();
-    case 'lv':
-      return AppLocalizationsLv();
-    case 'mk':
-      return AppLocalizationsMk();
-    case 'mr':
-      return AppLocalizationsMr();
-    case 'ms':
-      return AppLocalizationsMs();
-    case 'nl':
-      return AppLocalizationsNl();
-    case 'no':
-      return AppLocalizationsNo();
-    case 'pl':
-      return AppLocalizationsPl();
-    case 'pt':
-      return AppLocalizationsPt();
-    case 'ro':
-      return AppLocalizationsRo();
-    case 'ru':
-      return AppLocalizationsRu();
-    case 'sk':
-      return AppLocalizationsSk();
-    case 'sl':
-      return AppLocalizationsSl();
-    case 'sr':
-      return AppLocalizationsSr();
-    case 'sv':
-      return AppLocalizationsSv();
-    case 'ta':
-      return AppLocalizationsTa();
-    case 'te':
-      return AppLocalizationsTe();
-    case 'th':
-      return AppLocalizationsTh();
-    case 'tl':
-      return AppLocalizationsTl();
-    case 'tr':
-      return AppLocalizationsTr();
-    case 'uk':
-      return AppLocalizationsUk();
-    case 'ur':
-      return AppLocalizationsUr();
-    case 'vi':
-      return AppLocalizationsVi();
-    case 'zh':
-      return AppLocalizationsZh();
+    case 'ar': return AppLocalizationsAr();
+    case 'be': return AppLocalizationsBe();
+    case 'bg': return AppLocalizationsBg();
+    case 'bn': return AppLocalizationsBn();
+    case 'bs': return AppLocalizationsBs();
+    case 'ca': return AppLocalizationsCa();
+    case 'cs': return AppLocalizationsCs();
+    case 'da': return AppLocalizationsDa();
+    case 'de': return AppLocalizationsDe();
+    case 'el': return AppLocalizationsEl();
+    case 'en': return AppLocalizationsEn();
+    case 'es': return AppLocalizationsEs();
+    case 'et': return AppLocalizationsEt();
+    case 'fa': return AppLocalizationsFa();
+    case 'fi': return AppLocalizationsFi();
+    case 'fr': return AppLocalizationsFr();
+    case 'he': return AppLocalizationsHe();
+    case 'hi': return AppLocalizationsHi();
+    case 'hr': return AppLocalizationsHr();
+    case 'hu': return AppLocalizationsHu();
+    case 'id': return AppLocalizationsId();
+    case 'it': return AppLocalizationsIt();
+    case 'ja': return AppLocalizationsJa();
+    case 'kn': return AppLocalizationsKn();
+    case 'ko': return AppLocalizationsKo();
+    case 'lt': return AppLocalizationsLt();
+    case 'lv': return AppLocalizationsLv();
+    case 'mk': return AppLocalizationsMk();
+    case 'mr': return AppLocalizationsMr();
+    case 'ms': return AppLocalizationsMs();
+    case 'nl': return AppLocalizationsNl();
+    case 'no': return AppLocalizationsNo();
+    case 'pl': return AppLocalizationsPl();
+    case 'pt': return AppLocalizationsPt();
+    case 'ro': return AppLocalizationsRo();
+    case 'ru': return AppLocalizationsRu();
+    case 'sk': return AppLocalizationsSk();
+    case 'sl': return AppLocalizationsSl();
+    case 'sr': return AppLocalizationsSr();
+    case 'sv': return AppLocalizationsSv();
+    case 'ta': return AppLocalizationsTa();
+    case 'te': return AppLocalizationsTe();
+    case 'th': return AppLocalizationsTh();
+    case 'tl': return AppLocalizationsTl();
+    case 'tr': return AppLocalizationsTr();
+    case 'uk': return AppLocalizationsUk();
+    case 'ur': return AppLocalizationsUr();
+    case 'vi': return AppLocalizationsVi();
+    case 'zh': return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.'
+  );
 }

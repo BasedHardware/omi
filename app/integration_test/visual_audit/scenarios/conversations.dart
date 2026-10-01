@@ -64,7 +64,7 @@ final conversationsScenarios = <AuditScenario>[
       globalNavigatorKey.currentState!.pop();
       await a.settle();
       // A raw gesture in steps: the first move claims the horizontal drag before the row's
-      // long-press recognizer fires, the rest carry the row past the dismiss threshold.
+      // long-press recognizer fires, the rest carry the row past the point where it asks.
       final gesture = await a.tester.startGesture(a.tester.getCenter(find.byType(ConversationListItem).first));
       for (var i = 0; i < 6; i++) {
         await gesture.moveBy(const Offset(-60, 0));
@@ -72,8 +72,8 @@ final conversationsScenarios = <AuditScenario>[
       }
       await gesture.up();
       await a.settle();
-      expect(find.text('Delete Conversation?'), findsOneWidget);
-      await a.shot('Swipe the first row to delete: the delete confirmation', step: 'swipe-delete');
+      expect(find.text('Delete Conversation'), findsOneWidget);
+      await a.shot('Swipe the first row to delete: the confirm menu from its delete button', step: 'swipe-delete');
     },
   ),
   AuditScenario(

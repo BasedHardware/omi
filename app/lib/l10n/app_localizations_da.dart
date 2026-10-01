@@ -3956,9 +3956,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Ny version tilgængelig';
-
-  @override
   String get no => 'Nej';
 
   @override
@@ -5042,7 +5039,7 @@ class AppLocalizationsDa extends AppLocalizations {
       'Ved at fortsætte vil dine samtaler, optagelser og personlige oplysninger blive sikkert gemt på vores servere. Dine lydoptagelser og udskrifter behandles af tredjeparts AI-tjenester (herunder Deepgram til transskription og OpenAI til analyse) for at give dig AI-drevne indsigter og aktivere alle appfunktioner.';
 
   @override
-  String get tasksEmptyStateMessage => 'Opgaver fra dine samtaler vises her.\nTryk på + for at oprette en manuelt.';
+  String get tasksEmptyStateMessage => 'Start en samtale for at oprette en opgave.';
 
   @override
   String get clearChatAction => 'Ryd chat';
@@ -12107,4 +12104,17 @@ class AppLocalizationsDa extends AppLocalizations {
   String siriShortcutsSearchHint(String searchPhrase) {
     return ' Du kan også sige »$searchPhrase for what I did today«.';
   }
+
+  @override
+  String get updateAvailableTitle => 'Opdatering tilgængelig';
+
+  @override
+  String get updateAvailableMessage => 'En ny version af Omi er klar med rettelser og forbedringer.';
+
+  @override
+  String get updateRequiredTitle => 'Opdatering påkrævet';
+
+  @override
+  String get updateRequiredMessage =>
+      'Denne version af Omi understøttes ikke længere. Opdater for at fortsætte med at optage og synkronisere.';
 }

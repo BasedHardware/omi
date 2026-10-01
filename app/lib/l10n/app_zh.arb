@@ -1224,7 +1224,6 @@
     "appsCount": "应用 ({count})",
     "privateAppsCount": "私有应用 ({count})",
     "publicAppsCount": "公开应用 ({count})",
-    "newVersionAvailable": "新版本可用",
     "no": "否",
     "subscriptionCancelledSuccessfully": "订阅已成功取消。它将保持有效直到当前计费周期结束。",
     "failedToCancelSubscription": "取消订阅失败。请重试。",
@@ -1549,7 +1548,7 @@
     "durationSeconds": "时长: {seconds} 秒",
     "additionalSpeechSampleRemoved": "已删除附加语音样本",
     "consentDataMessage": "继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。",
-    "tasksEmptyStateMessage": "来自您对话的任务将显示在这里。\n点击 + 手动创建。",
+    "tasksEmptyStateMessage": "开始对话以创建任务。",
     "clearChatAction": "清除聊天",
     "enableApps": "启用应用",
     "omiAppName": "Omi",
@@ -3767,5 +3766,9 @@
     "speakerTagPromptNotMeAction": "不是我",
     "confidenceNextLabels": "{count, plural, =1{再在 1 个对话中为对方添加标签。} other{再在 {count} 个对话中为对方添加标签。}}",
     "siriShortcutsSetupHint": "在快捷指令 → Siri 中开启 Omi。说“{askPhrase}”或“{questionPhrase}”，然后提出你的问题。",
-    "siriShortcutsSearchHint": " 你还可以说“{searchPhrase} for what I did today”。"
+    "siriShortcutsSearchHint": " 你还可以说“{searchPhrase} for what I did today”。",
+    "updateAvailableTitle": "有可用更新",
+    "updateAvailableMessage": "Omi 新版本已就绪，包含问题修复和改进。",
+    "updateRequiredTitle": "需要更新",
+    "updateRequiredMessage": "此版本的 Omi 已不再受支持。请更新以继续录音和同步。"
 }
