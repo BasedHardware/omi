@@ -134,7 +134,7 @@ def gcloud_create_index_command(*, project: str, database: str, signature: Index
                 f'unsupported Firestore field configuration for gcloud provisioning: {direction!r}'
             ) from exc
         command.append(f'--field-config=field-path={field_path},{field_config}')
-    return [*command, '--quiet']
+    return [*command, '--async', '--quiet']
 
 
 def list_live_indexes(*, project: str, database: str, runner: CommandRunner = subprocess.run) -> list[LiveIndex]:
@@ -654,7 +654,7 @@ def provision_missing_indexes(
             capture_output=True,
             text=True,
         )
-        if result.returncode != 0:
+        if result.returncode != 0 and 'already_exists' not in (getattr(result, 'stderr', '') or '').casefold():
             raise RuntimeError(f'Firestore composite-index provisioning failed: {format_signature(signature)}')
     return missing
 

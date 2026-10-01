@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
+from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
@@ -431,6 +432,10 @@ class LiveConversationController:
             'conversation_role': request.conversation_role,
             'recording_session_id': self.host.recording_session_id,
         }
+        if self.host.client_conversation_id and sync_lineage_resolve_enabled():
+            # Every rollover generation names the client's recording, which the
+            # phone also stamps on its WALs, so sync can find them all.
+            external_data['recording_origin_id'] = self.host.client_conversation_id
         if getattr(request, 'screen_evidence_pass', False):
             external_data['screen_evidence_pass'] = True
         onboarding_session_id = resolve_onboarding_provenance_marker(self.host)
@@ -678,7 +683,7 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
             elif action == ConversationLifecycleAction.process_and_create_new:
                 await self.host.transcripts.flush_speaker_assignments(conversation_id)
-                await self.process_conversation(conversation_id)
+                await self._finalize_isolated(self.process_conversation, conversation_id, stage='lifecycle_rollover')
                 await self.create_new_in_progress_conversation(rollover=True)
 
     async def send_last_conversation(self) -> None:

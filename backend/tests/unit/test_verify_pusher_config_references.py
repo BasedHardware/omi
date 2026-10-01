@@ -184,6 +184,14 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_ENABLED": "true",
+        "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
+        "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT": "100",
+        "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP": "60000",
+        "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
+        "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
+        "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
+        "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
+        "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP": "60000",
         "CAPTURE_JEV_SHADOW_ENABLED": "true",
         "CAPTURE_JEV_SHADOW_PERCENT": "0",
         "CAPTURE_JEV_SHADOW_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
@@ -226,6 +234,11 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     literals = preflight.literal_pusher_values(deployment)
 
     assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
+    assert literals["CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT"] == "100"
+    assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
+    assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "0"
+    assert "CONVERSATION_RELEVANCE_JEV_ENABLED" not in literals
+    assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
     assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"
     assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,dg-nova-3,parakeet"

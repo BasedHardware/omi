@@ -16,7 +16,9 @@ overlay:
         # frame, 0 connects since 08-26), so they got no transcript. The configured order
         # The allocated windowed TDT cohort precedes the unchanged vendor order;
         # otherwise Soniox is second after Modulate. Canary allocation follows the
-        # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29).
+        # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29;
+        # rolled back to 0% on 2026-10-01 for a first-text latency regression;
+        # back to 5% after the posting-cadence fix #20043).
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
@@ -140,6 +142,24 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -148,6 +168,12 @@ overlay:
           category: rollout
         CAPTURE_JEV_SHADOW_PERCENT:
           value: '0'
+          category: rollout
+        # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+        # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+        # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+        SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
     pusher:
       env:
@@ -193,6 +219,24 @@ overlay:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           value: http://diarizer.omi.me:80
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -404,6 +448,24 @@ overlay:
           MCP_OAUTH_CLAUDE_REDIRECT_URIS:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -412,6 +474,12 @@ overlay:
             category: rollout
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
+            category: rollout
+          # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+          # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-sync:
         # Attached runtime identity (credential hygiene D4). The deploy pins it and removes
@@ -509,6 +577,24 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -517,6 +603,12 @@ overlay:
             category: rollout
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
+            category: rollout
+          # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+          # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-sync-backfill:
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
@@ -590,6 +682,24 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -598,6 +708,12 @@ overlay:
             category: rollout
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
+            category: rollout
+          # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+          # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-integration:
         forbidden_env:
@@ -649,6 +765,9 @@ overlay:
             value: based-hardware
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
+            category: rollout
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
     jobs:
       notifications-job:

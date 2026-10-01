@@ -145,6 +145,15 @@ from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
+from config.sync_lineage import sync_lineage_resolve_active_for
+from utils.sync.recording_lineage import (
+    fallback_segment_targets,
+    lineage_resolution_requested,
+    resolve_segment_targets,
+    merge_lineage_partial_results,
+    restore_lineage_enrichment_intent,
+    lineage_partial_result,
+)
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
@@ -179,6 +188,7 @@ MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
 _NON_ERROR_SEGMENT_OUTCOMES = frozenset({TranscriptionOutcome.SUCCESS, TranscriptionOutcome.EXPECTED_SILENCE})
 _PARTIAL_RESULT_FENCED_CONVERSATION_IDS = 'fenced_conversation_ids'
 _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
+_LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 _SYNC_FAILURE_REASON_CODES = {
     'backfill_capacity',
     'backfill_paced',
@@ -985,6 +995,16 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
+    if (
+        (sync_lineage_resolve_active_for(uid) or language == _LINEAGE_RETRY_LANGUAGE)
+        and conversation_data.get('sync_live_target')
+        and conversation_data.get('status') == 'in_progress'
+    ):
+        # Live finalization owns the open row. SYNC_UPDATE would mark it
+        # completed while the socket is still adding speech, after which the
+        # finalizer skips processing that later content.
+        return
+
     # Intake already discarded a rule-settled fragment; skip the processing
     # spend. Everything else goes through the relevance step (SYNC_UPDATE),
     # which reassesses the whole merged transcript, so later speech promotes it.
@@ -997,6 +1017,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
 
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
+    if language == _LINEAGE_RETRY_LANGUAGE:
+        language = conversation.language or 'en'
 
     was_discarded = conversation.discarded
     processed_conversation = process_conversation(
@@ -1472,11 +1494,7 @@ async def _checkpoint_fenced_conversations_for_run(
     active_run_lock_epoch: int | None,
 ):
     """Persist a fence tombstone before the losing worker can finalize audio."""
-    partial = {
-        'new_memories': sorted(response['new_memories']),
-        'updated_memories': sorted(response['updated_memories']),
-        _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(response[_RESPONSE_FENCED_CONVERSATION_IDS]),
-    }
+    partial = lineage_partial_result(response, sync_lineage_resolve_active_for(uid))
     if content_id:
         checkpointed = await run_blocking(
             db_executor,
@@ -1844,19 +1862,24 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # keeps the caller's exact coordinates and returns the input unchanged on
     # any geocode failure, so a miss never drops the user's location.
     geolocation = await async_resolve_geolocation(geolocation)
-    # Resolve before segment intake. A unique server-side match is authoritative
-    # over a local stamp from another silence-rollover generation; no safe match
-    # invalidates the stamp. Old clients without this proof retain their stamp.
-    target_conversation_id = await _resolve_safety_wal_target(
-        uid,
-        target_conversation_id,
-        recording_session_id,
-        source,
-        client_device_id,
-        should_lock,
-        audio_start_seconds,
-        audio_end_seconds,
+    # Recording-id uploads bind each VAD segment to its rollover generation after
+    # VAD (recording_lineage.py). With SYNC_LINEAGE_RESOLVE_ENABLED off, or a uid outside
+    # its allowlist, the whole batch resolves here as before: a unique match replaces the
+    # stamp, a miss drops it. Old clients without this proof retain their stamp either way.
+    use_lineage = lineage_resolution_requested(
+        uid, recording_session_id, audio_start_seconds, audio_end_seconds, job_id=job_id
     )
+    if not use_lineage:
+        target_conversation_id = await _resolve_safety_wal_target(
+            uid,
+            target_conversation_id,
+            recording_session_id,
+            source,
+            client_device_id,
+            should_lock,
+            audio_start_seconds,
+            audio_end_seconds,
+        )
 
     sync_provider = 'unknown'
     sync_model = 'unknown'
@@ -2333,25 +2356,14 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             partial_result = (current_job or {}).get('partial_result') or {}
             if content_id:
                 durable_partial = await run_blocking(db_executor, get_sync_content_partial_result, uid, content_id)
-                partial_result = {
-                    'new_memories': sorted(
-                        set(partial_result.get('new_memories') or []) | set(durable_partial.get('new_memories') or [])
-                    ),
-                    'updated_memories': sorted(
-                        set(partial_result.get('updated_memories') or [])
-                        | set(durable_partial.get('updated_memories') or [])
-                    ),
-                    _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(
-                        set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
-                        | set(durable_partial.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
-                    ),
-                }
+                partial_result = merge_lineage_partial_results(partial_result, durable_partial)
             fenced_conversation_ids = set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
             response = {
                 'updated_memories': set(partial_result.get('updated_memories') or []) - fenced_conversation_ids,
                 'new_memories': set(partial_result.get('new_memories') or []) - fenced_conversation_ids,
                 _RESPONSE_FENCED_CONVERSATION_IDS: fenced_conversation_ids,
             }
+            restore_lineage_enrichment_intent(response, partial_result, use_lineage, _LINEAGE_RETRY_LANGUAGE)
             segment_errors = []
             # Segments that yielded a transcript, distinct from failed and
             # speech-free ones: only transcribed audio is billed, so a silent
@@ -2388,8 +2400,35 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             # instead of racing into separate conversations (#6551, #5747).
             segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
+            segment_targets: dict = {}
+            if use_lineage and segment_list:
+
+                def _segment_targets() -> dict:
+                    spans = {
+                        p: (get_timestamp_from_path(p), get_timestamp_from_path(p) + get_wav_duration(p))
+                        for p in segment_list
+                    }
+                    return resolve_segment_targets(
+                        uid,
+                        str(recording_session_id),
+                        spans,
+                        stamped_target=target_conversation_id,
+                        source=source,
+                        client_device_id=client_device_id,
+                        is_locked=is_locked,
+                        job_id=job_id,
+                    )
+
+                try:
+                    segment_targets = await run_blocking(db_executor, _segment_targets)
+                except Exception:
+                    # Span construction and the executor call are also part of
+                    # planning. Keep the stamp if either fails, then ingest
+                    # siblings normally under the existing persistence fences.
+                    segment_targets = fallback_segment_targets(segment_list, target_conversation_id, job_id=job_id)
 
             def _process_one_segment(path: str):
+                segment_target = segment_targets.get(path, target_conversation_id)
                 segment_id = segment_ids_by_path.get(path)
                 if path in already_processed or (segment_id and segment_id in durable_processed_segment_ids):
                     # Release the assignment slot — later segments wait on it
@@ -2406,7 +2445,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     is_locked,
                     transcription_prefs,
                     person_embeddings_cache,
-                    target_conversation_id,
+                    segment_target,
                     assignment_turnstile,
                     speaker_scope=f'sync:{segment_id or compute_sync_segment_id(uid, path)}',
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
@@ -2427,13 +2466,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     # conversation IDs available for response hydration.
                     with segment_lock:
                         content_segment_count[0] += 1
-                        partial = {
-                            'new_memories': sorted(response['new_memories']),
-                            'updated_memories': sorted(response['updated_memories']),
-                            _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(
-                                response[_RESPONSE_FENCED_CONVERSATION_IDS]
-                            ),
-                        }
+                        partial = lineage_partial_result(response, sync_lineage_resolve_active_for(uid))
                         _update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})
                         if content_id:
                             checkpointed = checkpoint_sync_content_partial_result(
