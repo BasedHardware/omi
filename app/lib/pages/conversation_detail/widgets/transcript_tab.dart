@@ -242,7 +242,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           PlatformManager.instance.analytics.taggedSegment(
             resolvedId == 'user' ? 'User' : 'User Person',
           );
-          if (resolvedId != 'user' && identical(provider.conversationOrNull?.id, conversationId)) {
+          if (mounted && resolvedId != 'user' && provider.conversationOrNull?.id == conversationId) {
             _outcome.follow(personId: resolvedId, personName: personName, linesLabeled: linesLabeled);
           }
         }

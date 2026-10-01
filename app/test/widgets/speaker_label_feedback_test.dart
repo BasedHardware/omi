@@ -303,6 +303,24 @@ void main() {
       });
     });
 
+    test('a late saved tag cannot revive a disposed outcome controller', () {
+      fakeAsync((async) {
+        var reads = 0;
+        final outcome = SpeakerTagOutcomeController(
+          fetchPerson: (id) async {
+            reads++;
+            return ApiSuccess(_person(id, 'Maya', voice: 'learned'));
+          },
+          fetchMatches: (_) async => const ApiSuccess([]),
+        );
+        outcome.dispose();
+        expect(() => outcome.follow(personId: 'maya', personName: 'Maya', linesLabeled: 1), returnsNormally);
+        async.elapse(const Duration(seconds: 20));
+        expect(reads, 0);
+        expect(async.pendingTimers, isEmpty);
+      });
+    });
+
     test('a tag still pending when the reads run out is shown as not learned yet', () {
       fakeAsync((async) {
         final outcome = controller(['pending']);

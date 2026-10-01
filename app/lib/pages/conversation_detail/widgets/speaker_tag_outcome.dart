@@ -67,6 +67,7 @@ class SpeakerTagOutcomeController extends ChangeNotifier {
 
   /// Starts following a tag that was just saved. A newer tag replaces the one on screen.
   void follow({required String personId, required String personName, required int linesLabeled}) {
+    if (_disposed) return;
     final generation = ++_generation;
     _timer?.cancel();
     _outcome = SpeakerTagOutcome(personId: personId, personName: personName, linesLabeled: linesLabeled);
