@@ -31,6 +31,7 @@ def controls(monkeypatch):
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
     monkeypatch.setattr(live_router, '_target_circuits', {})
+    monkeypatch.setattr(live_router, '_capacity_until', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
     monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
     monkeypatch.setattr(live_chain, 'health', pod)
@@ -1082,11 +1083,144 @@ def test_default_target_id_equal_to_family_has_separate_failure_namespaces(monke
     assert recv._stt_failed_providers == {'soniox'}
 
 
-def test_single_user_failed_recovery_step_returns_to_backoff():
+def test_single_user_failed_recovery_step_holds_without_fleet_strike():
     state = GateState(stage=5, strikes=1)
     for i in range(30):
         state = transition(state, i % 3 != 0, 1000, witness='f' * 16)
-    assert state.stage == 0 and state.until == 1600
+    assert state.stage == 5 and state.strikes == 1 and state.until == 0
+
+
+@pytest.mark.parametrize('stage,required', [(5, 30), (25, 60)])
+def test_two_user_failed_trial_holds_then_healthy_window_promotes(stage, required):
+    state = GateState(stage=stage, strikes=2, generation=4)
+    language = state
+    for i in range(4 * required):
+        # Sixteen failures by session 30, from two equally affected callers.
+        failed = i % 30 < 16
+        uid = f'{i % 2:016x}'
+        state = transition(state, failed, 1000, witness=uid)
+        language = transition(language, failed, 1000, witness=uid, language_only=True)
+        assert state.stage == stage and state.strikes == 2 and state.generation == 4
+        if i == 29:
+            assert state.n == 30 and state.failures == 16
+    assert language.stage == 0  # only the affected language may spend a strike
+    assert state.n == 0 and state.failures == 0  # bounded trial rate window
+    for _ in range(required):
+        state = transition(state, False, 1000, witness='0' * 16)
+    assert state.stage == (25 if stage == 5 else 100) and state.strikes == 2
+
+
+@pytest.mark.parametrize('stage,required', [(5, 30), (25, 60)])
+def test_broad_fixed_boundary_trial_rejection_spends_one_fleet_strike(stage, required):
+    state = GateState(stage=stage, strikes=1, generation=4)
+    # No sequential alarm: rejection at the boundary itself must check breadth.
+    failing_positions = {required - i * 3 - 1: i for i in range(6 if stage == 25 else 4)}
+    for i in range(required):
+        state = transition(state, i in failing_positions, 1000, witness=f'{failing_positions.get(i, 0):016x}')
+        if i < required - 1:
+            assert state.stage == stage
+    assert state.stage == 0 and state.strikes == 2 and state.until == 1600 and state.generation == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'family,target_id',
+    [
+        ('parakeet', 'parakeet-window'),
+        ('modulate', 'modulate-velma-2'),
+        ('modulate', 'modulate-alias'),
+    ],
+)
+@pytest.mark.parametrize('signalled', [True, False])
+async def test_terminal_capacity_is_filtered_and_rejections_have_local_cooldown(
+    monkeypatch, family, target_id, signalled
+):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('TEST_TERMINAL_CAPACITY', str(signalled).lower())
+    terminal = replace(
+        next(t for t in DEFAULT_TARGETS if t.family == family), id=target_id, capacity_env='TEST_TERMINAL_CAPACITY'
+    )
+    healthy = DEFAULT_TARGETS[2]
+    monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([terminal.__dict__, healthy.__dict__]))
+    monkeypatch.setattr(
+        live_chain.health,
+        'cost_snapshot',
+        lambda *_: {
+            terminal.id: GateState(stage=0, strikes=1, until=1e20),
+            'soniox': GateState(),
+        },
+    )
+    monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *_: {})
+    monkeypatch.setattr(live_chain.health, 'quarantine', lambda *args: pytest.fail('capacity must not bench health'))
+    monkeypatch.setattr(st, '_soniox_circuit', ProviderCircuitBreaker(failure_threshold=1000, cooldown_seconds=30))
+    if family == 'parakeet':
+        monkeypatch.setattr(
+            st, '_modulate_circuit', ProviderCircuitBreaker(failure_threshold=1000, cooldown_seconds=30)
+        )
+    now, attempts = [1000.0], []
+    monkeypatch.setattr(live_router, '_capacity_clock', lambda: now[0])
+
+    async def full():
+        attempts.append(now[0])
+        raise live_chain.RejectedStream('capacity_full')
+
+    async def fails():
+        raise ConnectionError('synthetic healthy candidate connect failure')
+
+    async def connect():
+        callbacks = {st.STTService(family): full}
+        models = ['soniox', next(t.id for t in DEFAULT_TARGETS if t.family == family)]
+        if family == 'parakeet':
+            callbacks[st.STTService.modulate] = fails
+            models.append('modulate-velma-2')
+        with pytest.raises(RuntimeError, match='chain exhausted'):
+            await live_chain.connect_configured_chain(
+                primary_service=st.STTService.soniox,
+                connect_primary=fails,
+                callbacks=callbacks,
+                failed=set(),
+                models=models,
+                routing_uid='synthetic',
+                routing_language='en',
+                routing_models={'parakeet': 'parakeet-window'},
+            )
+
+    for _ in range(20):
+        await connect()
+    assert attempts == ([] if signalled else [1000.0])
+    now[0] += 4.999
+    await connect()
+    assert len(attempts) == (0 if signalled else 1)
+    now[0] += 0.001
+    await connect()
+    assert len(attempts) == (0 if signalled else 2)
+    assert getattr(st, f'_{family}_circuit').state == 'closed'
+    assert live_router.target_circuit(terminal, getattr(st, f'_{family}_circuit')).state == 'closed'
+    assert live_chain.health.cost_snapshot(DEFAULT_TARGETS, 'en')[terminal.id].strikes == 1
+
+
+@pytest.mark.asyncio
+async def test_empty_proposal_cannot_force_a_capacity_cooled_terminal(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setattr(live_chain, 'propose', lambda *args: [])
+    live_router.note_capacity_full('modulate-velma-2')
+    circuit = st._modulate_circuit
+    for _ in range(3):
+        circuit.record_failure()
+    connector = AsyncMock()
+    with pytest.raises(RuntimeError, match='chain exhausted'):
+        await live_chain.connect_configured_chain(
+            primary_service=st.STTService.modulate,
+            connect_primary=connector,
+            callbacks={},
+            failed=set(),
+            models=['modulate-velma-2'],
+            routing_uid='synthetic',
+            routing_language='en',
+        )
+    connector.assert_not_called()
 
 
 @pytest.mark.asyncio

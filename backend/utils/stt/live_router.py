@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
+import threading
+import time
 
 from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS, routing_on
 from utils.stt.live_gate import GateState, gate_rate
@@ -13,6 +15,28 @@ from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 
 connecting_target: ContextVar[Target | None] = ContextVar('stt_connecting_target', default=None)
 _target_circuits: dict[str, ProviderCircuitBreaker] = {}
+_capacity_until: dict[str, float] = {}
+_capacity_lock = threading.Lock()
+_CAPACITY_COOLDOWN_SECONDS = 5.0
+_capacity_clock = time.monotonic
+
+
+def capacity_available(target: Target) -> bool:
+    if target.at_capacity():
+        return False
+    with _capacity_lock:
+        return _capacity_clock() >= _capacity_until.get(target.id, 0)
+
+
+def note_capacity_full(target_id: str) -> None:
+    with _capacity_lock:
+        now = _capacity_clock()
+        for identity in list(_capacity_until):
+            if _capacity_until[identity] <= now:
+                del _capacity_until[identity]
+        _capacity_until[target_id] = now + _CAPACITY_COOLDOWN_SECONDS
+        if len(_capacity_until) > 64:
+            del _capacity_until[min(_capacity_until, key=lambda identity: _capacity_until[identity])]
 
 
 class TargetEngineMismatch(RuntimeError):
@@ -68,7 +92,7 @@ def select(targets, states, uid, language, *, features=frozenset({'streaming'}),
             reason = 'capability'
         elif not assigned(uid, target.id, target.ramp()):
             reason = 'ramp_skip'
-        elif target.at_capacity():
+        elif not capacity_available(target):
             reason = 'capacity_skip'
         elif state.stage == 0:
             reason = 'benched_skip'
@@ -130,6 +154,7 @@ def propose(
             and target.capable(language)
             and all(target.capable(code) for code in required_languages)
             and assigned(uid, target.id, target.ramp())
+            and capacity_available(target)
         )
     chosen = proposed[0].id if proposed else 'unavailable'
     COST_SHADOW.labels(

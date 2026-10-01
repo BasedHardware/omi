@@ -115,7 +115,7 @@ def transition(
     # short burst of five failures must not bench a mostly healthy target.
     detected = evidence[0] >= 12 or evidence[1] >= 11 or (sum(counts) >= 8 and evidence[2] >= 10)
     decisive = (broad_failure and detected) or (sparse_failure and max(evidence) >= 14)
-    rejected_trial = required and n >= required and failures / n > gate
+    rejected_trial = required and n >= required and failures / n > gate and broad_failure
     if n >= 8 and (decisive or rejected_trial):
         strikes = min(state.strikes + 1, 10)
         return GateState(
@@ -136,6 +136,11 @@ def transition(
             strikes=state.strikes,
             generation=state.generation + 1,
         )
+    if required and n >= 4 * required:
+        # Narrow failures cannot spend a fleet strike. Keep the trial share,
+        # but bound its rate window so later healthy sessions can promote it.
+        # Sequential scores and recent failure breadth remain intact.
+        return replace(state, n=0, failures=0, evidence=evidence)
     if n >= 1_000_000:
         return replace(state, n=0, failures=0, evidence=evidence)
     return replace(

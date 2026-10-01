@@ -247,9 +247,11 @@ UID fingerprints in the last 32 sessions, with no one UID supplying more than
 half of those failures. A smaller language cohort can bench only its language
 with at least two affected UIDs, sixteen recent failures, and a score >=14.
 One caller cannot bench a healthy target or language. Recovery promotion uses
-session count plus passing rate, without a distinct-user floor. At a failed
-30/60-session recovery boundary, even one user can abort a trial of an already
-benched target and return it to backoff. Fingerprints are bounded salted
+session count plus passing rate, without a distinct-user floor. A failed
+30/60-session recovery boundary must satisfy the same four-failing-user,
+no-majority breadth rule before re-benching the fleet and spending a strike.
+Narrow failures hold the current trial share without a fleet strike; the
+existing stronger two-user test may bench only their language. Fingerprints are bounded salted
 SHA-256 prefixes, never raw UIDs, labels, logs or content.
 
 Calibration uses 200 independent seeded runs of 20,000 sessions per baseline
@@ -305,7 +307,14 @@ four hours. A fleet lease starts a shared 5% trial when that target would be
 preferred over surviving targets. Thirty speech sessions with disruption <=
 the gate promote to 25%; sixty more promote to 100%, even in a single-user
 cohort. Trial rejection uses the sequential detector or empirical failure rate
-at those fixed boundaries. These acceptance checks do not prove an 8% upper
+at those fixed boundaries, with the same breadth protection in both paths.
+When neither promotion nor broad rejection is possible, evaluation continues
+at the current share. At 120 sessions (5% stage) or 240 (25% stage), reset only
+the rate-window counts and keep the stage, strikes, generation, sequential
+scores and recent failure witnesses. Later healthy traffic can then promote
+after 30/60 new sessions rather than remaining trapped by old failures.
+A persistently narrow failing cohort is never force-promoted or fleet-benched
+by a timer or cap; its language can remain benched while other languages recover. These acceptance checks do not prove an 8% upper
 confidence bound. Strike history clears after 1,024 healthy observations.
 Expensive benches receive no primary probes while cheaper targets can serve;
 they remain available only at the failover tail. No pod privately restarts a
@@ -344,6 +353,14 @@ view so a later Redis blip cannot revive a stale pod-only bench.
 Account/billing refusals remain family-wide immediate protection. Connection
 and serve breakers remain fast local protection; a fleet bench demotes its
 target to the last-resort tail, with no forced account/capacity bypass.
+Targets with an active capacity signal or local capacity cooldown are excluded
+from terminal legs and their configured-default aliases. A `capacity_full`
+refusal starts a five-second, monotonic process-local target cooldown, including
+on empty-proposal configured fallback. It releases any circuit probe without
+recording a circuit failure or fleet health disruption. Static off/shadow
+connections retain existing behavior; active capacity cooldowns cannot be
+bypassed by the static last-resort force path. Cooldown storage is capped at
+64 target IDs and expired entries are reclaimed.
 Legacy provider-score state is retained for static protection/telemetry but
 never ranks the active cost router. Registry fields and endpoint URL structure
 are validated before selection. Actual same-family initial overflow emits

@@ -19,8 +19,16 @@ from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_s
 from utils.stt.live_failure import PendingLiveFailover, fallback_reason_for_typed_death
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
 from utils.stt.live_health import health, mode as routing_mode
-from utils.stt.live_router import connecting_target, propose, target_circuit, TargetEngineMismatch, engine_matches
-from config.live_stt_registry import routing_on, DEFAULT_IDS
+from utils.stt.live_router import (
+    connecting_target,
+    propose,
+    target_circuit,
+    TargetEngineMismatch,
+    engine_matches,
+    capacity_available,
+    note_capacity_full,
+)
+from config.live_stt_registry import routing_on, DEFAULT_IDS, registry
 from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_metrics import COST_DECISION, COST_FAIL_OPEN
 from utils.stt.provider_resilience import EXPECTED_REJECTIONS, close_rejected_socket, fallback_socket_is_serving
@@ -108,6 +116,7 @@ async def connect_configured_chain(
     active = False
     routes = [(service, None) for service in candidates]
     canary = False
+    capacity_targets = {}
     if mode != 'off' and routing_uid:
         try:
             canary = routing_on(routing_uid)
@@ -125,6 +134,10 @@ async def connect_configured_chain(
                 routing_models,
                 last_resorts,
             )
+            capacity_targets = {target.id: target for target in registry() if engine_matches(target, routing_models)}
+            for target in list(capacity_targets.values()):
+                if target.endpoint is None:
+                    capacity_targets.setdefault(DEFAULT_IDS[target.family], target)
             active = canary and bool(proposed)
             if canary and not proposed:
                 COST_FAIL_OPEN.labels(reason='empty_proposal').inc()
@@ -140,11 +153,18 @@ async def connect_configured_chain(
                 # endpoint unless that endpoint is itself in the target chain.
                 represented = {target.family for target in (*proposed, *last_resorts) if target.endpoint is None}
                 tail = [(service, None) for service in configured_candidates if service.value not in represented]
+                tail = [
+                    (service, target)
+                    for service, target in tail
+                    if (entry := capacity_targets.get(DEFAULT_IDS.get(service.value, ''))) is None
+                    or capacity_available(entry)
+                ]
                 routes = [(STTService(target.family), target) for target in proposed] + tail
                 routes.extend((STTService(target.family), target) for target in last_resorts)
         except CostHealthUnavailable:
             COST_FAIL_OPEN.labels(reason='cache_unavailable').inc()
             active = False
+            capacity_targets = {}
             logger.debug('live_stt_cost_router cache unavailable; using configured order')
             if canary:
                 record_fallback(
@@ -157,6 +177,7 @@ async def connect_configured_chain(
         except Exception:
             COST_FAIL_OPEN.labels(reason='router_error').inc()
             active = False
+            capacity_targets = {}
             routes = [(service, None) for service in configured_candidates]
             logger.exception('live_stt_cost_router using configured order')
             record_fallback(
@@ -215,6 +236,7 @@ async def connect_configured_chain(
     attempted = False
     primary_open = False
     probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
+    capacity_blocked = set()
 
     async def attempt(service: STTService, connect: Connect, target=None) -> tuple[STTSocket, STTService] | None:
         nonlocal origin, prior_reason, prior_capacity_subtype, attempted
@@ -304,6 +326,18 @@ async def connect_configured_chain(
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
             elif reason in EXPECTED_REJECTIONS:
                 on_close()
+                if canary and reason == 'capacity_full':
+                    identity = (
+                        target.id
+                        if target is not None
+                        else (
+                            (routing_models or {}).get('parakeet')
+                            if service.value == 'parakeet'
+                            else DEFAULT_IDS.get(service.value)
+                        )
+                    )
+                    if identity is not None and identity in capacity_targets:
+                        note_capacity_full(capacity_targets[identity].id)
             else:
                 circuit.record_failure()
                 if circuit.state == 'open':
@@ -365,6 +399,11 @@ async def connect_configured_chain(
         )
         if connect is None or provider_for_service(service) in failed or identity in failed_targets:
             continue
+        capacity_target = target if target is not None else capacity_targets.get(identity or '')
+        if canary and capacity_target is not None and not capacity_available(capacity_target):
+            capacity_blocked.add(service)
+            COST_DECISION.labels(target=capacity_target.id, reason='capacity_skip').inc()
+            continue
         circuit = target_circuit(target, _circuit_for_primary(service))
         if not circuit.allow_request(max_probes=probes):
             primary_open |= not backup(service, target)
@@ -388,6 +427,7 @@ async def connect_configured_chain(
         and primary_open
         and not attempted
         and primary_service != STTService.parakeet
+        and primary_service not in capacity_blocked
         and provider_for_service(primary_service) not in failed
     ):
         circuit = _circuit_for_primary(primary_service)
@@ -402,7 +442,12 @@ async def connect_configured_chain(
         # selection circuit opened on a mid-session death.
         for service in configured_candidates:
             connect = callbacks.get(service)
-            if service == STTService.parakeet or connect is None or provider_for_service(service) in failed:
+            if (
+                service == STTService.parakeet
+                or service in capacity_blocked
+                or connect is None
+                or provider_for_service(service) in failed
+            ):
                 continue
             state = fleet_states.get(service.value)
             if state is not None and state.bench == 'account' and state.excluded:

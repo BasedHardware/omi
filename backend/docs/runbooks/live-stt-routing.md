@@ -33,7 +33,11 @@ Window candidates must match the session's actual engine choice, language
 eligibility and hosted endpoint. Mismatches and empty proposals restore the
 configured chain and increment `omi_stt_cost_routing_fail_open_total`.
 Configured unregistered services remain at the tail, followed by benched
-targets as last resorts. Ordinary mid-session deaths exclude only the target;
+targets as last resorts. Capacity signals and five-second local capacity
+cooldowns exclude terminal legs and configured-default aliases. A
+`capacity_full` refusal releases the circuit probe and starts that target
+cooldown without recording a circuit/health failure; even empty-proposal
+last-resort forcing respects it in the on cohort. Ordinary mid-session deaths exclude only the target;
 quota/auth failures exclude its whole family.
 
 The gate is a calibrated Page CUSUM, not an anytime-valid probability test.
@@ -42,7 +46,11 @@ per four million sessions. At 60% outage, median/p95 detection is 8/10 failed
 sessions; 16% and 12% median detection is 264.5 and 972.5 sessions. A 10%
 brownout has no prompt-bench SLA. Sparse languages can bench with two users,
 sixteen recent failures and stronger score evidence; promotion at 30/60
-passing sessions needs no distinct-user floor.
+passing sessions needs no distinct-user floor. Failed trial boundaries require
+the same breadth protection as fleet benches. Narrow failures hold the trial
+without a fleet strike; only their language may bench. Evaluation counts reset
+after 120/240 sessions at stages 5/25, retaining sequential evidence, so later
+healthy sessions can promote without old failures deadlocking recovery.
 
 At 17.9k eligible sessions/day and 61% Modulate disruption, the delayed-result
 trial replay averages 75.46 disruptions/day (p95 80; worst seeded run 83),

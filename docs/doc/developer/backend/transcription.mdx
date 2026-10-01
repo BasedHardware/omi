@@ -168,7 +168,10 @@ cheapest capable endpoint within its rollout share and capacity. Shared health
 gates remove disrupted targets and restore cheaper targets through staged
 recovery. Target identity is separate from provider family, so two endpoints
 using the same provider protocol can have independent routing health. Custom
-STT, BYOK and multichannel connections keep their existing paths.
+STT, BYOK and multichannel connections keep their existing paths. Fleet trial
+rejection requires broad failure evidence; healthy small cohorts can recover
+without a distinct-user minimum. Capacity signals and short local capacity
+cooldowns apply to terminal failover legs as well as primary selection.
 
 ```mermaid
 flowchart TD

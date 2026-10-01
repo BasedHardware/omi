@@ -112,7 +112,11 @@ admission stay intact. Redis refresh/write work stays off connect with a 75 ms
 default deadline; faults use local evidence and known benches, and router errors
 restore configured order. No worst-provider probes or score ranking remain in
 the active router. Legacy first-text counters remain diagnostics rather than
-additional health samples. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
+additional health samples. Failed recovery trials require the same failure-user
+breadth as fleet benches; narrow failing cohorts retain their trial share with
+bounded evaluation windows, while healthy small cohorts can promote. Terminal
+legs honor capacity signals and a five-second process-local cooldown after
+`capacity_full`, without treating capacity as provider disruption. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
 and [live STT routing runbook](runbooks/live-stt-routing.md).
 
 Soniox streams final token deltas whose network-frame boundaries can split a
