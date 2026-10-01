@@ -934,7 +934,10 @@ def fetch_ready_intent_batch(
     if now is not None:
         if not isinstance(now, datetime):
             raise ValueError("now must be a datetime")
-        fetched_at = now if (now.tzinfo is not None and now.utcoffset() is not None) else now.replace(tzinfo=timezone.utc)
+        if now.tzinfo is None or now.utcoffset() is None:
+            fetched_at = now.replace(tzinfo=timezone.utc)
+        else:
+            fetched_at = now.astimezone(timezone.utc)
     else:
         fetched_at = datetime.now(timezone.utc)
 
@@ -1435,7 +1438,10 @@ def release_due_deferrals(
         raise ValueError("account_generation must be a non-negative integer")
     if not isinstance(now, datetime):
         raise ValueError("now must be a datetime")
-    checked_now = now if (now.tzinfo is not None and now.utcoffset() is not None) else now.replace(tzinfo=timezone.utc)
+    if now.tzinfo is None or now.utcoffset() is None:
+        checked_now = now.replace(tzinfo=timezone.utc)
+    else:
+        checked_now = now.astimezone(timezone.utc)
 
     client = _db(firestore_client)
     _require_current_control(uid, account_generation=account_generation, firestore_client=client)
@@ -1482,7 +1488,7 @@ def release_due_deferrals(
             continue
         if subject is not None and deferred.subject != subject:
             continue
-        if subject is None and deferred.due_at > now:
+        if subject is None and deferred.due_at > checked_now:
             continue
         candidates.append(deferred)
 
@@ -1493,7 +1499,7 @@ def release_due_deferrals(
                 uid,
                 deferred,
                 account_generation=account_generation,
-                now=now,
+                now=checked_now,
                 firestore_client=client,
             )
         except ChatFirstIntentGenerationMismatch:
