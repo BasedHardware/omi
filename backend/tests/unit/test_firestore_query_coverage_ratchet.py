@@ -8,6 +8,14 @@ import pytest
 from scripts import firestore_query_coverage
 
 
+@pytest.fixture(scope='module')
+def current_query_coverage():
+    baseline_path = Path(__file__).resolve().parents[2] / 'scripts' / 'firestore_query_coverage_baseline.json'
+    committed = json.loads(baseline_path.read_text(encoding='utf-8'))
+    report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
+    return committed, report
+
+
 def test_query_coverage_ratchet_rejects_a_new_raw_serving_shape():
     baseline = {
         'schema_version': 1,
@@ -39,10 +47,8 @@ def test_query_coverage_ratchet_rejects_a_new_raw_serving_shape():
 
 
 @pytest.mark.slow
-def test_query_coverage_baseline_tracks_current_raw_and_unsupported_debt():
-    baseline_path = Path(__file__).resolve().parents[2] / 'scripts' / 'firestore_query_coverage_baseline.json'
-    committed = json.loads(baseline_path.read_text(encoding='utf-8'))
-    report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
+def test_query_coverage_baseline_tracks_current_raw_and_unsupported_debt(current_query_coverage):
+    committed, report = current_query_coverage
 
     assert firestore_query_coverage.check_ratchet(report, committed) == []
 
@@ -177,10 +183,8 @@ def test_query_coverage_ratchet_passes_unchanged_inventory():
 
 
 @pytest.mark.slow
-def test_committed_query_coverage_baseline_is_regenerated_from_the_current_inventory():
-    baseline_path = Path(__file__).resolve().parents[2] / 'scripts' / 'firestore_query_coverage_baseline.json'
-    committed = json.loads(baseline_path.read_text(encoding='utf-8'))
-    report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
+def test_committed_query_coverage_baseline_is_regenerated_from_the_current_inventory(current_query_coverage):
+    committed, report = current_query_coverage
 
     assert firestore_query_coverage.check_baseline_freshness(report, committed) == []
     assert committed == firestore_query_coverage.baseline_for(report)

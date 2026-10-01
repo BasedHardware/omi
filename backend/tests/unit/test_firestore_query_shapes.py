@@ -283,9 +283,8 @@ def test_covered_by_helpers_observed_in_named_driver(driver_results):
     assert not missing, f'covered-by helpers not observed in any named covering driver: {missing}'
 
 
-@pytest.mark.slow
-def test_digest_pinned_entries_unchanged():
-    """Reviewed bodies of non-observed covered-by helpers and skips are digest-pinned."""
+@pytest.fixture(scope='module')
+def pinned_entry_review_errors():
     bad = []
     for key, entry in COVERED_BY.items():
         if entry.expect_observed:
@@ -299,7 +298,13 @@ def test_digest_pinned_entries_unchanged():
             bad.append(f'{key}: skip without a body digest')
         elif entry.body_digest != serving_function_body_digest(key):
             bad.append(f'{key}: body changed since skip review — re-review the skip')
-    assert not bad, '; '.join(bad)
+    return bad
+
+
+@pytest.mark.slow
+def test_digest_pinned_entries_unchanged(pinned_entry_review_errors):
+    """Reviewed bodies of non-observed covered-by helpers and skips are digest-pinned."""
+    assert not pinned_entry_review_errors, '; '.join(pinned_entry_review_errors)
 
 
 def _mutating_driver_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
