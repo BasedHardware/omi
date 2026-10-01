@@ -23,7 +23,6 @@ from database.account_deletion_transitions import (
 )
 from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite
 
-
 # ---------------------------------------------------------------------------
 # Helpers unwrapping @transactional decorators (matching repo test precedent)
 # ---------------------------------------------------------------------------
