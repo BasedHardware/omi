@@ -164,8 +164,20 @@ def create_sync_job(
     ledger_fence_mode: str = SyncLedgerFenceMode.LEGACY.value,
 ) -> Dict[str, Any]:
     """Create a new sync job and store in Redis. Returns the job dict."""
-    if job_id is None:
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError('uid must be a non-empty string')
+    if isinstance(total_files, bool) or not isinstance(total_files, int) or total_files < 0:
+        raise ValueError('total_files must be a non-negative integer')
+    if isinstance(total_segments, bool) or not isinstance(total_segments, int) or total_segments < 0:
+        raise ValueError('total_segments must be a non-negative integer')
+    if job_id is not None:
+        if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+            raise ValueError('job_id must be a non-empty string without slashes')
+        job_id = job_id.strip()
+    else:
         job_id = str(uuid.uuid4())
+
+    uid = uid.strip()
     now = time.time()
     job: Dict[str, Any] = {
         'job_id': job_id,
@@ -185,10 +197,10 @@ def create_sync_job(
         'error': None,
         'reason_code': None,
         'retry_after': None,
-        'lane': lane,
+        'lane': lane if lane in _SYNC_LANES else 'fresh',
         'capture_time_trust': capture_time_trust,
         'recording_age_seconds': recording_age_seconds,
-        'content_id': content_id,
+        'content_id': content_id.strip() if isinstance(content_id, str) else content_id,
         'dispatch_mode': dispatch_mode if dispatch_mode in _SYNC_DISPATCH_MODES else 'inline',
         # Persist the protocol choice per job. This prevents an active
         # revision from fencing a job started before the hard old-revision
@@ -206,7 +218,9 @@ def create_sync_job(
 
 
 def delete_sync_job(job_id: str) -> None:
-    r.delete(_key(f'{JOB_KEY_PREFIX}{job_id}'))
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        return
+    r.delete(_key(f'{JOB_KEY_PREFIX}{job_id.strip()}'))
 
 
 def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
@@ -217,7 +231,9 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
     the run lease, re-read, then use the fenced finalizer. Inline work owns
     its own terminal transition, including executor leaves still in flight.
     """
-    data = r.get(_key(f'{JOB_KEY_PREFIX}{job_id}'))
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        return None
+    data = r.get(_key(f'{JOB_KEY_PREFIX}{job_id.strip()}'))
     if not data:
         return None
     try:
@@ -610,8 +626,14 @@ def _sync_job_finalization_updates(
     result: Dict[str, Any], *, completed_at: float
 ) -> tuple[str, int, int, Dict[str, Any]]:
     """Build the one terminal-state patch shared by fenced and legacy callers."""
+    if not isinstance(result, dict):
+        raise ValueError('result must be a dictionary')
     failed = result.get('failed_segments', 0)
     total = result.get('total_segments', 0)
+    if not isinstance(failed, int) or isinstance(failed, bool) or failed < 0:
+        failed = 0
+    if not isinstance(total, int) or isinstance(total, bool) or total < 0:
+        total = 0
 
     if total > 0 and failed >= total:
         status = 'failed'
