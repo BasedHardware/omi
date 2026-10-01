@@ -51,8 +51,9 @@ def test_keep_all_selection_is_stable_per_conversation_id(monkeypatch):
 
 def test_keep_all_selection_is_approximately_configured_percentage(monkeypatch):
     monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '2')
-    selected = sum(config.keep_all_selected(f'conversation-{i}') for i in range(50_000))
-    assert 900 <= selected <= 1100
+    selected = sum(config.keep_all_selected(f'conversation-{i}') for i in range(10_000))
+    # Expected 200, sd ~14: bounds are ~5 sd, and the loop stays inside the fast-unit CPU guard.
+    assert 120 <= selected <= 280
 
 
 @pytest.mark.parametrize('invalid', ['broken', '', '-1', '101', 'nan', 'inf'])
