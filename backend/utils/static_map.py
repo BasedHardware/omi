@@ -3,7 +3,7 @@
 Every in-app map preview is rendered through ``GET /v1/static-map``
 (``routers/static_map.py``): the server holds the only Maps key, builds the
 provider URL here, and caches rendered bytes in Redis keyed by the quantized
-pin set and size, so repeat renders of the same place (the home recap carousel
+pin set, size and theme, so repeat renders of the same place (the home recap carousel
 re-renders often) cost one upstream call per distinct pin set. Swapping the
 provider means changing this module only.
 
@@ -17,7 +17,7 @@ import json
 import logging
 import os
 import time
-from typing import List, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
 from database.redis_db import r
 from utils.executors import db_executor, run_blocking
@@ -36,7 +36,8 @@ _MAX_PINS = 50
 # Bumped 1->2 to evict provider "degraded render" watermarks (served as HTTP 200
 # image/png under launch-load authorization degradation) that were cached and
 # shared to every user for the full TTL before the reject below existed.
-_CACHE_VERSION = 2
+# Bumped 2->3 for the black-and-white light/dark restyle (theme is now part of the key).
+_CACHE_VERSION = 3
 _CACHE_TTL_SECONDS = 604800  # 7 days
 # Stampede dedup: per-key render lock TTL (bounds how long a crashed holder can
 # wedge waiters), how often waiters poll the cache, and how long they wait
@@ -45,42 +46,61 @@ _RENDER_LOCK_TTL_SECONDS = 30
 _RENDER_POLL_INTERVAL_SECONDS = 0.25
 _RENDER_WAIT_TIMEOUT_SECONDS = 15.0
 
-# Dark styling shared by every preview. Mirrors the look the app shipped with
-# client-side Google Static Maps (conversation detail geolocation card).
+MapTheme = Literal['light', 'dark']
+
+# Black and white in both themes, like Uber's map: grey land, white (or dark grey)
+# streets with a slightly darker edge, grey water and parks, street and area
+# names kept, POIs, icons and transit off, so the pin carries the image. Old app
+# builds send no theme and get dark, the only look they ever rendered.
 _DARK_STYLES = [
-    'style=element:geometry%7Ccolor:0x1a1a1a',
+    'style=element:geometry%7Ccolor:0x161616',
     'style=element:labels.icon%7Cvisibility:off',
-    'style=element:labels.text.fill%7Ccolor:0x4a4a4a',
-    'style=element:labels.text.stroke%7Ccolor:0x1a1a1a',
+    'style=element:labels.text.fill%7Ccolor:0x7c7c7c',
+    'style=element:labels.text.stroke%7Ccolor:0x161616',
     'style=feature:administrative%7Celement:geometry%7Cvisibility:off',
-    'style=feature:administrative%7Celement:labels%7Cvisibility:off',
-    'style=feature:administrative.locality%7Celement:labels.text.fill%7Ccolor:0x8a8a8a',
-    'style=feature:administrative.neighborhood%7Cvisibility:off',
     'style=feature:administrative.land_parcel%7Cvisibility:off',
-    'style=feature:poi%7Celement:labels%7Cvisibility:off',
-    'style=feature:poi.business%7Cvisibility:off',
-    'style=feature:poi.government%7Cvisibility:off',
-    'style=feature:poi.medical%7Cvisibility:off',
-    'style=feature:poi.place_of_worship%7Cvisibility:off',
-    'style=feature:poi.school%7Cvisibility:off',
-    'style=feature:poi.sports_complex%7Cvisibility:off',
-    'style=feature:poi.park%7Celement:geometry%7Ccolor:0x263c3f',
-    'style=feature:poi.park%7Celement:labels.text%7Cvisibility:simplified',
-    'style=feature:poi.park%7Celement:labels.text.fill%7Ccolor:0x5a7a5f',
-    'style=feature:road%7Celement:geometry%7Ccolor:0x2c2c2c',
-    'style=feature:road%7Celement:labels%7Cvisibility:simplified',
-    'style=feature:road%7Celement:labels.text.fill%7Ccolor:0x6a6a6a',
-    'style=feature:road.arterial%7Celement:geometry%7Ccolor:0x373737',
-    'style=feature:road.arterial%7Celement:labels%7Cvisibility:off',
-    'style=feature:road.highway%7Celement:geometry%7Ccolor:0x444444',
-    'style=feature:road.highway%7Celement:labels.text.fill%7Ccolor:0x8a8a8a',
-    'style=feature:road.highway.controlled_access%7Celement:geometry%7Ccolor:0x555555',
+    'style=feature:administrative.neighborhood%7Celement:labels.text.fill%7Ccolor:0x8c8c8c',
+    'style=feature:landscape.man_made%7Celement:geometry%7Ccolor:0x1b1b1b',
+    'style=feature:poi%7Cvisibility:off',
+    'style=feature:poi.park%7Cvisibility:on',
+    'style=feature:poi.park%7Celement:geometry%7Ccolor:0x1d1d1d',
+    'style=feature:poi.park%7Celement:labels%7Cvisibility:off',
+    'style=feature:road%7Celement:geometry.fill%7Ccolor:0x2a2a2a',
+    'style=feature:road%7Celement:geometry.stroke%7Ccolor:0x1f1f1f',
+    'style=feature:road.highway%7Celement:geometry.fill%7Ccolor:0x3b3b3b',
+    'style=feature:road.highway%7Celement:geometry.stroke%7Ccolor:0x2c2c2c',
     'style=feature:road.local%7Celement:labels%7Cvisibility:off',
-    'style=feature:transit%7Celement:labels%7Cvisibility:off',
-    'style=feature:water%7Celement:geometry%7Ccolor:0x0e1626',
-    'style=feature:water%7Celement:labels.text.fill%7Ccolor:0x3d5a5d',
-    'style=feature:water%7Celement:labels%7Cvisibility:simplified',
+    'style=feature:transit%7Cvisibility:off',
+    'style=feature:water%7Celement:geometry%7Ccolor:0x0a0a0a',
+    'style=feature:water%7Celement:labels%7Cvisibility:off',
 ]
+
+_LIGHT_STYLES = [
+    'style=element:geometry%7Ccolor:0xeaeaea',
+    'style=element:labels.icon%7Cvisibility:off',
+    'style=element:labels.text.fill%7Ccolor:0x767676',
+    'style=element:labels.text.stroke%7Ccolor:0xffffff',
+    'style=feature:administrative%7Celement:geometry%7Cvisibility:off',
+    'style=feature:administrative.land_parcel%7Cvisibility:off',
+    'style=feature:administrative.neighborhood%7Celement:labels.text.fill%7Ccolor:0x6e6e6e',
+    'style=feature:landscape.man_made%7Celement:geometry%7Ccolor:0xe4e4e4',
+    'style=feature:poi%7Cvisibility:off',
+    'style=feature:poi.park%7Cvisibility:on',
+    'style=feature:poi.park%7Celement:geometry%7Ccolor:0xe0e0e0',
+    'style=feature:poi.park%7Celement:labels%7Cvisibility:off',
+    'style=feature:road%7Celement:geometry.fill%7Ccolor:0xffffff',
+    'style=feature:road%7Celement:geometry.stroke%7Ccolor:0xdcdcdc',
+    'style=feature:road.highway%7Celement:geometry.stroke%7Ccolor:0xc9c9c9',
+    'style=feature:road.local%7Celement:labels%7Cvisibility:off',
+    'style=feature:transit%7Cvisibility:off',
+    'style=feature:water%7Celement:geometry%7Ccolor:0xcfcfcf',
+    'style=feature:water%7Celement:labels%7Cvisibility:off',
+]
+
+_STYLES = {'dark': _DARK_STYLES, 'light': _LIGHT_STYLES}
+# Markers take the theme's ink: white on dark, near-black on light (and never
+# purple, the brand rule).
+_MARKER_COLORS = {'dark': '0xFFFFFF', 'light': '0x0A0A0A'}
 
 
 class MalformedPinsError(ValueError):
@@ -122,8 +142,10 @@ def parse_pins(pins: str) -> List[Tuple[float, float]]:
     return parsed
 
 
-def build_static_map_url(pins: List[Tuple[float, float]], width: int, height: int, api_key: str) -> str:
-    """Build the provider URL for the quantized pin set and size.
+def build_static_map_url(
+    pins: List[Tuple[float, float]], width: int, height: int, api_key: str, theme: MapTheme = 'dark'
+) -> str:
+    """Build the provider URL for the quantized pin set, size and theme.
 
     One pin renders centered at street zoom; several pins use the provider's
     ``visible=`` auto-fit so every stop lands inside the frame.
@@ -135,17 +157,16 @@ def build_static_map_url(pins: List[Tuple[float, float]], width: int, height: in
     characters (https://developers.google.com/maps/documentation/maps-static/
     start). The old 2,048 figure is the legacy v2 limit and now belongs to the
     separate Maps URLs service — do not guard against it. Measured worst case
-    with the full style list is ~4KB at the 50-pin cap (the pin list appears
+    with either theme's style list is ~3.3KB at the 50-pin cap (the pin list appears
     twice, in ``markers`` and ``visible``), comfortably inside the limit;
     re-measure if the style list, pin cap, or provider changes.
     """
     size = f'size={width}x{height}'
     scale = 'scale=2'
     locations = '%7C'.join(f'{latitude:.4f},{longitude:.4f}' for latitude, longitude in pins)
-    # White markers match the app's pin styling (and the brand's no-purple rule).
-    markers = f'markers=color:0xFFFFFF%7C{locations}'
+    markers = f'markers=color:{_MARKER_COLORS[theme]}%7C{locations}'
     framing = f'center={locations}&zoom=15' if len(pins) == 1 else f'visible={locations}'
-    styles = '&'.join(_DARK_STYLES)
+    styles = '&'.join(_STYLES[theme])
     return (
         f'https://maps.googleapis.com/maps/api/staticmap?{framing}&{size}&{scale}'
         f'&format=png&{markers}&{styles}&key={api_key}'
@@ -164,9 +185,11 @@ def _effective_dimensions(width: int, height: int) -> Tuple[int, int]:
     return int(width * factor), int(height * factor)
 
 
-def _cache_key(pins: List[Tuple[float, float]], width: int, height: int) -> str:
+def _cache_key(pins: List[Tuple[float, float]], width: int, height: int, theme: MapTheme = 'dark') -> str:
     # Sorting makes the key order-insensitive even if a caller passes unsorted pins.
-    payload = json.dumps({'v': _CACHE_VERSION, 'pins': sorted(pins), 'w': width, 'h': height}, sort_keys=True)
+    payload = json.dumps(
+        {'v': _CACHE_VERSION, 'pins': sorted(pins), 'w': width, 'h': height, 'theme': theme}, sort_keys=True
+    )
     digest = hashlib.sha256(payload.encode()).hexdigest()
     return f'staticmap:{digest}'
 
@@ -188,14 +211,16 @@ async def _write_cache(key: str, image: bytes) -> None:
         logger.warning('static map cache write failed error_type=%s', type(error).__name__)
 
 
-async def _render_from_provider(pins: List[Tuple[float, float]], width: int, height: int) -> Optional[bytes]:
+async def _render_from_provider(
+    pins: List[Tuple[float, float]], width: int, height: int, theme: MapTheme
+) -> Optional[bytes]:
     """Fetch a fresh render from the provider. Failures return ``None`` and are never cached."""
     api_key = os.getenv('GOOGLE_MAPS_API_KEY')
     if not api_key:
         logger.error('static map render unavailable: GOOGLE_MAPS_API_KEY is not set')
         return None
 
-    url = build_static_map_url(pins, width, height, api_key)
+    url = build_static_map_url(pins, width, height, api_key, theme)
     try:
         async with get_maps_semaphore():
             response = await get_maps_client().get(url)
@@ -228,7 +253,9 @@ async def _render_from_provider(pins: List[Tuple[float, float]], width: int, hei
     return response.content
 
 
-async def fetch_static_map(pins: List[Tuple[float, float]], width: int, height: int) -> Optional[bytes]:
+async def fetch_static_map(
+    pins: List[Tuple[float, float]], width: int, height: int, theme: MapTheme = 'dark'
+) -> Optional[bytes]:
     """Return cached rendered bytes, fetching from the provider on a miss.
 
     Returns ``None`` on any upstream failure — callers surface an error and the
@@ -241,7 +268,7 @@ async def fetch_static_map(pins: List[Tuple[float, float]], width: int, height: 
     error path fails open to a plain fetch.
     """
     width, height = _effective_dimensions(width, height)
-    key = _cache_key(pins, width, height)
+    key = _cache_key(pins, width, height, theme)
 
     cached = await _read_cache(key)
     if cached:
@@ -268,7 +295,7 @@ async def fetch_static_map(pins: List[Tuple[float, float]], width: int, height: 
             cached = await _read_cache(key)
             if cached:
                 return cached
-            image = await _render_from_provider(pins, width, height)
+            image = await _render_from_provider(pins, width, height, theme)
             if image is not None:
                 await _write_cache(key, image)
             return image
@@ -276,7 +303,7 @@ async def fetch_static_map(pins: List[Tuple[float, float]], width: int, height: 
         if lock_state != 'held':
             # Lock unavailable (Redis broken): render immediately, no wait —
             # the cache write is best-effort like every other Redis touch.
-            image = await _render_from_provider(pins, width, height)
+            image = await _render_from_provider(pins, width, height, theme)
             if image is not None:
                 await _write_cache(key, image)
             return image
@@ -292,7 +319,7 @@ async def fetch_static_map(pins: List[Tuple[float, float]], width: int, height: 
         # Wait budget exhausted (holder crashed or is wedged): fail open and
         # render without holding the lock.
         logger.warning('static map render-lock wait timed out; rendering unlocked')
-        image = await _render_from_provider(pins, width, height)
+        image = await _render_from_provider(pins, width, height, theme)
         if image is not None:
             await _write_cache(key, image)
         return image

@@ -3,8 +3,8 @@
 The route is the app's only map-preview seam: auth keeps it from becoming an
 open image proxy on the project's Maps key, malformed pins fail fast with 400,
 upstream failures surface 502 (the app renders its offline pin-dot canvas), and
-rendered bytes are cached in Redis keyed by the quantized pin set + size so
-repeat renders of the same place never re-bill the provider.
+rendered bytes are cached in Redis keyed by the quantized pin set + size +
+theme so repeat renders of the same place never re-bill the provider.
 
 Direct-call pattern from tests/routers/test_imports.py; the utils-level cache
 paths are covered with a fake Redis against the real fetch_static_map.
@@ -29,9 +29,9 @@ UID = 'user-1'
 # ---------------------------------------------------------------------------
 
 
-def _get(pins, width=300, height=150, uid=UID):
+def _get(pins, width=300, height=150, uid=UID, **kwargs):
     # The endpoint is async; direct-call tests run its coroutine to completion.
-    return asyncio.run(static_map_router.get_static_map(pins=pins, width=width, height=height, uid=uid))
+    return asyncio.run(static_map_router.get_static_map(pins=pins, width=width, height=height, uid=uid, **kwargs))
 
 
 def test_malformed_pins_are_rejected_with_400():
@@ -86,6 +86,15 @@ def test_success_returns_png_bytes_with_private_cache_headers():
     assert response.headers['cache-control'] == 'private, max-age=86400'
 
 
+def test_route_defaults_to_dark_and_passes_the_requested_theme_through():
+    with patch.object(static_map_router, 'fetch_static_map', return_value=b'png') as fetch:
+        _get('37.7749,-122.4194')
+        _get('37.7749,-122.4194', theme='light')
+    # App builds from before themed maps send no theme; they keep the dark render.
+    assert fetch.await_args_list[0].args[3] == 'dark'
+    assert fetch.await_args_list[1].args[3] == 'light'
+
+
 def test_route_requires_auth():
     app = _bare_app()
     with TestClient(app) as client:
@@ -107,6 +116,21 @@ def test_dimension_bounds_are_rejected_with_422(monkeypatch):
         too_large = client.get('/v1/static-map', params={'pins': '1,2', 'width': 300, 'height': 2000})
     assert too_small.status_code == 422
     assert too_large.status_code == 422
+
+
+def test_unknown_theme_is_rejected_with_422(monkeypatch):
+    from utils.other import endpoints as endpoints_mod
+
+    monkeypatch.setattr(endpoints_mod, '_enforce_rate_limit', lambda *args, **kwargs: None)
+    app = _bare_app()
+    app.dependency_overrides[endpoints_mod.get_current_user_uid] = lambda: UID
+    with patch.object(static_map_router, 'fetch_static_map', return_value=b'png') as fetch:
+        with TestClient(app) as client:
+            bad = client.get('/v1/static-map', params={'pins': '1,2', 'width': 300, 'height': 150, 'theme': 'sepia'})
+            light = client.get('/v1/static-map', params={'pins': '1,2', 'width': 300, 'height': 150, 'theme': 'light'})
+    assert bad.status_code == 422
+    assert light.status_code == 200
+    assert fetch.await_args.args[3] == 'light'
 
 
 def _bare_app():
@@ -160,6 +184,36 @@ def test_multi_pin_url_uses_visible_autofit_with_the_given_size():
     assert 'size=640x640' in url
     assert 'center=' not in url
     assert 'markers=color:0xFFFFFF%7C' in url
+
+
+def test_light_theme_url_uses_the_light_styles_and_dark_markers():
+    pins = [(37.7749, -122.4194), (37.7849, -122.4094)]
+    light = static_map_mod.build_static_map_url(pins, 300, 150, 'k-test', 'light')
+    dark = static_map_mod.build_static_map_url(pins, 300, 150, 'k-test', 'dark')
+
+    assert 'markers=color:0x0A0A0A%7C' in light
+    assert 'markers=color:0xFFFFFF%7C' in dark
+    assert 'style=element:geometry%7Ccolor:0xeaeaea' in light
+    assert 'style=element:geometry%7Ccolor:0x161616' in dark
+    for style in static_map_mod._LIGHT_STYLES:
+        assert style in light
+    for style in static_map_mod._DARK_STYLES:
+        assert style in dark
+    # Without a theme the URL is the dark one, the only render older builds know.
+    assert static_map_mod.build_static_map_url(pins, 300, 150, 'k-test') == dark
+
+
+def test_worst_case_url_stays_well_inside_the_provider_limit():
+    # 16,384 characters is the Maps Static API URL limit; see build_static_map_url.
+    pins = [(i / 100, i / 100) for i in range(static_map_mod._MAX_PINS)]
+    for theme in ('light', 'dark'):
+        assert len(static_map_mod.build_static_map_url(pins, 640, 640, 'k' * 39, theme)) < 8000
+
+
+def test_each_theme_has_its_own_cache_entry():
+    pins = [(37.7749, -122.4194)]
+    assert static_map_mod._cache_key(pins, 300, 150, 'light') != static_map_mod._cache_key(pins, 300, 150, 'dark')
+    assert static_map_mod._cache_key(pins, 300, 150) == static_map_mod._cache_key(pins, 300, 150, 'dark')
 
 
 def test_effective_dimensions_scale_proportionally_and_share_the_cache_entry():
@@ -257,6 +311,23 @@ async def test_cache_miss_fetches_caches_and_returns_bytes(monkeypatch):
     assert redis.store[static_map_mod._cache_key([(37.7749, -122.4194)], 300, 150)] == b'png-bytes'
     # The render lock is released after the render.
     assert f"{static_map_mod._cache_key([(37.7749, -122.4194)], 300, 150)}:render-lock" not in redis.store
+
+
+@pytest.mark.asyncio
+async def test_light_and_dark_render_and_cache_separately(monkeypatch):
+    redis, captured = _patch_environment(monkeypatch)
+    pins = [(37.7749, -122.4194)]
+
+    await static_map_mod.fetch_static_map(pins, 300, 150, 'light')
+    assert 'markers=color:0x0A0A0A' in captured['url']
+    await static_map_mod.fetch_static_map(pins, 300, 150, 'dark')
+    assert 'markers=color:0xFFFFFF' in captured['url']
+    # A repeat of either theme is a hit; the other theme never serves it.
+    await static_map_mod.fetch_static_map(pins, 300, 150, 'light')
+
+    assert captured['provider_calls'] == 2
+    assert static_map_mod._cache_key(pins, 300, 150, 'light') in redis.store
+    assert static_map_mod._cache_key(pins, 300, 150, 'dark') in redis.store
 
 
 @pytest.mark.asyncio
