@@ -854,7 +854,14 @@ queued only after the task vectors are written. An unexpected planner error
 falls back to the kill-switch plan (`outcome=planner_error`).
 `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` (unset = on, any unrecognized value =
 off) restores recreate-under-fresh-ids; `event=action_item_identity` logs the
-per-replace counts.
+per-replace counts and the processing `trigger`. A measurement-only anchor shadow
+on the same line counts how many prior rows the exact rule left unmatched pair
+strictly one-to-one with an unmatched new item by shared stored
+`provenance[].transcript_segment_ids` for this conversation (`anchor_pairs`;
+other overlaps are `anchor_ambiguous`). It only logs: the prior-row read gains the
+`provenance` field and nothing written, deleted or delivered changes. A shadow
+failure logs `shadow=error`; `ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENABLED`
+(unset = on, any unrecognized value = off) turns it and the extra field off.
 
 With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant

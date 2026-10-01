@@ -30,7 +30,12 @@ os.environ.setdefault(
 
 import database.action_items as action_items_db
 import database.vector_db as vector_db
-from config.action_item_identity import ACTION_ITEM_IDENTITY_PRESERVE_ENV, action_item_identity_preserve_enabled
+from config.action_item_identity import (
+    ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENV,
+    ACTION_ITEM_IDENTITY_PRESERVE_ENV,
+    action_item_identity_anchor_shadow_enabled,
+    action_item_identity_preserve_enabled,
+)
 from utils import task_sync
 from utils.conversations import action_item_identity, process_conversation, smart_merge
 from utils.conversations.action_item_identity import identity_key, plan_replacement
@@ -39,6 +44,7 @@ from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingT
 UID = 'uid-identity'
 DUE = datetime(2026, 10, 9, 17, tzinfo=timezone.utc)
 _REAL_CREATE_BATCH = action_items_db.create_action_items_batch
+_REAL_CANONICAL_FIELDS = process_conversation.conversation_capture.canonical_conversation_fields
 
 
 # --------------------------------------------------------------------------- in-memory Firestore
@@ -671,7 +677,7 @@ def test_late_planner_error_has_flag_off_fields_and_does_not_mutate_inputs(monke
     calls = []
     monkeypatch.setattr(action_item_identity, 'record_fallback', lambda **kw: calls.append(kw))
 
-    def fail_after_matching(plan, count):
+    def fail_after_matching(plan, count, shadow):
         assert plan.document_ids == ['cloud'] and plan.outcomes == ['skipped_already_exported']
         raise error_type('synthetic late failure')
 
@@ -970,3 +976,381 @@ def test_telemetry_is_bounded_and_carries_no_ids_or_text(monkeypatch, caplog):
     text = caplog.text
     assert 'event=action_item_identity' in text
     assert not any(secret in text for secret in ('secret-id', 'Call mom', 'Pay rent', 'Buy milk'))
+
+
+# --------------------------------------------------------------------------- anchor shadow (measurement only)
+#
+# The shadow counts which prior rows the exact rule left unmatched could pair with an
+# unmatched new item by stored transcript segment ids. It is logged and nothing else:
+# every test below that runs the writer compares the full call trace with the shadow off.
+
+LOG_KEYS = (
+    'reused_identity',
+    'new',
+    'skipped_already_exported',
+    'disabled',
+    'prior_rows',
+    'deliver_after_persist',
+    'trigger',
+    'shadow',
+    'shadow_error',
+    *action_item_identity.SHADOW_FIELDS,
+)
+REWORDED_BUDGET, NOTES_SPLIT_A, NOTES_SPLIT_B, CATERER = (
+    'Email Maria the budget',
+    'Write up the meeting notes',
+    'Send the notes to Bob',
+    'Call the caterer',
+)
+
+
+def _anchored_item(description, segments, due_at=None):
+    item = _item(description, due_at)
+    item.source_segment_ids = list(segments)
+    return item
+
+
+def _anchored_conversation(conversation_id, items):
+    conversation = _conversation(conversation_id, items)
+    cited = sorted({segment for item in items for segment in item.source_segment_ids})
+    conversation.transcript_segments = [
+        SimpleNamespace(id=segment, start=float(n), end=float(n + 1)) for n, segment in enumerate(cited)
+    ]
+    return conversation
+
+
+def _provenance(segments, conversation_id='c', kind='conversation'):
+    return [{'kind': kind, 'id': conversation_id, 'scope': 'canonical', 'transcript_segment_ids': list(segments)}]
+
+
+def _new(description, segments=(), conversation_id='c'):
+    return {
+        'description': description,
+        'conversation_id': conversation_id,
+        'provenance': _provenance(segments, conversation_id) if segments else [],
+    }
+
+
+def _anchored_row(task_id, description, segments=(), conversation_id='c', **extra):
+    provenance = _provenance(segments, conversation_id) if segments else []
+    return _row(task_id, description, conversation_id, provenance=provenance, **extra)
+
+
+def _identity_logs(caplog) -> List[Dict[str, str]]:
+    lines = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == action_item_identity.__name__ and r.getMessage().startswith('event=action_item_identity ')
+    ]
+    return [dict(pair.split('=', 1) for pair in line.split()[1:]) for line in lines if 'planner_error' not in line]
+
+
+def _shadow_of(caplog, monkeypatch, conversation_id, items, prior, trigger=None):
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger=action_item_identity.__name__):
+        plan = plan_replacement(conversation_id, items, prior, trigger)
+    (fields,) = _identity_logs(caplog)
+    return plan, fields
+
+
+@pytest.fixture
+def shadow_env(monkeypatch):
+    monkeypatch.delenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, raising=False)
+    monkeypatch.delenv(ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENV, raising=False)
+
+
+def _anchored_world(monkeypatch, shadow_flag: Optional[str]) -> World:
+    world = World(monkeypatch)
+    monkeypatch.delenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, raising=False)
+    if shadow_flag is None:
+        monkeypatch.delenv(ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENV, raising=False)
+    else:
+        monkeypatch.setenv(ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENV, shadow_flag)
+    # The real provenance writer: every row cites the transcript segment ids its item named.
+    monkeypatch.setattr(
+        process_conversation.conversation_capture, 'canonical_conversation_fields', _REAL_CANONICAL_FIELDS
+    )
+    return world
+
+
+def _process(world, conversation_id, items, trigger=None):
+    process_conversation._save_action_items(UID, _anchored_conversation(conversation_id, items), (), trigger)
+
+
+FIRST = [
+    _anchored_item(BUDGET, ['s1', 's2'], DUE),
+    _anchored_item(VENUE, ['s3']),
+    _anchored_item(NOTES, ['s4', 's5'], DUE),
+]
+REPROCESS = [
+    _anchored_item(REWORDED_BUDGET, ['s1', 's2'], DUE),  # reworded, same segments: one pair
+    _anchored_item(VENUE, ['s3']),  # exact match, out of the shadow pool
+    _anchored_item(NOTES_SPLIT_A, ['s4']),  # one prior row split into two: ambiguous
+    _anchored_item(NOTES_SPLIT_B, ['s5']),
+    _anchored_item(CATERER, []),  # cites no segment
+]
+
+
+def _without_anchor_projection(trace):
+    """The shadow's only footprint outside the log: one extra projected field on the prior-row read."""
+    events, *rest = trace
+
+    def strip(event):
+        if event[0] == 'query' and event[3] is not None:
+            return (*event[:3], [name for name in event[3] if name != 'provenance'], *event[4:])
+        return event
+
+    return ([strip(event) for event in events], *rest)
+
+
+def _bucket_reads(events):
+    """The prior-row read's active/completed bucket queries (the legacy harvest keeps the list projection)."""
+    return [e for e in events if e[0] == 'query' and e[3] is not None and 'completed' in dict(e[2])]
+
+
+def _shadow_trace(monkeypatch, caplog, shadow_flag: Optional[str], first=FIRST, reprocess=REPROCESS):
+    caplog.clear()
+    world = _anchored_world(monkeypatch, shadow_flag)
+    with caplog.at_level(logging.INFO, logger=action_item_identity.__name__):
+        _process(world, 'conv-1', first, ProcessingTrigger.CAPTURE_END)
+        _process(world, 'conv-1', reprocess, ProcessingTrigger.USER_REPROCESS)
+    trace = (world.store.events, world.events, world.reminders, world.external, world.creates, world.store.docs)
+    return world, _scrub(trace), _identity_logs(caplog)
+
+
+def test_reworded_task_with_the_same_segments_is_one_anchor_pair_through_the_real_writer(monkeypatch, caplog):
+    world, _, logs = _shadow_trace(monkeypatch, caplog, None)
+
+    first, reprocess = logs
+    assert first['trigger'] == 'capture_end' and first['prior_rows'] == '0' and first['anchor_pairs'] == '0'
+    assert {key: reprocess[key] for key in LOG_KEYS} == {
+        'reused_identity': '0',
+        'new': '4',
+        'skipped_already_exported': '1',  # VENUE, exact
+        'disabled': '0',
+        'prior_rows': '3',
+        'deliver_after_persist': 'True',
+        'trigger': 'user_reprocess',
+        'shadow': 'ok',
+        'shadow_error': 'none',
+        'unmatched_prior': '2',
+        'unmatched_prior_exported': '2',
+        'unmatched_prior_ineligible': '0',
+        'prior_without_anchor': '0',
+        'unmatched_new': '4',
+        'new_without_anchor': '1',
+        'anchor_pairs': '1',  # BUDGET -> REWORDED_BUDGET
+        'anchor_ambiguous': '1',  # NOTES feeds two new tasks
+    }
+    # The rows really carry the anchor, and the prior-row read really asked for it.
+    stored = {data['description']: data for data in world.store.tasks('conv-1').values()}
+    assert stored[REWORDED_BUDGET]['provenance'][0]['transcript_segment_ids'] == ['s1', 's2']
+    assert _bucket_reads(world.store.events) and all('provenance' in e[3] for e in _bucket_reads(world.store.events))
+    # Measurement only: the reworded task is still delivered as new, exactly as on main.
+    assert world.external.count(REWORDED_BUDGET) == 1 and world.external.count(VENUE) == 1
+
+
+def test_the_shadow_changes_no_read_result_write_deletion_reminder_or_delivery(monkeypatch, caplog):
+    _, on, on_logs = _shadow_trace(monkeypatch, caplog, None)
+    _, off, off_logs = _shadow_trace(monkeypatch, caplog, 'false')
+
+    assert _without_anchor_projection(on) == _without_anchor_projection(off)
+    assert on != off  # the one difference is the projected field, which only the shadow reads
+    assert _bucket_reads(off[0]) and not any('provenance' in e[3] for e in off[0] if e[0] == 'query' and e[3])
+    assert [log['shadow'] for log in off_logs] == ['disabled', 'disabled']
+    assert off_logs[1]['anchor_pairs'] == '0' and on_logs[1]['anchor_pairs'] == '1'
+    strip = lambda log: {k: v for k, v in log.items() if k not in action_item_identity.SHADOW_FIELDS + ('shadow',)}
+    assert [strip(log) for log in on_logs] == [strip(log) for log in off_logs]
+
+
+def test_first_processing_writes_identically_with_the_shadow_on_and_off(monkeypatch, caplog):
+    def first_only(flag):
+        caplog.clear()
+        world = _anchored_world(monkeypatch, flag)
+        _process(world, 'conv-1', FIRST, ProcessingTrigger.CAPTURE_END)
+        trace = (world.store.events, world.events, world.reminders, world.external, world.creates, world.store.docs)
+        return _without_anchor_projection(_scrub(trace))
+
+    assert first_only(None) == first_only('off')
+
+
+@pytest.mark.parametrize('target', ['_anchor_counts', '_segment_anchor', 'action_item_identity_anchor_shadow_enabled'])
+def test_a_shadow_exception_never_reaches_the_write_path(monkeypatch, caplog, target):
+    _, off, _ = _shadow_trace(monkeypatch, caplog, 'false')
+    fallbacks = []
+    monkeypatch.setattr(action_item_identity, 'record_fallback', lambda **kw: fallbacks.append(kw))
+
+    def broken(*args, **kwargs):
+        raise RuntimeError('synthetic shadow defect s1 ' + BUDGET)
+
+    monkeypatch.setattr(action_item_identity, target, broken)
+    world, failed, logs = _shadow_trace(monkeypatch, caplog, None)
+
+    assert _without_anchor_projection(failed) == _without_anchor_projection(off)
+    assert sorted(world.external) == sorted(
+        [BUDGET, VENUE, NOTES, REWORDED_BUDGET, NOTES_SPLIT_A, NOTES_SPLIT_B, CATERER]
+    )
+    assert [(log['shadow'], log['shadow_error']) for log in logs] == [('error', 'RuntimeError')] * 2
+    assert all(log[name] == '0' for log in logs for name in action_item_identity.SHADOW_FIELDS)
+    assert logs[1]['skipped_already_exported'] == '1' and logs[1]['trigger'] == 'user_reprocess'
+    assert fallbacks == [] and 'planner_error' not in caplog.text and 'synthetic shadow defect' not in caplog.text
+
+
+@pytest.mark.parametrize(
+    'prior, items, pairs, ambiguous',
+    [
+        # One prior segment now feeds two tasks: no pair.
+        (
+            [_anchored_row('a', 'Plan the offsite', ['s1'])],
+            [_new('Book flights', ['s1']), _new('Book hotel', ['s1'])],
+            0,
+            1,
+        ),
+        # Two prior rows collapse into one task: no pair, both rows ambiguous.
+        (
+            [_anchored_row('a', 'Book flights', ['s1']), _anchored_row('b', 'Book hotel', ['s1'])],
+            [_new('Plan the offsite travel', ['s1'])],
+            0,
+            2,
+        ),
+        # A chain of partial overlaps is many-to-many: nothing pairs.
+        (
+            [_anchored_row('a', 'Draft memo', ['s1', 's2']), _anchored_row('b', 'Review memo', ['s3'])],
+            [_new('Write the memo', ['s1']), _new('Edit and review the memo', ['s2', 's3'])],
+            0,
+            2,
+        ),
+        # Partial overlap that is still one-to-one on both sides is a pair.
+        ([_anchored_row('a', 'Draft memo', ['s1', 's2'])], [_new('Write the memo', ['s2', 's9'])], 1, 0),
+        # Disjoint segments never pair.
+        ([_anchored_row('a', 'Draft memo', ['s1'])], [_new('Write the memo', ['s2'])], 0, 0),
+    ],
+)
+def test_only_strictly_one_to_one_segment_overlaps_are_pairs(
+    shadow_env, caplog, monkeypatch, prior, items, pairs, ambiguous
+):
+    _, fields = _shadow_of(caplog, monkeypatch, 'c', items, prior)
+    assert (fields['anchor_pairs'], fields['anchor_ambiguous']) == (str(pairs), str(ambiguous))
+    assert fields['unmatched_prior'] == str(len(prior)) and fields['unmatched_new'] == str(len(items))
+
+
+def test_smart_merge_donor_segments_never_pair_with_survivor_rows(shadow_env, caplog, monkeypatch):
+    """Smart merge keeps segment ids, and donor and survivor segments never overlap."""
+    prior = [
+        _anchored_row('survivor-1', 'Send the budget', ['sv-1', 'sv-2'], exported=True),
+        _anchored_row('survivor-2', 'Book the venue', ['sv-3']),
+    ]
+    items = [
+        _new('Email the budget', ['sv-1']),  # the survivor's own task, reworded
+        _new('Book the venue and caterer', ['dn-1']),  # donor transcript only
+        _new('Order flowers', ['dn-2', 'dn-3']),
+    ]
+    _, fields = _shadow_of(caplog, monkeypatch, 'c', items, prior, ProcessingTrigger.SMART_MERGE)
+    assert fields['trigger'] == 'smart_merge'
+    assert (fields['anchor_pairs'], fields['anchor_ambiguous']) == ('1', '0')
+    assert (fields['unmatched_prior'], fields['unmatched_prior_exported']) == ('2', '1')
+
+
+def test_rows_without_anchors_or_from_elsewhere_are_inert_and_counted(shadow_env, caplog, monkeypatch):
+    prior = [
+        _anchored_row('pair', 'Send the budget', ['s1']),
+        _anchored_row('bare', 'Integration task'),  # no provenance (external-integration writer)
+        _row('external', 'Imported', provenance=_provenance(['s2'], kind='external')),
+        _row('cited-elsewhere', 'Moved task', provenance=_provenance(['s3'], conversation_id='other')),
+        _anchored_row('foreign', 'Other conversation', ['s4'], conversation_id='other'),
+        _anchored_row('apple', 'Apple linked', ['s5'], apple_reminder_id='ek-1'),
+    ]
+    items = [
+        _new('Email the budget', ['s1']),
+        _new('Untethered task'),
+        _new('Elsewhere s2', ['s2']),
+        _new('Elsewhere s3', ['s3']),
+        _new('Elsewhere s4', ['s4']),
+        _new('Elsewhere s5', ['s5']),
+        {'description': 'Cites another conversation', 'provenance': _provenance(['s1'], conversation_id='other')},
+    ]
+    _, fields = _shadow_of(caplog, monkeypatch, 'c', items, prior)
+    assert {name: fields[name] for name in action_item_identity.SHADOW_FIELDS} == {
+        'unmatched_prior': '6',
+        'unmatched_prior_exported': '0',
+        'unmatched_prior_ineligible': '2',  # another conversation's row, the Apple-linked row
+        'prior_without_anchor': '3',  # bare, external-kind evidence, evidence for another conversation
+        'unmatched_new': '7',
+        'new_without_anchor': '2',  # untethered, cites another conversation
+        'anchor_pairs': '1',
+        'anchor_ambiguous': '0',
+    }
+
+
+def test_exact_matches_are_excluded_from_the_shadow_pool(shadow_env, caplog, monkeypatch):
+    prior = [_anchored_row('kept', 'Call mom', ['s1'], exported=True)]
+    items = [_new('Call mom', ['s1']), _new('Phone mom tonight', ['s1'])]
+    plan, fields = _shadow_of(caplog, monkeypatch, 'c', items, prior)
+    assert plan.outcomes == ['skipped_already_exported', 'new']
+    assert (fields['unmatched_prior'], fields['unmatched_new']) == ('0', '1')
+    assert (fields['anchor_pairs'], fields['anchor_ambiguous']) == ('0', '0')
+
+
+@pytest.mark.parametrize('preserve', [None, 'false'])
+def test_the_shadow_never_changes_the_plan_or_its_inputs(monkeypatch, caplog, preserve):
+    prior = [
+        _anchored_row('a', BUDGET, ['s1'], due_at=DUE),
+        _anchored_row('b', VENUE, ['s2'], exported=True),
+        _anchored_row('c-row', NOTES, ['s3']),
+    ]
+    items = [
+        _new(REWORDED_BUDGET, ['s1']),
+        _new(VENUE, ['s2']),
+        _new(NOTES_SPLIT_A, ['s3']),
+        _new(NOTES_SPLIT_B, ['s3']),
+    ]
+    snapshot = deepcopy((items, prior))
+    if preserve is None:
+        monkeypatch.delenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, raising=False)
+    else:
+        monkeypatch.setenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, preserve)
+    monkeypatch.setenv(ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENV, 'off')
+    off, _ = _shadow_of(caplog, monkeypatch, 'c', items, prior)
+    monkeypatch.delenv(ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENV)
+    on, fields = _shadow_of(caplog, monkeypatch, 'c', items, prior)
+    assert on == off and (items, prior) == snapshot
+    assert fields['shadow'] == 'ok' and fields['anchor_pairs'] == ('1' if preserve is None else '2')
+
+
+@pytest.mark.parametrize('raw', ['false', 'off', '0', ' OFF ', 'of', 'flase', 'disable'])
+def test_shadow_kill_switch_skips_the_anchor_read_and_pairing(shadow_env, monkeypatch, caplog, raw):
+    monkeypatch.setenv(ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENV, raw)
+    monkeypatch.setattr(action_item_identity, '_segment_anchor', lambda *a: pytest.fail('shadow ran while off'))
+    assert action_item_identity.prior_read_kwargs() == {}
+    prior = [_anchored_row('a', BUDGET, ['s1'])]
+    plan, fields = _shadow_of(caplog, monkeypatch, 'c', [_new(REWORDED_BUDGET, ['s1'])], prior)
+    assert fields['shadow'] == 'disabled' and fields['anchor_pairs'] == '0' and fields['unmatched_prior'] == '1'
+
+
+@pytest.mark.parametrize('raw, enabled', [(None, True), ('', True), ('  ', True), ('true', True), ('ON', True)])
+def test_shadow_flag_parse_defaults_on(monkeypatch, raw, enabled):
+    if raw is None:
+        monkeypatch.delenv(ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENV, raising=False)
+    else:
+        monkeypatch.setenv(ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENV, raw)
+    assert action_item_identity_anchor_shadow_enabled() is enabled
+    assert action_item_identity.prior_read_kwargs() == {'extra_fields': ('provenance',)}
+
+
+@pytest.mark.parametrize('trigger', [*ProcessingTrigger, None, 'user_reprocess', 7])
+def test_the_identity_log_line_is_integers_and_enums_only(shadow_env, caplog, monkeypatch, trigger):
+    conversation = 'secret-conv'
+    prior = [_anchored_row('secret-row-id', 'Call mom', ['secret-seg-1'], conversation, exported=True, due_at=DUE)]
+    items = [_new('Phone mom', ['secret-seg-1'], conversation), _new('Pay rent', (), conversation)]
+    _, fields = _shadow_of(caplog, monkeypatch, conversation, items, prior, trigger)
+    assert tuple(fields) == LOG_KEYS and fields['anchor_pairs'] == '1' and fields['unmatched_prior_exported'] == '1'
+    enums = {
+        'deliver_after_persist': {'True', 'False'},
+        'trigger': {t.value for t in ProcessingTrigger} | {'unknown'},
+        'shadow': {'ok', 'disabled', 'error'},
+        'shadow_error': {'none'},
+    }
+    for key, value in fields.items():
+        assert value in enums[key] if key in enums else value.isdigit(), (key, value)
+    assert fields['trigger'] == (trigger.value if isinstance(trigger, ProcessingTrigger) else 'unknown')
+    assert not any(secret in caplog.text for secret in ('secret', 'Call mom', 'Phone mom', 'Pay rent'))
