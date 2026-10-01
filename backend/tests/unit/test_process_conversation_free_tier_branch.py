@@ -802,6 +802,28 @@ def test_minimum_store_reports_persisted_with_terminal_no_derived_effects(monkey
     assert dispositions == [pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]
 
 
+def test_trial_paywall_reports_terminal_no_derived_effects(monkeypatch, pc) -> None:
+    """The paywall early-return never reprocesses, so it is terminal for
+    derived effects as well: a caller that honours the disposition (the
+    smart-merge admin undo replay) converges instead of retrying a paywalled
+    restored donor forever."""
+    monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: True)
+    owned: list[bool] = []
+    dispositions: list[Any] = []
+
+    result = pc.process_conversation(
+        'paywalled-uid',
+        'en',
+        _desktop_create(),
+        persistence_observer=owned.append,
+        derived_effects_disposition_observer=dispositions.append,
+    )
+
+    assert result is not None
+    assert owned == [False]
+    assert dispositions == [pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize('anyio_backend', ['asyncio'])
 async def test_finalizer_completes_minimum_store_without_extracting_memories(monkeypatch, pc, anyio_backend) -> None:

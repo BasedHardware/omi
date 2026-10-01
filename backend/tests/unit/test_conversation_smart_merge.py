@@ -63,6 +63,7 @@ class World:
         self.vector_error = None
         self.process_error = None
         self.process_persisted = True
+        self.process_disposition = smart_merge.DerivedEffectsDisposition.RUN
         self.retract_error = None
         self.on_ask = None
         for module in (smart_merge_db, sync_bridges, conversations_db):

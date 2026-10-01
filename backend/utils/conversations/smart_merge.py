@@ -59,7 +59,11 @@ from utils import app_integrations
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
-from utils.conversations.process_conversation import process_conversation, save_structured_vector
+from utils.conversations.process_conversation import (
+    DerivedEffectsDisposition,
+    process_conversation,
+    save_structured_vector,
+)
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge_policy import (
     DECISION_FIELD,
@@ -598,7 +602,9 @@ def unmerge_conversation(
                 dry_run=dry_run,
                 now=now,
                 suffix=unmerge_suffix,
-                eligibility=lambda row, donors: unmerge_ineligible(row, donors, force=force, now=now),
+                eligibility=lambda row, donors, **kwargs: unmerge_ineligible(
+                    row, donors, force=force, now=now, **kwargs
+                ),
                 payload=unmerge_payload,
                 audio_filenames=audio_filenames,
                 expected_donor_revisions=donor_revisions,
@@ -627,13 +633,16 @@ def finish_unmerge(uid: str, survivor_id: str) -> None:
 
     try:
         pending = checkpoint()
-        for cid in pending['donor_ids']:
-            donor = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
-            filenames = (pending.get('audio_filenames') or {}).get(cid)
-            if filenames is not None or (donor and donor.get('sync_bridge_audio_target') == survivor_id):
-                delete_copied_smart_merge_audio(uid, cid, survivor_id, filenames=filenames)
-        unmerge_audio.rebuild_audio(uid, survivor_id)
-        refresh_survivor(uid, survivor_id, owner=owner)
+        survivor_row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
+        survivor_live = bool(survivor_row) and not survivor_row.get('deleted')
+        if survivor_live:
+            for cid in pending['donor_ids']:
+                donor = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
+                filenames = (pending.get('audio_filenames') or {}).get(cid)
+                if filenames is not None or (donor and donor.get('sync_bridge_audio_target') == survivor_id):
+                    delete_copied_smart_merge_audio(uid, cid, survivor_id, filenames=filenames)
+            unmerge_audio.rebuild_audio(uid, survivor_id)
+            refresh_survivor(uid, survivor_id, owner=owner)
         for cid in pending['donor_ids']:
             pending = checkpoint()
             if cid in pending.get('processed_ids', []) or cid in pending.get('deleted_ids', []):
@@ -646,28 +655,48 @@ def finish_unmerge(uid: str, survivor_id: str) -> None:
                 raise SmartMergeIncomplete('restored_donor_role_changed')
             try:
                 persistence = {'owned': False}
+                disposition = [DerivedEffectsDisposition.RUN]
                 processed = process_conversation(
                     uid,
                     row.get('language') or 'en',
                     deserialize_conversation(row),
                     trigger=ProcessingTrigger.SMART_UNMERGE,
                     persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
+                    derived_effects_disposition_observer=lambda d: disposition.__setitem__(0, d),
                 )
-                if not persistence['owned']:
+                if disposition[0] is DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS:
+                    # Free-tier minimum or trial paywall: the account's own
+                    # policy stored the donor with no derived effects, and the
+                    # normal finalizer suppresses the bundle for exactly this
+                    # disposition. The undo must not bypass that gate; this is
+                    # a completed donor even though the paywall path reports
+                    # persistence as not-owned (it never reprocesses either).
+                    logger.info(
+                        'event=smart_merge_unmerge outcome=terminal_no_derived_effects uid=%s donor=%s',
+                        uid,
+                        cid,
+                    )
+                elif not persistence['owned']:
                     raise SmartMergeIncomplete('restored_donor_processing_fenced')
-                current = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
-                if current and not current.get('deleted'):
+                else:
+                    current = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
+                    if not current or current.get('deleted'):
+                        # Terminal deletion won the race after persistence.
+                        checkpoint(completed_donor=cid)
+                        continue
                     save_structured_vector(uid, processed)
                     unmerge_audio.rebuild_audio(uid, cid)
                     conversations_db._sync_conversation_search_index(uid, cid)  # pyright: ignore[reportPrivateUsage]
-                    asyncio.run(
-                        app_integrations.trigger_external_integrations(
-                            uid,
-                            processed,
-                            idempotency_key=f"smart-unmerge:{survivor_id}:{pending['revision']}:{cid}",
-                            require_delivery=True,
+                    current = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
+                    if current and not current.get('deleted'):
+                        asyncio.run(
+                            app_integrations.trigger_external_integrations(
+                                uid,
+                                processed,
+                                idempotency_key=f"smart-unmerge:{survivor_id}:{pending['revision']}:{cid}",
+                                require_delivery=True,
+                            )
                         )
-                    )
             except Exception:
                 # Deletion is terminal even if it races processing or audio work;
                 # failures on a still-live donor retain the receipt for retry.

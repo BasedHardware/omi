@@ -10,7 +10,10 @@ from google.cloud import firestore
 
 from database import conversations as conversations_db
 from database._client import get_firestore_client, run_transactional
-from database.legal_holds import assert_no_destructive_operation_transaction
+from database.legal_holds import (
+    assert_no_destructive_operation_transaction,
+    assert_no_legal_hold_transaction,
+)
 from database.smart_merge import conversation_collection, decode_merge_row, audit_ref, merge_audit
 
 
@@ -33,7 +36,7 @@ def unmerge_transaction(
     dry_run: bool,
     now: datetime,
     suffix: Callable[[Mapping[str, Any], str], list[str]],
-    eligibility: Callable[[Mapping[str, Any], Sequence[Mapping[str, Any]]], str | None],
+    eligibility: Callable[..., str | None],
     payload: Callable[..., tuple[dict[str, Any], int]],
     audio_filenames: Mapping[str, Sequence[str]] | None = None,
     expected_donor_revisions: Mapping[str, Any] | None = None,
@@ -46,7 +49,11 @@ def unmerge_transaction(
     def undo(transaction) -> UnmergeResult:
         # The audit sibling this transaction writes is user-scoped data the
         # account-deletion wipe owns; never recreate it under a live wipe gate.
+        # An active legal hold without a running gate owns no gate document, so
+        # irreversible transcript surgery and its follow-up deletions must read
+        # the hold itself here as well.
         assert_no_destructive_operation_transaction(transaction, client, uid=uid)
+        assert_no_legal_hold_transaction(transaction, client, uid=uid)
         requested = collection.document(donor_id).get(transaction=transaction).to_dict() or {}
         donor_state = requested.get('smart_merge') or {}
         survivor_id = str(donor_state.get('survivor_id') or '')
@@ -79,7 +86,7 @@ def unmerge_transaction(
             row = collection.document(cid).get(transaction=transaction).to_dict() or {}
             donors.append(decode_merge_row(uid, dict(row, id=cid)))
             audits.append(audit_ref(client, uid, cid).get(transaction=transaction).to_dict())
-        reason = eligibility(survivor, [row for row, _ in donors])
+        reason = eligibility(survivor, donors, segments=segments)
         if reason is not None:
             return UnmergeResult('ineligible', reason, survivor_id, tuple(donor_ids))
         if not dry_run and (
@@ -163,7 +170,20 @@ def checkpoint_unmerge(
         row = ref.get(transaction=transaction).to_dict() or {}
         state = dict(row.get('smart_merge') or {})
         pending = dict(state.get('unmerge_pending') or {})
-        if row.get('deleted') or not pending or int(state.get('revision') or 0) != pending.get('revision'):
+        # A survivor deleted mid-follow-up deleted its visible copy, not the
+        # donors this receipt still owes first processing: converge the receipt
+        # (deletion of a restored donor is terminal) instead of stranding it.
+        if not row or row.get('deleted'):
+            if not pending:
+                return None
+            if not complete:
+                return pending
+            if int(state.get('revision') or 0) != pending.get('revision'):
+                return None
+            state.pop('unmerge_pending')
+            transaction.update(ref, {'smart_merge': state})
+            return pending
+        if not pending or int(state.get('revision') or 0) != pending.get('revision'):
             return None
         lease = pending.get('lease') or {}
         until = lease.get('until')

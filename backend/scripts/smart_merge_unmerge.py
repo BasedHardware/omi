@@ -13,6 +13,11 @@ from typing import Sequence
 from utils.conversations.smart_merge import unmerge_conversation
 from utils.executors import postprocess_executor
 
+# Tests substitute a raising stub: the real os._exit cannot be observed
+# in-process, and a SystemExit here would unwind the redirect context and
+# restore output during interpreter shutdown — the exact leak this guards.
+_HARD_EXIT = os._exit
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -45,7 +50,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 # action-item, goal and webhook work to the shared postprocess
                 # executor. Drain it before output is restored, or that work can
                 # print legacy/provider output after the closed JSON projection.
-                postprocess_executor.drain_submitted(timeout=600)
+                # If work is still running at the timeout, the only way to keep
+                # the projection closed is to stay suppressed: exit without
+                # restoring output (the process ends here anyway) so a hung
+                # provider task can never leak transcript content.
+                if not postprocess_executor.drain_submitted(timeout=600):
+                    _HARD_EXIT(1)
     except Exception:
         output = {'donor_id': args.donor_id, 'reason': 'error'}
         status = 1

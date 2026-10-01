@@ -18,7 +18,12 @@ def unmerge_suffix(survivor: Mapping[str, Any], donor_id: str) -> list[str]:
 
 
 def unmerge_ineligible(
-    survivor: Mapping[str, Any], donors: Sequence[Mapping[str, Any]], *, force: bool, now: datetime
+    survivor: Mapping[str, Any],
+    donors: Sequence[tuple[Mapping[str, Any], Sequence[Mapping[str, Any]]]],
+    *,
+    segments: Sequence[Mapping[str, Any]] = (),
+    force: bool,
+    now: datetime,
 ) -> str | None:
     if not survivor or survivor.get('deleted'):
         return 'survivor_missing_or_deleted'
@@ -38,7 +43,7 @@ def unmerge_ineligible(
         return 'survivor_user_modified'
     if not donors:
         return 'donor_not_in_ledger'
-    for donor in donors:
+    for donor, _ in donors:
         donor_state = smart_merge_state(donor)
         if donor_state.get('role') != 'donor' or donor_state.get('survivor_id') != survivor.get('id'):
             return 'donor_not_owned'
@@ -48,6 +53,41 @@ def unmerge_ineligible(
             return 'donor_cleanup_pending'
         if donor.get('sync_content_revision') is None:
             return 'donor_cleanup_pending'
+    reason = _post_merge_append(survivor, donors, segments)
+    if reason is not None:
+        return reason
+    return None
+
+
+def _post_merge_append(
+    survivor: Mapping[str, Any],
+    donors: Sequence[tuple[Mapping[str, Any], Sequence[Mapping[str, Any]]]],
+    segments: Sequence[Mapping[str, Any]],
+) -> str | None:
+    """Sync content appended after the last absorb is not in the ledger.
+
+    The sync bridge appends without segment ids, and the undo payload derives
+    the survivor's new extent from the retained ledger fragments. An id-less
+    segment starting beyond the merged extent (the last ledger fragment) can
+    therefore only be a post-merge append: its retention would leave the
+    transcript ending after the restored ``finished_at``, so reject the undo
+    instead of misdating the survivor. Id-less segments inside a donor window
+    are not appends (the window fallback owns them), and id-bearing foreign
+    ids are deliberately preserved by the surgery, so neither is rejected.
+    """
+    origin = survivor.get('started_at')
+    if not isinstance(origin, datetime) or not segments:
+        return None
+    fragments = ledger_fragments(survivor)
+    if not fragments:
+        return None
+    merged_until = max(fragment.finished_at for fragment in fragments).timestamp() - origin.timestamp()
+    for segment in segments:
+        sid, start = segment.get('id'), segment.get('start')
+        if sid:
+            continue
+        if isinstance(start, (int, float)) and start > merged_until + 1e-3:
+            return 'survivor_appended_content'
     return None
 
 

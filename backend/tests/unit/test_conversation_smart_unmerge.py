@@ -51,7 +51,16 @@ def world(monkeypatch):
         lambda uid, cid: world.rebuilt_audio.append(cid) or [],
     )
 
-    def process(uid, language, conversation, *, trigger, persistence_observer, smart_merge_refresh=None):
+    def process(
+        uid,
+        language,
+        conversation,
+        *,
+        trigger,
+        persistence_observer,
+        smart_merge_refresh=None,
+        derived_effects_disposition_observer=None,
+    ):
         if trigger is ProcessingTrigger.SMART_MERGE:
             return world.process(
                 uid,
@@ -66,6 +75,8 @@ def world(monkeypatch):
             raise world.process_error
         world.restored.append(conversation.id)
         persistence_observer(world.process_persisted)
+        if derived_effects_disposition_observer is not None:
+            derived_effects_disposition_observer(world.process_disposition)
         return conversation
 
     monkeypatch.setattr(smart_merge, 'process_conversation', process)
@@ -609,3 +620,122 @@ def test_unmerge_fenced_while_account_wipe_runs(world):
         smart_merge.unmerge_conversation(UID, 'n', dry_run=False)
     assert world.store.rows == before  # no partial undo, no audit resurrection
     assert not world.restored and not world.removed_audio
+
+
+def test_unmerge_fenced_while_legal_hold_active(world):
+    """An active hold without a running gate owns no gate document; the undo
+    transaction must read the hold itself before irreversible surgery."""
+    from database.legal_holds import LEGAL_HOLD_SCHEMA_VERSION
+
+    world.store.rows[('legal_holds', UID)] = {
+        'schema_version': LEGAL_HOLD_SCHEMA_VERSION,
+        'issuer': 'admin',
+        'active': True,
+        'updated_at': datetime.now(timezone.utc),
+    }
+    before = deepcopy(world.store.rows)
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        smart_merge.unmerge_conversation(UID, 'n', dry_run=False)
+    assert world.store.rows == before
+    assert not world.restored and not world.removed_audio
+
+
+def test_survivor_deleted_after_undo_converges_receipt(world):
+    """Deleting the survivor after the undo committed must not strand the
+    follow-up receipt: donors still get their first processing and the
+    receipt completes even though the survivor row is gone."""
+    world.process_error = RuntimeError('synthetic first failure')
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        smart_merge.unmerge_conversation(UID, 'n', dry_run=False)
+    assert world.raw('p')['smart_merge']['unmerge_pending']
+    world.raw('p')['deleted'] = True
+    world.process_error = None
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).outcome == 'ok'
+    assert 'unmerge_pending' not in world.raw('p')['smart_merge']
+    assert world.restored == ['n']  # donor first processing still ran
+    assert [item[0] for item in world.integrations] == ['n']  # restored donor is live: its integrations fire
+    assert 'n' in world.rebuilt_audio
+
+
+def test_paywalled_restored_donor_completes_without_derived_fanout(world, monkeypatch):
+    """A trial-paywalled account reports a terminal no-effects disposition;
+    the replay must treat the donor as processed, not retry forever or fan out."""
+
+    def process(uid, language, conversation, *, trigger, persistence_observer, smart_merge_refresh=None, **kwargs):
+        if trigger is ProcessingTrigger.SMART_MERGE:  # survivor refresh is not paywalled
+            persistence_observer(True)
+            return conversation
+        assert trigger is ProcessingTrigger.SMART_UNMERGE
+        world.restored.append(conversation.id)
+        persistence_observer(False)  # the paywall early-return reports not-owned
+        observer = kwargs.get('derived_effects_disposition_observer')
+        assert observer is not None
+        observer(smart_merge.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+        return conversation
+
+    monkeypatch.setattr(smart_merge, 'process_conversation', process)
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).outcome == 'ok'
+    assert 'unmerge_pending' not in world.raw('p')['smart_merge']
+    assert world.restored == ['n']
+    assert not world.integrations and 'n' not in world.rebuilt_audio
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).reason == 'already_unmerged'
+
+
+def test_donor_deleted_after_persistence_checkpoints_without_fanout(world, monkeypatch):
+    """A donor deleted between persistence and the post-read must checkpoint
+    as terminal instead of emitting derived effects for deleted content."""
+
+    def process(uid, language, conversation, *, trigger, persistence_observer, **kwargs):
+        if trigger is ProcessingTrigger.SMART_MERGE:  # survivor refresh is unaffected
+            persistence_observer(True)
+            return conversation
+        assert trigger is ProcessingTrigger.SMART_UNMERGE
+        world.restored.append(conversation.id)
+        persistence_observer(True)
+        kwargs.get('derived_effects_disposition_observer', lambda _d: None)(smart_merge.DerivedEffectsDisposition.RUN)
+        # Deleting after persistence but before the replay's post-read is the
+        # exact race the live-read fence covers.
+        world.raw('n')['deleted'] = True
+        return conversation
+
+    monkeypatch.setattr(smart_merge, 'process_conversation', process)
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).outcome == 'ok'
+    assert 'unmerge_pending' not in world.raw('p')['smart_merge']
+    assert world.restored == ['n']
+    assert not world.integrations and 'n' not in world.rebuilt_audio
+
+
+def test_post_merge_append_rejects_undo(world):
+    """Sync content appended after the last absorb (id-less, beyond the merged
+    extent) is not in the ledger; undo must reject instead of misdating."""
+    segments = world.transcript('p')
+    segments.append({'text': 'appended after merge', 'speaker': 'SPEAKER_00', 'start': 1000.0, 'end': 1006.0})
+    world.raw('p').update(
+        smart_merge.conversations_db.encode_conversation_for_write(UID, {'transcript_segments': segments}, 'enhanced')
+    )
+    before = deepcopy(world.store.rows)
+    result = smart_merge.unmerge_conversation(UID, 'n')
+    assert result.outcome == 'ineligible' and result.reason == 'survivor_appended_content'
+    assert world.store.rows == before
+    # An append that starts inside the merged extent is not provable; allowed.
+    segments[-1] = dict(segments[-1], start=300.0, end=660.0)
+    world.raw('p').update(
+        smart_merge.conversations_db.encode_conversation_for_write(UID, {'transcript_segments': segments}, 'enhanced')
+    )
+    assert smart_merge.unmerge_conversation(UID, 'n').outcome == 'dry_run'
+
+
+def test_cli_stays_suppressed_when_drain_times_out(world, monkeypatch, capsys):
+    """A hung postprocess task must not print after the closed projection:
+    the CLI hard-exits while output is still suppressed."""
+    monkeypatch.setattr(cli.postprocess_executor, 'drain_submitted', lambda timeout=None: False)
+
+    def hard_exit(code):
+        raise SystemExit(code)
+
+    monkeypatch.setattr(cli, '_HARD_EXIT', hard_exit)
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(['--uid', UID, '--donor-id', 'n'])
+    assert exit_info.value.code == 1
+    output = capsys.readouterr()
+    assert output.out == '' and output.err == ''
