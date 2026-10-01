@@ -19,6 +19,8 @@ BACKEND_ROOT = ROOT / 'backend'
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from database.firestore_index_registry import firebase_index_manifest  # noqa: E402
+from database.firestore_query_types import FieldIndexRequirement  # noqa: E402
+from scripts import firestore_field_indexes as field_indexes  # noqa: E402
 
 DEFAULT_DATABASE = '(default)'
 DEFAULT_TIMEOUT_SECONDS = 900.0
@@ -105,6 +107,10 @@ def verify_manifest_source(manifest_path: Path) -> dict[str, Any]:
     if loaded != generated:
         raise ValueError('firestore.indexes.json is not generated from the repository index registry')
     return generated
+
+
+def expected_field_requirements(manifest: Mapping[str, Any]) -> tuple[FieldIndexRequirement, ...]:
+    return field_indexes.expected_field_requirements(manifest)
 
 
 def gcloud_create_index_command(*, project: str, database: str, signature: IndexSignature) -> list[str]:
@@ -339,6 +345,10 @@ def _validate_proposal_ttl(ttl_seconds: int) -> None:
         raise ValueError(f'proposal TTL must be between 1 and {MAX_PROPOSAL_TTL_SECONDS} seconds')
 
 
+def _field_override_key(override: Mapping[str, Any]) -> tuple[str, str]:
+    return (override['collectionGroup'], override['fieldPath'])
+
+
 def write_schema_proposal(
     *,
     output_path: Path,
@@ -348,6 +358,7 @@ def write_schema_proposal(
     manifest: Mapping[str, Any],
     states: Mapping[IndexSignature, str],
     ttl_seconds: int,
+    field_states: Mapping[tuple[str, str], str] | None = None,
     clock: Clock = lambda: datetime.now(timezone.utc),
 ) -> dict[str, Any]:
     """Write a redacted, deterministic-input proposal for a human-approved follow-up."""
@@ -366,8 +377,23 @@ def write_schema_proposal(
     create_indexes = [
         signature_manifest_entry(signature) for signature, state in sorted(states.items()) if state == 'MISSING'
     ]
+    field_states = field_states or {}
+    overrides = {
+        _field_override_key(override): override
+        for override in manifest.get('fieldOverrides', [])
+        if isinstance(override, Mapping) and override.get('indexes')
+    }
+    unknown_fields = sorted(key for key in field_states if key not in overrides)
+    if unknown_fields:
+        raise ValueError(f'field states reference undeclared manifest overrides: {unknown_fields}')
+    blocking_field_indexes = [
+        {'override': overrides[key], 'state': field_states[key]}
+        for key in sorted(field_states)
+        if field_states[key] != 'READY'
+    ]
+    create_field_indexes = [overrides[key] for key in sorted(field_states) if field_states[key] == 'MISSING']
     plan_input = {
-        'schema_version': 1,
+        'schema_version': 2,
         'target': {'project': project, 'database': database},
         'source': {
             'commit': normalized_commit,
@@ -375,6 +401,8 @@ def write_schema_proposal(
         },
         'create_indexes': create_indexes,
         'blocking_indexes': blocking,
+        'create_field_indexes': create_field_indexes,
+        'blocking_field_indexes': blocking_field_indexes,
         'ttl_seconds': ttl_seconds,
     }
     created_at = clock()
@@ -462,6 +490,8 @@ def validate_schema_proposal(
             'source',
             'create_indexes',
             'blocking_indexes',
+            'create_field_indexes',
+            'blocking_field_indexes',
             'ttl_seconds',
             'input_sha256',
             'validity',
@@ -469,8 +499,8 @@ def validate_schema_proposal(
         },
         scope='proposal',
     )
-    if loaded['schema_version'] != 1:
-        raise ValueError('proposal schema_version must be 1')
+    if loaded['schema_version'] != 2:
+        raise ValueError('proposal schema_version must be 2')
     if loaded['kind'] != 'firestore-index-create-proposal' or loaded['status'] != 'BLOCKED':
         raise ValueError('proposal kind or status is invalid')
     if loaded['ttl_seconds'] != ttl_seconds:
@@ -494,8 +524,8 @@ def validate_schema_proposal(
 
     create_entries = loaded['create_indexes']
     blocking_entries = loaded['blocking_indexes']
-    if not isinstance(create_entries, list) or not isinstance(blocking_entries, list) or not blocking_entries:
-        raise ValueError('proposal must contain create_indexes and at least one blocking index')
+    if not isinstance(create_entries, list) or not isinstance(blocking_entries, list):
+        raise ValueError('proposal must contain create_indexes and blocking_indexes lists')
     create_signatures = [
         _validated_proposal_signature(entry, scope=f'create_indexes[{index}]')
         for index, entry in enumerate(create_entries)
@@ -530,6 +560,62 @@ def validate_schema_proposal(
     if set(create_signatures) != missing_signatures:
         raise ValueError('proposal create_indexes must exactly match the MISSING blocking signatures')
 
+    additive_hashes: dict[str, dict[str, Any]] = {}
+    for index, override in enumerate(manifest.get('fieldOverrides', [])):
+        if not isinstance(override, Mapping):
+            raise ValueError(f'manifest fieldOverrides[{index}] must be an object')
+        if isinstance(override.get('indexes'), list) and override['indexes']:
+            additive_hashes[_canonical_sha256(override)] = dict(override)
+
+    def _validated_proposal_field_override(value: Any, *, scope: str) -> dict[str, Any]:
+        if not isinstance(value, Mapping):
+            raise ValueError(f'{scope} must be a field override object')
+        hashed = _canonical_sha256(value)
+        if hashed not in additive_hashes:
+            raise ValueError(f'{scope} is not an additive field override in the approved manifest')
+        return additive_hashes[hashed]
+
+    create_field_entries = loaded['create_field_indexes']
+    blocking_field_entries = loaded['blocking_field_indexes']
+    if not isinstance(create_field_entries, list) or not isinstance(blocking_field_entries, list):
+        raise ValueError('proposal must contain create_field_indexes and blocking_field_indexes lists')
+    create_field_keys = [
+        _field_override_key(_validated_proposal_field_override(entry, scope=f'create_field_indexes[{index}]'))
+        for index, entry in enumerate(create_field_entries)
+    ]
+    if len(create_field_keys) != len(set(create_field_keys)):
+        raise ValueError('proposal create_field_indexes contains duplicates')
+
+    blocking_field_keys: list[tuple[str, str]] = []
+    missing_field_keys: set[tuple[str, str]] = set()
+    for index, entry in enumerate(blocking_field_entries):
+        if not isinstance(entry, Mapping):
+            raise ValueError(f'blocking_field_indexes[{index}] must be an object')
+        _require_exact_keys(entry, {'override', 'state'}, scope=f'blocking_field_indexes[{index}]')
+        override = _validated_proposal_field_override(
+            entry['override'], scope=f'blocking_field_indexes[{index}].override'
+        )
+        state = entry['state']
+        if (
+            not isinstance(state, str)
+            or not state
+            or state == 'READY'
+            or len(state) > 64
+            or state != state.upper()
+            or not state.replace('_', '').isalnum()
+        ):
+            raise ValueError(f'blocking_field_indexes[{index}].state must be a non-READY state')
+        key = _field_override_key(override)
+        blocking_field_keys.append(key)
+        if state == 'MISSING':
+            missing_field_keys.add(key)
+    if len(blocking_field_keys) != len(set(blocking_field_keys)):
+        raise ValueError('proposal blocking_field_indexes contains duplicates')
+    if set(create_field_keys) != missing_field_keys:
+        raise ValueError('proposal create_field_indexes must exactly match the MISSING blocking field overrides')
+    if not create_field_keys and not blocking_entries and not blocking_field_entries:
+        raise ValueError('proposal must contain at least one blocking index')
+
     validity = loaded['validity']
     if not isinstance(validity, Mapping):
         raise ValueError('proposal validity must be an object')
@@ -555,6 +641,8 @@ def validate_schema_proposal(
             'source',
             'create_indexes',
             'blocking_indexes',
+            'create_field_indexes',
+            'blocking_field_indexes',
             'ttl_seconds',
         )
     }
@@ -566,16 +654,35 @@ def validate_schema_proposal(
     return loaded
 
 
+def live_field_requirement_states(
+    *,
+    requirements: Iterable,
+    project: str,
+    database: str,
+    field_request,
+) -> dict[tuple[str, str], str]:
+    """Read each additive field requirement's live state through the REST seam."""
+
+    return field_indexes.expected_field_states(
+        requirements=tuple(requirements),
+        project=project,
+        database=database,
+        request=field_request,
+    )
+
+
 def check_indexes_and_write_proposal(
     *,
     expected: Iterable[IndexSignature],
     manifest: Mapping[str, Any],
+    field_requirements: Iterable = (),
     project: str,
     database: str,
     proposal_output: Path,
     source_commit: str,
     proposal_ttl_seconds: int,
     runner: CommandRunner = subprocess.run,
+    field_request=field_indexes.field_api_request,
     clock: Clock = lambda: datetime.now(timezone.utc),
 ) -> None:
     """Check one live snapshot and emit a bounded proposal when readiness fails."""
@@ -589,9 +696,19 @@ def check_indexes_and_write_proposal(
         database=database,
     )
     report_unmanaged_live_indexes(expected=expected_set, live_indexes=live_indexes)
+    field_states = live_field_requirement_states(
+        requirements=field_requirements,
+        project=project,
+        database=database,
+        field_request=field_request,
+    )
     pending = {signature: state for signature, state in states.items() if state != 'READY'}
-    if not pending:
-        print(f'Firestore index readiness passed: {len(expected_set)} composite indexes READY')
+    pending_fields = {key: state for key, state in field_states.items() if state != 'READY'}
+    if not pending and not pending_fields:
+        print(
+            f'Firestore index readiness passed: {len(expected_set)} composite indexes '
+            f'and {len(field_states)} field overrides READY'
+        )
         return
 
     write_schema_proposal(
@@ -601,11 +718,16 @@ def check_indexes_and_write_proposal(
         source_commit=source_commit,
         manifest=manifest,
         states=states,
+        field_states=field_states,
         ttl_seconds=proposal_ttl_seconds,
         clock=clock,
     )
     details = '; '.join(f'{format_signature(signature)}={state}' for signature, state in sorted(pending.items()))
-    raise RuntimeError(f'Firestore index readiness failed; proposal written to {proposal_output}: {details}')
+    field_details = '; '.join(f'{key[0]}.{key[1]}={state}' for key, state in sorted(pending_fields.items()))
+    message = f'Firestore index readiness failed; proposal written to {proposal_output}: {details}'
+    if field_details:
+        message = f'{message}; fields: {field_details}'
+    raise RuntimeError(message)
 
 
 def missing_index_signatures(
@@ -667,7 +789,9 @@ def wait_for_indexes(
     timeout_seconds: float,
     poll_interval_seconds: float,
     allow_implicit_terminal_document_id_alias: bool = False,
+    field_requirements: Iterable = (),
     runner: CommandRunner = subprocess.run,
+    field_request=field_indexes.field_api_request,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> None:
@@ -676,6 +800,7 @@ def wait_for_indexes(
     if poll_interval_seconds <= 0:
         raise ValueError('poll_interval_seconds must be positive')
     expected_set = set(expected)
+    field_requirements = tuple(field_requirements)
     deadline = monotonic() + timeout_seconds
     while True:
         states = expected_index_states(
@@ -694,14 +819,28 @@ def wait_for_indexes(
             for signature in expected_set
             if states.get(signature) != 'READY'
         }
-        if not pending:
-            print(f'Firestore index readiness passed: {len(expected_set)} composite indexes READY')
+        field_states = live_field_requirement_states(
+            requirements=field_requirements,
+            project=project,
+            database=database,
+            field_request=field_request,
+        )
+        pending_fields = {key: state for key, state in field_states.items() if state != 'READY'}
+        if not pending and not pending_fields:
+            print(
+                f'Firestore index readiness passed: {len(expected_set)} composite indexes '
+                f'and {len(field_states)} field overrides READY'
+            )
             return
         if monotonic() >= deadline:
             details = '; '.join(
                 f'{format_signature(signature)}={state}' for signature, state in sorted(pending.items())
             )
-            raise RuntimeError(f'Firestore indexes did not become READY before timeout: {details}')
+            field_details = '; '.join(f'{key[0]}.{key[1]}={state}' for key, state in sorted(pending_fields.items()))
+            message = f'Firestore indexes did not become READY before timeout: {details}'
+            if field_details:
+                message = f'{message}; fields: {field_details}'
+            raise RuntimeError(message)
         sleep(poll_interval_seconds)
 
 
@@ -719,6 +858,7 @@ def reconcile(
     source_commit: str | None = None,
     proposal_ttl_seconds: int = DEFAULT_PROPOSAL_TTL_SECONDS,
     runner: CommandRunner = subprocess.run,
+    field_request=field_indexes.field_api_request,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
     clock: Clock = lambda: datetime.now(timezone.utc),
@@ -734,6 +874,7 @@ def reconcile(
         raise ValueError('--proposal-output and --source-commit require --check-only')
     manifest = verify_manifest_source(manifest_path)
     expected = expected_index_signatures(manifest)
+    field_requirements = expected_field_requirements(manifest)
     if dry_run:
         live_indexes = list_live_indexes(
             project=project,
@@ -748,6 +889,14 @@ def reconcile(
         )
         for signature in sorted(missing):
             print(f'Firestore index provisioning dry run: would create {format_signature(signature)}')
+        field_states = live_field_requirement_states(
+            requirements=field_requirements,
+            project=project,
+            database=database,
+            field_request=field_request,
+        )
+        for key, state in sorted(field_states.items()):
+            print(f'Firestore field override dry run: {key[0]}.{key[1]} is {state}')
         report_unmanaged_live_indexes(expected=expected, live_indexes=live_indexes)
         return
     if check_only:
@@ -755,24 +904,38 @@ def reconcile(
         check_indexes_and_write_proposal(
             expected=expected,
             manifest=manifest,
+            field_requirements=field_requirements,
             project=project,
             database=database,
             proposal_output=proposal_output,
             source_commit=source_commit,
             proposal_ttl_seconds=proposal_ttl_seconds,
             runner=runner,
+            field_request=field_request,
             clock=clock,
         )
         return
     if provision_missing:
         provision_missing_indexes(expected=expected, project=project, database=database, runner=runner)
+        field_indexes.provision_field_requirements(
+            requirements=field_requirements,
+            project=project,
+            database=database,
+            request=field_request,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+            sleep=sleep,
+            monotonic=monotonic,
+        )
     wait_for_indexes(
         expected=expected,
+        field_requirements=field_requirements,
         project=project,
         database=database,
         timeout_seconds=timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,
         runner=runner,
+        field_request=field_request,
         sleep=sleep,
         monotonic=monotonic,
     )

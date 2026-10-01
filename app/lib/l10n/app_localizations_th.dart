@@ -3941,9 +3941,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'มีเวอร์ชันใหม่';
-
-  @override
   String get no => 'ไม่';
 
   @override
@@ -5023,7 +5020,7 @@ class AppLocalizationsTh extends AppLocalizations {
       'เมื่อดำเนินการต่อ การสนทนา การบันทึก และข้อมูลส่วนบุคคลของคุณจะถูกจัดเก็บอย่างปลอดภัยบนเซิร์ฟเวอร์ของเรา การบันทึกเสียงและการถอดความของคุณจะถูกประมวลผลโดยบริการ AI ของบุคคลที่สาม (รวมถึง Deepgram สำหรับการถอดความ และ OpenAI สำหรับการวิเคราะห์) เพื่อมอบข้อมูลเชิงลึกที่ขับเคลื่อนด้วย AI และเปิดใช้งานคุณสมบัติทั้งหมดของแอป';
 
   @override
-  String get tasksEmptyStateMessage => 'งานจากการสนทนาของคุณจะปรากฏที่นี่\nแตะ + เพื่อสร้างด้วยตนเอง';
+  String get tasksEmptyStateMessage => 'เริ่มการสนทนาเพื่อสร้างงาน';
 
   @override
   String get clearChatAction => 'ล้างแชท';
@@ -12046,6 +12043,44 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ผู้พูด $count คน',
+      one: 'ผู้พูด 1 คน',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'เปิด Omi ใน คำสั่งลัด → Siri พูดว่า “$askPhrase” หรือ “$questionPhrase” แล้วพูดคำถามของคุณ';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' คุณยังสามารถพูดว่า “$searchPhrase for what I did today” ได้อีกด้วย';
+  }
+
+  @override
+  String get updateAvailableTitle => 'มีอัปเดตใหม่';
+
+  @override
+  String get updateAvailableMessage => 'Omi เวอร์ชันใหม่พร้อมแล้ว พร้อมการแก้ไขและการปรับปรุง';
+
+  @override
+  String get updateRequiredTitle => 'ต้องอัปเดต';
+
+  @override
+  String get updateRequiredMessage => 'Omi เวอร์ชันนี้ไม่รองรับแล้ว อัปเดตเพื่อบันทึกและซิงค์ต่อ';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'จำนวนบรรทัดที่ติดป้ายชื่อ: $count';
+  }
+
+  @override
   String speakerLabelVoiceStatus(String state) {
     String _temp0 = intl.Intl.selectLogic(
       state,
@@ -12074,6 +12109,11 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'การสนทนาก่อนหน้าที่มีเสียงนี้: $count';
+  }
+
+  @override
   String speakerLabelText(String part, String name) {
     String _temp0 = intl.Intl.selectLogic(
       part,
@@ -12095,15 +12135,5 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return '$duration ของเสียงนี้';
-  }
-
-  @override
-  String speakerLabelLinesLabeled(int count) {
-    return 'จำนวนบรรทัดที่ติดป้ายชื่อ: $count';
-  }
-
-  @override
-  String speakerLabelEarlierMatches(int count) {
-    return 'การสนทนาก่อนหน้าที่มีเสียงนี้: $count';
   }
 }

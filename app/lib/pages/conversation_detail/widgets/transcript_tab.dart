@@ -8,11 +8,14 @@ import 'package:omi/backend/http/api/conversations.dart' show assignBulkConversa
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_sheet.dart';
+import 'package:omi/pages/conversation_detail/widgets.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/edit_segment_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_summary_action.dart';
@@ -316,11 +319,47 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                     editSegment: (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
                     onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
                     onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
+                    startedAt: conversation.startedAt ?? conversation.createdAt,
+                    leadingItems: [if (segments.isNotEmpty) _TranscriptHeading(conversation: conversation)],
+                    leadingItemIds: [if (segments.isNotEmpty) 'transcript-heading'],
                   ),
                 ),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// "Transcript · 14m · 2 speakers" over the lines (Omi v8 transcript heading): the length by the
+/// list row's rule, and how many voices took part, counting the owner once.
+class _TranscriptHeading extends StatelessWidget {
+  const _TranscriptHeading({required this.conversation});
+
+  final ServerConversation conversation;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final voices = {
+      for (final segment in conversation.transcriptSegments) segment.isUser ? 'owner' : 'speaker-${segment.speakerId}',
+    };
+    final duration = conversationDurationLabel(conversation, l10n);
+    final label = [
+      l10n.transcript,
+      if (duration.isNotEmpty) duration,
+      l10n.transcriptSpeakerCount(voices.length),
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(top: 18, bottom: 18),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: ConversationDetailChip(
+          key: const Key('conversation_transcript_heading'),
+          icon: const Icon(Icons.notes),
+          label: label,
         ),
       ),
     );

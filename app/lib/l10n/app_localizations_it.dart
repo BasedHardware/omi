@@ -3988,9 +3988,6 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Nuova versione disponibile';
-
-  @override
   String get no => 'No';
 
   @override
@@ -5084,8 +5081,7 @@ class AppLocalizationsIt extends AppLocalizations {
       'Continuando, le tue conversazioni, registrazioni e informazioni personali saranno archiviate in modo sicuro sui nostri server. Le tue registrazioni audio e trascrizioni vengono elaborate da servizi AI di terze parti (inclusi Deepgram per la trascrizione e OpenAI per l\'analisi) per fornirti approfondimenti basati sull\'AI e abilitare tutte le funzionalità dell\'app.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Le attività dalle tue conversazioni appariranno qui.\nTocca + per crearne una manualmente.';
+  String get tasksEmptyStateMessage => 'Avvia una conversazione per creare un\'attività.';
 
   @override
   String get clearChatAction => 'Cancella chat';
@@ -12182,6 +12178,45 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count interlocutori',
+      one: '1 interlocutore',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Attiva Omi in Comandi rapidi → Siri. Dì “$askPhrase” o “$questionPhrase”, poi fai la tua domanda.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Puoi anche dire “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Aggiornamento disponibile';
+
+  @override
+  String get updateAvailableMessage => 'È pronta una nuova versione di Omi, con correzioni e miglioramenti.';
+
+  @override
+  String get updateRequiredTitle => 'Aggiornamento necessario';
+
+  @override
+  String get updateRequiredMessage =>
+      'Questa versione di Omi non è più supportata. Aggiorna per continuare a registrare e sincronizzare.';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Righe etichettate: $count';
+  }
+
+  @override
   String speakerLabelVoiceStatus(String state) {
     String _temp0 = intl.Intl.selectLogic(
       state,
@@ -12210,6 +12245,11 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Conversazioni precedenti con questa voce: $count';
+  }
+
+  @override
   String speakerLabelText(String part, String name) {
     String _temp0 = intl.Intl.selectLogic(
       part,
@@ -12231,15 +12271,5 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return '$duration di questa voce';
-  }
-
-  @override
-  String speakerLabelLinesLabeled(int count) {
-    return 'Righe etichettate: $count';
-  }
-
-  @override
-  String speakerLabelEarlierMatches(int count) {
-    return 'Conversazioni precedenti con questa voce: $count';
   }
 }

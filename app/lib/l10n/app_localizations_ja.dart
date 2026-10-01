@@ -3902,9 +3902,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => '新しいバージョンが利用可能です';
-
-  @override
   String get no => 'いいえ';
 
   @override
@@ -4958,7 +4955,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。';
 
   @override
-  String get tasksEmptyStateMessage => '会話からのタスクがここに表示されます。\n手動で作成するには + をタップしてください。';
+  String get tasksEmptyStateMessage => '会話を始めてタスクを作成しましょう。';
 
   @override
   String get clearChatAction => 'チャットを消去';
@@ -11918,6 +11915,44 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '話者 $count人',
+      one: '話者 1人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'ショートカット→SiriでOmiをオンにします。「$askPhrase」または「$questionPhrase」と言ってから、質問を話してください。';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' 「$searchPhrase for what I did today」と言うこともできます。';
+  }
+
+  @override
+  String get updateAvailableTitle => 'アップデートがあります';
+
+  @override
+  String get updateAvailableMessage => 'Omiの新しいバージョンが利用できます。不具合の修正と改善が含まれています。';
+
+  @override
+  String get updateRequiredTitle => 'アップデートが必要です';
+
+  @override
+  String get updateRequiredMessage => 'このバージョンのOmiはサポートが終了しました。録音と同期を続けるにはアップデートしてください。';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'ラベルを付けた行数：$count';
+  }
+
+  @override
   String speakerLabelVoiceStatus(String state) {
     String _temp0 = intl.Intl.selectLogic(
       state,
@@ -11946,6 +11981,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'この声の過去の会話数：$count';
+  }
+
+  @override
   String speakerLabelText(String part, String name) {
     String _temp0 = intl.Intl.selectLogic(
       part,
@@ -11967,15 +12007,5 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
-  }
-
-  @override
-  String speakerLabelLinesLabeled(int count) {
-    return 'ラベルを付けた行数：$count';
-  }
-
-  @override
-  String speakerLabelEarlierMatches(int count) {
-    return 'この声の過去の会話数：$count';
   }
 }

@@ -3976,9 +3976,6 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Nova verzija je dostupna';
-
-  @override
   String get no => 'Ne';
 
   @override
@@ -5065,8 +5062,7 @@ class AppLocalizationsBs extends AppLocalizations {
       'Nastavljanjem, vaši razgovori, snimke i lični podaci bit će sigurno pohranjeni na našim serverima. Vaši audio zapisi i transkripti se obrađuju od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane vještačkom inteligencijom i omogućili sve funkcije aplikacije.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Zadaci iz vaših razgovora će se pojaviti ovdje.\nDodirnite + da ga kreirate ručno.';
+  String get tasksEmptyStateMessage => 'Započnite razgovor da kreirate zadatak.';
 
   @override
   String get clearChatAction => 'Očisti razgovor';
@@ -12144,6 +12140,45 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Govornika: $count',
+      one: '1 govornik',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Uključite Omi u Prečice → Siri. Recite „$askPhrase“ ili „$questionPhrase“, a zatim postavite pitanje.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Možete reći i „$searchPhrase for what I did today“.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Dostupno je ažuriranje';
+
+  @override
+  String get updateAvailableMessage => 'Nova verzija Omija je spremna, s ispravkama i poboljšanjima.';
+
+  @override
+  String get updateRequiredTitle => 'Potrebno je ažuriranje';
+
+  @override
+  String get updateRequiredMessage =>
+      'Ova verzija Omija više nije podržana. Ažurirajte da biste nastavili snimati i sinhronizovati.';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Označeni redovi: $count';
+  }
+
+  @override
   String speakerLabelVoiceStatus(String state) {
     String _temp0 = intl.Intl.selectLogic(
       state,
@@ -12172,6 +12207,11 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Raniji razgovori s ovim glasom: $count';
+  }
+
+  @override
   String speakerLabelText(String part, String name) {
     String _temp0 = intl.Intl.selectLogic(
       part,
@@ -12193,15 +12233,5 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
-  }
-
-  @override
-  String speakerLabelLinesLabeled(int count) {
-    return 'Označeni redovi: $count';
-  }
-
-  @override
-  String speakerLabelEarlierMatches(int count) {
-    return 'Raniji razgovori s ovim glasom: $count';
   }
 }

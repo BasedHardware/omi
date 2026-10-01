@@ -444,6 +444,14 @@ jobs:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           set -euo pipefail
-          python3 .github/scripts/ensure_firestore_missing_index_alert.py \
+          test -n "${DEPLOY_WORKFLOW_ROOT:-}" || {
+            echo "DEPLOY_WORKFLOW_ROOT is not set; cannot run the workflow-owned missing-index alert script." >&2
+            exit 1
+          }
+          test -f "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" || {
+            echo "Workflow-owned missing-index alert script not found under $DEPLOY_WORKFLOW_ROOT/.github/scripts." >&2
+            exit 1
+          }
+          python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" \
             --project "$PROJECT_ID" \
             --notification-channels "$ALERT_CHANNELS"

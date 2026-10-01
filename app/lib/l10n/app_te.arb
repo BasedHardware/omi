@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "కొత్త సంస్కరణ లభ్యమైంది",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "లేదు",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "మీ సంభాషణల నుండి చర్యలు ఇక్కడ కనిపిస్తాయి.\n+ నిర్ణయం చేయడానికి ట్యాప్ చేయండి.",
+    "tasksEmptyStateMessage": "పనిని సృష్టించడానికి సంభాషణను ప్రారంభించండి.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11326,10 +11322,17 @@
     "collapseAction": "కుదించు",
     "speakerTagPromptNotMeAction": "నేను కాదు",
     "confidenceNextLabels": "{count, plural, =1{ఇంకా 1 సంభాషణలో వారికి లేబుల్ చేయండి.} other{ఇంకా {count} సంభాషణల్లో వారికి లేబుల్ చేయండి.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 వక్త} other{{count} వక్తలు}}",
+    "siriShortcutsSetupHint": "షార్ట్‌కట్స్ → Siri లో Omi ని ఆన్ చేయండి. “{askPhrase}” లేదా “{questionPhrase}” అని చెప్పి, ఆపై మీ ప్రశ్న అడగండి.",
+    "siriShortcutsSearchHint": " మీరు “{searchPhrase} for what I did today” అని కూడా చెప్పవచ్చు.",
+    "updateAvailableTitle": "అప్‌డేట్ అందుబాటులో ఉంది",
+    "updateAvailableMessage": "Omi కొత్త వెర్షన్ సిద్ధంగా ఉంది, సవరణలు మరియు మెరుగుదలలతో.",
+    "updateRequiredTitle": "అప్‌డేట్ అవసరం",
+    "updateRequiredMessage": "Omi యొక్క ఈ వెర్షన్‌కు ఇకపై మద్దతు లేదు. రికార్డింగ్ మరియు సింక్ కొనసాగించడానికి అప్‌డేట్ చేయండి.",
+    "speakerLabelLinesLabeled": "లేబుల్ వేసిన లైన్లు: {count}",
     "speakerLabelVoiceStatus": "{state, select, learned{వాయిస్ నేర్చుకుంది} pending{వాయిస్‌ను నేర్చుకుంటోంది…} disabled{వాయిస్ సేవింగ్ ఆఫ్‌లో ఉంది} other{వాయిస్ ఇంకా నేర్చుకోలేదు}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi వచ్చే సారి {name} ను గుర్తిస్తుంది.} pending{దీనికి కొన్ని సెకన్లు పడుతుంది.} disabled{Omi {name} ను గుర్తించేందుకు సెట్టింగ్‌లలో వాయిస్ సేవింగ్ ఆన్ చేయండి.} other{Omi కి {name} యొక్క మరింత స్పష్టమైన మాట అవసరం, అది ప్రయత్నిస్తూనే ఉంటుంది.}}",
+    "speakerLabelEarlierMatches": "ఈ వాయిస్‌తో మునుపటి సంభాషణలు: {count}",
     "speakerLabelText": "{part, select, likely{అవకాశం} soundsLike{{name} లాగా వినిపిస్తోంది} notPerson{{name} కాదు} carried{ఇప్పటికీ {name}. మీ చివరి సంభాషణ నుండి కొనసాగింది.} change{మార్చండి} alsoTitle{ఇది కూడా {name} యేనా?} alsoBody{Omi మునుపటి సంభాషణల్లో ఇదే వాయిస్‌ను కనుగొంది.} confirmed{మీరు ఈ లేబుల్‌ను నిర్ధారించారు} other{సమీక్షించండి}}",
-    "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}",
-    "speakerLabelLinesLabeled": "లేబుల్ వేసిన లైన్లు: {count}",
-    "speakerLabelEarlierMatches": "ఈ వాయిస్‌తో మునుపటి సంభాషణలు: {count}"
+    "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}"
 }

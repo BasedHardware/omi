@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "גרסה חדשה זמינה",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "לא",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "משימות משיחותיך יופיעו כאן.\nלחץ + כדי ליצור אחת ידנית.",
+    "tasksEmptyStateMessage": "התחילו שיחה כדי ליצור משימה.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11326,10 +11322,17 @@
     "collapseAction": "כווץ",
     "speakerTagPromptNotMeAction": "לא אני",
     "confidenceNextLabels": "{count, plural, =1{תייגו אותם בעוד שיחה 1.} other{תייגו אותם בעוד {count} שיחות.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{דובר אחד} other{{count} דוברים}}",
+    "siriShortcutsSetupHint": "הפעילו את Omi בקיצורי דרך ← Siri. אמרו “{askPhrase}” או “{questionPhrase}” ואז שאלו את השאלה.",
+    "siriShortcutsSearchHint": " ואפשר גם לומר “{searchPhrase} for what I did today”.",
+    "updateAvailableTitle": "יש עדכון זמין",
+    "updateAvailableMessage": "גרסה חדשה של Omi מוכנה, עם תיקונים ושיפורים.",
+    "updateRequiredTitle": "נדרש עדכון",
+    "updateRequiredMessage": "הגרסה הזו של Omi כבר לא נתמכת. יש לעדכן כדי להמשיך להקליט ולסנכרן.",
+    "speakerLabelLinesLabeled": "שורות שסומנו: {count}",
     "speakerLabelVoiceStatus": "{state, select, learned{הקול נלמד} pending{לומד את הקול…} disabled{שמירת קול כבויה} other{הקול עדיין לא נלמד}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi יזהה את {name} בפעם הבאה.} pending{זה לוקח כמה שניות.} disabled{הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את {name}.} other{Omi צריך עוד דיבור ברור של {name} וימשיך לנסות.}}",
+    "speakerLabelEarlierMatches": "שיחות קודמות עם הקול הזה: {count}",
     "speakerLabelText": "{part, select, likely{סביר} soundsLike{נשמע כמו {name}} notPerson{לא {name}} carried{עדיין {name}. הועבר מהשיחה האחרונה שלך.} change{שינוי} alsoTitle{האם זה גם {name}?} alsoBody{Omi מצא את אותו קול בשיחות קודמות.} confirmed{אישרת את התווית הזו} other{סקירה}}",
-    "speakerLabelTalkTime": "{duration} מהקול הזה",
-    "speakerLabelLinesLabeled": "שורות שסומנו: {count}",
-    "speakerLabelEarlierMatches": "שיחות קודמות עם הקול הזה: {count}"
+    "speakerLabelTalkTime": "{duration} מהקול הזה"
 }

@@ -3969,9 +3969,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'K dispozícii je nová verzia';
-
-  @override
   String get no => 'Nie';
 
   @override
@@ -5049,8 +5046,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch. Vaše audio nahrávky a prepisy sú spracovávané AI službami tretích strán (vrátane Deepgram na prepis a OpenAI na analýzu), aby vám poskytli poznatky založené na AI a umožnili všetky funkcie aplikácie.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Úlohy z vašich konverzácií sa zobrazia tu.\nKlepnite na + pre manuálne vytvorenie.';
+  String get tasksEmptyStateMessage => 'Začnite konverzáciu a vytvorte úlohu.';
 
   @override
   String get clearChatAction => 'Vymazať chat';
@@ -12106,6 +12102,45 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hovoriaci: $count',
+      one: '1 hovoriaci',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Zapnite Omi v Skratkách → Siri. Povedzte „$askPhrase“ alebo „$questionPhrase“ a potom položte svoju otázku.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Môžete povedať aj „$searchPhrase for what I did today“.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'K dispozícii je aktualizácia';
+
+  @override
+  String get updateAvailableMessage => 'Nová verzia Omi je pripravená, s opravami a vylepšeniami.';
+
+  @override
+  String get updateRequiredTitle => 'Vyžaduje sa aktualizácia';
+
+  @override
+  String get updateRequiredMessage =>
+      'Táto verzia Omi už nie je podporovaná. Aktualizujte ju, aby ste mohli ďalej nahrávať a synchronizovať.';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Označené riadky: $count';
+  }
+
+  @override
   String speakerLabelVoiceStatus(String state) {
     String _temp0 = intl.Intl.selectLogic(
       state,
@@ -12134,6 +12169,11 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Predchádzajúce rozhovory s týmto hlasom: $count';
+  }
+
+  @override
   String speakerLabelText(String part, String name) {
     String _temp0 = intl.Intl.selectLogic(
       part,
@@ -12155,15 +12195,5 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return '$duration tohto hlasu';
-  }
-
-  @override
-  String speakerLabelLinesLabeled(int count) {
-    return 'Označené riadky: $count';
-  }
-
-  @override
-  String speakerLabelEarlierMatches(int count) {
-    return 'Predchádzajúce rozhovory s týmto hlasom: $count';
   }
 }

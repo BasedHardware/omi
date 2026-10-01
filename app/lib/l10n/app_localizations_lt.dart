@@ -3965,9 +3965,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Galima nauja versija';
-
-  @override
   String get no => 'Ne';
 
   @override
@@ -5052,8 +5049,7 @@ class AppLocalizationsLt extends AppLocalizations {
       'Tęsdami, jūsų pokalbiai, įrašai ir asmeninė informacija bus saugiai saugomi mūsų serveriuose. Jūsų garso įrašai ir transkripcijos apdorojami trečiųjų šalių AI paslaugų (įskaitant Deepgram transkripcijai ir OpenAI analizei), kad suteiktų jums AI paremtas įžvalgas ir įgalintų visas programėlės funkcijas.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Užduotys iš jūsų pokalbių bus rodomos čia.\nBakstelėkite + norėdami sukurti rankiniu būdu.';
+  String get tasksEmptyStateMessage => 'Pradėkite pokalbį, kad sukurtumėte užduotį.';
 
   @override
   String get clearChatAction => 'Išvalyti pokalbį';
@@ -12133,6 +12129,45 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kalbėtojų: $count',
+      one: '1 kalbėtojas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Įjunkite Omi skyriuje Sparčieji klavišai → Siri. Pasakykite „$askPhrase“ arba „$questionPhrase“, tada užduokite savo klausimą.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Taip pat galite pasakyti „$searchPhrase for what I did today“.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Yra naujinys';
+
+  @override
+  String get updateAvailableMessage => 'Nauja Omi versija paruošta – su pataisymais ir patobulinimais.';
+
+  @override
+  String get updateRequiredTitle => 'Būtina atnaujinti';
+
+  @override
+  String get updateRequiredMessage =>
+      'Ši Omi versija nebepalaikoma. Atnaujinkite, kad galėtumėte toliau įrašyti ir sinchronizuoti.';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Pažymėtos eilutės: $count';
+  }
+
+  @override
   String speakerLabelVoiceStatus(String state) {
     String _temp0 = intl.Intl.selectLogic(
       state,
@@ -12161,6 +12196,11 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Ankstesni pokalbiai su šiuo balsu: $count';
+  }
+
+  @override
   String speakerLabelText(String part, String name) {
     String _temp0 = intl.Intl.selectLogic(
       part,
@@ -12182,15 +12222,5 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
-  }
-
-  @override
-  String speakerLabelLinesLabeled(int count) {
-    return 'Pažymėtos eilutės: $count';
-  }
-
-  @override
-  String speakerLabelEarlierMatches(int count) {
-    return 'Ankstesni pokalbiai su šiuo balsu: $count';
   }
 }

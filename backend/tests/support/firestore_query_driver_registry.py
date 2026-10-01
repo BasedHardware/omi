@@ -20,6 +20,7 @@ from tests.support.firestore_query_drivers import (
     FROZEN_NOW,
     FROZEN_TODAY,
     SHAPE_UID,
+    CallerProfile,
     CoveredByEntry,
     DriverEntry,
     SkipEntry,
@@ -29,6 +30,7 @@ from tests.support.firestore_query_drivers import (
     ref_transaction,
 )
 from tests.support.firestore_conversation_profiles import COUNT_PROFILES, PHOTO_PROFILES, WITHOUT_PHOTOS_PROFILES
+from tests.support import firestore_outside_query_drivers as outside_drivers
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -428,8 +430,14 @@ _add(
     DriverEntry(
         'database.candidates.list_candidates',
         base={'uid': UID},
-        domains={'status': [None] + list(CandidateStatus), 'account_generation': [None, 1]},
         neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+        profiles=(
+            CallerProfile(
+                'candidate-list',
+                {'status': [None] + list(CandidateStatus), 'account_generation': [0, 1]},
+            ),
+            CallerProfile('candidate-suggested', {'status': [None], 'account_generation': [0, 1]}),
+        ),
     )
 )
 
@@ -1444,14 +1452,30 @@ _add(
     DriverEntry(
         'database.memories.get_memories',
         base={'uid': UID},
-        domains={
-            'categories': [[], ['one'], ['one', 'two']],
-            'start_date': [None, T0],
-            'end_date': [None, T1],
-            'include_invalidated': [False, True],
-            'sort': ['scoring_desc', 'updated_desc', 'updated_at_desc', 'updated_or_created_desc'],
-        },
         neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+        profiles=(
+            CallerProfile(
+                'legacy-scoring',
+                {
+                    'categories': [[]],
+                    'start_date': [None],
+                    'end_date': [None],
+                    'include_invalidated': [False],
+                    'sort': ['scoring_desc'],
+                },
+            ),
+            CallerProfile(
+                'exploratory-updated-sorts',
+                {
+                    'categories': [[]],
+                    'start_date': [None],
+                    'end_date': [None],
+                    'include_invalidated': [False],
+                    'sort': ['updated_desc', 'updated_at_desc', 'updated_or_created_desc'],
+                },
+                serving=False,
+            ),
+        ),
     )
 )
 _add(DriverEntry('database.memories.get_memories_to_migrate', base={'uid': UID, 'target_level': 'level-2'}))
@@ -1471,13 +1495,13 @@ _add(
     DriverEntry(
         'database.memories.list_memory_updated_or_created_index',
         base={'uid': UID},
-        domains={
-            'categories': [[], ['one'], ['one', 'two']],
-            'start_date': [None, T0],
-            'end_date': [None, T1],
-            'include_invalidated': [False, True],
-        },
         neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
+        profiles=(
+            CallerProfile(
+                'historical-dual-window',
+                {'categories': [[]], 'start_date': [None], 'end_date': [None], 'include_invalidated': [False]},
+            ),
+        ),
     )
 )
 _add(
@@ -1592,8 +1616,8 @@ _add(
     DriverEntry(
         'database.memory_vector_repair_outbox_worker.lease_vector_repair_purge_outbox_records',
         base={'uid': UID, 'worker_id': 'worker-1'},
-        domains={'now': [None, T0]},
         neutrals={'limit': (25, 'lease bound; fixed'), 'lease_seconds': (300, 'lease ttl; payload')},
+        profiles=(CallerProfile('unwired-vector-repair-pending-and-expired', {'now': [None, T0]}, serving=False),),
     )
 )
 _add(
@@ -1606,7 +1630,7 @@ _add(
             'vector_deleter': noop,
             'vector_repairer': noop,
         },
-        domains={'now': [None, T0]},
+        profiles=(CallerProfile('unwired-vector-repair-pending-and-expired', {'now': [None, T0]}, serving=False),),
         neutrals={
             'telemetry_emitter': (None, 'optional telemetry callback; not filter-affecting'),
             'telemetry_config': (None, 'optional telemetry config; not filter-affecting'),
@@ -2290,3 +2314,6 @@ _add(
         'when a retryable failure row has no transcript text',
     )
 )
+
+for entry in (*outside_drivers.DRIVERS.values(), *outside_drivers.COVERED_BY.values(), *outside_drivers.SKIPS.values()):
+    _add(entry)

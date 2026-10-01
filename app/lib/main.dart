@@ -446,11 +446,7 @@ Future<void> _start({bool forceFull = false}) async {
     });
   }
   runApp(const MyApp());
-  unawaited(
-    SiriIntegration.instance.takePendingRoute().then((route) {
-      if (route != null) SiriIntegration.instance.openRoute(route);
-    }),
-  );
+  unawaited(SiriIntegration.instance.deliverPendingRoute());
   if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
 }
 

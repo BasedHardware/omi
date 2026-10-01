@@ -3973,9 +3973,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Có phiên bản mới';
-
-  @override
   String get no => 'Không';
 
   @override
@@ -5060,8 +5057,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Bằng cách tiếp tục, các cuộc trò chuyện, bản ghi âm và thông tin cá nhân của bạn sẽ được lưu trữ an toàn trên máy chủ của chúng tôi. Bản ghi âm và bản phiên âm của bạn được xử lý bởi các dịch vụ AI bên thứ ba (bao gồm Deepgram cho phiên âm và OpenAI cho phân tích) để cung cấp cho bạn thông tin chi tiết được hỗ trợ bởi AI và kích hoạt tất cả các tính năng ứng dụng.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Các nhiệm vụ từ cuộc trò chuyện của bạn sẽ xuất hiện ở đây.\nNhấn + để tạo thủ công.';
+  String get tasksEmptyStateMessage => 'Bắt đầu cuộc trò chuyện để tạo nhiệm vụ.';
 
   @override
   String get clearChatAction => 'Xóa cuộc trò chuyện';
@@ -12107,6 +12103,45 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count người nói',
+      one: '1 người nói',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Bật Omi trong Lối tắt → Siri. Nói “$askPhrase” hoặc “$questionPhrase”, sau đó đặt câu hỏi của bạn.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Bạn cũng có thể nói “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Có bản cập nhật';
+
+  @override
+  String get updateAvailableMessage => 'Phiên bản mới của Omi đã sẵn sàng, với các bản sửa lỗi và cải tiến.';
+
+  @override
+  String get updateRequiredTitle => 'Cần cập nhật';
+
+  @override
+  String get updateRequiredMessage =>
+      'Phiên bản Omi này không còn được hỗ trợ. Hãy cập nhật để tiếp tục ghi âm và đồng bộ.';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Số dòng đã gắn nhãn: $count';
+  }
+
+  @override
   String speakerLabelVoiceStatus(String state) {
     String _temp0 = intl.Intl.selectLogic(
       state,
@@ -12135,6 +12170,11 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Số cuộc trò chuyện trước có giọng nói này: $count';
+  }
+
+  @override
   String speakerLabelText(String part, String name) {
     String _temp0 = intl.Intl.selectLogic(
       part,
@@ -12156,15 +12196,5 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return '$duration từ giọng nói này';
-  }
-
-  @override
-  String speakerLabelLinesLabeled(int count) {
-    return 'Số dòng đã gắn nhãn: $count';
-  }
-
-  @override
-  String speakerLabelEarlierMatches(int count) {
-    return 'Số cuộc trò chuyện trước có giọng nói này: $count';
   }
 }

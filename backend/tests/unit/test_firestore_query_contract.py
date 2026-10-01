@@ -444,9 +444,14 @@ def test_canonical_atlas_read_serving_query_requires_declared_composite():
     assert signature in _declared_index_signatures()
 
 
+@pytest.fixture(scope='module')
+def query_inventory_report():
+    return firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
+
+
 @pytest.mark.slow
-def test_query_inventory_registers_the_migrated_query_shapes():
-    report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
+def test_query_inventory_registers_the_migrated_query_shapes(query_inventory_report):
+    report = query_inventory_report
 
     for spec in (
         DUE_MEMORY_OUTBOX_QUERY,

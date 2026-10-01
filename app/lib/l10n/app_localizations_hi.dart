@@ -3946,9 +3946,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'नया संस्करण उपलब्ध';
-
-  @override
   String get no => 'नहीं';
 
   @override
@@ -5031,8 +5028,7 @@ class AppLocalizationsHi extends AppLocalizations {
       'जारी रखने पर, आपकी बातचीत, रिकॉर्डिंग और व्यक्तिगत जानकारी हमारे सर्वर पर सुरक्षित रूप से संग्रहीत की जाएगी। आपकी ऑडियो रिकॉर्डिंग और ट्रांसक्रिप्ट तीसरे पक्ष की AI सेवाओं (ट्रांसक्रिप्शन के लिए Deepgram और विश्लेषण के लिए OpenAI सहित) द्वारा संसाधित किए जाते हैं ताकि आपको AI-संचालित अंतर्दृष्टि प्रदान की जा सके और सभी ऐप सुविधाएँ सक्षम की जा सकें।';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'आपकी बातचीत के कार्य यहां दिखाई देंगे।\nमैन्युअल रूप से बनाने के लिए + टैप करें।';
+  String get tasksEmptyStateMessage => 'टास्क बनाने के लिए बातचीत शुरू करें।';
 
   @override
   String get clearChatAction => 'चैट साफ़ करें';
@@ -12095,6 +12091,45 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count वक्ता',
+      one: '1 वक्ता',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'शॉर्टकट → Siri में Omi चालू करें। “$askPhrase” या “$questionPhrase” कहकर अपना प्रश्न पूछें।';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' आप “$searchPhrase for what I did today” भी कह सकते हैं।';
+  }
+
+  @override
+  String get updateAvailableTitle => 'अपडेट उपलब्ध है';
+
+  @override
+  String get updateAvailableMessage => 'Omi का नया संस्करण तैयार है, सुधारों और बेहतरियों के साथ।';
+
+  @override
+  String get updateRequiredTitle => 'अपडेट ज़रूरी है';
+
+  @override
+  String get updateRequiredMessage =>
+      'Omi का यह संस्करण अब समर्थित नहीं है। रिकॉर्डिंग और सिंक जारी रखने के लिए अपडेट करें।';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'लेबल लगी लाइनें: $count';
+  }
+
+  @override
   String speakerLabelVoiceStatus(String state) {
     String _temp0 = intl.Intl.selectLogic(
       state,
@@ -12123,6 +12158,11 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'इस आवाज़ वाली पिछली बातचीत: $count';
+  }
+
+  @override
   String speakerLabelText(String part, String name) {
     String _temp0 = intl.Intl.selectLogic(
       part,
@@ -12144,15 +12184,5 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return 'इस आवाज़ का $duration';
-  }
-
-  @override
-  String speakerLabelLinesLabeled(int count) {
-    return 'लेबल लगी लाइनें: $count';
-  }
-
-  @override
-  String speakerLabelEarlierMatches(int count) {
-    return 'इस आवाज़ वाली पिछली बातचीत: $count';
   }
 }

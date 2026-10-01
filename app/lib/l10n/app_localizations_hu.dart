@@ -3989,9 +3989,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Új verzió elérhető';
-
-  @override
   String get no => 'Nem';
 
   @override
@@ -5078,8 +5075,7 @@ class AppLocalizationsHu extends AppLocalizations {
       'A folytatással beszélgetéseit, felvételeit és személyes adatait biztonságosan tároljuk szervereinken. Hangfelvételeit és átiratait harmadik féltől származó AI szolgáltatások dolgozzák fel (beleértve a Deepgramot az átíráshoz és az OpenAI-t az elemzéshez), hogy AI-alapú betekintéseket nyújtsunk Önnek és az alkalmazás összes funkcióját biztosítsuk.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'A beszélgetéseidből származó feladatok itt jelennek meg.\nKoppints a + gombra manuális létrehozáshoz.';
+  String get tasksEmptyStateMessage => 'Feladat létrehozásához kezdj beszélgetést.';
 
   @override
   String get clearChatAction => 'Chat törlése';
@@ -12159,6 +12155,45 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélő',
+      one: '1 beszélő',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Kapcsolja be az Omi alkalmazást a Parancsikonok → Siri menüben. Mondja ki: „$askPhrase” vagy „$questionPhrase”, majd tegye fel kérdését.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Elmondhatja azt is: „$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Frissítés érhető el';
+
+  @override
+  String get updateAvailableMessage => 'Elkészült az Omi új verziója, javításokkal és fejlesztésekkel.';
+
+  @override
+  String get updateRequiredTitle => 'Frissítés szükséges';
+
+  @override
+  String get updateRequiredMessage =>
+      'Az Omi ezen verziója már nem támogatott. Frissítsen a felvétel és a szinkronizálás folytatásához.';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Megjelölt sorok: $count';
+  }
+
+  @override
   String speakerLabelVoiceStatus(String state) {
     String _temp0 = intl.Intl.selectLogic(
       state,
@@ -12187,6 +12222,11 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Korábbi beszélgetések ezzel a hanggal: $count';
+  }
+
+  @override
   String speakerLabelText(String part, String name) {
     String _temp0 = intl.Intl.selectLogic(
       part,
@@ -12208,15 +12248,5 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
-  }
-
-  @override
-  String speakerLabelLinesLabeled(int count) {
-    return 'Megjelölt sorok: $count';
-  }
-
-  @override
-  String speakerLabelEarlierMatches(int count) {
-    return 'Korábbi beszélgetések ezzel a hanggal: $count';
   }
 }
