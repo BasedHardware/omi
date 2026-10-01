@@ -1884,12 +1884,10 @@ counter (label = reason only) plus one log line:
 drop (it logs and decides on the next clip). `speaker_id_evidence` /
 `speaker_id_decision` / the exit line carry `session=<recording session id>`
 — never uid, never transcript content — so one user's report is attributable
-without replaying the saved conversation. "That's me" outcomes are likewise
-attributable: `store_owner_voice_sample` logs one
-`owner sample outcome=… conversation=<id>` line per outcome next to the
-existing counter. Owner confirmation publication reads the current conversation
-receipt in the same transaction as pooling: a deleted/missing conversation or
-changed receipt generation drops the attempt as `stale_assignment`.
+without replaying the saved conversation. "That's me" outcomes are likewise attributable:
+`store_owner_voice_sample` logs one `owner sample outcome=… conversation=<id>` line next to the counter.
+Owner confirmation publication reads the current conversation receipt in the pooling transaction:
+a deleted/missing conversation or changed receipt generation drops the attempt as `stale_assignment`.
 
 Provider segment IDs are normalized once at `TranscriptProcessor.enqueue`
 admission: a raw segment arriving with a missing or empty `id` is minted a
