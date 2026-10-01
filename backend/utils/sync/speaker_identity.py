@@ -120,6 +120,7 @@ def identify_speakers_for_segments(
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     segment_person_assignment_map: Dict[str, str] = {}
     voice_assignments: list[tuple[TranscriptSegment, str]] = []
+    text_assignments: list[tuple[TranscriptSegment, str]] = []
 
     # Group all available evidence by diarized speaker.
     speaker_segments: Dict[int, List[TranscriptSegment]] = {}
@@ -280,6 +281,11 @@ def identify_speakers_for_segments(
             if detected_name:
                 person = users_db.get_person_by_name(uid, detected_name)
                 if person:
+                    text_assignments.extend(
+                        (target, person['id'])
+                        for target in (segments if speaker_id > 0 else [seg])
+                        if not target.is_user and not target.person_id
+                    )
                     # Per-segment assignment always applies
                     if seg.id is not None:
                         segment_person_assignment_map[seg.id] = person['id']
@@ -306,6 +312,9 @@ def identify_speakers_for_segments(
             segment.speaker_identity_status = (
                 SpeakerIdentityStatus.user if person_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
             )
+    for segment, person_id in text_assignments:
+        if segment.person_id == person_id:
+            segment.speaker_match_source = 'sync_text'
     if prior:
         # Filter after voice, manual and text assignments, including voices visited
         # later in the matching loop. This never changes an identity decision.

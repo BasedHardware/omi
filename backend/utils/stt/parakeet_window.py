@@ -768,7 +768,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._agc_last_gain = gain
         return out.tobytes()
 
-    def finalize(self) -> None:
+    def _ordinary_speech_locked(self) -> bool:
+        # Reuse the startup short-episode boundary. Answered-empty retained
+        # context must not turn a fresh blip into an ordinary utterance.
+        start = max(self._anchor_bytes, self._accounted_speech_end)
+        return self._speech_bytes_locked(start, self._received_bytes) >= self._to_bytes(SHORT_SPEECH_EPISODE_SECONDS)
+
+    def finalize(self, *, vad_pause: bool = False) -> None:
+        if vad_pause:
+            with self._lock:
+                if not self._ordinary_speech_locked():
+                    return
         self._pause_requested = True
         self._wake.set()
 
@@ -946,6 +956,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if decision.new_anchor is not None:
             rel_bytes = min(job.end_bytes - job.start_bytes, max(0, self._to_bytes(decision.new_anchor)))
             new_anchor_bytes = job.start_bytes + rel_bytes
+        if self._capture_clock_seen and not segments and not self._closed and job.force:
+            # An ordinary idle answer can still be an empty mid-utterance
+            # decode. Only the long-silence stranded path below may settle
+            # its accounting; retain context and exact fallback replay.
+            new_anchor_bytes = None
         if beyond_window:
             # TDT timestamps at/beyond the posted duration are drift on
             # re-posted audio, not silence: the dropped segments are that
@@ -1036,8 +1051,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         return total
 
     def _idle_wait_timeout(self) -> float | None:
-        if self._closed or self._dead or self._idle_flushed or self._capture_clock_seen:
+        if self._closed or self._dead or self._idle_flushed:
             return None
+        if self._capture_clock_seen:
+            with self._lock:
+                if not self._ordinary_speech_locked():
+                    return None
         if not self._has_unemitted_speech():
             return None
         remaining = self._last_accepted_at + IDLE_FLUSH_SECONDS - time.monotonic()
@@ -1063,10 +1082,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             if speech_end is None:
                 self._pause_requested = False
                 return None
-            silence_flush = not self._capture_clock_seen and (received - speech_end) >= self._silence_bytes
+            ordinary_flush = not self._capture_clock_seen or self._ordinary_speech_locked()
+            silence_flush = ordinary_flush and (received - speech_end) >= self._silence_bytes
             at_cap = (received - self._anchor_bytes) >= self._max_context_bytes
             idle_flush = (
-                not self._capture_clock_seen
+                ordinary_flush
                 and not self._idle_flushed
                 and time.monotonic() - self._last_accepted_at >= IDLE_FLUSH_SECONDS
             )

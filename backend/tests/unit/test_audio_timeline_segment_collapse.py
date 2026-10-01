@@ -99,6 +99,15 @@ def runtime(monkeypatch):
 
     monkeypatch.setattr(window, 'wait_for_event', pacing)
     monkeypatch.setattr(window, 'IDLE_FLUSH_SECONDS', 3600.0)
+    # Timestamp repros choose explicit pause/drain windows. Normal automatic
+    # VAD pause scheduling is covered end-to-end in test_parakeet_window_live.
+    finalize = window.WindowedParakeetSocket.finalize
+
+    def explicit_finalize_only(self, *, vad_pause=False):
+        if not vad_pause:
+            finalize(self)
+
+    monkeypatch.setattr(window.WindowedParakeetSocket, 'finalize', explicit_finalize_only)
 
 
 class SeqClient:
@@ -187,7 +196,7 @@ async def _drive_window_session(monkeypatch, *, v2: bool):
 
     Pace is pinned above the audio length. Explicit raw-socket finalize
     selects the pause job, followed by the drain job. Automatic VAD finalize
-    does not select a managed window job. Gated audio remains [0, 6.5] then
+    is pinned out by the timestamp fixture. Gated audio remains [0, 6.5] then
     [6.5, 9.5], with capture gap [6.5, 7]. The sentence anchor advances to 4.5.
     """
     receiver = _receiver(monkeypatch, v2=v2)

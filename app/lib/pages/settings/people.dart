@@ -24,6 +24,7 @@ class UserPeoplePage extends StatefulWidget {
 class _UserPeoplePageState extends State<UserPeoplePage> {
   final _search = TextEditingController();
   String _query = '';
+  PeopleFilter _filter = PeopleFilter.all;
 
   @override
   void initState() {
@@ -67,7 +68,19 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
 
   void _clearQuery() {
     _search.clear();
-    setState(() => _query = '');
+    _changeQuery('');
+  }
+
+  void _changeQuery(String query) {
+    final provider = context.read<PeopleProvider>();
+    if (provider.selecting) provider.beginSelection();
+    setState(() => _query = query);
+  }
+
+  void _changeFilter(PeopleFilter filter) {
+    final provider = context.read<PeopleProvider>();
+    if (provider.selecting) provider.beginSelection();
+    setState(() => _filter = filter);
   }
 
   @override
@@ -85,7 +98,9 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
     final l10n = context.l10n;
     final motion = OmiMotion.of(context);
     final selecting = provider.selecting;
-    final selectable = provider.people.where((p) => !p.pinned).map((p) => p.id).toList();
+    final visible = visiblePeople(provider.people, _query, _filter);
+    final selectable = visible.where((p) => !p.pinned).map((p) => p.id).toList();
+    final selected = visible.where((p) => !p.pinned && provider.selectedIds.contains(p.id)).toList();
     final allSelected = selectable.isNotEmpty && selectable.every(provider.selectedIds.contains);
     return Scaffold(
       backgroundColor: OmiColors.surface0,
@@ -93,7 +108,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
         leading: selecting
             ? OmiIconButton(icon: const Icon(Icons.close), label: l10n.cancel, onPressed: provider.endSelection)
             : const OmiBackButton(),
-        title: Text(selecting ? l10n.selectedCount(provider.selectedIds.length) : l10n.people),
+        title: Text(selecting ? l10n.selectedCount(selected.length) : l10n.people),
         actions: [
           if (selecting)
             OmiButton.toolbar(
@@ -101,7 +116,7 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
               label: allSelected ? l10n.deselectAll : l10n.selectAll,
               onPressed: () {
                 OmiHaptics.selection();
-                allSelected ? provider.beginSelection() : provider.selectAll(selectable);
+                allSelected ? provider.deselectAll(selectable) : provider.selectAll(selectable);
               },
             )
           else ...[
@@ -132,14 +147,14 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
                     label: l10n.delete,
                     icon: Icons.delete_outline,
                     expand: true,
-                    onPressed: provider.selectedIds.isEmpty
+                    onPressed: selected.isEmpty
                         ? null
                         // Not awaited: the button should not spin behind the confirmation.
                         : () {
                             confirmAndDeletePeople(
                               context,
                               provider,
-                              provider.people.where((p) => provider.selectedIds.contains(p.id)).toList(),
+                              selected,
                             );
                           },
                   ),
@@ -149,6 +164,8 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
       ),
       body: PeopleList(
         query: _query,
+        filter: _filter,
+        onFilterChanged: _changeFilter,
         allowSelection: true,
         onCleanUp: _openCleanUp,
         onClearQuery: _clearQuery,
@@ -163,8 +180,8 @@ class _UserPeoplePageState extends State<UserPeoplePage> {
             OmiSearchField(
               placeholder: l10n.peopleSearchPlaceholder,
               controller: _search,
-              onChanged: (value) => setState(() => _query = value),
-              onCleared: () => setState(() => _query = ''),
+              onChanged: _changeQuery,
+              onCleared: () => _changeQuery(''),
             ),
         ],
         trailing: [
