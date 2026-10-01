@@ -10,11 +10,13 @@ from typing import Any, Deque, Dict, Optional, Tuple, cast
 
 import av
 import numpy as np
+from pydantic import ValidationError
 
 from config.speaker_prior import pinned_speaker_prior_enabled
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.audio import AudioRingBuffer
 from utils.live_speaker_suggestions import reconcile_pinned_suggestion
+from utils.log_sanitizer import sanitize
 from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
 from utils.speaker_sample import download_sample_audio
@@ -459,12 +461,29 @@ class SpeakerMatcher:
             self.host.state.speaker_map_dirty = True
             self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
         except Exception as error:
-            logger.error(
-                'Speaker ID match failed speaker=%s type=%s session=%s',
-                speaker_id,
-                type(error).__name__,
-                self._session_log_id(),
-            )
+            if isinstance(error, ValidationError):
+                issues = error.errors(include_input=False, include_context=False, include_url=False)
+                first = issues[0] if issues else {}
+                loc = first.get('loc')
+                if isinstance(loc, tuple):
+                    loc = '.'.join(str(part) for part in loc)
+                logger.error(
+                    'Speaker ID match failed speaker=%s type=%s session=%s '
+                    'validation_model=%s validation_loc=%s validation_type=%s',
+                    speaker_id,
+                    type(error).__name__,
+                    self._session_log_id(),
+                    sanitize(error.title),
+                    sanitize(loc),
+                    sanitize(first.get('type')),
+                )
+            else:
+                logger.error(
+                    'Speaker ID match failed speaker=%s type=%s session=%s',
+                    speaker_id,
+                    type(error).__name__,
+                    self._session_log_id(),
+                )
 
     def _offer_pinned_suggestion(
         self, voice: int, result: SpeakerMatchDecision, pinned: set, segment_id: str, assigned: set

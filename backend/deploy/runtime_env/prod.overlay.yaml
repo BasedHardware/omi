@@ -18,11 +18,11 @@ overlay:
         # otherwise Soniox is second after Modulate. Canary allocation follows the
         # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29;
         # rolled back to 0% on 2026-10-01 for a first-text latency regression;
-        # back to 5% after the posting-cadence fix #20043).
+        # back to 5% after the posting-cadence fix #20043; 25% on 2026-10-01).
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
-          value: '5'
+          value: '25'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '8'
         PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
@@ -482,6 +482,10 @@ overlay:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-sync:
+        # Attached runtime identity (credential hygiene D4). The deploy pins it and removes
+        # SERVICE_ACCOUNT_JSON/GOOGLE_APPLICATION_CREDENTIALS; every secret and bucket this
+        # service reads needs its own grant to this account. `backend` and `backend-integration` wait for their own canaries.
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -607,6 +611,7 @@ overlay:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-sync-backfill:
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -766,10 +771,11 @@ overlay:
             category: rollout
     jobs:
       notifications-job:
-        secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
+        # Keyless (credential hygiene D4): run as the jobs runtime identity and drop the nik-164 key
+        # ref in the same deploy; backend-jobs-runtime@ cannot read SERVICE_ACCOUNT_JSON.
+        flags:
+          --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
+          --remove-secrets: SERVICE_ACCOUNT_JSON,GOOGLE_APPLICATION_CREDENTIALS
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -843,10 +849,11 @@ overlay:
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
             value: ''
       day3-reengagement-email-job:
-        secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
+        # Keyless (credential hygiene D4): run as the jobs runtime identity and drop the nik-164 key
+        # ref in the same deploy; backend-jobs-runtime@ cannot read SERVICE_ACCOUNT_JSON.
+        flags:
+          --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
+          --remove-secrets: SERVICE_ACCOUNT_JSON,GOOGLE_APPLICATION_CREDENTIALS
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
