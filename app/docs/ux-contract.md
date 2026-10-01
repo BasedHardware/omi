@@ -100,7 +100,7 @@ One policy, and never neither:
 | The delete… | Pattern |
 |---|---|
 | can be deferred and restored — a **memory**, a **task**, a goal | delete at once, `OmiFeedback.undo(...)` for 5 s; **no** confirmation dialog |
-| is a **conversation** | confirm (`showOmiConfirmWithOptOut`, "Don't ask again" allowed) **and** always an Undo toast backed by the provider's pending-delete window, which is at least `OmiFeedbackTiming.undo` (D5) |
+| is a **conversation** | confirm (`showOmiConfirmWithOptOut`, or `showOmiConfirmMenu(offerOptOut: true)` from a swiped row's delete button; "Don't ask again" allowed) **and** always an Undo toast backed by the provider's pending-delete window, which is at least `OmiFeedbackTiming.undo` (D5) |
 | cannot be undone — a local recording file, forget/unpair device, clear chat, sign out, account deletion, bulk delete | `showOmiConfirm(..., destructive: true)` every time; **never** "Don't ask again" |
 
 - The confirm button is a verb naming the action — "Delete", "Forget Device", "Clear Chat",
