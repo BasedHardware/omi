@@ -444,7 +444,9 @@ JEV_DECISION_LABELS = {
             'conversation_smart_merge',
         }
     ),
-    'outcome': frozenset({'success', 'unconfigured', 'timeout', 'transport_error', 'http_error', 'malformed'}),
+    'outcome': frozenset(
+        {'success', 'unconfigured', 'timeout', 'transport_error', 'http_error', 'http_429', 'malformed'}
+    ),
 }
 
 JEV_DECISION_TOTAL = Counter(
@@ -487,6 +489,38 @@ CAPTURE_JEV_SHADOW_AGREEMENT = Counter(
     'Shipped rule versus Jev same-scene matrix.',
     ['category', 'agreement'],
 )
+
+# EXP-004: no identifiers or arbitrary strings may become labels.
+JEV_SHADOW_OUTCOMES = frozenset(
+    {'ok', 'jev_failed', 'http_429', 'timeout', 'deduped', 'cap', 'cohort', 'dropped', 'redis_unavailable'}
+)
+JEV_SHADOW_TOTAL = Counter('omi_jev_shadow_total', 'Relevance and owner shadow outcomes.', ['lane', 'outcome'])
+JEV_SHADOW_LATENCY = Histogram(
+    'omi_jev_shadow_latency_seconds',
+    'Shadow question latency including queue time.',
+    ['lane'],
+    buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 5),
+)
+RELEVANCE_JEV_SHADOW_SCORE = Histogram(
+    'omi_relevance_jev_shadow_p_discard', 'Shadow P(discard).', buckets=(0.5, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99)
+)
+RELEVANCE_JEV_SHADOW_AGREEMENT = Counter(
+    'omi_relevance_jev_shadow_agreement_total',
+    'Nano verdict versus Jev discard strictly above 0.95; none means nano did not answer.',
+    ['nano_verdict', 'jev_would_discard'],
+)
+OWNER_JEV_SHADOW_SCORE = Histogram('omi_owner_jev_shadow_p_user', 'Shadow P(user).', buckets=(0.5, 0.7, 0.8, 0.9, 0.95))
+
+
+def record_jev_shadow_outcome(lane: str, outcome: str) -> None:
+    try:
+        JEV_SHADOW_TOTAL.labels(
+            lane=lane if lane in {'relevance', 'owner'} else 'other',
+            outcome=outcome if outcome in JEV_SHADOW_OUTCOMES else 'jev_failed',
+        ).inc()
+    except Exception:
+        pass
+
 
 # Capture-time owner re-attribution (process_conversation, MEMORY_OWNER_JEV_FLIP_ENABLED).
 # `flipped` re-attributed a third-party candidate to the user; `kept_third_party`
