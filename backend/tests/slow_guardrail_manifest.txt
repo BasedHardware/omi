@@ -34,7 +34,6 @@ tests/unit/test_async_tasks.py
 tests/unit/test_desktop_transcribe.py
 tests/unit/test_firestore_di_seam.py
 tests/unit/test_firestore_query_contract.py
-tests/unit/test_firestore_query_coverage_ratchet.py
 tests/unit/test_firestore_query_shapes.py
 tests/unit/test_flush_pending_batch1.py
 tests/unit/test_llm_gateway_coverage_guardrails.py

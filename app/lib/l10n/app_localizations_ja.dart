@@ -11948,6 +11948,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String get updateRequiredMessage => 'このバージョンのOmiはサポートが終了しました。録音と同期を続けるにはアップデートしてください。';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => '同期済みコピーを自動削除';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '同期済みコピーは$days日後に削除されます';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return '同期後$days日でローカルコピーを削除します。クラウドのコピーは保持されます。';
+  }
+
+  @override
+  String get localCopiesSection => 'ローカルコピー';
+
+  @override
   String get singleTap => 'シングルタップ';
 
   @override

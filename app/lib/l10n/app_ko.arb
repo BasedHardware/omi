@@ -3772,6 +3772,10 @@
     "updateAvailableMessage": "수정 사항과 개선 사항이 담긴 새 버전의 Omi가 준비되었습니다.",
     "updateRequiredTitle": "업데이트 필요",
     "updateRequiredMessage": "이 버전의 Omi는 더 이상 지원되지 않습니다. 계속 녹음하고 동기화하려면 업데이트하세요.",
+    "autoRemoveSyncedCopiesTitle": "동기화된 사본 자동 삭제",
+    "autoRemoveSyncedCopiesDays": "동기화된 사본은 {days}일 후 삭제됩니다",
+    "autoRemoveSyncedCopiesDescription": "동기화 후 {days}일에 로컬 사본을 삭제합니다. 클라우드 사본은 유지됩니다.",
+    "localCopiesSection": "로컬 사본",
     "singleTap": "싱글 탭",
     "@singleTap": {
         "description": "Device button gesture: one short press"

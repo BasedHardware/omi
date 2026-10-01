@@ -3772,6 +3772,10 @@
     "updateAvailableMessage": "Μια νέα έκδοση του Omi είναι έτοιμη, με διορθώσεις και βελτιώσεις.",
     "updateRequiredTitle": "Απαιτείται ενημέρωση",
     "updateRequiredMessage": "Αυτή η έκδοση του Omi δεν υποστηρίζεται πλέον. Κάντε ενημέρωση για να συνεχίσετε την εγγραφή και τον συγχρονισμό.",
+    "autoRemoveSyncedCopiesTitle": "Αυτόματη διαγραφή συγχρονισμένων αντιγράφων",
+    "autoRemoveSyncedCopiesDays": "Τα συγχρονισμένα αντίγραφα διαγράφονται μετά από {days} ημέρες",
+    "autoRemoveSyncedCopiesDescription": "Διαγράφει τα τοπικά αντίγραφα {days} ημέρες μετά τον συγχρονισμό. Τα αντίγραφα στο cloud διατηρούνται.",
+    "localCopiesSection": "Τοπικά αντίγραφα",
     "singleTap": "Απλό Πάτημα",
     "@singleTap": {
         "description": "Device button gesture: one short press"

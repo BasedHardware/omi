@@ -3772,6 +3772,10 @@
     "updateAvailableMessage": "Omi เวอร์ชันใหม่พร้อมแล้ว พร้อมการแก้ไขและการปรับปรุง",
     "updateRequiredTitle": "ต้องอัปเดต",
     "updateRequiredMessage": "Omi เวอร์ชันนี้ไม่รองรับแล้ว อัปเดตเพื่อบันทึกและซิงค์ต่อ",
+    "autoRemoveSyncedCopiesTitle": "ลบสำเนาที่ซิงค์แล้วอัตโนมัติ",
+    "autoRemoveSyncedCopiesDays": "สำเนาที่ซิงค์แล้วจะถูกลบหลังจาก {days} วัน",
+    "autoRemoveSyncedCopiesDescription": "ลบสำเนาในเครื่องหลังซิงค์ {days} วัน สำเนาบนคลาวด์จะถูกเก็บไว้",
+    "localCopiesSection": "สำเนาในเครื่อง",
     "singleTap": "แตะครั้งเดียว",
     "@singleTap": {
         "description": "Device button gesture: one short press"

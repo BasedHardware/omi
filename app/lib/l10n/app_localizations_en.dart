@@ -12131,6 +12131,22 @@ class AppLocalizationsEn extends AppLocalizations {
       'This version of Omi is no longer supported. Update to keep recording and syncing.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Auto-Remove Synced Copies';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Synced copies deleted after $days days';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Deletes local copies $days days after sync. Cloud copies are kept.';
+  }
+
+  @override
+  String get localCopiesSection => 'Local Copies';
+
+  @override
   String get singleTap => 'Single Tap';
 
   @override

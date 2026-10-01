@@ -3868,6 +3868,10 @@
     "updateAvailableMessage": "Elkészült az Omi új verziója, javításokkal és fejlesztésekkel.",
     "updateRequiredTitle": "Frissítés szükséges",
     "updateRequiredMessage": "Az Omi ezen verziója már nem támogatott. Frissítsen a felvétel és a szinkronizálás folytatásához.",
+    "autoRemoveSyncedCopiesTitle": "Szinkronizált másolatok automatikus törlése",
+    "autoRemoveSyncedCopiesDays": "A szinkronizált másolatok {days} nap után törlődnek",
+    "autoRemoveSyncedCopiesDescription": "Törli a helyi másolatokat a szinkronizálás után {days} nappal. A felhőbeli másolatok megmaradnak.",
+    "localCopiesSection": "Helyi másolatok",
     "singleTap": "Egyszeres érintés",
     "@singleTap": {
         "description": "Device button gesture: one short press"

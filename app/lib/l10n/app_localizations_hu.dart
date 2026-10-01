@@ -12189,6 +12189,22 @@ class AppLocalizationsHu extends AppLocalizations {
       'Az Omi ezen verziója már nem támogatott. Frissítsen a felvétel és a szinkronizálás folytatásához.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Szinkronizált másolatok automatikus törlése';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'A szinkronizált másolatok $days nap után törlődnek';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Törli a helyi másolatokat a szinkronizálás után $days nappal. A felhőbeli másolatok megmaradnak.';
+  }
+
+  @override
+  String get localCopiesSection => 'Helyi másolatok';
+
+  @override
   String get singleTap => 'Egyszeres érintés';
 
   @override

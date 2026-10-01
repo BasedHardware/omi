@@ -193,8 +193,6 @@ env:
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
     value: "60000"
-  - name: CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
-    value: ""
   - name: CAPTURE_JEV_SHADOW_ENABLED
     value: "true"
   - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
@@ -400,8 +398,12 @@ env:
     value: "shadow"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
-  - name: STT_ROUTING_PROBE_PERCENT
-    value: "2"
+  - name: STT_ROUTING_ON_PERCENT
+    value: "0"
+  - name: STT_ROUTING_TARGETS_JSON
+    value: ""
+  - name: STT_ROUTING_DISRUPTION_GATE
+    value: "0.08"
   - name: STT_NO_TEXT_SECONDS
     value: "30"
   - name: SONIOX_MONTHLY_CEILING_USD

@@ -3772,6 +3772,10 @@
     "updateAvailableMessage": "Jaunā Omi versija ir gatava – ar labojumiem un uzlabojumiem.",
     "updateRequiredTitle": "Nepieciešams atjauninājums",
     "updateRequiredMessage": "Šī Omi versija vairs netiek atbalstīta. Atjauniniet, lai turpinātu ierakstīt un sinhronizēt.",
+    "autoRemoveSyncedCopiesTitle": "Automātiski noņemt sinhronizētās kopijas",
+    "autoRemoveSyncedCopiesDays": "Sinhronizētās kopijas tiek dzēstas pēc {days} dienām",
+    "autoRemoveSyncedCopiesDescription": "Dzēš vietējās kopijas {days} dienas pēc sinhronizācijas. Mākoņa kopijas tiek saglabātas.",
+    "localCopiesSection": "Vietējās kopijas",
     "singleTap": "Viens klikšķis",
     "@singleTap": {
         "description": "Device button gesture: one short press"

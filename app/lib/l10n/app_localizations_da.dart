@@ -12130,6 +12130,22 @@ class AppLocalizationsDa extends AppLocalizations {
       'Denne version af Omi understøttes ikke længere. Opdater for at fortsætte med at optage og synkronisere.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Fjern synkroniserede kopier automatisk';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Synkroniserede kopier slettes efter $days dage';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Sletter lokale kopier $days dage efter synkronisering. Cloudkopier gemmes.';
+  }
+
+  @override
+  String get localCopiesSection => 'Lokale kopier';
+
+  @override
   String get singleTap => 'Enkelttryk';
 
   @override

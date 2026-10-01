@@ -3807,6 +3807,10 @@
     "updateAvailableMessage": "Omi'nin yeni sürümü hazır; düzeltmeler ve iyileştirmeler içeriyor.",
     "updateRequiredTitle": "Güncelleme gerekli",
     "updateRequiredMessage": "Omi'nin bu sürümü artık desteklenmiyor. Kayda ve eşitlemeye devam etmek için güncelleyin.",
+    "autoRemoveSyncedCopiesTitle": "Senkronize Kopyaları Otomatik Kaldır",
+    "autoRemoveSyncedCopiesDays": "Senkronize kopyalar {days} gün sonra silinir",
+    "autoRemoveSyncedCopiesDescription": "Senkronizasyondan {days} gün sonra yerel kopyaları siler. Bulut kopyaları saklanır.",
+    "localCopiesSection": "Yerel Kopyalar",
     "singleTap": "Tek Dokunma",
     "@singleTap": {
         "description": "Device button gesture: one short press"

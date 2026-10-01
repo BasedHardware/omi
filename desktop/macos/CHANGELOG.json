@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.430",
+      "date": "2026-10-01",
+      "changes": [
+        "Added a way to disconnect Google Calendar from the Calendar import while keeping previously imported memories"
+      ]
+    },
+    {
       "version": "0.12.429",
       "date": "2026-10-01",
       "changes": [

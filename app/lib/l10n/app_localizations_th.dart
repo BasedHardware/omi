@@ -12076,6 +12076,22 @@ class AppLocalizationsTh extends AppLocalizations {
   String get updateRequiredMessage => 'Omi เวอร์ชันนี้ไม่รองรับแล้ว อัปเดตเพื่อบันทึกและซิงค์ต่อ';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'ลบสำเนาที่ซิงค์แล้วอัตโนมัติ';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'สำเนาที่ซิงค์แล้วจะถูกลบหลังจาก $days วัน';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'ลบสำเนาในเครื่องหลังซิงค์ $days วัน สำเนาบนคลาวด์จะถูกเก็บไว้';
+  }
+
+  @override
+  String get localCopiesSection => 'สำเนาในเครื่อง';
+
+  @override
   String get singleTap => 'แตะครั้งเดียว';
 
   @override

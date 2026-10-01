@@ -24,6 +24,7 @@ APP_NOTIFICATION_RATE_LIMIT_POLICY = 'integration-notification'
 class NotificationKind(str, Enum):
     APP_INTEGRATION = 'app_integration'
     CAPTURE_RECOVERY = 'capture_recovery'
+    IMPORT_JOB = 'import_job'
 
 
 class NotificationPolicy(str, Enum):

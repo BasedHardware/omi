@@ -64,6 +64,7 @@ from utils.stt.live_failure import (
 )
 from utils.stt.live_chain import ProviderChainUnavailable
 from config.stt_provider_policy import provider_for_service
+from utils.stt.live_router import note_failed_route
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.brand_terms import normalize_brand_segments
 from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
@@ -213,6 +214,7 @@ class ListenReceiver(ReplayFilterMixin):
         # Providers whose socket already died this session; a failover must not
         # reselect one, or a dead primary would be chosen again immediately.
         self._stt_failed_providers: set[str] = set()
+        self._stt_failed_targets: set[str] = set()
         # (callback factory, sample rate): each rebuild mints fresh epoch callbacks.
         self._stt_rebuild: Optional[Tuple[Any, int]] = None
         self._stt_failover_lock = asyncio.Lock()
@@ -1265,12 +1267,10 @@ class ListenReceiver(ReplayFilterMixin):
             return False
 
         dead_provider = provider_for_service(self.host.stt_service)
-        if dead_provider:
-            self._stt_failed_providers.add(dead_provider)
-        if len(self._stt_failed_providers) > (3 if managed_chain_enabled(self.host) else MAX_STT_FAILOVERS):
+        failures = note_failed_route(self, dead_provider)
+        if failures > (3 if managed_chain_enabled(self.host) else MAX_STT_FAILOVERS):
             self._settle_pending_live_failover_failure()
             return False
-        # Feed account/serve deaths even when failover prevents a terminal event.
         note_typed_provider_death(self.stt_socket, dead_provider)
         service, language, model = get_stt_service_for_language(
             self.host.language,

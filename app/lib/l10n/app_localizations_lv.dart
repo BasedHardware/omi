@@ -12169,6 +12169,22 @@ class AppLocalizationsLv extends AppLocalizations {
       'Šī Omi versija vairs netiek atbalstīta. Atjauniniet, lai turpinātu ierakstīt un sinhronizēt.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Automātiski noņemt sinhronizētās kopijas';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Sinhronizētās kopijas tiek dzēstas pēc $days dienām';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Dzēš vietējās kopijas $days dienas pēc sinhronizācijas. Mākoņa kopijas tiek saglabātas.';
+  }
+
+  @override
+  String get localCopiesSection => 'Vietējās kopijas';
+
+  @override
   String get singleTap => 'Viens klikšķis';
 
   @override

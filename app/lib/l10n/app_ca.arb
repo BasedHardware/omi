@@ -3772,6 +3772,10 @@
     "updateAvailableMessage": "Hi ha una nova versió d'Omi a punt, amb correccions i millores.",
     "updateRequiredTitle": "Cal actualitzar",
     "updateRequiredMessage": "Aquesta versió d'Omi ja no és compatible. Actualitza-la per continuar gravant i sincronitzant.",
+    "autoRemoveSyncedCopiesTitle": "Elimina automàticament les còpies sincronitzades",
+    "autoRemoveSyncedCopiesDays": "Les còpies sincronitzades s'eliminen després de {days} dies",
+    "autoRemoveSyncedCopiesDescription": "Elimina les còpies locals {days} dies després de la sincronització. Les còpies al núvol es conserven.",
+    "localCopiesSection": "Còpies locals",
     "singleTap": "Toc simple",
     "@singleTap": {
         "description": "Device button gesture: one short press"

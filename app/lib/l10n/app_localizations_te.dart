@@ -12194,6 +12194,22 @@ class AppLocalizationsTe extends AppLocalizations {
       'Omi యొక్క ఈ వెర్షన్‌కు ఇకపై మద్దతు లేదు. రికార్డింగ్ మరియు సింక్ కొనసాగించడానికి అప్‌డేట్ చేయండి.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'సింక్ చేసిన కాపీలను స్వయంచాలకంగా తొలగించు';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'సింక్ చేసిన కాపీలు $days రోజుల తర్వాత తొలగించబడతాయి';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'సింక్ అయిన $days రోజుల తర్వాత స్థానిక కాపీలను తొలగిస్తుంది. క్లౌడ్ కాపీలు ఉంచబడతాయి.';
+  }
+
+  @override
+  String get localCopiesSection => 'స్థానిక కాపీలు';
+
+  @override
   String get singleTap => 'సింగిల్ ట్యాప్';
 
   @override

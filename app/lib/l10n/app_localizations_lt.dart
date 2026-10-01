@@ -12163,6 +12163,22 @@ class AppLocalizationsLt extends AppLocalizations {
       'Ši Omi versija nebepalaikoma. Atnaujinkite, kad galėtumėte toliau įrašyti ir sinchronizuoti.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Automatiškai šalinti sinchronizuotas kopijas';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Sinchronizuotos kopijos ištrinamos po $days dienų';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Ištrina vietines kopijas po $days dienų nuo sinchronizavimo. Debesies kopijos išsaugomos.';
+  }
+
+  @override
+  String get localCopiesSection => 'Vietinės kopijos';
+
+  @override
   String get singleTap => 'Vienas bakstelėjimas';
 
   @override

@@ -12148,6 +12148,22 @@ class AppLocalizationsFi extends AppLocalizations {
       'Tätä Omin versiota ei enää tueta. Päivitä, jotta voit jatkaa tallentamista ja synkronointia.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Poista synkronoidut kopiot automaattisesti';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Synkronoidut kopiot poistetaan $days päivän jälkeen';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Poistaa paikalliset kopiot $days päivää synkronoinnin jälkeen. Pilvikopiot säilytetään.';
+  }
+
+  @override
+  String get localCopiesSection => 'Paikalliset kopiot';
+
+  @override
   String get singleTap => 'Kertanapautus';
 
   @override

@@ -11329,6 +11329,10 @@
     "updateAvailableMessage": "Nova verzija Omija je spremna, s ispravcima i poboljšanjima.",
     "updateRequiredTitle": "Potrebno je ažuriranje",
     "updateRequiredMessage": "Ova verzija Omija više nije podržana. Ažurirajte kako biste nastavili snimati i sinkronizirati.",
+    "autoRemoveSyncedCopiesTitle": "Automatski ukloni sinkronizirane kopije",
+    "autoRemoveSyncedCopiesDays": "Sinkronizirane kopije brišu se nakon {days} dana",
+    "autoRemoveSyncedCopiesDescription": "Briše lokalne kopije {days} dana nakon sinkronizacije. Oblačne kopije se zadržavaju.",
+    "localCopiesSection": "Lokalne kopije",
     "singleTap": "Jednostruki dodir",
     "@singleTap": {
         "description": "Device button gesture: one short press"

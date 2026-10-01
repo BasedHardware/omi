@@ -3772,6 +3772,10 @@
     "updateAvailableMessage": "Eine neue Version von Omi ist bereit, mit Fehlerbehebungen und Verbesserungen.",
     "updateRequiredTitle": "Update erforderlich",
     "updateRequiredMessage": "Diese Version von Omi wird nicht mehr unterstützt. Aktualisieren Sie, um weiterhin aufzunehmen und zu synchronisieren.",
+    "autoRemoveSyncedCopiesTitle": "Synchronisierte Kopien automatisch entfernen",
+    "autoRemoveSyncedCopiesDays": "Synchronisierte Kopien werden nach {days} Tagen gelöscht",
+    "autoRemoveSyncedCopiesDescription": "Löscht lokale Kopien {days} Tage nach der Synchronisierung. Cloud-Kopien bleiben erhalten.",
+    "localCopiesSection": "Lokale Kopien",
     "singleTap": "Einfachtippen",
     "@singleTap": {
         "description": "Device button gesture: one short press"

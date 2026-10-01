@@ -11952,6 +11952,22 @@ class AppLocalizationsKo extends AppLocalizations {
   String get updateRequiredMessage => '이 버전의 Omi는 더 이상 지원되지 않습니다. 계속 녹음하고 동기화하려면 업데이트하세요.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => '동기화된 사본 자동 삭제';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '동기화된 사본은 $days일 후 삭제됩니다';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return '동기화 후 $days일에 로컬 사본을 삭제합니다. 클라우드 사본은 유지됩니다.';
+  }
+
+  @override
+  String get localCopiesSection => '로컬 사본';
+
+  @override
   String get singleTap => '싱글 탭';
 
   @override

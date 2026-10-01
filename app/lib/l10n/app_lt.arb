@@ -3772,6 +3772,10 @@
     "updateAvailableMessage": "Nauja Omi versija paruošta – su pataisymais ir patobulinimais.",
     "updateRequiredTitle": "Būtina atnaujinti",
     "updateRequiredMessage": "Ši Omi versija nebepalaikoma. Atnaujinkite, kad galėtumėte toliau įrašyti ir sinchronizuoti.",
+    "autoRemoveSyncedCopiesTitle": "Automatiškai šalinti sinchronizuotas kopijas",
+    "autoRemoveSyncedCopiesDays": "Sinchronizuotos kopijos ištrinamos po {days} dienų",
+    "autoRemoveSyncedCopiesDescription": "Ištrina vietines kopijas po {days} dienų nuo sinchronizavimo. Debesies kopijos išsaugomos.",
+    "localCopiesSection": "Vietinės kopijos",
     "singleTap": "Vienas bakstelėjimas",
     "@singleTap": {
         "description": "Device button gesture: one short press"

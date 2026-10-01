@@ -13,6 +13,24 @@ BUILDERS = frozenset({'where', 'order_by', 'collection_group', 'count', 'sum', '
 CHAINS = BUILDERS | {'collection', 'limit', 'select', 'start_after', 'start_at', 'end_at', 'end_before'}
 
 
+def is_serving_query_inventory_path(path: str) -> bool:
+    """Return whether a repo-relative Python path is in this inventory's walk scope.
+
+    The database package is scanned separately by ``discover_query_functions``;
+    other backend Python packages use the exclusions from ``discover_serving_query_functions``.
+    Keep CI path selection on this same scope so new packages cannot escape the guard.
+    """
+    parts = Path(path).parts
+    if not parts or parts[0] != 'backend' or not path.endswith('.py'):
+        return False
+    relative = parts[1:]
+    if not relative:
+        return False
+    if relative[0] == 'database':
+        return True
+    return not any(part in EXCLUDED_DIRECTORIES or part.startswith('.') for part in relative)
+
+
 def _query_call(call: ast.Call, collection_names: set[str]) -> bool:
     func = call.func
     if isinstance(func, ast.Name):

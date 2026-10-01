@@ -12176,6 +12176,22 @@ class AppLocalizationsMs extends AppLocalizations {
       'Versi Omi ini tidak lagi disokong. Kemas kini untuk terus merakam dan menyegerakkan.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Buang Salinan Tersegerak Secara Automatik';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Salinan tersegerak dipadam selepas $days hari';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Memadam salinan setempat $days hari selepas segerak. Salinan awan dikekalkan.';
+  }
+
+  @override
+  String get localCopiesSection => 'Salinan Setempat';
+
+  @override
   String get singleTap => 'Ketik Sekali';
 
   @override

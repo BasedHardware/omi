@@ -3814,6 +3814,10 @@
     "updateAvailableMessage": "En ny version af Omi er klar med rettelser og forbedringer.",
     "updateRequiredTitle": "Opdatering påkrævet",
     "updateRequiredMessage": "Denne version af Omi understøttes ikke længere. Opdater for at fortsætte med at optage og synkronisere.",
+    "autoRemoveSyncedCopiesTitle": "Fjern synkroniserede kopier automatisk",
+    "autoRemoveSyncedCopiesDays": "Synkroniserede kopier slettes efter {days} dage",
+    "autoRemoveSyncedCopiesDescription": "Sletter lokale kopier {days} dage efter synkronisering. Cloudkopier gemmes.",
+    "localCopiesSection": "Lokale kopier",
     "singleTap": "Enkelttryk",
     "@singleTap": {
         "description": "Device button gesture: one short press"

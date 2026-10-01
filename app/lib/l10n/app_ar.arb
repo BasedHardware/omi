@@ -3772,6 +3772,10 @@
     "updateAvailableMessage": "إصدار جديد من Omi جاهز، مع إصلاحات وتحسينات.",
     "updateRequiredTitle": "التحديث مطلوب",
     "updateRequiredMessage": "لم يعد هذا الإصدار من Omi مدعومًا. حدّث التطبيق لمواصلة التسجيل والمزامنة.",
+    "autoRemoveSyncedCopiesTitle": "إزالة النسخ المتزامنة تلقائيًا",
+    "autoRemoveSyncedCopiesDays": "يتم حذف النسخ المتزامنة بعد {days} يومًا",
+    "autoRemoveSyncedCopiesDescription": "يحذف النسخ المحلية بعد {days} يومًا من المزامنة. تبقى النسخ السحابية محفوظة.",
+    "localCopiesSection": "النسخ المحلية",
     "singleTap": "نقرة مفردة",
     "@singleTap": {
         "description": "Device button gesture: one short press"

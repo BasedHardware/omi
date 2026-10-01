@@ -12071,6 +12071,22 @@ class AppLocalizationsAr extends AppLocalizations {
   String get updateRequiredMessage => 'لم يعد هذا الإصدار من Omi مدعومًا. حدّث التطبيق لمواصلة التسجيل والمزامنة.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'إزالة النسخ المتزامنة تلقائيًا';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'يتم حذف النسخ المتزامنة بعد $days يومًا';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'يحذف النسخ المحلية بعد $days يومًا من المزامنة. تبقى النسخ السحابية محفوظة.';
+  }
+
+  @override
+  String get localCopiesSection => 'النسخ المحلية';
+
+  @override
   String get singleTap => 'نقرة مفردة';
 
   @override

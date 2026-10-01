@@ -12141,6 +12141,22 @@ class AppLocalizationsEt extends AppLocalizations {
       'Seda Omi versiooni enam ei toetata. Värskenda, et jätkata salvestamist ja sünkroonimist.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Sünkroonitud koopiate automaatne eemaldamine';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Sünkroonitud koopiad kustutatakse pärast $days päeva';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Kustutab kohalikud koopiad $days päeva pärast sünkroonimist. Pilvekoopiad jäävad alles.';
+  }
+
+  @override
+  String get localCopiesSection => 'Kohalikud koopiad';
+
+  @override
   String get singleTap => 'Ühekordne puudutus';
 
   @override

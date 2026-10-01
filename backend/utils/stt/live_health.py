@@ -16,7 +16,8 @@ import redis.asyncio as aioredis
 
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from utils.executors import start_background_task
-from utils.stt.live_metrics import FLEET_HEALTH_WRITE_DROPPED, LEG_TRANSCRIPT_OUTCOME, ROUTING_DECISION
+from utils.stt.live_cost_health import CostHealthMixin
+from utils.stt.live_metrics import FLEET_HEALTH_WRITE_DROPPED, LEG_TRANSCRIPT_OUTCOME
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class ProviderState:
         return self.bench is not None and self.bench_until > time.time()
 
 
-class FleetHealth:
+class FleetHealth(CostHealthMixin):
     def __init__(
         self,
         *,
@@ -72,6 +73,7 @@ class FleetHealth:
         redis_client: Any = None,
         probe_jitter: Callable[[str], float] | None = None,
     ) -> None:
+        self.init_cost_health()
         self._clock = clock
         self._client = redis_client
         self._lock = threading.RLock()
@@ -455,6 +457,8 @@ class FleetHealth:
     async def refresh_forever(self) -> None:
         while True:
             await self.refresh_once()
+            if mode() != 'off':
+                await self.refresh_cost_once()
             await asyncio.sleep(CACHE_REFRESH_SECONDS)
 
     def try_admit_recovery_probe(self, provider: str) -> bool:
@@ -481,31 +485,3 @@ class FleetHealth:
 
 
 health = FleetHealth()
-
-
-def ordered_providers(
-    providers: list[str], states: dict[str, ProviderState], uid: str | None, *, probe_percent: float = 2.0
-) -> list[str]:
-    """Rank eligible legs, preserving config order for ties and a small recovery probe floor."""
-    candidates = [provider for provider in providers if not states.get(provider, ProviderState()).excluded]
-    if not candidates:
-        return []
-    indexed = {provider: index for index, provider in enumerate(candidates)}
-    ranked = sorted(candidates, key=lambda provider: (-states.get(provider, ProviderState()).score, indexed[provider]))
-    if uid:
-        floor = min(10.0, max(0.0, probe_percent))
-        probes = [
-            provider
-            for provider in candidates
-            if int.from_bytes(hashlib.sha256(f'stt-probe:{uid}:{provider}'.encode()).digest()[:8], 'big') / 2**64 * 100
-            < floor
-        ]
-        if probes:
-            probe = min(probes, key=lambda provider: (states.get(provider, ProviderState()).score, indexed[provider]))
-            ranked.remove(probe)
-            ranked.insert(0, probe)
-            try:
-                ROUTING_DECISION.labels(outcome='probe').inc()
-            except Exception:
-                pass
-    return ranked
