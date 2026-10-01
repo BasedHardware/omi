@@ -898,7 +898,6 @@ def privacy_deletion_receipt_id(uid: str, memory_id: str) -> str:
     return f"receipt_{digest}"
 
 
-
 def _control_fence(control: MemoryControlState) -> _MemoryControlFence:
     return _MemoryControlFence(
         head_commit_id=control.head_commit_id,
@@ -2270,7 +2269,6 @@ def atomic_bump_source_generation(uid: str, *, db_client: Any) -> MemoryControlS
         raise ValueError("db_client must not be None")
     transaction = db_client.transaction()
     return _atomic_bump_source_generation_transaction(transaction, db_client, uid.strip())
-
 
 
 @transactional
