@@ -17,6 +17,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/transcript.dart';
 
 import '../fakes.dart';
@@ -25,7 +26,6 @@ import 'capture.dart';
 
 const _transcript = 'lib/pages/conversation_detail/widgets/transcript_tab.dart (TranscriptWidgets)';
 const _live = 'lib/pages/conversation_capturing/page.dart (ConversationCapturingPage)';
-const _transcriptTab = 0;
 
 Person _person(String id, String name, {String voice = 'learned'}) => Person(
       id: id,
@@ -65,7 +65,7 @@ Future<void> _pumpTranscript(
 }) async {
   final people = await a.tester.runAsync(_people);
   await a.pump(
-    ConversationDetailPage(conversation: conversation, initialTabIndex: _transcriptTab),
+    ConversationDetailPage(conversation: conversation, initialTab: ConversationTab.transcript),
     providers: <SingleChildWidget>[
       ChangeNotifierProvider<PeopleProvider>.value(value: people!),
       ChangeNotifierProvider<ConversationProvider>.value(

@@ -158,7 +158,7 @@ class SpeakerTagOutcomeCard extends StatelessWidget {
       liveRegion: true,
       child: Container(
         key: const Key('speaker_tag_outcome'),
-        margin: const EdgeInsets.only(bottom: OmiSpacing.xs),
+        margin: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
         padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.xxs, OmiSpacing.sm),
         decoration: BoxDecoration(
           color: OmiColors.surface1,
