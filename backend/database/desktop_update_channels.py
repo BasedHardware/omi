@@ -348,7 +348,12 @@ def _build_pointer(
     """
     policy = TRANSITIONS[transition]
 
-    if manifest["platform"] != platform:
+    if not isinstance(current, dict):
+        raise ValueError("current pointer must be a dictionary")
+    if not isinstance(manifest, dict):
+        raise ValueError("manifest must be a dictionary")
+
+    if manifest.get("platform") != platform:
         raise ValueError("release manifest platform does not match pointer platform")
     accepted_evidence = policy["accepted_evidence"]
     evidence = (manifest["qualification_tier"], manifest["qualification_passed"])  # legacy evidence-class fields
@@ -370,8 +375,11 @@ def _build_pointer(
             )
 
     current_generation = _generation(current.get("generation", 0))
-    if expected_generation is not None and expected_generation != current_generation:
-        raise ValueError(f"generation mismatch: expected {expected_generation}, current {current_generation}")
+    if expected_generation is not None:
+        if isinstance(expected_generation, bool) or not isinstance(expected_generation, int) or expected_generation < 0:
+            raise ValueError("expected_generation must be a non-negative integer")
+        if expected_generation != current_generation:
+            raise ValueError(f"generation mismatch: expected {expected_generation}, current {current_generation}")
 
     current_build_raw = current.get("build_number")
     if policy["direction"] == "forward":
@@ -380,6 +388,12 @@ def _build_pointer(
                 f"channel pointers are roll-forward only: current build {_generation(current_build_raw)}, "
                 f"requested build {manifest['build_number']}"
             )
+
+    if updated_at is not None:
+        if not isinstance(updated_at, datetime):
+            raise ValueError("updated_at must be a datetime")
+        if updated_at.tzinfo is None or updated_at.utcoffset() is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
 
     pointer = {
         "platform": platform,
@@ -447,6 +461,18 @@ def promote_channel(
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Advance or explicitly repoint a channel pointer to a qualified manifest."""
+    if not isinstance(platform, str):
+        raise ValueError("platform must be a string")
+    if not isinstance(channel, str):
+        raise ValueError("channel must be a string")
+    if not isinstance(release_id, str):
+        raise ValueError("release_id must be a string")
+    if expected_generation is not None and (
+        isinstance(expected_generation, bool)
+        or not isinstance(expected_generation, int)
+        or expected_generation < 0
+    ):
+        raise ValueError("expected_generation must be a non-negative integer")
     platform = platform.strip().lower()
     channel = channel.strip().lower()
     release_id = release_id.strip()
@@ -552,6 +578,10 @@ def admit_qualified_beta_manifest(
 
 def get_channel_release(platform: str, channel: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
     """Resolve one explicit channel pointer to its immutable manifest."""
+    if not isinstance(platform, str):
+        raise ValueError("platform must be a string")
+    if not isinstance(channel, str):
+        raise ValueError("channel must be a string")
     if platform != "macos" or channel not in VALID_CHANNELS:
         raise ValueError("invalid platform or channel")
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -591,6 +621,8 @@ def get_channel_release(platform: str, channel: str, *, firestore_client: Any = 
 
 def get_release_manifest(release_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
     """Read one retained immutable manifest without consulting release metadata."""
+    if not isinstance(release_id, str):
+        raise ValueError("release_id must be a string")
     release_id = release_id.strip()
     if not release_id:
         raise ValueError("release_id is required")
