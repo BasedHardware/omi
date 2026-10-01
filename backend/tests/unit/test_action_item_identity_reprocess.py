@@ -14,6 +14,7 @@ real ``utils.task_sync`` delivery with a fake task app. Nothing reaches a networ
 import asyncio
 import logging
 import os
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
@@ -27,6 +28,7 @@ os.environ.setdefault(
 )
 
 import database.action_items as action_items_db
+import database.vector_db as vector_db
 from config.action_item_identity import ACTION_ITEM_IDENTITY_PRESERVE_ENV, action_item_identity_preserve_enabled
 from utils import task_sync
 from utils.conversations import action_item_identity, process_conversation, smart_merge
@@ -63,17 +65,21 @@ class _Ref:
         return _Query(self._store, f'{self.path}/{name}')
 
     def get(self, transaction=None) -> _Snapshot:
+        self._store.events.append(('get', self.path, transaction is not None))
         return _Snapshot(self, self._store.docs.get(self.path))
 
     def set(self, data: Dict[str, Any]) -> None:
+        self._store.events.append(('set', self.path, dict(data)))
         self._store.docs[self.path] = dict(data)
 
     def update(self, patch: Dict[str, Any]) -> None:
+        self._store.events.append(('update', self.path, dict(patch)))
         if self.path not in self._store.docs:
             raise NotFound(self.path)
         self._store.docs[self.path].update(patch)
 
     def delete(self) -> None:
+        self._store.events.append(('delete', self.path))
         self._store.docs.pop(self.path, None)
 
 
@@ -86,6 +92,8 @@ class _Query:
         return _Query(self._store, self._path, **state)
 
     def document(self, document_id: Optional[str] = None) -> _Ref:
+        if document_id == '':
+            raise ValueError('a Firestore document id must not be empty')
         return _Ref(self._store, f'{self._path}/{document_id or self._store.mint()}')
 
     def where(self, *, filter) -> '_Query':
@@ -102,6 +110,7 @@ class _Query:
         return self
 
     def stream(self, *args, **kwargs):
+        self._store.events.append(('query', self._path, self._filters, self._fields, self._limit))
         prefix = f'{self._path}/'
         rows = []
         for path in sorted(self._store.docs):
@@ -115,8 +124,9 @@ class _Query:
 class _Batch:
     """Batch and transaction: writes apply on commit (transactions apply immediately; no contention here)."""
 
-    def __init__(self, immediate: bool):
+    def __init__(self, immediate: bool, events: list):
         self._immediate, self._ops = immediate, []
+        self._events = events
 
     def _apply(self, op: Callable[[], None]) -> None:
         op() if self._immediate else self._ops.append(op)
@@ -131,6 +141,7 @@ class _Batch:
         self._apply(ref.delete)
 
     def commit(self) -> None:
+        self._events.append(('commit', len(self._ops)))
         for op in self._ops:
             op()
         self._ops.clear()
@@ -140,6 +151,7 @@ class TaskFirestore:
     def __init__(self):
         self.docs: Dict[str, Dict[str, Any]] = {}
         self.minted = 0
+        self.events: List[tuple] = []
 
     def mint(self) -> str:
         self.minted += 1
@@ -149,10 +161,12 @@ class TaskFirestore:
         return _Query(self, name)
 
     def batch(self) -> _Batch:
-        return _Batch(immediate=False)
+        self.events.append(('batch',))
+        return _Batch(immediate=False, events=self.events)
 
     def transaction(self) -> _Batch:
-        return _Batch(immediate=True)
+        self.events.append(('transaction',))
+        return _Batch(immediate=True, events=self.events)
 
     def tasks(self, conversation_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         prefix = f'users/{UID}/action_items/'
@@ -393,6 +407,30 @@ def test_reprocess_failure_before_the_vectors_queues_no_delivery_for_apple_remin
     assert world.apple_pushes == [[world.ids()[BUDGET]], [world.ids()[VENUE]]]
 
 
+def test_real_vector_write_fence_failure_prevents_reprocess_delivery(world, monkeypatch):
+    world.default_app = 'apple_reminders'
+    world.process('conv-1', [_item(BUDGET)])
+    world.client_marks_apple_exported()
+    world.deferred = True
+    monkeypatch.setattr(
+        process_conversation, 'upsert_action_item_vectors_batch', vector_db.upsert_action_item_vectors_batch
+    )
+    monkeypatch.setattr(vector_db, 'index', SimpleNamespace(upsert=lambda **kwargs: None))
+    monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_documents=lambda texts: [[0.0] for _ in texts]))
+
+    def failed_fence(*args, **kwargs):
+        raise RuntimeError('synthetic external-write fence failure')
+
+    monkeypatch.setattr(vector_db, 'external_write_fence', failed_fence)
+    with pytest.raises(RuntimeError, match='synthetic external-write fence'):
+        world.process('conv-1', [_item(BUDGET), _item(VENUE)])
+    assert world.queue == []
+    monkeypatch.setattr(vector_db, 'external_write_fence', lambda *a, **k: nullcontext())
+    world.process('conv-1', [_item(BUDGET), _item(VENUE)])
+    world.drain()
+    assert world.apple_pushes == [[world.ids()[BUDGET]], [world.ids()[VENUE]]]
+
+
 # --------------------------------------------------------------------------- smart merge refresh
 
 
@@ -475,7 +513,7 @@ def _first_processing_trace(monkeypatch, flag: Optional[str]):
     else:
         monkeypatch.setenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, flag)
     world.process('conv-1', [_item(BUDGET, DUE), _item(VENUE), _item(BUDGET)])
-    return _scrub((world.events, world.reminders, world.external, world.creates, world.store.docs))
+    return _scrub((world.events, world.reminders, world.external, world.creates, world.store.docs, world.store.events))
 
 
 def test_first_processing_is_identical_with_the_flag_on_and_off(monkeypatch):
@@ -551,10 +589,36 @@ def test_identity_key_ignores_case_whitespace_punctuation_and_unicode_form(left,
         ('Send $5 to Bob', 'Send 5 to Bob'),
         ('Call Bob', 'Call Rob'),
         ('Email Ann', 'Email Ann today'),
+        ('Do not approve the invoice', 'Do approve the invoice'),
+        ('联系张三', '联系李四'),
+        ('اتصل بعلي', 'اتصل بعمر'),
     ],
 )
 def test_identity_key_keeps_material_wording_differences(left, right):
     assert identity_key(left) != identity_key(right)
+
+
+@pytest.mark.parametrize(
+    'left, right',
+    [
+        ('Set offset -5', 'Set offset 5'),
+        ('Transfer 1.5 units', 'Transfer 1/5 units'),
+        ('Send 1,500 units', 'Send 1.500 units'),
+        ('Use account A-B', 'Use account A B'),
+        ('Email a.b@example.test', 'Email a/b@example.test'),
+        ('Use code AbC', 'Use code abc'),
+        ('Enter Ab12', 'Enter ab12'),
+        ('Calculate x²', 'Calculate x2'),
+        ('👩\u200d💻', '👩💻'),
+        ('می\u200cروم', 'میروم'),
+    ],
+)
+def test_material_symbols_never_borrow_an_exported_identity(world, left, right):
+    world.process('conv-1', [_item(left)])
+    first_id = world.ids()[left]
+    world.process('conv-1', [_item(right)])
+    assert world.ids()[right] != first_id
+    assert world.external == [left, right]
 
 
 @pytest.mark.parametrize('description', [None, '', '   ', '...', '!?', 42])
@@ -642,6 +706,61 @@ def test_create_action_items_batch_reserves_given_ids_and_mints_the_rest(world):
     )
     assert ids[0] == 'kept-id' and ids[1].startswith('auto-')
     assert world.store.tasks()['kept-id']['description'] == 'a'
+
+
+def test_flag_is_evaluated_for_each_replacement(world, monkeypatch):
+    world.process('conv-1', [_item(BUDGET)])
+    original = world.ids()[BUDGET]
+    monkeypatch.setenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, 'false')
+    world.process('conv-1', [_item(BUDGET)])
+    replacement = world.ids()[BUDGET]
+    assert replacement != original
+    monkeypatch.setenv(ACTION_ITEM_IDENTITY_PRESERVE_ENV, 'true')
+    world.process('conv-1', [_item(BUDGET)])
+    assert world.ids()[BUDGET] == replacement
+    assert world.external == [BUDGET, BUDGET]
+
+
+def test_duplicate_pairing_reserves_due_matches_before_exported_fallback():
+    prior = [
+        _row('exported', 'Call mom', exported=True, due_at=DUE),
+        _row('other', 'Call mom', due_at=DUE + timedelta(days=1)),
+    ]
+    plan = plan_replacement(
+        'c',
+        [{'description': 'Call mom', 'due_at': DUE + timedelta(days=2)}, {'description': 'Call mom', 'due_at': DUE}],
+        prior,
+    )
+    assert plan.document_ids == ['other', 'exported']
+
+
+def test_duplicate_pairing_prefers_oldest_after_due_and_export_state():
+    plan = plan_replacement(
+        'c',
+        [{'description': 'Call mom'}],
+        [_row('a-new', 'Call mom', created_at=DUE), _row('z-old', 'Call mom', created_at=DUE - timedelta(days=1))],
+    )
+    assert plan.document_ids == ['z-old']
+
+
+def test_due_pairing_does_not_round_distinct_instants_into_one():
+    early, late = DUE + timedelta(microseconds=100), DUE + timedelta(microseconds=200)
+    plan = plan_replacement(
+        'c',
+        [{'description': 'Call mom', 'due_at': late}, {'description': 'Call mom', 'due_at': early}],
+        [_row('a-early', 'Call mom', due_at=early), _row('z-late', 'Call mom', due_at=late)],
+    )
+    assert plan.document_ids == ['z-late', 'a-early']
+
+
+def test_long_descriptions_are_not_truncated_for_identity():
+    prefix = 'Synthetic detail ' * 600
+    assert identity_key(prefix + 'alpha') != identity_key(prefix + 'beta')
+
+
+def test_identical_emoji_only_tasks_keep_distinct_ids():
+    plan = plan_replacement('c', [{'description': '💻'}, {'description': '💻'}], [_row('a', '💻'), _row('b', '💻')])
+    assert plan.document_ids == ['a', 'b']
 
 
 # --------------------------------------------------------------------------- telemetry

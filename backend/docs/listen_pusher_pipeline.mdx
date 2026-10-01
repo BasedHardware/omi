@@ -832,8 +832,11 @@ automatically repeat an uncertain provider create after a failed marker write.
 
 A reprocess (smart-merge survivor refresh, user reprocess, sync update, server
 recovery) replaces the conversation's tasks. A new item whose description has the
-same exact canonical form (NFKC, case-folded, punctuation and whitespace
-collapsed) as a prior row of the same conversation keeps that row's id and export
+same exact canonical form (width/typography normalized, ordinary text case-folded,
+sentence punctuation and whitespace collapsed; internal punctuation, numeric signs,
+numeric compatibility symbols and Unicode joiners retained; code-bearing descriptions
+retain case) as a prior
+row of the same conversation keeps that row's id and export
 marker (`utils/conversations/action_item_identity.py`), so its task-app copy is
 not created again and Apple Reminders is not pushed again; reworded or new items
 are delivered as before. With prior rows, delivery is queued only after the task
