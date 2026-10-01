@@ -96,6 +96,19 @@ SHADOW_FIELDS = (
 )
 _SHADOW_FORMAT = ' '.join(f'{name}=%d' for name in SHADOW_FIELDS)
 SHADOW_STATES = {True: 'ok', False: 'disabled'}  # plus 'error'
+# Reject an oversized measurement rather than sampling and reporting false pairs.
+ANCHOR_MAX_ROWS = 512
+ANCHOR_MAX_COMPARISONS = 65_536
+ANCHOR_MAX_PROVENANCE_ENTRIES = 64
+ANCHOR_MAX_SEGMENTS_PER_ROW = 512
+ANCHOR_MAX_TOTAL_SEGMENTS = 65_536
+ANCHOR_MAX_SEGMENT_ID_LENGTH = 256
+_MAX_LOG_COUNT = 2**31 - 1
+_SHADOW_ERROR_NAMES = frozenset({'RuntimeError', 'TypeError', 'ValueError', 'AssertionError', 'KeyError'})
+
+
+class AnchorShadowLimitExceeded(Exception):
+    """Measurement exceeded its work budget; the completed write plan is still valid."""
 
 
 def identity_key(description: object) -> str:
@@ -319,10 +332,23 @@ def _plan(
 def _segment_anchor(row: Mapping[str, Any], conversation_id: str) -> frozenset[str]:
     """Transcript segment ids this row's provenance cites for this conversation; empty means no anchor."""
     anchor: set[str] = set()
-    for entry in row.get('provenance') or ():
+    provenance = row.get('provenance')
+    if not isinstance(provenance, (list, tuple)):
+        return frozenset()
+    if len(provenance) > ANCHOR_MAX_PROVENANCE_ENTRIES:
+        raise AnchorShadowLimitExceeded()
+    segment_count = 0
+    for entry in provenance:
         evidence: Mapping[str, Any] = cast(Mapping[str, Any], entry) if isinstance(entry, Mapping) else {}
         if evidence.get('kind') == 'conversation' and evidence.get('id') == conversation_id:
-            segments: Any = evidence.get('transcript_segment_ids') or ()
+            segments = evidence.get('transcript_segment_ids')
+            if not isinstance(segments, (list, tuple)):
+                continue
+            segment_count += len(segments)
+            if segment_count > ANCHOR_MAX_SEGMENTS_PER_ROW:
+                raise AnchorShadowLimitExceeded()
+            if any(isinstance(seg, str) and len(seg) > ANCHOR_MAX_SEGMENT_ID_LENGTH for seg in segments):
+                raise AnchorShadowLimitExceeded()
             anchor.update(seg for seg in segments if isinstance(seg, str) and seg)
     return frozenset(anchor)
 
@@ -335,7 +361,10 @@ def _anchor_counts(
     enabled: bool,
 ) -> Dict[str, int]:
     """Shadow counts over the rows the exact rule left unmatched. Reads its inputs; writes nothing."""
-    unmatched_prior = [row for row in prior_rows if row.get('id') not in plan.reused_ids]
+    if enabled and max(len(prior_rows), len(items)) > ANCHOR_MAX_ROWS:
+        raise AnchorShadowLimitExceeded()
+    reused_ids = plan.reused_ids
+    unmatched_prior = [row for row in prior_rows if row.get('id') not in reused_ids]
     exact = (REUSED, SKIPPED_EXPORTED)
     unmatched_new = [item for item, outcome in zip(items, plan.outcomes) if outcome not in exact]
     eligible = [row for row in unmatched_prior if _eligible(row, conversation_id)]
@@ -347,17 +376,28 @@ def _anchor_counts(
         unmatched_new=len(unmatched_new),
     )
     if not enabled:
-        return counts
+        return {name: min(value, _MAX_LOG_COUNT) for name, value in counts.items()}
+    if len(eligible) * len(unmatched_new) > ANCHOR_MAX_COMPARISONS:
+        raise AnchorShadowLimitExceeded()
     old = [_segment_anchor(row, conversation_id) for row in eligible]
     new = [_segment_anchor(item, conversation_id) for item in unmatched_new]
-    links = [[j for j, b in enumerate(new) if b and len(a & b) >= ANCHOR_MIN_SHARED_SEGMENTS] for a in old if a]
-    new_degree = [sum(j in row_links for row_links in links) for j in range(len(new))]
-    pairs = sum(1 for row_links in links if len(row_links) == 1 and new_degree[row_links[0]] == 1)
+    if sum(map(len, old)) + sum(map(len, new)) > ANCHOR_MAX_TOTAL_SEGMENTS:
+        raise AnchorShadowLimitExceeded()
+    # Degree counts avoid storing the graph and the former cubic dense-graph scan.
+    old_degree, new_degree = [0] * len(old), [0] * len(new)
+    sole_new = [0] * len(old)
+    for i, a in enumerate(old):
+        for j, b in enumerate(new):
+            if a and b and len(a & b) >= ANCHOR_MIN_SHARED_SEGMENTS:
+                old_degree[i] += 1
+                new_degree[j] += 1
+                sole_new[i] = j
+    pairs = sum(1 for i, degree in enumerate(old_degree) if degree == 1 and new_degree[sole_new[i]] == 1)
     counts.update(
         prior_without_anchor=sum(1 for a in old if not a),
         new_without_anchor=sum(1 for b in new if not b),
         anchor_pairs=pairs,
-        anchor_ambiguous=sum(1 for row_links in links if row_links) - pairs,
+        anchor_ambiguous=sum(1 for degree in old_degree if degree) - pairs,
     )
     return counts
 
@@ -377,7 +417,13 @@ def _shadow(
         enabled = action_item_identity_anchor_shadow_enabled()
         fields.update(_anchor_counts(conversation_id, items, prior_rows, plan, enabled), shadow=SHADOW_STATES[enabled])
     except Exception as error:
-        fields.update(dict.fromkeys(SHADOW_FIELDS, 0), shadow='error', shadow_error=type(error).__name__)
+        name = type(error).__name__
+        error_label = (
+            'budget_exceeded'
+            if isinstance(error, AnchorShadowLimitExceeded)
+            else (name if name in _SHADOW_ERROR_NAMES else 'Exception')
+        )
+        fields.update(dict.fromkeys(SHADOW_FIELDS, 0), shadow='error', shadow_error=error_label)
     return fields
 
 

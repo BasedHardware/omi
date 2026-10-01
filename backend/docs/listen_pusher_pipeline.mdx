@@ -862,6 +862,17 @@ other overlaps are `anchor_ambiguous`). It only logs: the prior-row read gains t
 `provenance` field and nothing written, deleted or delivered changes. A shadow
 failure logs `shadow=error`; `ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENABLED`
 (unset = on, any unrecognized value = off) turns it and the extra field off.
+The measurement rejects oversized inputs rather than sampling: at most 512 rows
+per side, 65,536 candidate comparisons, 64 provenance entries per row, 512 cited
+segment ids per row, 65,536 distinct segment references in total and 256 characters
+per segment id. Exceeding a limit logs `shadow=error shadow_error=budget_exceeded`
+with zero shadow counts; exclude those lines from coverage ratios. Graph degree
+counts use linear space. Malformed evidence containers are unanchored; iterators
+are never consumed. Error labels are a fixed set (`RuntimeError`, `TypeError`,
+`ValueError`, `AssertionError`, `KeyError`, `Exception`, `budget_exceeded`, `none`).
+The projection can increase bytes materially for large provenance arrays even
+though query/document counts do not change. Legacy missing-completion harvests
+retain the lean projection and may understate anchor coverage.
 
 With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant
