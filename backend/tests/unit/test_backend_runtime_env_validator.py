@@ -3184,3 +3184,6 @@ def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
         }
         assert {name: env_block.get(name, {}).get('value') for name in expected} == expected, scope
     assert hosts == _JEV_PROCESS_CONVERSATION_HOSTS
+    # backend-sync-backfill is not a shadow host but also processes conversations.
+    backfill = dict(_manifest_env_blocks(prod))['cloud_run/backend-sync-backfill']
+    assert backfill['CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT']['value'] == '2'

@@ -33,6 +33,14 @@ salt. A conversation's assignment is stable; an account can have both selected
 and unselected conversations. Arm outcomes are analyzed at the conversation
 level, with repeated conversations clustered by user for uncertainty estimates.
 
+Rollback and reprocessing limits: selection is recomputed from the conversation
+ID, so setting K back to 0 stops new keep-all treatment but does not pin earlier
+assignments; a later `SYNC_UPDATE` reassessment of a previously kept conversation
+follows the control (nano) policy, and discards stay recoverable. `arm` lives in
+the latest `relevance_decision`, which a later reprocess or merge overwrites, so
+analysis uses the shadow records (written at first model-tier exposure) and the
+first-processing decision, and excludes conversations reprocessed before readout.
+
 Owner flip is universal when `MEMORY_OWNER_JEV_FLIP_ENABLED` is on; INV-MEM-5
 forbids UID cohorts in live owner attribution. `MEMORY_OWNER_JEV_FLIP_PERCENT`
 is a universal control: 0 disables scoring, 100 permits it when the flag is on;
