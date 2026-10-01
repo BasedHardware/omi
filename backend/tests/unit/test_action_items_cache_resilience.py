@@ -7,12 +7,10 @@ from unittest.mock import MagicMock, patch
 
 from redis.exceptions import ConnectionError, RedisError, TimeoutError
 
+import database.action_items_cache as aic
 from database.action_items_cache import (
     MAX_KEY_LENGTH,
     MAX_UID_LENGTH,
-    _clean_key,
-    _clean_uid,
-    _version_key,
     bump_action_items_list_version,
     compute_etag,
     get_action_items_list_version,
@@ -22,6 +20,10 @@ from database.action_items_cache import (
     read_cached_list,
     write_cached_list,
 )
+
+_clean_key = getattr(aic, "_clean_key")
+_clean_uid = getattr(aic, "_clean_uid")
+_version_key = getattr(aic, "_version_key")
 
 
 def test_clean_uid_validation():

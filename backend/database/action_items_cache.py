@@ -45,7 +45,7 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
-from redis.exceptions import RedisError
+import redis as redis_pkg
 
 from database import redis_db
 
@@ -128,7 +128,7 @@ def bump_action_items_list_version(uid: str) -> None:
         pipe.incr(key)
         pipe.expire(key, _VERSION_TTL_SECONDS)
         pipe.execute()
-    except (RedisError, AttributeError) as e:
+    except (AttributeError, redis_pkg.exceptions.RedisError) as e:  # pyright: ignore[reportAttributeAccessIssue]
         logger.warning('action-items list cache: version bump failed uid=%s: %s', uid, e)
 
 
@@ -148,7 +148,7 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
             logger.warning('action-items list cache: redis client uninitialized for version read uid=%s', clean_uid)
             return None
         raw = client.get(key)
-    except (RedisError, AttributeError) as e:
+    except (AttributeError, redis_pkg.exceptions.RedisError) as e:  # pyright: ignore[reportAttributeAccessIssue]
         logger.warning('action-items list cache: version read failed uid=%s: %s', clean_uid, e)
         return None
     if raw is None:
@@ -191,7 +191,7 @@ def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
             logger.warning('action-items list cache: redis client uninitialized for read')
             return None
         raw = client.get(clean_key)
-    except (RedisError, AttributeError) as e:
+    except (AttributeError, redis_pkg.exceptions.RedisError) as e:  # pyright: ignore[reportAttributeAccessIssue]
         logger.warning('action-items list cache: read failed: %s', e)
         return None
     if not raw:
@@ -226,7 +226,7 @@ def write_cached_list(key: str, *, body: Any, etag: Any, ttl: Any) -> None:
             logger.warning('action-items list cache: redis client uninitialized for write')
             return
         client.set(clean_key, json.dumps({'etag': etag, 'body': body}, default=str), ex=effective_ttl)
-    except (RedisError, AttributeError) as e:
+    except (AttributeError, redis_pkg.exceptions.RedisError) as e:  # pyright: ignore[reportAttributeAccessIssue]
         logger.warning('action-items list cache: write failed: %s', e)
     except (TypeError, ValueError) as e:
         logger.warning('action-items list cache: body not serializable: %s', e)
