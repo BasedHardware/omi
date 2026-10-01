@@ -33,6 +33,7 @@ import 'package:omi/widgets/home_bottom_bar.dart';
 enum _ConversationListRowKind {
   topSpacer,
   dateHeader,
+  processing,
   captureGapHeader,
   captureGap,
   conversation,
@@ -138,6 +139,7 @@ List<_ConversationListRow> _buildConversationListRows({
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
   Map<DateTime, List<CalendarCaptureGap>> captureGapsByDate = const {},
+  Map<DateTime, ServerConversation> processingByDate = const {},
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
@@ -147,13 +149,14 @@ List<_ConversationListRow> _buildConversationListRows({
     final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
     final captureGaps = captureGapsByDate[date] ?? const <CalendarCaptureGap>[];
+    final processing = processingByDate[date];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
       for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
     };
     // A day with only uncaptured meetings still deserves its date header —
     // the capture-gap group is the honest row for that day.
-    if (entries.isEmpty && captureGaps.isEmpty) continue;
+    if (entries.isEmpty && captureGaps.isEmpty && processing == null) continue;
 
     if (!hasRenderedDate) {
       rows.add((
@@ -175,6 +178,19 @@ List<_ConversationListRow> _buildConversationListRows({
       captureGap: null,
       conversationIndex: -1,
     ));
+
+    // Process Now belongs to the list, above the day where the completed conversation lands.
+    if (processing != null) {
+      rows.add((
+        kind: _ConversationListRowKind.processing,
+        date: date,
+        isFirst: false,
+        conversation: processing,
+        recording: null,
+        captureGap: null,
+        conversationIndex: -1,
+      ));
+    }
 
     if (captureGaps.isNotEmpty) {
       rows.add((
@@ -509,6 +525,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool hasProcessingConversations = snapshot.processingConversations.isNotEmpty;
+        final processingNewest = newestProcessingConversation(snapshot.processingConversations);
+        final processingByDate = <DateTime, ServerConversation>{
+          if (processingNewest != null)
+            conversationLocalDayKey(processingNewest.startedAt ?? processingNewest.createdAt): processingNewest,
+        };
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -527,6 +548,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           ...convoProvider.groupedConversations.keys,
           ...recordingsByDate.keys,
           if (showCaptureGaps) ...captureGapsByDate.keys,
+          ...processingByDate.keys,
         }.toList()
           ..sort((a, b) => b.compareTo(a));
         final conversationRows = _buildConversationListRows(
@@ -534,6 +556,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           conversationsByDate: convoProvider.groupedConversations,
           recordingsByDate: recordingsByDate,
           captureGapsByDate: captureGapsByDate,
+          processingByDate: processingByDate,
         );
 
         return RefreshIndicator(
@@ -567,8 +590,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     ? HomeDailyRecaps(key: _recapsKey)
                     : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
               ),
-              // Process Now belongs to the list, above the day where the completed conversation lands.
-              if (hasProcessingConversations) getProcessingConversationsWidget(snapshot.processingConversations),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
               if (showTypedStatus &&
@@ -588,9 +609,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
                 const SliverFillRemaining(hasScrollBody: false, child: Center(child: NoConversationsHero()))
-              else if (hasProcessingConversations && convoProvider.groupedConversations.isEmpty && !hasRecordings)
-                const SliverToBoxAdapter(child: SizedBox(height: 20))
-              else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && !isShowingConversationSkeleton)
+              else if (convoProvider.groupedConversations.isEmpty &&
+                  !hasRecordings &&
+                  !hasProcessingConversations &&
+                  !isShowingConversationSkeleton)
                 SliverToBoxAdapter(
                   child: Center(
                     child: Padding(
@@ -599,7 +621,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     ),
                   ),
                 )
-              else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && isShowingConversationSkeleton)
+              else if (convoProvider.groupedConversations.isEmpty &&
+                  !hasRecordings &&
+                  !hasProcessingConversations &&
+                  isShowingConversationSkeleton)
                 _buildLoadingShimmer()
               else
                 SliverList(
@@ -630,6 +655,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           key: ValueKey('date_${row.date.toIso8601String()}'),
                           date: row.date,
                           isFirst: row.isFirst,
+                        );
+                      case _ConversationListRowKind.processing:
+                        return ProcessingConversationWidget(
+                          key: ValueKey('processing_${row.conversation!.id}'),
+                          conversation: row.conversation!,
                         );
                       case _ConversationListRowKind.captureGapHeader:
                         return CaptureGapHeader(

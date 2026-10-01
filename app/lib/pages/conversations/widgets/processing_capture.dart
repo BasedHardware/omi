@@ -638,18 +638,23 @@ getPhoneMicRecordingButton(
   );
 }
 
-Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
-  // Only show at most 1 processing widget on homepage
-  if (conversations.isEmpty) {
-    return const SliverToBoxAdapter(child: SizedBox.shrink());
-  }
+ServerConversation? newestProcessingConversation(List<ServerConversation> conversations) {
+  if (conversations.isEmpty) return null;
   // Live events append new IDs; list position is not recency. Processing begins
   // at capture end, while the optimistic Process Now row has only createdAt.
-  final newest = conversations.reduce((a, b) {
+  return conversations.reduce((a, b) {
     final aTime = a.finishedAt ?? a.createdAt;
     final bTime = b.finishedAt ?? b.createdAt;
     return bTime.isAfter(aTime) ? b : a;
   });
+}
+
+Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
+  // Only show at most 1 processing widget on homepage
+  final newest = newestProcessingConversation(conversations);
+  if (newest == null) {
+    return const SliverToBoxAdapter(child: SizedBox.shrink());
+  }
   return SliverToBoxAdapter(
     child: ProcessingConversationWidget(key: ValueKey('processing_${newest.id}'), conversation: newest),
   );
