@@ -16,11 +16,12 @@ overlay:
         # frame, 0 connects since 08-26), so they got no transcript. The configured order
         # The allocated windowed TDT cohort precedes the unchanged vendor order;
         # otherwise Soniox is second after Modulate. Canary allocation follows the
-        # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29).
+        # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29;
+        # rolled back to 0% on 2026-10-01 for a first-text latency regression).
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
-          value: '5'
+          value: '0'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '8'
         PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
@@ -140,6 +141,24 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -199,6 +218,24 @@ overlay:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           value: http://diarizer.omi.me:80
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -410,6 +447,24 @@ overlay:
           MCP_OAUTH_CLAUDE_REDIRECT_URIS:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -517,6 +572,24 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -602,6 +675,24 @@ overlay:
             value: based-hardware
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
