@@ -4,7 +4,7 @@ import copy
 import hashlib
 import json
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from google.cloud import firestore
@@ -14,6 +14,9 @@ from .conversation_revisions import ensure_timezone_aware, firestore_revision_da
 from .conversations import conversations_collection
 
 _RECEIPTS_COLLECTION = 'mutation_receipts'
+DEFAULT_RECEIPT_TTL_DAYS = 14
+DEFAULT_RECEIPT_TTL = timedelta(days=DEFAULT_RECEIPT_TTL_DAYS)
+_RECEIPT_SCHEMA_VERSION = 1
 
 
 class ConversationMutationNotFoundError(LookupError):
@@ -112,11 +115,14 @@ def apply_conversation_sync_mutation(
     client_mutation_id: str,
     base_revision: datetime,
     operation: Dict[str, Any],
+    ttl: timedelta = DEFAULT_RECEIPT_TTL,
     firestore_client: Any = None,
 ) -> tuple[Dict[str, Any], bool]:
     """Apply one user mutation exactly once against a canonical revision.
 
     The conversation write and its compact receipt share one Firestore commit.
+    Receipts are stamped with `expire_at` corresponding to the outbox retry horizon
+    (defaulting to DEFAULT_RECEIPT_TTL) to bound Firestore document growth.
     For a real state change, the receipt document's own ``update_time`` is the
     commit revision returned on both the first response and every retry. A no-op
     stores the conversation's existing revision because Firestore may preserve
@@ -136,21 +142,50 @@ def apply_conversation_sync_mutation(
         # Firestore requires every read to finish before the first write.
         receipt_snapshot = receipt_ref.get(transaction=transaction)
         conversation_snapshot = conversation_ref.get(transaction=transaction)
+        now_utc = datetime.now(timezone.utc)
+        expire_at = now_utc + ttl
 
         if getattr(receipt_snapshot, 'exists', False):
             receipt = receipt_snapshot.to_dict() or {}
-            if receipt.get('client_mutation_id') != client_mutation_id or receipt.get('fingerprint') != fingerprint:
-                raise ConversationMutationConflictError(
-                    {
-                        'status': 'conflict',
-                        'code': 'mutation_id_reused',
-                        'client_mutation_id': client_mutation_id,
-                        'conversation_id': conversation_id,
-                        'conversation': None,
-                    }
-                )
-            replayed = True
-            return
+            receipt_expire_at = receipt.get('expire_at')
+            is_expired = False
+            if receipt_expire_at is not None and isinstance(receipt_expire_at, datetime):
+                aware_expire = ensure_timezone_aware(receipt_expire_at).astimezone(timezone.utc)
+                if aware_expire <= now_utc:
+                    is_expired = True
+
+            if not is_expired:
+                if receipt.get('client_mutation_id') != client_mutation_id or receipt.get('fingerprint') != fingerprint:
+                    raise ConversationMutationConflictError(
+                        {
+                            'status': 'conflict',
+                            'code': 'mutation_id_reused',
+                            'client_mutation_id': client_mutation_id,
+                            'conversation_id': conversation_id,
+                            'conversation': None,
+                        }
+                    )
+                replayed = True
+                return
+
+        def _write_receipt(resp: Dict[str, Any], rev_source: Optional[str] = None) -> None:
+            receipt_payload: Dict[str, Any] = {
+                'schema_version': _RECEIPT_SCHEMA_VERSION,
+                'client_mutation_id': client_mutation_id,
+                'fingerprint': fingerprint,
+                'created_at': firestore.SERVER_TIMESTAMP,
+                'expire_at': expire_at,
+                'response': resp,
+            }
+            if rev_source:
+                receipt_payload['revision_source'] = rev_source
+
+            if hasattr(transaction, 'set'):
+                transaction.set(receipt_ref, receipt_payload)
+            elif getattr(receipt_snapshot, 'exists', False):
+                transaction.update(receipt_ref, receipt_payload)
+            else:
+                transaction.create(receipt_ref, receipt_payload)
 
         if not getattr(conversation_snapshot, 'exists', False):
             raise ConversationMutationNotFoundError(conversation_id)
@@ -169,15 +204,7 @@ def apply_conversation_sync_mutation(
                 'conversation_id': conversation_id,
                 'conversation': None,
             }
-            transaction.create(
-                receipt_ref,
-                {
-                    'schema_version': 1,
-                    'client_mutation_id': client_mutation_id,
-                    'fingerprint': fingerprint,
-                    'response': response,
-                },
-            )
+            _write_receipt(response)
             return
 
         if requested_revision != current_revision:
@@ -188,15 +215,7 @@ def apply_conversation_sync_mutation(
                 'conversation_id': conversation_id,
                 'conversation': _sync_state(current, current_revision),
             }
-            transaction.create(
-                receipt_ref,
-                {
-                    'schema_version': 1,
-                    'client_mutation_id': client_mutation_id,
-                    'fingerprint': fingerprint,
-                    'response': response,
-                },
-            )
+            _write_receipt(response)
             return
 
         next_state, patch = _apply_operation(current, operation)
@@ -215,16 +234,7 @@ def apply_conversation_sync_mutation(
         }
         if patch:
             transaction.update(conversation_ref, patch)
-        transaction.create(
-            receipt_ref,
-            {
-                'schema_version': 1,
-                'client_mutation_id': client_mutation_id,
-                'fingerprint': fingerprint,
-                'revision_source': revision_source,
-                'response': response,
-            },
-        )
+        _write_receipt(response, revision_source)
 
     run_transactional(client, _apply)
 
@@ -255,3 +265,70 @@ def apply_conversation_sync_mutation(
             raise ConversationMutationReceiptUnavailableError('conversation mutation receipt has no revision')
         conversation['revision'] = revision
     return result, replayed
+
+
+def get_conversation_mutation_receipt(
+    uid: str,
+    conversation_id: str,
+    client_mutation_id: str,
+    firestore_client: Any = None,
+) -> Optional[Dict[str, Any]]:
+    """Retrieve raw mutation receipt data by client_mutation_id, or None if expired or non-existent."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    receipt_ref = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .collection(_RECEIPTS_COLLECTION)
+        .document(_receipt_id(client_mutation_id))
+    )
+    snapshot = receipt_ref.get()
+    if not getattr(snapshot, 'exists', False):
+        return None
+    data = snapshot.to_dict() or {}
+    expire_at = data.get('expire_at')
+    if expire_at is not None and isinstance(expire_at, datetime):
+        if ensure_timezone_aware(expire_at).astimezone(timezone.utc) <= datetime.now(timezone.utc):
+            return None
+    return data
+
+
+def prune_expired_mutation_receipts(
+    uid: str,
+    conversation_id: str,
+    *,
+    now: Optional[datetime] = None,
+    batch_size: int = 100,
+    firestore_client: Any = None,
+) -> int:
+    """Explicit garbage collector for expired mutation receipts.
+
+    While Firestore automatically purges documents via collection TTL policies,
+    this helper provides on-demand deterministic cleanup for maintenance sweeps,
+    test tear-downs, and client migration runs.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    now_utc = ensure_timezone_aware(now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    receipts_ref = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .collection(_RECEIPTS_COLLECTION)
+    )
+
+    deleted_count = 0
+    try:
+        query = receipts_ref.where('expire_at', '<=', now_utc).limit(batch_size)
+        docs = list(query.stream() if hasattr(query, 'stream') else query.get())
+        for doc in docs:
+            ref = getattr(doc, 'reference', None)
+            if ref is not None and hasattr(ref, 'delete'):
+                ref.delete()
+            elif hasattr(doc, 'delete'):
+                doc.delete()
+            deleted_count += 1
+    except Exception:
+        pass
+    return deleted_count
