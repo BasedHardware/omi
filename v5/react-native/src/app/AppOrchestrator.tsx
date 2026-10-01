@@ -1,0 +1,1839 @@
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  Animated,
+  Easing,
+  Keyboard,
+  KeyboardAvoidingView,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+  useColorScheme,
+} from 'react-native';
+import omiPendant from '../../assets/omi-pendant.webp';
+import {MaterialIcon} from '../ui/MaterialIcon';
+
+import {
+  cancelChatGeneration,
+  ChatBackendError,
+  chatErrorCopy,
+  chatHistoryErrorCopy,
+  chatRequestCancelled,
+  chatSessionLost,
+  createLocalChatMessage,
+  createPendingAssistantMessage,
+  isStreamingAssistant,
+  loadNewestChatHistory,
+  loadOlderChatHistory,
+  mergeOlderChatHistory,
+  pendingAssistantId,
+  reconcileCanonicalChatHistory,
+  sendChatMessage,
+  type ChatMessage,
+} from '../chatClient';
+import {omiBackend} from '../omiNative';
+import {
+  desktopBackendConfigurationCopy,
+  desktopBackendUnauthorizedCopy,
+  desktopRecoveryCopy,
+} from '../desktopReadClient';
+import {subscribeDesktopSearchCommand} from '../desktopCommands';
+import {styles} from '../ui/styles';
+import {OutcomeStatus} from '../ui/ReadStatus';
+import {ProjectionList, ProjectionRow} from '../ui/ProjectionList';
+import {HomeSearchField} from '../ui/SearchField';
+import {Onboarding} from '../ui/Onboarding';
+import {DesktopOnboarding} from '../desktop/DesktopOnboarding';
+import {PageShell} from '../ui/PageShell';
+import {FocusPressable} from '../ui/Pressable';
+import {ConversationsPage} from '../pages/Conversations';
+import {MemoriesPage} from '../pages/Memories';
+import {TasksPage} from '../pages/Tasks';
+import {TaskPagination} from '../ui/TaskPagination';
+import {ConnectorsPage} from '../pages/Connectors';
+import {SettingsPage} from '../pages/Settings';
+import {resolveInitialRoute, type Route} from './routes';
+import {
+  DeviceSession,
+  type DeviceSessionVariant,
+  homeConnectionStatus,
+} from './DeviceSession';
+import {matchesSearchQuery} from '../searchText';
+import {useDesktopReads} from './useDesktopReads';
+import {useTaskMutations} from './useTaskMutations';
+import {useOnboarding} from './useOnboarding';
+import {usePostSetupHomeCue} from './usePostSetupHomeCue';
+import {useNativeDevices} from './useNativeDevices';
+import {useReduceMotion} from './useReduceMotion';
+import {omiDotColor} from '../ui/OmiAvatar';
+import {OmiMark, bundledAssetSource} from '../ui/OmiMark';
+import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
+import {AppNav} from '../ui/AppNav';
+import {Composer} from '../ui/Composer';
+import {LiveVoiceButton} from '../ui/LiveVoiceButton';
+import {
+  loadDesktopPreferences,
+  type AudioRecordingMode,
+  resolveDesktopAppearance,
+  type DesktopAppearance,
+  type LiveVoiceProvider,
+} from '../desktopSettingsClient';
+import {useAmbientAudio} from './useAmbientAudio';
+import {DesktopApp, DesktopSessionProbe} from '../desktop/DesktopApp';
+import {DesktopThemeProvider} from '../desktop/DesktopTheme';
+import {MobileChat} from '../mobile/MobileChat';
+import {MobileOmnibar, type MobileOmnibarMode} from '../mobile/MobileOmnibar';
+import {
+  MobileAppSurface,
+  type MobileProjectionStatus,
+  type MobileRoute,
+} from '../mobile/MobileAppSurface';
+import {MobileCanvas} from '../mobile/MobileCanvas';
+import {MobileThemeRoot, useMobileAppearance} from '../mobile/MobileTheme';
+
+export {omiDotColor};
+
+type AppProps = {initialRoute?: string; hostMode?: boolean};
+
+const quickPrompts = [
+  'What did I talk about today?',
+  'Show my pending tasks',
+  'What should I remember?',
+  'Summarize my recent conversations',
+];
+
+// Paired, exhaustive Route <-> MobileRoute maps. Keep both directions here so
+// the mobile surface and the app route can never drift apart. Memories has no
+// mobile surface of its own and lands on the mobile home route.
+const mobileRouteByRoute: Record<Route, MobileRoute> = {
+  Home: 'home',
+  Conversations: 'chat',
+  Memories: 'home',
+  Tasks: 'tasks',
+  Settings: 'settings',
+  Connectors: 'apps',
+};
+
+const routeByMobileRoute: Record<MobileRoute, Route> = {
+  home: 'Home',
+  chat: 'Conversations',
+  tasks: 'Tasks',
+  settings: 'Settings',
+  apps: 'Connectors',
+};
+
+function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
+  const {width} = useWindowDimensions();
+  const macDesktop = Platform.OS === 'macos';
+  const nativeSessionRequired =
+    macDesktop || Platform.OS === 'ios' || Platform.OS === 'android';
+  const compact = width < 1024;
+  const desktopWorkspace = macDesktop;
+  const floatingPane = width >= 640;
+  const composerMaxWidth = width >= 1280 ? 820 : width >= 768 ? 720 : 640;
+  const stageOpacity = useRef(new Animated.Value(0)).current;
+  const stageTranslateY = useRef(new Animated.Value(8)).current;
+  const homeResultsOpacity = useRef(new Animated.Value(0)).current;
+  const restingOpacity = useRef(new Animated.Value(0)).current;
+  const restingTranslateY = useRef(new Animated.Value(8)).current;
+  const reduceMotion = useReduceMotion();
+  const [draft, setDraft] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const stableChatMessageIds = useRef(new Set<string>()).current;
+  const animatedChatMessageIds = useRef(new Set<string>()).current;
+  const chatScrollRef = useRef<ScrollView>(null);
+  const composerRef = useRef<TextInput>(null);
+  const shouldFollowChat = useRef(false);
+  const [olderChatCursor, setOlderChatCursor] = useState<string | null>(null);
+  const [hasOlderChat, setHasOlderChat] = useState(false);
+  const [loadingOlderChat, setLoadingOlderChat] = useState(false);
+  const [chatHistorySettled, setChatHistorySettled] = useState(false);
+  // A failed history read is not an empty conversation: the chat surfaces
+  // say so and offer Try Again instead of a greeting.
+  const [chatHistoryFailed, setChatHistoryFailed] = useState(false);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [activeGenerationId, setActiveGenerationId] = useState<string | null>(
+    null,
+  );
+  const [activeOmiRequestId, setActiveOmiRequestId] = useState<string | null>(
+    null,
+  );
+  const omiRequestRef = useRef<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [chatEpoch, setChatEpoch] = useState(0);
+  const chatMutationSeqRef = useRef(0);
+  // Synchronous in-flight fence for send(). chatBusy is render state, so two
+  // submits in the same tick (composer + button, or a queued duplicate) would
+  // both pass the chatBusy check before React re-renders. The token also
+  // survives a gate transition: the gate clears it so the next session's
+  // composer is never bricked by a retired send still unwinding.
+  const sendInFlightRef = useRef<object | null>(null);
+  // Monotonic chat session epoch. Each run of the chat-history effect (a gate
+  // transition or a backend plane switch) bumps it, so a send or older-page
+  // load that started under a retired session can never write transcript
+  // state into the session that follows.
+  const chatSessionEpochRef = useRef(0);
+  const [route, setRoute] = useState<Route>(() =>
+    resolveInitialRoute(initialRoute),
+  );
+  const [homeChatOpen, setHomeChatOpen] = useState(false);
+  const [mobileMode, setMobileMode] = useState<MobileOmnibarMode>('Search');
+  const [mobileAppearance, setMobileAppearance] = useMobileAppearance();
+  const beforeMobileChat = useRef<{route: Route; mode: MobileOmnibarMode}>({
+    route: 'Home',
+    mode: 'Search',
+  });
+  const [devicePanelOpen, setDevicePanelOpen] = useState(false);
+  // useOnboarding owns the desktop session gate and needs a reads refresh;
+  // useDesktopReads must stay idle until that gate is ready. A latest-ref
+  // trampoline breaks the cycle without firing reads before the session.
+  const refreshReadsRef = useRef<
+    (initial: boolean, options?: {ignoreEnabled?: boolean}) => Promise<void>
+  >(async () => undefined);
+  const refreshReadsViaRef = useCallback(
+    (initial: boolean, options?: {ignoreEnabled?: boolean}) =>
+      refreshReadsRef.current(initial, options),
+    [],
+  );
+  const {
+    authError,
+    cancelSignIn,
+    completeFirstRun,
+    completeSetup,
+    completingSetup,
+    desktopHandoff,
+    setupRequired,
+    onboardingRequired,
+    returningUser,
+    revalidateSession,
+    signInAndRefresh,
+    signOutAndRefresh,
+    signingIn,
+  } = useOnboarding(nativeSessionRequired, refreshReadsViaRef, hostMode);
+  // Cloud reads/chat need a live session: onboarding done AND signed in. A
+  // returning signed-out user sits in the shell's Welcome-back card instead.
+  const sessionReady =
+    !hostMode && onboardingRequired === false && !returningUser;
+  const {
+    allHomeReadsUnavailable,
+    tasksLoadingMore,
+    taskNotice,
+    loadMoreTasks,
+    readOutcomes,
+    reads,
+    readsPhase,
+    resetReads,
+    refreshReads,
+    refreshTasks,
+    conversationsLoadingMore,
+    conversationsExtended,
+    conversationNotice,
+    loadMoreConversations,
+  } = useDesktopReads({
+    enabled: sessionReady,
+  });
+  const postSetupHomeCue = usePostSetupHomeCue(onboardingRequired, readsPhase);
+
+  const taskMutations = useTaskMutations({
+    enabled: sessionReady,
+    outcome: readOutcomes?.tasks ?? null,
+    refreshTasks,
+    revalidateSession,
+  });
+  const taskPagination = (
+    <TaskPagination
+      hasMore={
+        readOutcomes?.tasks.status === 'success' &&
+        readOutcomes.tasks.value.page.hasMore
+      }
+      busy={
+        tasksLoadingMore ||
+        readsPhase === 'refreshing' ||
+        taskMutations.busyTaskId !== null
+      }
+      notice={taskNotice}
+      onLoadMore={loadMoreTasks}
+    />
+  );
+
+  useEffect(() => {
+    refreshReadsRef.current = refreshReads;
+  }, [refreshReads]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [searchArmed, setSearchArmed] = useState(false);
+  const [homeSearchFocusNonce, setHomeSearchFocusNonce] = useState(0);
+  const [composerFocused, setComposerFocused] = useState(false);
+  const [liveVoiceProvider, setLiveVoiceProvider] =
+    useState<LiveVoiceProvider>('gpt_live');
+  const [audioMode, setAudioMode] = useState<AudioRecordingMode>('off');
+  const [appearance, setAppearance] = useState<DesktopAppearance>('dark');
+  // 'system' follows macOS; the window reports the resolved scheme.
+  const systemScheme = useColorScheme();
+  const desktopScheme = resolveDesktopAppearance(appearance, systemScheme);
+  const [screenCaptureEnabled, setScreenCaptureEnabled] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadDesktopPreferences()
+      .then(prefs => {
+        if (!cancelled) {
+          setLiveVoiceProvider(prefs.liveVoiceProvider);
+          setAudioMode(prefs.audioMode);
+          setAppearance(prefs.appearance);
+          setScreenCaptureEnabled(prefs.screenCapture);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const ambient = useAmbientAudio(audioMode, sessionReady && !hostMode);
+  const {
+    deviceBusy,
+    deviceScanMessage,
+    rememberedDevice,
+    rememberedBusy,
+    forgetRememberedDevice,
+    nativeSnapshot,
+    scanForOmi,
+    toggleDevice,
+  } = useNativeDevices({
+    enabled: onboardingRequired === false && !hostMode,
+  });
+  const searchRef = useRef<TextInput>(null);
+  // Drops the previous session's transcript, cursors, and message bookkeeping
+  // so nothing leaks across accounts or flashes on the next sign-in. Busy
+  // flags reset too: send() refuses to start while chatBusy, so a send that
+  // never settled must not brick the next session's composer. Shared by the
+  // gate-drop path in the history effect and retireWorkspace.
+  const resetChatSession = useCallback(() => {
+    setChatError(null);
+    setDraft('');
+    setMessages([]);
+    setOlderChatCursor(null);
+    setHasOlderChat(false);
+    setChatBusy(false);
+    setLoadingOlderChat(false);
+    setChatHistorySettled(false);
+    setChatHistoryFailed(false);
+    setActiveGenerationId(null);
+    sendInFlightRef.current = null;
+    stableChatMessageIds.clear();
+    animatedChatMessageIds.clear();
+  }, [animatedChatMessageIds, stableChatMessageIds]);
+  // Scroll-follow fence shared by the mobile chat surface and the desktop
+  // chat ScrollView: keep following the newest message while the user is
+  // within 40px of the bottom, stop once they scroll away.
+  const handleChatScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
+      shouldFollowChat.current =
+        contentOffset.y + layoutMeasurement.height >= contentSize.height - 40;
+    },
+    [],
+  );
+  useEffect(() => {
+    let active = true;
+    chatSessionEpochRef.current += 1;
+    const retiredRequest = omiRequestRef.current;
+    omiRequestRef.current = null;
+    setActiveOmiRequestId(null);
+    if (retiredRequest !== null)
+      void omiBackend?.cancelOmiChat?.(retiredRequest).catch(() => undefined);
+    if (!sessionReady) {
+      resetChatSession();
+      return () => {
+        active = false;
+      };
+    }
+    const backend = omiBackend;
+    if (backend === undefined || backend === null) {
+      setChatHistorySettled(true);
+      return () => undefined;
+    }
+    // Capture the session this load belongs to. Both branches merge into
+    // whatever the session already shows, so a concurrent send's optimistic
+    // rows survive; workspace reload / gate drop clear messages before
+    // bumping the epoch. A send must not suppress this load's settle/error
+    // bookkeeping either, or a failed history read would pin the "Loading
+    // conversation…" state forever.
+    const session = chatSessionEpochRef.current;
+    loadNewestChatHistory(backend)
+      .then(page => {
+        if (!active || chatSessionEpochRef.current !== session) {
+          return;
+        }
+        page.messages.forEach(message => stableChatMessageIds.add(message.id));
+        setMessages(current =>
+          reconcileCanonicalChatHistory(current, page.messages),
+        );
+        setOlderChatCursor(page.olderCursor);
+        setHasOlderChat(page.hasOlder);
+        setChatError(null);
+        setChatHistoryFailed(false);
+        setChatHistorySettled(true);
+      })
+      .catch(error => {
+        if (
+          active &&
+          chatSessionEpochRef.current === session &&
+          onboardingRequired === false
+        ) {
+          setChatError(chatHistoryErrorCopy(error));
+          setChatHistoryFailed(true);
+          setChatHistorySettled(true);
+          // A 401/unconfigured history load can mean the cloud session died;
+          // re-probe it instead of keeping a ready shell on dead credentials.
+          if (nativeSessionRequired && chatSessionLost(error)) {
+            revalidateSession().catch(() => undefined);
+          }
+        }
+      });
+    return () => {
+      active = false;
+      chatSessionEpochRef.current += 1;
+      const requestId = omiRequestRef.current;
+      omiRequestRef.current = null;
+      if (requestId !== null)
+        void backend.cancelOmiChat?.(requestId).catch(() => undefined);
+    };
+  }, [
+    chatEpoch,
+    nativeSessionRequired,
+    onboardingRequired,
+    resetChatSession,
+    revalidateSession,
+    sessionReady,
+    stableChatMessageIds,
+  ]);
+
+  useEffect(() => {
+    if (route === 'Home') {
+      Keyboard?.dismiss?.();
+    }
+  }, [route]);
+
+  useEffect(() => {
+    if (route === 'Home' && homeChatOpen && shouldFollowChat.current) {
+      chatScrollRef.current?.scrollToEnd({animated: !reduceMotion});
+    }
+  }, [chatBusy, homeChatOpen, messages, reduceMotion, route]);
+
+  const routeOutcome = useMemo(() => {
+    if (readOutcomes === null || route === 'Home') {
+      return null;
+    }
+    const outcomes = {
+      Conversations: readOutcomes.conversations,
+      Memories: readOutcomes.memories,
+      Tasks: readOutcomes.tasks,
+    };
+    return route === 'Conversations' ||
+      route === 'Memories' ||
+      route === 'Tasks'
+      ? outcomes[route]
+      : null;
+  }, [readOutcomes, route]);
+
+  const homeResults = useMemo(
+    () =>
+      reads.filter(item =>
+        matchesSearchQuery(item.searchableText, searchQuery),
+      ),
+    [reads, searchQuery],
+  );
+  const homeSearching = searchQuery.trim() !== '';
+  // An unavailable Omi cloud read is a single truthful empty state, not a result row. Keeping the
+  // results panel content-sized here preserves the upstream two-island hierarchy instead of
+  // turning an error into a window-filling modal.
+  // A retry from the unavailable state must never flash the resting "none yet"
+  // claim: while nothing has loaded, a refresh reads as continued loading.
+  useEffect(() => {
+    homeResultsOpacity.setValue(0);
+    if (!homeSearching) {
+      return;
+    }
+    Animated.timing(homeResultsOpacity, {
+      duration: reduceMotion ? 1 : 180,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [homeResultsOpacity, homeSearching, reduceMotion]);
+
+  useEffect(() => {
+    const subscription = subscribeDesktopSearchCommand(() => {
+      setRoute('Home');
+      setHomeChatOpen(false);
+      setHomeSearchFocusNonce(current => current + 1);
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // A dead cloud session must not keep the product shell up: when every
+  // credential-bearing read comes back unauthorized or unconfigured, re-probe
+  // the native session and fall back to Welcome if it is really gone.
+  useEffect(() => {
+    if (
+      !nativeSessionRequired ||
+      onboardingRequired !== false ||
+      readOutcomes === null
+    ) {
+      return;
+    }
+    const sessionLost = [
+      readOutcomes.conversations,
+      readOutcomes.memories,
+      readOutcomes.tasks,
+    ].some(
+      outcome =>
+        outcome.status === 'error' &&
+        (outcome.error === desktopBackendUnauthorizedCopy ||
+          outcome.error === desktopBackendConfigurationCopy),
+    );
+    if (sessionLost) {
+      revalidateSession().catch(() => undefined);
+    }
+  }, [
+    nativeSessionRequired,
+    onboardingRequired,
+    readOutcomes,
+    revalidateSession,
+  ]);
+
+  useEffect(() => {
+    if (homeSearchFocusNonce === 0) {
+      return;
+    }
+    searchRef.current?.focus();
+  }, [homeSearchFocusNonce]);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      stageOpacity.setValue(1);
+      stageTranslateY.setValue(0);
+      return;
+    }
+    stageOpacity.setValue(0);
+    stageTranslateY.setValue(8);
+    Animated.parallel([
+      Animated.timing(stageOpacity, {
+        duration: 180,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+        toValue: 1,
+        // Keep first content paint on the JS driver: the native driver can
+        // leave this gate at zero during a cold Fabric launch.
+        useNativeDriver: false,
+      }),
+      Animated.timing(stageTranslateY, {
+        duration: 180,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+        toValue: 0,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [reduceMotion, route, stageOpacity, stageTranslateY]);
+
+  useEffect(() => {
+    if (
+      !homeChatOpen ||
+      route !== 'Home' ||
+      messages.length !== 0 ||
+      chatBusy
+    ) {
+      return;
+    }
+    restingOpacity.setValue(0);
+    restingTranslateY.setValue(reduceMotion ? 0 : 8);
+    Animated.parallel([
+      Animated.timing(restingOpacity, {
+        duration: reduceMotion ? 1 : 250,
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.timing(restingTranslateY, {
+        duration: reduceMotion ? 1 : 250,
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [
+    chatBusy,
+    homeChatOpen,
+    messages.length,
+    reduceMotion,
+    restingOpacity,
+    restingTranslateY,
+    route,
+  ]);
+
+  const nav = (
+    <AppNav
+      compact={compact}
+      onNavigate={destination => {
+        setRoute(destination);
+        if (destination === 'Home') {
+          setHomeChatOpen(false);
+        }
+      }}
+      reduceMotion={reduceMotion}
+      route={route}
+    />
+  );
+
+  const send = async (explicitText?: string) => {
+    const text = (explicitText ?? draft).trim();
+    const explicit = explicitText !== undefined;
+    const backend = omiBackend;
+    if (
+      backend === undefined ||
+      backend === null ||
+      text === '' ||
+      chatBusy ||
+      sendInFlightRef.current !== null
+    ) {
+      return;
+    }
+    if (nativeSessionRequired && !sessionReady) {
+      return;
+    }
+    const sendToken = {};
+    sendInFlightRef.current = sendToken;
+    const session = chatSessionEpochRef.current;
+    chatMutationSeqRef.current += 1;
+    let admitted = false;
+    let requestStarted = false;
+    setChatBusy(true);
+    setChatError(null);
+    shouldFollowChat.current = true;
+    const localMessage = createLocalChatMessage(text);
+    const pending = createPendingAssistantMessage(localMessage);
+    const pendingId = pending.id;
+    setMessages(current => [...current, localMessage, pending]);
+    if (!explicit) {
+      setDraft('');
+    }
+    try {
+      const result = await sendChatMessage(
+        backend,
+        text,
+        localMessage.createdAt,
+        id => {
+          admitted = true;
+          if (chatSessionEpochRef.current === session) {
+            setActiveGenerationId(id);
+            setMessages(current =>
+              current.map(message =>
+                message.id === pendingId
+                  ? {...message, generationId: id}
+                  : message,
+              ),
+            );
+          }
+        },
+        localMessage,
+        id => {
+          if (chatSessionEpochRef.current !== session) return false;
+          requestStarted = true;
+          omiRequestRef.current = id;
+          setActiveOmiRequestId(id);
+          return true;
+        },
+        visible => {
+          if (
+            chatSessionEpochRef.current !== session ||
+            (requestStarted && omiRequestRef.current !== localMessage.id)
+          ) {
+            return;
+          }
+          setMessages(current =>
+            current.map(message =>
+              message.id === pendingId ? {...message, text: visible} : message,
+            ),
+          );
+        },
+      );
+      // A gate transition (sign-out, dead session, plane switch) retired the
+      // session this send belonged to: its canonical messages belong to the
+      // previous account and must not seed the next session's transcript.
+      if (
+        chatSessionEpochRef.current !== session ||
+        (requestStarted && omiRequestRef.current !== localMessage.id)
+      ) {
+        return;
+      }
+      setMessages(current => {
+        const echoIndex = current.findIndex(
+          message => message.id === localMessage.id,
+        );
+        const withoutCanonical = current.filter(
+          message =>
+            message.id !== localMessage.id &&
+            message.id !== result.human.id &&
+            message.id !== result.assistant?.id &&
+            message.id !== pendingId,
+        );
+        if (echoIndex < 0) {
+          return [
+            ...withoutCanonical,
+            result.human,
+            ...(result.assistant === null ? [] : [result.assistant]),
+          ];
+        }
+        const insertAt = Math.min(echoIndex, withoutCanonical.length);
+        return [
+          ...withoutCanonical.slice(0, insertAt),
+          result.human,
+          ...(result.assistant === null ? [] : [result.assistant]),
+          ...withoutCanonical.slice(insertAt),
+        ];
+      });
+    } catch (error) {
+      if (
+        chatSessionEpochRef.current === session &&
+        (!requestStarted || omiRequestRef.current === localMessage.id)
+      ) {
+        if (!admitted && !requestStarted) {
+          setMessages(current =>
+            current.filter(
+              message =>
+                message.id !== localMessage.id && message.id !== pendingId,
+            ),
+          );
+          setDraft(current => (current === '' ? text : current));
+        } else {
+          setMessages(current =>
+            current.map(message =>
+              message.id === pendingId && message.generationOutcome === null
+                ? {...message, generationOutcome: 'cancelled'}
+                : message,
+            ),
+          );
+        }
+        setChatError(
+          admitted || requestStarted
+            ? chatRequestCancelled(error)
+              ? 'Response stopped locally. It may still complete on the server.'
+              : 'Response interrupted. It may still complete.'
+            : chatErrorCopy(error),
+        );
+        if (nativeSessionRequired && chatSessionLost(error)) {
+          revalidateSession().catch(() => undefined);
+        }
+      }
+    } finally {
+      if (sendInFlightRef.current === sendToken) {
+        sendInFlightRef.current = null;
+      }
+      if (
+        chatSessionEpochRef.current === session &&
+        (!requestStarted || omiRequestRef.current === localMessage.id)
+      ) {
+        setActiveGenerationId(null);
+        omiRequestRef.current = null;
+        setActiveOmiRequestId(null);
+        setChatBusy(false);
+      }
+    }
+  };
+
+  // Re-read chat history after a failed load. Only while nothing is in
+  // flight: the history effect retires any active request on a new epoch.
+  const retryChatHistory = () => {
+    if (chatBusy || sendInFlightRef.current !== null) {
+      return;
+    }
+    setChatError(null);
+    setChatHistoryFailed(false);
+    setChatHistorySettled(false);
+    setChatEpoch(current => current + 1);
+  };
+
+  // Re-send the human message paired with a failed assistant response.
+  const retryChatMessage = (failed: ChatMessage) => {
+    const index = messages.findIndex(message => message.id === failed.id);
+    if (index < 0) return;
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const candidate = messages[i];
+      if (candidate.sender === 'human') {
+        send(candidate.text).catch(() => undefined);
+        return;
+      }
+    }
+  };
+
+  const loadOlderMessages = async () => {
+    const backend = omiBackend;
+    const cursor = olderChatCursor;
+    if (
+      backend === undefined ||
+      backend === null ||
+      cursor === null ||
+      loadingOlderChat ||
+      (nativeSessionRequired && !sessionReady)
+    ) {
+      return;
+    }
+    // Capture the session this page belongs to. send() bumps mutation so a
+    // replace-style write cannot clobber optimistic rows — but that same bump
+    // must not discard a successfully fetched older page (cursor + messages).
+    // Merge into the live transcript; only a session epoch change retires it.
+    // 410 recovery still respects mutation: a full newest-history replace can
+    // wipe a newer send (covered by the stale-recovery test).
+    const session = chatSessionEpochRef.current;
+    const mutation = chatMutationSeqRef.current;
+    setLoadingOlderChat(true);
+    setChatError(null);
+    try {
+      const page = await loadOlderChatHistory(backend, cursor);
+      if (chatSessionEpochRef.current !== session) {
+        return;
+      }
+      page.messages.forEach(message => stableChatMessageIds.add(message.id));
+      setMessages(current => mergeOlderChatHistory(current, page.messages));
+      setOlderChatCursor(page.olderCursor);
+      setHasOlderChat(page.hasOlder);
+    } catch (error) {
+      // A session change retires the page entirely. A newer send only fences
+      // the destructive 410 recovery (below); it must not swallow the terminal
+      // error, or a failed older page would look like it silently succeeded.
+      if (chatSessionEpochRef.current !== session) {
+        return;
+      }
+      if (
+        error instanceof ChatBackendError &&
+        error.status === 410 &&
+        error.action === 'refresh_history' &&
+        chatMutationSeqRef.current === mutation
+      ) {
+        try {
+          const page = await loadNewestChatHistory(backend);
+          if (
+            chatSessionEpochRef.current !== session ||
+            chatMutationSeqRef.current !== mutation
+          ) {
+            return;
+          }
+          page.messages.forEach(message =>
+            stableChatMessageIds.add(message.id),
+          );
+          setMessages(current =>
+            reconcileCanonicalChatHistory(
+              current.filter(message => message.localOnly === true),
+              page.messages,
+            ),
+          );
+          setOlderChatCursor(page.olderCursor);
+          setHasOlderChat(page.hasOlder);
+          return;
+        } catch (recoveryError) {
+          if (
+            nativeSessionRequired &&
+            chatSessionEpochRef.current === session &&
+            chatMutationSeqRef.current === mutation &&
+            chatSessionLost(recoveryError)
+          ) {
+            revalidateSession().catch(() => undefined);
+          }
+        }
+      }
+      if (chatSessionEpochRef.current === session) {
+        setChatError('Older messages could not be loaded.');
+        if (nativeSessionRequired && chatSessionLost(error)) {
+          revalidateSession().catch(() => undefined);
+        }
+      }
+    } finally {
+      if (chatSessionEpochRef.current === session) {
+        setLoadingOlderChat(false);
+      }
+    }
+  };
+
+  const stopGeneration = async () => {
+    const backend = omiBackend;
+    const generationId = activeGenerationId;
+    const requestId = omiRequestRef.current;
+    if (
+      backend === undefined ||
+      backend === null ||
+      (generationId === null && requestId === null)
+    ) {
+      return;
+    }
+    const session = chatSessionEpochRef.current;
+    try {
+      if (requestId !== null) {
+        if (backend.cancelOmiChat === undefined)
+          throw new Error('Omi chat cancellation is unavailable');
+        await backend.cancelOmiChat(requestId);
+        if (
+          chatSessionEpochRef.current === session &&
+          omiRequestRef.current === requestId
+        ) {
+          omiRequestRef.current = null;
+          setActiveOmiRequestId(null);
+          setChatBusy(false);
+          setMessages(current =>
+            current.map(message =>
+              message.id === pendingAssistantId(requestId) &&
+              message.generationOutcome === null
+                ? {...message, generationOutcome: 'cancelled'}
+                : message,
+            ),
+          );
+          setChatError(
+            'Response stopped locally. It may still complete on the server.',
+          );
+        }
+      } else if (generationId !== null)
+        await cancelChatGeneration(backend, generationId);
+    } catch {
+      if (chatSessionEpochRef.current === session) {
+        setChatError('Could not stop the response.');
+      }
+    }
+  };
+
+  const retireWorkspace = useCallback(() => {
+    chatSessionEpochRef.current += 1;
+    chatMutationSeqRef.current += 1;
+    resetChatSession();
+    setActiveOmiRequestId(null);
+    omiRequestRef.current = null;
+    resetReads();
+    refreshReads(true).catch(() => undefined);
+    setChatEpoch(current => current + 1);
+  }, [refreshReads, resetChatSession, resetReads]);
+
+  const shouldAnimateChatMessage = (id: string) =>
+    !stableChatMessageIds.has(id) && !animatedChatMessageIds.has(id);
+
+  // Mark rendered message ids as animated after commit; keeps
+  // shouldAnimateChatMessage pure (no ref writes during render).
+  useEffect(() => {
+    for (const message of messages) {
+      animatedChatMessageIds.add(message.id);
+    }
+  }, [animatedChatMessageIds, messages]);
+
+  const composer = (
+    <Composer
+      activeGenerationId={activeGenerationId ?? activeOmiRequestId}
+      chatBusy={chatBusy}
+      compact={compact}
+      composerFocused={composerFocused}
+      composerMaxWidth={composerMaxWidth}
+      composerRef={composerRef}
+      draft={draft}
+      onDraftChange={setDraft}
+      onFocusChange={setComposerFocused}
+      onSend={() => {
+        send().catch(() => undefined);
+      }}
+      onStop={() => {
+        stopGeneration().catch(() => undefined);
+      }}
+    />
+  );
+
+  const {
+    connectedDevice,
+    label: homeStatus,
+    color: homeStatusColor,
+  } = homeConnectionStatus(nativeSnapshot);
+  const bluetoothStatusColor =
+    nativeSnapshot === null
+      ? '#b4ad9f'
+      : nativeSnapshot.bluetooth === 'poweredOn'
+      ? '#45b79b'
+      : '#d9826f';
+  const desktopLiveControl = (
+    <LiveVoiceButton
+      backend={omiBackend}
+      desktop
+      provider={liveVoiceProvider}
+    />
+  );
+  const currentItems = reads.slice(0, 2);
+
+  // Shared DeviceSession props: every surface passes the same device wiring
+  // and only varies the variant (plus the compact-only Bluetooth status
+  // color; the overview header never took it). The DesktopApp mount spells
+  // nativeSnapshot out literally because the static session-probe guard in
+  // App.test.tsx pins that wiring inside the DesktopApp slice.
+  const deviceSessionCoreProps = {
+    rememberedDevice,
+    rememberedBusy,
+    onForgetRemembered: forgetRememberedDevice,
+    deviceBusy,
+    deviceScanMessage,
+    onScan: scanForOmi,
+    onToggle: toggleDevice,
+  };
+  const renderDeviceSession = (variant: DeviceSessionVariant) => (
+    <DeviceSession
+      {...deviceSessionCoreProps}
+      {...(variant === 'compact' ? {bluetoothStatusColor} : {})}
+      nativeSnapshot={nativeSnapshot}
+      variant={variant}
+    />
+  );
+
+  const OnboardingSurface = macDesktop ? DesktopOnboarding : Onboarding;
+  const firstRunOnboarding = (
+    <OnboardingSurface
+      setupRequired={setupRequired}
+      completingSetup={completingSetup}
+      onCompleteSetup={connectDevice => {
+        completeSetup()
+          .then(completed => {
+            if (completed && connectDevice) {
+              setRoute('Home');
+              setHomeChatOpen(false);
+              setDevicePanelOpen(true);
+            }
+          })
+          .catch(() => undefined);
+      }}
+      onSignOut={
+        nativeSessionRequired
+          ? () => {
+              signOutAndRefresh().catch(() => undefined);
+            }
+          : undefined
+      }
+      onCancelSignIn={() => {
+        cancelSignIn().catch(() => undefined);
+      }}
+      error={authError}
+      onSignIn={() => {
+        completeFirstRun().catch(() => undefined);
+      }}
+      signingIn={signingIn}
+      desktopHandoff={desktopHandoff}
+    />
+  );
+
+  const homeOverview = (
+    <ScrollView
+      accessibilityLabel="Home overview"
+      contentContainerStyle={styles.homeOverviewContent}
+      style={styles.homeOverview}>
+      <View style={[styles.pendantHero, compact && styles.pendantHeroCompact]}>
+        <View
+          pointerEvents="none"
+          style={[styles.pendantStage, compact && styles.pendantStageCompact]}>
+          <OmiMark
+            accessibilityLabel="Home pendant"
+            height={compact ? 210 : 184}
+            size={compact ? 210 : 160}
+            source={bundledAssetSource(omiPendant)}
+          />
+        </View>
+        <Text
+          style={[styles.pendantName, compact && styles.pendantNameCompact]}>
+          Omi
+        </Text>
+        <View
+          accessibilityLabel="Home pendant status"
+          style={styles.pendantStatusRow}>
+          <View
+            style={[
+              styles.pendantStatusDot,
+              {backgroundColor: homeStatusColor},
+            ]}
+          />
+          <Text
+            style={[
+              styles.pendantStatus,
+              compact && styles.pendantStatusCompact,
+            ]}>
+            {homeStatus}
+          </Text>
+        </View>
+        {connectedDevice?.battery !== undefined && (
+          <View style={styles.pendantBatteryPill}>
+            <Text style={styles.pendantBattery}>
+              {connectedDevice.battery}% battery
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {compact && (
+        <>
+          <View accessibilityLabel="Home currents" style={styles.homeSection}>
+            <View style={styles.homeSectionHeader}>
+              <View style={styles.homeSectionAccent} />
+              <Text style={[styles.sectionLabel, styles.homeSectionLabel]}>
+                Currents
+              </Text>
+            </View>
+            {currentItems.length > 0 ? (
+              currentItems.map(item => (
+                <ProjectionRow home item={item} key={item.id} />
+              ))
+            ) : readsPhase === 'initial-loading' ||
+              readsPhase === 'refreshing' ? (
+              <Text style={styles.homeHint}>Loading Currents…</Text>
+            ) : readsPhase === 'unavailable' ||
+              readsPhase === 'saved-but-refresh-failed' ? (
+              <Text style={styles.homeHint}>
+                Currents could not be loaded. Retry from Home.
+              </Text>
+            ) : (
+              <Text style={styles.homeHint}>Nothing current right now.</Text>
+            )}
+          </View>
+
+          {renderDeviceSession('compact')}
+        </>
+      )}
+    </ScrollView>
+  );
+
+  if (macDesktop) {
+    // Desktop session gate. A Mac that is not fully in — probe unsettled,
+    // no cloud session, or first-run onboarding incomplete — never mounts
+    // the product shell. The probe keeps traffic-light space and the mark,
+    // and a signed-out Mac sees Welcome, so no signed-in IA leaks before
+    // OmiAuth establishes a real session. DesktopApp enforces the same gate.
+    if (onboardingRequired !== false && !hostMode) {
+      // First-run onboarding and the session probe render before the product
+      // shell, but the window material already follows the appearance pref —
+      // they must read the same theme or light mode shows dark ink on glass.
+      return (
+        <DesktopThemeProvider
+          initialName={desktopScheme}
+          onSetName={setAppearance}>
+          <PageShell macDesktop workspaceMaterial>
+            {onboardingRequired === true ? (
+              firstRunOnboarding
+            ) : (
+              <DesktopSessionProbe />
+            )}
+          </PageShell>
+        </DesktopThemeProvider>
+      );
+    }
+    return (
+      <PageShell macDesktop workspaceMaterial>
+        <DesktopApp
+          hostMode={hostMode}
+          {...taskMutations}
+          activeGenerationId={activeGenerationId ?? activeOmiRequestId}
+          authError={authError}
+          chatBusy={chatBusy}
+          chatError={chatError}
+          deviceContent={
+            // Kept spelled out (not via renderDeviceSession) because the
+            // static session-probe guard in App.test.tsx pins the literal
+            // nativeSnapshot wiring inside the DesktopApp slice; the rest of
+            // the props are shared through deviceSessionCoreProps.
+            <DeviceSession
+              {...deviceSessionCoreProps}
+              bluetoothStatusColor={bluetoothStatusColor}
+              nativeSnapshot={nativeSnapshot}
+              variant="compact"
+            />
+          }
+          draft={draft}
+          hasOlderChat={hasOlderChat}
+          loadingOlderChat={loadingOlderChat}
+          loadingHistory={!chatHistorySettled}
+          liveVoiceControl={hostMode ? undefined : desktopLiveControl}
+          ambient={ambient}
+          messages={messages}
+          reads={reads}
+          onDraftChange={setDraft}
+          onLoadOlderChat={() => {
+            loadOlderMessages().catch(() => undefined);
+          }}
+          onRefresh={() => {
+            refreshReads(false).catch(() => undefined);
+          }}
+          onSend={() => {
+            send().catch(() => undefined);
+          }}
+          onStop={() => {
+            stopGeneration().catch(() => undefined);
+          }}
+          onRetryChat={retryChatMessage}
+          chatHistoryFailed={chatHistoryFailed}
+          onRetryChatHistory={retryChatHistory}
+          onCancelSignIn={() => {
+            cancelSignIn().catch(() => undefined);
+          }}
+          onSignIn={() => {
+            signInAndRefresh().catch(() => undefined);
+          }}
+          onSignOut={() => {
+            return signOutAndRefresh();
+          }}
+          onPreferencesChange={prefs => {
+            setLiveVoiceProvider(prefs.liveVoiceProvider);
+            setAudioMode(prefs.audioMode);
+            setAppearance(prefs.appearance);
+            setScreenCaptureEnabled(prefs.screenCapture);
+          }}
+          initialAppearance={desktopScheme}
+          onAppearanceChange={setAppearance}
+          captureAutoStart={!hostMode && screenCaptureEnabled}
+          onWorkspaceReload={retireWorkspace}
+          outcomes={readOutcomes}
+          postSetupHomeCue={postSetupHomeCue}
+          readsPhase={readsPhase}
+          session={
+            onboardingRequired === null
+              ? 'probing'
+              : onboardingRequired || returningUser
+              ? 'signed-out'
+              : 'ready'
+          }
+          returning={returningUser}
+          signingIn={signingIn}
+        />
+      </PageShell>
+    );
+  }
+
+  const mobileChat = homeChatOpen ? (
+    <MobileChat
+      messages={messages}
+      busy={chatBusy}
+      error={chatError}
+      loadingHistory={!chatHistorySettled}
+      hasOlder={hasOlderChat && olderChatCursor !== null}
+      loadingOlder={loadingOlderChat}
+      onLoadOlder={() => {
+        shouldFollowChat.current = false;
+        loadOlderMessages().catch(() => undefined);
+      }}
+      onClose={() => {
+        setHomeChatOpen(false);
+        setRoute(beforeMobileChat.current.route);
+        setMobileMode(beforeMobileChat.current.mode);
+      }}
+      onRetry={retryChatMessage}
+      historyFailed={chatHistoryFailed}
+      onRetryHistory={retryChatHistory}
+      onUsePrompt={prompt => {
+        setMobileMode('Ask');
+        setDraft(prompt);
+        composerRef.current?.focus();
+      }}
+      prompts={quickPrompts}
+      scrollRef={chatScrollRef}
+      shouldAnimate={shouldAnimateChatMessage}
+      onScroll={handleChatScroll}
+      onJumpLatest={() => {
+        shouldFollowChat.current = true;
+      }}
+    />
+  ) : undefined;
+
+  if (
+    !macDesktop &&
+    compact &&
+    (onboardingRequired === true || returningUser)
+  ) {
+    // Phone setup follows the mobile appearance on its own canvas, outside
+    // the legacy wide shell's dark frame.
+    return (
+      <MobileThemeRoot
+        appearance={mobileAppearance}
+        onAppearanceChange={setMobileAppearance}>
+        <MobileCanvas>{firstRunOnboarding}</MobileCanvas>
+      </MobileThemeRoot>
+    );
+  }
+
+  if (
+    !macDesktop &&
+    compact &&
+    onboardingRequired === false &&
+    !returningUser &&
+    (route === 'Home' ||
+      route === 'Conversations' ||
+      route === 'Tasks' ||
+      route === 'Settings' ||
+      route === 'Connectors')
+  ) {
+    const taskItems =
+      readOutcomes?.tasks.status === 'success'
+        ? readOutcomes.tasks.value.items
+        : [];
+    const conversationItems =
+      readOutcomes?.conversations.status === 'success'
+        ? readOutcomes.conversations.value.items
+        : [];
+    const projectionStatus: MobileProjectionStatus =
+      readsPhase === 'initial-loading' || readsPhase === 'refreshing'
+        ? 'loading'
+        : readsPhase === 'unavailable' ||
+          readsPhase === 'saved-but-refresh-failed'
+        ? 'offline'
+        : 'ready';
+    const activeMobileRoute: MobileRoute = mobileRouteByRoute[route];
+    return (
+      <MobileThemeRoot
+        appearance={mobileAppearance}
+        onAppearanceChange={setMobileAppearance}>
+        <MobileAppSurface
+          taskPagination={taskPagination}
+          {...taskMutations}
+          activeRoute={activeMobileRoute}
+          chatContent={mobileChat}
+          omnibar={
+            <MobileOmnibar
+              key="mobile-omnibar"
+              mode={mobileMode}
+              chatPage={homeChatOpen}
+              onModeChange={next => {
+                setMobileMode(next);
+                if (next === 'Search' && homeChatOpen) {
+                  setHomeChatOpen(false);
+                  setRoute(beforeMobileChat.current.route);
+                }
+              }}
+              value={draft}
+              onChange={setDraft}
+              inputRef={composerRef}
+              busy={chatBusy}
+              canStop={(activeGenerationId ?? activeOmiRequestId) !== null}
+              onStop={() => {
+                void stopGeneration();
+              }}
+              onSubmit={() => {
+                if (mobileMode === 'Search') {
+                  setHomeChatOpen(false);
+                  setRoute('Home');
+                  return;
+                }
+                if (!homeChatOpen)
+                  beforeMobileChat.current = {route, mode: mobileMode};
+                setRoute('Home');
+                shouldFollowChat.current = true;
+                setHomeChatOpen(true);
+                send().catch(() => undefined);
+              }}
+            />
+          }
+          searchContent={
+            mobileMode === 'Search' && draft.trim() !== '' ? (
+              <ProjectionList
+                accessibilityLabel="Search results"
+                items={[
+                  ...reads,
+                  ...(readOutcomes?.tasks.status === 'success'
+                    ? readOutcomes.tasks.value.items
+                    : []),
+                ].filter(item =>
+                  matchesSearchQuery(item.searchableText, draft),
+                )}
+                loading={
+                  readsPhase === 'initial-loading' ||
+                  readsPhase === 'refreshing'
+                }
+                error={
+                  readsPhase === 'unavailable' ||
+                  readsPhase === 'saved-but-refresh-failed'
+                    ? 'Some saved data could not be loaded.'
+                    : null
+                }
+                emptyTitle="No Matches"
+                emptyCopy="Search covers data already loaded on this device."
+              />
+            ) : undefined
+          }
+          conversationContent={
+            <ConversationsPage
+              search={{
+                value: mobileMode === 'Search' ? draft : '',
+                onChange: value => {
+                  if (mobileMode === 'Search') setDraft(value);
+                },
+              }}
+              onRefresh={() => {
+                void refreshReads(false);
+              }}
+              onLoadMore={() => {
+                void loadMoreConversations();
+              }}
+              loadingMore={conversationsLoadingMore}
+              preserveLoadedPages={conversationsExtended}
+              notice={conversationNotice}
+              outcome={readOutcomes?.conversations ?? null}
+              loading={
+                readsPhase === 'initial-loading' || readsPhase === 'refreshing'
+              }
+              embedded
+            />
+          }
+          settingsContent={
+            <SettingsPage
+              chatBusy={chatBusy}
+              onOpenApps={() => setRoute('Connectors')}
+              onSignIn={signInAndRefresh}
+              onSignOut={nativeSessionRequired ? signOutAndRefresh : undefined}
+              onWorkspaceReload={retireWorkspace}
+              signingIn={signingIn}
+            />
+          }
+          appsContent={
+            <ConnectorsPage onSignIn={signInAndRefresh} signingIn={signingIn} />
+          }
+          capture={{
+            active: nativeSnapshot?.capture === 'recording',
+            waitingForAudio: nativeSnapshot?.audioStatus === 'waiting',
+            transcript: '',
+          }}
+          device={{connected: connectedDevice !== null, label: homeStatus}}
+          deviceMessage={devicePanelOpen ? null : deviceScanMessage}
+          devicePanel={devicePanelOpen ? renderDeviceSession('compact') : null}
+          onOpenDevice={() => setDevicePanelOpen(open => !open)}
+          onRouteChange={destination => {
+            setHomeChatOpen(false);
+            setRoute(routeByMobileRoute[destination]);
+          }}
+          onViewConversations={() => setRoute('Conversations')}
+          onViewTasks={() => setRoute('Tasks')}
+          onRetryReads={() => {
+            refreshReads(false).catch(() => undefined);
+          }}
+          conversationStatus={
+            readOutcomes?.conversations.status === 'success'
+              ? 'ready'
+              : readOutcomes?.conversations.status === 'error'
+              ? 'error'
+              : projectionStatus
+          }
+          conversations={conversationItems}
+          tasks={taskItems}
+          taskStatus={
+            readOutcomes?.tasks.status === 'success'
+              ? 'ready'
+              : readOutcomes?.tasks.status === 'error'
+              ? 'error'
+              : projectionStatus
+          }
+        />
+      </MobileThemeRoot>
+    );
+  }
+
+  const shell = (
+    <View
+      style={[
+        styles.shell,
+        compact && styles.shellCompact,
+        !compact && !macDesktop && styles.shellWide,
+        macDesktop && styles.macShell,
+      ]}>
+      {!compact && sessionReady ? nav : null}
+      <View
+        style={[
+          styles.paneInset,
+          !floatingPane && styles.paneInsetCompact,
+          macDesktop && styles.macPaneInset,
+        ]}>
+        <View
+          accessibilityLabel="Floating pane"
+          style={[
+            styles.paneFrame,
+            !floatingPane && styles.paneFrameCompact,
+            !compact && !macDesktop && styles.paneFrameWide,
+          ]}>
+          {floatingPane && !desktopWorkspace && (
+            <View
+              accessibilityLabel="Floating pane depth"
+              pointerEvents="none"
+              style={styles.paneDepth}>
+              <View style={[styles.paneDepthLayer, styles.paneDepthWide]} />
+              <View style={[styles.paneDepthLayer, styles.paneDepthMid]} />
+              <View style={[styles.paneDepthLayer, styles.paneDepthNear]} />
+            </View>
+          )}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={[
+              styles.pane,
+              !floatingPane && styles.paneCompact,
+              compact && styles.paneCompactSurface,
+              desktopWorkspace && styles.desktopPane,
+              macDesktop && styles.macPane,
+            ]}>
+            <Animated.View
+              accessibilityLabel={`${route} stage`}
+              style={[
+                styles.stageMotion,
+                {
+                  opacity: stageOpacity,
+                  transform: [{translateY: stageTranslateY}],
+                },
+              ]}>
+              <View
+                style={[
+                  styles.stage,
+                  compact && styles.stageCompact,
+                  desktopWorkspace && styles.desktopStage,
+                ]}>
+                {compact &&
+                  route !== 'Home' &&
+                  onboardingRequired === false && (
+                    <FocusPressable
+                      accessibilityLabel="Back to Home"
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setRoute('Home');
+                        setHomeChatOpen(false);
+                      }}
+                      style={[styles.backButton, styles.mobileBackButton]}>
+                      <MaterialIcon
+                        name="chevron_left"
+                        color="#b0b0b0"
+                        size={18}
+                      />
+                      <Text style={styles.backButtonText}>Home</Text>
+                    </FocusPressable>
+                  )}
+                {onboardingRequired === true || returningUser ? (
+                  firstRunOnboarding
+                ) : onboardingRequired !== false ? (
+                  <View
+                    accessibilityLabel="Session check"
+                    style={styles.stage}
+                  />
+                ) : route === 'Home' && !homeChatOpen ? (
+                  <View style={styles.searchHome}>
+                    {!compact && (
+                      <View style={styles.homeHeading}>
+                        <Text
+                          accessibilityRole="header"
+                          style={styles.homeTitle}>
+                          Your Omi, at a glance
+                        </Text>
+                        <Text style={styles.homeSubtitle}>
+                          Device status and the conversations and memories saved
+                          for you.
+                        </Text>
+                      </View>
+                    )}
+                    {!homeSearching && homeOverview}
+                    {homeSearching && (
+                      <Animated.View
+                        accessibilityLabel="Home search results"
+                        style={[
+                          styles.homeResults,
+                          !compact && styles.homeResultsWide,
+                          {opacity: homeResultsOpacity},
+                        ]}>
+                        <ProjectionList
+                          emptyCopy={
+                            homeSearching
+                              ? 'Clear the search to see saved items.'
+                              : 'Start typing to search what is saved.'
+                          }
+                          emptyTitle={
+                            homeSearching ? 'No results' : 'Nothing saved yet'
+                          }
+                          error={null}
+                          footer={
+                            <View style={styles.readStatuses}>
+                              {readsPhase !== 'ready' && (
+                                <View
+                                  style={[
+                                    styles.readStatus,
+                                    macDesktop && styles.macReadStatus,
+                                  ]}>
+                                  <Text
+                                    style={[
+                                      styles.readStatusText,
+                                      macDesktop && styles.macReadStatusText,
+                                    ]}>
+                                    {readsPhase === 'initial-loading'
+                                      ? 'Loading saved data…'
+                                      : readsPhase === 'refreshing'
+                                      ? 'Refreshing saved data…'
+                                      : readsPhase ===
+                                        'saved-but-refresh-failed'
+                                      ? 'Showing saved data. Could not refresh.'
+                                      : 'Saved data is unavailable.'}
+                                  </Text>
+                                  {allHomeReadsUnavailable && (
+                                    <Text
+                                      style={[
+                                        styles.readStatusCopy,
+                                        macDesktop && styles.macReadStatusText,
+                                      ]}>
+                                      {readOutcomes === null
+                                        ? ''
+                                        : desktopRecoveryCopy(
+                                            readOutcomes.conversations,
+                                            readOutcomes.memories,
+                                          )}
+                                    </Text>
+                                  )}
+                                  {(readsPhase === 'saved-but-refresh-failed' ||
+                                    readsPhase === 'unavailable') && (
+                                    <FocusPressable
+                                      accessibilityLabel="Retry saved data"
+                                      accessibilityRole="button"
+                                      onPress={() => refreshReads(false)}
+                                      style={({pressed}) => [
+                                        styles.retryButton,
+                                        macDesktop && styles.macRetryButton,
+                                        pressed && styles.pressed,
+                                      ]}>
+                                      <Text
+                                        style={[
+                                          styles.retryButtonText,
+                                          macDesktop &&
+                                            styles.macRetryButtonText,
+                                        ]}>
+                                        Retry
+                                      </Text>
+                                    </FocusPressable>
+                                  )}
+                                </View>
+                              )}
+                              {readOutcomes !== null &&
+                                !allHomeReadsUnavailable && (
+                                  <View style={styles.readStatuses}>
+                                    <OutcomeStatus
+                                      label="Conversations"
+                                      outcome={readOutcomes.conversations}
+                                    />
+                                    <OutcomeStatus
+                                      label="Memories"
+                                      outcome={readOutcomes.memories}
+                                    />
+                                  </View>
+                                )}
+                            </View>
+                          }
+                          header={
+                            <View style={styles.homeOverview}>
+                              {renderDeviceSession('overview')}
+                              <Text style={styles.sectionLabel}>Currents</Text>
+                            </View>
+                          }
+                          items={homeResults}
+                          loading={readsPhase === 'initial-loading'}
+                          suppressEmpty={readsPhase !== 'ready'}
+                        />
+                      </Animated.View>
+                    )}
+                    <HomeSearchField
+                      compact={compact}
+                      desktop={false}
+                      inputRef={searchRef}
+                      onBlur={() => setSearchFocused(false)}
+                      onChangeText={setSearchQuery}
+                      onFocus={() => setSearchFocused(true)}
+                      onOpenChat={() => setHomeChatOpen(true)}
+                      onPressIn={() => setSearchArmed(true)}
+                      query={searchQuery}
+                      searchArmed={searchArmed}
+                      searchFocused={searchFocused}
+                    />
+                  </View>
+                ) : route === 'Home' ? (
+                  <ScrollView
+                    accessibilityLabel="Chat scroll region"
+                    contentContainerStyle={styles.chatScrollContent}
+                    onScroll={handleChatScroll}
+                    ref={chatScrollRef}
+                    scrollEventThrottle={16}
+                    style={styles.chatScroll}>
+                    <View
+                      style={
+                        compact
+                          ? [
+                              messages.length === 0 && !chatBusy
+                                ? styles.home
+                                : styles.chatHistory,
+                              messages.length === 0 && !chatBusy
+                                ? styles.homeCompact
+                                : styles.chatHistoryCompact,
+                            ]
+                          : messages.length === 0 && !chatBusy
+                          ? styles.home
+                          : styles.chatHistory
+                      }>
+                      <FocusPressable
+                        accessibilityLabel="Back to Home"
+                        accessibilityRole="button"
+                        onPress={() => setHomeChatOpen(false)}
+                        style={({pressed}) => [
+                          styles.backButton,
+                          pressed && styles.pressed,
+                        ]}>
+                        <MaterialIcon
+                          name="chevron_left"
+                          color="#b0b0b0"
+                          size={18}
+                        />
+                        <Text style={styles.backButtonText}>Home</Text>
+                      </FocusPressable>
+                      {messages.length === 0 && !chatBusy ? (
+                        <Animated.View
+                          accessibilityLabel="Chat resting stage"
+                          style={[
+                            styles.restingStage,
+                            {
+                              opacity: restingOpacity,
+                              transform: [{translateY: restingTranslateY}],
+                            },
+                          ]}>
+                          <OmiMark />
+                          <Text
+                            style={[
+                              styles.greeting,
+                              macDesktop && styles.macPrimaryText,
+                            ]}>
+                            I’m ready.
+                          </Text>
+                          <View style={styles.currents}>
+                            <Text style={styles.sectionLabel}>CURRENTS</Text>
+                            {chatError === null ? (
+                              <Text style={styles.empty}>
+                                Nothing’s waiting on you.
+                              </Text>
+                            ) : (
+                              <Text style={styles.error}>{chatError}</Text>
+                            )}
+                          </View>
+                          <View
+                            style={[
+                              styles.prompts,
+                              compact && styles.promptsCompact,
+                            ]}>
+                            {quickPrompts.map(prompt => (
+                              <FocusPressable
+                                accessibilityRole="button"
+                                key={prompt}
+                                onPress={() => {
+                                  setDraft(prompt);
+                                  composerRef.current?.focus();
+                                }}
+                                style={({pressed}) => [
+                                  styles.promptChip,
+                                  compact && styles.promptChipCompact,
+                                  pressed && styles.pressed,
+                                ]}>
+                                <Text style={styles.promptText}>{prompt}</Text>
+                              </FocusPressable>
+                            ))}
+                          </View>
+                        </Animated.View>
+                      ) : (
+                        <View style={styles.currents}>
+                          <Text style={styles.sectionLabel}>CURRENTS</Text>
+                          <View style={styles.transcript}>
+                            {hasOlderChat && olderChatCursor !== null && (
+                              <FocusPressable
+                                accessibilityLabel="Load older messages"
+                                accessibilityRole="button"
+                                disabled={loadingOlderChat}
+                                onPress={loadOlderMessages}
+                                style={({pressed}) => [
+                                  styles.loadOlderButton,
+                                  pressed && styles.pressed,
+                                ]}>
+                                <Text style={styles.loadOlderText}>
+                                  {loadingOlderChat
+                                    ? 'Loading older…'
+                                    : 'Load older'}
+                                </Text>
+                              </FocusPressable>
+                            )}
+                            {messages.map(message => (
+                              <ChatMessageRow
+                                animate={shouldAnimateChatMessage(message.id)}
+                                compact={compact}
+                                key={message.id}
+                                message={message}
+                                reduceMotion={reduceMotion}
+                              />
+                            ))}
+                            {chatBusy &&
+                              !messages.some(isStreamingAssistant) && (
+                                <ChatThinking reduceMotion={reduceMotion} />
+                              )}
+                            {chatError !== null && (
+                              <Text style={styles.error}>{chatError}</Text>
+                            )}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  </ScrollView>
+                ) : route === 'Conversations' ? (
+                  <ConversationsPage
+                    onRefresh={() => {
+                      void refreshReads(false);
+                    }}
+                    onLoadMore={() => {
+                      void loadMoreConversations();
+                    }}
+                    loadingMore={conversationsLoadingMore}
+                    preserveLoadedPages={conversationsExtended}
+                    notice={conversationNotice}
+                    loading={
+                      readsPhase === 'initial-loading' ||
+                      readsPhase === 'refreshing'
+                    }
+                    outcome={routeOutcome}
+                  />
+                ) : route === 'Memories' ? (
+                  <MemoriesPage
+                    loading={readsPhase === 'initial-loading'}
+                    outcome={routeOutcome}
+                    onRefresh={() => refreshReads(false)}
+                  />
+                ) : route === 'Tasks' ? (
+                  <TasksPage
+                    taskPagination={taskPagination}
+                    {...taskMutations}
+                    loading={readsPhase === 'initial-loading'}
+                    outcome={routeOutcome}
+                  />
+                ) : route === 'Connectors' ? (
+                  <ConnectorsPage
+                    onSignIn={signInAndRefresh}
+                    signingIn={signingIn}
+                  />
+                ) : (
+                  <SettingsPage
+                    chatBusy={chatBusy}
+                    onSignIn={signInAndRefresh}
+                    onSignOut={signOutAndRefresh}
+                    onWorkspaceReload={retireWorkspace}
+                    signingIn={signingIn}
+                  />
+                )}
+              </View>
+            </Animated.View>
+            {route === 'Home' && homeChatOpen && composer}
+          </KeyboardAvoidingView>
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <PageShell macDesktop={macDesktop} workspaceMaterial>
+      {shell}
+    </PageShell>
+  );
+}
+
+export default App;

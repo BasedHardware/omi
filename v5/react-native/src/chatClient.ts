@@ -1,0 +1,529 @@
+import {
+  IncrementalOmiChatParser,
+  omiHistoryOffset,
+  parseOmiHistory,
+  parseOmiChatStream,
+} from './legacyOmiChat';
+import type {NativeHttpResponse, OmiBackend} from './omiNative';
+import {nativeTransportErrorKind} from './nativeTransportError';
+import {
+  parseChatGenerationEventStream,
+  wireToChatAdmissionEnvelope,
+  wireToChatHistoryEnvelope,
+} from '@omi-core/adapters-platform/dist/chat';
+import {IncrementalChatGenerationParser} from '@omi-core/adapters-platform/dist/chat-generation';
+
+export type ChatMessage = {
+  id: string;
+  text: string;
+  sender: 'human' | 'ai';
+  createdAt: number;
+  generationOutcome: 'completed' | 'cancelled' | 'failed' | null;
+  generationId?: string;
+  generationRetryable?: boolean;
+  localOnly?: boolean;
+};
+
+export type ChatHistoryPage = {
+  messages: ChatMessage[];
+  olderCursor: string | null;
+  hasOlder: boolean;
+};
+type ParsedChatMessage = NonNullable<
+  ReturnType<typeof wireToChatHistoryEnvelope>
+>['messages'][number];
+type AdmissionEnvelope = {
+  message: ChatMessage;
+  generation: {id: string};
+};
+type TerminalFrame =
+  | {kind: 'done'; message: ChatMessage}
+  | {kind: 'cancelled'; message: ChatMessage | null}
+  | {kind: 'failed'; error: {code: string; retryable: boolean}};
+
+export class ChatBackendError extends Error {
+  constructor(
+    readonly status: number,
+    readonly backendCode: string,
+    readonly retryable: boolean,
+    readonly action: string,
+    readonly retryAfterSeconds: number | null,
+  ) {
+    super(`Chat backend failed (${status}:${backendCode})`);
+  }
+}
+
+export function chatErrorCopy(error: unknown): string {
+  if (!(error instanceof ChatBackendError)) {
+    return 'Message not sent. Check your connection and try again.';
+  }
+  if (error.action === 'reauthenticate' || error.status === 401) {
+    return 'Sign in again to continue.';
+  }
+  if (error.status === 403 || error.backendCode === 'forbidden') {
+    return 'Chat is not available for this account.';
+  }
+  if (error.status === 429) {
+    return error.retryAfterSeconds === null
+      ? 'Too many requests. Try again shortly.'
+      : `Too many requests. Try again in ${error.retryAfterSeconds} seconds.`;
+  }
+  if (error.retryable || error.status === 503) {
+    return 'Omi is temporarily unavailable. Try again.';
+  }
+  return 'This request cannot be completed.';
+}
+
+// A chat failure that means "this client no longer holds a usable cloud
+// session": a backend 401 / reauthenticate action, or native credentials that
+// never resolved. Callers use it to re-probe the session instead of keeping a
+// signed-in shell up with a dead Bearer.
+export function chatSessionLost(error: unknown): boolean {
+  if (error instanceof ChatBackendError) {
+    return error.status === 401 || error.action === 'reauthenticate';
+  }
+  const code =
+    error !== null && typeof error === 'object'
+      ? (error as {code?: unknown}).code
+      : null;
+  return (
+    code === 'OMI_HTTP_UNCONFIGURED' ||
+    code === 'OMI_HTTP_UNAUTHORIZED' ||
+    (error instanceof Error &&
+      error.message === 'Native HTTP configuration is unavailable')
+  );
+}
+
+export function chatHistoryErrorCopy(error: unknown): string {
+  if (error instanceof ChatBackendError) {
+    return chatErrorCopy(error);
+  }
+  const code = nativeTransportErrorKind(error);
+  if (
+    code === 'OMI_HTTP_UNCONFIGURED' ||
+    code === 'OMI_HTTP_UNAUTHORIZED' ||
+    code === 'unauthorized' ||
+    (error instanceof Error &&
+      error.message === 'Native HTTP configuration is unavailable')
+  ) {
+    return 'Sign in again to continue.';
+  }
+  if (
+    code === 'OMI_HTTP_TRANSPORT' ||
+    (error instanceof Error && error.message === 'Native HTTP transport failed')
+  ) {
+    return 'Omi is temporarily unavailable. Try again.';
+  }
+  return 'Chat history could not be loaded. Check your connection and try again.';
+}
+
+let messageSequence = 0;
+
+export function createLocalChatMessage(
+  text: string,
+  now: number = Date.now(),
+): ChatMessage {
+  messageSequence += 1;
+  return {
+    id: `desktop-${now}-${messageSequence}`,
+    text,
+    sender: 'human',
+    createdAt: now,
+    generationOutcome: null,
+    localOnly: true,
+  };
+}
+
+export function createPendingAssistantMessage(
+  human: ChatMessage,
+  generationId: string = human.id,
+): ChatMessage {
+  return {
+    id: pendingAssistantId(human.id),
+    text: '',
+    sender: 'ai',
+    createdAt: human.createdAt,
+    generationOutcome: null,
+    generationId,
+    localOnly: true,
+  };
+}
+
+export function pendingAssistantId(humanId: string): string {
+  return `pending:${humanId}`;
+}
+
+export function isStreamingAssistant(message: ChatMessage): boolean {
+  return (
+    message.sender === 'ai' &&
+    message.generationOutcome === null &&
+    message.generationId !== undefined
+  );
+}
+
+export function chatRequestCancelled(error: unknown): boolean {
+  return isNativeCancellation(error);
+}
+
+function parseJson(body: string | null): unknown {
+  if (body === null) {
+    throw new Error('Backend returned an empty response');
+  }
+  return JSON.parse(body) as unknown;
+}
+
+function desktopChatMessage(message: ParsedChatMessage): ChatMessage {
+  if (message.sender !== 'human' && message.sender !== 'ai') {
+    throw new Error('Chat message sender is unsupported');
+  }
+  return {
+    id: message.id,
+    text: message.text,
+    sender: message.sender,
+    createdAt: message.createdAt,
+    generationOutcome: message.generationOutcome,
+  };
+}
+
+export async function loadChatHistory(
+  backend: OmiBackend,
+): Promise<ChatMessage[]> {
+  return (await loadNewestChatHistory(backend)).messages;
+}
+
+export async function loadNewestChatHistory(
+  backend: OmiBackend,
+): Promise<ChatHistoryPage> {
+  if ((await backend.getApiContract?.()) === 'omi') {
+    return loadOmiHistory(backend, 0);
+  }
+  return loadChatHistoryPage(backend, '/v1/chat-messages?limit=50');
+}
+
+export async function loadOlderChatHistory(
+  backend: OmiBackend,
+  olderCursor: string,
+): Promise<ChatHistoryPage> {
+  if ((await backend.getApiContract?.()) === 'omi') {
+    return loadOmiHistory(backend, omiHistoryOffset(olderCursor));
+  }
+  if (olderCursor.length === 0) {
+    throw new Error('Chat history cursor is empty');
+  }
+  return loadChatHistoryPage(
+    backend,
+    `/v1/chat-messages?limit=50&olderCursor=${encodeURIComponent(olderCursor)}`,
+  );
+}
+
+async function loadOmiHistory(
+  backend: OmiBackend,
+  offset: number,
+): Promise<ChatHistoryPage> {
+  const response = await backend.request({
+    id: 'omi-chat-history',
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: `/v2/messages?limit=50&offset=${offset}`,
+  });
+  if (response.status !== 200) throwBackendError(response);
+  return parseOmiHistory(response.body, offset);
+}
+
+async function loadChatHistoryPage(
+  backend: OmiBackend,
+  path: `/v1/chat-messages?${string}`,
+): Promise<ChatHistoryPage> {
+  const response = await backend.request({
+    id: 'chat-history',
+    method: 'GET',
+    expectedApiContract: 'canonical',
+    path,
+  });
+  if (response.status !== 200) {
+    throwBackendError(response);
+  }
+  const envelope = wireToChatHistoryEnvelope(parseJson(response.body));
+  if (envelope === null) {
+    throw new Error('Chat history is malformed');
+  }
+  return {
+    messages: envelope.messages.map(desktopChatMessage),
+    olderCursor: envelope.page.olderCursor,
+    hasOlder: envelope.page.hasOlder,
+  };
+}
+
+export function mergeOlderChatHistory(
+  current: ChatMessage[],
+  older: ChatMessage[],
+): ChatMessage[] {
+  const currentIds = new Set(current.map(message => message.id));
+  return [...older.filter(message => !currentIds.has(message.id)), ...current];
+}
+
+export function reconcileCanonicalChatHistory(
+  local: ChatMessage[],
+  canonical: ChatMessage[],
+): ChatMessage[] {
+  const canonicalIds = new Set(canonical.map(message => message.id));
+  return [
+    ...canonical,
+    ...local.filter(message => !canonicalIds.has(message.id)),
+  ];
+}
+
+export async function sendChatMessage(
+  backend: OmiBackend,
+  text: string,
+  now: number = Date.now(),
+  onGenerationStarted?: (generationId: string) => void,
+  localMessage?: ChatMessage,
+  onRequestStarted?: (requestId: string) => boolean | void,
+  onAssistantText?: (text: string) => void,
+): Promise<{human: ChatMessage; assistant: ChatMessage | null}> {
+  if ((await backend.getApiContract?.()) === 'omi') {
+    if (backend.sendOmiChat === undefined)
+      throw new Error('Omi chat transport is unavailable');
+    const human = localMessage ?? createLocalChatMessage(text, now);
+    if (onRequestStarted?.(human.id) === false) {
+      throw Object.assign(new Error('Omi chat request retired'), {
+        code: 'OMI_HTTP_CANCELLED',
+      });
+    }
+    const parser = new IncrementalOmiChatParser();
+    let visible = '';
+    const response = await backend.sendOmiChat(human.id, text, frame => {
+      try {
+        for (const event of parser.push(frame)) {
+          if (event.kind !== 'data') {
+            continue;
+          }
+          visible += event.text;
+          onAssistantText?.(visible);
+        }
+      } catch {
+        return;
+      }
+    });
+    if (response.status !== 200) throwBackendError(response);
+    const assistant = parseOmiChatStream(response.body);
+    return {human, assistant};
+  }
+  const id = (localMessage ?? createLocalChatMessage(text, now)).id;
+  const response = await backend.request({
+    id: `admit-${id}`,
+    method: 'POST',
+    expectedApiContract: 'canonical',
+    path: '/v1/chat-messages',
+    body: JSON.stringify({
+      op: 'create',
+      opId: `op-${id}`,
+      id,
+      at: now,
+      text,
+      sender: 'human',
+      journalRevision: 1,
+      type: 'text',
+      appId: null,
+      chatSessionId: null,
+      messageSource: 'desktop_chat',
+      metadata: null,
+      attachmentIds: [],
+    }),
+  });
+  if (response.status !== 200 && response.status !== 201) {
+    throwBackendError(response);
+  }
+  const wireAdmission = wireToChatAdmissionEnvelope(parseJson(response.body));
+  if (wireAdmission === null) {
+    throw new Error('Chat admission is malformed');
+  }
+  const admission: AdmissionEnvelope = {
+    message: desktopChatMessage(wireAdmission.message),
+    generation: wireAdmission.generation,
+  };
+  onGenerationStarted?.(admission.generation.id);
+  let terminal: TerminalFrame;
+  const parser = new IncrementalChatGenerationParser();
+  let visible = '';
+  const onFrame = (frame: string) => {
+    try {
+      for (const event of parser.push(frame)) {
+        if (event.frame.kind === 'snapshot') {
+          visible = event.frame.text;
+          onAssistantText?.(visible);
+        } else if (event.frame.kind === 'delta') {
+          visible += event.frame.text;
+          onAssistantText?.(visible);
+        }
+      }
+    } catch {
+      return;
+    }
+  };
+  try {
+    terminal = parseTerminal(
+      readGeneration(
+        await backend.generationEvents(admission.generation.id, null, onFrame),
+      ),
+    );
+  } catch (error) {
+    if (isNativeCancellation(error)) {
+      try {
+        terminal = parseTerminal(
+          readGeneration(
+            await backend.generationEvents(admission.generation.id, null),
+          ),
+        );
+      } catch (replayError) {
+        if (!isReplayExpired(replayError)) {
+          throw replayError;
+        }
+        return reconcileGeneration(admission, await loadChatHistory(backend));
+      }
+    } else {
+      if (!isReplayExpired(error)) {
+        throw error;
+      }
+      return reconcileGeneration(admission, await loadChatHistory(backend));
+    }
+  }
+  if (terminal.kind === 'failed') {
+    return {
+      human: admission.message,
+      assistant: {
+        id: `generation:${admission.generation.id}`,
+        text: '',
+        sender: 'ai',
+        createdAt: admission.message.createdAt,
+        generationOutcome: 'failed',
+        generationId: admission.generation.id,
+        generationRetryable: terminal.error.retryable,
+        localOnly: true,
+      },
+    };
+  }
+  if (terminal.kind === 'cancelled' && terminal.message === null) {
+    return {
+      human: admission.message,
+      assistant: {
+        id: `generation:${admission.generation.id}`,
+        text: '',
+        sender: 'ai',
+        createdAt: admission.message.createdAt,
+        generationOutcome: 'cancelled',
+        generationId: admission.generation.id,
+        localOnly: true,
+      },
+    };
+  }
+  return {human: admission.message, assistant: terminal.message};
+}
+
+function reconcileGeneration(
+  admission: AdmissionEnvelope,
+  history: ChatMessage[],
+): {human: ChatMessage; assistant: ChatMessage} {
+  const canonicalHuman = history.find(
+    message => message.id === admission.message.id,
+  );
+  const assistant = history.find(
+    message =>
+      message.id === admission.generation.id && message.sender === 'ai',
+  );
+  if (canonicalHuman === undefined || assistant === undefined) {
+    throw new Error(
+      'Generation replay expired before canonical history reconciled',
+    );
+  }
+  return {human: canonicalHuman, assistant};
+}
+
+function isNativeCancellation(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    error.code === 'OMI_HTTP_CANCELLED'
+  );
+}
+
+export async function cancelChatGeneration(
+  backend: OmiBackend,
+  generationId: string,
+): Promise<void> {
+  await backend.cancelGenerationEvents(generationId);
+}
+
+function isReplayExpired(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    ((error instanceof ChatBackendError && error.status === 410) ||
+      ('code' in error && error.code === 'OMI_HTTP_REPLAY_EXPIRED'))
+  );
+}
+
+function readGeneration(response: NativeHttpResponse): string {
+  if (response.status !== 200) {
+    throwBackendError(response);
+  }
+  if (response.body === null) {
+    throw new Error('Generation returned an empty stream');
+  }
+  return response.body;
+}
+
+function throwBackendError(response: NativeHttpResponse): never {
+  let code = 'unknown';
+  let retryable = false;
+  let action = 'none';
+  if (response.body !== null) {
+    try {
+      const parsed = JSON.parse(response.body) as {
+        error?: {code?: unknown; retryable?: unknown; action?: unknown};
+      };
+      if (typeof parsed.error?.code === 'string') {
+        code = parsed.error.code;
+      }
+      if (typeof parsed.error?.retryable === 'boolean') {
+        retryable = parsed.error.retryable;
+      }
+      if (typeof parsed.error?.action === 'string') {
+        action = parsed.error.action;
+      }
+    } catch {}
+  }
+  throw new ChatBackendError(
+    response.status,
+    code,
+    retryable,
+    action,
+    response.retryAfterSeconds ?? null,
+  );
+}
+
+export function parseTerminal(raw: string): TerminalFrame {
+  const frames = parseChatGenerationEventStream(raw);
+  if (frames === null) {
+    throw new Error('Generation stream is malformed');
+  }
+  for (let index = frames.length - 1; index >= 0; index -= 1) {
+    const frame = frames[index];
+    if (frame.kind === 'done') {
+      return {kind: 'done', message: desktopChatMessage(frame.message)};
+    }
+    if (frame.kind === 'cancelled') {
+      return {
+        kind: 'cancelled',
+        message:
+          frame.message === null ? null : desktopChatMessage(frame.message),
+      };
+    }
+    if (frame.kind === 'failed') {
+      return {kind: 'failed', error: frame.error};
+    }
+  }
+  throw new Error('Generation ended without a terminal frame');
+}

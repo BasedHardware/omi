@@ -1,0 +1,32 @@
+version: 2
+name: v5-host-embedding
+tier: manual
+description: Verify the locally built React Native Activity view inside the shipping Swift host, then verify the classic escape path
+app: com.omi.omi-v5-host
+covers:
+  - desktop/macos/Desktop/Sources/V5Host/V5HostView.swift
+  - desktop/macos/Desktop/Sources/V5Host/V5UIRollout.swift
+  - desktop/macos/Desktop/Sources/V5HostKit/V5HostKit.swift
+preconditions:
+  - auth_ready
+  # The orchestrator builds this named bundle with OMI_V5_HOST=1 and sets
+  # omi.v5ui.localOverride=true before launch. B3 must supply the host session
+  # provider before authenticated Activity reads can be expected.
+steps:
+  - id: S1
+    name: Embedded Activity replaces signed-in content
+    do: "Launch the named development bundle with the local v5 override on. Complete the host's normal sign-in and onboarding gate. Verify the React Native Activity surface is inside the existing Mac main window, and the floating bar and menu bar still belong to the host. Capture a screenshot."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S2
+    name: Input and window chrome stay usable
+    do: "Click an Activity control, scroll the Activity list, then drag, resize, and fullscreen the host window. Verify content receives input and the host window keeps each window operation."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3
+    name: Local override returns to classic
+    do: "Quit, set omi.v5ui.localOverride=false for this bundle, and relaunch. Verify the same signed-in account opens the classic Home content and the host services remain usable."
+    expect:
+      interactive_count: { min: 1 }

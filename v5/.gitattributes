@@ -1,0 +1,5 @@
+# Applied Postgres migrations are immutable: runner.ts pins each file's sha256
+# and compares it with the receipt stored in the database. 0051 was applied
+# with a trailing blank line, so it keeps those bytes and is exempt from the
+# blank-at-eof whitespace rule that `git diff --check` enforces.
+backends/example-platform/drivers/postgres/migrations/0051-listen-capture-ownership.sql whitespace=-blank-at-eof

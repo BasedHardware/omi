@@ -41,6 +41,15 @@ BUDGETS: dict[str, tuple[int, int]] = {
     "web/app/AGENTS.md": (55, 2_400),
     "docs/AGENTS.md": (34, 1_309),
     "scripts/dev-harness/AGENTS.md": (15, 861),
+    "v5/.github/AGENTS.md": (27, 1_841),
+    "v5/AGENTS.md": (51, 2_907),
+    "v5/apps/backend-worker/AGENTS.md": (98, 5_289),
+    "v5/backends/example-platform/AGENTS.md": (45, 2_210),
+    "v5/native-core/AGENTS.md": (53, 2_632),
+    "v5/pwa/AGENTS.md": (62, 3_038),
+    "v5/react-native/AGENTS.md": (145, 8_234),
+    "v5/scripts/AGENTS.md": (35, 2_627),
+    "v5/tools/OmiSimulator/AGENTS.md": (56, 2_650),
 }
 
 SKIP_PARTS = {"node_modules", ".build", ".git"}

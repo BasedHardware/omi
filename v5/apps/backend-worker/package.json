@@ -1,0 +1,42 @@
+{
+  "name": "@omi-v5/backend-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint --config .eslintrc.cjs --max-warnings 0 'src/**/*.ts' 'test/**/*.ts' 'scripts/**/*.ts' 'migrations/**/*.ts'",
+    "typecheck": "tsc --noEmit && WRANGLER_SEND_METRICS=false wrangler types --check",
+    "test": "bun x tsc -b ../../packages/adapters-platform --force && bun test test/worker.contract.test.ts test/ready.verify.test.ts test/openrouter.gateway.test.ts test/live.contract.test.ts test/observability.policy.test.ts test/release.gate.test.ts test/retrieval.test.ts test/memory-service.test.ts test/migrations.verify.test.ts test/attachments.contract.test.ts test/device-sessions.contract.test.ts test/device-transcription-projection.test.ts test/generation-prompt.test.ts test/http-adapters.contract.test.ts ../../backends/example-platform/drivers/model/device-audio.test.ts test/canonical-tasks.test.ts test/canonical-routes.contract.test.ts && bun x vitest run test/account.integration.test.ts test/d1-tasks.integration.test.ts test/d1-chat.integration.test.ts test/attachments.integration.test.ts test/device-transcriptions.integration.test.ts test/device-audio-upload.integration.test.ts",
+    "dev": "WRANGLER_SEND_METRICS=false wrangler dev",
+    "dev:elysia": "bun scripts/dev-elysia.ts",
+    "deploy:dry-run": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --strict",
+    "deploy:staging": "WRANGLER_SEND_METRICS=false wrangler deploy --strict",
+    "migrate:staging": "WRANGLER_SEND_METRICS=false WRANGLER_WRITE_LOGS=false wrangler d1 migrations apply omi-v5-backend-staging-tasks --remote --config wrangler.jsonc",
+    "verify:ready": "bun run scripts/verify-ready.ts",
+    "verify:release": "bun run scripts/verify-release.ts",
+    "verify:migrations": "bun run scripts/verify-migrations.ts"
+  },
+  "dependencies": {
+    "@omi-core/contracts": "workspace:*",
+    "@omi-core/kernel": "workspace:*",
+    "@omi-core/ratified-contracts": "workspace:*",
+    "@sinclair/typebox": "0.34.41",
+    "elysia": "1.4.30",
+    "hono": "4.12.26"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.21.3",
+    "@omi-core/adapters-platform": "workspace:*",
+    "@types/bun": "1.3.14",
+    "@typescript-eslint/eslint-plugin": "6.21.0",
+    "@typescript-eslint/parser": "6.21.0",
+    "eslint": "8.57.1",
+    "vitest": "4.1.10",
+    "wrangler": "4.123.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.62.4"
+  }
+}

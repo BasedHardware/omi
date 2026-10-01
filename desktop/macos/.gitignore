@@ -103,3 +103,6 @@ CLAUDE.md
 # Captured dev auth session (omi-auth-dump.sh) — contains real tokens, never commit
 tmp/desktop-auth.json
 tmp/
+
+# Local React Native host framework built for development only
+Desktop/Vendor/OmiV5Runtime.xcframework/

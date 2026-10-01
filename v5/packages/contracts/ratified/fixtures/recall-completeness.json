@@ -1,0 +1,452 @@
+[
+  {
+    "name": "complete nonempty recall",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included",
+          "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": true
+  },
+  {
+    "name": "qualified incomplete query gap",
+    "page": {
+      "items": [],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "incomplete",
+        "reasons": ["accepted_work_pending"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:behind",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": null,
+          "missingStmFrontierReason": "accepted_work_pending"
+        }
+      },
+      "absence": {"kind": "query_gap"}
+    },
+    "honest": true
+  },
+  {
+    "name": "missing completeness",
+    "page": {"items": [], "absence": {"kind": "query_gap"}},
+    "honest": false
+  },
+  {
+    "name": "empty items without explicit query gap",
+    "page": {
+      "items": [],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": null,
+          "missingStmFrontierReason": "no_eligible_stm"
+        }
+      },
+      "absence": null
+    },
+    "honest": false
+  },
+  {
+    "name": "nonempty items with absence",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included",
+          "missingStmFrontierReason": null
+        }
+      },
+      "absence": {"kind": "query_gap"}
+    },
+    "honest": false
+  },
+  {
+    "name": "unqualified degraded query gap",
+    "page": {
+      "items": [],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "degraded",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": null,
+          "missingStmFrontierReason": "projection_unavailable"
+        }
+      },
+      "absence": {"kind": "query_gap"}
+    },
+    "honest": false
+  },
+  {
+    "name": "bounded partial query gap is qualified",
+    "page": {
+      "items": [],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "partial",
+        "reasons": ["source_bound"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": null,
+          "missingStmFrontierReason": "source_bound"
+        }
+      },
+      "absence": {"kind": "query_gap"}
+    },
+    "honest": true
+  },
+  {
+    "name": "null searched short-term frontier without typed reason",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": null,
+          "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": false
+  },
+  {
+    "name": "complete cannot carry projection limitation",
+    "page": {
+      "items": [],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": null,
+          "missingStmFrontierReason": "projection_stale"
+        }
+      },
+      "absence": {"kind": "query_gap"}
+    },
+    "honest": false
+  },
+  {
+    "name": "degraded reason cannot appear under partial",
+    "page": {
+      "items": [],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "partial",
+        "reasons": ["projection_stale"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": null,
+          "missingStmFrontierReason": "projection_stale"
+        }
+      },
+      "absence": {"kind": "query_gap"}
+    },
+    "honest": false
+  },
+  {
+    "name": "missing frontier limitation must be declared",
+    "page": {
+      "items": [],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "degraded",
+        "reasons": ["projection_unavailable"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": null,
+          "missingStmFrontierReason": "projection_stale"
+        }
+      },
+      "absence": {"kind": "query_gap"}
+    },
+    "honest": false
+  },
+  {
+    "name": "duplicate completeness reasons rejected",
+    "page": {
+      "items": [],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "partial",
+        "reasons": ["source_bound", "source_bound"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": null,
+          "missingStmFrontierReason": "source_bound"
+        }
+      },
+      "absence": {"kind": "query_gap"}
+    },
+    "honest": false
+  },
+  {
+    "name": "complete recall can report no accepted work and no eligible short-term candidates",
+    "page": {
+      "items": [],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": null,
+          "missingAcceptedFrontierReason": "no_accepted_work",
+          "newestSearchedStmFrontier": null,
+          "missingStmFrontierReason": "no_eligible_stm"
+        }
+      },
+      "absence": {"kind": "query_gap"}
+    },
+    "honest": true
+  },
+  {
+    "name": "complete recall cannot omit the newest accepted frontier",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:behind",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included",
+          "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": false
+  },
+  {
+    "name": "incomplete accepted-work claim requires a frontier gap",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "incomplete",
+        "reasons": ["accepted_work_pending"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included",
+          "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": false
+  },
+  {
+    "name": "extra accepted frontier key rejected",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "complete",
+        "reasons": [],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestSearchedAcceptedFrontier": "frontier-v1:declared",
+          "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included",
+          "missingStmFrontierReason": null,
+          "raw": "unsafe"
+        }
+      },
+      "absence": null
+    },
+    "honest": false
+  },
+  {
+    "name": "degraded outranks incomplete while preserving both reasons",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1", "status": "degraded",
+        "reasons": ["projection_stale", "accepted_work_pending"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:behind", "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": true
+  },
+  {
+    "name": "incomplete cannot understate degraded plus incomplete reasons",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1", "status": "incomplete",
+        "reasons": ["projection_stale", "accepted_work_pending"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:behind", "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": false
+  },
+  {
+    "name": "degraded outranks partial while preserving both reasons",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1", "status": "degraded",
+        "reasons": ["projection_unavailable", "source_bound"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:declared", "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": true
+  },
+  {
+    "name": "partial cannot understate degraded plus partial reasons",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1", "status": "partial",
+        "reasons": ["projection_unavailable", "source_bound"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:declared", "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": false
+  },
+  {
+    "name": "incomplete outranks partial while preserving both reasons",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1", "status": "incomplete",
+        "reasons": ["accepted_work_pending", "time_bound"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:behind", "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": true
+  },
+  {
+    "name": "partial cannot understate incomplete plus partial reasons",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1", "status": "partial",
+        "reasons": ["accepted_work_pending", "time_bound"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:behind", "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": false
+  },
+  {
+    "name": "degraded outranks all lower families while preserving every reason",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1", "status": "degraded",
+        "reasons": ["projection_bypassed", "accepted_work_pending", "policy_bound"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:behind", "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": true
+  },
+  {
+    "name": "incomplete cannot understate all three reason families",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1", "status": "incomplete",
+        "reasons": ["projection_bypassed", "accepted_work_pending", "policy_bound"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:behind", "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null
+        }
+      },
+      "absence": null
+    },
+    "honest": false
+  },
+  {
+    "name": "missing frontier limitation must remain in mixed reason set",
+    "page": {
+      "items": [{}],
+      "completeness": {
+        "version": "recall-completeness-v1", "status": "degraded",
+        "reasons": ["projection_unavailable", "accepted_work_pending"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared", "newestSearchedAcceptedFrontier": "frontier-v1:behind", "missingAcceptedFrontierReason": null,
+          "newestSearchedStmFrontier": null, "missingStmFrontierReason": "source_bound"
+        }
+      },
+      "absence": null
+    },
+    "honest": false
+  }
+]

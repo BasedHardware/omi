@@ -1,0 +1,59 @@
+{
+  "owner_account_id": "multi-origin-owner",
+  "source_trust": "synthetic",
+  "event_kind": "capture.transcript/utterance",
+  "adapter": {
+    "producer_ref": "synthetic-producer",
+    "contract_ref": "synthetic-contract",
+    "namespace_instance_ref": "synthetic-device",
+    "asserted_identity_domain": "person",
+    "scope_ref": "multi-origin-owner",
+    "issuer_ref": "synthetic-issuer",
+    "authority_policy_version": "synthetic-v1"
+  },
+  "sessions": [
+    {
+      "session_id": "manual-huong",
+      "capture_sequence": 1,
+      "revision_lineage": "manual-r1",
+      "ingest_sequence": 1,
+      "settled_window_id": "manual-w1",
+      "event_kind": "capture.manual/note",
+      "source_trust": "user_asserted",
+      "segments": [
+        {
+          "event_id": "manual-huong-event",
+          "text": "David's girlfriend is Phan Thi Thao Huong. Their anniversary is 2023-10-02.",
+          "start_at": "2026-08-01T12:00:00Z",
+          "speaker_label": "Owner",
+          "speaker_id": "owner",
+          "is_actor_user": true,
+          "revision_lineage": "manual-r1a",
+          "ingest_sequence": 1,
+          "settled_window_id": "manual-w1"
+        }
+      ]
+    },
+    {
+      "session_id": "import-doc",
+      "capture_sequence": 2,
+      "revision_lineage": "import-r1",
+      "ingest_sequence": 2,
+      "settled_window_id": "import-w1",
+      "event_kind": "capture.import/document",
+      "source_trust": "imported_unverified",
+      "segments": [
+        {
+          "event_id": "import-doc-event",
+          "text": "Imported note: David prefers AssemblyAI for transcription and speaker identification in one API pass.",
+          "start_at": "2026-08-01T13:00:00Z",
+          "speaker_label": "Import",
+          "speaker_id": "import",
+          "revision_lineage": "import-r1a",
+          "ingest_sequence": 2,
+          "settled_window_id": "import-w1"
+        }
+      ]
+    }
+  ]
+}

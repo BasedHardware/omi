@@ -1,0 +1,215 @@
+#import "OmiGlassPanelView.h"
+
+#import "OmiDesktopCommandsModule.h"
+#import <React/RCTViewManager.h>
+#import <QuartzCore/QuartzCore.h>
+
+static const CGFloat defaultCornerRadius = 22.0;
+// The HUD material is a dark, behind-window vibrancy: whatever the window
+// floats over shows through, darkened. A constant light scrim would flatten
+// that; a modest black scrim keeps the dark base consistent even over bright
+// content so the light React ink stays readable no matter what is behind.
+static const CGFloat OmiGlassScrimAlpha = 0.25;
+static const CGFloat OmiGlassEdgeAlpha = 0.10;
+static const CGFloat OmiGlassSheenAlpha = 0.4;
+static const CGFloat OmiGlassSheenHeight = 1.0;
+// Light appearance: the material flips to a light behind-window vibrancy and
+// the ink flips dark, so the scrim/edge/sheen invert to keep the glass legible
+// over both bright and dark backdrops.
+static const CGFloat OmiGlassLightScrimAlpha = 0.12;
+static const CGFloat OmiGlassLightEdgeAlpha = 0.10;
+static const CGFloat OmiGlassLightSheenAlpha = 0.08;
+
+static NSAppearance *OmiInkGlassAppearance(void)
+{
+  // Dark chrome: the HUD material must be evaluated in a dark appearance or
+  // Aqua renders it light, which starves the light React ink of contrast.
+  return [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+}
+
+static BOOL OmiGlassLightMode(void)
+{
+  // Same resolution as the window: light, dark, or the current macOS
+  // appearance when the preference is system.
+  return [OmiPreferredDesktopAppearance() isEqual:NSAppearanceNameAqua];
+}
+
+@interface OmiGlassPanelView ()
+
+{
+  CGFloat _glassCornerRadius;
+}
+
+@property (nonatomic, strong) NSVisualEffectView *material;
+@property (nonatomic, strong) NSView *fallback;
+@property (nonatomic, strong) CALayer *scrim;
+@property (nonatomic, strong) CALayer *sheen;
+@property (nonatomic, strong, nullable) id accessibilityObserver;
+@property (nonatomic, strong, nullable) id appearanceObserver;
+
+@end
+
+@implementation OmiGlassPanelView
+
+- (instancetype)initWithFrame:(NSRect)frameRect
+{
+  self = [super initWithFrame:frameRect];
+  if (self == nil) {
+    return nil;
+  }
+
+  self.wantsLayer = YES;
+  self.appearance = OmiInkGlassAppearance();
+  self.layer.borderWidth = 1;
+
+  // This is a window backdrop, not a floating control. NSGlassEffectView
+  // requires a contentView; Apple explicitly advises against placing it
+  // behind content as a sibling (WWDC25, Build an AppKit app, 18:26).
+  self.material = [[NSVisualEffectView alloc] initWithFrame:self.bounds];
+  self.material.appearance = OmiInkGlassAppearance();
+  self.material.material = NSVisualEffectMaterialHUDWindow;
+  self.material.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+  self.material.state = NSVisualEffectStateActive;
+  self.material.wantsLayer = YES;
+  self.material.layer.masksToBounds = YES;
+  [self addSubview:self.material];
+
+  self.fallback = [[NSView alloc] initWithFrame:self.bounds];
+  self.fallback.wantsLayer = YES;
+  self.fallback.layer.masksToBounds = YES;
+  [self addSubview:self.fallback];
+
+  self.scrim = [CALayer layer];
+  [self.layer addSublayer:self.scrim];
+  self.sheen = [CALayer layer];
+  [self.layer addSublayer:self.sheen];
+
+  __weak OmiGlassPanelView *weakSelf = self;
+  self.accessibilityObserver =
+      [NSWorkspace.sharedWorkspace.notificationCenter
+          addObserverForName:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+                      object:nil
+                       queue:NSOperationQueue.mainQueue
+                   usingBlock:^(__unused NSNotification *note) {
+    [weakSelf applyAccessibilityAppearance];
+  }];
+  self.appearanceObserver =
+      [NSNotificationCenter.defaultCenter
+          addObserverForName:OmiDesktopAppearanceDidChangeNotification
+                      object:nil
+                       queue:NSOperationQueue.mainQueue
+                   usingBlock:^(__unused NSNotification *note) {
+    [weakSelf applyAccessibilityAppearance];
+  }];
+  self.glassCornerRadius = defaultCornerRadius;
+  [self applyAccessibilityAppearance];
+  return self;
+}
+
+- (void)dealloc
+{
+  if (self.accessibilityObserver != nil) {
+    [NSWorkspace.sharedWorkspace.notificationCenter removeObserver:self.accessibilityObserver];
+  }
+  if (self.appearanceObserver != nil) {
+    [NSNotificationCenter.defaultCenter removeObserver:self.appearanceObserver];
+  }
+}
+
+- (void)setGlassCornerRadius:(CGFloat)glassCornerRadius
+{
+  _glassCornerRadius = glassCornerRadius;
+  self.layer.cornerRadius = _glassCornerRadius;
+  self.layer.cornerCurve = kCACornerCurveContinuous;
+  self.material.layer.cornerRadius = _glassCornerRadius;
+  self.material.layer.cornerCurve = kCACornerCurveContinuous;
+  self.fallback.layer.cornerRadius = _glassCornerRadius;
+  self.fallback.layer.cornerCurve = kCACornerCurveContinuous;
+  self.scrim.cornerRadius = _glassCornerRadius;
+  self.scrim.cornerCurve = kCACornerCurveContinuous;
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event
+{
+  return NO;
+}
+
+- (NSView *)hitTest:(NSPoint)point
+{
+  return nil;
+}
+
+- (void)layout
+{
+  [super layout];
+  // Window/onboarding geometry changes must not animate a stale scrim through
+  // the content. React owns content motion; the backdrop tracks bounds exactly.
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  self.material.frame = self.bounds;
+  self.fallback.frame = self.bounds;
+  self.scrim.frame = self.bounds;
+  self.sheen.frame = NSMakeRect(0, NSMaxY(self.bounds) - OmiGlassSheenHeight, NSWidth(self.bounds),
+      OmiGlassSheenHeight);
+  [CATransaction commit];
+}
+
+- (void)applyAccessibilityAppearance
+{
+  BOOL reduceTransparency = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency;
+  BOOL light = OmiGlassLightMode();
+  self.material.hidden = reduceTransparency;
+  self.fallback.hidden = !reduceTransparency;
+  NSAppearance *appearance = OmiInkGlassAppearance();
+  if (light) {
+    appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantLight];
+    if (appearance == nil) {
+      appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+    }
+  }
+  self.appearance = appearance;
+  // The material renders according to its OWN effective appearance: leaving
+  // it pinned to DarkAqua keeps even the light material dark, which strands
+  // the light ink on a charcoal base.
+  self.material.appearance = appearance;
+  // The HUD material is inherently dark; the light mode switches to the
+  // under-window background material so the vibrancy base is light.
+  self.material.material = light ? NSVisualEffectMaterialUnderWindowBackground
+                                 : NSVisualEffectMaterialHUDWindow;
+  [self.appearance performAsCurrentDrawingAppearance:^{
+    self.fallback.layer.backgroundColor =
+        [NSColor colorWithCalibratedWhite:(light ? 0.96 : 0.11) alpha:1.0].CGColor;
+    CGFloat alpha = reduceTransparency ? 1.0 : (light ? OmiGlassLightScrimAlpha : OmiGlassScrimAlpha);
+    NSColor *scrimBase = light ? NSColor.whiteColor : NSColor.blackColor;
+    self.scrim.backgroundColor = [scrimBase colorWithAlphaComponent:alpha].CGColor;
+    self.sheen.hidden = reduceTransparency;
+    self.sheen.backgroundColor = [(light ? NSColor.blackColor : NSColor.whiteColor)
+        colorWithAlphaComponent:(light ? OmiGlassLightSheenAlpha : OmiGlassSheenAlpha)].CGColor;
+    self.layer.borderColor = [(light ? NSColor.blackColor : NSColor.whiteColor)
+        colorWithAlphaComponent:(light ? OmiGlassLightEdgeAlpha : OmiGlassEdgeAlpha)].CGColor;
+  }];
+}
+
+@end
+
+@interface OmiGlassPanelManager : RCTViewManager
+
+@end
+
+@implementation OmiGlassPanelManager
+
+RCT_EXPORT_MODULE(OmiGlassPanel)
+
+RCT_EXPORT_VIEW_PROPERTY(glassCornerRadius, CGFloat)
+
+- (NSView *)view
+{
+  return [[OmiGlassPanelView alloc] initWithFrame:NSZeroRect];
+}
+
++ (BOOL)requiresMainQueueSetup
+{
+  return YES;
+}
+
+@end

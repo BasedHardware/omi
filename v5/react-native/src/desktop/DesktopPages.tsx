@@ -1,0 +1,690 @@
+import React, {useEffect, useState} from 'react';
+import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
+
+import {loadConnectors, type CloudApp} from '../desktopCloudClient';
+import {
+  desktopProjectionUnavailableCopy,
+  loadMemories,
+  projectionTimestamp,
+  type DesktopReadOutcomes,
+} from '../desktopReadClient';
+import {matchesSearchQuery} from '../searchText';
+import {omiBackend, subscribeOmiBackendSessionInvalidated} from '../omiNative';
+import {ReadStatus} from '../ui/ReadStatus';
+import {ConversationDetail} from '../ui/ConversationDetail';
+import {MemoryWriteActions} from '../pages/MemoryWriteActions';
+import {FocusPressable} from '../ui/Pressable';
+import {
+  TaskEditor,
+  TaskMutationStatus,
+  type TaskMutationProps,
+} from '../ui/TaskEditor';
+import {ShippingListInsert, ShippingStage} from './ShippingStage';
+import {ConnectionGallery} from './ConnectionGallery';
+import {
+  ConversationRow,
+  DesktopEmptyState,
+  ReadRow,
+  TaskRow,
+} from './DesktopRows';
+import type {DesktopSession} from './desktopChrome';
+import {
+  type DesktopTokens,
+  useDesktopTheme,
+  useDesktopStyleSheets,
+} from './DesktopTheme';
+import {OmiButton, OmiChip} from '../design/primitives';
+import {omiLayout} from '../design/tokens';
+
+export function LibraryPage({
+  outcomes,
+  query = '',
+  onLoadMore,
+  onRefresh,
+  loadingMore = false,
+  notice = null,
+}: {
+  outcomes: DesktopReadOutcomes | null;
+  query?: string;
+  onLoadMore?: () => void;
+  onRefresh?: () => void | Promise<void>;
+  loadingMore?: boolean;
+  notice?: string | null;
+}) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
+  useEffect(
+    () => subscribeOmiBackendSessionInvalidated(() => setSelectedId(null)),
+    [],
+  );
+  const outcome = outcomes?.conversations ?? null;
+  const memoryOutcome = outcomes?.memories ?? null;
+  const items = [
+    ...(outcome?.status === 'success' ? outcome.value.items : []),
+    ...(memoryOutcome?.status === 'success' ? memoryOutcome.value.items : []),
+  ]
+    .filter(
+      item =>
+        !(item.kind === 'conversation' && deletedIds.has(item.id)) &&
+        matchesSearchQuery(item.searchableText, query),
+    )
+    .sort(
+      (left, right) =>
+        (projectionTimestamp(right) ?? 0) - (projectionTimestamp(left) ?? 0),
+    );
+  const selected =
+    items.find(item => `${item.kind}:${item.id}` === selectedId) ?? null;
+  const refreshMemoryWrites = async () => {
+    if (omiBackend != null) await loadMemories(omiBackend);
+    await onRefresh?.();
+  };
+  const readError = [outcome, memoryOutcome]
+    .filter(value => value?.status === 'error')
+    .map(value => (value?.status === 'error' ? value.error : ''))
+    // Unserved projections are surfaced as empty copy, not as an alert.
+    .filter(error => error !== desktopProjectionUnavailableCopy)
+    .join(' ');
+  useEffect(() => {
+    if (selectedId !== null && selected === null) {
+      setSelectedId(null);
+    }
+  }, [selectedId, selected]);
+  const emptyCopy =
+    outcome === null
+      ? 'Loading conversations…'
+      : outcome.status === 'error'
+      ? // A projection the dev backend cannot serve yet reads as plain
+        // empty; only real failures surface their error copy.
+        outcome.error === desktopProjectionUnavailableCopy
+        ? 'Nothing captured in this window yet.'
+        : outcome.error
+      : query.trim() !== ''
+      ? 'No loaded conversations or memories match.'
+      : 'Nothing captured in this window yet.';
+  return (
+    <View style={styles.page}>
+      {readError && items.length > 0 ? (
+        <Text accessibilityRole="alert" style={styles.rowMeta}>
+          {readError}
+        </Text>
+      ) : null}
+      {notice ? (
+        <Text accessibilityRole="alert" style={styles.rowMeta}>
+          {notice}
+        </Text>
+      ) : null}
+      {selected !== null ? (
+        <View style={styles.list}>
+          <ScrollView
+            accessibilityLabel="Selected conversation details"
+            scrollEventThrottle={16}
+            contentContainerStyle={styles.conversationDetail}>
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to conversations"
+              onPress={() => setSelectedId(null)}
+              style={[styles.taskEdit, styles.backAction]}>
+              <Text style={styles.rowMeta}>Back to conversations</Text>
+            </FocusPressable>
+            {selected.kind === 'conversation' ? (
+              <ConversationDetail
+                key={selected.id}
+                conversation={selected}
+                onRefresh={onRefresh}
+                onDeleted={() => {
+                  setDeletedIds(current => new Set(current).add(selected.id));
+                  setSelectedId(null);
+                  onRefresh?.();
+                }}
+                apiContract={
+                  outcome?.status === 'success'
+                    ? outcome.value.apiContract
+                    : undefined
+                }
+                desktop
+              />
+            ) : (
+              <View
+                accessibilityLabel="Selected memory details"
+                style={styles.memoryDetail}>
+                {selected.title.trim() !== '' &&
+                  !selected.summary.startsWith(selected.title) && (
+                    <Text accessibilityRole="header" style={styles.rowTitle}>
+                      {selected.title}
+                    </Text>
+                  )}
+                <Text selectable style={styles.memoryBody}>
+                  {selected.summary}
+                </Text>
+                <Text style={styles.rowMeta}>
+                  {selected.timestamp === null
+                    ? 'Date unavailable'
+                    : new Date(selected.timestamp * 1000).toLocaleDateString()}
+                </Text>
+                <Text style={styles.rowMeta}>
+                  {selected.citations.length}{' '}
+                  {selected.citations.length === 1 ? 'citation' : 'citations'} ·{' '}
+                  {selected.provenance.label || 'Synthesized memory'}
+                </Text>
+                <MemoryWriteActions
+                  memory={selected}
+                  writesAvailable={
+                    memoryOutcome?.status === 'success' &&
+                    memoryOutcome.value.apiContract === 'omi'
+                  }
+                  onRefresh={refreshMemoryWrites}
+                  onDeleted={() => setSelectedId(null)}
+                />
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      ) : (
+        <View style={styles.list}>
+          <ScrollView
+            scrollEventThrottle={16}
+            contentContainerStyle={styles.listContent}>
+            {items.length === 0 ? (
+              <DesktopEmptyState
+                error={!!readError}
+                title={
+                  readError
+                    ? 'History is unavailable'
+                    : outcome === null
+                    ? 'Finding your moments…'
+                    : query.trim() !== ''
+                    ? 'Nothing matches yet'
+                    : 'Your story starts here.'
+                }
+                detail={readError || emptyCopy}
+              />
+            ) : (
+              items.map(item => (
+                <FocusPressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${item.kind} ${
+                    item.title ||
+                    (item.kind === 'memory'
+                      ? 'Memory'
+                      : item.status === 'processing'
+                      ? 'Processing conversation…'
+                      : 'Conversation title unavailable')
+                  }`}
+                  key={`${item.kind}:${item.id}`}
+                  onPress={() => setSelectedId(`${item.kind}:${item.id}`)}
+                  style={state => [
+                    styles.libraryRow,
+                    (state as {hovered?: boolean}).hovered && styles.hoverRow,
+                    state.pressed && styles.selectedRow,
+                  ]}>
+                  {item.kind === 'conversation' ? (
+                    <ConversationRow item={item} />
+                  ) : (
+                    <ReadRow item={item} />
+                  )}
+                </FocusPressable>
+              ))
+            )}
+            {outcome?.status === 'success' ? (
+              <>
+                {outcome.value.page.hasMore && onLoadMore ? (
+                  <FocusPressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Load more conversations"
+                    disabled={loadingMore}
+                    onPress={onLoadMore}
+                    style={styles.taskEdit}>
+                    <Text style={styles.rowMeta}>
+                      {loadingMore ? 'Loading…' : 'Load more'}
+                    </Text>
+                  </FocusPressable>
+                ) : null}
+                <ReadStatus
+                  label="Conversations"
+                  mac
+                  page={outcome.value.page}
+                />
+              </>
+            ) : null}
+            {memoryOutcome?.status === 'success' ? (
+              <ReadStatus
+                label="Memories"
+                mac
+                page={memoryOutcome.value.page}
+              />
+            ) : null}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+}
+
+export function TasksPage({
+  outcomes,
+  taskPagination,
+  onTaskToggle,
+  onTaskEdit,
+  busyTaskId = null,
+  writesAvailable = false,
+  taskMutationError = null,
+  onRetryTaskMutation,
+  onDismissTaskMutation,
+}: TaskMutationProps & {
+  outcomes: DesktopReadOutcomes | null;
+  taskPagination?: React.ReactNode;
+}) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const outcome = outcomes?.tasks ?? null;
+  const tasks = outcome?.status === 'success' ? outcome.value.items : [];
+  const emptyCopy =
+    outcome === null
+      ? 'Loading tasks…'
+      : outcome.status === 'error'
+      ? // Same as conversations: an unserved projection is just empty.
+        outcome.error === desktopProjectionUnavailableCopy
+        ? 'No tasks yet'
+        : outcome.error
+      : 'No tasks yet';
+  return (
+    <View style={styles.page}>
+      <TaskMutationStatus
+        desktop
+        writesAvailable={writesAvailable}
+        taskMutationError={taskMutationError}
+        onRetryTaskMutation={onRetryTaskMutation}
+        onDismissTaskMutation={onDismissTaskMutation}
+      />
+      <View style={styles.list}>
+        <ScrollView
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.listContent}>
+          {tasks.length > 0 ? (
+            tasks.map(item => {
+              const editable =
+                outcome?.status === 'success' &&
+                (outcome.value.apiContract === 'omi' || item.revision !== null);
+              return (
+                <ShippingListInsert itemKey={item.id} key={item.id}>
+                  <View style={styles.libraryRow}>
+                    <View style={styles.taskActions}>
+                      <FocusPressable
+                        accessibilityRole={
+                          writesAvailable && onTaskToggle ? 'checkbox' : 'text'
+                        }
+                        accessibilityLabel={`${
+                          item.completed ? 'Reopen' : 'Complete'
+                        } task: ${item.title}`}
+                        accessibilityState={{
+                          checked: item.completed,
+                          disabled:
+                            !writesAvailable ||
+                            !onTaskToggle ||
+                            !editable ||
+                            busyTaskId !== null,
+                          busy:
+                            busyTaskId === item.id &&
+                            taskMutationError === null,
+                        }}
+                        disabled={
+                          !writesAvailable ||
+                          !onTaskToggle ||
+                          !editable ||
+                          busyTaskId !== null
+                        }
+                        onPress={() => onTaskToggle?.(item.id)}
+                        style={styles.taskToggle}>
+                        <TaskRow item={item} />
+                      </FocusPressable>
+                      {writesAvailable && onTaskEdit && editable && (
+                        <OmiButton
+                          accessibilityLabel={`Edit task: ${item.title}`}
+                          compact
+                          disabled={busyTaskId !== null}
+                          label="Edit"
+                          onPress={() => setEditingId(item.id)}
+                          variant="plain"
+                        />
+                      )}
+                    </View>
+                    {editingId === item.id &&
+                      writesAvailable &&
+                      onTaskEdit &&
+                      editable && (
+                        <TaskEditor
+                          desktop
+                          id={item.id}
+                          title={item.title}
+                          busy={busyTaskId !== null}
+                          failed={taskMutationError !== null}
+                          onSave={onTaskEdit}
+                          onClose={() => setEditingId(null)}
+                        />
+                      )}
+                  </View>
+                </ShippingListInsert>
+              );
+            })
+          ) : (
+            <DesktopEmptyState
+              icon="checklist"
+              error={outcome?.status === 'error'}
+              title={
+                outcome === null
+                  ? 'Gathering your tasks…'
+                  : outcome.status === 'error'
+                  ? 'Tasks are unavailable'
+                  : 'A little room to think.'
+              }
+              detail={emptyCopy}
+            />
+          )}
+          {taskPagination}
+          {outcome?.status === 'success' ? (
+            <ReadStatus label="Tasks" mac page={outcome.value.page} />
+          ) : null}
+        </ScrollView>
+      </View>
+    </View>
+  );
+}
+
+type AppTileModel = {
+  Icon: MaterialIconName;
+  id: string;
+  name: string;
+  source: string;
+  status: string;
+};
+
+function cloudAppStatus(app: CloudApp): string {
+  if (app.connectedAccounts.length > 0) {
+    return 'Connected';
+  }
+  if (app.enabled) {
+    return 'Installed';
+  }
+  return 'Not connected';
+}
+
+function cloudAppSource(app: CloudApp): string {
+  if (app.author.length > 0) {
+    return app.author;
+  }
+  if (app.category.length > 0) {
+    return app.category;
+  }
+  return app.description;
+}
+
+function tilesFromCatalog(apps: CloudApp[]): AppTileModel[] {
+  return apps.map(app => ({
+    Icon: 'extension',
+    id: app.id,
+    name: app.name,
+    source: cloudAppSource(app),
+    status: cloudAppStatus(app),
+  }));
+}
+
+function AppTile({item}: {item: AppTileModel}) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const {tokens: token} = useDesktopTheme();
+  const Icon = item.Icon;
+  return (
+    <View style={styles.appSlot}>
+      <View style={styles.appCard}>
+        <View style={styles.appIcon}>
+          <MaterialIcon name={Icon} color={token.color.ink} size={22} />
+        </View>
+        <Text style={styles.rowTitle}>{item.name}</Text>
+        <Text style={styles.rowMeta}>{item.source}</Text>
+        <Text style={styles.appStatus}>{item.status}</Text>
+      </View>
+    </View>
+  );
+}
+
+export function AppsPage({session}: {session: DesktopSession}) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const [section, setSection] = useState<
+    'AI assistants' | 'Connect data' | 'Your apps'
+  >('Your apps');
+  const [tiles, setTiles] = useState<AppTileModel[] | null>();
+  useEffect(() => {
+    if (session !== 'ready') {
+      setTiles(undefined);
+      return;
+    }
+    const backend = omiBackend;
+    if (backend === undefined || backend === null) {
+      setTiles(null);
+      return;
+    }
+    setTiles(undefined);
+    let active = true;
+    loadConnectors(backend)
+      .then(snapshot => {
+        if (!active) {
+          return;
+        }
+        setTiles(tilesFromCatalog(snapshot.apps));
+      })
+      .catch(() => {
+        if (active) {
+          setTiles(null);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [session]);
+  return (
+    <View style={styles.page}>
+      <View accessibilityRole="tablist" style={styles.galleryTabs}>
+        {(['AI assistants', 'Connect data', 'Your apps'] as const).map(
+          label => (
+            <OmiChip
+              key={label}
+              label={label}
+              onPress={() => setSection(label)}
+              selected={section === label}
+            />
+          ),
+        )}
+      </View>
+      <ScrollView
+        style={styles.galleryScroller}
+        contentContainerStyle={styles.galleryContent}>
+        <ShippingStage
+          stageKey={section}
+          variant="hub"
+          style={styles.galleryStage}>
+          {section !== 'Your apps' ? (
+            <ConnectionGallery
+              key={section}
+              kind={section === 'AI assistants' ? 'agent' : 'context'}
+            />
+          ) : (
+            <View
+              style={tiles && tiles.length > 0 ? styles.appGrid : undefined}>
+              {tiles === undefined ? (
+                <DesktopEmptyState
+                  icon="extension"
+                  title="Finding your apps…"
+                  detail="Loading apps…"
+                />
+              ) : tiles === null ? (
+                <DesktopEmptyState
+                  icon="extension"
+                  error
+                  title="Your apps are out of reach"
+                  detail="Apps could not be loaded."
+                />
+              ) : tiles.length === 0 ? (
+                <DesktopEmptyState
+                  icon="extension"
+                  title="Your collection starts here."
+                  detail="No apps are available."
+                />
+              ) : (
+                tiles.map(item => <AppTile item={item} key={item.id} />)
+              )}
+            </View>
+          )}
+        </ShippingStage>
+      </ScrollView>
+    </View>
+  );
+}
+
+const createStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    page: {flex: 1, paddingHorizontal: 24, paddingTop: 8},
+    // Rows are clear at rest, fill on hover (design language: lists are
+    // rows, not slabs).
+    libraryRow: {borderRadius: 12},
+    hoverRow: {backgroundColor: token.color.glassQuiet},
+    selectedRow: {backgroundColor: token.color.glassSelected},
+    galleryStage: {flexBasis: 'auto', flexGrow: 0, flexShrink: 0},
+    galleryTabs: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 4,
+      paddingHorizontal: 0,
+      paddingVertical: 8,
+    },
+    galleryScroller: {
+      // Full-width stretch to match the uncapped chrome rows above.
+      alignSelf: 'center',
+      width: '100%',
+    },
+    galleryContent: {
+      paddingVertical: 24,
+      width: '100%',
+    },
+    conversationDetail: {gap: 16, padding: 16},
+    memoryDetail: {gap: 16},
+    memoryBody: {color: token.color.ink, fontSize: 15, lineHeight: 22},
+    backAction: {alignSelf: 'flex-start'},
+    taskActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    taskToggle: {flex: 1, minHeight: 44},
+    taskEdit: {
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    hubRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 14,
+      minHeight: 32,
+    },
+    hubItem: {
+      alignItems: 'center',
+      height: 28,
+      justifyContent: 'center',
+    },
+    hubText: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.caption,
+      fontWeight: '600',
+    },
+    hubTextActive: {color: token.color.ink},
+    list: {flex: 1},
+    listContent: {
+      paddingBottom: 24,
+      paddingTop: 4,
+      maxWidth: omiLayout.listColumn,
+      width: '100%',
+      alignSelf: 'center',
+    },
+    pageTitle: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: token.type.title,
+      fontWeight: '600',
+    },
+    tasksHeader: {alignItems: 'center', flexDirection: 'row', gap: 12},
+    searchControl: {
+      alignItems: 'center',
+      flex: 1,
+      flexDirection: 'row',
+      gap: 8,
+      height: 32,
+    },
+    searchInput: {
+      color: token.color.ink,
+      flex: 1,
+      fontFamily: token.font,
+      fontSize: token.type.body,
+      height: 32,
+      minWidth: 0,
+      paddingVertical: 0,
+    },
+    rowTitle: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: token.type.title,
+      fontWeight: '500',
+    },
+    rowMeta: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.meta,
+      marginTop: 2,
+    },
+    emptyTitle: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.search,
+      fontWeight: '400',
+      textAlign: 'center',
+    },
+    centerState: {
+      alignItems: 'center',
+      flex: 1,
+      gap: 8,
+      justifyContent: 'center',
+      paddingVertical: 40,
+    },
+    appGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      paddingHorizontal: 6,
+      paddingTop: 12,
+    },
+    appSlot: {
+      padding: 6,
+      width: '50%',
+      maxWidth: 360,
+    },
+    // Cards on glass: a quiet fill, no border, no shadow.
+    appCard: {
+      minHeight: 200,
+      backgroundColor: token.color.glassQuiet,
+      borderRadius: 22,
+      padding: 22,
+    },
+    appIcon: {
+      alignItems: 'center',
+      backgroundColor: token.color.glassQuiet,
+      borderRadius: 12,
+      height: 40,
+      justifyContent: 'center',
+      marginBottom: 12,
+      width: 40,
+    },
+    appStatus: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.meta,
+      marginTop: 12,
+    },
+  });

@@ -1,0 +1,259 @@
+import React, {useMemo, useRef, useState} from 'react';
+import {
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {MaterialIcon} from '../ui/MaterialIcon';
+
+import {
+  taskGroup,
+  type DesktopReadProjection,
+  type DomainReadOutcome,
+  type TaskGroup,
+  type TaskProjection,
+} from '../desktopReadClient';
+import {FocusPressable} from '../ui/Pressable';
+import {
+  TaskEditor,
+  TaskMutationStatus,
+  type TaskMutationProps,
+} from '../ui/TaskEditor';
+import {ReadStatus} from '../ui/ReadStatus';
+import {matchesSearchQuery} from '../searchText';
+import {styles} from '../ui/styles';
+
+const taskGroups: TaskGroup[] = ['Today', 'Tomorrow', 'Later'];
+
+function formatTaskDue(dueAt: number | null): string {
+  if (dueAt === null) {
+    return 'No due date';
+  }
+  return new Date(dueAt).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+}
+
+export function TasksPage({
+  outcome,
+  loading,
+  taskPagination,
+  onTaskToggle,
+  onTaskEdit,
+  busyTaskId = null,
+  taskMutationError = null,
+  onRetryTaskMutation,
+  onDismissTaskMutation,
+  writesAvailable = false,
+}: TaskMutationProps & {
+  outcome: DomainReadOutcome<DesktopReadProjection> | null;
+  loading: boolean;
+  taskPagination?: React.ReactNode;
+}) {
+  const [query, setQuery] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const nowMs = useRef(Date.now()).current;
+  const tasks = useMemo(
+    () =>
+      outcome?.status === 'success'
+        ? outcome.value.items.filter(
+            (item): item is TaskProjection => item.kind === 'task',
+          )
+        : [],
+    [outcome],
+  );
+  const filtered = useMemo(
+    () => tasks.filter(task => matchesSearchQuery(task.title, query)),
+    [query, tasks],
+  );
+  const grouped = useMemo(
+    () =>
+      taskGroups.map(label => ({
+        label,
+        tasks: filtered.filter(task => taskGroup(task.dueAt, nowMs) === label),
+      })),
+    [filtered, nowMs],
+  );
+  const error = outcome?.status === 'error' ? outcome.error : null;
+  const filtering = query.trim() !== '';
+  return (
+    <View style={styles.tasksPage}>
+      <Text
+        style={[
+          styles.projectionTitle,
+          Platform.OS === 'macos' && styles.macPrimaryText,
+        ]}>
+        Tasks
+      </Text>
+      <View style={styles.taskSearchBox}>
+        <MaterialIcon
+          name="search"
+          accessible={false}
+          color="#777777"
+          size={17}
+        />
+        <TextInput
+          accessibilityLabel="Search loaded tasks"
+          onChangeText={setQuery}
+          placeholder="Search loaded tasks"
+          placeholderTextColor="#666666"
+          style={styles.memorySearchInput}
+          value={query}
+        />
+      </View>
+      <TaskMutationStatus
+        writesAvailable={writesAvailable}
+        taskMutationError={taskMutationError}
+        onRetryTaskMutation={onRetryTaskMutation}
+        onDismissTaskMutation={onDismissTaskMutation}
+        busyTaskId={busyTaskId}
+      />
+      {loading && outcome === null ? (
+        <View style={styles.projectionEmpty}>
+          <ActivityIndicator color="#888888" />
+          <Text style={styles.projectionEmptyCopy}>Loading tasks…</Text>
+        </View>
+      ) : error !== null ? (
+        <View style={styles.projectionEmpty}>
+          <Text style={styles.projectionEmptyTitle}>Tasks unavailable</Text>
+          <Text style={styles.projectionEmptyCopy}>{error}</Text>
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.projectionEmpty}>
+          <Text style={styles.projectionEmptyTitle}>
+            {filtering ? 'No loaded tasks match.' : 'No tasks yet.'}
+          </Text>
+          {filtering && (
+            <Text style={styles.projectionEmptyCopy}>
+              Search covers task descriptions already loaded on this device.
+            </Text>
+          )}
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.taskList}>
+          {grouped.map(group =>
+            group.tasks.length === 0 ? null : (
+              <View key={group.label} style={styles.taskGroup}>
+                <View style={styles.taskGroupHeader}>
+                  <Text style={styles.taskGroupTitle}>{group.label}</Text>
+                  <Text style={styles.taskGroupCount}>
+                    {group.tasks.length}
+                  </Text>
+                </View>
+                {group.tasks.map(task => {
+                  const selected = task.id === selectedId;
+                  return (
+                    <View key={task.id}>
+                      <View
+                        style={[
+                          styles.taskCard,
+                          selected && styles.taskCardSelected,
+                        ]}>
+                        <FocusPressable
+                          accessibilityLabel={`${
+                            writesAvailable
+                              ? task.completed
+                                ? 'Reopen'
+                                : 'Complete'
+                              : task.completed
+                              ? 'Completed'
+                              : 'Open'
+                          } ${task.title}`}
+                          accessibilityRole={
+                            writesAvailable && onTaskToggle
+                              ? 'checkbox'
+                              : 'text'
+                          }
+                          accessibilityState={{
+                            checked: task.completed,
+                            disabled:
+                              !writesAvailable ||
+                              !onTaskToggle ||
+                              busyTaskId !== null,
+                            busy: busyTaskId === task.id,
+                          }}
+                          disabled={
+                            !writesAvailable ||
+                            !onTaskToggle ||
+                            busyTaskId !== null
+                          }
+                          onPress={() => onTaskToggle?.(task.id)}
+                          style={taskStyles.toggle}>
+                          <View
+                            style={[
+                              styles.taskCompletion,
+                              task.completed && styles.taskCompletionDone,
+                            ]}>
+                            {task.completed && (
+                              <Text style={styles.taskCheck}>✓</Text>
+                            )}
+                          </View>
+                        </FocusPressable>
+                        <FocusPressable
+                          accessibilityLabel={`${
+                            task.completed ? 'Completed' : 'Open'
+                          } task: ${task.title}`}
+                          accessibilityRole="button"
+                          accessibilityState={{selected}}
+                          onPress={() => setSelectedId(task.id)}
+                          style={styles.taskCardText}>
+                          <Text
+                            style={[
+                              styles.taskDescription,
+                              task.completed && styles.taskDescriptionDone,
+                            ]}>
+                            {task.title}
+                          </Text>
+                          <Text style={styles.taskDue}>
+                            {task.completed
+                              ? `Completed · ${formatTaskDue(task.dueAt)}`
+                              : formatTaskDue(task.dueAt)}
+                          </Text>
+                        </FocusPressable>
+                      </View>
+                      {selected && writesAvailable && onTaskEdit && (
+                        <TaskEditor
+                          id={task.id}
+                          title={task.title}
+                          busy={busyTaskId !== null}
+                          failed={taskMutationError !== null}
+                          onSave={onTaskEdit}
+                          onClose={() => setSelectedId(null)}
+                        />
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            ),
+          )}
+          {outcome?.status === 'success' && (
+            <ReadStatus label="Tasks" page={outcome.value.page} />
+          )}
+        </ScrollView>
+      )}
+      {taskPagination}
+      <View
+        accessibilityLabel="Task keyboard shortcuts"
+        style={styles.taskShortcuts}>
+        <Text style={styles.taskShortcut}>Tab · Focus</Text>
+        <Text style={styles.taskShortcut}>Enter · Select</Text>
+      </View>
+    </View>
+  );
+}
+
+const taskStyles = StyleSheet.create({
+  toggle: {
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

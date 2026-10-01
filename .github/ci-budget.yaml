@@ -2583,6 +2583,42 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "v5-checks.yml/apple-auth": {
+      "budget_p50_minutes": 2,
+      "display_name": "Apple host regressions",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "#19573: new v5 lane gate; single observation 1m05s on this PR (run 36592371744), seeded p50 x 1.25 -> 2; re-seed from weekly sample",
+      "reusable": null,
+      "runner": "macos",
+      "runner_counts": {
+        "macos": 1
+      },
+      "runs_on": "macos-latest"
+    },
+    "v5-checks.yml/validate": {
+      "budget_p50_minutes": 10,
+      "display_name": "Validate v5",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "#19573: new v5 lane gate; single observation 7m32s on this PR (run 36592371744), seeded p50 x 1.25 -> 10; re-seed from weekly sample",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "web-checks.yml/build": {
       "budget_p50_minutes": 1,
       "display_name": "Build",
@@ -4995,6 +5031,31 @@
       "rationale": "Initial workflow inventory",
       "triggers": {
         "workflow_dispatch": ""
+      }
+    },
+    "v5-checks.yml": {
+      "name": "v5 Checks",
+      "owner": "CI maintainers",
+      "rationale": "#19573: v5 wrapper cutover lane gate; PR+push scoped to v5/** so it runs only when the imported rewrite changes",
+      "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "v5/**",
+            ".github/workflows/v5-checks.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "v5/**",
+            ".github/workflows/v5-checks.yml"
+          ]
+        }
       }
     },
     "web-checks.yml": {

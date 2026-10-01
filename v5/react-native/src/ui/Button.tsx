@@ -1,0 +1,135 @@
+import React from 'react';
+import {
+  type PressableProps,
+  type StyleProp,
+  StyleSheet,
+  Text,
+  type TextStyle,
+} from 'react-native';
+import {FocusPressable, type PressableStyleProp} from './Pressable';
+import {type KitTokens, useKitStyleSheets} from '../desktop/DesktopTheme';
+
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonSize = 'compact' | 'default' | 'large' | 'icon';
+
+export type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
+  children: React.ReactNode;
+  labelStyle?: StyleProp<TextStyle>;
+  size?: ButtonSize;
+  style?: PressableStyleProp;
+  variant?: ButtonVariant;
+};
+
+export function Button({
+  accessibilityRole = 'button',
+  accessibilityState,
+  children,
+  disabled = false,
+  labelStyle,
+  size = 'default',
+  style,
+  variant = 'primary',
+  ...props
+}: ButtonProps) {
+  const styles = useKitStyleSheets(createStyles);
+  const isDisabled = disabled === true;
+  const content =
+    typeof children === 'string' || typeof children === 'number' ? (
+      <Text
+        style={[
+          styles.label,
+          variant === 'primary' && styles.primaryLabel,
+          variant === 'secondary' && styles.secondaryLabel,
+          variant === 'ghost' && styles.ghostLabel,
+          variant === 'danger' && styles.dangerLabel,
+          labelStyle,
+        ]}>
+        {children}
+      </Text>
+    ) : (
+      children
+    );
+
+  return (
+    <FocusPressable
+      {...props}
+      accessibilityRole={accessibilityRole}
+      accessibilityState={{...accessibilityState, disabled: isDisabled}}
+      disabled={isDisabled}
+      style={state => [
+        styles.base,
+        variant === 'primary' && styles.primary,
+        variant === 'secondary' && styles.secondary,
+        variant === 'ghost' && styles.ghost,
+        variant === 'danger' && styles.danger,
+        size === 'compact' && styles.compact,
+        size === 'default' && styles.defaultSize,
+        size === 'large' && styles.large,
+        size === 'icon' && styles.icon,
+        state.hovered &&
+          !state.pressed &&
+          variant === 'primary' &&
+          styles.primaryHover,
+        state.hovered &&
+          !state.pressed &&
+          variant === 'secondary' &&
+          styles.secondaryHover,
+        state.hovered &&
+          !state.pressed &&
+          variant === 'ghost' &&
+          styles.ghostHover,
+        state.hovered &&
+          !state.pressed &&
+          variant === 'danger' &&
+          styles.dangerHover,
+        state.pressed && styles.pressed,
+        isDisabled && styles.disabled,
+        typeof style === 'function' ? style(state) : style,
+      ]}>
+      {content}
+    </FocusPressable>
+  );
+}
+
+const createStyles = (tokens: KitTokens) =>
+  StyleSheet.create({
+    base: {
+      alignItems: 'center',
+      borderRadius: tokens.radius.md,
+      flexDirection: 'row',
+      gap: tokens.space.sm,
+      justifyContent: 'center',
+      paddingHorizontal: tokens.space.md,
+    },
+    primary: {backgroundColor: tokens.color.primary},
+    primaryHover: {backgroundColor: tokens.color.primaryPressed},
+    secondary: {
+      backgroundColor: tokens.color.input,
+      borderColor: tokens.color.line,
+      borderWidth: tokens.border.width,
+    },
+    secondaryHover: {backgroundColor: tokens.color.inputPressed},
+    ghost: {backgroundColor: tokens.color.transparent},
+    ghostHover: {backgroundColor: tokens.color.input},
+    danger: {
+      backgroundColor: tokens.color.transparent,
+      borderColor: tokens.color.danger,
+      borderWidth: tokens.border.width,
+    },
+    dangerHover: {backgroundColor: tokens.color.input},
+    compact: {height: tokens.size.controlCompact},
+    defaultSize: {height: tokens.size.control},
+    large: {height: tokens.size.controlLarge},
+    icon: {
+      height: tokens.size.control,
+      paddingHorizontal: tokens.space.none,
+      width: tokens.size.control,
+    },
+    pressed: {opacity: tokens.opacity.pressed},
+    disabled: {opacity: tokens.opacity.disabled},
+    label: tokens.type.label,
+    primaryLabel: {color: tokens.color.textInverse},
+    secondaryLabel: {color: tokens.color.text},
+    ghostLabel: {color: tokens.color.text},
+    dangerLabel: {color: tokens.color.danger},
+  });

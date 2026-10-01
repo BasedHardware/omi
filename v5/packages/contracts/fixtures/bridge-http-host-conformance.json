@@ -1,0 +1,280 @@
+{
+  "version": 1,
+  "rows": [
+    {
+      "id": "bodyless-get",
+      "scope": "all",
+      "request": {"id": "hc-bodyless-get", "method": "GET", "path": "/v1/tasks?limit=2"},
+      "credential": "fixture-token",
+      "expect": {
+        "outcome": "dispatch",
+        "servedDelta": 1,
+        "backendHit": 1,
+        "method": "GET",
+        "pathAndQuery": "/v1/tasks?limit=2",
+        "body": null,
+        "headers": {"authorization": "Bearer fixture-token"},
+        "followRedirects": false
+      }
+    },
+    {
+      "id": "body-write-order",
+      "scope": "all",
+      "request": {
+        "id": "hc-body-write-order",
+        "method": "POST",
+        "path": "/v1/tasks",
+        "headers": {"x-trace": "wave-9"},
+        "body": "{\"title\":\"fixture\"}"
+      },
+      "credential": "fixture-token",
+      "expect": {
+        "outcome": "dispatch",
+        "servedDelta": 1,
+        "backendHit": 1,
+        "method": "POST",
+        "pathAndQuery": "/v1/tasks",
+        "body": "{\"title\":\"fixture\"}",
+        "headers": {
+          "authorization": "Bearer fixture-token",
+          "content-type": "application/json",
+          "x-trace": "wave-9"
+        },
+        "bodyAfterHeaders": true,
+        "followRedirects": false
+      }
+    },
+    {
+      "id": "forbidden-mixed-case-keeps-safe-header",
+      "scope": "all",
+      "request": {
+        "id": "hc-forbidden-headers",
+        "method": "GET",
+        "path": "/v1/tasks",
+        "headers": {
+          "AuThOrIzAtIoN": "Bearer forged",
+          "COOKIE": "session=forged",
+          "Proxy-Authorization": "Basic forged",
+          "X-Trace": "kept"
+        }
+      },
+      "credential": "fixture-token",
+      "expect": {
+        "outcome": "dispatch",
+        "servedDelta": 1,
+        "backendHit": 1,
+        "method": "GET",
+        "pathAndQuery": "/v1/tasks",
+        "body": null,
+        "headers": {"authorization": "Bearer fixture-token", "x-trace": "kept"},
+        "forbiddenDropped": ["authorization", "cookie", "proxy-authorization"],
+        "followRedirects": false
+      }
+    },
+    {
+      "id": "relative-query",
+      "scope": "all",
+      "request": {"id": "hc-relative-query", "method": "PATCH", "path": "/v1/tasks/task-1?dry_run=true"},
+      "credential": "fixture-token",
+      "expect": {
+        "outcome": "dispatch",
+        "servedDelta": 1,
+        "backendHit": 1,
+        "method": "PATCH",
+        "pathAndQuery": "/v1/tasks/task-1?dry_run=true",
+        "body": null,
+        "headers": {"authorization": "Bearer fixture-token"},
+        "followRedirects": false
+      }
+    },
+    {
+      "id": "absolute-path-rejected",
+      "scope": "all",
+      "request": {"id": "hc-absolute", "method": "GET", "path": "https://evil.example/v1/tasks"},
+      "credential": "fixture-token",
+      "expect": {"outcome": "failure", "failureReason": "shell-error", "servedDelta": 0, "backendHit": 0}
+    },
+    {
+      "id": "scheme-relative-path-rejected",
+      "scope": "all",
+      "request": {"id": "hc-scheme-relative", "method": "GET", "path": "//evil.example/v1/tasks"},
+      "credential": "fixture-token",
+      "expect": {"outcome": "failure", "failureReason": "shell-error", "servedDelta": 0, "backendHit": 0}
+    },
+    {
+      "id": "no-leading-slash-rejected",
+      "scope": "all",
+      "request": {"id": "hc-no-leading-slash", "method": "GET", "path": "v1/tasks"},
+      "credential": "fixture-token",
+      "expect": {"outcome": "failure", "failureReason": "shell-error", "servedDelta": 0, "backendHit": 0}
+    },
+    {
+      "id": "missing-credential",
+      "scope": "all",
+      "request": {"id": "hc-no-credential", "method": "GET", "path": "/v1/tasks"},
+      "credential": null,
+      "expect": {"outcome": "failure", "failureReason": "not-authenticated", "servedDelta": 0, "backendHit": 0}
+    },
+    {
+      "id": "missing-correlation-id",
+      "scope": "transport-scoped",
+      "missingId": true,
+      "request": {"id": null, "method": "GET", "path": "/v1/tasks"},
+      "credential": "fixture-token",
+      "expect": {
+        "outcome": "missing-id",
+        "servedDelta": 0,
+        "backendHit": 0,
+        "swiftReply": "shell-error",
+        "dartReply": "none"
+      }
+    },
+    {
+      "id": "malformed-message",
+      "scope": "transport-scoped",
+      "malformed": true,
+      "request": {"id": "hc-malformed", "method": "", "path": ""},
+      "credential": "fixture-token",
+      "expect": {
+        "outcome": "malformed",
+        "failureReason": "shell-error",
+        "servedDelta": 0,
+        "backendHit": 0,
+        "swiftReply": "shell-error",
+        "dartReply": "shell-error"
+      }
+    },
+    {
+      "id": "transport-offline",
+      "scope": "all",
+      "request": {"id": "hc-offline", "method": "GET", "path": "/v1/tasks"},
+      "credential": "fixture-token",
+      "transportFailure": "offline",
+      "expect": {"outcome": "transport-failure", "failureReason": "offline", "servedDelta": 1, "backendHit": 1}
+    },
+    {
+      "id": "transport-timeout",
+      "scope": "all",
+      "request": {"id": "hc-timeout", "method": "GET", "path": "/v1/tasks"},
+      "credential": "fixture-token",
+      "transportFailure": "timeout",
+      "expect": {"outcome": "transport-failure", "failureReason": "timeout", "servedDelta": 1, "backendHit": 1}
+    },
+    {
+      "id": "transport-cancelled",
+      "scope": "all",
+      "request": {"id": "hc-cancelled", "method": "GET", "path": "/v1/tasks"},
+      "credential": "fixture-token",
+      "transportFailure": "cancelled",
+      "expect": {"outcome": "transport-failure", "failureReason": "cancelled", "servedDelta": 1, "backendHit": 1}
+    },
+    {
+      "id": "transport-shell-error",
+      "scope": "all",
+      "request": {"id": "hc-shell-error", "method": "GET", "path": "/v1/tasks"},
+      "credential": "fixture-token",
+      "transportFailure": "shell-error",
+      "expect": {"outcome": "transport-failure", "failureReason": "shell-error", "servedDelta": 1, "backendHit": 1}
+    },
+    {
+      "id": "server-422-no-retry",
+      "scope": "all",
+      "request": {"id": "hc-422", "method": "POST", "path": "/v1/tasks", "body": "{\"title\":\"invalid\"}"},
+      "credential": "fixture-token",
+      "response": {"status": 422, "body": "{\"detail\":\"invalid\"}", "retryAfterSeconds": null},
+      "expect": {
+        "outcome": "response",
+        "servedDelta": 1,
+        "backendHit": 1,
+        "body": "{\"title\":\"invalid\"}",
+        "responseStatus": 422,
+        "responseBody": "{\"detail\":\"invalid\"}",
+        "retryAfterMs": null,
+        "responseHeadersExposed": false
+      }
+    },
+    {
+      "id": "server-429-integer-retry-after",
+      "scope": "all",
+      "request": {"id": "hc-429", "method": "POST", "path": "/v1/tasks", "body": "{\"title\":\"busy\"}"},
+      "credential": "fixture-token",
+      "response": {"status": 429, "body": "{\"detail\":\"busy\"}", "retryAfterSeconds": 3},
+      "expect": {
+        "outcome": "response",
+        "servedDelta": 1,
+        "backendHit": 1,
+        "body": "{\"title\":\"busy\"}",
+        "responseStatus": 429,
+        "responseBody": "{\"detail\":\"busy\"}",
+        "retryAfterMs": 3000,
+        "responseHeadersExposed": false
+      }
+    },
+    {
+      "id": "one-way-correlation",
+      "scope": "one-way",
+      "request": {"id": "hc-correlation", "method": "GET", "path": "/v1/tasks"},
+      "credential": "fixture-token",
+      "response": {"status": 200, "body": "[]", "retryAfterSeconds": null},
+      "expect": {
+        "outcome": "response",
+        "servedDelta": 1,
+        "backendHit": 1,
+        "responseStatus": 200,
+        "responseBody": "[]",
+        "correlationId": "hc-correlation",
+        "responseHeadersExposed": false
+      }
+    },
+    {
+      "id": "one-way-duplicate-is-correlated-by-id",
+      "scope": "one-way",
+      "request": {"id": "hc-duplicate", "method": "GET", "path": "/v1/tasks"},
+      "credential": "fixture-token",
+      "duplicateReply": true,
+      "response": {"status": 200, "body": "[]", "retryAfterSeconds": null},
+      "expect": {
+        "outcome": "response",
+        "servedDelta": 1,
+        "backendHit": 1,
+        "responseStatus": 200,
+        "responseBody": "[]",
+        "correlationId": "hc-duplicate",
+        "duplicateReplyDroppedBySurface": true,
+        "responseHeadersExposed": false
+      }
+    },
+    {
+      "id": "redirect-no-follow",
+      "scope": "all",
+      "request": {"id": "hc-redirect", "method": "GET", "path": "/redirect"},
+      "credential": "fixture-token",
+      "response": {"status": 302, "body": null, "retryAfterSeconds": null, "location": "https://evil.example/"},
+      "expect": {
+        "outcome": "response",
+        "servedDelta": 1,
+        "backendHit": 1,
+        "responseStatus": 302,
+        "responseBody": null,
+        "followRedirects": false,
+        "redirectLocationForwarded": false,
+        "responseHeadersExposed": false
+      }
+    },
+    {
+      "id": "response-headers-not-exposed",
+      "scope": "all",
+      "request": {"id": "hc-no-response-headers", "method": "GET", "path": "/v1/tasks"},
+      "credential": "fixture-token",
+      "response": {"status": 200, "body": "[]", "retryAfterSeconds": null, "headers": {"set-cookie": "secret=1", "www-authenticate": "Bearer"}},
+      "expect": {
+        "outcome": "response",
+        "servedDelta": 1,
+        "backendHit": 1,
+        "responseStatus": 200,
+        "responseBody": "[]",
+        "responseHeadersExposed": false
+      }
+    }
+  ]
+}

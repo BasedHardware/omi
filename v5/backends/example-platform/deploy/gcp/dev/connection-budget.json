@@ -1,0 +1,11 @@
+{
+  "database_max_connections": 100,
+  "provider_reserved_connections": 3,
+  "approved_connections": 70,
+  "migration_reserve": 4,
+  "operator_reserve": 8,
+  "api_pool_max": 4,
+  "revision_instance_cap": 2,
+  "concurrent_revisions": 3,
+  "job_connections": 0
+}

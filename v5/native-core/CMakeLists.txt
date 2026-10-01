@@ -1,0 +1,44 @@
+cmake_minimum_required(VERSION 3.20)
+project(omi_native_core LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_library(omi_native_boundary STATIC src/omi_native_boundary.cpp)
+target_include_directories(omi_native_boundary PUBLIC include)
+
+add_library(omi_backend_policy STATIC src/omi_backend_policy.cpp)
+target_include_directories(omi_backend_policy PUBLIC include)
+
+add_library(omi_backend_http STATIC src/omi_backend_http.cpp)
+target_include_directories(omi_backend_http PUBLIC include)
+target_link_libraries(omi_backend_http PUBLIC omi_backend_policy)
+
+add_library(omi_backend_recording STATIC src/omi_backend_recording.cpp)
+target_include_directories(omi_backend_recording PUBLIC include)
+
+add_library(omi_device STATIC src/omi_device.cpp)
+target_include_directories(omi_device PUBLIC include)
+target_link_libraries(omi_device PUBLIC omi_native_boundary)
+
+enable_testing()
+add_executable(test_omi_native_boundary tests/test_omi_native_boundary.cpp)
+target_link_libraries(test_omi_native_boundary PRIVATE omi_native_boundary)
+add_test(NAME NativeBoundaryHostTest COMMAND test_omi_native_boundary)
+
+add_executable(test_omi_backend_policy tests/test_omi_backend_policy.cpp)
+target_link_libraries(test_omi_backend_policy PRIVATE omi_backend_policy)
+add_test(NAME BackendPolicyHostTest COMMAND test_omi_backend_policy)
+
+add_executable(test_omi_backend_http tests/test_omi_backend_http.cpp)
+target_link_libraries(test_omi_backend_http PRIVATE omi_backend_http)
+add_test(NAME BackendHttpHostTest COMMAND test_omi_backend_http)
+
+add_executable(test_omi_backend_recording tests/test_omi_backend_recording.cpp)
+target_link_libraries(test_omi_backend_recording PRIVATE omi_backend_recording)
+add_test(NAME BackendRecordingHostTest COMMAND test_omi_backend_recording)
+
+add_executable(test_omi_device tests/test_omi_device.cpp)
+target_link_libraries(test_omi_device PRIVATE omi_device)
+add_test(NAME DeviceHostTest COMMAND test_omi_device)

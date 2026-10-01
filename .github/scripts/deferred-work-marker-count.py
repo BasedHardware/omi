@@ -56,6 +56,7 @@ NORMALIZED_EXCLUDED_FILES = {
     ".github/scripts/deferred-work-marker-count.py",
     "AGENTS.md",
     "CLAUDE.md",
+    "v5/apps/backend-worker/worker-configuration.d.ts",  # Wrangler-generated types.
 }
 
 

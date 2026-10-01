@@ -43,9 +43,9 @@ declared in `controls[]` as B1’s schema stands.
 ## 1. home
 
 **Owners:** `app/lib/pages/home/home_content.dart` (`HomeContentPage`, catalog
-widget), `app/lib/widgets/bottom_nav_bar.dart` (tab row), shell
-`app/lib/pages/home/page.dart` (**hot**). `main.dart` not required for tab
-addressability.
+widget), shell `app/lib/pages/home/page.dart` (**hot**). `main.dart` not
+required for tab addressability. The `bottom_nav_bar.dart` tab row is gone —
+#19730 simplified the app shell (one Home feed, Ask Omi sheet) and removed it.
 
 **Reach:** IndexedStack tab 0 of `HomePage` (`_ensurePageInitialized` case 0).
 Route row today: `kind: tab, tab: 0`, fixture `identity-empty`, `auth:
@@ -103,7 +103,7 @@ separate widget.
    `identity-empty` still hits the network; recap controls appear while
    loading even when empty.
 
-**Size:** 2 PRs. First: `bottom_nav_bar.dart` only (not hot) — three catalog
+**Size:** 2 PRs. First: the home tab surface only (not hot) — three catalog
 tabs, leave Apps uncatalogued or add it in the same PR. Second: hot
 `page.dart` chat bar **after** the announcement timer is on `main`, plus
 `home_content.dart` headers. Do not combine with `conversation_detail`.
@@ -449,7 +449,7 @@ set.
 4. **conversations** — row `GestureDetector` + seeded id; do **not** key home preview in the same PR if that would duplicate onstage keys.
 5. **onboarding auth** — Google + local-dev; blocked on signed-out `buildShell` (B1 adapter), not on `main` widgets.
 6. **tasks** — extract FAB/row out of the 31-constructor file first.
-7. **home tabs** — `bottom_nav_bar.dart` only; wait for announcement-timer on `main` before pumping `HomePage` in a green surface test.
+7. **home tabs** — home tab surface only; wait for announcement-timer on `main` before pumping `HomePage` in a green surface test.
 8. **conversation_detail** — last; extract app bar out of the hot file; fix Ask/Back labels; never in the same PR as `app/lib/pages/home/page.dart`.
 
 **home/page.dart chat bar** sits with (7) or after it; it is the only home

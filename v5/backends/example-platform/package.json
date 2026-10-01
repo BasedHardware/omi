@@ -1,0 +1,51 @@
+{
+  "name": "omi-placement-platform",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "core/*",
+    "drivers/*",
+    "harness",
+    "migration"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "test:postgres": "bun run scripts/postgres-test.ts test",
+    "test:postgres:preserve": "bun run scripts/postgres-test.ts test --preserve",
+    "test:postgres:setup": "bun run scripts/postgres-test.ts setup",
+    "test:postgres:status": "bun run scripts/postgres-test.ts status",
+    "test:postgres:teardown": "bun run scripts/postgres-test.ts teardown",
+    "test:postgres:destroy": "bun run scripts/postgres-test.ts destroy --yes",
+    "prod-local": "bun run scripts/prod-local.ts",
+    "prod-local-identity": "bun run scripts/prod-local-identity.ts",
+    "prod-local-identity-seed": "bun run scripts/prod-local-identity-seed.ts",
+    "lint:imports": "bun run scripts/lint-import-graph.ts",
+    "lint:closure": "bun run scripts/lint-import-closure.ts",
+    "qa:contracts": "bun run scripts/qa-contracts.ts",
+    "qa:production-deps": "node scripts/verify-production-dependency-closure.mjs",
+    "qa:production-qualification": "bun run scripts/validate-production-qualification-manifest.ts",
+    "build:production-deps": "bun run scripts/build-production-dependency-artifact.ts",
+    "app": "bun run apps/service/bin/dev-server.ts",
+    "logs": "bun integration/dev-logs.ts",
+    "check:deployed": "bun test scripts/prod-local.test.ts scripts/prod-local-identity.test.ts scripts/prod-local-identity-e2e.test.ts scripts/prod-local-identity-seed.test.ts integration/lib/supervise.test.ts scripts/lint-import-graph.test.ts drivers/sqlite/service-stores/account-lifecycle.test.ts migration/postgres/deletion-surface-registry.schema.test.ts migration/postgres/account-deletion-cleanup-participant.test.ts apps/service/codecs/capture-ownership.test.ts drivers/postgres/migrations/schema-static.test.ts drivers/postgres/firebase-chat-generation-context-source.test.ts apps/service/chat/generation-context.test.ts core/retrieve/temporal.test.ts apps/service/workers/formation-work-producer.test.ts drivers/postgres/conversation-read-repository.test.ts drivers/postgres/chat-read-repository.test.ts drivers/postgres/chat-write-repository.test.ts drivers/postgres/chat-attachment-repository.test.ts drivers/postgres/firebase-chat-write-authorization.test.ts drivers/postgres/firebase-formation-work-authorization.test.ts drivers/postgres/firebase-chat-read-runtime.test.ts drivers/postgres/firebase-settings-runtime.test.ts drivers/postgres/chat-messages.real.test.ts drivers/postgres/chat-write-repository.real.test.ts drivers/postgres/chat-attachment-repository.real.test.ts apps/service/composition/chat-conversation-sessions.test.ts drivers/postgres/conversation-read-projection.test.ts apps/service/listen/prerecorded-transcription.test.ts apps/service/listen/device-transcription.test.ts apps/service/bin/production-server.test.ts drivers/model/device-audio.test.ts drivers/model/deepgram-transcription.test.ts drivers/postgres/firebase-authorized-memory-service-app.test.ts apps/service/stores/device-session-upload.test.ts drivers/postgres/firebase-device-session-runtime.test.ts drivers/postgres/listen-finalization-repository.test.ts drivers/postgres/postgresjs.test.ts deploy/gcp/dev/release-candidate.test.ts drivers/postgres/migrations/manifest.test.ts scripts/postgres-test-lifecycle.test.ts scripts/postgres-test-resources.test.ts drivers/model/persisted-render.test.ts scripts/bind-firebase-identity.test.ts drivers/model/http-render.test.ts apps/service/composition/deployed-config.test.ts drivers/postgres/firebase-authorized-memory-service-process.test.ts drivers/postgres/firebase-authorized-memory-read-runtime.test.ts drivers/postgres/firebase-memory-route-read-port.test.ts apps/service/memory-service-app.test.ts && bun run lint:imports && bun scripts/trace-value-imports.ts apps/service/bin/production-server.ts --forbid apps/qa --forbid drivers/sqlite --forbid drivers/model/glm --forbid integration/local-test-gateway --forbid harness/ --forbid spikes/ --forbid migration/",
+    "start:deployed": "bun apps/service/bin/production-server.ts",
+    "bind:firebase": "bun scripts/bind-firebase-identity.ts"
+  },
+  "dependencies": {
+    "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.9.0-e44625eb.tgz",
+    "@sinclair/typebox": "^0.34.41",
+    "ajv": "^8.17.1",
+    "firebase-admin": "14.2.0",
+    "hono": "4.12.34"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/node": "25.9.8",
+    "fast-check": "^3.23.2",
+    "typescript": "5.9.3"
+  },
+  "resolutions": {
+    "@types/node": "25.9.8"
+  }
+}

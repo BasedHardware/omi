@@ -13,6 +13,7 @@ Read the guide for the area you are changing. `CLAUDE.md` points here.
 | Web app / admin | `web/app/AGENTS.md` / `web/admin/AGENTS.md` |
 | Firmware | `omi/firmware/AGENTS.md` |
 | CI / deployment workflows | `.github/AGENTS.md` |
+| v5 React Native rewrite (hosted in the macOS app behind `v5-ui`) | `v5/AGENTS.md` |
 | Public documentation | `docs/AGENTS.md` |
 | Product behavior / UI | `PRODUCT.md`, `product/invariants/`; macOS UI: `desktop/macos/docs/ux-contract.md` |
 | Shared client behavior | `contracts/parity/README.md` |

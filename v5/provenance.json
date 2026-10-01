@@ -1,0 +1,18 @@
+{
+  "core": {
+    "commit": "d690837553fb28835edfac94c2fc8b5412b95673",
+    "paths": [
+      "core/contracts",
+      "core/packages/adapters-platform",
+      "core/packages/kernel",
+      "core/packages/sync",
+      "core/packages/wire-listen"
+    ],
+    "repository": "https://github.com/BasedHardware/omi.git"
+  },
+  "rewrite": {
+    "commit": "911d4cf42c",
+    "path": "rewrite",
+    "repository": "https://github.com/BasedHardware/omi.git"
+  }
+}

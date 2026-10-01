@@ -1,0 +1,1607 @@
+#import "../../apple/OmiBleRecording.h"
+#import "../../apple/OmiRecordingPolicy.h"
+#import "OmiBackendModule.h"
+#import "OmiAuthModule.h"
+
+#include <stdio.h>
+#include <math.h>
+
+#include "omi_backend_http.h"
+#include "omi_backend_policy.h"
+
+#import <LocalAuthentication/LocalAuthentication.h>
+#import <Security/Security.h>
+// Shared with iOS (ios/RnRuntime/OmiBackendModule.mm imports this file), so
+// platform UI frameworks stay conditional.
+#if TARGET_OS_OSX
+#import <AppKit/AppKit.h>
+#else
+#import <UIKit/UIKit.h>
+#endif
+
+static NSString *const OmiContractVersion = @"1.0.0";
+static NSString *const OmiDevelopmentBackendUnsupportedBody = @"{\"error\":{\"code\":\"development_backend_unsupported\",\"retryable\":false,\"action\":\"none\"}}";
+static NSString *const OmiSoftwarePlaneDefaultsKey = @"omi.backend.softwarePlane";
+
+static void OmiBackendSessionLog(NSString *message);
+static NSString *const OmiBackendSessionInvalidatedEvent = @"omiBackendSessionInvalidated";
+static NSString *const OmiBackendGenerationFrameEvent = @"omiGenerationFrame";
+
+typedef NS_ENUM(NSInteger, OmiBackendCredentialKind) {
+  OmiBackendCredentialKindCloud,
+  OmiBackendCredentialKindLocal,
+  OmiBackendCredentialKindExamplePlatform,
+};
+
+@interface OmiBackendPolicy : NSObject
+@property(nonatomic, strong) NSURL *url;
+@property(nonatomic, strong) NSURL *captureURL;
+@property(nonatomic) BOOL captureOriginRequired;
+@property(nonatomic, copy) NSString *token;
+@property(nonatomic, copy) NSString *refreshToken;
+@property(nonatomic, copy) NSString *clientId;
+@property(nonatomic) OmiBackendCredentialKind kind;
+@end
+
+@implementation OmiBackendPolicy
+@end
+
+static BOOL OmiIsLoopbackHost(NSString *host) {
+  return host.length > 0 && omi_backend_is_loopback_hostname(host.UTF8String) == 1;
+}
+
+static BOOL OmiIsCloudHost(NSString *host) {
+  return host.length > 0 && omi_backend_is_cloud_hostname(host.UTF8String) == 1;
+}
+
+static BOOL OmiIsAllowedV5Host(NSString *host) {
+  return host.length > 0 && omi_backend_is_allowed_v5_hostname(host.UTF8String) == 1;
+}
+
+static NSURL *OmiValidatedV5URL(NSString *value);
+
+BOOL OmiSoftwarePlaneIsNew(void) {
+  NSString *stored = [NSUserDefaults.standardUserDefaults stringForKey:OmiSoftwarePlaneDefaultsKey];
+  BOOL stamped = OmiValidatedV5BackendURLFromEnvironment() != nil;
+  return omi_backend_software_plane_is_new(
+    [stored isKindOfClass:NSString.class] ? stored.UTF8String : nullptr,
+    stamped ? 1 : 0) == 1;
+}
+
+static NSString *OmiSoftwarePlaneValue(void) {
+  return OmiSoftwarePlaneIsNew() ? @"new" : @"old";
+}
+
+static NSString *OmiBackendRoute(NSString *path) {
+  if (path.length == 0) return path;
+  char buffer[2048];
+  int32_t length = omi_backend_route_strip(path.UTF8String, buffer, sizeof(buffer));
+  if (length < 0) {
+    NSRange delimiter = [path rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"?#"]];
+    return delimiter.location == NSNotFound ? path : [path substringToIndex:delimiter.location];
+  }
+  return [[NSString alloc] initWithBytes:buffer length:(NSUInteger)length encoding:NSUTF8StringEncoding];
+}
+
+static BOOL OmiIsCaptureBackendPath(NSString *path) {
+  return path.length > 0 && omi_backend_is_capture_path(path.UTF8String) == 1;
+}
+
+static NSURL *OmiValidatedV5URL(NSString *value) {
+  NSURL *url = value.length > 0 ? [NSURL URLWithString:value] : nil;
+  BOOL validPath = url.path.length == 0 || [url.path isEqualToString:@"/"];
+  if (url == nil || ![url.scheme.lowercaseString isEqualToString:@"https"] ||
+      url.host.length == 0 || url.user.length > 0 || url.password.length > 0 ||
+      !validPath || url.query.length > 0 || url.fragment.length > 0 ||
+      !OmiIsAllowedV5Host(url.host)) {
+    return nil;
+  }
+  if (!OmiIsLoopbackHost(url.host)) {
+    NSInteger port = url.port != nil ? url.port.integerValue : 443;
+    if (port != 443) return nil;
+  }
+  return url;
+}
+
+NSURL *OmiValidatedV5BackendURLFromEnvironment(void) {
+  NSURL *url = OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"]);
+  if (url != nil) {
+    return url;
+  }
+  // Dev convenience: launching from Finder/Dock carries no process
+  // environment, so a dev origin written once to defaults keeps the v5 plane
+  // usable without a terminal. Same validation as the env stamp, so this can
+  // never redirect api traffic to an arbitrary host.
+  return OmiValidatedV5URL([NSUserDefaults.standardUserDefaults stringForKey:@"omi.dev.v5-origin"]);
+}
+
+static NSURL *OmiRequestBaseURL(OmiBackendPolicy *policy, NSString *path) {
+  if (policy.captureOriginRequired && policy.captureURL != nil &&
+      OmiIsCaptureBackendPath(path)) {
+    return policy.captureURL;
+  }
+  (void)path;
+  return policy.url;
+}
+
+static NSURL *OmiValidatedURL(NSString *value, BOOL requireLoopback) {
+  NSURL *url = value.length > 0 ? [NSURL URLWithString:value] : nil;
+  NSSet<NSString *> *schemes = [NSSet setWithArray:@[ @"http", @"https" ]];
+  BOOL validPath = url.path.length == 0 || [url.path isEqualToString:@"/"];
+  if (url == nil || ![schemes containsObject:url.scheme.lowercaseString] ||
+      url.host.length == 0 || url.user.length > 0 || url.password.length > 0 ||
+      !validPath || url.query.length > 0 || url.fragment.length > 0) {
+    return nil;
+  }
+  if (requireLoopback && !OmiIsLoopbackHost(url.host)) {
+    return nil;
+  }
+  if (!requireLoopback && !OmiIsCloudHost(url.host) && !OmiIsLoopbackHost(url.host)) {
+    return nil;
+  }
+  return url;
+}
+
+static NSURL *OmiLocalBaseURL(NSString *value, NSString *developmentBackend) {
+  if (developmentBackend.length > 0) {
+#if DEBUG
+    if (value.length > 0 || ![developmentBackend isEqualToString:@"example-platform"]) return nil;
+    return [NSURL URLWithString:@"http://127.0.0.1:4851"];
+#else
+    return nil;
+#endif
+  }
+  return OmiValidatedURL(value.length > 0 ? value : @"http://127.0.0.1:8787", YES);
+}
+
+static NSDictionary *OmiOwnKeychainCloudSession(void) {
+  LAContext *context = [[LAContext alloc] init];
+  context.interactionNotAllowed = YES;
+  NSMutableDictionary *query = [@{
+    (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
+    (__bridge id)kSecAttrService : OmiAuthKeychainService(),
+    (__bridge id)kSecAttrAccount : @"firebase-rest-tokens",
+    (__bridge id)kSecReturnData : @YES,
+    (__bridge id)kSecMatchLimit : (__bridge id)kSecMatchLimitOne,
+    (__bridge id)kSecUseAuthenticationUI : (__bridge id)kSecUseAuthenticationUIFail,
+    (__bridge id)kSecUseAuthenticationContext : context,
+  } mutableCopy];
+  if (OmiAuthUsesDataProtectionKeychain()) {
+    query[(__bridge id)kSecUseDataProtectionKeychain] = @YES;
+  }
+  @synchronized (OmiAuthKeychainLock()) {
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status != errSecSuccess || result == NULL) return nil;
+    NSData *data = CFBridgingRelease(result);
+    id session = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    return [session isKindOfClass:NSDictionary.class] ? session : nil;
+  }
+}
+
+static BOOL OmiStoreOwnKeychainCloudSession(NSDictionary *session) {
+  NSData *data = [NSJSONSerialization dataWithJSONObject:session options:0 error:nil];
+  if (data == nil) return NO;
+  NSMutableDictionary *query = [@{
+    (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
+    (__bridge id)kSecAttrService : OmiAuthKeychainService(),
+    (__bridge id)kSecAttrAccount : @"firebase-rest-tokens",
+  } mutableCopy];
+  if (OmiAuthUsesDataProtectionKeychain()) {
+    query[(__bridge id)kSecUseDataProtectionKeychain] = @YES;
+  }
+  NSMutableDictionary *attributes = [@{
+    (__bridge id)kSecValueData : data,
+  } mutableCopy];
+  if (OmiAuthUsesDataProtectionKeychain()) {
+    attributes[(__bridge id)kSecAttrAccessible] =
+        (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
+  }
+  @synchronized (OmiAuthKeychainLock()) {
+    OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query,
+                                    (__bridge CFDictionaryRef)attributes);
+    if (status == errSecItemNotFound) {
+      NSMutableDictionary *add = [query mutableCopy];
+      [add addEntriesFromDictionary:attributes];
+      status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+    }
+    return status == errSecSuccess;
+  }
+}
+
+static void OmiBackendSessionLog(NSString *message) {
+  NSString *line = [NSString stringWithFormat:@"%@ [OmiBackend] %@\n", NSDate.date, message];
+  const char *utf8 = line.UTF8String;
+  if (utf8 == NULL) return;
+  FILE *log = fopen("/tmp/omi-auth-debug.log", "a");
+  if (log == NULL) return;
+  fwrite(utf8, 1, strlen(utf8), log);
+  fclose(log);
+}
+
+static BOOL OmiClearOwnKeychainCloudSession(void) {
+  OmiBackendSessionLog(@"deleteOwnCloudSession");
+  NSMutableDictionary *query = [@{
+    (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
+    (__bridge id)kSecAttrService : OmiAuthKeychainService(),
+    (__bridge id)kSecAttrAccount : @"firebase-rest-tokens",
+  } mutableCopy];
+  if (OmiAuthUsesDataProtectionKeychain()) {
+    query[(__bridge id)kSecUseDataProtectionKeychain] = @YES;
+  }
+  @synchronized (OmiAuthKeychainLock()) {
+    return SecItemDelete((__bridge CFDictionaryRef)query) == errSecSuccess;
+  }
+}
+
+static NSString *OmiRecordingLogin(void) {
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *session = OmiOwnKeychainCloudSession();
+    if (session == nil) return nil;
+    NSString *existing = [session[@"journalLogin"] isKindOfClass:NSString.class] ? session[@"journalLogin"] : nil;
+    if (existing.length > 0) return existing;
+    NSDictionary *updated = OmiRecordingInitializeLogin(session);
+    return OmiStoreOwnKeychainCloudSession(updated) ? updated[@"journalLogin"] : nil;
+  }
+}
+
+static BOOL OmiCloudRefreshTokensEqual(NSString *left, NSString *right) {
+  return left == right || [left isEqualToString:right];
+}
+
+static BOOL OmiStoreOwnKeychainCloudSessionIfCurrent(
+    NSDictionary *session, NSString *expectedRefreshToken) {
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *current = OmiOwnKeychainCloudSession();
+    NSString *currentRefreshToken = [current[@"refreshToken"] isKindOfClass:NSString.class]
+        ? current[@"refreshToken"] : nil;
+    if (!OmiCloudRefreshTokensEqual(currentRefreshToken, expectedRefreshToken)) return NO;
+    return OmiStoreOwnKeychainCloudSession(OmiRememberedRefreshSession(session, current));
+  }
+}
+
+static void OmiClearOwnKeychainCloudSessionIfCurrent(NSString *expectedRefreshToken) {
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *current = OmiOwnKeychainCloudSession();
+    NSString *currentRefreshToken = [current[@"refreshToken"] isKindOfClass:NSString.class]
+        ? current[@"refreshToken"] : nil;
+    if (OmiCloudRefreshTokensEqual(currentRefreshToken, expectedRefreshToken)) {
+      OmiClearOwnKeychainCloudSession();
+    }
+  }
+}
+
+static NSString *OmiOwnKeychainCloudToken(NSDictionary *session);
+
+static BOOL OmiClearUnauthorizedCloudSession(OmiBackendPolicy *policy, NSInteger status) {
+  if (status == 401 && policy.kind == OmiBackendCredentialKindCloud &&
+      policy.refreshToken != nil) {
+    @synchronized (OmiAuthKeychainLock()) {
+      NSDictionary *current = OmiOwnKeychainCloudSession();
+      NSString *currentRefreshToken = [current[@"refreshToken"] isKindOfClass:NSString.class]
+          ? current[@"refreshToken"] : nil;
+      NSString *currentToken = OmiOwnKeychainCloudToken(current);
+      if (currentToken.length > 0 && [currentToken isEqualToString:policy.token] &&
+          OmiCloudRefreshTokensEqual(currentRefreshToken, policy.refreshToken)) {
+        BOOL cleared = OmiClearOwnKeychainCloudSession();
+        if (cleared) {
+          OmiBackendSessionLog([NSString stringWithFormat:
+              @"cleared session after 401 from %@", policy.url.absoluteString]);
+          OmiAuthSetEnvironmentCloudTokensIgnored(YES);
+          OmiAuthSetShippingSessionIgnored(YES);
+        }
+        return cleared;
+      }
+    }
+  }
+  return NO;
+}
+
+static NSString *OmiOwnKeychainCloudToken(NSDictionary *session) {
+  NSString *token = [session[@"idToken"] isKindOfClass:NSString.class] ? session[@"idToken"] : nil;
+  NSNumber *expiryTime = [session[@"expiryTime"] isKindOfClass:NSNumber.class] ? session[@"expiryTime"] : nil;
+  if (expiryTime == nil || expiryTime.doubleValue <= NSDate.date.timeIntervalSince1970 + 60) return nil;
+  return token.length > 0 ? token : nil;
+}
+
+static BOOL OmiCloudSessionNeedsRefresh(NSDictionary *session) {
+  NSString *token = [session[@"idToken"] isKindOfClass:NSString.class] ? session[@"idToken"] : nil;
+  NSNumber *expiryTime = [session[@"expiryTime"] isKindOfClass:NSNumber.class] ? session[@"expiryTime"] : nil;
+  return token.length > 0 && (expiryTime == nil ||
+      expiryTime.doubleValue <= NSDate.date.timeIntervalSince1970 + 60);
+}
+
+static BOOL OmiCloudRefreshFailureIsDefinitive(NSInteger status, NSDictionary *json) {
+  if (status == 401 || status == 403) return YES;
+  NSDictionary *error = [json[@"error"] isKindOfClass:NSDictionary.class] ? json[@"error"] : nil;
+  NSString *message = [error[@"message"] isKindOfClass:NSString.class] ? error[@"message"] : nil;
+  NSSet<NSString *> *failures = [NSSet setWithArray:@[
+    @"INVALID_REFRESH_TOKEN", @"TOKEN_EXPIRED", @"USER_DISABLED", @"USER_NOT_FOUND"
+  ]];
+  return [failures containsObject:message];
+}
+
+static void OmiRefreshOwnKeychainCloudSession(
+    NSDictionary *session,
+    NSURLSession *networkSession,
+    id retirementOwner,
+    BOOL (^active)(void),
+    void (^completion)(NSError *error)) {
+  @synchronized(retirementOwner) {
+  if (!active()) { completion([NSError errorWithDomain:@"OmiBackendDisposed" code:1 userInfo:nil]); return; }
+  NSString *refreshToken = [session[@"refreshToken"] isKindOfClass:NSString.class]
+      ? session[@"refreshToken"] : nil;
+  if (refreshToken.length == 0) {
+    OmiClearOwnKeychainCloudSessionIfCurrent(refreshToken);
+    OmiAuthSetShippingSessionIgnored(YES);
+    OmiAuthSetEnvironmentCloudTokensIgnored(YES);
+    completion(nil);
+    return;
+  }
+  void (^refreshWithKey)(NSString *) = ^(NSString *firebaseApiKey) {
+    if (firebaseApiKey.length == 0) {
+      completion([NSError errorWithDomain:@"OmiBackend" code:0 userInfo:nil]);
+      return;
+    }
+    NSURLComponents *components = [NSURLComponents componentsWithString:
+        @"https://securetoken.googleapis.com/v1/token"];
+    components.queryItems = @[[NSURLQueryItem queryItemWithName:@"key" value:firebaseApiKey]];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:components.URL];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/x-www-form-urlencoded" forHTTPHeaderField:@"content-type"];
+    NSURLComponents *form = [[NSURLComponents alloc] init];
+    form.queryItems = @[
+      [NSURLQueryItem queryItemWithName:@"grant_type" value:@"refresh_token"],
+      [NSURLQueryItem queryItemWithName:@"refresh_token" value:refreshToken],
+    ];
+    request.HTTPBody = [form.percentEncodedQuery dataUsingEncoding:NSUTF8StringEncoding];
+    [[networkSession dataTaskWithRequest:request
+                       completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+      @synchronized(retirementOwner) {
+      if (!active()) { completion([NSError errorWithDomain:@"OmiBackendDisposed" code:1 userInfo:nil]); return; }
+      NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
+          ? ((NSHTTPURLResponse *)response).statusCode : 0;
+      NSDictionary *json = data == nil ? nil
+          : [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+      if (error != nil || status < 200 || status >= 300 || ![json isKindOfClass:NSDictionary.class]) {
+        if (OmiCloudRefreshFailureIsDefinitive(status, json)) {
+          OmiBackendSessionLog([NSString stringWithFormat:
+              @"cleared session after definitive refresh failure (status=%ld, message=%@)",
+              (long)status,
+              [json[@"error"][@"message"] isKindOfClass:NSString.class]
+                  ? json[@"error"][@"message"] : @"none"]);
+          OmiClearOwnKeychainCloudSessionIfCurrent(refreshToken);
+          OmiAuthSetShippingSessionIgnored(YES);
+          OmiAuthSetEnvironmentCloudTokensIgnored(YES);
+        }
+        completion(error ?: [NSError errorWithDomain:@"OmiBackend" code:status userInfo:nil]);
+        return;
+      }
+      NSString *idToken = [json[@"id_token"] isKindOfClass:NSString.class] ? json[@"id_token"] : nil;
+      NSString *newRefreshToken = [json[@"refresh_token"] isKindOfClass:NSString.class]
+          ? json[@"refresh_token"] : refreshToken;
+      NSNumber *expiresIn = [json[@"expires_in"] respondsToSelector:@selector(doubleValue)]
+          ? @([json[@"expires_in"] doubleValue]) : @3600;
+      if (idToken.length == 0 || newRefreshToken.length == 0) {
+        completion([NSError errorWithDomain:@"OmiBackend" code:status userInfo:nil]);
+        return;
+      }
+      NSMutableDictionary *updated = [session mutableCopy];
+      updated[@"idToken"] = idToken;
+      updated[@"refreshToken"] = newRefreshToken;
+      updated[@"expiryTime"] = @(NSDate.date.timeIntervalSince1970 + MAX(expiresIn.doubleValue, 60));
+      updated[@"firebaseApiKey"] = firebaseApiKey;
+      NSString *userId = [json[@"user_id"] isKindOfClass:NSString.class] ? json[@"user_id"] : nil;
+      if (userId.length > 0) updated[@"tokenUserId"] = userId;
+      if (!OmiStoreOwnKeychainCloudSessionIfCurrent(updated, refreshToken)) {
+        NSDictionary *current = OmiOwnKeychainCloudSession();
+        NSString *expectedUserId = [session[@"tokenUserId"] isKindOfClass:NSString.class]
+            ? session[@"tokenUserId"] : nil;
+        NSString *refreshedUserId = userId.length > 0 ? userId : expectedUserId;
+        NSString *currentUserId = [current[@"tokenUserId"] isKindOfClass:NSString.class]
+            ? current[@"tokenUserId"] : nil;
+        if (expectedUserId.length > 0 &&
+            [refreshedUserId isEqualToString:expectedUserId] &&
+            [currentUserId isEqualToString:expectedUserId] &&
+            OmiOwnKeychainCloudToken(current).length > 0) {
+          completion(nil);
+          return;
+        }
+        completion([NSError errorWithDomain:@"OmiBackend" code:0 userInfo:nil]);
+        return;
+      }
+      completion(nil);
+      }
+    }] resume];
+  };
+  NSString *firebaseApiKey = [session[@"firebaseApiKey"] isKindOfClass:NSString.class]
+      ? session[@"firebaseApiKey"] : nil;
+  // Imported shipping sessions carry no firebaseApiKey, and
+  // /v1/config/api-keys 401s without a session, so refresh with the same
+  // public Web API key sign-in uses. The refreshed session persists it.
+  if (firebaseApiKey.length == 0) firebaseApiKey = OmiAuthResolvedFirebaseApiKey();
+  refreshWithKey(firebaseApiKey);
+  }
+}
+
+static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSString *> *environment, BOOL allowExpiredToken = NO) {
+  NSString *developmentBackend = environment[@"OMI_DEV_BACKEND"];
+  NSString *localURL = environment[@"OMI_LOCAL_BACKEND_URL"];
+  NSString *localToken = environment[@"OMI_LOCAL_API_TOKEN"];
+  NSString *localClient = environment[@"OMI_LOCAL_API_CLIENT_ID"];
+  BOOL localSelected = developmentBackend.length > 0 || localURL.length > 0 ||
+      localToken.length > 0 || localClient.length > 0;
+  if (localSelected) {
+    if (localToken.length > 0 && localClient.length > 0) {
+      NSURL *url = OmiLocalBaseURL(localURL, developmentBackend);
+      if (url == nil) return nil;
+      OmiBackendPolicy *policy = [[OmiBackendPolicy alloc] init];
+      policy.url = url;
+      policy.token = [localToken copy];
+      policy.clientId = [localClient copy];
+      policy.kind = developmentBackend.length > 0
+          ? OmiBackendCredentialKindExamplePlatform : OmiBackendCredentialKindLocal;
+      return policy;
+    }
+    return nil;
+  }
+  OmiAuthImportShippingSessionIfNeeded();
+  NSDictionary *session = OmiOwnKeychainCloudSession();
+  NSString *ownKeychainToken = OmiOwnKeychainCloudToken(session);
+  // Native-only local capture needs the configured origin even while offline
+  // with an expired token. HTTP callers must keep the default and refresh.
+  if (allowExpiredToken && ownKeychainToken.length == 0 && [session[@"idToken"] isKindOfClass:NSString.class]) ownKeychainToken = session[@"idToken"];
+  NSString *cloud = ownKeychainToken;
+  if (cloud.length == 0 && !OmiAuthEnvironmentCloudTokensIgnored()) {
+    cloud = environment[@"OMI_CLOUD_API_TOKEN"] ?: environment[@"OMI_API_TOKEN"];
+  }
+  if (cloud.length == 0) {
+    return nil;
+  }
+  OmiBackendPolicy *policy = [[OmiBackendPolicy alloc] init];
+  policy.url = OmiValidatedURL(@"https://api.omi.me", NO);
+  policy.token = [cloud copy];
+  if (ownKeychainToken.length > 0 && [cloud isEqualToString:ownKeychainToken]) {
+    policy.refreshToken = [session[@"refreshToken"] isKindOfClass:NSString.class]
+        ? session[@"refreshToken"] : nil;
+  }
+  policy.clientId = @"omi-macos";
+  policy.kind = OmiBackendCredentialKindCloud;
+  NSURL *v5 = OmiValidatedV5URL(environment[@"OMI_V5_BACKEND_URL"]);
+  if (v5 == nil) v5 = OmiValidatedV5BackendURLFromEnvironment();
+  if (OmiSoftwarePlaneIsNew() && v5 == nil) return nil;
+  if (OmiSoftwarePlaneIsNew() && v5 != nil) {
+    // A stamped v5 origin replaces the API origin, not just the capture
+    // plane: a session minted by the v5 desktop handoff belongs to the v5
+    // Firebase project, so sending its account reads to api.omi.me draws a
+    // 401 that erases the session and bounces the app back to onboarding.
+    policy.captureOriginRequired = YES;
+    policy.captureURL = v5;
+    policy.url = v5;
+  }
+  return policy;
+}
+
+static BOOL OmiBackendPolicyIsValid(OmiBackendPolicy *policy) {
+  if (policy == nil || policy.url == nil || policy.token.length == 0) return NO;
+  NSString *scheme = policy.url.scheme.lowercaseString;
+  if (policy.kind == OmiBackendCredentialKindCloud) {
+    NSInteger port = policy.url.port != nil ? policy.url.port.integerValue : 443;
+    BOOL allowedHost = OmiIsCloudHost(policy.url.host) || OmiIsAllowedV5Host(policy.url.host);
+    return [scheme isEqualToString:@"https"] && allowedHost && (port == 443 || OmiIsLoopbackHost(policy.url.host));
+  }
+  return ([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"]) &&
+      OmiIsLoopbackHost(policy.url.host) && policy.clientId.length > 0;
+}
+
+static BOOL OmiApplyAuthorization(NSMutableURLRequest *request, OmiBackendPolicy *policy) {
+  if (!OmiBackendPolicyIsValid(policy)) return NO;
+  [request setValue:[NSString stringWithFormat:@"Bearer %@", policy.token]
+      forHTTPHeaderField:@"authorization"];
+  if (policy.kind != OmiBackendCredentialKindCloud ||
+      !OmiIsCloudHost(request.URL.host)) {
+    [request setValue:policy.clientId forHTTPHeaderField:@"x-omi-client-id"];
+  }
+  return YES;
+}
+
+static BOOL OmiExamplePlatformRequestSupported(NSString *method, NSString *path) {
+  if (method.length == 0 || path.length == 0) return NO;
+  return omi_backend_example_platform_supported(method.UTF8String, path.UTF8String) == 1;
+}
+
+static NSDictionary *OmiDevelopmentBackendUnsupportedResponse(NSString *requestId) {
+  return @{
+    @"id": requestId,
+    @"status": @503,
+    @"body": OmiDevelopmentBackendUnsupportedBody,
+    @"retryAfterSeconds": NSNull.null,
+  };
+}
+
+@interface OmiGenerationDelegate : NSObject <NSURLSessionDataDelegate, NSURLSessionTaskDelegate>
+@property(nonatomic, strong) NSMutableData *data;
+@property(nonatomic, strong) NSURLSession *session;
+@property(nonatomic, strong) NSURLSessionDataTask *task;
+@property(nonatomic, strong) NSMutableURLRequest *request;
+@property(nonatomic, copy) RCTPromiseResolveBlock resolve;
+@property(nonatomic, copy) RCTPromiseRejectBlock reject;
+@property(nonatomic, copy) dispatch_block_t cleanup;
+@property(nonatomic) BOOL settled;
+@property(nonatomic) BOOL omiChat;
+@property(nonatomic) NSUInteger receivedBytes;
+@property(nonatomic) NSUInteger reconnects;
+@property(nonatomic, copy) NSString *lastEventId;
+@property(nonatomic, copy) dispatch_block_t reconnectWork;
+@property(nonatomic) NSInteger responseStatus;
+@property(nonatomic) NSInteger retryAfterSeconds;
+@property(nonatomic, copy) NSString *requestId;
+@property(nonatomic, strong) OmiBackendPolicy *policy;
+@property(nonatomic, copy) void (^unauthorizedResponse)(NSInteger);
+@property(nonatomic, copy) void (^onFrame)(NSString *);
+- (instancetype)initWithResolve:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject
+                         cleanup:(dispatch_block_t)cleanup;
+- (void)cancel;
+- (void)start;
+@end
+
+@implementation OmiGenerationDelegate
+
+- (instancetype)initWithResolve:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject
+                         cleanup:(dispatch_block_t)cleanup {
+  self = [super init];
+  if (self) {
+    _data = [NSMutableData data];
+    _resolve = [resolve copy];
+    _reject = [reject copy];
+    _cleanup = [cleanup copy];
+  }
+  return self;
+}
+
+- (void)finishWithValue:(NSString *)value code:(NSString *)code message:(NSString *)message {
+  @synchronized(self) {
+    if (self.settled) return;
+    self.settled = YES;
+  }
+  if (self.reconnectWork != nil) dispatch_block_cancel(self.reconnectWork);
+  if (value != nil) self.resolve(@{
+    @"id": self.requestId,
+    @"status": @(self.responseStatus),
+    @"body": value,
+    @"retryAfterSeconds": self.retryAfterSeconds > 0 ? @(self.retryAfterSeconds) : NSNull.null,
+  });
+  else self.reject(code, message, nil);
+  [self.task cancel];
+  [self.session finishTasksAndInvalidate];
+  self.cleanup();
+}
+
+- (void)cancel {
+  [self finishWithValue:nil code:@"OMI_HTTP_CANCELLED" message:@"Native generation request was cancelled"];
+}
+
+- (void)start {
+  self.task = [self.session dataTaskWithRequest:self.request];
+  [self.task resume];
+}
+
+- (void)URLSession:(NSURLSession *)session
+              task:(NSURLSessionTask *)task
+willPerformHTTPRedirection:(NSHTTPURLResponse *)response
+        newRequest:(NSURLRequest *)request
+ completionHandler:(void (^)(NSURLRequest * _Nullable))completionHandler {
+  completionHandler(nil);
+}
+
+- (void)URLSession:(NSURLSession *)session
+          dataTask:(NSURLSessionDataTask *)dataTask
+didReceiveResponse:(NSURLResponse *)response
+ completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))completionHandler {
+  NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
+      ? ((NSHTTPURLResponse *)response).statusCode : 0;
+  self.responseStatus = status;
+  if (self.omiChat && status == 200 && ![[response MIMEType].lowercaseString isEqual:@"text/event-stream"]) {
+    completionHandler(NSURLSessionResponseCancel);
+    [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Omi chat response is not an event stream"];
+    return;
+  }
+  if (self.unauthorizedResponse != nil) self.unauthorizedResponse(status);
+  if ([response isKindOfClass:NSHTTPURLResponse.class]) {
+    NSString *retryAfter = [(NSHTTPURLResponse *)response valueForHTTPHeaderField:@"Retry-After"];
+    NSInteger parsed = retryAfter.integerValue;
+    if (parsed > 0 && parsed <= 3600) self.retryAfterSeconds = parsed;
+  }
+  completionHandler(NSURLSessionResponseAllow);
+}
+
+- (void)URLSession:(NSURLSession *)session
+          dataTask:(NSURLSessionDataTask *)dataTask
+    didReceiveData:(NSData *)data {
+  @synchronized(self) { if (self.settled) return; }
+  if (self.omiChat && (self.receivedBytes += data.length) > 3 * 1024 * 1024) {
+    [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Omi chat response exceeds limit"]; return;
+  }
+  [self.data appendData:data];
+  if (self.omiChat && self.responseStatus != 200) return;
+  NSString *text = [[NSString alloc] initWithData:self.data encoding:NSUTF8StringEncoding];
+  if (text == nil) return;
+  if (self.omiChat) text = [text stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"];
+  NSArray<NSString *> *blocks = [text componentsSeparatedByString:@"\n\n"];
+  for (NSUInteger index = 0; index + 1 < blocks.count; index += 1) {
+    NSString *rawFrame = [blocks[index] stringByAppendingString:@"\n\n"];
+    if (self.onFrame != nil) self.onFrame(rawFrame);
+    if (self.omiChat) {
+      for (NSString *line in [blocks[index] componentsSeparatedByString:@"\n"]) {
+        if (![line hasPrefix:@"done:"]) continue;
+        NSString *value = [line substringFromIndex:5];
+        if ([value hasPrefix:@" "]) value = [value substringFromIndex:1];
+        NSData *decoded = [[NSData alloc] initWithBase64EncodedString:value options:0];
+        id message = decoded == nil ? nil : [NSJSONSerialization JSONObjectWithData:decoded options:0 error:nil];
+        if (![message isKindOfClass:NSDictionary.class]) {
+          [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Omi terminal message is invalid"]; return;
+        }
+        [self finishWithValue:rawFrame code:nil message:nil]; return;
+      }
+      continue;
+    }
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    NSString *eventId = nil;
+    for (NSString *line in [blocks[index] componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
+      if ([line hasPrefix:@"id:"]) {
+        NSString *candidate = [line substringFromIndex:3];
+        eventId = [candidate hasPrefix:@" "] ? [candidate substringFromIndex:1] : candidate;
+      }
+      if ([line hasPrefix:@"data:"]) {
+        NSString *part = [line substringFromIndex:5];
+        [parts addObject:[part hasPrefix:@" "] ? [part substringFromIndex:1] : part];
+      }
+    }
+    if (parts.count == 0) continue;
+    if (eventId.length > 0) self.lastEventId = eventId;
+    NSData *jsonData = [[parts componentsJoinedByString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];
+    NSDictionary *payload = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:nil];
+    NSString *kind = [payload[@"kind"] isKindOfClass:NSString.class] ? payload[@"kind"] : nil;
+    if ([kind isEqualToString:@"done"] || [kind isEqualToString:@"failed"] ||
+        [kind isEqualToString:@"cancelled"]) {
+      [self finishWithValue:rawFrame code:nil message:nil];
+      return;
+    }
+  }
+  NSData *remaining = [blocks.lastObject dataUsingEncoding:NSUTF8StringEncoding];
+  [self.data setData:remaining ?: [NSData data]];
+}
+
+- (void)URLSession:(NSURLSession *)session
+              task:(NSURLSessionTask *)task
+didCompleteWithError:(NSError *)error {
+  @synchronized(self) {
+    if (self.settled) return;
+  }
+  if (self.responseStatus != 0 && self.responseStatus != 200) {
+    NSString *body = [[NSString alloc] initWithData:self.data encoding:NSUTF8StringEncoding];
+    [self finishWithValue:body ?: @"" code:nil message:nil];
+    return;
+  }
+  if (!self.omiChat && self.reconnects < 5) {
+    NSTimeInterval delay = 0.25 * (1 << self.reconnects);
+    self.reconnects += 1;
+    [self.data setLength:0];
+    if (self.lastEventId.length > 0) {
+      [self.request setValue:self.lastEventId forHTTPHeaderField:@"last-event-id"];
+    }
+    __weak OmiGenerationDelegate *weakSelf = self;
+    dispatch_block_t reconnect = dispatch_block_create(DISPATCH_BLOCK_INHERIT_QOS_CLASS, ^{
+      OmiGenerationDelegate *strongSelf = weakSelf;
+      if (strongSelf == nil) return;
+      @synchronized(strongSelf) {
+        if (strongSelf.settled) return;
+      }
+      [strongSelf start];
+    });
+    self.reconnectWork = reconnect;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), reconnect);
+    return;
+  }
+  NSString *message = self.responseStatus == 0
+      ? @"Native generation transport failed before an HTTP response"
+      : @"Generation ended without a terminal frame";
+  [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:message];
+}
+
+@end
+
+@interface OmiBackendModule () <NSURLSessionTaskDelegate>
+@property(atomic) BOOL disposed;
+@property(nonatomic) NSUInteger rememberedGeneration;
+@property(nonatomic, strong) OmiRecordingJournals *recordingJournals;
+@property(nonatomic, strong) dispatch_queue_t journalQueue;
+@property(nonatomic, strong) OmiBleRecording *bleRecording;
+@property(nonatomic, copy) NSString *bleOrigin;
+@property(nonatomic, copy) NSString *bleLogin;
+@property(nonatomic, strong) NSURLSession *session;
+@property(nonatomic, strong) OmiBackendPolicy *policy;
+@property(nonatomic, strong) NSMutableDictionary<NSString *, OmiGenerationDelegate *> *generations;
+@property(nonatomic) BOOL hasListeners;
+@end
+
+@implementation OmiBackendModule
+
+RCT_EXPORT_MODULE(OmiBackend)
+
++ (BOOL)requiresMainQueueSetup {
+  return NO;
+}
+
+- (NSArray<NSString *> *)supportedEvents {
+  return @[OmiBackendSessionInvalidatedEvent, OmiBackendGenerationFrameEvent];
+}
+
+- (void)emitGenerationFrame:(NSString *)streamId frame:(NSString *)frame {
+  if (self.disposed || !self.hasListeners || streamId.length == 0 || frame.length == 0) return;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (!self.disposed && self.hasListeners) {
+      [self sendEventWithName:OmiBackendGenerationFrameEvent body:@{@"streamId": streamId, @"frame": frame}];
+    }
+  });
+}
+
+- (void)startObserving {
+  self.hasListeners = YES;
+}
+
+- (void)stopObserving {
+  self.hasListeners = NO;
+}
+
+- (void)emitSessionInvalidated {
+  if (self.disposed) return;
+  @synchronized(self.generations) {
+    for (OmiGenerationDelegate *delegate in self.generations.allValues.copy) [delegate cancel];
+  }
+  if (self.journalQueue != nil) dispatch_async(self.journalQueue, ^{ [self.recordingJournals close]; });
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (!self.disposed && self.hasListeners) {
+      [self sendEventWithName:OmiBackendSessionInvalidatedEvent body:@{}];
+    }
+  });
+}
+
+- (void)invalidate {
+  dispatch_queue_t queue;
+  @synchronized(self) {
+    self.disposed = YES;
+    self.hasListeners = NO;
+    [self.session invalidateAndCancel];
+    queue = self.journalQueue;
+  }
+  @synchronized(self.generations) {
+    NSArray *pending = self.generations.allValues;
+    [self.generations removeAllObjects];
+    for (OmiGenerationDelegate *generation in pending) [generation cancel];
+  }
+  if (queue != nil) {
+    if (dispatch_get_specific((__bridge const void *)self) != NULL) [self.recordingJournals dispose];
+    else dispatch_sync(queue, ^{ [self.recordingJournals dispose]; });
+  }
+  [super invalidate];
+}
+
+- (instancetype)init {
+  self = [super init];
+  if (self) {
+    NSDictionary<NSString *, NSString *> *environment = NSProcessInfo.processInfo.environment;
+    _policy = OmiResolvedBackendPolicy(environment);
+    _generations = [NSMutableDictionary dictionary];
+    NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    configuration.timeoutIntervalForRequest = 150;
+    configuration.timeoutIntervalForResource = 180;
+    configuration.HTTPCookieStorage = nil;
+    configuration.HTTPShouldSetCookies = NO;
+    configuration.HTTPCookieAcceptPolicy = NSHTTPCookieAcceptPolicyNever;
+    _session = [NSURLSession sessionWithConfiguration:configuration delegate:self delegateQueue:nil];
+  }
+  return self;
+}
+
+- (BOOL)examplePlatformBackend {
+  return self.policy.kind == OmiBackendCredentialKindExamplePlatform;
+}
+
+- (void)resolveBackendPolicyWithCompletion:(void (^)(OmiBackendPolicy *, NSError *))completion {
+  if (self.disposed) { completion(nil, [NSError errorWithDomain:@"OmiBackendDisposed" code:1 userInfo:nil]); return; }
+  NSDictionary<NSString *, NSString *> *environment = NSProcessInfo.processInfo.environment;
+  BOOL localSelected = [environment[@"OMI_DEV_BACKEND"] length] > 0 ||
+      [environment[@"OMI_LOCAL_BACKEND_URL"] length] > 0 ||
+      [environment[@"OMI_LOCAL_API_TOKEN"] length] > 0 ||
+      [environment[@"OMI_LOCAL_API_CLIENT_ID"] length] > 0;
+  if (localSelected) {
+    self.policy = OmiResolvedBackendPolicy(environment);
+    completion(self.policy, nil);
+    return;
+  }
+  NSDictionary *session = OmiOwnKeychainCloudSession();
+  if (!OmiCloudSessionNeedsRefresh(session)) {
+    self.policy = OmiResolvedBackendPolicy(environment);
+    completion(self.policy, nil);
+    return;
+  }
+  OmiRefreshOwnKeychainCloudSession(session, self.session, self, ^BOOL { return !self.disposed; }, ^(NSError *error) {
+    if (self.disposed) { completion(nil, [NSError errorWithDomain:@"OmiBackendDisposed" code:1 userInfo:nil]); return; }
+    self.policy = OmiResolvedBackendPolicy(environment);
+    BOOL sessionCleared = OmiOwnKeychainCloudSession() == nil;
+    if (sessionCleared) [self emitSessionInvalidated];
+    completion(self.policy, sessionCleared ? nil : error);
+  });
+}
+
+RCT_REMAP_METHOD(createWriteId,
+                 createWriteIdWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  unsigned char bytes[32];
+  if (SecRandomCopyBytes(kSecRandomDefault, sizeof(bytes), bytes) != errSecSuccess) {
+    reject(@"OMI_WRITE_ENTROPY", @"Native write identity is unavailable", nil);
+    return;
+  }
+  NSMutableString *value = [NSMutableString stringWithCapacity:64];
+  for (NSUInteger index = 0; index < sizeof(bytes); index++) {
+    [value appendFormat:@"%02x", bytes[index]];
+  }
+  resolve(value);
+}
+
+- (void)rememberedDevice:(NSString *)action device:(NSDictionary *)device current:(BOOL (^)(void))current resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+  NSString *login = OmiRecordingLogin();
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+    NSUInteger ticket = ++self.rememberedGeneration;
+    if (login == nil) { if (![action isEqual:@"save"]) resolve(nil); else reject(@"OMI_REMEMBERED_DEVICE", @"A native login is required", nil); return; }
+    NSDictionary *saved = OmiOwnKeychainCloudSession()[@"rememberedDevice"];
+    void (^finish)(NSDictionary *) = ^(NSDictionary *owner) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        @synchronized(self) {
+        if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+        @synchronized(OmiAuthKeychainLock()) {
+          NSMutableDictionary *session = [OmiOwnKeychainCloudSession() mutableCopy];
+          if (!OmiRememberedCurrent(ticket, self.rememberedGeneration, login, session[@"journalLogin"], current()) || (owner != nil && ![owner[@"origin"] isEqual:OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment), @"/v1/device-sessions/ownership").absoluteString])) { reject(@"OMI_REMEMBERED_DEVICE", @"Device or login changed", nil); return; }
+          NSDictionary *selected = nil;
+          if ([action isEqual:@"save"]) {
+            if (!OmiRememberedIdentity(device[@"id"], device[@"name"])) { reject(@"OMI_REMEMBERED_DEVICE", @"Device identity is unavailable", nil); return; }
+            selected = @{@"id":device[@"id"], @"name":device[@"name"], @"origin":owner[@"origin"], @"login":login, @"ownerKey":owner[@"ownerKey"]};
+            session[@"rememberedDevice"] = selected;
+          } else if ([action isEqual:@"forget"]) [session removeObjectForKey:@"rememberedDevice"];
+          else if ([saved isKindOfClass:NSDictionary.class] && OmiRememberedIdentity(saved[@"id"], saved[@"name"]) && [saved[@"origin"] isEqual:owner[@"origin"]] && [saved[@"ownerKey"] isEqual:owner[@"ownerKey"]] && [saved[@"login"] isEqual:login]) selected = saved;
+          if (![action isEqual:@"get"] && !OmiStoreOwnKeychainCloudSession(session)) { reject(@"OMI_REMEMBERED_DEVICE", @"Device preference could not be saved", nil); return; }
+          resolve(selected == nil ? nil : @{@"id":selected[@"id"], @"name":selected[@"name"]});
+        }
+        }
+      });
+    };
+    if ([action isEqual:@"save"] || ([action isEqual:@"get"] && saved != nil)) [self recordingOwner:finish allowCached:NO rejecter:reject];
+    else finish(nil);
+  });
+}
+
+- (void)ensureRecordingJournals {
+  @synchronized(self) {
+    if (self.recordingJournals != nil) return;
+    self.journalQueue = dispatch_queue_create("omi.recording-journals", DISPATCH_QUEUE_SERIAL);
+    dispatch_queue_set_specific(self.journalQueue, (__bridge const void *)self, (__bridge void *)self, NULL);
+    NSString *application = NSBundle.mainBundle.bundleIdentifier ?: @"omi-v5-runtime";
+    NSString *support = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject;
+    NSString *root = [[support stringByAppendingPathComponent:application] stringByAppendingPathComponent:@"recording-journals"];
+    self.recordingJournals = [[OmiRecordingJournals alloc] initWithRoot:root keyTag:[application stringByAppendingString:@".recording-key"] currentLogin:^NSString *{ return OmiRecordingLogin(); }];
+    if (self.disposed) [self.recordingJournals dispose];
+  }
+}
+
+- (void)prepareBleRecording:(NSDictionary *)device restoring:(BOOL)restoring current:(BOOL (^)(void))current resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+  [self ensureRecordingJournals];
+  NSString *login = OmiRecordingLogin();
+  NSString *origin = OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment, YES), @"/v1/device-sessions/ownership").absoluteString;
+  void (^accept)(NSDictionary *) = ^(NSDictionary *owner) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (self.disposed || !current()) { reject(@"OMI_RECORDING_OWNERSHIP", @"Bluetooth recording was retired", nil); return; }
+      if (!OmiRecordingMatches(owner[@"ownerKey"], @"^capture-owner-v1:[0-9a-f]{64}$") ||
+          !OmiRecordingMatches(owner[@"receipt"], @"^capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}$") ||
+          !OmiRememberedIdentity(device[@"deviceId"], device[@"deviceName"])) {
+        reject(@"OMI_RECORDING_OWNERSHIP", @"Recording owner or device is invalid", nil); return;
+      }
+      __block BOOL accepted = NO;
+      dispatch_sync(self.journalQueue, ^{
+        @synchronized(OmiAuthKeychainLock()) {
+          NSMutableDictionary *session = [OmiOwnKeychainCloudSession() mutableCopy];
+          if (!OmiRecordingSameContext(login, session[@"journalLogin"], origin,
+              OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment, YES), @"/v1/device-sessions/ownership").absoluteString)
+              || ![owner[@"login"] isEqual:login] || ![owner[@"origin"] isEqual:origin] || self.disposed) return;
+          NSDictionary *binding = @{@"deviceId":device[@"deviceId"], @"login":login, @"origin":origin, @"ownerKey":owner[@"ownerKey"]};
+          // Restoration is not a new recording grant. Legacy sessions without a
+          // binding, a different device, or a new account must reconnect explicitly.
+          if (restoring && ![session[@"bleRecording"] isEqual:binding]) return;
+          session[@"bleRecording"] = binding;
+          if (!OmiStoreOwnKeychainCloudSession(session)) return;
+          self.bleRecording = [[OmiBleRecording alloc] initWithJournals:self.recordingJournals owner:owner device:device];
+          self.bleOrigin = origin;
+          self.bleLogin = login;
+          accepted = YES;
+        }
+      });
+      if (accepted) resolve(nil); else reject(@"OMI_RECORDING_OWNERSHIP", @"Recording account or device changed", nil);
+    });
+  };
+  if (restoring) {
+    // A background relaunch cannot depend on a network round trip. Reuse only
+    // the receipt and explicit device grant already stored in this native login.
+    NSDictionary *owner = OmiOwnKeychainCloudSession()[@"recordingOwner"];
+    if (![owner isKindOfClass:NSDictionary.class]) { reject(@"OMI_RECORDING_OWNERSHIP", @"No restorable recording owner", nil); return; }
+    accept(owner);
+  } else [self recordingOwner:accept allowCached:YES rejecter:reject];
+}
+
+- (BOOL)appendBlePacket:(NSData *)packet codec:(NSNumber *)codec at:(NSNumber *)at sealed:(NSDictionary **)sealed {
+  if (sealed != NULL) *sealed = nil;
+  [self ensureRecordingJournals];
+  __block BOOL saved = NO;
+  __block NSDictionary *completed = nil;
+  dispatch_sync(self.journalQueue, ^{
+    if (self.disposed || self.bleRecording == nil || !OmiRecordingSameContext(self.bleLogin, OmiRecordingLogin(), self.bleOrigin,
+        OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment, YES), @"/v1/device-sessions/ownership").absoluteString)) return;
+    saved = [self.bleRecording receive:packet codec:codec at:at sealed:&completed error:nil];
+  });
+  if (sealed != NULL) *sealed = completed;
+  return saved;
+}
+
+- (NSDictionary *)stopBleRecording:(BOOL)forget {
+  [self ensureRecordingJournals];
+  __block NSDictionary *sealed = nil;
+  dispatch_sync(self.journalQueue, ^{
+    sealed = [self.bleRecording seal:nil];
+    self.bleRecording = nil;
+    if (forget) @synchronized(OmiAuthKeychainLock()) {
+      NSMutableDictionary *session = [OmiOwnKeychainCloudSession() mutableCopy];
+      [session removeObjectForKey:@"bleRecording"];
+      if (session != nil) OmiStoreOwnKeychainCloudSession(session);
+    }
+  });
+  return sealed;
+}
+
+- (void)rotateBleRecording {
+  [self ensureRecordingJournals];
+  dispatch_sync(self.journalQueue, ^{ [self.bleRecording requestRotation]; });
+}
+
+- (NSString *)restorableBleDeviceId {
+  NSDictionary *session = OmiOwnKeychainCloudSession();
+  NSDictionary *binding = session[@"bleRecording"];
+  NSDictionary *owner = session[@"recordingOwner"];
+  NSString *origin = OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment, YES), @"/v1/device-sessions/ownership").absoluteString;
+  if (self.disposed || ![binding isKindOfClass:NSDictionary.class] || ![owner isKindOfClass:NSDictionary.class] ||
+      !OmiRecordingSameContext(binding[@"login"], session[@"journalLogin"], binding[@"origin"], origin) ||
+      ![binding[@"ownerKey"] isEqual:owner[@"ownerKey"]] || ![binding[@"deviceId"] isKindOfClass:NSString.class]) return nil;
+  return binding[@"deviceId"];
+}
+
+- (void)recordingOwner:(void (^)(NSDictionary *))completion allowCached:(BOOL)allowCached rejecter:(RCTPromiseRejectBlock)reject {
+  if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+  NSString *login = OmiRecordingLogin();
+  NSString *origin = OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment), @"/v1/device-sessions/ownership").absoluteString;
+  if (login == nil || origin == nil) { reject(@"OMI_RECORDING_OWNERSHIP", @"A persistent native login and recording backend are required", nil); return; }
+  RCTPromiseRejectBlock failure = ^(NSString *code, NSString *message, NSError *error) {
+    if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+    if (allowCached && OmiRecordingOffline(error) && OmiRecordingSameContext(login, OmiRecordingLogin(), origin,
+        OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment), @"/v1/device-sessions/ownership").absoluteString)) {
+      NSDictionary *cached = OmiOwnKeychainCloudSession()[@"recordingOwner"];
+      if ([cached isKindOfClass:NSDictionary.class] && [cached[@"origin"] isEqual:origin] && [cached[@"login"] isEqual:login]) { completion(cached); return; }
+    }
+    reject(code, message, error);
+  };
+  [self performNativeRequest:@{@"id":@"recording-ownership", @"method":@"GET", @"path":@"/v1/device-sessions/ownership"} receipt:nil expectedOrigin:origin expectedLogin:login resolver:^(NSDictionary *response) {
+    if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+    if ([response[@"status"] integerValue] == 503 && [response[@"body"] isKindOfClass:NSString.class]) {
+      id envelope = [NSJSONSerialization JSONObjectWithData:[response[@"body"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+      id failure = [envelope isKindOfClass:NSDictionary.class] ? envelope[@"error"] : nil;
+      if ([failure isKindOfClass:NSDictionary.class] && [failure[@"code"] isEqual:@"capture_ownership_unavailable"]) { reject(@"OMI_CAPTURE_OWNERSHIP_UNAVAILABLE", @"Recording ownership is unavailable from this backend", nil); return; }
+    }
+    if (OmiRecordingRetryableOwnershipStatus([response[@"status"] integerValue])) { reject(@"OMI_HTTP_TRANSPORT", @"Recording ownership could not be refreshed", nil); return; }
+    if ([response[@"status"] integerValue] != 200 || ![login isEqual:OmiRecordingLogin()]) { reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership is unavailable from this backend", nil); return; }
+    NSString *body = [response[@"body"] isKindOfClass:NSString.class] ? response[@"body"] : nil;
+    id parsed = body == nil ? nil : [NSJSONSerialization JSONObjectWithData:body == nil ? nil : [body dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+    NSDictionary *ownership = [parsed isKindOfClass:NSDictionary.class] ? parsed[@"ownership"] : nil;
+    if (![ownership isKindOfClass:NSDictionary.class] || !OmiRecordingMatches(ownership[@"ownerKey"], @"^capture-owner-v1:[0-9a-f]{64}$")
+        || !OmiRecordingMatches(ownership[@"receipt"], @"^capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}$")) { reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership response is invalid", nil); return; }
+    NSDictionary *owner = @{@"ownerKey":ownership[@"ownerKey"], @"receipt":ownership[@"receipt"], @"origin":origin, @"login":login};
+    @synchronized(self) {
+    if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+    @synchronized (OmiAuthKeychainLock()) {
+      NSMutableDictionary *session = [OmiOwnKeychainCloudSession() mutableCopy];
+      if (![session[@"journalLogin"] isEqual:login]) { reject(@"OMI_RECORDING_OWNERSHIP", @"Recording login changed", nil); return; }
+      session[@"recordingOwner"] = owner;
+      if (!OmiStoreOwnKeychainCloudSession(session)) { reject(@"OMI_RECORDING_JOURNAL", @"Recording ownership could not be saved", nil); return; }
+    }
+    }
+    completion(owner);
+  } rejecter:failure];
+}
+
+RCT_REMAP_METHOD(createRecordingJournal, createRecordingJournalWithInput:(NSDictionary *)input resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    [self recordingOwner:^(NSDictionary *owner) {
+      dispatch_async(self.journalQueue, ^{
+        NSError *error = nil;
+        NSDictionary *entry = [self.recordingJournals create:owner input:input error:&error];
+        if (entry != nil) resolve(entry); else reject(@"OMI_RECORDING_JOURNAL", @"Recording journal could not be created", nil);
+      });
+    } allowCached:YES rejecter:reject];
+  });
+}
+
+RCT_REMAP_METHOD(listRecordingJournals, listRecordingJournalsWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    [self recordingOwner:^(NSDictionary *owner) {
+      dispatch_async(self.journalQueue, ^{
+        NSError *error = nil;
+        NSArray *entries = [self.recordingJournals list:owner error:&error];
+        if (entries != nil) {
+          NSMutableArray *sealed = [NSMutableArray array];
+          for (NSDictionary *entry in entries) if (![entry[@"handle"] isEqual:self.bleRecording.activeHandle]) [sealed addObject:entry];
+          resolve(sealed);
+        } else reject(@"OMI_RECORDING_JOURNAL", @"Saved recordings could not be recovered", nil);
+      });
+    } allowCached:YES rejecter:reject];
+  });
+}
+
+RCT_REMAP_METHOD(readRecordingJournal, readRecordingJournalWithHandle:(NSString *)handle resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    NSError *error = nil;
+    NSDictionary *entry = [self.recordingJournals read:handle error:&error];
+    if (entry != nil) resolve(entry); else reject(@"OMI_RECORDING_JOURNAL", @"Saved recording could not be read", nil);
+  });
+}
+
+RCT_REMAP_METHOD(appendRecordingJournal, appendRecordingJournalWithHandle:(NSString *)handle entry:(NSString *)entry resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    NSError *error = nil;
+    NSNumber *sequence = [self.recordingJournals append:handle entry:entry error:&error];
+    if (sequence != nil) resolve(sequence); else reject(@"OMI_RECORDING_JOURNAL", @"Recording journal append failed; saved audio was retained", nil);
+  });
+}
+
+RCT_REMAP_METHOD(removeRecordingJournal, removeRecordingJournalWithHandle:(NSString *)handle resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    NSError *error = nil;
+    if ([self.recordingJournals remove:handle error:&error]) resolve(nil); else reject(@"OMI_RECORDING_JOURNAL", @"Recording journal removal failed", nil);
+  });
+}
+
+RCT_REMAP_METHOD(requestRecordingJournal, requestRecordingJournalWithHandle:(NSString *)handle request:(NSDictionary *)request resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    NSError *error = nil;
+    NSDictionary *owner = [self.recordingJournals ownerForRequest:handle request:request error:&error];
+    if (owner == nil) { reject(@"OMI_RECORDING_OWNERSHIP", @"Recording journal request is unavailable", nil); return; }
+    [self recordingOwner:^(NSDictionary *fresh) {
+      if (![fresh[@"ownerKey"] isEqual:owner[@"ownerKey"]] || ![fresh[@"origin"] isEqual:owner[@"origin"]] || ![fresh[@"login"] isEqual:owner[@"login"]]) {
+        dispatch_async(self.journalQueue, ^{ [self.recordingJournals close]; });
+        reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership changed; saved audio was retained", nil);
+        return;
+      }
+    [self performNativeRequest:request receipt:fresh[@"receipt"] expectedOrigin:fresh[@"origin"] expectedLogin:fresh[@"login"] resolver:^(NSDictionary *response) {
+      dispatch_async(self.journalQueue, ^{
+        NSError *failure = nil;
+        if ([response[@"status"] integerValue] == 409 && [response[@"body"] isKindOfClass:NSString.class]) {
+          id envelope = [NSJSONSerialization JSONObjectWithData:[response[@"body"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+          id error = [envelope isKindOfClass:NSDictionary.class] ? envelope[@"error"] : nil;
+          if ([error isKindOfClass:NSDictionary.class] && [error[@"code"] isEqual:@"capture_ownership_changed"]) {
+            [self.recordingJournals close];
+            reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership changed; saved audio was retained", nil);
+            return;
+          }
+        }
+        if ([self.recordingJournals acknowledgeOpen:handle request:request response:response error:&failure]) resolve(response);
+        else reject(@"OMI_RECORDING_JOURNAL", @"Recording acknowledgement could not be saved", nil);
+      });
+    } rejecter:reject];
+    } allowCached:NO rejecter:reject];
+  });
+}
+
+RCT_REMAP_METHOD(createRecordingId,
+                 createRecordingIdWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  resolve(NSUUID.UUID.UUIDString.lowercaseString);
+}
+
+RCT_REMAP_METHOD(request,
+                 requestWithValue:(NSDictionary *)value
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  NSString *path = value[@"path"], *method = value[@"method"];
+  BOOL transcribe = [method isEqual:@"POST"] && OmiRecordingMatches(path, @"^/v1/device-sessions/[0-9a-f-]{36}/transcribe$");
+  if (transcribe) {
+    [self ensureRecordingJournals];
+    dispatch_async(self.journalQueue, ^{
+      [self recordingOwner:^(NSDictionary *owner) {
+        [self performNativeRequest:value receipt:owner[@"receipt"] expectedOrigin:owner[@"origin"] expectedLogin:owner[@"login"] resolver:resolve rejecter:reject];
+      } allowCached:NO rejecter:^(NSString *code, NSString *message, NSError *error) {
+        if ([code isEqual:@"OMI_CAPTURE_OWNERSHIP_UNAVAILABLE"]) [self performNativeRequest:value receipt:nil expectedOrigin:nil expectedLogin:nil resolver:resolve rejecter:reject];
+        else reject(code, message, error);
+      }];
+    });
+  } else [self performNativeRequest:value receipt:nil expectedOrigin:nil expectedLogin:nil resolver:resolve rejecter:reject];
+}
+
+RCT_REMAP_METHOD(copyToClipboard,
+                 copyToClipboardWithText:(NSString *)text
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (![text isKindOfClass:NSString.class]) {
+    reject(@"OMI_CLIPBOARD_INVALID", @"Clipboard text is invalid", nil);
+    return;
+  }
+  dispatch_async(dispatch_get_main_queue(), ^{
+#if TARGET_OS_OSX
+    NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
+    [pasteboard clearContents];
+    if ([pasteboard setString:text forType:NSPasteboardTypeString]) resolve(@YES);
+    else reject(@"OMI_CLIPBOARD_WRITE", @"Could not copy the link", nil);
+#else
+    UIPasteboard.generalPasteboard.string = text;
+    resolve(@YES);
+#endif
+  });
+}
+
+- (void)performNativeRequest:(NSDictionary *)value receipt:(NSString *)receipt expectedOrigin:(NSString *)origin expectedLogin:(NSString *)login resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+  [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *resolutionError) {
+  if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+  if (resolutionError != nil) {
+    reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP session refresh failed", resolutionError);
+    return;
+  }
+  NSString *requestId = [value[@"id"] isKindOfClass:NSString.class] ? value[@"id"] : nil;
+  NSString *method = [value[@"method"] isKindOfClass:NSString.class] ? value[@"method"] : nil;
+  NSString *path = [value[@"path"] isKindOfClass:NSString.class] ? value[@"path"] : nil;
+  NSDictionary *headers = [value[@"headers"] isKindOfClass:NSDictionary.class] ? value[@"headers"] : @{};
+  id expectedContract = value[@"expectedApiContract"];
+  if (expectedContract != nil) {
+    if (![expectedContract isKindOfClass:NSString.class] || ![@[@"omi", @"canonical"] containsObject:expectedContract]) { reject(@"OMI_HTTP_INVALID_REQUEST", @"Native API contract is invalid", nil); return; }
+    NSString *actual = policy.kind == OmiBackendCredentialKindCloud && !policy.captureOriginRequired ? @"omi" : @"canonical";
+    if (![expectedContract isEqual:actual]) { reject(@"OMI_HTTP_BACKEND_CHANGED", @"The selected backend changed", nil); return; }
+  }
+  NSString *body = [value[@"body"] isKindOfClass:NSString.class] ? value[@"body"] : nil;
+  NSArray<NSDictionary *> *multipart =
+      [value[@"multipart"] isKindOfClass:NSArray.class] ? value[@"multipart"] : nil;
+  NSData *multipartBody = nil;
+  NSString *multipartContentType = nil;
+  if (multipart != nil) {
+    // Offline-sync WAL uploads: binary parts are assembled here so JS never
+    // handles raw bytes or credentials. Names/filenames must stay
+    // header-safe (no quotes, CR, or LF).
+    BOOL multipartInvalid = body != nil || multipart.count == 0 || multipart.count > 20;
+    NSString *boundary = [NSString stringWithFormat:@"omi-%@", NSUUID.UUID.UUIDString.lowercaseString];
+    NSMutableData *assembled = [NSMutableData data];
+    for (id rawPart in multipart) {
+      if (![rawPart isKindOfClass:NSDictionary.class]) { multipartInvalid = YES; break; }
+      NSDictionary *part = (NSDictionary *)rawPart;
+      NSString *name = [part[@"name"] isKindOfClass:NSString.class] ? part[@"name"] : nil;
+      NSString *filename = [part[@"filename"] isKindOfClass:NSString.class] ? part[@"filename"] : nil;
+      NSString *partContentType = [part[@"contentType"] isKindOfClass:NSString.class]
+          ? part[@"contentType"] : @"application/octet-stream";
+      NSString *base64 = [part[@"bytesBase64"] isKindOfClass:NSString.class] ? part[@"bytesBase64"] : nil;
+      NSData *bytes = base64 != nil
+          ? [[NSData alloc] initWithBase64EncodedString:base64 options:NSDataBase64DecodingIgnoreUnknownCharacters]
+          : nil;
+      NSCharacterSet *unsafeHeaderCharacters =
+          [NSCharacterSet characterSetWithCharactersInString:@"\"\r\n"];
+      BOOL nameSafe = name.length > 0 && name.length <= 255 &&
+          [name rangeOfCharacterFromSet:unsafeHeaderCharacters].location == NSNotFound;
+      BOOL filenameSafe = filename == nil ||
+          (filename.length > 0 && filename.length <= 255 &&
+           [filename rangeOfCharacterFromSet:unsafeHeaderCharacters].location == NSNotFound);
+      if (!nameSafe || !filenameSafe || bytes == nil) {
+        multipartInvalid = YES;
+        break;
+      }
+      NSMutableString *head = [NSMutableString stringWithFormat:
+          @"--%@\r\nContent-Disposition: form-data; name=\"%@\"", boundary, name];
+      if (filename != nil) {
+        [head appendFormat:@"; filename=\"%@\"", filename];
+      }
+      [head appendFormat:@"\r\nContent-Type: %@\r\n\r\n", partContentType];
+      [assembled appendData:[head dataUsingEncoding:NSUTF8StringEncoding]];
+      [assembled appendData:bytes];
+      [assembled appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    }
+    if (multipartInvalid) {
+      reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP multipart request is invalid", nil);
+      return;
+    }
+    [assembled appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary]
+        dataUsingEncoding:NSUTF8StringEncoding]];
+    multipartBody = assembled;
+    multipartContentType = [NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary];
+  }
+  NSSet<NSString *> *schemes = [NSSet setWithArray:@[ @"http", @"https" ]];
+  omi_backend_http_plan plan = {};
+  if (requestId.length == 0 || method.length == 0 || path.length == 0 ||
+      omi_backend_http_plan_request(method.UTF8String, path.UTF8String, &plan) != 0 ||
+      plan.valid != 1) {
+    reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP request is invalid", nil);
+    return;
+  }
+  NSURL *baseURL = (policy.captureOriginRequired && policy.captureURL != nil && plan.is_capture_path)
+      ? policy.captureURL
+      : policy.url;
+  if (!OmiBackendPolicyIsValid(policy) || baseURL == nil ||
+      ![schemes containsObject:baseURL.scheme.lowercaseString]) {
+    reject(@"OMI_HTTP_UNCONFIGURED", @"Native HTTP configuration is unavailable", nil);
+    return;
+  }
+  if ((origin != nil && ![origin isEqual:baseURL.absoluteString]) || (login != nil && ![login isEqual:OmiRecordingLogin()])) {
+    reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership changed", nil);
+    return;
+  }
+  if (policy.kind == OmiBackendCredentialKindExamplePlatform && !OmiExamplePlatformRequestSupported(method, path)) {
+    resolve(OmiDevelopmentBackendUnsupportedResponse(requestId));
+    return;
+  }
+  NSURL *url = [NSURL URLWithString:path relativeToURL:baseURL].absoluteURL;
+  NSInteger basePort = baseURL.port != nil
+      ? baseURL.port.integerValue
+      : ([baseURL.scheme.lowercaseString isEqualToString:@"https"] ? 443 : 80);
+  NSInteger requestPort = url.port != nil
+      ? url.port.integerValue
+      : ([url.scheme.lowercaseString isEqualToString:@"https"] ? 443 : 80);
+  BOOL schemeMatches = url != nil && [url.scheme caseInsensitiveCompare:baseURL.scheme] == NSOrderedSame;
+  BOOL hostMatches = url != nil && [url.host caseInsensitiveCompare:baseURL.host] == NSOrderedSame;
+  BOOL portMatches = url != nil && requestPort == basePort;
+  if (!schemeMatches || !hostMatches || !portMatches) {
+    reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP request is unavailable or invalid", nil);
+    return;
+  }
+  NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+  request.HTTPMethod = method;
+  NSNumber *requestedTimeout = [value[@"timeoutSeconds"] isKindOfClass:NSNumber.class]
+      ? value[@"timeoutSeconds"] : nil;
+  if (value[@"timeoutSeconds"] != nil &&
+      (requestedTimeout == nil || !isfinite(requestedTimeout.doubleValue) ||
+       requestedTimeout.doubleValue < 1 || requestedTimeout.doubleValue > 600)) {
+    reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP timeout is invalid", nil);
+    return;
+  }
+  request.timeoutInterval = requestedTimeout != nil
+      ? MAX((NSTimeInterval)plan.timeout_seconds, requestedTimeout.doubleValue)
+      : (NSTimeInterval)plan.timeout_seconds;
+  NSSet<NSString *> *forbidden = [NSSet setWithArray:@[
+    @"authorization", @"cookie", @"proxy-authorization", @"x-omi-contract-version", @"x-omi-client-id", @"x-omi-capture-ownership"
+  ]];
+  for (id rawName in headers) {
+    id rawValue = headers[rawName];
+    if (![rawName isKindOfClass:NSString.class] || ![rawValue isKindOfClass:NSString.class] ||
+        [forbidden containsObject:[rawName lowercaseString]]) {
+      continue;
+    }
+    [request setValue:rawValue forHTTPHeaderField:rawName];
+  }
+  if (multipartBody != nil) {
+    request.HTTPBody = multipartBody;
+    [request setValue:multipartContentType forHTTPHeaderField:@"content-type"];
+  } else if (body != nil) {
+    request.HTTPBody = [body dataUsingEncoding:NSUTF8StringEncoding];
+    [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+  }
+  if (!OmiApplyAuthorization(request, policy)) {
+    reject(@"OMI_HTTP_UNCONFIGURED", @"Native HTTP configuration is unavailable", nil);
+    return;
+  }
+  [request setValue:OmiContractVersion forHTTPHeaderField:@"x-omi-contract-version"];
+  if (receipt != nil) [request setValue:receipt forHTTPHeaderField:@"x-omi-capture-ownership"];
+  @synchronized(self) {
+  if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+  NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request
+                                              completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+    if (error != nil) {
+      reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP transport failed", error);
+      return;
+    }
+    if (![response isKindOfClass:NSHTTPURLResponse.class]) {
+      reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP transport failed", nil);
+      return;
+    }
+    NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+    @synchronized(self) {
+      if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+      if (OmiClearUnauthorizedCloudSession(policy, httpResponse.statusCode)) [self emitSessionInvalidated];
+    }
+    NSString *retryAfter = [httpResponse valueForHTTPHeaderField:@"Retry-After"];
+    NSInteger retryAfterSeconds = retryAfter.integerValue;
+    NSString *responseBody = data.length > 0 ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+    if (data.length > 0 && responseBody == nil) {
+      reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP response was not UTF-8", nil);
+      return;
+    }
+    resolve(@{
+      @"id": requestId,
+      @"status": @(httpResponse.statusCode),
+      @"body": responseBody ?: NSNull.null,
+      @"retryAfterSeconds": retryAfterSeconds > 0 && retryAfterSeconds <= 3600
+          ? @(retryAfterSeconds) : NSNull.null,
+    });
+  }];
+  [task resume];
+  }
+  }];
+}
+
+RCT_REMAP_METHOD(sendOmiChat,
+                 sendOmiChatWithId:(NSString *)requestId
+                 text:(NSString *)text
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (!OmiRecordingMatches(requestId, @"^[A-Za-z0-9._:-]{1,128}$") || ![text isKindOfClass:NSString.class] || [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length == 0 || [text lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > 65536) {
+    reject(@"OMI_HTTP_INVALID_REQUEST", @"Omi chat request is invalid", nil); return;
+  }
+  NSString *key = [@"omi-chat:" stringByAppendingString:requestId];
+    __weak OmiBackendModule *weakSelf = self;
+    OmiGenerationDelegate *delegate = [[OmiGenerationDelegate alloc] initWithResolve:resolve reject:reject cleanup:^{
+      OmiBackendModule *owner = weakSelf;
+      @synchronized(owner.generations) { [owner.generations removeObjectForKey:key]; }
+    }];
+  @synchronized(self.generations) {
+    if (self.disposed) { [delegate cancel]; return; }
+    if (self.generations[key] != nil) { reject(@"OMI_HTTP_INVALID_REQUEST", @"Omi chat request is already active", nil); return; }
+    self.generations[key] = delegate;
+  }
+  RCTPromiseRejectBlock fail = ^(NSString *code, NSString *message, NSError *failure) { [delegate finishWithValue:nil code:code message:message]; };
+  [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *error) {
+    @synchronized(delegate) { if (delegate.settled) return; }
+    if (self.disposed) { fail(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+    if (error != nil || policy == nil) { fail(@"OMI_HTTP_UNCONFIGURED", @"Omi chat is unavailable", nil); return; }
+    if (policy.kind != OmiBackendCredentialKindCloud || policy.captureOriginRequired) { fail(@"OMI_HTTP_BACKEND_CHANGED", @"The selected backend changed", nil); return; }
+    NSURL *base = OmiRequestBaseURL(policy, @"/v2/messages");
+    if (base == nil || !OmiBackendPolicyIsValid(policy)) { fail(@"OMI_HTTP_UNCONFIGURED", @"Omi chat is unavailable", nil); return; }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"/v2/messages" relativeToURL:base].absoluteURL];
+    request.HTTPMethod = @"POST";
+    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{@"text":text, @"file_ids":@[]} options:0 error:nil];
+    request.timeoutInterval = 150;
+    if (!OmiApplyAuthorization(request, policy)) { fail(@"OMI_HTTP_UNCONFIGURED", @"Omi chat is unavailable", nil); return; }
+    [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+    [request setValue:@"text/event-stream" forHTTPHeaderField:@"accept"];
+    delegate.omiChat = YES;
+    delegate.request = request;
+    delegate.requestId = requestId;
+    delegate.onFrame = ^(NSString *frame) {
+      OmiBackendModule *owner = weakSelf;
+      if (owner == nil) return;
+      [owner emitGenerationFrame:requestId frame:frame];
+    };
+    delegate.policy = policy;
+    delegate.unauthorizedResponse = ^(NSInteger status) {
+      OmiBackendModule *owner = weakSelf;
+      @synchronized(owner) { if (owner != nil && !owner.disposed && OmiClearUnauthorizedCloudSession(policy, status)) [owner emitSessionInvalidated]; }
+    };
+    NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    configuration.timeoutIntervalForRequest = 150;
+    configuration.timeoutIntervalForResource = 150;
+    NSOperationQueue *queue = [[NSOperationQueue alloc] init]; queue.maxConcurrentOperationCount = 1;
+    delegate.session = [NSURLSession sessionWithConfiguration:configuration delegate:delegate delegateQueue:queue];
+    @synchronized(self.generations) {
+      if (self.disposed) { [delegate cancel]; return; }
+      @synchronized(delegate) {
+        if (delegate.settled) { [delegate.session invalidateAndCancel]; return; }
+        [delegate start];
+      }
+    }
+  }];
+}
+
+RCT_REMAP_METHOD(cancelOmiChat,
+                 cancelOmiChatWithId:(NSString *)requestId
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (!OmiRecordingMatches(requestId, @"^[A-Za-z0-9._:-]{1,128}$")) { reject(@"OMI_HTTP_INVALID_REQUEST", @"Omi chat request is invalid", nil); return; }
+  NSString *key = [@"omi-chat:" stringByAppendingString:requestId];
+  @synchronized(self.generations) { [self.generations[key] cancel]; }
+  resolve(nil);
+}
+
+RCT_REMAP_METHOD(generationEvents,
+                 generationEventsWithId:(NSString *)generationId
+                 lastEventId:(NSString *)lastEventId
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *resolutionError) {
+  if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+  if (resolutionError != nil) {
+    reject(@"OMI_HTTP_TRANSPORT", @"Native generation session refresh failed", nil);
+    return;
+  }
+  NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"];
+  NSString *encoded = [generationId stringByAddingPercentEncodingWithAllowedCharacters:allowed];
+  if (generationId.length == 0 || generationId.length > 256 || encoded.length == 0 ||
+      (lastEventId != nil && (lastEventId.length == 0 || lastEventId.length > 1024))) {
+    reject(@"OMI_HTTP_INVALID_REQUEST", @"Native generation request is invalid", nil);
+    return;
+  }
+  if (self.examplePlatformBackend) {
+    resolve(OmiDevelopmentBackendUnsupportedResponse(generationId));
+    return;
+  }
+  NSString *path = [NSString stringWithFormat:@"/v1/chat-generations/%@/events", encoded];
+  NSURL *url = [NSURL URLWithString:path
+                      relativeToURL:OmiRequestBaseURL(policy, path)].absoluteURL;
+  if (url == nil || !OmiBackendPolicyIsValid(policy)) {
+    reject(@"OMI_HTTP_UNCONFIGURED", @"Native generation request is unavailable", nil);
+    return;
+  }
+  NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+  request.HTTPMethod = @"GET";
+  if (!OmiApplyAuthorization(request, policy)) {
+    reject(@"OMI_HTTP_UNCONFIGURED", @"Native generation request is unavailable", nil);
+    return;
+  }
+  [request setValue:OmiContractVersion forHTTPHeaderField:@"x-omi-contract-version"];
+  [request setValue:@"text/event-stream" forHTTPHeaderField:@"accept"];
+  [request setValue:@"no-cache" forHTTPHeaderField:@"cache-control"];
+  if (lastEventId != nil) [request setValue:lastEventId forHTTPHeaderField:@"last-event-id"];
+  @synchronized(self.generations) {
+    if (self.generations[[@"canonical:" stringByAppendingString:generationId]] != nil) {
+      reject(@"OMI_HTTP_INVALID_REQUEST", @"Generation request is already active", nil);
+      return;
+    }
+  }
+  __weak OmiBackendModule *weakSelf = self;
+  OmiGenerationDelegate *delegate = [[OmiGenerationDelegate alloc]
+      initWithResolve:resolve reject:reject cleanup:^{
+        OmiBackendModule *strongSelf = weakSelf;
+        if (strongSelf == nil) return;
+        @synchronized(strongSelf.generations) {
+          [strongSelf.generations removeObjectForKey:[@"canonical:" stringByAppendingString:generationId]];
+        }
+      }];
+  NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+  configuration.timeoutIntervalForRequest = 30;
+  configuration.timeoutIntervalForResource = 60 * 60;
+  configuration.HTTPCookieStorage = nil;
+  configuration.HTTPShouldSetCookies = NO;
+  configuration.HTTPCookieAcceptPolicy = NSHTTPCookieAcceptPolicyNever;
+  NSOperationQueue *queue = [[NSOperationQueue alloc] init];
+  queue.maxConcurrentOperationCount = 1;
+  delegate.session = [NSURLSession sessionWithConfiguration:configuration delegate:delegate delegateQueue:queue];
+  delegate.request = request;
+  delegate.requestId = generationId;
+  delegate.onFrame = ^(NSString *frame) {
+    OmiBackendModule *owner = weakSelf;
+    if (owner == nil) return;
+    [owner emitGenerationFrame:generationId frame:frame];
+  };
+  delegate.policy = policy;
+  delegate.unauthorizedResponse = ^(NSInteger status) {
+    OmiBackendModule *owner = weakSelf;
+    @synchronized(owner) {
+      if (owner != nil && !owner.disposed && OmiClearUnauthorizedCloudSession(policy, status)) [owner emitSessionInvalidated];
+    }
+  };
+  @synchronized(self.generations) {
+    if (self.disposed) { [delegate cancel]; return; }
+    self.generations[[@"canonical:" stringByAppendingString:generationId]] = delegate;
+    [delegate start];
+  }
+  }];
+}
+
+RCT_REMAP_METHOD(cancelGenerationEvents,
+                 cancelGenerationEventsWithId:(NSString *)generationId
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *resolutionError) {
+  if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+  if (resolutionError != nil) {
+    reject(@"OMI_HTTP_TRANSPORT", @"Native generation session refresh failed", nil);
+    return;
+  }
+  if (self.examplePlatformBackend) {
+    reject(@"OMI_DEV_BACKEND_UNSUPPORTED", @"Generation cancellation is unsupported by the selected development backend", nil);
+    return;
+  }
+  OmiGenerationDelegate *delegate;
+  @synchronized(self.generations) {
+    delegate = self.generations[[@"canonical:" stringByAppendingString:generationId]];
+  }
+  NSString *encoded = [generationId stringByAddingPercentEncodingWithAllowedCharacters:
+      [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"]];
+  if (generationId.length == 0 || generationId.length > 256 || encoded.length == 0) {
+    reject(@"OMI_HTTP_INVALID_REQUEST", @"Native generation cancellation is invalid", nil);
+    return;
+  }
+  if (!OmiBackendPolicyIsValid(policy)) {
+    reject(@"OMI_HTTP_UNCONFIGURED", @"Native generation cancellation is unavailable", nil);
+    return;
+  }
+  NSString *path = [NSString stringWithFormat:@"/v1/chat-generations/%@", encoded];
+  NSURL *url = [NSURL URLWithString:path
+                      relativeToURL:OmiRequestBaseURL(policy, path)].absoluteURL;
+  NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+  request.HTTPMethod = @"DELETE";
+  if (!OmiApplyAuthorization(request, policy)) {
+    reject(@"OMI_HTTP_UNCONFIGURED", @"Native generation cancellation is unavailable", nil);
+    return;
+  }
+  [request setValue:OmiContractVersion forHTTPHeaderField:@"x-omi-contract-version"];
+  @synchronized(self) {
+  if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+  NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request
+                                              completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+    NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
+        ? ((NSHTTPURLResponse *)response).statusCode : 0;
+    @synchronized(self) {
+      if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+      if (OmiClearUnauthorizedCloudSession(policy, status)) [self emitSessionInvalidated];
+    }
+    if (error != nil || (status != 202 && status != 204)) {
+      reject(@"OMI_HTTP_TRANSPORT", @"Generation cancellation was not accepted", nil);
+      return;
+    }
+    if (delegate != nil) [delegate cancel];
+    resolve(nil);
+  }];
+  [task resume];
+  }
+  }];
+}
+
+RCT_REMAP_METHOD(getApiContract,
+                 getApiContractWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+  OmiBackendPolicy *policy = OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment);
+  if (policy == nil) { reject(@"OMI_HTTP_UNCONFIGURED", @"Native HTTP configuration is unavailable", nil); return; }
+  resolve(policy.kind == OmiBackendCredentialKindCloud && !policy.captureOriginRequired ? @"omi" : @"canonical");
+}
+
+RCT_REMAP_METHOD(getSoftwarePlane,
+                 getSoftwarePlaneWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  resolve(OmiSoftwarePlaneValue());
+}
+
+RCT_REMAP_METHOD(setSoftwarePlane,
+                 setSoftwarePlane:(NSString *)plane
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  NSString *value = [plane isEqualToString:@"new"] ? @"new" : @"old";
+  OmiBackendSessionLog([NSString stringWithFormat:@"plane write %@", value]);
+  [NSUserDefaults.standardUserDefaults setObject:value forKey:OmiSoftwarePlaneDefaultsKey];
+  self.policy = OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment);
+  resolve(value);
+}
+
+RCT_REMAP_METHOD(stampedV5BackendOrigin,
+                 stampedV5BackendOriginWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  NSURL *url = OmiValidatedV5BackendURLFromEnvironment();
+  resolve(url.absoluteString ?: [NSNull null]);
+}
+
+- (void)URLSession:(NSURLSession *)session
+              task:(NSURLSessionTask *)task
+willPerformHTTPRedirection:(NSHTTPURLResponse *)response
+        newRequest:(NSURLRequest *)request
+ completionHandler:(void (^)(NSURLRequest * _Nullable))completionHandler {
+  completionHandler(nil);
+}
+
+@end

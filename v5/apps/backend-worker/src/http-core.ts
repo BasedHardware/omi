@@ -1,0 +1,1095 @@
+import { SYNTHESIZED_READ_CONTRACT_VERSION } from "@omi-core/ratified-contracts/projections/synthesized";
+
+import { readHistory, readSettings, type Admission } from "./chat";
+import {
+  createLiveSession,
+  LIVE_REQUEST_MAX_BYTES,
+  parseLiveSessionRequest,
+  type LiveEnv,
+} from "./live";
+import {
+  conversationPage,
+  paginateConversations,
+  readConversations,
+  toLegacyConversation,
+} from "./conversations";
+import {
+  gatewayConfig,
+  gatewayModeEnabled,
+  type GatewayEnv,
+} from "./openrouter";
+import {
+  configurationNotReadyEvent,
+  generationAdmittedEvent,
+  observabilityConfigured,
+  parseObservabilitySinkMode,
+  type ObservabilityEnv,
+} from "./observability";
+import {
+  ATTACHMENT_CAPABILITIES,
+  completeAttachment,
+  makeR2UploadUrlSigner,
+  parseAttachmentStageRequest,
+  parseSignedUploadConfig,
+  resolveAttachmentsForAdmit,
+  stageAttachment,
+  type AttachmentIngestMessage,
+  type SignedUploadEnv,
+} from "./attachments";
+import {
+  appendDeviceSessionAudioBatch,
+  completeDeviceSession,
+  listDeviceSessions,
+  openDeviceSession,
+  parseDeviceSessionAudioBatch,
+  parseDeviceSessionCreate,
+} from "./device-sessions";
+import { handleDesktopGlance } from "./desktop-glance";
+import { type RetrievalEnv } from "./retrieval";
+import { type CanonicalService } from "./canonical-service";
+import { readCanonicalMemoryPage } from "./memory-service";
+import { requestCanonicalTasks } from "./canonical-tasks";
+import {
+  readDeviceTranscription,
+  processDeviceTranscriptions,
+  projectDeviceTranscription,
+  type TranscriptionAI,
+} from "./device-transcriptions";
+
+import {
+  backendError,
+  isChatCreate,
+  isClientId,
+  json,
+  type ChatCreate,
+  withTimeout,
+} from "./wire";
+
+export type AccountPort = {
+  admit(
+    accountId: string,
+    input: ChatCreate,
+    chatLimit: number
+  ): Promise<Admission | "conflict" | "entitlement" | "attachment_rejected">;
+  cancel(
+    accountId: string,
+    generationId: string
+  ): Promise<"not_found" | "accepted" | "terminal">;
+  fetch(request: Request): Promise<Response>;
+};
+
+export type AccountLocator = {
+  getByName(name: string): AccountPort;
+};
+
+export type CoreEnv = SignedUploadEnv &
+  GatewayEnv &
+  LiveEnv &
+  ObservabilityEnv & {
+    ENVIRONMENT: string;
+    API_TOKEN: string;
+    FIREBASE_API_KEY?: string;
+    FIREBASE_DESKTOP_API_KEY?: string;
+    FIREBASE_DESKTOP_TOKEN_SA_EMAIL?: string;
+    FIREBASE_DESKTOP_TOKEN_PRIVATE_KEY?: string;
+    STAGING_ACCOUNT_ID: string;
+    STAGING_DISPLAY_NAME: string;
+    STAGING_EMAIL: string;
+    STAGING_PLAN_LABEL: string;
+    STAGING_CHAT_LIMIT: number;
+    AI_MODEL: string;
+    DB?: D1Database;
+    ATTACHMENTS?: R2Bucket;
+    ATTACHMENT_INGEST?: Queue<AttachmentIngestMessage>;
+    ACCOUNTS?: AccountLocator;
+    AI?: RetrievalEnv["AI"] | { run: (...args: never[]) => Promise<unknown> };
+    VECTORIZE?: RetrievalEnv["VECTORIZE"];
+    CANONICAL_SERVICE?: CanonicalService;
+  };
+
+export type CoreContext = {
+  env: CoreEnv;
+  req: {
+    method: string;
+    url: string;
+    raw: Request;
+    routePath: string;
+    header(name: string): string | undefined;
+    param(name: string): string;
+  };
+  get(key: "accountId" | "requestId"): string;
+  set(key: "accountId" | "requestId", value: string): void;
+};
+
+export type RouteMethod = "GET" | "POST" | "DELETE";
+
+export type CoreRoute = {
+  method: RouteMethod;
+  path: string;
+  handle: (context: CoreContext) => Response | Promise<Response>;
+};
+
+export function coreContext(input: {
+  env: CoreEnv;
+  request: Request;
+  routePath: string;
+  params: Record<string, string>;
+  values: { accountId?: string; requestId: string };
+}): CoreContext {
+  const values = { ...input.values };
+  return {
+    env: input.env,
+    req: {
+      method: input.request.method,
+      url: input.request.url,
+      raw: input.request,
+      routePath: input.routePath,
+      header: (name) => input.request.headers.get(name) ?? undefined,
+      param: (name) => input.params[name] ?? "",
+    },
+    get: (key) => values[key] ?? "",
+    set: (key, value) => {
+      values[key] = value;
+    },
+  };
+}
+
+export function safeRoute(routePath: string): string {
+  return routePath.startsWith("/") && routePath.length <= 200
+    ? routePath
+    : "unmatched";
+}
+
+export function constantTimeEqual(
+  supplied: Uint8Array,
+  expected: Uint8Array
+): boolean {
+  const length = Math.max(supplied.byteLength, expected.byteLength);
+  let difference = supplied.byteLength ^ expected.byteLength;
+  for (let index = 0; index < length; index += 1) {
+    difference |= (supplied[index] ?? 0) ^ (expected[index] ?? 0);
+  }
+  return difference === 0;
+}
+
+export function configurationReady(env: CoreEnv): boolean {
+  const base =
+    typeof env.API_TOKEN === "string" &&
+    env.API_TOKEN.length > 0 &&
+    typeof env.STAGING_ACCOUNT_ID === "string" &&
+    env.STAGING_ACCOUNT_ID.length > 0 &&
+    typeof env.AI_MODEL === "string" &&
+    env.AI_MODEL.length > 0 &&
+    Number.isSafeInteger(env.STAGING_CHAT_LIMIT) &&
+    env.STAGING_CHAT_LIMIT >= 0 &&
+    env.ACCOUNTS !== undefined &&
+    env.AI !== undefined &&
+    env.DB !== undefined &&
+    observabilityConfigured(env);
+  if (!base) return false;
+  if (gatewayModeEnabled(env)) return gatewayConfig(env) !== null;
+  return true;
+}
+
+export function parseLimit(value: string | undefined): number | null {
+  if (value === undefined) return 50;
+  if (!/^(?:[1-9]|[1-9][0-9]|100)$/.test(value)) return null;
+  return Number(value);
+}
+
+export function parseOffset(value: string | undefined): number | null {
+  if (value === undefined) return 0;
+  if (!/^(?:0|[1-9][0-9]{0,8})$/.test(value)) return null;
+  return Number(value);
+}
+
+export async function readBoundedJson(
+  request: Request,
+  maxBytes: number
+): Promise<
+  | { kind: "ok"; value: unknown; raw: string }
+  | { kind: "invalid" }
+  | { kind: "too_large" }
+> {
+  return readBoundedJsonStream(
+    request.body,
+    request.headers.get("content-length"),
+    maxBytes
+  );
+}
+
+async function readBoundedJsonStream(
+  body: ReadableStream<Uint8Array> | null,
+  declaredLength: string | null,
+  maxBytes: number
+): Promise<
+  | { kind: "ok"; value: unknown; raw: string }
+  | { kind: "invalid" }
+  | { kind: "too_large" }
+> {
+  if (
+    declaredLength !== null &&
+    (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxBytes)
+  ) {
+    return { kind: "too_large" };
+  }
+  if (body === null) return { kind: "invalid" };
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    length += value.byteLength;
+    if (length > maxBytes) {
+      await reader.cancel();
+      return { kind: "too_large" };
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    const raw = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return { kind: "ok", value: JSON.parse(raw) as unknown, raw };
+  } catch {
+    return { kind: "invalid" };
+  }
+}
+
+export function emptyPage(
+  completenessVersion: "recall-completeness-v1" | "tasks-completeness-v1"
+) {
+  return {
+    contractVersion: SYNTHESIZED_READ_CONTRACT_VERSION,
+    items: [],
+    window: {
+      status: "complete",
+      complete: true,
+      hasMore: false,
+      nextCursor: null,
+    },
+    completeness: {
+      version: completenessVersion,
+      status: "complete",
+      reasons: [],
+      frontiers:
+        completenessVersion === "tasks-completeness-v1"
+          ? {
+              declaredFrontier: "frontier-v1:tasks-declared",
+              newestAppliedFrontier: "frontier-v1:tasks-declared",
+              missingAppliedFrontierReason: null,
+            }
+          : {
+              declaredFrontier: "frontier-v1:declared",
+              newestSearchedAcceptedFrontier: null,
+              missingAcceptedFrontierReason: "no_accepted_work",
+              newestSearchedStmFrontier: null,
+              missingStmFrontierReason: "no_eligible_stm",
+            },
+    },
+    absence: { kind: "query_gap" },
+  };
+}
+
+async function firebaseAccountId(
+  token: string,
+  apiKey: string
+): Promise<string | "invalid" | "unavailable"> {
+  const localId = await firebaseLocalId(token, apiKey);
+  return localId === "invalid" || localId === "unavailable"
+    ? localId
+    : `firebase:${localId}`;
+}
+
+export async function firebaseLocalId(
+  token: string,
+  apiKey: string
+): Promise<string | "invalid" | "unavailable"> {
+  if (token.length === 0 || token.length > 16_384 || apiKey.length === 0)
+    return "invalid";
+  try {
+    return await withTimeout(5_000, async (signal) => {
+      const response = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(
+          apiKey
+        )}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ idToken: token }),
+          redirect: "manual",
+          signal,
+        }
+      );
+      if (response.status !== 200) {
+        const unavailable =
+          response.status === 0 ||
+          response.status === 429 ||
+          response.status >= 500 ||
+          (response.status >= 300 && response.status < 400);
+        if (unavailable) {
+          console.error(
+            JSON.stringify({
+              event: "firebase_lookup_failed",
+              status: response.status,
+            })
+          );
+        }
+        return unavailable ? "unavailable" : "invalid";
+      }
+      const parsed = await readBoundedJsonStream(
+        response.body,
+        response.headers.get("content-length"),
+        65_536
+      );
+      if (
+        parsed.kind !== "ok" ||
+        parsed.value === null ||
+        typeof parsed.value !== "object"
+      )
+        return "unavailable";
+      const users = (parsed.value as Record<string, unknown>)["users"];
+      if (!Array.isArray(users) || users.length !== 1) return "invalid";
+      const user = users[0];
+      if (user === null || typeof user !== "object" || Array.isArray(user))
+        return "invalid";
+      const localId = (user as Record<string, unknown>)["localId"];
+      return typeof localId === "string" && isClientId(localId)
+        ? localId
+        : "invalid";
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "firebase_lookup_failed",
+        name: error instanceof Error ? error.name : "Unknown",
+      })
+    );
+    return "unavailable";
+  }
+}
+
+export async function authorizeV1(
+  context: CoreContext
+): Promise<Response | null> {
+  // Authorization is gated on the SAME readiness predicate `/ready` reports,
+  // because a readiness signal is not an enforcement point: Cloudflare routes
+  // request traffic regardless of what `/ready` returns, so a deployment whose
+  // API_TOKEN secret is unset still serves `/v1/*`. That matters here and not
+  // merely in principle: TextEncoder yields an EMPTY expectation for an absent
+  // or empty secret, and an empty bearer credential ("Authorization: Bearer ")
+  // encodes to the same empty value, so the constant-time comparison below
+  // returns true and authenticates an anonymous caller. Wrangler does not fail
+  // a deploy when a secret referenced solely in code is unset, so this is a
+  // reachable configuration, not a hypothetical one. Refuse before comparing.
+  if (!configurationReady(context.env)) {
+    // Operator-visible, client-opaque: the caller still gets the ordinary
+    // refusal, so a misconfigured deployment is not advertised over the wire.
+    console.error(
+      JSON.stringify(
+        configurationNotReadyEvent({
+          requestId: context.get("requestId") || "unavailable",
+          route: safeRoute(context.req.routePath),
+        })
+      )
+    );
+    return backendError("unauthorized", "reauthenticate", 401);
+  }
+  const authorization = context.req.header("authorization");
+  if (authorization === undefined || !authorization.startsWith("Bearer ")) {
+    return backendError("unauthorized", "reauthenticate", 401);
+  }
+  const supplied = new TextEncoder().encode(
+    authorization.slice("Bearer ".length)
+  );
+  const expected = new TextEncoder().encode(context.env.API_TOKEN);
+  if (constantTimeEqual(supplied, expected)) {
+    const clientId = context.req.header("x-omi-client-id");
+    // Staging isolation by client id, not production multi-tenant auth.
+    // After Bearer auth, each validated x-omi-client-id is its own data
+    // partition for chat, tasks, attachments, conversations, and device
+    // sessions. Settings display name/email/plan stay staging labels.
+    if (
+      clientId === undefined ||
+      !isClientId(clientId) ||
+      clientId.startsWith("firebase:")
+    ) {
+      return backendError("bad_request", "edit_request", 400);
+    }
+    context.set("accountId", clientId);
+    return null;
+  }
+  const firebaseApiKey = context.env.FIREBASE_API_KEY;
+  if (typeof firebaseApiKey !== "string" || firebaseApiKey.length === 0)
+    return backendError("unauthorized", "reauthenticate", 401);
+  let accountId = await firebaseAccountId(
+    authorization.slice("Bearer ".length),
+    firebaseApiKey
+  );
+  // Staging-only dual-project tolerance: FIREBASE_API_KEY points at the legacy
+  // project while the desktop-auth handoff mints accounts in the dev project.
+  // A token that the legacy lookup rejects is retried once against the dev
+  // browser key before it is refused. Both lookups go through the same
+  // accounts:lookup verification; nothing is trusted from the token itself.
+  if (accountId === "invalid") {
+    const desktopApiKey = context.env.FIREBASE_DESKTOP_API_KEY;
+    if (
+      typeof desktopApiKey === "string" &&
+      desktopApiKey.length > 0 &&
+      desktopApiKey !== firebaseApiKey
+    ) {
+      accountId = await firebaseAccountId(
+        authorization.slice("Bearer ".length),
+        desktopApiKey
+      );
+    }
+  }
+  if (accountId === "unavailable")
+    return backendError("service_unavailable", "retry", 503, true);
+  if (accountId === "invalid")
+    return backendError("unauthorized", "reauthenticate", 401);
+  context.set("accountId", accountId);
+  return null;
+}
+
+export function handleHealth(context: CoreContext): Response {
+  return json({ status: "ok", environment: context.env.ENVIRONMENT });
+}
+
+export function handleReady(context: CoreContext): Response {
+  return configurationReady(context.env) &&
+    parseObservabilitySinkMode(context.env.OBSERVABILITY_SINK_MODE) !== null
+    ? json({
+        status: "ready",
+        environment: context.env.ENVIRONMENT,
+        observability_sink_mode: context.env.OBSERVABILITY_SINK_MODE,
+      })
+    : backendError("service_unavailable", "retry", 503, true);
+}
+
+export async function handleSettings(context: CoreContext): Promise<Response> {
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const accountId = context.get("accountId");
+  // Firebase sessions have no owner-backed Settings producer here. Staging
+  // client partitions may still show explicit staging labels.
+  if (accountId.startsWith("firebase:")) {
+    return backendError("service_unavailable", "retry", 503, true);
+  }
+  return json(
+    await readSettings(
+      db,
+      accountId,
+      {
+        displayName: context.env.STAGING_DISPLAY_NAME,
+        email: context.env.STAGING_EMAIL,
+      },
+      context.env.STAGING_PLAN_LABEL,
+      context.env.STAGING_CHAT_LIMIT
+    )
+  );
+}
+
+export async function handleLiveSession(
+  context: CoreContext
+): Promise<Response> {
+  if (context.get("accountId").startsWith("firebase:")) {
+    return backendError("service_unavailable", "retry", 503, true);
+  }
+  const parsed = await readBoundedJson(context.req.raw, LIVE_REQUEST_MAX_BYTES);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
+    return backendError("bad_request", "edit_request", 400);
+  const request = parseLiveSessionRequest(parsed.value);
+  if (request === null) return backendError("validation", "edit_request", 422);
+  const result = await createLiveSession(
+    context.env,
+    request,
+    context.get("requestId") || "unavailable"
+  );
+  if (result.kind === "error") {
+    return backendError(
+      result.code,
+      result.retryable ? "retry" : "edit_request",
+      result.status,
+      result.retryable
+    );
+  }
+  if (result.provider === "gemini_live") {
+    return json(
+      {
+        provider: "gemini_live",
+        session: { id: result.sessionId },
+        transport: {
+          type: "gemini_ws",
+          token: result.token,
+          model: result.model,
+          url: result.url,
+        },
+      },
+      201
+    );
+  }
+  return json(
+    {
+      provider: "gpt_live",
+      session: { id: result.sessionId },
+      transport: { type: "webrtc", sdp: result.answerSdp },
+    },
+    201
+  );
+}
+
+export async function handleChatHistory(
+  context: CoreContext
+): Promise<Response> {
+  const query = new URL(context.req.url).searchParams;
+  if (
+    [...query.keys()].some((key) => key !== "limit" && key !== "olderCursor") ||
+    query.getAll("limit").length > 1 ||
+    query.getAll("olderCursor").length > 1
+  ) {
+    return backendError("bad_request", "edit_request", 400);
+  }
+  const limit = parseLimit(query.get("limit") ?? undefined);
+  const olderCursor = query.get("olderCursor") ?? undefined;
+  if (limit === null || olderCursor === "")
+    return backendError("bad_request", "edit_request", 400);
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const history = await readHistory(
+    db,
+    context.get("accountId"),
+    limit,
+    olderCursor
+  );
+  return history === "invalid_cursor"
+    ? backendError("bad_request", "edit_request", 400)
+    : json(history);
+}
+
+export async function handleChatCreate(
+  context: CoreContext
+): Promise<Response> {
+  const parsed = await readBoundedJson(context.req.raw, 65_536);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
+    return backendError("bad_request", "edit_request", 400);
+  const body = parsed.value;
+  if (!isChatCreate(body))
+    return backendError("validation", "edit_request", 422);
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const resolved = await resolveAttachmentsForAdmit(
+    db,
+    context.get("accountId"),
+    body.attachmentIds,
+    body.id
+  );
+  if (resolved.kind === "rejected")
+    return backendError("attachment_rejected", "edit_request", 422);
+  const accountBackend = account(context);
+  const admission = await accountBackend.admit(
+    context.get("accountId"),
+    body,
+    context.env.STAGING_CHAT_LIMIT
+  );
+  if (admission === "conflict") {
+    return backendError("client_message_id_conflict", "edit_request", 409);
+  }
+  if (admission === "entitlement") {
+    return backendError("entitlement", "upgrade", 402);
+  }
+  if (admission === "attachment_rejected") {
+    return backendError("attachment_rejected", "edit_request", 422);
+  }
+  console.log(
+    JSON.stringify(
+      generationAdmittedEvent({
+        requestId: context.get("requestId") || "unavailable",
+        generationId: admission.generation.id,
+      })
+    )
+  );
+  return json(
+    { message: admission.message, generation: admission.generation },
+    admission.created ? 201 : 200
+  );
+}
+
+export async function handleGenerationEvents(
+  context: CoreContext
+): Promise<Response> {
+  const generationId = context.req.param("id");
+  const target = new URL("https://account.internal/events");
+  target.searchParams.set("generationId", generationId);
+  const response = await account(context).fetch(
+    new Request(target, { headers: context.req.raw.headers })
+  );
+  return response.status === 404
+    ? backendError("not_found", "refresh_history", 404)
+    : response;
+}
+
+export async function handleGenerationCancel(
+  context: CoreContext
+): Promise<Response> {
+  const cancellation = await account(context).cancel(
+    context.get("accountId"),
+    context.req.param("id")
+  );
+  if (cancellation === "not_found")
+    return backendError("not_found", "refresh_history", 404);
+  return cancellation === "terminal"
+    ? new Response(null, {
+        status: 204,
+        headers: { "cache-control": "no-store" },
+      })
+    : json({ cancellation: { state: "accepted" } }, 202);
+}
+
+export async function handleAttachmentStage(
+  context: CoreContext
+): Promise<Response> {
+  const r2 = context.env.ATTACHMENTS;
+  if (r2 === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const parsed = await readBoundedJson(context.req.raw, 65_536);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
+    return backendError("bad_request", "edit_request", 400);
+  const request = parseAttachmentStageRequest(parsed.value);
+  if (request === null)
+    return backendError("attachment_rejected", "edit_request", 422);
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const signedConfig = parseSignedUploadConfig(context.env);
+  if (signedConfig === null)
+    return backendError("service_unavailable", "retry", 503, true);
+  const signer = makeR2UploadUrlSigner(signedConfig);
+  const result = await stageAttachment(
+    db,
+    context.get("accountId"),
+    request,
+    ATTACHMENT_CAPABILITIES,
+    "attachments",
+    signer
+  );
+  if (result.kind === "conflict")
+    return backendError("attachment_rejected", "edit_request", 409);
+  return json(result.response, result.created ? 201 : 200);
+}
+
+export async function handleAttachmentComplete(
+  context: CoreContext
+): Promise<Response> {
+  const r2 = context.env.ATTACHMENTS;
+  const ingest = context.env.ATTACHMENT_INGEST;
+  const db = context.env.DB;
+  if (r2 === undefined || ingest === undefined || db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const attachmentId = context.req.param("id");
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      attachmentId
+    )
+  )
+    return backendError("bad_request", "edit_request", 400);
+  const outcome = await completeAttachment(
+    db,
+    r2,
+    ingest,
+    context.get("accountId"),
+    attachmentId,
+    Date.now()
+  );
+  switch (outcome.kind) {
+    case "accepted":
+      return json({ attachment: outcome.attachment }, 202);
+    case "queued":
+      return json({ attachment: outcome.attachment }, 202);
+    case "ingested":
+      return json({ attachment: outcome.attachment }, 200);
+    case "not_found":
+      return backendError("not_found", "refresh_history", 404);
+    case "expired":
+      return backendError("attachment_expired", "edit_request", 410);
+    case "absent":
+      return backendError("attachment_not_uploaded", "retry", 422, true);
+    case "mismatch":
+      return backendError("attachment_metadata_mismatch", "edit_request", 422);
+    case "conflict":
+      return backendError("attachment_rejected", "edit_request", 409);
+  }
+}
+
+export async function handleDeviceSessionOpen(
+  context: CoreContext
+): Promise<Response> {
+  const r2 = context.env.ATTACHMENTS;
+  const db = context.env.DB;
+  if (r2 === undefined || db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const parsed = await readBoundedJson(context.req.raw, 65_536);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
+    return backendError("bad_request", "edit_request", 400);
+  const request = parseDeviceSessionCreate(parsed.value);
+  if (request === null) return backendError("validation", "edit_request", 422);
+  const session = await openDeviceSession(
+    db,
+    context.get("accountId"),
+    request,
+    Date.now()
+  );
+  return session === null
+    ? backendError("conflict", "edit_request", 409)
+    : json({ session }, 201);
+}
+
+export async function handleDeviceSessionAudio(
+  context: CoreContext
+): Promise<Response> {
+  const r2 = context.env.ATTACHMENTS;
+  const db = context.env.DB;
+  if (r2 === undefined || db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const parsed = await readBoundedJson(context.req.raw, 2_097_152);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
+    return backendError("bad_request", "edit_request", 400);
+  const request = parseDeviceSessionAudioBatch(parsed.value);
+  if (request === null) return backendError("validation", "edit_request", 422);
+  const outcome = await appendDeviceSessionAudioBatch(
+    db,
+    r2,
+    context.get("accountId"),
+    context.req.param("id"),
+    request,
+    Date.now()
+  );
+  switch (outcome.kind) {
+    case "ok":
+      return json({ session: outcome.session });
+    case "unavailable":
+      return backendError("service_unavailable", "retry", 503, true);
+    case "not_found":
+      return backendError("not_found", "refresh_history", 404);
+    case "conflict":
+      return backendError("conflict", "edit_request", 409);
+    case "too_large":
+      return backendError("attachment_too_large", "edit_request", 413);
+  }
+}
+
+export async function handleDeviceSessionComplete(
+  context: CoreContext
+): Promise<Response> {
+  const r2 = context.env.ATTACHMENTS;
+  const db = context.env.DB;
+  if (r2 === undefined || db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const outcome = await completeDeviceSession(
+    db,
+    context.get("accountId"),
+    context.req.param("id"),
+    Date.now()
+  );
+  if (outcome.kind === "conflict")
+    return backendError("conflict", "edit_request", 409);
+  return outcome.kind === "not_found"
+    ? backendError("not_found", "refresh_history", 404)
+    : json({ session: outcome.session });
+}
+
+export async function handleDeviceSessionList(
+  context: CoreContext
+): Promise<Response> {
+  const r2 = context.env.ATTACHMENTS;
+  const db = context.env.DB;
+  if (r2 === undefined || db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  return json({
+    sessions: await listDeviceSessions(db, context.get("accountId")),
+  });
+}
+
+export async function handleConversations(
+  context: CoreContext
+): Promise<Response> {
+  const query = new URL(context.req.url).searchParams;
+  const keys = [...query.keys()];
+  const hasOffset = query.has("offset");
+  if (hasOffset) {
+    if (
+      keys.some((key) => key !== "limit" && key !== "offset") ||
+      query.getAll("limit").length > 1 ||
+      query.getAll("offset").length > 1
+    ) {
+      return backendError("bad_request", "edit_request", 400);
+    }
+    const limit = parseLimit(query.get("limit") ?? undefined);
+    const offset = parseOffset(query.get("offset") ?? undefined);
+    if (limit === null || offset === null)
+      return backendError("bad_request", "edit_request", 400);
+    const db = context.env.DB;
+    if (db === undefined) return json([]);
+    const items = await readConversations(db, context.get("accountId"));
+    return json(
+      items
+        .slice(offset, offset + limit)
+        .map((item) => toLegacyConversation(item))
+    );
+  }
+  if (
+    keys.some((key) => key !== "limit" && key !== "cursor") ||
+    query.getAll("limit").length > 1 ||
+    query.getAll("cursor").length > 1
+  ) {
+    return backendError("bad_request", "edit_request", 400);
+  }
+  const limit = parseLimit(query.get("limit") ?? undefined);
+  const cursor = query.get("cursor") ?? undefined;
+  if (limit === null || cursor === "")
+    return backendError("bad_request", "edit_request", 400);
+  const db = context.env.DB;
+  if (db === undefined) return json(conversationPage([], false, null));
+  const page = paginateConversations(
+    await readConversations(db, context.get("accountId")),
+    limit,
+    cursor
+  );
+  return page === "invalid_cursor"
+    ? backendError("bad_request", "edit_request", 400)
+    : json(page);
+}
+
+export async function handleMemories(context: CoreContext): Promise<Response> {
+  const query = new URL(context.req.url).searchParams;
+  if (
+    [...query.keys()].some((key) => key !== "limit" && key !== "cursor") ||
+    query.getAll("limit").length > 1 ||
+    query.getAll("cursor").length > 1
+  ) {
+    return backendError("bad_request", "edit_request", 400);
+  }
+  const limit = parseLimit(query.get("limit") ?? undefined);
+  const cursor = query.get("cursor") ?? undefined;
+  if (limit === null || cursor === "")
+    return backendError("bad_request", "edit_request", 400);
+  const contractVersion = context.req.header("x-omi-contract-version");
+  const result = await readCanonicalMemoryPage({
+    service: context.env.CANONICAL_SERVICE,
+    caller: {
+      accountId: context.get("accountId"),
+      authorization: context.req.header("authorization"),
+      stagingApiToken: context.env.API_TOKEN,
+    },
+    query,
+    ...(contractVersion === undefined ? {} : { contractVersion }),
+  });
+  if (result.kind === "page") return result.response;
+  if (result.kind === "denied")
+    return new Response(
+      JSON.stringify({
+        error:
+          result.status === 401
+            ? "unauthorized"
+            : result.status === 403
+            ? "forbidden"
+            : "bad_request",
+      }),
+      {
+        status: result.status,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+        },
+      }
+    );
+  return backendError("projection_unavailable", "retry", 503, true);
+}
+
+export async function handleTasks(context: CoreContext): Promise<Response> {
+  const query = new URL(context.req.url).searchParams;
+  const contractVersion = context.req.header("x-omi-contract-version");
+  return requestCanonicalTasks({
+    service: context.env.CANONICAL_SERVICE,
+    caller: {
+      accountId: context.get("accountId"),
+      authorization: context.req.header("authorization"),
+      stagingApiToken: context.env.API_TOKEN,
+    },
+    method: "GET",
+    query,
+    ...(contractVersion === undefined ? {} : { contractVersion }),
+  });
+}
+
+export async function handleTaskWrite(context: CoreContext): Promise<Response> {
+  const parsed = await readBoundedJson(context.req.raw, 1_000_000);
+  if (parsed.kind !== "ok")
+    return backendError("bad_request", "edit_request", 400);
+  const contractVersion = context.req.header("x-omi-contract-version");
+  return requestCanonicalTasks({
+    service: context.env.CANONICAL_SERVICE,
+    caller: {
+      accountId: context.get("accountId"),
+      authorization: context.req.header("authorization"),
+      stagingApiToken: context.env.API_TOKEN,
+    },
+    method: "POST",
+    body: parsed.raw,
+    ...(contractVersion === undefined ? {} : { contractVersion }),
+  });
+}
+
+export async function handleTranscription(
+  context: CoreContext
+): Promise<Response> {
+  if (context.env.DB === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const row = await readDeviceTranscription(
+    context.env.DB,
+    context.get("accountId"),
+    context.req.param("id")
+  );
+  if (row === null) return backendError("not_found", "refresh_history", 404);
+  const transcription = projectDeviceTranscription(row);
+  if (transcription === null)
+    return backendError("service_unavailable", "retry", 503, true);
+  return json({ transcription });
+}
+
+export async function handleTranscribe(
+  context: CoreContext
+): Promise<Response> {
+  const { DB, ATTACHMENTS, AI } = context.env;
+  if (DB === undefined || ATTACHMENTS === undefined || AI === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const accountId = context.get("accountId"),
+    sessionId = context.req.param("id");
+  const session = await DB.prepare(
+    "SELECT state FROM device_sessions WHERE id = ? AND account_id = ?"
+  )
+    .bind(sessionId, accountId)
+    .first<{ state: string }>();
+  if (session === null)
+    return backendError("not_found", "refresh_history", 404);
+  if (session.state !== "complete")
+    return backendError("conflict", "retry", 409);
+  await processDeviceTranscriptions(
+    DB,
+    ATTACHMENTS,
+    AI as TranscriptionAI,
+    Date.now(),
+    { accountId, sessionId }
+  );
+  const response = await handleTranscription(context);
+  if (response.status !== 200) return response;
+  const payload = (await response.json()) as {
+    transcription: { state: string };
+  };
+  return json(
+    payload,
+    payload.transcription.state === "queued" ||
+      payload.transcription.state === "running"
+      ? 202
+      : 200
+  );
+}
+
+export const publicRoutes: readonly CoreRoute[] = [
+  { method: "GET", path: "/health", handle: handleHealth },
+  { method: "GET", path: "/ready", handle: handleReady },
+];
+
+export const v1Routes: readonly CoreRoute[] = [
+  {
+    method: "GET",
+    path: "/v1/device-sessions/ownership",
+    handle: () =>
+      backendError("capture_ownership_unavailable", "retry", 503, true),
+  },
+  {
+    method: "POST",
+    path: "/v1/device-sessions/:id/transcribe",
+    handle: handleTranscribe,
+  },
+  { method: "POST", path: "/v1/tasks/ops", handle: handleTaskWrite },
+  {
+    method: "GET",
+    path: "/v1/device-sessions/:id/transcript",
+    handle: handleTranscription,
+  },
+  { method: "GET", path: "/v1/settings", handle: handleSettings },
+  { method: "POST", path: "/v1/live/sessions", handle: handleLiveSession },
+  { method: "GET", path: "/v1/chat-messages", handle: handleChatHistory },
+  { method: "POST", path: "/v1/chat-messages", handle: handleChatCreate },
+  {
+    method: "GET",
+    path: "/v1/chat-generations/:id/events",
+    handle: handleGenerationEvents,
+  },
+  {
+    method: "DELETE",
+    path: "/v1/chat-generations/:id",
+    handle: handleGenerationCancel,
+  },
+  {
+    method: "POST",
+    path: "/v1/chat-attachments",
+    handle: handleAttachmentStage,
+  },
+  {
+    method: "POST",
+    path: "/v1/chat-attachments/:id/complete",
+    handle: handleAttachmentComplete,
+  },
+  {
+    method: "POST",
+    path: "/v1/device-sessions",
+    handle: handleDeviceSessionOpen,
+  },
+  {
+    method: "POST",
+    path: "/v1/device-sessions/:id/audio",
+    handle: handleDeviceSessionAudio,
+  },
+  {
+    method: "POST",
+    path: "/v1/device-sessions/:id/complete",
+    handle: handleDeviceSessionComplete,
+  },
+  {
+    method: "GET",
+    path: "/v1/device-sessions",
+    handle: handleDeviceSessionList,
+  },
+  { method: "GET", path: "/v1/conversations", handle: handleConversations },
+  { method: "GET", path: "/v1/memories", handle: handleMemories },
+  { method: "GET", path: "/v1/tasks", handle: handleTasks },
+  { method: "POST", path: "/v1/desktop/glance", handle: handleDesktopGlance },
+];
+
+function account(context: CoreContext): AccountPort {
+  const accounts = context.env.ACCOUNTS;
+  if (accounts === undefined) {
+    throw new Error("accounts");
+  }
+  return accounts.getByName(context.get("accountId"));
+}

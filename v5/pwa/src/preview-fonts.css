@@ -1,0 +1,10 @@
+/* Design preview only: the native apps bundle this icon font; the browser
+   preview must load it too or every MaterialIcon renders as a missing glyph. */
+@font-face {
+  font-family: "Material Symbols Rounded";
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url("../../react-native/macos/RnRuntime-macOS/Resources/MaterialSymbolsRounded.ttf")
+    format("truetype");
+}

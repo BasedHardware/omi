@@ -1,0 +1,83 @@
+import {createPostgresFirebaseConversationReadRuntime, type PostgresFirebaseConversationReadOptions} from "./firebase-conversation-read-runtime";
+import { createPostgresFirebaseChatReadRuntime, type PostgresFirebaseChatReadOptions } from "./firebase-chat-read-runtime";
+import { createPostgresFirebaseSettingsRuntime, type PostgresFirebaseSettingsOptions } from "./firebase-settings-runtime";
+import { createPostgresFirebaseDeviceSessionRuntime } from "./firebase-device-session-runtime";
+import type { PrerecordedTranscriptionSource } from "../../apps/service/listen/prerecorded-transcription";
+import type { PostgresFirebaseAuthorizationRuntimeOptions } from "./firebase-authorized-runtime-support";
+import { createPostgresFirebaseTasksRuntime, type PostgresFirebaseTasksOptions } from "./firebase-tasks-runtime";
+import type { Hono } from "hono";
+import { isProxy } from "node:util/types";
+
+import {
+  createMemoryServiceApp,
+} from "../../apps/service/memory-service-app";
+import type {
+  ServiceAppObservability,
+  StandardFetchHandler,
+} from "../../apps/service/app";
+import type { ServedCounter } from "../../apps/service/observability/served-count";
+import {
+  createPostgresFirebaseAuthorizedMemoryReadRuntime,
+  type PostgresFirebaseAuthorizedMemoryReadRuntimeOptions,
+} from "./firebase-authorized-memory-read-runtime";
+import { createPostgresFirebaseMemoryRouteReadPort } from
+  "./firebase-memory-route-read-port";
+
+export interface PostgresFirebaseAuthorizedMemoryServiceAppOptions {
+  readonly mcp_handler: StandardFetchHandler;
+  readonly memory_read: PostgresFirebaseAuthorizedMemoryReadRuntimeOptions;
+  readonly now_epoch_seconds: () => number;
+  readonly counter: ServedCounter;
+  readonly observability?: ServiceAppObservability;
+  readonly tasks?: PostgresFirebaseTasksOptions;
+  readonly conversations?: PostgresFirebaseConversationReadOptions;
+  readonly chat?: PostgresFirebaseChatReadOptions;
+  readonly settings?: PostgresFirebaseSettingsOptions;
+  readonly device_sessions?: PostgresFirebaseAuthorizationRuntimeOptions;
+  readonly device_ownership_key?: Uint8Array;
+  readonly transcription_source?: PrerecordedTranscriptionSource;
+}
+
+/**
+ * Route composition only. The caller still owns the listener, secrets, MCP
+ * credential implementation, telemetry sink, and deployment activation.
+ */
+export const createPostgresFirebaseAuthorizedMemoryServiceApp = (
+  options: PostgresFirebaseAuthorizedMemoryServiceAppOptions,
+): Hono => {
+  if (options === null || typeof options !== "object" || Array.isArray(options)
+    || isProxy(options) || Object.getPrototypeOf(options) !== Object.prototype) {
+    throw new TypeError("invalid PostgreSQL Firebase memory service options");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(options);
+  const required = ["mcp_handler", "memory_read", "now_epoch_seconds", "counter"] as const;
+  if (Reflect.ownKeys(descriptors).some((key) =>
+    typeof key !== "string" || ![...required, "observability", "tasks", "device_sessions", "transcription_source", "device_ownership_key", "conversations", "chat", "settings"].includes(key))
+    || required.some((key) => !Object.hasOwn(descriptors, key))
+    || Object.values(descriptors).some((entry) => !entry.enumerable || !("value" in entry))) {
+    throw new TypeError("invalid PostgreSQL Firebase memory service options");
+  }
+  const mcpHandler = descriptors.mcp_handler!.value;
+  const nowEpochSeconds = descriptors.now_epoch_seconds!.value;
+  if (typeof mcpHandler !== "function" || isProxy(mcpHandler)
+    || typeof nowEpochSeconds !== "function" || isProxy(nowEpochSeconds)) {
+    throw new TypeError("invalid PostgreSQL Firebase memory service options");
+  }
+  const runtime = createPostgresFirebaseAuthorizedMemoryReadRuntime(
+    descriptors.memory_read!.value as PostgresFirebaseAuthorizedMemoryReadRuntimeOptions,
+  );
+  return createMemoryServiceApp(
+    mcpHandler as StandardFetchHandler,
+    {
+      readPort: createPostgresFirebaseMemoryRouteReadPort(runtime),
+      nowEpochSeconds: nowEpochSeconds as () => number,
+      counter: descriptors.counter!.value as ServedCounter,
+    },
+    (descriptors.observability?.value ?? {}) as ServiceAppObservability,
+    descriptors.tasks ? createPostgresFirebaseTasksRuntime(descriptors.tasks.value as PostgresFirebaseTasksOptions) : undefined,
+    descriptors.device_sessions ? createPostgresFirebaseDeviceSessionRuntime(descriptors.device_sessions.value as PostgresFirebaseAuthorizationRuntimeOptions, descriptors.transcription_source?.value as PrerecordedTranscriptionSource | undefined, descriptors.device_ownership_key?.value as Uint8Array | undefined) : undefined,
+    descriptors.conversations ? createPostgresFirebaseConversationReadRuntime(descriptors.conversations.value as PostgresFirebaseConversationReadOptions) : undefined,
+    descriptors.chat ? createPostgresFirebaseChatReadRuntime(descriptors.chat.value as PostgresFirebaseChatReadOptions) : undefined,
+    descriptors.settings ? createPostgresFirebaseSettingsRuntime(descriptors.settings.value as PostgresFirebaseSettingsOptions) : undefined,
+  );
+};
