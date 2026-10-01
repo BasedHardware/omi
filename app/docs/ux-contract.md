@@ -33,7 +33,9 @@ There are exactly two ways out, and they mean different things.
 - Never an X on a pushed page, never a back chevron on something that floats.
 - **System back and the iOS edge swipe always do what the on-screen control does.** A multi-step
   flow makes each step a real route (or a nested `Navigator`) so the swipe steps back one step;
-  `PopScope(canPop: false)` that disables the swipe is a bug unless it guards unsaved input (§4).
+  `PopScope(canPop: false)` that disables the swipe is a bug unless it guards unsaved input (§4)
+  or holds a sheet nothing may dismiss: a required update or a progress sheet that cannot be
+  cancelled (§2).
 - Push with `routeToPage(context, page)`, or `omiPageRoute(builder)` when you need a `Route`
   (`pushReplacement`). Never `PageRouteBuilder` for a push: it has no iOS back swipe
   (`page-route-builder`).
@@ -57,8 +59,9 @@ There are exactly two ways out, and they mean different things.
   widget. It owns the top radius (`OmiRadius.xl`), the 36×4 drag handle, the optional title row
   with a trailing `OmiCloseButton`, safe-area and keyboard insets, and `isScrollControlled`. Never
   a raw `showModalBottomSheet` (`raw-bottom-sheet`) and never a hand-drawn handle.
-- A sheet nothing may dismiss (a required update) passes `isDismissible: false, enableDrag: false,
-  showDragHandle: false` and blocks back with `PopScope`: no handle that promises a swipe.
+- A sheet nothing may dismiss (a required update) passes `isDismissible: false, enableDrag: false`
+  and blocks back with `PopScope`, and has no handle that promises a swipe: `showOmiSheet` drops it
+  itself; `showOmiSurfaceSheet` takes `showDragHandle: false`.
 - A sheet that edits something is `showOmiEditSheet(...)` / `OmiEditSheet(isDirty:, ...)`, with
   explicit Save and Cancel. It owns the swipe-down itself, because the framework's sheet drag pops
   without consulting `PopScope`. Swipe-down, tap-outside, the close X and system back on a **dirty**

@@ -17,7 +17,7 @@
 /// | Search | `OmiSearchField(placeholder:)` |
 /// | Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:)` |
 /// | A level (confidence, voice match) | `OmiLevelMeter(level:, semanticsLabel:)` — three neutral steps, never a percentage |
-/// | Confirm / alert | `showOmiConfirm`, `showOmiConfirmWithOptOut`, `showOmiAlert`; `OmiDialogCard` holds a control |
+/// | Confirm / alert | `showOmiConfirm`, `showOmiConfirmWithOptOut`, `showOmiAlert`; `OmiDialogCard` holds a control; from a tapped control (a swiped row's delete), `showOmiConfirmMenu(anchor:)` |
 /// | Toasts, undo, copy | `OmiFeedback.confirm/info/error/undo`, `OmiClipboard.copy` |
 /// | Dates, durations, speaker names | `OmiDateFormat.of(context)`, `OmiDuration`, `SpeakerNames` |
 /// | Startup / background prompts | `PromptQueue.instance.enqueue` |

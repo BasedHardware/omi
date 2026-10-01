@@ -89,6 +89,27 @@ void main() {
     expect(tester.getRect(card), rest);
   });
 
+  testWidgets('a swipe the system cancels mid-drag still settles closed or open, never halfway', (tester) async {
+    await pumpRow(tester);
+    final rest = tester.getRect(card);
+    for (final dx in [-20.0, -60.0, -200.0]) {
+      final gesture = await tester.startGesture(tester.getCenter(card));
+      for (var i = 0; i < 12; i++) {
+        await gesture.moveBy(Offset(dx / 12, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      final shift = rest.left - tester.getRect(card).left;
+      expect(shift, anyOf(0, 76), reason: 'cancelled at $dx');
+      expect(deleteItem, findsNothing, reason: 'short of 40% of the row it does not ask');
+      if (shift > 0) {
+        await tester.tapAt(tester.getRect(card).center);
+        await tester.pumpAndSettle();
+      }
+    }
+  });
+
   testWidgets('the delete button asks in a menu below it; tapping outside cancels and closes the row', (tester) async {
     await pumpRow(tester);
     final rest = tester.getRect(card);
