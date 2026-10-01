@@ -59,9 +59,12 @@ class CaptureSystemSurface {
             state == RecordingState.interrupted ||
             (state == RecordingState.initialising && _anchor != null && id == _recordingId));
     // Only a user pause offers Resume. Connecting and interruptions recover on
-    // their own; they freeze the clock but still offer Pause for privacy.
-    final userPaused = capture.isPaused || state == RecordingState.pause;
-    final interrupted = state == RecordingState.interrupted;
+    // their own; they freeze the clock but still offer Pause for privacy. An Omi
+    // call holds the pendant in the pause state without a user pause; like a phone
+    // call holding the mic, it is an interruption that offers neither.
+    final heldForCall = capture.pendantPausedForCall;
+    final userPaused = capture.isPaused || (state == RecordingState.pause && !heldForCall);
+    final interrupted = state == RecordingState.interrupted || heldForCall;
     final connecting = state == RecordingState.initialising;
     final paused = userPaused || interrupted || connecting;
     final now = _now();
@@ -107,7 +110,7 @@ class CaptureSystemSurface {
       'waveTime':
           _anchor == null ? 0.0 : (_pausedAt ?? now).difference(_anchor!).inMilliseconds.clamp(0, 2147483647000) / 1000,
       'paused': paused,
-      'canPause': active && !capture.isCallActive,
+      'canPause': active && !capture.isCallActive && !heldForCall,
       'canFinish': active &&
           (capture.systemSurfacePhoneCapture || batch || capture.segments.isNotEmpty || capture.photos.isNotEmpty),
       'busy': _busy,

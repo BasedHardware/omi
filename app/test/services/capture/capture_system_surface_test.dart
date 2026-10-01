@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/capture/capture_system_surface.dart';
@@ -175,6 +176,25 @@ void main() {
     await world.settle();
     expect(presentation.snapshot['source'], 'pendant');
   }
+
+  test('an Omi call holding the pendant reads as an interruption, without Stop or Start', () async {
+    await recordWithPendant();
+    world.omiCall.value = PhoneCallState.active;
+    await world.controller.pendingSourceSwitch;
+    await world.settle();
+    expect(world.controller.pendantPausedForCall, isTrue);
+    expect(presentation.snapshot['active'], true);
+    expect(presentation.snapshot['status'], 'interrupted');
+    expect(presentation.snapshot['paused'], true);
+    expect(presentation.snapshot['canPause'], false);
+    await expectLater(sink.action(request('resume')), throwsStateError);
+
+    world.omiCall.value = PhoneCallState.ended;
+    await world.controller.pendingSourceSwitch;
+    await world.settle();
+    expect(presentation.snapshot['paused'], false);
+    expect(presentation.snapshot['canPause'], true);
+  });
 
   test('a Stop queued behind a handoff does not pause the recording that takes over', () async {
     await recordWithPendant();
