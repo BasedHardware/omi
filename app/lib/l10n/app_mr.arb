@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "नवीन संस्करण उपलब्ध",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "नाही",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "आपल्या संभाषणातील कार्य येथे दिसतील.\n+ टॅप करून एक मॅन्युअल्ली तयार करा.",
+    "tasksEmptyStateMessage": "कार्य तयार करण्यासाठी संभाषण सुरू करा.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11325,5 +11321,12 @@
     "speakerSuggestionAppliesToSpeaker": "या वक्त्याच्या प्रत्येक ओळीला लागू होते",
     "collapseAction": "आकसा",
     "speakerTagPromptNotMeAction": "मी नाही",
-    "confidenceNextLabels": "{count, plural, =1{त्यांना आणखी 1 संभाषणात लेबल करा.} other{त्यांना आणखी {count} संभाषणांमध्ये लेबल करा.}}"
+    "confidenceNextLabels": "{count, plural, =1{त्यांना आणखी 1 संभाषणात लेबल करा.} other{त्यांना आणखी {count} संभाषणांमध्ये लेबल करा.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 वक्ता} other{{count} वक्ते}}",
+    "siriShortcutsSetupHint": "शॉर्टकट्स → Siri मध्ये Omi चालू करा. “{askPhrase}” किंवा “{questionPhrase}” म्हणा, नंतर तुमचा प्रश्न विचारा.",
+    "siriShortcutsSearchHint": " तुम्ही “{searchPhrase} for what I did today” असेही म्हणू शकता.",
+    "updateAvailableTitle": "अपडेट उपलब्ध आहे",
+    "updateAvailableMessage": "Omi ची नवीन आवृत्ती तयार आहे, दुरुस्त्या आणि सुधारणांसह.",
+    "updateRequiredTitle": "अपडेट आवश्यक आहे",
+    "updateRequiredMessage": "Omi ची ही आवृत्ती आता समर्थित नाही. रेकॉर्डिंग आणि सिंक सुरू ठेवण्यासाठी अपडेट करा."
 }

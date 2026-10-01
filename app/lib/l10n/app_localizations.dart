@@ -109,7 +109,8 @@ import 'app_localizations_zh.dart';
 /// be consistent with the languages listed in the AppLocalizations.supportedLocales
 /// property.
 abstract class AppLocalizations {
-  AppLocalizations(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  AppLocalizations(String locale)
+      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -117,7 +118,8 @@ abstract class AppLocalizations {
     return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
   }
 
-  static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
+  static const LocalizationsDelegate<AppLocalizations> delegate =
+      _AppLocalizationsDelegate();
 
   /// A list of this localizations delegate along with the default localizations
   /// delegates.
@@ -129,7 +131,8 @@ abstract class AppLocalizations {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
     delegate,
     GlobalMaterialLocalizations.delegate,
     GlobalCupertinoLocalizations.delegate,
@@ -7641,12 +7644,6 @@ abstract class AppLocalizations {
   /// **'Public Apps ({count})'**
   String publicAppsCount(String count);
 
-  /// Dialog title when a new app version is available
-  ///
-  /// In en, this message translates to:
-  /// **'New Version Available'**
-  String get newVersionAvailable;
-
   /// Button text to decline or dismiss
   ///
   /// In en, this message translates to:
@@ -8893,7 +8890,8 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
+  String accessesAndTriggeredBy(
+      String accessDescription, String triggerDescription);
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -9585,10 +9583,10 @@ abstract class AppLocalizations {
   /// **'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.'**
   String get consentDataMessage;
 
-  /// Empty state message shown when there are no tasks, with instruction to tap + button
+  /// Guidance on the empty Tasks tab: start a conversation to create a task.
   ///
   /// In en, this message translates to:
-  /// **'Tasks from your conversations will appear here.\nTap + to create one manually.'**
+  /// **'Start a conversation to create a task.'**
   String get tasksEmptyStateMessage;
 
   /// Menu item text for clearing chat history
@@ -20635,13 +20633,15 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'You can change this anytime in {settings} › {voiceResponse}'**
-  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse);
+  String deviceOnboardingVoiceReplySettingsHint(
+      String settings, String voiceResponse);
 
   /// Footer explaining the complete Settings menu path for replaying the device tutorial
   ///
   /// In en, this message translates to:
   /// **'Replay this tour anytime in {settings} › {deviceSettings} › {deviceTutorial}'**
-  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial);
+  String deviceOnboardingAllSetReplayHint(
+      String settings, String deviceSettings, String deviceTutorial);
 
   /// Generic fallback name for connected headphones when the system does not provide a device name
   ///
@@ -21782,9 +21782,52 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Label them in 1 more conversation.} other{Label them in {count} more conversations.}}'**
   String confidenceNextLabels(int count);
+
+  /// How many people spoke, after the length in the transcript's heading: Transcript · 14 min · 2 speakers
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 speaker} other{{count} speakers}}'**
+  String transcriptSpeakerCount(int count);
+
+  /// Guidance for enabling Ask Omi in the iOS Shortcuts app; askPhrase/questionPhrase are literal English Siri phrases
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.'**
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase);
+
+  /// Optional iOS 27 search phrase guidance appended to the Shortcuts setup hint; searchPhrase is a literal English Siri phrase
+  ///
+  /// In en, this message translates to:
+  /// **' You can also say “{searchPhrase} for what I did today.”'**
+  String siriShortcutsSearchHint(String searchPhrase);
+
+  /// Title of the pop-up that offers a newer version of the app
+  ///
+  /// In en, this message translates to:
+  /// **'Update available'**
+  String get updateAvailableTitle;
+
+  /// Message of the pop-up that offers a newer version of the app
+  ///
+  /// In en, this message translates to:
+  /// **'A new version of Omi is ready, with fixes and improvements.'**
+  String get updateAvailableMessage;
+
+  /// Title of the pop-up when this app version is no longer supported and must be updated
+  ///
+  /// In en, this message translates to:
+  /// **'Update required'**
+  String get updateRequiredTitle;
+
+  /// Message of the pop-up when this app version is no longer supported and must be updated
+  ///
+  /// In en, this message translates to:
+  /// **'This version of Omi is no longer supported. Update to keep recording and syncing.'**
+  String get updateRequiredMessage;
 }
 
-class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
   const _AppLocalizationsDelegate();
 
   @override
@@ -21952,7 +21995,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+  throw FlutterError(
+      'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
       'an issue with the localizations generation tool. Please file an issue '
       'on GitHub with a reproducible sample app and the gen-l10n configuration '
       'that was used.');

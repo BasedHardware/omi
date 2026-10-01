@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "Нова верзија достапна",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "Не",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Задачите од вашите разговори ќе се појават овде.\nОтвори + за да создадеш една ручно.",
+    "tasksEmptyStateMessage": "Започнете разговор за да создадете задача.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11325,5 +11321,12 @@
     "speakerSuggestionAppliesToSpeaker": "Важи за секоја реплика од овој говорник",
     "collapseAction": "Собери",
     "speakerTagPromptNotMeAction": "Не сум јас",
-    "confidenceNextLabels": "{count, plural, =1{Означете ги во уште 1 разговор.} other{Означете ги во уште {count} разговори.}}"
+    "confidenceNextLabels": "{count, plural, =1{Означете ги во уште 1 разговор.} other{Означете ги во уште {count} разговори.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 говорник} other{{count} говорници}}",
+    "siriShortcutsSetupHint": "Вклучете Omi во Кратенки → Siri. Кажете „{askPhrase}“ или „{questionPhrase}“, а потоа поставете го вашето прашање.",
+    "siriShortcutsSearchHint": " Може да кажете и „{searchPhrase} for what I did today“.",
+    "updateAvailableTitle": "Достапно е ажурирање",
+    "updateAvailableMessage": "Нова верзија на Omi е подготвена, со поправки и подобрувања.",
+    "updateRequiredTitle": "Потребно е ажурирање",
+    "updateRequiredMessage": "Оваа верзија на Omi веќе не е поддржана. Ажурирајте за да продолжите со снимање и синхронизација."
 }

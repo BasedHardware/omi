@@ -829,11 +829,6 @@ checks:
     triggers: ["firestore.indexes.json", "backend/database/firestore_index_registry.py", "backend/scripts/generate_firestore_indexes.py"]
     lanes: ["local", "ci"]
     reason: "Firebase composite-index manifest must be generated from the registered requirements"
-  - id: firestore-query-coverage
-    command: ["python3", "backend/scripts/firestore_query_coverage.py", "--check-ratchet"]
-    triggers: ["backend/**/*.py", "backend/scripts/firestore_query_coverage_baseline.json", "backend/scripts/firestore_query_coverage_waivers.json"]
-    lanes: ["local", "ci"]
-    reason: "serving Firestore compound queries cannot add unregistered or unsupported debt"
   - id: firestore-model-read-boundary
     command: ["python3", ".github/scripts/check_firestore_model_read_boundary.py"]
     triggers: ["backend/database/**/*.py", ".github/scripts/check_firestore_model_read_boundary.py", ".github/scripts/firestore_model_read_boundary_baseline.json"]

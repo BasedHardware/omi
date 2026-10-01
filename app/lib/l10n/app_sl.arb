@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "Nova različica dostopna",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "Ne",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Naloge iz vaših pogovorov se bodo prikazale tukaj.\nTapnite + za ročno ustvarjanje.",
+    "tasksEmptyStateMessage": "Začnite pogovor, da ustvarite nalogo.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11325,5 +11321,12 @@
     "speakerSuggestionAppliesToSpeaker": "Velja za vse vrstice tega govorca",
     "collapseAction": "Strni",
     "speakerTagPromptNotMeAction": "Nisem jaz",
-    "confidenceNextLabels": "{count, plural, =1{Označite jih še v 1 pogovoru.} other{Označite jih še v {count} pogovorih.}}"
+    "confidenceNextLabels": "{count, plural, =1{Označite jih še v 1 pogovoru.} other{Označite jih še v {count} pogovorih.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 govorec} other{Govorci: {count}}}",
+    "siriShortcutsSetupHint": "Vklopite Omi v Bližnjice → Siri. Recite «{askPhrase}» ali «{questionPhrase}» in nato postavite svoje vprašanje.",
+    "siriShortcutsSearchHint": " Lahko rečete tudi «{searchPhrase} for what I did today».",
+    "updateAvailableTitle": "Na voljo je posodobitev",
+    "updateAvailableMessage": "Nova različica aplikacije Omi je pripravljena, s popravki in izboljšavami.",
+    "updateRequiredTitle": "Potrebna je posodobitev",
+    "updateRequiredMessage": "Ta različica aplikacije Omi ni več podprta. Posodobite jo, da boste lahko še naprej snemali in sinhronizirali."
 }

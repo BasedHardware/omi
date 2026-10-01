@@ -235,7 +235,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => OmiAlertDialog(
+        builder: (dialogContext, setDialogState) => OmiDialogCard(
           title: device.getFirmwareWarningTitle(),
           message: warningMessage,
           content: OmiCheckboxRow(

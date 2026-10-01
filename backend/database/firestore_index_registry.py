@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from .firestore_query_types import (
+    FieldIndexRequirement,
     FirestoreIndexField,
     FirestoreIndexRequirement,
     FirestoreQueryFilter,
@@ -2029,6 +2030,55 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('conversations', 'live_transcript_replay_receipt'),
 )
 
+FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
+    FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
+    FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
+    FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'fair_use_events_case_ref_group_both', 'fair_use_events', 'case_ref', ('ASCENDING', 'DESCENDING')
+    ),
+    FieldIndexRequirement(
+        'fcm_tokens_app_version_group_both', 'fcm_tokens', 'app_version', ('ASCENDING', 'DESCENDING')
+    ),
+    FieldIndexRequirement('fcm_tokens_token_group_ascending', 'fcm_tokens', 'token', ('ASCENDING',)),
+    FieldIndexRequirement('llm_usage_date_group_ascending', 'llm_usage', 'date', ('ASCENDING',)),
+    FieldIndexRequirement('memories_tags_group_contains', 'memories', 'tags', ('CONTAINS',)),
+    FieldIndexRequirement(
+        'processing_memories_created_at_group_ascending', 'processing_memories', 'created_at', ('ASCENDING',)
+    ),
+    FieldIndexRequirement(
+        'candidate_integration_outbox_status_group_ascending',
+        'candidate_integration_outbox',
+        'status',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
+        'chat_first_dead_letters_created_at_group_ascending',
+        'chat_first_dead_letters',
+        'created_at',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
+        'chat_first_proactive_intents_created_at_group_ascending',
+        'chat_first_proactive_intents',
+        'created_at',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement(
+        'chat_first_proactive_intents_delivery_state_group_ascending',
+        'chat_first_proactive_intents',
+        'delivery_state',
+        ('ASCENDING',),
+    ),
+    FieldIndexRequirement('memory_outbox_status_group_ascending', 'memory_outbox', 'status', ('ASCENDING',)),
+    FieldIndexRequirement('projection_repairs_status_group_ascending', 'projection_repairs', 'status', ('ASCENDING',)),
+    FieldIndexRequirement(
+        'task_recurrence_inbox_status_group_ascending', 'task_recurrence_inbox', 'status', ('ASCENDING',)
+    ),
+)
+
+_FIELD_MODES = {'ASCENDING', 'DESCENDING', 'CONTAINS'}
+
 
 def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
     """Return Firebase's canonical composite-index manifest deterministically."""
@@ -2040,13 +2090,32 @@ def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
             raise ValueError(f'duplicate Firestore index requirement: {requirement.identifier}')
         signatures.add(requirement.signature)
         indexes.append(requirement.to_manifest())
-    field_overrides = [
-        {
-            'collectionGroup': collection_group,
-            'fieldPath': field_path,
-            'ttl': False,
-            'indexes': [],
-        }
-        for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS
-    ]
+    additive_fields: set[tuple[str, str]] = set()
+    field_overrides: list[dict[str, Any]] = []
+    for requirement in FIELD_INDEX_REQUIREMENTS:
+        key = (requirement.collection_group, requirement.field_path)
+        if key in additive_fields:
+            raise ValueError(f'duplicate Firestore field index requirement: {requirement.identifier}')
+        additive_fields.add(key)
+        if not requirement.collection_group or '/' in requirement.collection_group:
+            raise ValueError(f'invalid collection group in Firestore field requirement: {requirement.identifier}')
+        if not requirement.field_path or '/' in requirement.field_path:
+            raise ValueError(f'invalid field path in Firestore field requirement: {requirement.identifier}')
+        modes = requirement.collection_group_modes
+        if not modes or any(mode not in _FIELD_MODES for mode in modes) or len(set(modes)) != len(modes):
+            raise ValueError(f'invalid modes in Firestore field requirement: {requirement.identifier}')
+        field_overrides.append(requirement.to_manifest())
+    for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS:
+        if (collection_group, field_path) in additive_fields:
+            raise ValueError(
+                f'Firestore field {collection_group}.{field_path} is both an additive requirement and an exemption'
+            )
+        field_overrides.append(
+            {
+                'collectionGroup': collection_group,
+                'fieldPath': field_path,
+                'ttl': False,
+                'indexes': [],
+            }
+        )
     return {'indexes': indexes, 'fieldOverrides': field_overrides}

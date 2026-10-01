@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "نسخه جدید دردسترس است",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "نه",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "وظایف از مکالمات شما اینجا ظاهر خواهند شد.\n+ را ضربه بزنید تا یکی به‌صورت دستی ایجاد کنید.",
+    "tasksEmptyStateMessage": "برای ایجاد یک کار، گفتگو را شروع کنید.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11325,5 +11321,12 @@
     "speakerSuggestionAppliesToSpeaker": "برای همه‌ی جمله‌های این گوینده اعمال می‌شود",
     "collapseAction": "جمع کردن",
     "speakerTagPromptNotMeAction": "من نیستم",
-    "confidenceNextLabels": "{count, plural, =1{آن‌ها را در 1 گفتگوی دیگر برچسب بزنید.} other{آن‌ها را در {count} گفتگوی دیگر برچسب بزنید.}}"
+    "confidenceNextLabels": "{count, plural, =1{آن‌ها را در 1 گفتگوی دیگر برچسب بزنید.} other{آن‌ها را در {count} گفتگوی دیگر برچسب بزنید.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{۱ گوینده} other{{count} گوینده}}",
+    "siriShortcutsSetupHint": "Omi را در میان‌برها ← Siri روشن کنید. «{askPhrase}» یا «{questionPhrase}» بگویید و سپس سؤال خود را بپرسید.",
+    "siriShortcutsSearchHint": " همچنین می‌توانید بگویید «{searchPhrase} for what I did today».",
+    "updateAvailableTitle": "به‌روزرسانی در دسترس است",
+    "updateAvailableMessage": "نسخهٔ جدید Omi آماده است، همراه با رفع اشکال‌ها و بهبودها.",
+    "updateRequiredTitle": "به‌روزرسانی لازم است",
+    "updateRequiredMessage": "این نسخه از Omi دیگر پشتیبانی نمی‌شود. برای ادامهٔ ضبط و همگام‌سازی، به‌روزرسانی کنید."
 }

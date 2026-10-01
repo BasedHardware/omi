@@ -122,6 +122,7 @@ from utils.cloud_tasks import (
     verify_account_deletion_cloud_tasks_oidc,
 )
 from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
+from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
@@ -432,6 +433,17 @@ def set_user_webhook_endpoint(
     wtype: WebhookType, data: SetUserWebhookUrlRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     url = data.url
+    # Reject a non-public target at configuration time, so an internal/loopback/metadata address
+    # is a 400 here rather than an SSRF from the backend's network position at delivery time.
+    target = webhook_url_from_setting(wtype, url)
+    if target:
+        try:
+            safe_request_target(target)
+        except (UnsafeWebhookURLError, ValueError):
+            # UnsafeWebhookURLError: non-public/unresolvable target. ValueError: the shared URL
+            # validator raises it for a malformed URL (e.g. an invalid IPv6 literal) — both are a
+            # bad configuration, so answer 400 rather than letting it escape as a 500.
+            raise HTTPException(status_code=400, detail='Webhook URL must be a valid public http(s) address')
     set_user_webhook_db(uid, wtype, url)
     if not webhook_url_from_setting(wtype, url):
         disable_user_webhook_db(uid, wtype)

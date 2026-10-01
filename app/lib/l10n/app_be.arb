@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "Даступна новая версія",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "Не",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Задачы з вашых разговораў пояўляцца тут.\nТапніце + каб стварыць адну ручнічна.",
+    "tasksEmptyStateMessage": "Пачніце размову, каб стварыць задачу.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11325,5 +11321,12 @@
     "speakerSuggestionAppliesToSpeaker": "Датычыцца ўсіх радкоў гэтага спікера",
     "collapseAction": "Згарнуць",
     "speakerTagPromptNotMeAction": "Не я",
-    "confidenceNextLabels": "{count, plural, =1{Пазначце яго яшчэ ў 1 размове.} other{Пазначце яго яшчэ ў {count} размовах.}}"
+    "confidenceNextLabels": "{count, plural, =1{Пазначце яго яшчэ ў 1 размове.} other{Пазначце яго яшчэ ў {count} размовах.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 удзельнік} other{Удзельнікаў: {count}}}",
+    "siriShortcutsSetupHint": "Уключыце Omi ў Камандах → Siri. Скажыце «{askPhrase}» або «{questionPhrase}», а затым задайце сваё пытанне.",
+    "siriShortcutsSearchHint": " Также можно сказать «{searchPhrase} for what I did today».",
+    "updateAvailableTitle": "Даступнае абнаўленне",
+    "updateAvailableMessage": "Новая версія Omi гатовая: з выпраўленнямі і паляпшэннямі.",
+    "updateRequiredTitle": "Патрабуецца абнаўленне",
+    "updateRequiredMessage": "Гэтая версія Omi больш не падтрымліваецца. Абнавіце, каб працягваць запіс і сінхранізацыю."
 }

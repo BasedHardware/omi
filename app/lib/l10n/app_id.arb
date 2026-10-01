@@ -1220,7 +1220,6 @@
     "appsCount": "Aplikasi ({count})",
     "privateAppsCount": "Aplikasi Pribadi ({count})",
     "publicAppsCount": "Aplikasi Publik ({count})",
-    "newVersionAvailable": "Versi Baru Tersedia",
     "no": "Tidak",
     "subscriptionCancelledSuccessfully": "Langganan berhasil dibatalkan. Akan tetap aktif hingga akhir periode penagihan saat ini.",
     "failedToCancelSubscription": "Gagal membatalkan langganan. Silakan coba lagi.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Durasi: {seconds} detik",
     "additionalSpeechSampleRemoved": "Sampel suara tambahan dihapus",
     "consentDataMessage": "Dengan melanjutkan, percakapan, rekaman, dan informasi pribadi Anda akan disimpan dengan aman di server kami. Rekaman audio dan transkrip Anda diproses oleh layanan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan Anda wawasan berbasis AI dan mengaktifkan semua fitur aplikasi.",
-    "tasksEmptyStateMessage": "Tugas dari percakapan Anda akan muncul di sini.\nKetuk + untuk membuat secara manual.",
+    "tasksEmptyStateMessage": "Mulai percakapan untuk membuat tugas.",
     "clearChatAction": "Hapus obrolan",
     "enableApps": "Aktifkan aplikasi",
     "omiAppName": "Omi",
@@ -3800,5 +3799,12 @@
     "speakerSuggestionAppliesToSpeaker": "Berlaku untuk setiap baris dari pembicara ini",
     "collapseAction": "Ciutkan",
     "speakerTagPromptNotMeAction": "Bukan saya",
-    "confidenceNextLabels": "{count, plural, =1{Beri label pada 1 percakapan lagi.} other{Beri label pada {count} percakapan lagi.}}"
+    "confidenceNextLabels": "{count, plural, =1{Beri label pada 1 percakapan lagi.} other{Beri label pada {count} percakapan lagi.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 pembicara} other{{count} pembicara}}",
+    "siriShortcutsSetupHint": "Aktifkan Omi di Pintasan → Siri. Ucapkan “{askPhrase}” atau “{questionPhrase}”, lalu ajukan pertanyaan Anda.",
+    "siriShortcutsSearchHint": " Anda juga bisa mengatakan “{searchPhrase} for what I did today”.",
+    "updateAvailableTitle": "Pembaruan tersedia",
+    "updateAvailableMessage": "Versi baru Omi sudah siap, dengan perbaikan dan peningkatan.",
+    "updateRequiredTitle": "Pembaruan diperlukan",
+    "updateRequiredMessage": "Versi Omi ini tidak lagi didukung. Perbarui untuk terus merekam dan menyinkronkan."
 }

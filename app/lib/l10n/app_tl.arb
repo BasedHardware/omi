@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "Ang Bagong Bersyon ay Available",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "Hindi",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\nI-tap ang + upang lumikha ng isa nang manual.",
+    "tasksEmptyStateMessage": "Magsimula ng pag-uusap para gumawa ng gawain.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11325,5 +11321,12 @@
     "speakerSuggestionAppliesToSpeaker": "Nalalapat sa bawat linya mula sa speaker na ito",
     "collapseAction": "I-collapse",
     "speakerTagPromptNotMeAction": "Hindi ako",
-    "confidenceNextLabels": "{count, plural, =1{I-label sila sa 1 pang usapan.} other{I-label sila sa {count} pang usapan.}}"
+    "confidenceNextLabels": "{count, plural, =1{I-label sila sa 1 pang usapan.} other{I-label sila sa {count} pang usapan.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 nagsasalita} other{{count} nagsasalita}}",
+    "siriShortcutsSetupHint": "I-on ang Omi sa Mga Shortcut → Siri. Sabihin ang “{askPhrase}” o “{questionPhrase}”, pagkatapos ay itanong ang tanong mo.",
+    "siriShortcutsSearchHint": " Maaari mo ring sabihin ang “{searchPhrase} for what I did today”.",
+    "updateAvailableTitle": "May available na update",
+    "updateAvailableMessage": "Handa na ang bagong bersyon ng Omi, may mga ayos at pagpapahusay.",
+    "updateRequiredTitle": "Kailangang mag-update",
+    "updateRequiredMessage": "Hindi na sinusuportahan ang bersyong ito ng Omi. Mag-update para patuloy na makapag-record at makapag-sync."
 }

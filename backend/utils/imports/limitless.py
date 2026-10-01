@@ -22,12 +22,45 @@ from models.conversation_enums import CategoryEnum, ConversationSource, Conversa
 from models.structured import Structured
 from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from models.transcript_segment import TranscriptSegment
-from utils.notifications import send_notification
+from utils.notification_dispatch import (
+    NotificationDispatchStatus,
+    NotificationIntent,
+    NotificationKind,
+    dispatch_notification,
+)
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.projection_payload import omit_null_processing_state
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _notify_import_job(uid: str, job_id: str, title: str, body: str, data: Dict[str, str]) -> None:
+    """Push is best effort; delivery cannot change a committed import status."""
+    try:
+        outcome = dispatch_notification(
+            NotificationIntent(
+                user_id=uid,
+                title=title,
+                body=body,
+                source='limitless_import',
+                kind=NotificationKind.IMPORT_JOB,
+                data=data,
+            )
+        )
+    except Exception as exc:
+        logger.error(
+            'Limitless import notification failed job_id=%s uid=%s error_class=%s', job_id, uid, type(exc).__name__
+        )
+        return
+    if outcome.status != NotificationDispatchStatus.DISPATCHED or outcome.delivered == 0:
+        logger.warning(
+            'Limitless import notification not delivered job_id=%s uid=%s status=%s delivered=%s',
+            job_id,
+            uid,
+            outcome.status.value,
+            outcome.delivered,
+        )
 
 
 def parse_lifelog_filename(filename: str) -> Tuple[Optional[datetime], Optional[str]]:
@@ -481,11 +514,12 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     )
                 if errors:
                     complete_body += f" {len(errors)} file(s) could not be processed."
-                send_notification(
-                    user_id=uid,
-                    title="Limitless Import Complete! 🎉",
-                    body=complete_body,
-                    data={
+                _notify_import_job(
+                    uid,
+                    job_id,
+                    "Limitless Import Complete! 🎉",
+                    complete_body,
+                    {
                         'type': 'import_complete',
                         'job_id': job_id,
                         'conversations_created': str(conversations_created),
@@ -493,11 +527,12 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     },
                 )
             else:
-                send_notification(
-                    user_id=uid,
-                    title="Limitless Import Failed",
-                    body=error_msg or "There was an error importing your data. Please try again.",
-                    data={'type': 'import_failed', 'job_id': job_id},
+                _notify_import_job(
+                    uid,
+                    job_id,
+                    "Limitless Import Failed",
+                    error_msg or "There was an error importing your data. Please try again.",
+                    {'type': 'import_failed', 'job_id': job_id},
                 )
 
     except Exception as e:
@@ -513,11 +548,12 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
         )
 
         # Send failure notification
-        send_notification(
-            user_id=uid,
-            title="Limitless Import Failed",
-            body="There was an error importing your data. Please try again.",
-            data={'type': 'import_failed', 'job_id': job_id},
+        _notify_import_job(
+            uid,
+            job_id,
+            "Limitless Import Failed",
+            "There was an error importing your data. Please try again.",
+            {'type': 'import_failed', 'job_id': job_id},
         )
 
     finally:

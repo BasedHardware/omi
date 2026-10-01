@@ -102,7 +102,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Fleet live routing and runway polling run on backend-listen only.
             "STT_NO_TEXT_SECONDS",
             "STT_ROUTING_MODE",
-            "STT_ROUTING_PROBE_PERCENT",
+            "STT_ROUTING_ON_PERCENT",
+            "STT_ROUTING_TARGETS_JSON",
+            "STT_ROUTING_DISRUPTION_GATE",
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "DEEPGRAM_SELF_HOSTED_ENABLED",
@@ -204,7 +206,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Fleet live routing and runway polling run on backend-listen only.
             "STT_NO_TEXT_SECONDS",
             "STT_ROUTING_MODE",
-            "STT_ROUTING_PROBE_PERCENT",
+            "STT_ROUTING_ON_PERCENT",
+            "STT_ROUTING_TARGETS_JSON",
+            "STT_ROUTING_DISRUPTION_GATE",
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
