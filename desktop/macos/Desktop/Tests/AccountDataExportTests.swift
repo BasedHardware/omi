@@ -439,6 +439,45 @@ import XCTest
       XCTAssertEqual(confirmed, 1)
     }
 
+    func testModelRetryAfterIncompleteExportSucceeds() async throws {
+      let client = await makeClient()
+      let snapshot = try await ownerSnapshot()
+      let destination = destinationURL()
+      var downloadCalls = 0
+      var confirmed: [String] = []
+      var capturedErrors: [APIClient.DataExportError] = []
+      let model = AccountDataExportModel(
+        runSavePanel: { destination },
+        ownerSnapshot: { snapshot },
+        download: { destination, snapshot, onProgress in
+          downloadCalls += 1
+          do {
+            try await client.exportUserData(
+              to: destination, authorizationSnapshot: snapshot, onProgress: onProgress)
+          } catch let error as APIClient.DataExportError {
+            capturedErrors.append(error)
+            throw error
+          }
+        },
+        confirm: { confirmed.append($0) })
+
+      ExportStubProtocol.enqueue(
+        status: 200, headers: Self.jsonHeaders, body: "{\"chat_messages\": []")
+      model.startExport()
+      await waitUntil { downloadCalls == 1 && !model.isExporting }
+      XCTAssertEqual(capturedErrors, [.incompleteExport])
+      XCTAssertNotNil(model.errorMessage)
+      XCTAssertTrue(confirmed.isEmpty)
+
+      ExportStubProtocol.enqueue(status: 200, headers: Self.jsonHeaders, body: Self.validBody)
+      model.startExport()
+      await waitUntil { downloadCalls == 2 && !model.isExporting }
+      XCTAssertEqual(ExportStubProtocol.requests.count, 2)
+      XCTAssertNil(model.errorMessage)
+      XCTAssertEqual(confirmed, ["Export Saved"])
+      XCTAssertEqual(try Data(contentsOf: destination), Data(Self.validBody.utf8))
+    }
+
     func testModelCancelDoesNotConfirm() async throws {
       var confirmed = 0
       let snapshot = try currentSnapshot()

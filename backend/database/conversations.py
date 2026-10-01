@@ -48,6 +48,12 @@ from .conversation_revisions import ensure_timezone_aware, firestore_revision_da
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from .read_boundary import parse_payload_strict
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+from utils.other.portability_read import (
+    check_portability_read,
+    current_portability_read,
+    iter_portability_guarded,
+    verified_encrypted_read,
+)
 from utils.other.storage import list_audio_chunks
 from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
@@ -125,6 +131,16 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
         _reveal_manual_speaker_assignments_for_read(data, uid)
         return data
 
+    if current_portability_read() is not None:
+        data['transcript_segments'] = _decode_transcript_segments_strict(
+            uid,
+            data['transcript_segments'],
+            bool(data.get('transcript_segments_compressed')),
+            require_decryption=True,
+        )
+        _reveal_manual_speaker_assignments_for_read(data, uid)
+        return data
+
     if isinstance(data['transcript_segments'], str):
         try:
             decrypted_payload = encryption.decrypt(data['transcript_segments'], uid)
@@ -165,7 +181,7 @@ def _reveal_json_value(raw: Any, uid: str, compressed: bool) -> Any:
     if isinstance(raw, (dict, list)):
         return raw
     if isinstance(raw, str):
-        payload = encryption.decrypt(raw, uid)
+        payload = verified_encrypted_read(raw, encryption.decrypt(raw, uid))
         if compressed:
             return json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
         return json.loads(payload)
@@ -178,7 +194,11 @@ def decode_manual_speaker_assignments(uid: str, raw: Any, compressed: bool) -> d
     if raw is None:
         return {}
     parsed = _reveal_json_value(raw, uid, compressed)
-    return parsed if isinstance(parsed, dict) else {}
+    if not isinstance(parsed, dict):
+        if current_portability_read() is not None:
+            raise ValueError(f'undecodable manual_speaker_assignments: parsed {type(parsed).__name__}')
+        return {}
+    return parsed
 
 
 def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) -> None:
@@ -189,6 +209,8 @@ def _reveal_manual_speaker_assignments_for_read(data: Dict[str, Any], uid: str) 
             uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
         )
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as error:
+        if current_portability_read() is not None:
+            raise
         logger.error(f"{error} {uid}")
         data['manual_speaker_assignments'] = {}
 
@@ -442,7 +464,7 @@ def prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[
     return data
 
 
-def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+def prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not photo_data:
         return None
     data = copy.deepcopy(photo_data)
@@ -454,10 +476,11 @@ def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> O
             # If decryption fails, it might be already decrypted or not encrypted.
             # We can log this, but for now, we'll just pass.
             pass
+        data['base64'] = verified_encrypted_read(photo_data['base64'], data['base64'])
     return data
 
 
-@prepare_for_read(decrypt_func=_prepare_photo_for_read)
+@prepare_for_read(decrypt_func=prepare_photo_for_read)
 def get_conversation_photos(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -474,12 +497,13 @@ def iter_all_conversation_photos(uid: str):
         .where(filter=FieldFilter('__name__', '>=', start_key))
         .where(filter=FieldFilter('__name__', '<=', end_key))
     )
-    for doc in query.stream():
+    for doc in iter_portability_guarded(query.stream()):
+        check_portability_read()
         # Path format: users/{uid}/conversations/{conversation_id}/photos/{photo_id}
         parts = doc.reference.path.split('/')
         if len(parts) >= 6 and parts[-2] == 'photos' and parts[-4] == 'conversations':
             conversation_id = parts[-3]
-            yield conversation_id, doc.to_dict()
+            yield conversation_id, prepare_photo_for_read(doc.to_dict(), uid) or doc.to_dict()
 
 
 def _sync_conversation_search_index(uid: str, conversation_id: str) -> None:
@@ -1339,8 +1363,9 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         if cursor is not None:
             batch_ref = batch_ref.start_after(cursor)
         batch = []
-        snapshots = list(batch_ref.stream())
+        snapshots = list(iter_portability_guarded(batch_ref.stream()))
         for doc in snapshots:
+            check_portability_read()
             conv = doc.to_dict()
             conv = prepare_conversation_for_read(conv, uid) or conv
             if not is_visible_conversation(conv, include_discarded=include_discarded):
@@ -1885,7 +1910,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 continue
 
             # Decrypt first to get a clean state
-            plain_photo_data = _prepare_photo_for_read(photo_data, uid)
+            plain_photo_data = prepare_photo_for_read(photo_data, uid)
 
             # Prepare the specific fields for update
             photo_update_payload = {'data_protection_level': target_level}

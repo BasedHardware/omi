@@ -7,6 +7,8 @@ import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 
 final List<int> _exportCompletionSuffix = utf8.encode(',\n  "export_complete": true\n}\n');
@@ -23,7 +25,18 @@ Future<String?> exportUserDataToFile(
   Future<void>? abortTrigger,
   Future<http.StreamedResponse> Function()? request,
   Duration idleTimeout = const Duration(minutes: 2),
+  AuthSessionSnapshot? authorizationSnapshot,
+  AuthService? authService,
 }) async {
+  final service = authService ?? AuthService.instance;
+  var snapshot = authorizationSnapshot;
+  if (snapshot == null && request == null) {
+    snapshot = service.captureSessionSnapshot();
+    if (snapshot == null) {
+      Logger.debug('exportUserDataToFile aborted: no authenticated session');
+      return null;
+    }
+  }
   final tempPath = '$filePath.${const Uuid().v4()}.part';
   final tempFile = File(tempPath);
   final abort = Completer<void>();
@@ -31,6 +44,14 @@ Future<String?> exportUserDataToFile(
     unawaited(abortTrigger.then((_) {
       if (!abort.isCompleted) abort.complete();
     }));
+  }
+  StreamSubscription<int>? generationWatch;
+  if (snapshot != null) {
+    generationWatch = service.sessionGenerationEvents.listen((_) {
+      if (!service.isSessionSnapshotCurrent(snapshot!) && !abort.isCompleted) {
+        abort.complete();
+      }
+    });
   }
   RandomAccessFile? output;
   var finished = false;
@@ -40,6 +61,8 @@ Future<String?> exportUserDataToFile(
               url: '${Env.apiBaseUrl}v1/users/export?stream=true',
               method: 'GET',
               abortTrigger: abort.future,
+              sessionSnapshot: snapshot,
+              authService: service,
             ))();
     if (response.statusCode != 200) {
       Logger.debug('exportUserDataToFile failed: HTTP ${response.statusCode}');
@@ -101,6 +124,10 @@ Future<String?> exportUserDataToFile(
       Logger.debug('exportUserDataToFile aborted');
       return null;
     }
+    if (snapshot != null && !service.isSessionSnapshotCurrent(snapshot)) {
+      Logger.debug('exportUserDataToFile aborted: session changed before promotion');
+      return null;
+    }
     await tempFile.rename(filePath);
     finished = true;
     return filePath;
@@ -108,6 +135,7 @@ Future<String?> exportUserDataToFile(
     Logger.debug('exportUserDataToFile error: ${e.runtimeType}');
     return null;
   } finally {
+    await generationWatch?.cancel();
     if (!abort.isCompleted) abort.complete();
     final openOutput = output;
     if (openOutput != null) {

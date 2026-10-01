@@ -25,6 +25,7 @@ from database import (
 from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
+from services.users.data_export_response import DataExportStreamingResponse
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
@@ -2278,16 +2279,17 @@ def export_all_user_data(
     }
     if stream:
         headers['X-Accel-Buffering'] = 'no'
-        return StreamingResponse(
-            iter_user_data_export_streaming(uid),
+        return DataExportStreamingResponse(
+            uid,
+            iterator_factory=iter_user_data_export_streaming,
             media_type='application/json',
             headers=headers,
         )
     # Iterator construction eagerly validates and spools the complete export,
     # including retained image bytes, before HTTP 200 and headers are committed.
-    export_stream = iter_user_data_export(uid)
-    return StreamingResponse(
-        export_stream,
+    return DataExportStreamingResponse(
+        uid,
+        iterator_factory=iter_user_data_export,
         media_type='application/json',
         headers=headers,
     )

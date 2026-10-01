@@ -16,6 +16,8 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:uuid/uuid.dart';
@@ -970,11 +972,15 @@ Future<String?> exportUserDataToFile(
   String filePath, {
   void Function(int bytesReceived)? onProgress,
   Future<void>? abortTrigger,
+  AuthSessionSnapshot? authorizationSnapshot,
+  AuthService? authService,
 }) =>
     export_user_data.exportUserDataToFile(
       filePath,
       onProgress: onProgress,
       abortTrigger: abortTrigger,
+      authorizationSnapshot: authorizationSnapshot,
+      authService: authService,
     );
 
 Future<Map<String, dynamic>?> getFairUseStatus() async {

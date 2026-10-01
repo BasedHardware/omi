@@ -5,17 +5,31 @@ import base64
 import tempfile
 from datetime import datetime
 from itertools import chain
-from typing import IO, Any, Iterable, Iterator, Mapping, Sequence, cast
+from typing import IO, Any, Generator, Iterable, Iterator, Mapping, Optional, Sequence, cast
 
 from database import chat as chat_db
 from database import conversations as conversations_db
-from database import _client as database_client
 from database.action_items import iter_all_action_items
 from utils.retrieval.frame_request_storage import download_frame_request_pixels
 from database.users import get_people, get_user_profile
+from services.users import data_export_iterators as _export_iterators
+from services.users.data_export_iterators import (
+    PortabilityScopedIterator,
+    SpooledExportIterator,
+)
 from utils.memory.memory_service import MemoryService
+from utils.other.portability_read import (
+    PortabilityReadContext,
+    check_portability_read,
+    iter_portability_guarded,
+    portability_read_scope,
+)
 
 JsonRecord = dict[str, Any]
+
+_iter_user_subcollection = _export_iterators.iter_user_subcollection
+_iter_user_nested_subcollection = _export_iterators.iter_user_nested_subcollection
+database_client = _export_iterators.database_client
 
 
 class PortabilityExportIncomplete(RuntimeError):
@@ -131,14 +145,20 @@ def _dump(obj: object, fp: IO[str], **kwargs: Any) -> None:
 
 
 def _yield_json_array(items: Iterable[Mapping[str, Any]]) -> Iterator[str]:
-    yield '[\n'
-    first = True
-    for item in items:
-        if not first:
-            yield ',\n'
-        first = False
-        yield '    ' + _dumps(item, indent=4)
-    yield '\n  ]'
+    iterator = iter(items)
+    try:
+        yield '[\n'
+        first = True
+        for item in iterator:
+            if not first:
+                yield ',\n'
+            first = False
+            yield '    ' + _dumps(item, indent=4)
+        yield '\n  ]'
+    finally:
+        close = getattr(iterator, 'close', None)
+        if callable(close):
+            close()
 
 
 def _spool_export_memories_json(uid: str) -> IO[str]:
@@ -164,38 +184,6 @@ def _spool_export_memories_json(uid: str) -> IO[str]:
     except BaseException:
         spool.close()
         raise
-
-
-def _iter_user_subcollection(uid: str, collection_name: str) -> Iterator[Mapping[str, Any]]:
-    """Stream one user-owned primary collection without loading it in memory."""
-
-    collection = database_client.db.collection('users').document(uid).collection(collection_name)
-    for snapshot in collection.stream():
-        payload = snapshot.to_dict()
-        if not isinstance(payload, dict):
-            continue
-        row = dict(payload)
-        row.setdefault('id', snapshot.id)
-        yield row
-
-
-def _iter_user_nested_subcollection(
-    uid: str,
-    parent_collection_name: str,
-    child_collection_name: str,
-) -> Iterator[Mapping[str, Any]]:
-    """Stream user-visible records nested below one user-owned collection."""
-
-    parents = database_client.db.collection('users').document(uid).collection(parent_collection_name)
-    for parent_snapshot in parents.stream():
-        for child_snapshot in parent_snapshot.reference.collection(child_collection_name).stream():
-            payload = child_snapshot.to_dict()
-            if not isinstance(payload, dict):
-                continue
-            row = dict(payload)
-            row.setdefault('id', child_snapshot.id)
-            row['parent_id'] = parent_snapshot.id
-            yield row
 
 
 def _export_photo_manifest(
@@ -242,6 +230,7 @@ def _export_photo_manifest(
         # cannot be read, abort the export so the job can retry; returning a
         # nominally successful archive with ``bytes_available: false`` would
         # silently omit durable user data.
+        check_portability_read()
         payload = download_frame_request_pixels(uid, storage_id)
         if not payload:
             raise PortabilityExportIncomplete("retained image object is empty")
@@ -264,90 +253,18 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str] | None) 
 
     yield '  "conversations": [\n'
     first = True
-    for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
-        if conv is None:
-            continue
-        if not first:
-            yield ",\n"
-        first = False
-        yield "    " + _dumps(conv, indent=4)
-    yield "\n  ],\n"
-
-    if memories_spool is None:
-        photo_rows = (
-            _export_photo_manifest(uid, str(conversation_id), photo, require_bytes=False)
-            for conversation_id, photo in conversations_db.iter_all_conversation_photos(uid)
-            if isinstance(photo, Mapping)
-        )
-        first_photo = next(photo_rows, None)
-        if first_photo is not None:
-            yield '  "conversation_photo_manifest": '
-            yield from _yield_json_array(chain((first_photo,), photo_rows))
-            yield ",\n"
-    else:
-        # Photo manifests can contain base64 image bytes. Spool them independently
-        # while conversations stream so account size cannot turn export into an
-        # unbounded resident list.
-        photo_spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8")
-        photo_count = 0
-        try:
-            for conversation_id, photo in conversations_db.iter_all_conversation_photos(uid):
-                if not isinstance(photo, Mapping):
-                    continue
-                if photo_count:
-                    photo_spool.write(",\n")
-                photo_spool.write("    ")
-                _dump(
-                    _export_photo_manifest(uid, str(conversation_id), photo, require_bytes=False),
-                    photo_spool,
-                    indent=4,
-                )
-                photo_count += 1
-
-            if photo_count:
-                yield '  "conversation_photo_manifest": [\n'
-                photo_spool.seek(0)
-                while chunk := photo_spool.read(64 * 1024):
-                    yield chunk
-                yield "\n  ],\n"
-        finally:
-            photo_spool.close()
-
-    # Frame-request metadata is user-owned audit history. Keep it separate from
-    # conversation JSON and include a byte manifest for each referenced object.
-    def frame_request_rows() -> Iterator[Mapping[str, Any]]:
-        for row in _iter_user_subcollection(uid, "frame_requests"):
-            if not isinstance(row.get("state"), str):
+    conversations = iter_portability_guarded(conversations_db.iter_all_conversations(uid, include_discarded=True))
+    try:
+        for conv in conversations:
+            if conv is None:
                 continue
-            request = dict(row)
-            storage_id = request.get("storage_id")
-            state = request["state"]
-            cleanup_state = request.get("cleanup_state")
-            # Uploaded and attached rows necessarily represent retained bytes.
-            # A missing/malformed reference must abort before a 200 response;
-            # metadata-only terminal states are allowed to omit pixels. Cleanup
-            # deliberately preserves storage_id as audit metadata after object
-            # deletion, so that stale identifier alone is not byte authority.
-            cleanup_converged = cleanup_state in {"deleted", "not_required"}
-            if state in {"uploaded", "attached"} or (not cleanup_converged and storage_id is not None):
-                request["image_manifest"] = _export_photo_manifest(
-                    uid,
-                    str(request.get("conversation_id") or ""),
-                    {
-                        "id": request.get("request_id") or request.get("id"),
-                        "storage_id": storage_id,
-                        "content_type": request.get("content_type"),
-                        "created_at": request.get("created_at"),
-                    },
-                )
-            yield request
-
-    frame_rows = frame_request_rows()
-    first_frame = next(frame_rows, None)
-    if first_frame is not None:
-        yield '  "frame_requests": '
-        yield from _yield_json_array(chain((first_frame,), frame_rows))
-        yield ",\n"
+            if not first:
+                yield ",\n"
+            first = False
+            yield "    " + _dumps(conv, indent=4)
+    finally:
+        conversations.close()
+    yield "\n  ],\n"
 
     # Durable JIT receipts are user data too. They contain no pixels, but the
     # bounded derived vision description and lifecycle metadata remain part of
@@ -365,10 +282,13 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str] | None) 
 
     yield '  "memories": '
     if memories_spool is None:
-        yield from _yield_json_array(
-            memory.model_dump(mode="json")
-            for memory in MemoryService().iter_portability_export_memories(uid, include_archive=True)
+        memory_items = iter_portability_guarded(
+            MemoryService().iter_portability_export_memories(uid, include_archive=True)
         )
+        try:
+            yield from _yield_json_array(memory.model_dump(mode="json") for memory in memory_items)
+        finally:
+            memory_items.close()
     else:
         while chunk := memories_spool.read(64 * 1024):
             yield chunk
@@ -427,12 +347,111 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str] | None) 
 
     yield '  "chat_messages": [\n'
     first = True
-    for msg in cast(Iterable[Mapping[str, Any]], chat_db.iter_all_messages(uid)):
-        if not first:
+    messages = iter_portability_guarded(chat_db.iter_all_messages(uid))
+    try:
+        for msg in cast(Iterable[Mapping[str, Any]], messages):
+            if not first:
+                yield ",\n"
+            first = False
+            yield "    " + _dumps(msg, indent=4)
+    finally:
+        messages.close()
+    yield "\n  ]"
+
+    if memories_spool is None:
+        photo_source = iter_portability_guarded(conversations_db.iter_all_conversation_photos(uid))
+        photo_rows = (
+            _export_photo_manifest(uid, str(conversation_id), photo, require_bytes=False)
+            for conversation_id, photo in photo_source
+            if isinstance(photo, Mapping)
+        )
+        try:
+            first_photo = next(photo_rows, None)
+            if first_photo is not None:
+                yield ",\n"
+                yield '  "conversation_photo_manifest": '
+                yield from _yield_json_array(chain((first_photo,), photo_rows))
+        finally:
+            photo_rows.close()
+            photo_source.close()
+    else:
+        # Photo manifests can contain base64 image bytes. Spool them independently
+        # while conversations stream so account size cannot turn export into an
+        # unbounded resident list.
+        photo_spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8")
+        photo_count = 0
+        photo_source = iter_portability_guarded(conversations_db.iter_all_conversation_photos(uid))
+        try:
+            for conversation_id, photo in photo_source:
+                if not isinstance(photo, Mapping):
+                    continue
+                if photo_count:
+                    photo_spool.write(",\n")
+                photo_spool.write("    ")
+                _dump(
+                    _export_photo_manifest(uid, str(conversation_id), photo, require_bytes=False),
+                    photo_spool,
+                    indent=4,
+                )
+                photo_count += 1
+
+            if photo_count:
+                yield ",\n"
+                yield '  "conversation_photo_manifest": [\n'
+                photo_spool.seek(0)
+                while chunk := photo_spool.read(64 * 1024):
+                    yield chunk
+                yield "\n  ]"
+        finally:
+            photo_source.close()
+            photo_spool.close()
+
+    # Frame-request metadata is user-owned audit history. Keep it separate from
+    # conversation JSON and include a byte manifest for each referenced object.
+    def frame_request_rows() -> Generator[Mapping[str, Any], None, None]:
+        rows = _iter_user_subcollection(uid, "frame_requests")
+        try:
+            for row in rows:
+                if not isinstance(row.get("state"), str):
+                    continue
+                request = dict(row)
+                storage_id = request.get("storage_id")
+                state = request["state"]
+                cleanup_state = request.get("cleanup_state")
+                # Uploaded and attached rows necessarily represent retained bytes.
+                # A missing/malformed reference must abort before a 200 response;
+                # metadata-only terminal states are allowed to omit pixels. Cleanup
+                # deliberately preserves storage_id as audit metadata after object
+                # deletion, so that stale identifier alone is not byte authority.
+                cleanup_converged = cleanup_state in {"deleted", "not_required"}
+                if state in {"uploaded", "attached"} or (not cleanup_converged and storage_id is not None):
+                    request["image_manifest"] = _export_photo_manifest(
+                        uid,
+                        str(request.get("conversation_id") or ""),
+                        {
+                            "id": request.get("request_id") or request.get("id"),
+                            "storage_id": storage_id,
+                            "content_type": request.get("content_type"),
+                            "created_at": request.get("created_at"),
+                        },
+                    )
+                yield request
+        finally:
+            close = getattr(rows, 'close', None)
+            if callable(close):
+                close()
+
+    frame_rows = frame_request_rows()
+    try:
+        first_frame = next(frame_rows, None)
+        if first_frame is not None:
             yield ",\n"
-        first = False
-        yield "    " + _dumps(msg, indent=4)
-    yield "\n  ]\n"
+            yield '  "frame_requests": '
+            yield from _yield_json_array(chain((first_frame,), frame_rows))
+    finally:
+        frame_rows.close()
+
+    yield "\n"
 
     if memories_spool is None:
         yield ',\n  "export_complete": true\n}\n'
@@ -440,33 +459,29 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str] | None) 
         yield "}\n"
 
 
-def _iter_spooled_export_and_close(export_spool: IO[str]) -> Iterator[str]:
-    try:
-        while chunk := export_spool.read(64 * 1024):
-            yield chunk
-    finally:
-        export_spool.close()
-
-
-def iter_user_data_export(uid: str) -> Iterator[str]:
+def iter_user_data_export(uid: str, *, read_context: Optional[PortabilityReadContext] = None) -> Iterator[str]:
     # Build the complete export before the first response byte. Every retained
     # image object and every authority-sensitive section must either be present
     # or raise a real HTTP error; a 200 response containing a truncated archive
     # is not a successful portability export. Both spools spill to disk after a
     # bounded in-memory prefix, so this remains safe for large accounts.
-    memories_spool = _spool_export_memories_json(uid)
-    export_spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8")
-    try:
-        for chunk in _iter_user_data_export_from_spool(uid, memories_spool):
-            export_spool.write(chunk)
-        export_spool.seek(0)
-    except BaseException:
-        export_spool.close()
-        raise
-    finally:
-        memories_spool.close()
-    return _iter_spooled_export_and_close(export_spool)
+    with portability_read_scope(read_context):
+        memories_spool = _spool_export_memories_json(uid)
+        export_spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8")
+        try:
+            for chunk in _iter_user_data_export_from_spool(uid, memories_spool):
+                export_spool.write(chunk)
+            export_spool.seek(0)
+        except BaseException:
+            export_spool.close()
+            raise
+        finally:
+            memories_spool.close()
+    return cast(Iterator[str], SpooledExportIterator(export_spool))
 
 
-def iter_user_data_export_streaming(uid: str) -> Iterator[str]:
-    return _iter_user_data_export_from_spool(uid, None)
+def iter_user_data_export_streaming(
+    uid: str, *, read_context: Optional[PortabilityReadContext] = None
+) -> Iterator[str]:
+    context = read_context if read_context is not None else PortabilityReadContext()
+    return cast(Iterator[str], PortabilityScopedIterator(_iter_user_data_export_from_spool(uid, None), context))

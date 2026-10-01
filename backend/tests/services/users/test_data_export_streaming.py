@@ -212,6 +212,34 @@ def test_streaming_iterator_close_closes_underlying_seams(monkeypatch):
     assert closed == ["conversations"]
 
 
+def test_streaming_iterator_close_closes_externally_held_source(monkeypatch):
+    class _HeldSource:
+        def __init__(self):
+            self.closed = False
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return {"id": "conv1"}
+
+        def close(self):
+            self.closed = True
+
+    source = _HeldSource()
+    _stub_all_sections(
+        monkeypatch,
+        iter_all_conversations=MagicMock(return_value=source),
+    )
+
+    stream = data_export.iter_user_data_export_streaming("uid1")
+    while next(stream) != "    " + json.dumps({"id": "conv1"}, indent=4):
+        pass
+    stream.close()
+
+    assert source.closed
+
+
 def test_streaming_export_complete_marker_is_last_section_content(monkeypatch):
     _stub_all_sections(monkeypatch)
 
