@@ -38,8 +38,9 @@ struct CaptureSnapshot {
     let state: OmiCaptureAttributes.ContentState
     let isStale: Bool
 
+    /// Transcription can reconnect while audio is still captured and saved.
     var isReceivingAudio: Bool {
-        !isStale && !state.paused && (state.status == "listening" || state.status == "recording")
+        !isStale && !state.paused && ["listening", "recording", "reconnecting"].contains(state.status)
     }
 
     /// A live timer's ideal width is unbounded, so the clock always gets a

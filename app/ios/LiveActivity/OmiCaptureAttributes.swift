@@ -31,8 +31,10 @@ enum OmiCaptureActionDispatcher {
     static var handler: Handler?
 
     static func perform(recordingId: String, revision: Int, action: String) async throws {
-        // A cold intent can arrive before Flutter registers its ready handler.
-        for _ in 0..<20 {
+        // A cold intent launches Omi in the background, and Flutter registers its ready
+        // handler only once the engine is up, which can take seconds on older iPhones.
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
             if let handler {
                 try await handler(recordingId, revision, action)
                 return
