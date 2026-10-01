@@ -34,10 +34,16 @@ eligibility and hosted endpoint. Mismatches and empty proposals restore the
 configured chain and increment `omi_stt_cost_routing_fail_open_total`.
 Configured unregistered services remain at the tail, followed by benched
 targets as last resorts. Capacity signals and five-second local capacity
-cooldowns exclude terminal legs and configured-default aliases. A
+cooldowns exclude terminal legs and configured-default aliases when an
+alternative remains. If all remaining candidates are capacity-blocked, dial
+one least-recently-refused candidate through its normal account/circuit and
+admission gates, at most once per session. This serves a sole candidate that
+recovers inside its cooldown; it intentionally removes the process-wide
+five-second dial bound in that case. A
 `capacity_full` refusal releases the circuit probe and starts that target
-cooldown without recording a circuit/health failure; even empty-proposal
-last-resort forcing respects it in the on cohort. Ordinary mid-session deaths exclude only the target;
+cooldown without recording a circuit/health failure. Empty-proposal
+last-resort forcing respects it; the one-attempt escape above is the only
+capacity exception in the on cohort. Ordinary mid-session deaths exclude only the target;
 quota/auth failures exclude its whole family.
 
 The gate is a calibrated Page CUSUM, not an anytime-valid probability test.
@@ -46,11 +52,18 @@ per four million sessions. At 60% outage, median/p95 detection is 8/10 failed
 sessions; 16% and 12% median detection is 264.5 and 972.5 sessions. A 10%
 brownout has no prompt-bench SLA. Sparse languages can bench with two users,
 sixteen recent failures and stronger score evidence; promotion at 30/60
-passing sessions needs no distinct-user floor. Failed trial boundaries require
-the same breadth protection as fleet benches. Narrow failures hold the trial
-without a fleet strike; only their language may bench. Evaluation counts reset
-after 120/240 sessions at stages 5/25, retaining sequential evidence, so later
-healthy sessions can promote without old failures deadlocking recovery.
+passing sessions needs no distinct-user floor. Trial promotion judges the
+failing-user fraction: each fingerprint has one majority-outcome vote across
+all its current-window speech sessions. At most its first three sessions
+contribute sequential evidence. Failed trial boundaries need the same breadth
+protection as fleet benches. Held windows reset votes/evidence at 120/240
+sessions in stages 5/25. With two always-failing users and at least 23
+always-passing users observed in **each** window (>=92% healthy users),
+recovery reaches 100% within **360 completed trial sessions**; representative
+30/60-session prefixes reduce this to 90. No finite bound exists if healthy
+users never appear in the sticky trial cohort. Broad failures still reject.
+The v3 namespace starts fresh shadow evidence for the new vote schema; warm
+it before increasing on-percent.
 
 At 17.9k eligible sessions/day and 61% Modulate disruption, the delayed-result
 trial replay averages 75.46 disruptions/day (p95 80; worst seeded run 83),
@@ -72,7 +85,7 @@ sum by (kind) (rate(omi_stt_fleet_health_write_dropped_total{job="backend-listen
 sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[5m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[5m])), 1)
 ```
 
-Cost state uses `omi:live-stt:cost-v2:<target>:<bounded-language>` (and `all`)
+Cost state uses `omi:live-stt:cost-v3:<target>:<bounded-language>` (and `all`)
 with atomic compare-and-set updates and trial-start leases. A full result-write
 pool, deadline or CAS contention can drop a fleet sample and increments
 `omi_stt_fleet_health_write_dropped_total`; local evidence still advances.
@@ -81,13 +94,51 @@ show `omi_stt_cost_routing_decisions_total`, `omi_stt_cost_routing_shadow_total`
 `omi_stt_cost_routing_benched`, `omi_stt_cost_routing_stage`, and
 `omi_stt_cost_routing_events_total`, and `omi_stt_cost_routing_fail_open_total`.
 Transition logs include counts, failure rate and CUSUM score.
-The bench/stage gauges show the last language queried per pod; use transition
-logs to investigate language-specific health.
+The bench/stage gauges show **global** target state from each pod's cache.
+The event counter records global CAS transitions once at the writer; language
+and Redis-down local transitions remain in logs. Transition `n/failures/rate`
+are raw sessions, while promotion uses user votes. Shadow comparison labels
+are registry IDs (at most 16) plus fixed `unregistered`/`unavailable` values;
+no UID, endpoint, content or language is added to these metrics. The new
+shadow label schema replaces `{agreement,target}`. Drain old pods before
+using the new pair query.
 
 The `omi-modulate-failing-soniox` Telegram rule names the active spend lever.
 The existing `Omi - Services Alerting (Telegram)` Grafana contact point must
 reach David. The coordinator must verify this contact point and the live rule
 evaluation after deployment; committed JSON alone is not delivery evidence.
+
+## Exact router rollout queries
+
+Global gate stage (0 benched, 5 or 25 trial, 100 fully available), using the
+most restrictive pod cache during refresh lag:
+
+```promql
+min by (target) (omi_stt_cost_routing_stage{job="backend-listen-metrics"})
+```
+
+Global transitions per target over the last hour. `bench` enters 0, `stage`
+starts 5 or advances to 25, and `unbench` returns to 100:
+
+```promql
+sum by (target, event) (increase(omi_stt_cost_routing_events_total{job="backend-listen-metrics",event=~"bench|unbench|stage"}[1h]))
+```
+
+Shadow agreement/disagreement rate by actual static and proposed primary:
+
+```promql
+sum by (agreement, static_primary, proposed_primary) (rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[15m]))
+```
+
+Counts for the same pairs over an hour:
+
+```promql
+sum by (agreement, static_primary, proposed_primary) (increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h]))
+```
+
+These comparisons are computed in shadow and on modes; verify the runtime
+mode before interpreting them as shadow-only rollout evidence. A missing
+stage series is missing evidence, not stage 100.
 
 ## Soniox runway
 

@@ -693,7 +693,7 @@ async def test_local_bench_is_reconciled_before_redis_recovery_can_unbench(monke
     now[0] = 1010
     await pod.refresh_cost_once()
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0
-    stored = json.loads(redis.data['omi:live-stt:cost-v2:parakeet-window:all'])
+    stored = json.loads(redis.data['omi:live-stt:cost-v3:parakeet-window:all'])
     assert stored['stage'] == 0 and stored['until'] == 1300
     now[0] = 1300
     pod.prefer_recovery('parakeet-window', 'en')
@@ -707,7 +707,7 @@ async def test_healthy_fleet_is_not_benched_by_an_isolated_pod_local_rate():
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
     for lang in ('all', 'en'):
         healthy = GateState(n=200)
-        redis.data[f'omi:live-stt:cost-v2:parakeet-window:{lang}'] = json.dumps(healthy.encode())
+        redis.data[f'omi:live-stt:cost-v3:parakeet-window:{lang}'] = json.dumps(healthy.encode())
         pod._cost_local[('parakeet-window', lang)] = GateState(stage=0, generation=1, until=1300)
     pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
@@ -771,7 +771,7 @@ async def test_static_out_of_cohort_sessions_cannot_accelerate_reentry(stage, re
     redis = MemoryRedis()
     state = GateState(stage=stage, generation=1)
     for lang in ('all', 'en'):
-        redis.data[f'omi:live-stt:cost-v2:parakeet-window:{lang}'] = json.dumps(state.encode())
+        redis.data[f'omi:live-stt:cost-v3:parakeet-window:{lang}'] = json.dumps(state.encode())
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
     pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
@@ -1004,7 +1004,7 @@ async def test_server_clock_controls_deadlines_despite_sixty_second_pod_skew():
         pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     for i in range(8):
         await pods[i % 2]._write_cost_result('modulate-velma-2', 'en', True, None, f'{i:016x}')
-    assert json.loads(redis.data['omi:live-stt:cost-v2:modulate-velma-2:all'])['until'] == 1300
+    assert json.loads(redis.data['omi:live-stt:cost-v3:modulate-velma-2:all'])['until'] == 1300
     now[0] = 1299
     for pod in pods:
         pod.prefer_recovery('modulate-velma-2', 'en')
@@ -1061,7 +1061,7 @@ async def test_ten_minute_redis_outage_remains_usable_then_reconciles(monkeypatc
     now[0] = 1600
     redis.down = False
     await pod.refresh_cost_once()
-    state = json.loads(redis.data['omi:live-stt:cost-v2:modulate-velma-2:all'])
+    state = json.loads(redis.data['omi:live-stt:cost-v3:modulate-velma-2:all'])
     assert state['stage'] == 0 and state['failures'] == 8
     assert not pod._cost_unreconciled
     assert (
@@ -1103,7 +1103,7 @@ def test_two_user_failed_trial_holds_then_healthy_window_promotes(stage, require
         assert state.stage == stage and state.strikes == 2 and state.generation == 4
         if i == 29:
             assert state.n == 30 and state.failures == 16
-    assert language.stage == 0  # only the affected language may spend a strike
+    assert language.stage == stage  # repeated callers have capped trial evidence
     assert state.n == 0 and state.failures == 0  # bounded trial rate window
     for _ in range(required):
         state = transition(state, False, 1000, witness='0' * 16)
@@ -1116,7 +1116,7 @@ def test_broad_fixed_boundary_trial_rejection_spends_one_fleet_strike(stage, req
     # No sequential alarm: rejection at the boundary itself must check breadth.
     failing_positions = {required - i * 3 - 1: i for i in range(6 if stage == 25 else 4)}
     for i in range(required):
-        state = transition(state, i in failing_positions, 1000, witness=f'{failing_positions.get(i, 0):016x}')
+        state = transition(state, i in failing_positions, 1000, witness=f'{failing_positions.get(i, 65535):016x}')
         if i < required - 1:
             assert state.stage == stage
     assert state.stage == 0 and state.strikes == 2 and state.until == 1600 and state.generation == 5
@@ -1260,3 +1260,143 @@ async def test_new_endpoint_only_registry_keeps_configured_endpoint_tail(monkeyp
         routing_language='en',
     )
     assert actual == st.STTService.modulate and seen == ['modulate-next', None]
+
+
+@pytest.mark.parametrize('language_only', [False, True])
+def test_two_failing_users_and_healthy_majority_recover_within_360_sessions(language_only):
+    state = GateState(stage=5, strikes=2)
+    completed = 0
+    for stage, limit in ((5, 120), (25, 240)):
+        assert state.stage == stage
+        for i in range(limit):
+            failed = i < limit - 23
+            uid = f'{i % 2 if failed else 2 + i - (limit - 23):016x}'
+            state = transition(state, failed, completed, witness=uid, language_only=language_only)
+            completed += 1
+            if i < limit - 1:
+                assert state.stage == stage and state.strikes == 2
+        assert state.stage == (25 if stage == 5 else 100)
+    assert state.stage == 100 and completed == 360 and state.strikes == 2
+
+
+def test_trial_majority_uses_all_user_outcomes_and_broad_late_failure_rejects():
+    state = GateState(stage=5)
+    for i in range(30):
+        # First three samples from each user pass, but a later outage dominates.
+        state = transition(state, i >= 12, 0, witness=f'{i % 4:016x}')
+    assert state.stage == 0 and state.strikes == 1
+
+
+def test_trial_user_state_roundtrip_and_bounded_validation():
+    state = GateState(stage=5)
+    for i in range(29):
+        state = transition(state, True, 0, witness=f'{i % 2:016x}')
+    assert len(state.trial_users) == 2
+    assert GateState.decode(json.loads(json.dumps(state.encode()))) == state
+    for invalid in (
+        [['x', 1, 0]],
+        [['0' * 16, 241, 0]],
+        [['0' * 16, 1, 2]],
+        [['0' * 16, True, 0]],
+        [['0' * 16, 1, 0], ['0' * 16, 1, 0]],
+    ):
+        with pytest.raises(ValueError):
+            GateState.decode({**state.encode(), 'trial_users': invalid})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('signalled', [False, True])
+async def test_last_candidate_is_served_when_capacity_clears_during_cooldown(monkeypatch, signalled):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('TEST_ONLY_CAPACITY', str(signalled).lower())
+    target = replace(DEFAULT_TARGETS[2], capacity_env='TEST_ONLY_CAPACITY')
+    monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([target.__dict__]))
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    live_router.note_capacity_full(target.id)
+    connector = AsyncMock(return_value=SimpleNamespace(is_connection_dead=False))
+    sock, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.soniox,
+        connect_primary=connector,
+        callbacks={},
+        failed=set(),
+        models=['soniox'],
+        routing_uid='synthetic',
+        routing_language='en',
+    )
+    assert service == st.STTService.soniox and sock.is_connection_dead is False
+    connector.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_all_capacity_refusals_escape_once_per_session_in_least_recent_order(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    targets = [replace(t, capacity_env='TEST_ALL_CAPACITY') for t in DEFAULT_TARGETS[1:]]
+    monkeypatch.setenv('TEST_ALL_CAPACITY', 'true')
+    monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([t.__dict__ for t in targets]))
+    now = [1000.0]
+    monkeypatch.setattr(live_router, '_capacity_clock', lambda: now[0])
+    live_router.note_capacity_full('modulate-velma-2')
+    now[0] = 1001
+    live_router.note_capacity_full('soniox')
+    seen = []
+
+    def connector(name):
+        async def connect():
+            seen.append(name)
+            raise live_chain.RejectedStream('capacity_full')
+
+        return connect
+
+    for i in range(4):
+        now[0] += 1
+        with pytest.raises(RuntimeError, match='chain exhausted'):
+            await live_chain.connect_configured_chain(
+                primary_service=st.STTService.modulate,
+                connect_primary=connector('modulate'),
+                callbacks={st.STTService.soniox: connector('soniox')},
+                failed=set(),
+                models=['modulate-velma-2', 'soniox'],
+                routing_uid='synthetic',
+                routing_language='en',
+            )
+        assert len(seen) == i + 1
+    assert seen == ['modulate', 'soniox', 'modulate', 'soniox']
+
+
+def test_shadow_pairs_are_bounded_and_global_stage_does_not_follow_language():
+    from utils.stt.live_metrics import COST_STAGE, COST_EVENTS
+
+    pod = live_chain.health
+    target = DEFAULT_TARGETS[1]
+    pod._cost_local[(target.id, 'all')] = GateState(stage=25)
+    pod._cost_local[(target.id, 'fr')] = GateState(stage=0)
+    assert pod.cost_snapshot([target], 'fr')[target.id].stage == 0
+    assert COST_STAGE.labels(target=target.id)._value.get() == 25
+    labels = dict(agreement='disagree', static_primary='soniox', proposed_primary=target.id)
+    before = COST_SHADOW.labels(**labels)._value.get()
+    live_router.propose(
+        pod,
+        ['modulate', 'soniox'],
+        next(str(i) for i in range(1000) if assigned(str(i), 'stt-reentry:' + target.id, 25)),
+        'en',
+        'soniox',
+    )
+    assert COST_SHADOW.labels(**labels)._value.get() == before + 1
+    for event, old, new in (
+        ('bench', GateState(), GateState(stage=0)),
+        ('stage', GateState(stage=0), GateState(stage=5)),
+        ('unbench', GateState(stage=25), GateState()),
+    ):
+        metric = COST_EVENTS.labels(target=target.id, event=event)
+        before = metric._value.get()
+        pod._cost_event(target.id, 'fr', old, new)
+        assert metric._value.get() == before
+        pod._cost_event(target.id, 'all', old, new)
+        assert metric._value.get() == before + 1
+        assert COST_STAGE.labels(target=target.id)._value.get() == new.stage
+    labels = dict(agreement='disagree', static_primary='unregistered', proposed_primary='unavailable')
+    before = COST_SHADOW.labels(**labels)._value.get()
+    live_router.propose(pod, ['deepgram'], 'synthetic', 'en', 'arbitrary-unregistered-model')
+    assert COST_SHADOW.labels(**labels)._value.get() == before + 1

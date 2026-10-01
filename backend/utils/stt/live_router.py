@@ -31,12 +31,14 @@ def capacity_available(target: Target) -> bool:
 def note_capacity_full(target_id: str) -> None:
     with _capacity_lock:
         now = _capacity_clock()
-        for identity in list(_capacity_until):
-            if _capacity_until[identity] <= now:
-                del _capacity_until[identity]
         _capacity_until[target_id] = now + _CAPACITY_COOLDOWN_SECONDS
         if len(_capacity_until) > 64:
             del _capacity_until[min(_capacity_until, key=lambda identity: _capacity_until[identity])]
+
+
+def capacity_refused_at(target: Target) -> float:
+    with _capacity_lock:
+        return _capacity_until.get(target.id, 0) - _CAPACITY_COOLDOWN_SECONDS
 
 
 class TargetEngineMismatch(RuntimeError):
@@ -157,10 +159,16 @@ def propose(
             and capacity_available(target)
         )
     chosen = proposed[0].id if proposed else 'unavailable'
+    static_target = (
+        (engine_models or {}).get('parakeet')
+        if static_primary == 'parakeet'
+        else DEFAULT_IDS.get(static_primary, static_primary)
+    )
+    ids = {target.id for target in registry()}
+    static_target = static_target if static_target in ids else 'unregistered'
     COST_SHADOW.labels(
-        agreement=(
-            'agree' if proposed and proposed[0].id == DEFAULT_IDS.get(static_primary, static_primary) else 'disagree'
-        ),
-        target=chosen,
+        agreement='agree' if chosen == static_target else 'disagree',
+        static_primary=static_target,
+        proposed_primary=chosen,
     ).inc()
     return proposed

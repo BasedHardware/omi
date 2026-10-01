@@ -27,6 +27,7 @@ from utils.stt.live_router import (
     engine_matches,
     capacity_available,
     note_capacity_full,
+    capacity_refused_at,
 )
 from config.live_stt_registry import routing_on, DEFAULT_IDS, registry
 from utils.stt.live_cost_health import CostHealthUnavailable
@@ -237,6 +238,8 @@ async def connect_configured_chain(
     primary_open = False
     probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
     capacity_blocked = set()
+    capacity_resorts = []
+    non_capacity_candidate = False
 
     async def attempt(service: STTService, connect: Connect, target=None) -> tuple[STTSocket, STTService] | None:
         nonlocal origin, prior_reason, prior_capacity_subtype, attempted
@@ -402,8 +405,10 @@ async def connect_configured_chain(
         capacity_target = target if target is not None else capacity_targets.get(identity or '')
         if canary and capacity_target is not None and not capacity_available(capacity_target):
             capacity_blocked.add(service)
+            capacity_resorts.append((service, target, capacity_target))
             COST_DECISION.labels(target=capacity_target.id, reason='capacity_skip').inc()
             continue
+        non_capacity_candidate = True
         circuit = target_circuit(target, _circuit_for_primary(service))
         if not circuit.allow_request(max_probes=probes):
             primary_open |= not backup(service, target)
@@ -419,6 +424,33 @@ async def connect_configured_chain(
         result = await attempt(service, connect, target)
         if result is not None:
             return result
+
+    # Capacity is advisory when it would suppress every usable route. Dial only
+    # one least-recently-refused candidate; retain account/local circuit gates.
+    if canary and not attempted and not non_capacity_candidate and capacity_resorts:
+        for service, target, capacity_target in sorted(
+            capacity_resorts, key=lambda route: capacity_refused_at(route[2])
+        ):
+            account = fleet_states.get(service.value)
+            if account is not None and account.bench == 'account' and account.excluded:
+                continue
+            circuit = target_circuit(target, _circuit_for_primary(service))
+            connect = callbacks.get(service)
+            if connect is None or not circuit.allow_request(max_probes=probes):
+                continue
+            prior_reason = 'capacity_full'
+            primary_open = True
+            record_fallback(
+                component='stt_selection',
+                from_mode=origin,
+                to_mode=service.value,
+                reason='capacity_full',
+                outcome='degraded',
+            )
+            result = await attempt(service, connect, target)
+            if result is not None:
+                return result
+            break  # one real escape dial, even if it is still full
 
     # Last-resort may force a non-account bench on a non-TDT primary only.
     # Windowed TDT shedding (capacity/5xx) must hold; account cooldown never yields.
