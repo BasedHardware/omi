@@ -3765,6 +3765,7 @@
     "collapseAction": "Restrânge",
     "speakerTagPromptNotMeAction": "Nu sunt eu",
     "confidenceNextLabels": "{count, plural, =1{Etichetează-i în încă 1 conversație.} other{Etichetează-i în încă {count} conversații.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 vorbitor} other{Vorbitori: {count}}}",
     "siriShortcutsSetupHint": "Activați Omi în Comenzi rapide → Siri. Spuneți „{askPhrase}” sau „{questionPhrase}”, apoi puneți-vă întrebarea.",
     "siriShortcutsSearchHint": " Puteți spune și „{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "Actualizare disponibilă",

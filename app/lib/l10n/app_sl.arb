@@ -11322,6 +11322,7 @@
     "collapseAction": "Strni",
     "speakerTagPromptNotMeAction": "Nisem jaz",
     "confidenceNextLabels": "{count, plural, =1{Označite jih še v 1 pogovoru.} other{Označite jih še v {count} pogovorih.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 govorec} other{Govorci: {count}}}",
     "siriShortcutsSetupHint": "Vklopite Omi v Bližnjice → Siri. Recite «{askPhrase}» ali «{questionPhrase}» in nato postavite svoje vprašanje.",
     "siriShortcutsSearchHint": " Lahko rečete tudi «{searchPhrase} for what I did today».",
     "updateAvailableTitle": "Na voljo je posodobitev",

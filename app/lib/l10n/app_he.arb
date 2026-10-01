@@ -11322,6 +11322,7 @@
     "collapseAction": "כווץ",
     "speakerTagPromptNotMeAction": "לא אני",
     "confidenceNextLabels": "{count, plural, =1{תייגו אותם בעוד שיחה 1.} other{תייגו אותם בעוד {count} שיחות.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{דובר אחד} other{{count} דוברים}}",
     "siriShortcutsSetupHint": "הפעילו את Omi בקיצורי דרך ← Siri. אמרו “{askPhrase}” או “{questionPhrase}” ואז שאלו את השאלה.",
     "siriShortcutsSearchHint": " ואפשר גם לומר “{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "יש עדכון זמין",

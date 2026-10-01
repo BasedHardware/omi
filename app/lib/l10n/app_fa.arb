@@ -11322,6 +11322,7 @@
     "collapseAction": "جمع کردن",
     "speakerTagPromptNotMeAction": "من نیستم",
     "confidenceNextLabels": "{count, plural, =1{آن‌ها را در 1 گفتگوی دیگر برچسب بزنید.} other{آن‌ها را در {count} گفتگوی دیگر برچسب بزنید.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{۱ گوینده} other{{count} گوینده}}",
     "siriShortcutsSetupHint": "Omi را در میان‌برها ← Siri روشن کنید. «{askPhrase}» یا «{questionPhrase}» بگویید و سپس سؤال خود را بپرسید.",
     "siriShortcutsSearchHint": " همچنین می‌توانید بگویید «{searchPhrase} for what I did today».",
     "updateAvailableTitle": "به‌روزرسانی در دسترس است",

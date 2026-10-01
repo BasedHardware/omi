@@ -9,7 +9,6 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
@@ -32,9 +31,10 @@ String conversationDurationLabel(ServerConversation conversation, [AppLocalizati
 
 /// The conversation title, edited in place.
 ///
-/// Up to two lines with a Done key; an empty title shows the "Untitled Conversation" placeholder. The
-/// edit is saved when editing ends — Done, or tapping away — and the outcome is announced
-/// ("Saved" / an error that restores the old title). Blank or unchanged text is not saved.
+/// Up to three lines at the page's title size, with a Done key; an empty title shows the "Untitled
+/// Conversation" placeholder. The edit is saved when editing ends — Done, or tapping away — and the
+/// outcome is announced ("Saved" / an error that restores the old title). Blank or unchanged text is
+/// not saved.
 class ConversationTitleField extends StatefulWidget {
   final TextStyle style;
   final TextEditingController? controller;
@@ -101,7 +101,7 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
       keyboardType: TextInputType.text,
       textInputAction: TextInputAction.done,
       minLines: 1,
-      maxLines: 2,
+      maxLines: 3,
       focusNode: widget.focusNode,
       controller: widget.controller,
       onSubmitted: (_) => widget.focusNode?.unfocus(),
@@ -285,15 +285,6 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
     _exitEditing();
   }
 
-  /// Attribution label for the summary source. The selected non-app summary is
-  /// Omi's own "Summary" — the same name the bottom pill and desktop use;
-  /// "Unknown App" is reserved for an app result whose catalog lookup failed
-  /// (SCA-359), including legacy results without an app id.
-  String _summarySourceLabel(BuildContext context, ConversationSummarySelection selection) {
-    if (widget.app != null) return widget.app!.name.decodeString;
-    return selection.isApp ? context.l10n.unknownApp : context.l10n.summary;
-  }
-
   Widget _buildNoSummaryForApp(BuildContext context) {
     return Semantics(
       button: true,
@@ -336,7 +327,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                         ),
                       ),
           ),
-          if (content.isNotEmpty && !_isEditing) _buildAppAttribution(context, selection),
+          if (content.isNotEmpty && !_isEditing && widget.app != null) _buildAppAttribution(context, widget.app!),
         ],
       ),
     );
@@ -564,52 +555,37 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                 : () => _startEditing(content),
           ),
         ),
-        SliverToBoxAdapter(child: _buildAppAttribution(context, selection)),
+        if (widget.app != null) SliverToBoxAdapter(child: _buildAppAttribution(context, widget.app!)),
       ],
     );
   }
 
-  Widget _buildAppAttribution(BuildContext context, ConversationSummarySelection selection) {
+  /// The app that wrote this summary, opening its page. Omi's own summary (and an app the catalog no
+  /// longer knows) has nowhere to go, so it shows no row; the bottom pill names the source either way.
+  Widget _buildAppAttribution(BuildContext context, App app) {
     const avatarRadius = 12.0;
-    final app = widget.app;
-    final Widget avatar;
-    if (app != null) {
-      avatar = CachedNetworkImage(
-        imageUrl: app.getImageUrl(),
-        imageBuilder: (context, imageProvider) =>
-            CircleAvatar(backgroundColor: OmiColors.textPrimary, radius: avatarRadius, backgroundImage: imageProvider),
-        errorWidget: (context, url, error) => CircleAvatar(
-          backgroundColor: OmiColors.textPrimary,
-          radius: avatarRadius,
-          child: const Icon(Icons.error_outline_rounded, size: 12),
-        ),
-        progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-          backgroundColor: OmiColors.surface2,
-          radius: avatarRadius,
-          child: const OmiSpinner(size: OmiSpinnerSize.small),
-        ),
-      );
-    } else {
-      avatar = Container(
-        decoration: BoxDecoration(
-          image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
-          borderRadius: OmiRadius.mdAll,
-        ),
-        height: 24,
-        width: 24,
-        alignment: Alignment.center,
-        child: Image.asset(Assets.images.herologo.path, height: 16, width: 16),
-      );
-    }
+    final avatar = CachedNetworkImage(
+      imageUrl: app.getImageUrl(),
+      imageBuilder: (context, imageProvider) =>
+          CircleAvatar(backgroundColor: OmiColors.textPrimary, radius: avatarRadius, backgroundImage: imageProvider),
+      errorWidget: (context, url, error) => CircleAvatar(
+        backgroundColor: OmiColors.textPrimary,
+        radius: avatarRadius,
+        child: const Icon(Icons.error_outline_rounded, size: 12),
+      ),
+      progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
+        backgroundColor: OmiColors.surface2,
+        radius: avatarRadius,
+        child: const OmiSpinner(size: OmiSpinnerSize.small),
+      ),
+    );
 
     return Semantics(
-      button: app != null,
+      button: true,
       child: GestureDetector(
         onTap: () async {
-          if (app != null) {
-            PlatformManager.instance.analytics.pageOpened('App Detail');
-            await routeToPage(context, AppDetailPage(app: app));
-          }
+          PlatformManager.instance.analytics.pageOpened('App Detail');
+          await routeToPage(context, AppDetailPage(app: app));
         },
         child: Padding(
           padding: const EdgeInsets.only(top: OmiSpacing.sm, left: OmiSpacing.xxs),
@@ -622,17 +598,16 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _summarySourceLabel(context, selection),
+                      app.name.decodeString,
                       maxLines: 1,
                       style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
                     ),
-                    if (app != null)
-                      Text(
-                        app.description.decodeString,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                      ),
+                    Text(
+                      app.description.decodeString,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                    ),
                   ],
                 ),
               ),

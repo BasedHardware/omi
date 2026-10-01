@@ -733,6 +733,74 @@ async def _emit_calendar_status(callback: AsyncStreamingCallback, tool_name: str
 # ---------------------------------------------------------------------------
 
 
+_CONTINUATION_REQUESTS = frozenset(
+    {
+        'carry on',
+        'continue',
+        'continue from where you left off please',
+        'continue please',
+        'continue where you left off please',
+        'continue from where you left off',
+        'continue where you left off',
+        'continue with the next part',
+        'go on',
+        'keep going',
+        'next part',
+        'please continue',
+        'please continue from where you left off',
+        'please continue where you left off',
+        'please resume',
+        'resume',
+        'resume from where you left off',
+        'resume from where you left off please',
+        'resume please',
+        'resume where you left off',
+        'resume where you left off please',
+    }
+)
+_CONTINUATION_CONTRACT = """<continuation_request>
+Resume the immediately preceding assistant response at its exact endpoint. Treat
+that response as already delivered, complete any unfinished sentence or
+structure, and keep following the original request and formatting constraints.
+Do not restart, summarize, restate, or repeat content already delivered.
+</continuation_request>"""
+
+
+def _is_explicit_continuation_request(text: str) -> bool:
+    """Match only short, unambiguous commands that refer to the prior answer."""
+    normalized = ' '.join(text.casefold().strip().strip(',.!?…').split())
+    return normalized in _CONTINUATION_REQUESTS
+
+
+def _with_continuation_contract(messages: list) -> list:
+    """Annotate a bare continuation turn when it directly follows an answer.
+
+    A plain ``Continue`` previously reached the model as ordinary user text. On
+    long, multipart answers that left the model free to reinterpret the original
+    request and start again. Keep the user's text intact, but add a narrow resume
+    contract only when the immediately preceding provider turn is a non-empty
+    assistant answer. More specific requests continue through unchanged.
+    """
+    if len(messages) < 2:
+        return messages
+
+    previous = messages[-2]
+    latest = messages[-1]
+    if previous.get('role') != 'assistant' or latest.get('role') != 'user':
+        return messages
+
+    previous_content = previous.get('content')
+    latest_content = latest.get('content')
+    if not isinstance(previous_content, str) or not previous_content.strip():
+        return messages
+    if not isinstance(latest_content, str) or not _is_explicit_continuation_request(latest_content):
+        return messages
+
+    marked = list(messages)
+    marked[-1] = {**latest, 'content': f'{latest_content}\n\n{_CONTINUATION_CONTRACT}'}
+    return marked
+
+
 def _messages_to_anthropic(messages: List[Message]) -> list:
     """Convert chat messages to Anthropic API format."""
     anthropic_messages = []
@@ -1559,6 +1627,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # Build the provider-neutral role/content message shape. The current datetime is injected
     # into the user turn (not the system prompt) so the direct Anthropic cache prefix stays stable.
     anthropic_messages = _messages_to_anthropic(messages)
+    anthropic_messages = _with_continuation_contract(anthropic_messages)
     anthropic_messages = _inject_current_datetime(
         anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
     )

@@ -3765,6 +3765,7 @@
     "collapseAction": "折りたたむ",
     "speakerTagPromptNotMeAction": "自分ではない",
     "confidenceNextLabels": "{count, plural, =1{あと1件の会話でラベルを付けてください。} other{あと{count}件の会話でラベルを付けてください。}}",
+    "transcriptSpeakerCount": "{count, plural, =1{話者 1人} other{話者 {count}人}}",
     "siriShortcutsSetupHint": "ショートカット→SiriでOmiをオンにします。「{askPhrase}」または「{questionPhrase}」と言ってから、質問を話してください。",
     "siriShortcutsSearchHint": " 「{searchPhrase} for what I did today」と言うこともできます。",
     "updateAvailableTitle": "アップデートがあります",

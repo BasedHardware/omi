@@ -147,9 +147,14 @@ def capture_jev_shadow_enabled(now: datetime | None = None) -> tuple[bool, str]:
             os.getenv(CAPTURE_JEV_SHADOW_EXPIRY_ENV, CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY).replace('Z', '+00:00')
         )
         hard_stop = datetime.fromisoformat(CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY.replace('Z', '+00:00'))
-        expiry = min(configured, hard_stop)
-        if expiry.tzinfo is None or (now or datetime.now(timezone.utc)) >= expiry:
+        # A deadline without an offset (date-only, or a missing offset) is malformed for a UTC hard
+        # stop: min() against the aware default raises TypeError, which must not escape to the
+        # unguarded callers (separate-conversation route, finalizer). Fail closed instead.
+        if configured.tzinfo is None or hard_stop.tzinfo is None:
             return False, 'expired'
-    except ValueError:
+        expiry = min(configured, hard_stop)
+        if (now or datetime.now(timezone.utc)) >= expiry:
+            return False, 'expired'
+    except (ValueError, TypeError):
         return False, 'expired'
     return True, 'enabled'
