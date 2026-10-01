@@ -33,20 +33,14 @@ from utils.conversations.recovery import structured_has_protected_content
 
 # Terminal failure codes after which a user reprocess can still succeed: the
 # retry budget ran out on a provider, parser or worker failure. Includes both
-# dead-letter production codes ('final_attempt_failed', 'processing_failed') and
-# transient provider/network failure codes. Deliberately excludes
-# ``recovery_structure_unavailable`` (the model ran and found nothing to summarize;
-# retry would produce the same result) and BYOK abandonment.
+# dead-letter production codes ('final_attempt_failed', 'processing_failed').
+# Deliberately excludes ``recovery_structure_unavailable`` (the model ran and
+# found nothing to summarize; retry would produce the same result) and BYOK
+# abandonment.
 SUMMARY_RETRYABLE_FAILURE_CODES: frozenset[str] = frozenset(
     {
         'final_attempt_failed',
         'processing_failed',
-        'timeout',
-        'provider_unavailable',
-        'rate_limited',
-        'worker_died',
-        'parser_failure',
-        'transcription_failed',
     }
 )
 
