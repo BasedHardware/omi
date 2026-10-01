@@ -181,6 +181,7 @@ def test_import_notifications_keep_client_payload_and_kind(tmp_path, store):
     assert intent.source == 'limitless_import'
     assert intent.user_id == UID
     assert intent.title == 'Limitless Import Complete! 🎉'
+    assert intent.body == 'Successfully imported 1 conversations from your Limitless data.'
     assert intent.data == {
         'type': 'import_complete',
         'job_id': 'job-1',
@@ -199,6 +200,10 @@ def test_failed_import_keeps_failure_when_push_delivery_fails(tmp_path, store, m
     updates = limitless.import_jobs_db.update_import_job.call_args_list
     assert updates[-1].args[1]['status'] == 'failed'
     assert send.call_count == 1
+    assert send.call_args.args[1] == 'Limitless Import Failed'
+    assert send.call_args.args[2] == (
+        f'All files failed to process. First error: Error processing lifelogs/{FN_A}: simulated firestore error'
+    )
     assert send.call_args.args[3] == {'type': 'import_failed', 'job_id': 'job-1'}
 
 
