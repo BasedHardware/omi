@@ -101,3 +101,11 @@ ROUTING_DECISION_LATENCY = Histogram(
     'Time spent choosing the eligible live STT order without network operations',
     buckets=(0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.05),
 )
+
+COST_DECISION = Counter(
+    'omi_stt_cost_routing_decisions_total', 'Cost routing selections and skips', ['target', 'reason']
+)
+COST_BENCH = Gauge('omi_stt_cost_routing_benched', 'Fleet target health bench', ['target'])
+COST_STAGE = Gauge('omi_stt_cost_routing_stage', 'Fleet target recovery percentage', ['target'])
+COST_EVENTS = Counter('omi_stt_cost_routing_events_total', 'Fleet health transitions', ['target', 'event'])
+COST_SHADOW = Counter('omi_stt_cost_routing_shadow_total', 'Proposed vs static primary', ['agreement', 'target'])

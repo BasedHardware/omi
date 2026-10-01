@@ -13,6 +13,8 @@ import pytest
 from unittest.mock import AsyncMock, Mock
 
 from utils.stt import live_health, live_session, streaming as st
+from config.live_stt_registry import DEFAULT_TARGETS, routing_on
+from utils.stt.live_router import connecting_target
 
 
 class SlowRedis:
@@ -40,27 +42,10 @@ async def test_redis_slow_or_down_uses_local_score_without_blocking_session(monk
     assert time.monotonic() - started < 0.005
 
 
-def test_health_order_probe_floor_and_account_override():
-    states = {
-        'modulate': live_health.ProviderState(score=0.2, samples=20),
-        'soniox': live_health.ProviderState(score=0.9, samples=20),
-        'parakeet': live_health.ProviderState(score=0.1, samples=20),
-    }
-    configured = ['modulate', 'soniox', 'parakeet']
-    assert live_health.ordered_providers(configured, states, 'uid', probe_percent=0) == [
-        'soniox',
-        'modulate',
-        'parakeet',
-    ]
-    # At the bounded probe floor a weaker provider is tried; a spent account is never probed.
-    uid = next(
-        str(index)
-        for index in range(10000)
-        if live_health.ordered_providers(configured, states, str(index), probe_percent=10)[0] == 'parakeet'
-    )
-    assert live_health.ordered_providers(configured, states, uid, probe_percent=10)[0] == 'parakeet'
-    states['parakeet'] = live_health.ProviderState(score=0.1, samples=20, bench='account', bench_until=time.time() + 60)
-    assert 'parakeet' not in live_health.ordered_providers(configured, states, uid, probe_percent=10)
+def test_account_bench_exclusion_is_binary():
+    state = live_health.ProviderState(score=0.99, samples=20, bench='account', bench_until=time.time() + 60)
+    assert state.excluded
+    assert not live_health.ProviderState(score=0.1, samples=20).excluded
 
 
 @pytest.mark.asyncio
@@ -120,7 +105,7 @@ async def test_stale_scores_keep_known_fleet_account_bench(monkeypatch):
     assert state.bench == 'account'
     assert state.bench_until == bench_until
     assert state.excluded
-    assert live_health.ordered_providers(['soniox'], {'soniox': state}, 'uid') == []
+    assert state.excluded
     health._benches['soniox'] = ('selection', bench_until + 30)
     assert health.cached_snapshot(['soniox'], 'en')['soniox'].bench == 'account'
     health._client = DownRedis()
@@ -464,7 +449,6 @@ async def test_hanging_recovery_lease_is_not_awaited_by_connection(monkeypatch):
 
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', serving)
     monkeypatch.setattr(st, '_circuit_for_primary', lambda _service: Circuit())
-    monkeypatch.setenv('STT_ROUTING_PROBE_PERCENT', '0')
     monkeypatch.setenv('STT_ROUTING_REDIS_TIMEOUT_SECONDS', '0.1')
     redis = SlowLeaseRedis()
     health = live_health.FleetHealth(redis_client=redis, probe_jitter=lambda _provider: 0.0)
@@ -520,10 +504,10 @@ async def test_on_reorders_only_eligible_legs_and_shadow_keeps_config_order(monk
         return states
 
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', snapshot)
-    monkeypatch.setenv('STT_ROUTING_PROBE_PERCENT', '0')
     modulate = AsyncMock(return_value=RawSocket())
     soniox = AsyncMock(return_value=RawSocket())
-    for mode, expected in [('shadow', 'modulate'), ('on', 'soniox')]:
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    for mode, expected in [('shadow', 'modulate'), ('on', 'modulate')]:
         monkeypatch.setenv('STT_ROUTING_MODE', mode)
         _, actual = await st.connect_stt_socket_with_fallback(
             primary_service=st.STTService.modulate,
@@ -566,14 +550,12 @@ async def test_on_account_bench_overrides_better_score(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('local_allowed,claims,releases', [(False, 0, 0), (True, 1, 1)])
-async def test_local_probe_is_checked_before_fleet_lease_and_released_on_denial(
-    monkeypatch, local_allowed, claims, releases
-):
+@pytest.mark.parametrize('local_allowed,claims,releases', [(False, 0, 0), (True, 0, 0)])
+async def test_cost_order_does_not_claim_a_per_pod_recovery_permit(monkeypatch, local_allowed, claims, releases):
     from utils.stt import live_chain
 
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
-    monkeypatch.setenv('STT_ROUTING_PROBE_PERCENT', '0')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(
         live_chain.health,
         'cached_snapshot',
@@ -657,16 +639,23 @@ class SpeechGate:
 
 
 def _leg(gate=None):
-    receiver = SimpleNamespace(host=SimpleNamespace(language='en'), _telemetry_platform=lambda: 'ios')
-    session = SimpleNamespace(receiver=receiver, audio_seconds=0.0, speech_ms=0, total_speech_ms=0)
-    return live_session.LiveLegSocket(
-        RawSocket(), gate or SpeechGate(), session, st.STTService.modulate, 16000, False, False
+    receiver = SimpleNamespace(
+        host=SimpleNamespace(language='en', request=SimpleNamespace(uid='test-user')), _telemetry_platform=lambda: 'ios'
     )
+    session = SimpleNamespace(receiver=receiver, audio_seconds=0.0, speech_ms=0, total_speech_ms=0)
+    token = connecting_target.set(DEFAULT_TARGETS[1] if routing_on('test-user') else None)
+    try:
+        return live_session.LiveLegSocket(
+            RawSocket(), gate or SpeechGate(), session, st.STTService.modulate, 16000, False, False
+        )
+    finally:
+        connecting_target.reset(token)
 
 
 def test_no_text_and_text_are_classified_from_vad_speech(monkeypatch):
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     observed = []
+    monkeypatch.setattr(live_session.health, 'record_session', lambda *_: None)
     monkeypatch.setattr(
         live_session.health,
         'record',
@@ -692,6 +681,7 @@ def test_speech_then_silence_past_deadline_yields_no_text_once(monkeypatch):
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setenv('STT_NO_TEXT_SECONDS', '3')
     observed = []
+    monkeypatch.setattr(live_session.health, 'record_session', lambda *_: None)
     monkeypatch.setattr(live_session.health, 'record', lambda *args: observed.append(args))
     gate = SpeechGate()
     leg = _leg(gate)
@@ -706,7 +696,9 @@ def test_speech_then_silence_past_deadline_yields_no_text_once(monkeypatch):
 
 def test_on_mode_waits_for_text_and_no_text_opens_breaker(monkeypatch):
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setattr(live_session.health, 'record', lambda *_: None)
+    monkeypatch.setattr(live_session.health, 'record_session', lambda *_: None)
     quarantines = []
     monkeypatch.setattr(live_session.health, 'quarantine', lambda *args: quarantines.append(args))
     breaker = SimpleNamespace(record_serve_failure=lambda: None, serve_error_bench_seconds=180.0)

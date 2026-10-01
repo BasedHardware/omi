@@ -179,3 +179,146 @@ rather than failing the session. Only managed listen callers supply
 `window_uid`; all other surfaces retain their legacy model policy, with
 `parakeet-window` stripped from the configured list rather than replaced by
 code defaults. Deepgram availability includes its runtime endpoint.
+
+## Cost-ordered, health-gated live routing
+
+`config/live_stt_registry.py` owns the target schema and default registry;
+`live_router.py` filters capabilities, sorts by audio-hour cost (stable config
+order for ties), then skips ramp exclusions, capacity signals and fleet benches.
+The first surviving target is primary and the rest retain cost order for
+failover. Healthy cheaper targets take every eligible session within their
+configured ramp and capacity. There is no portfolio split or worst-provider
+probe. The existing Parakeet admission and batch-pressure gates still reject
+at connect and overflow into the next target. Target IDs are distinct from
+provider families: two Modulate endpoints have separate health and connection
+breakers. `live_target_connect.py` reuses the existing Modulate socket protocol
+for endpoint overrides; it does not change provider clients.
+
+The registry defaults to `parakeet-window` ($0.02/audio-hour),
+`modulate-velma-2` ($0.055), and `soniox` ($0.0754). These are routing estimates,
+not billing measurements. `STT_ROUTING_TARGETS_JSON` replaces the entire list
+(maximum 16 entries). Fields are `id`, `family`, `cost_per_audio_hour`,
+`ramp_percent` (default 100), `languages` (optional restriction), `features`
+(default `["streaming"]`), `endpoint` (optional Modulate WSS URL without query
+parameters), and `capacity_env` (optional boolean environment signal). IDs must
+be stable lowercase tokens of at most 48 characters. Family capabilities reuse
+`stt_provider_policy`; configuration may restrict them, never expand them.
+Callbacks and credentials must already be available on the managed chain.
+A new wire protocol needs an adapter before it can become a config-only target;
+this router does not re-enable Deepgram or invent provider SDKs.
+
+`parakeet-window` always reads `PARAKEET_WINDOW_ALLOCATION_PERCENT`, including
+its existing `sha256("parakeet-window:" + uid)` cohort. Its registry percentage
+cannot override that safety control. Other target ramps use the same hash shape
+with their target ID. Recovery uses a separate, nested sticky cohort, so a 5%
+re-entry means 5% of sessions eligible under the configured ramp.
+
+### Health evidence and hysteresis
+
+`live_gate.py` implements a sequential mixture likelihood test, with three
+alternatives above `STT_ROUTING_DISRUPTION_GATE` (default 0.08). Each session
+invests 1/1024 of the evidence budget in a new possible change point, while
+existing investments continue accumulating likelihood. This detects an abrupt
+outage after a long healthy history without treating minutes as samples. The
+mixture is an anytime-valid test within each 1024-session evidence block;
+bench at likelihood evidence >= 1000 with at least eight speech sessions.
+Under independent Bernoulli outcomes with a rate at or below the gate, the
+false-bench bound is 0.1% per block/test (0.2% for the target and one language
+test combined). Repeated blocks/languages increase that bound; it is not a
+lifetime guarantee. Synthetic tests observe zero benches over 200 seeded runs
+of 5000 sessions at 3% (one million outcomes). The 95% upper bound for a
+5000-session run's false-bench probability from those zero observations is
+about 1.5%, rather than proof that false positives cannot occur.
+
+A leg contributes once after at least one second of VAD-confirmed speech:
+no text by the existing deadline, death/failover after text, or successful
+completion. A known no-text or dead leg contributes immediately; successful
+legs wait until close so later failure cannot be hidden by first text.
+Intentional teardown does not count as a death. Legacy first-text counters
+remain diagnostic and are not added to the session denominator. Target-global
+and bounded-language evidence run independently; a language bench can restrict
+that language, and sparse healthy languages inherit target-global health.
+The language view is used after 30 samples or a decisive failure test.
+
+Cold hard outages bench after eight failed speech sessions. The deterministic
+warm-history tests bound detection to 15 failures, including a 12-failure
+case crossing an evidence-block reset. The synthetic replay detects a hard
+outage after seven additional failures and a 25% brownout after 64 speech
+sessions. At 62 speech sessions/5 minutes, eight failures take approximately
+39 seconds if all traffic serves that target, or 155 seconds at a 25% share,
+plus outcome and cache delay. Long open successful sessions, sparse traffic,
+local breaker cooldowns, dropped Redis writes and smaller cohorts make wall
+clock detection slower. The statistical guarantee assumes independent
+outcomes; repeated sessions from one UID can be correlated.
+
+A bench waits 300 seconds initially. A failed trial doubles the wait, capped
+at four hours. A fleet lease starts the shared 5% trial after cooldown when
+this target would be cheaper than a surviving primary for some eligible
+session. Thirty speech sessions with disruption <= the gate promote to 25%;
+sixty more promote to 100%. Trial failures trigger an early sequential bench,
+or re-bench at the fixed sample boundary when the empirical rate exceeds the
+gate. These are fixed-sample acceptance checks, not a high-confidence proof of
+an 8% upper bound. Strike history clears after a full healthy evidence block.
+A more expensive bench receives no primary probes while a cheaper target
+serves it; it can remain unknown until needed. No pod starts a private trial
+when Redis is down. Outcomes carry a stage generation: completions from a
+previous stage cannot promote a newer one.
+
+`live_cost_health.py` stores target/global and target/language state in the
+`omi:live-stt:cost-v1` Redis namespace. Compare-and-set updates preserve shared
+counts and transitions across pods; leases serialize trial starts. A background
+refresh uses the existing 75 ms deadline. Connect reads memory only. Redis
+faults use local evidence and retain known benches, then unknown health and
+configured cost order. A router exception restores today's configured chain.
+Account/billing refusals remain immediate protection; local connection/serve
+breakers remain fast protection and cannot bypass an active fleet cost bench,
+including the old last-resort path. Legacy provider-score state is retained for
+static-path protection/telemetry, but never ranks the active cost router.
+
+### Adding a second Modulate endpoint and rollout
+
+Keep the current family enabled in `STT_SERVICE_MODELS`, its credential in
+`MODULATE_API_KEY`, and supply this complete registry through
+`STT_ROUTING_TARGETS_JSON` in the listen runtime overlay and matching chart:
+
+```json
+[
+  {"id":"parakeet-window","family":"parakeet","cost_per_audio_hour":0.02},
+  {"id":"modulate-next","family":"modulate","cost_per_audio_hour":0.05,
+   "ramp_percent":5,"endpoint":"wss://new-modulate.example/stream"},
+  {"id":"modulate-velma-2","family":"modulate","cost_per_audio_hour":0.055},
+  {"id":"soniox","family":"soniox","cost_per_audio_hour":0.0754}
+]
+```
+
+Replace the example URL and estimated cost with the endpoint being tested.
+Ramp `modulate-next` 5 → 25 → 50 → 100 by changing only its `ramp_percent`.
+The sample's lower cost places it ahead of the old Modulate endpoint; an equal
+cost also does so because it appears first. A more expensive endpoint receives
+only overflow/failover traffic. No ramp routes users away from a healthy,
+capable, unconstrained Parakeet target to exercise an expensive endpoint.
+
+Production and development remain `STT_ROUTING_MODE=shadow` and
+`STT_ROUTING_ON_PERCENT=0` on merge. Observe proposed/static primary agreement,
+health transitions and outcomes first; then set `on` with percentages 5 → 25 →
+100. The router cohort is `sha256("stt-routing-on:" + uid)` and never changes
+Parakeet's allocation cohort. In active routing the old language-arm/primary
+pin does not supersede capability and cost. `STT_ROUTING_ON_PERCENT=0`,
+`STT_ROUTING_MODE=shadow`, or `off` restore static selection immediately through
+runtime config. `PARAKEET_WINDOW_ALLOCATION_PERCENT=0` independently withdraws
+windowed Parakeet. No deployment or production qualification is part of these
+local test results.
+
+New bounded metrics: `omi_stt_cost_routing_decisions_total{target,reason}` with
+`capability|cost_primary|benched_skip|ramp_skip|capacity_skip|failover`,
+`omi_stt_cost_routing_benched{target}`, `omi_stt_cost_routing_stage{target}`,
+`omi_stt_cost_routing_shadow_total{agreement,target}`, and
+`omi_stt_cost_routing_events_total{target,event}`. Decisions count the proposed
+policy even in shadow; capacity admission refusals also count actual overflow
+in active mode. Transition logs contain target, bounded language, stage, n,
+failures, rate and cooldown, never UID/content/endpoint/credentials. Gauges
+reflect the last queried language per pod: use event logs for language diagnosis.
+Add dashboard panels for proposed target share, shadow disagreement, maximum
+bench state, minimum recovery stage, transition counts, and dropped writes.
+Use traffic floors/dwell for alerts and the existing headline transcript SLI;
+no unvalidated Grafana rule changes are included here.

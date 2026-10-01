@@ -136,9 +136,15 @@ environments:
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
-          STT_ROUTING_PROBE_PERCENT:
-            value: '2'
+          STT_ROUTING_ON_PERCENT:
+            value: '0'
             category: rollout
+          STT_ROUTING_TARGETS_JSON:
+            value: ''
+            category: rollout
+          STT_ROUTING_DISRUPTION_GATE:
+            value: '0.08'
+            category: reliability
           STT_NO_TEXT_SECONDS:
             value: '30'
             category: rollout
@@ -2094,9 +2100,15 @@ environments:
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
-          STT_ROUTING_PROBE_PERCENT:
-            value: '2'
+          STT_ROUTING_ON_PERCENT:
+            value: '0'
             category: rollout
+          STT_ROUTING_TARGETS_JSON:
+            value: ''
+            category: rollout
+          STT_ROUTING_DISRUPTION_GATE:
+            value: '0.08'
+            category: reliability
           STT_NO_TEXT_SECONDS:
             value: '30'
             category: rollout

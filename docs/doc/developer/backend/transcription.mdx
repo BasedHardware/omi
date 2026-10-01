@@ -163,6 +163,13 @@ non-cloud `DEEPGRAM_SELF_HOSTED_URL`; it is never a fallback to
 `api.deepgram.com`. If no supported provider can serve a language, the request
 fails closed.
 
+Managed live connections can use a declarative target registry to select the
+cheapest capable endpoint within its rollout share and capacity. Shared health
+gates remove disrupted targets and restore cheaper targets through staged
+recovery. Target identity is separate from provider family, so two endpoints
+using the same provider protocol can have independent routing health. Custom
+STT, BYOK and multichannel connections keep their existing paths.
+
 ```mermaid
 flowchart TD
     Start[Incoming Audio] --> Lang{Language?}
