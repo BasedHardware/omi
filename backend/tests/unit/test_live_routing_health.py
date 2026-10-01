@@ -109,9 +109,12 @@ async def test_stale_scores_keep_known_fleet_account_bench(monkeypatch):
 
     health = live_health.FleetHealth(clock=lambda: now[0], redis_client=BenchedRedis())
     health.cached_snapshot(['soniox'], 'en')
+    assert not health.has_fresh_fleet_snapshot()
     await health.refresh_once()
+    assert health.has_fresh_fleet_snapshot()
     assert health.cached_snapshot(['soniox'], 'en')['soniox'].score == pytest.approx(28 / 29)
     now[0] += live_health.CACHE_STALE_SECONDS + 1
+    assert not health.has_fresh_fleet_snapshot()
     state = health.cached_snapshot(['soniox'], 'en')['soniox']
     assert state.score == 0.5  # Fleet score expired; the known account bench did not.
     assert state.bench == 'account'
@@ -123,6 +126,7 @@ async def test_stale_scores_keep_known_fleet_account_bench(monkeypatch):
     health._client = DownRedis()
     await health.refresh_once()
     assert health._cache_at is None
+    assert not health.has_fresh_fleet_snapshot()
     assert health.cached_snapshot(['soniox'], 'en')['soniox'].bench == 'account'
 
 

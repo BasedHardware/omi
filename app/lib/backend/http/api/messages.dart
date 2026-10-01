@@ -89,10 +89,11 @@ Future<List<ServerMessage>> getMessagesServer({
   return [];
 }
 
-Future<List<ServerMessage>> clearChatServer({String? appId}) async {
+Future<List<ServerMessage>> clearChatServer({String? appId, String? chatSessionId}) async {
   if (appId == 'no_selected') appId = null;
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}',
+    url:
+        '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}${chatSessionId == null ? '' : '&chat_session_id=${Uri.encodeQueryComponent(chatSessionId)}'}',
     headers: {},
     method: 'DELETE',
     body: '',
@@ -188,10 +189,15 @@ Stream<ServerMessageChunk> sendMessageStreamServer(
   String? appId,
   List<String>? filesId,
   ChatPageContext? context,
+  String? chatSessionId,
 }) async* {
   var url = '${Env.apiBaseUrl}v2/messages?app_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v2/messages';
+  }
+
+  if (chatSessionId != null) {
+    url += '${url.contains('?') ? '&' : '?'}chat_session_id=${Uri.encodeQueryComponent(chatSessionId)}';
   }
 
   var messageId = "1000"; // Default new message

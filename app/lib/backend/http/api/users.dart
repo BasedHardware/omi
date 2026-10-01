@@ -357,9 +357,10 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true}) async {
+Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples',
+    url:
+        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
     headers: {},
     method: 'GET',
     body: '',
@@ -394,6 +395,20 @@ Future<bool> updatePersonName(String personId, String newName) async {
   if (response == null) return false;
   Logger.debug('updatePersonName response: ${response.body}');
   return response.statusCode == 200;
+}
+
+@visibleForTesting
+String personPinnedPath(String personId, bool pinned) => 'v1/users/people/$personId/pinned?value=$pinned';
+
+/// Pins or unpins a person. True when the server stored it.
+Future<bool> setPersonPinned(String personId, bool pinned) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}${personPinnedPath(personId, pinned)}',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  return response != null && response.statusCode == 200;
 }
 
 Future<bool> deletePerson(String personId) async {

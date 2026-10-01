@@ -18,11 +18,11 @@ import database.action_items as action_items_db
 import database.calendar_meetings as calendar_db
 import database.conversations as conversations_db
 import database.goals as goals_db
-import database.memories as memories_db
 import database.screen_activity as screen_activity_db
-from database._client import get_firestore_client
+from database._client import db as firestore_db, get_firestore_client
 from database.auth import get_user_from_uid
 from models.calendar_context import CalendarMeetingContext
+from utils.memory.memory_service import MemoryService
 from utils.conversations.meeting_context import stored_meeting_window
 from utils.conversations.meeting_participants import MeetingRoster
 from utils.conversations.screen_text_digest import digest_screen_rows
@@ -36,6 +36,9 @@ MAX_PEOPLE_CHARACTERS = 900
 MAX_GOALS_CHARACTERS = 400
 MAX_MEMORIES_CHARACTERS = 850
 MAX_SCREEN_CHARACTERS = 2_500
+# Rendered before SCREEN ACTIVITY so the overall cap trims the raw OCR digest,
+# not the judge's per-frame summaries.
+MAX_SCREEN_MOMENTS_CHARACTERS = 900
 
 MAX_PRIOR_MEETINGS = 3
 MAX_PRIOR_OPEN_ITEMS = 3
@@ -72,10 +75,18 @@ class MeetingContextPack:
     goals: tuple[str, ...] = ()
     memories: tuple[str, ...] = ()
     screen_text: str = ''
+    screen_moments: tuple[str, ...] = ()
 
     @property
     def empty(self) -> bool:
-        return not (self.prior_meetings or self.people_facts or self.goals or self.memories or self.screen_text)
+        return not (
+            self.prior_meetings
+            or self.people_facts
+            or self.goals
+            or self.memories
+            or self.screen_text
+            or self.screen_moments
+        )
 
 
 def _truncate(value: str, limit: int) -> str:
@@ -140,6 +151,9 @@ def render_meeting_context_pack(pack: Optional[MeetingContextPack]) -> str:
     memories = _render_part((f'- {memory}' for memory in pack.memories), MAX_MEMORIES_CHARACTERS)
     if memories:
         parts.append(f'MEMORIES\n{memories}')
+    moments = _render_part(pack.screen_moments, MAX_SCREEN_MOMENTS_CHARACTERS)
+    if moments:
+        parts.append(f'SCREEN MOMENTS (approved screenshots from this call)\n{moments}')
     if pack.screen_text:
         parts.append(f'SCREEN ACTIVITY\n{_truncate(pack.screen_text, MAX_SCREEN_CHARACTERS)}')
     rendered = '\n\n'.join(parts)
@@ -521,14 +535,16 @@ def _gather_memories(uid: str, roster: MeetingRoster) -> tuple[str, ...]:
         # fetching memories nothing can match against.
         return ()
     try:
-        memories: Any = memories_db.get_memories(uid, limit=40)
+        # Canonical read path (utils/memory/ARCHITECTURE.md): MemoryService merges canonical
+        # memory_items with the historical collection, so a meeting whose attendees' memories
+        # were written after the store switch is no longer missing from the notes context.
+        universal_memories = MemoryService(db_client=firestore_db).read(uid, limit=40)
     except Exception as exc:  # noqa: BLE001 - best effort
         _log_source_failure('memories', uid, exc)
         return ()
+    memories = [record.dict() for record in universal_memories if not record.is_locked]
     lines: list[str] = []
-    for memory in memories or []:
-        if not isinstance(memory, Mapping):
-            continue
+    for memory in memories:
         content = memory.get('content')
         if not isinstance(content, str) or not content.strip():
             continue
@@ -567,6 +583,7 @@ def gather_meeting_context_pack(
     people: Optional[Sequence[Mapping[str, Any]]] = None,
     include_screen_text: bool = False,
     timezone_name: Optional[str] = None,
+    screen_moments: Sequence[str] = (),
 ) -> Optional[MeetingContextPack]:
     """Assemble the background pack. Every source degrades independently.
 
@@ -599,6 +616,7 @@ def gather_meeting_context_pack(
         screen_text=(
             _try('screen_activity', lambda: _gather_screen_text(uid, conversation), '') if include_screen_text else ''
         ),
+        screen_moments=tuple(screen_moments),
     )
     return None if pack.empty else pack
 

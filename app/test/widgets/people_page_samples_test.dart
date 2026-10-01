@@ -8,10 +8,19 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/pages/settings/people.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/pages/settings/person_detail_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
+
+class _UnreachableApiEnv implements EnvFields {
+  @override
+  String? get apiBaseUrl => 'http://127.0.0.1:1/';
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
 
 class _People extends PeopleProvider {
   _People(List<Person> seeded) : super(loadPeople: () async => seeded);
@@ -20,9 +29,9 @@ class _People extends PeopleProvider {
   final List<(int, int)> deletedSamples = [];
 
   @override
-  void initialize() {
+  Future<void> initialize() {
     loading = true;
-    setPeople();
+    return setPeople();
   }
 
   @override
@@ -35,6 +44,8 @@ class _People extends PeopleProvider {
 /// Tapping a voice sample plays it; deleting is the labelled trailing control behind a confirm
 /// (hub #6 — a tap used to open the delete dialog).
 void main() {
+  setUpAll(() => Env.init(_UnreachableApiEnv()));
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
@@ -52,6 +63,7 @@ void main() {
       ),
     ]);
     addTearDown(people.dispose);
+    await people.setPeople();
 
     await tester.pumpWidget(
       MultiProvider(
@@ -68,7 +80,7 @@ void main() {
         child: const MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: [Locale('en')],
-          home: UserPeoplePage(),
+          home: PersonDetailPage(personId: 'p1'),
         ),
       ),
     );

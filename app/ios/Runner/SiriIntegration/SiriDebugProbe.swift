@@ -18,9 +18,18 @@ enum SiriDebugProbe {
         let shortcuts = OmiAppShortcuts.appShortcuts
         _ = RememberIntent()
         _ = AskOmiIntent()
+        _ = OpenOmiChatActionIntent()
         _ = StartOmiListeningIntent()
         _ = StopOmiListeningIntent()
-        return shortcuts.count == 4 && !RememberIntent.openAppWhenRun && !AskOmiIntent.openAppWhenRun &&
+        let discoverySafe: Bool
+        if #available(iOS 17.0, *) {
+            discoverySafe = !OpenOmiChatIntent.isDiscoverable && AskOmiIntent.isDiscoverable &&
+                OpenOmiChatActionIntent.isDiscoverable
+        } else {
+            discoverySafe = true
+        }
+        return shortcuts.count == 5 && !RememberIntent.openAppWhenRun && !AskOmiIntent.openAppWhenRun &&
+            discoverySafe && OpenOmiChatActionIntent.openAppWhenRun &&
             StartOmiListeningIntent.openAppWhenRun && StopOmiListeningIntent.openAppWhenRun
     }
 
@@ -63,6 +72,25 @@ enum SiriDebugProbe {
             let decodedDraft = encodedRoute.flatMap { URLComponents(string: $0)?.queryItems?.first?.value }
             NSLog("[SiriProbe] askOmiDraftEncoding=%@",
                   decodedDraft == reservedDraft && encodedRoute?.contains("%2B") == true ? "PASS" : "FAIL")
+            let normalizedQuestion = cleanedSiriQuestion("  Ask Omi about what I did today  ")
+            let normalizedFallback = cleanedSiriQuestion("Ask about what I did today")
+            let normalizedBareCarrier = cleanedSiriQuestion("Ask what I did today")
+            NSLog("[SiriProbe] askOmiQuestionRouting=%@",
+                  normalizedQuestion == "what I did today" &&
+                    normalizedFallback == "what I did today" &&
+                    normalizedBareCarrier == "what I did today" &&
+                    !OpenOmiChatIntent.isDiscoverable && AskOmiIntent.isDiscoverable ? "PASS" : "FAIL")
+            let attemptedFallback = AskOmiIntent.fallbackOpenChat(
+                OpenOmiChatIntent(), question: "What did I do today?", didAttemptChatPost: true)
+            let unattemptedFallback = AskOmiIntent.fallbackOpenChat(
+                OpenOmiChatIntent(), question: "What did I do today?", didAttemptChatPost: false)
+            NSLog("[SiriProbe] askOmiNoDoubleSend=%@",
+                  attemptedFallback.draftWasAttempted == true &&
+                    !OpenOmiChatIntent.shouldAutoSend(draft: attemptedFallback.draft,
+                                                      wasAttempted: attemptedFallback.draftWasAttempted) &&
+                    OpenOmiChatIntent.shouldAutoSend(draft: unattemptedFallback.draft,
+                                                     wasAttempted: unattemptedFallback.draftWasAttempted)
+                    ? "PASS" : "FAIL")
             let production = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12")
             let development = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12.development")
             let productionKeys = [production.ownerKey, production.pendingWipeOwnersKey,

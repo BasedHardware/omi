@@ -1,0 +1,15 @@
+{
+ "schema_version": 1,
+ "id": "FC-decision-guard-keyed-finer-than-decision",
+ "violated_contract": "A guard that preserves a user decision must be keyed at the same scope as the decision it protects. A decision recorded per record ID needs that ID to survive, so records it covers must not be absorbed. A decision recorded per group (every segment of a speaker) survives any merge inside the group, so the guard may only stop content crossing the group boundary. Expanding a group decision into a per-record freeze turns the protection into a behaviour change: after a user labels a speaker during a live recording, every later provider fragment from that speaker is stored as its own record, and the transcript degrades to one word per bubble. A second form of the same drift is comparing a record planned before the decision is applied against one planned after it (a provenance field that the decision clears), which blocks merges the decision was meant to allow.",
+ "canonical_prevention": "The planner applies the persisted decisions to both sides before merging, so compared provenance is post-decision on both, and passes group-scoped decisions as a group boundary (merge within the group, never across it) rather than as protected record IDs. Behavioural tests pin that a labeled speaker's word-by-word stream still merges into one utterance (including when live voice matching tags the fresh words), that a cross-speaker repair across a labeled speaker is refused, and that an ID-keyed decision still keeps its record.",
+ "canonical_prevention_artifact": [
+  "backend/tests/unit/test_live_transcript_merge.py"
+ ],
+ "evidence_prs": [],
+ "scope_hints": [
+  "backend/utils/manual_speaker_assignments.py",
+  "backend/models/transcript_segment.py"
+ ],
+ "status": "open"
+}

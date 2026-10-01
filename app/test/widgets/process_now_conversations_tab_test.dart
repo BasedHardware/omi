@@ -114,7 +114,7 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  testWidgets('Finish processes and lands on the Conversations tab', (tester) async {
+  testWidgets('Finish processes and lands on Home, where conversations live', (tester) async {
     final harness = await _pumpCapturingPage(tester);
 
     expect(find.byKey(const Key('process_now_button')), findsOneWidget);
@@ -123,7 +123,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(harness.capture.forceProcessingCalls, 1);
-    expect(harness.home.selectedIndex, 1);
+    expect(harness.home.selectedIndex, HomeProvider.homeTab);
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('open-capture'), findsOneWidget);
     expect(find.byType(ConversationCapturingPage), findsNothing);
@@ -141,12 +141,12 @@ void main() {
 
     expect(find.text('Finished Conversation?'), findsNothing);
     expect(harness.capture.forceProcessingCalls, 1);
-    expect(harness.home.selectedIndex, 1);
+    expect(harness.home.selectedIndex, HomeProvider.homeTab);
     await tester.pump(const Duration(seconds: 1));
   });
 
-  testWidgets('switchHomeToConversationsTab selects the Conversations tab', (tester) async {
-    final home = HomeProvider();
+  testWidgets('switchHomeToConversationsTab returns to Home, where conversations live', (tester) async {
+    final home = HomeProvider()..setIndex(HomeProvider.tasksTab);
     addTearDown(home.dispose);
     await tester.pumpWidget(
       ChangeNotifierProvider<HomeProvider>.value(
@@ -164,7 +164,7 @@ void main() {
 
     await tester.tap(find.text('go'));
     await tester.pump();
-    expect(home.selectedIndex, 1);
+    expect(home.selectedIndex, HomeProvider.homeTab);
   });
 
   testWidgets('optimistic processing row renders the skeleton until title and emoji exist', (tester) async {
@@ -210,7 +210,7 @@ Future<_Harness> _pumpCapturingPage(WidgetTester tester) async {
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  final home = HomeProvider();
+  final home = HomeProvider()..setIndex(HomeProvider.tasksTab); // Finish must bring Home back.
   final capture = _TrackingCaptureProvider()..segments = [_segment()];
   addTearDown(home.dispose);
   addTearDown(capture.dispose);

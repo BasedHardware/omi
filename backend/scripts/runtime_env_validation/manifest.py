@@ -20,6 +20,7 @@ from scripts.runtime_env_capability_contracts import (
     validate_speaker_embedding_hosts,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
+from scripts.render_backend_runtime_env import validate_sync_lineage_rollout  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
     _fetch_live_cloud_run_state,
     _validate_cloud_run,
@@ -171,6 +172,9 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
 
 def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[ValidationError]:
     errors = validate_retired_memory_manifest(env, env_config)
+    errors.extend(
+        ValidationError('sync_lineage_rollout', message) for message in validate_sync_lineage_rollout(env, env_config)
+    )
     for key in ('region', 'gke', 'cloud_run'):
         if key not in env_config:
             errors.append(ValidationError(env, f'missing {key}'))

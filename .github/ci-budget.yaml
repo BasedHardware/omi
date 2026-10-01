@@ -1607,24 +1607,6 @@
       },
       "runs_on": "ubuntu-latest"
     },
-    "guardrail-baseline-pulse.yml/pulse": {
-      "budget_p50_minutes": 5,
-      "display_name": "pulse",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
     "jit_qa_cloud_run.yml/admit": {
       "budget_p50_minutes": 5,
       "display_name": "Admit exact proven main source",
@@ -1748,7 +1730,7 @@
       "runs_on": "ubuntu-latest"
     },
     "jit_qa_manual_operator.yml/operate": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 15,
       "display_name": "Run isolated JIT QA operator",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1757,7 +1739,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual-only unsampled placeholder, not a measured p50: retain 5 minutes for setup and reserve 10 for the oracle's default 540-second query budget plus live inventory reads; PR frequency and global caps unchanged",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3469,24 +3451,8 @@
     "gcp_app.yml": {
       "name": "Deploy App to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "David's 2026-09-29 CI cleanup removed push triggers because main pushes queued rejected prod deploys; retain manual dispatch.",
       "triggers": {
-        "push": {
-          "branches": [
-            "main",
-            "development"
-          ],
-          "paths": [
-            "web/app/**",
-            "config/public-build-*.json",
-            ".github/actions/deploy-public-build/**",
-            ".github/actions/prepare-public-build/**",
-            ".github/actions/public-build-candidate-promotion/**",
-            ".github/scripts/preflight_public_build_config.py",
-            ".github/scripts/preflight_public_build_runtime.py",
-            ".github/scripts/smoke_public_build_browser.py"
-          ]
-        },
         "workflow_dispatch": {
           "inputs": {
             "environment": {
@@ -4297,24 +4263,8 @@
     "gcp_personas.yml": {
       "name": "Deploy Personas to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "David's 2026-09-29 CI cleanup removed push triggers because main pushes queued rejected prod deploys; retain manual dispatch.",
       "triggers": {
-        "push": {
-          "branches": [
-            "main",
-            "development"
-          ],
-          "paths": [
-            "web/personas-open-source/**",
-            "config/public-build-*.json",
-            ".github/actions/deploy-public-build/**",
-            ".github/actions/prepare-public-build/**",
-            ".github/actions/public-build-candidate-promotion/**",
-            ".github/scripts/preflight_public_build_config.py",
-            ".github/scripts/preflight_public_build_runtime.py",
-            ".github/scripts/smoke_public_build_browser.py"
-          ]
-        },
         "workflow_dispatch": {
           "inputs": {
             "environment": {
@@ -4450,19 +4400,6 @@
         }
       }
     },
-    "guardrail-baseline-pulse.yml": {
-      "name": "Guardrail baseline pulse",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "schedule": [
-          {
-            "cron": "0 15 * * 1"
-          }
-        ],
-        "workflow_dispatch": ""
-      }
-    },
     "jit_qa_cloud_run.yml": {
       "name": "JIT isolated QA Cloud Run plane",
       "owner": "CI maintainers",
@@ -4494,7 +4431,7 @@
     "jit_qa_manual_operator.yml": {
       "name": "Operate isolated JIT QA data plane",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Add a read-only index-oracle choice to the existing manual dispatch; no new events, jobs, or automatic runs",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4516,6 +4453,7 @@
                 "ensure-infrastructure-api",
                 "indexes-plan",
                 "indexes-apply",
+                "index-oracle",
                 "prepare",
                 "inspect",
                 "drain-verify",

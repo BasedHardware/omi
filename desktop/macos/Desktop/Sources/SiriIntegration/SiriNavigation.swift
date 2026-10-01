@@ -134,13 +134,15 @@ struct OmiOpenListIntent: OpenIntent {
 @available(macOS 27, *)
 @AppIntent(schema: .system.searchInApp)
 struct OmiSearchIntent: ShowInAppSearchResultsIntent {
-  static let title: LocalizedStringResource = "Search Omi"
+  static let title: LocalizedStringResource = "Search Omi and answer"
   static let searchScopes: [StringSearchScope] = [.general]
+  static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
   var criteria: StringSearchCriteria
 
   @MainActor
-  func perform() async throws -> some IntentResult {
-    try await SiriIntentTelemetry.perform("search") { SiriNavigator.search(criteria.term) }
-    return .result()
+  func perform() async throws -> some IntentResult & ProvidesDialog {
+    let ask = AskOmiIntent()
+    ask.question = criteria.term
+    return try await ask.perform()
   }
 }

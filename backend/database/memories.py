@@ -554,6 +554,35 @@ def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *
     return 0
 
 
+def count_default_visible_memories(uid: str, *, firestore_client: Any = None) -> int:
+    """Cheap approximation of how many memories the default ``/v3/memories`` list shows.
+
+    Uses at most two single-field ``count()`` aggregations and no new index:
+
+    * Canonical store first: ``memory_items`` with ``status == 'active'``. This
+      drops superseded, hidden, and tombstoned items like the default list, but
+      still counts Archive-tier items (hidden unless ``include_archive``) and does
+      not apply short-term expiry or device-scope filtering, which only run in
+      Python after the read.
+    * An account with no active canonical item falls back to the whole legacy
+      ``memories`` collection. User-rejected or invalidated legacy rows cannot be
+      excluded server-side (see ``_memory_passes_list_visibility``), so they are
+      counted.
+
+    The two stores are never summed: dual-store ids would be double-counted
+    (see ``count_memories_created``).
+    """
+    database = _get_db(firestore_client)
+    canonical_collection = database.collection(MemoryCollections(uid=uid).memory_items)
+    canonical_active = canonical_collection.where(filter=FieldFilter('status', '==', 'active')).count().get()
+    canonical_count = int(canonical_active[0][0].value or 0)
+    if canonical_count:
+        return canonical_count
+    legacy_collection = database.collection(users_collection).document(uid).collection(memories_collection)
+    legacy_count = legacy_collection.count().get()
+    return int(legacy_count[0][0].value or 0)
+
+
 _HISTORICAL_SCAN_PAGE_MAX = 500
 HistoricalScanCursor = tuple[datetime, str]
 

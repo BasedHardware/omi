@@ -509,7 +509,7 @@ def send_message(
         llm_executor.submit(extract_and_update_goal_progress, uid, data.text)
 
     app = get_available_app_by_id(compat_app_id, uid)
-    app = App(**app) if app else None
+    app = App.deserialize_safe(app) if app else None
 
     app_id_from_app = app.id if app else None
 

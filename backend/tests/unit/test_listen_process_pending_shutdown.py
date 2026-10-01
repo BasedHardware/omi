@@ -16,9 +16,12 @@ Seam: the controller takes only a host, so this subclasses it to record the two 
 calls and drives the real process_pending. No patching and no sys.modules mutation.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
+import pytest
 
 from database import conversations as conversations_db
 from database.conversations import select_stale_in_progress
@@ -135,6 +138,87 @@ async def test_recovery_never_touches_the_sessions_current_conversation():
     await controller.process_pending(None)
 
     assert controller.processed == ['conv-orphan']
+
+
+# ── A conversation whose finalization always fails must not end the session ──
+#
+# process_pending is a supervised finite task: an exception escaping it is a
+# supervisor "crash" that tears the listen socket down. In prod a stale
+# in_progress conversation at Firestore's 1 MiB document limit failed its
+# finalization write every time, so every reconnect for that user died seconds
+# after it started and the client reconnected in a loop.
+
+
+class _OversizedDocument(Exception):
+    """Stands in for the Firestore InvalidArgument an oversized document write raises."""
+
+
+class _FailingController(_RecordingController):
+    """Records every attempt and raises for the configured conversation ids."""
+
+    def __init__(self, host: _Host, *, failing: set[str]) -> None:
+        super().__init__(host)
+        self.failing = failing
+
+    async def process_conversation(self, conversation_id: str) -> bool:
+        self.processed.append(conversation_id)
+        if conversation_id in self.failing:
+            raise _OversizedDocument('document exceeds the maximum allowed size')
+        return True
+
+    async def schedule_finalization(self, conversation_id: str) -> bool:
+        self.scheduled.append(conversation_id)
+        if conversation_id in self.failing:
+            raise _OversizedDocument('document exceeds the maximum allowed size')
+        return True
+
+
+async def test_failing_stale_conversation_does_not_crash_the_sweep(caplog):
+    host = _Host(
+        woken_by_shutdown=False,
+        processing=[],
+        stale_in_progress=[{'id': 'conv-oversized'}, {'id': 'conv-orphan'}],
+    )
+    controller = _FailingController(host, failing={'conv-oversized'})
+
+    with caplog.at_level('ERROR', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    # The sweep returned normally and still recovered the row behind the failing one.
+    assert controller.processed == ['conv-oversized', 'conv-orphan']
+    failures = [r.getMessage() for r in caplog.records if 'pending finalization failed' in r.getMessage()]
+    assert failures == [
+        'Listen pending finalization failed stage=stale_in_progress conversation=conv-oversized type=_OversizedDocument'
+    ]
+
+
+async def test_failing_timed_out_and_processing_rows_do_not_skip_the_rest():
+    host = _Host(
+        woken_by_shutdown=False,
+        processing=[{'id': 'conv-processing-bad'}, {'id': 'conv-processing-ok'}],
+        stale_in_progress=[{'id': 'conv-orphan'}],
+    )
+    controller = _FailingController(host, failing={'conv-timed-out', 'conv-processing-bad'})
+
+    await controller.process_pending('conv-timed-out')
+
+    assert controller.processed == ['conv-timed-out', 'conv-orphan']
+    assert controller.scheduled == ['conv-processing-bad', 'conv-processing-ok']
+
+
+async def test_cancellation_still_propagates_out_of_the_sweep():
+    """Isolation is for ordinary failures only; drain must still be able to cancel the task."""
+
+    class _CancelledController(_RecordingController):
+        async def process_conversation(self, conversation_id: str) -> bool:
+            raise asyncio.CancelledError
+
+    host = _Host(woken_by_shutdown=False, processing=[{'id': 'conv-processing'}])
+    controller = _CancelledController(host)
+
+    with pytest.raises(asyncio.CancelledError):
+        await controller.process_pending('conv-timed-out')
+    assert controller.scheduled == []
 
 
 def test_select_stale_in_progress_filters_sorts_and_bounds():

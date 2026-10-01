@@ -124,7 +124,9 @@ env:
   - name: PARAKEET_STARVATION_TIMEOUT
     value: "5.0"
   - name: PARAKEET_MAX_INFLIGHT
-    value: "2"
+    # Keep dispatch at the GPU batch boundary so backfill cannot queue ahead
+    # of newly arrived live work in the worker's FIFO queue.
+    value: "1"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
 
@@ -184,8 +186,8 @@ prometheus-adapter:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 2
-  maxReplicas: 3
+  minReplicas: 3
+  maxReplicas: 6
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
@@ -232,6 +234,11 @@ affinity:
               operator: In
               values:
                 - prod
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
 
 
 strategy:

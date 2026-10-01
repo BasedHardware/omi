@@ -6,14 +6,16 @@ import asyncio
 import hashlib
 import logging
 import os
+import threading
 import time
+from collections import deque
 from typing import TYPE_CHECKING, Awaitable, Callable
 
 if TYPE_CHECKING:
     from utils.stt.streaming import STTService
 
 from config.stt_provider_policy import DEEPGRAM_PROVIDERS, provider_for_model_token, provider_for_service
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_failure import PendingLiveFailover, fallback_reason_for_typed_death
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
@@ -24,6 +26,24 @@ from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_RATE_LIMI
 
 Connect = Callable[[], Awaitable[STTSocket | None]]
 logger = logging.getLogger(__name__)
+_connect_failure_lock = threading.Lock()
+_FAILURE_EVIDENCE_SECONDS = 60.0
+_recent_connect_failures: deque[tuple[float, str]] = deque(maxlen=1000)
+
+
+def _connect_failures_before_shed() -> int:
+    try:
+        return min(1000, max(1, int(os.getenv('STT_SHED_CONNECT_FAILURES', '3'))))
+    except ValueError:
+        return 3
+
+
+def _note_connect_result(*, failed_provider: str | None) -> None:
+    with _connect_failure_lock:
+        if failed_provider is None:
+            _recent_connect_failures.clear()
+        else:
+            _recent_connect_failures.append((time.monotonic(), failed_provider))
 
 
 def failure_reason(error: BaseException) -> str:
@@ -75,6 +95,7 @@ async def connect_configured_chain(
             ordered.append(service)
     callbacks = {**callbacks, primary_service: connect_primary}
     candidates = [primary_service, *ordered]
+    configured_candidates = candidates[:]
     decision_started = time.perf_counter()
     mode = routing_mode()
     fleet_states = {}
@@ -97,27 +118,51 @@ async def connect_configured_chain(
             if digest < 3:
                 logger.info('live_stt_routing_shadow configured=%s proposed=%s', configured, proposed)
     ROUTING_DECISION_LATENCY.observe(time.perf_counter() - decision_started)
-    # If every eligible provider is still benched, avoid constructing any
-    # provider socket. A cooled circuit remains eligible here so the normal
-    # allow_request path can claim its existing half-open recovery probe.
-    eligible = [service for service in candidates if callbacks.get(service) is not None]
+    # Mid-session deaths can open every pod-local circuit without proving that
+    # new connects fail. Require repeated real connect failures before shedding.
+    # A cooled circuit still reaches the normal half-open recovery probe.
+    eligible = [service for service in configured_candidates if callbacks.get(service) is not None]
+    all_benched = False
     if eligible:
         circuits = [_circuit_for_primary(service) for service in eligible]
         # Half-open is an admission state: allow_request() may grant its
         # recovery probe. Only open circuits still inside cooldown are benched.
         all_benched = all(circuit.state == 'open' and not circuit.cooldown_elapsed() for circuit in circuits)
-        if all_benched:
+        eligible_names = {service.value for service in eligible}
+        with _connect_failure_lock:
+            cutoff = time.monotonic() - _FAILURE_EVIDENCE_SECONDS
+            while _recent_connect_failures and _recent_connect_failures[0][0] < cutoff:
+                _recent_connect_failures.popleft()
+            threshold = _connect_failures_before_shed()
+            confirmed_failures = len(_recent_connect_failures) >= threshold and all(
+                provider in eligible_names for _, provider in list(_recent_connect_failures)[-threshold:]
+            )
+        fleet_snapshot_fresh = health.has_fresh_fleet_snapshot()
+        fleet_has_healthy_provider = fleet_snapshot_fresh and any(
+            (state := fleet_states.get(service.value)) is not None
+            and not state.excluded
+            and state.samples > 0
+            and state.score > 0.5
+            for service in eligible
+        )
+        fleet_confirms_outage = fleet_snapshot_fresh and all(
+            fleet_states.get(service.value) is not None and fleet_states[service.value].excluded for service in eligible
+        )
+        if all_benched and not fleet_has_healthy_provider and (fleet_confirms_outage or confirmed_failures):
             waits = [circuit.account_cooldown_seconds_remaining for circuit in circuits if circuit.state == 'open']
+            if fleet_confirms_outage:
+                waits.extend(max(0.0, fleet_states[service.value].bench_until - time.time()) for service in eligible)
             retry_after = max(5, int(max(waits, default=0) + 0.999))
             raise ProviderChainUnavailable(retry_after)
     origin = primary_service.value
     prior_reason = 'circuit_open'
+    prior_capacity_subtype: str | None = None
     attempted = False
     primary_open = False
     probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
 
     async def attempt(service: STTService, connect: Connect) -> tuple[STTSocket, STTService] | None:
-        nonlocal origin, prior_reason, attempted
+        nonlocal origin, prior_reason, prior_capacity_subtype, attempted
         attempted = True
         circuit = _circuit_for_primary(service)
         on_success, on_close = circuit.deferred_result_callbacks()
@@ -147,10 +192,13 @@ async def connect_configured_chain(
                 on_close()
                 raise
             reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
+            if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
+                _note_connect_result(failed_provider=service.value)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
             # omi_fallback_total keeps its bounded vocabulary: the typed account
             # deaths fold onto quota/auth exactly like the socket path does.
             fallback_reason = fallback_reason_for_typed_death(reason) if account_rejection else reason
+            capacity_subtype = getattr(error, 'capacity_subtype', None) if reason == 'capacity_full' else None
             failed.add(provider_for_service(service) or service.value)
             record_stt_provider_connect(provider=service.value, outcome=CONNECT_FAILURE, reason=reason)
             if reason == 'auth' or account_rejection:
@@ -172,10 +220,12 @@ async def connect_configured_chain(
                     to_mode=service.value,
                     reason=fallback_reason,
                     outcome='degraded',
+                    **capacity_fallback_kwargs(capacity_subtype),
                 )
-            origin, prior_reason = service.value, fallback_reason
+            origin, prior_reason, prior_capacity_subtype = service.value, fallback_reason, capacity_subtype
             return None
         LEG_ATTEMPTS.labels(to_mode=service.value, outcome='success').inc()
+        _note_connect_result(failed_provider=None)
         record_stt_provider_connect(provider=service.value, outcome=CONNECT_SUCCESS)
         attach_health = getattr(socket, 'set_health_callbacks', None)
         if getattr(socket, 'defers_selection_success', False) and callable(attach_health):
@@ -184,7 +234,11 @@ async def connect_configured_chain(
             on_success()
         if service != primary_service or primary_open:
             pending = PendingLiveFailover(
-                component='stt_selection', from_mode=origin, to_mode=service.value, reason=prior_reason
+                component='stt_selection',
+                from_mode=origin,
+                to_mode=service.value,
+                reason=prior_reason,
+                capacity_subtype=prior_capacity_subtype,
             )
             attach_outcome = getattr(socket, 'set_selection_outcome', None)
             if callable(attach_outcome):
@@ -196,6 +250,7 @@ async def connect_configured_chain(
                     to_mode=service.value,
                     reason=prior_reason,
                     outcome='recovered',
+                    **capacity_fallback_kwargs(prior_capacity_subtype),
                 )
         return socket, service
 
@@ -235,9 +290,27 @@ async def connect_configured_chain(
         circuit = _circuit_for_primary(primary_service)
         if circuit.allow_request(max_probes=1, force=True):
             prior_reason = 'last_resort'
+            prior_capacity_subtype = None
             result = await attempt(primary_service, connect_primary)
             if result is not None:
                 return result
+    if all_benched and not attempted:
+        # A spent primary must not strand a still-serving fallback whose local
+        # selection circuit opened on a mid-session death.
+        for service in configured_candidates:
+            connect = callbacks.get(service)
+            if service == STTService.parakeet or connect is None or provider_for_service(service) in failed:
+                continue
+            state = fleet_states.get(service.value)
+            if state is not None and state.bench == 'account' and state.excluded:
+                continue
+            if _circuit_for_primary(service).allow_request(max_probes=1, force=True):
+                prior_reason = 'last_resort'
+                prior_capacity_subtype = None
+                result = await attempt(service, connect)
+                if result is not None:
+                    return result
+                break
     CHAIN_EXHAUSTED.inc()
     record_fallback(
         component='stt_selection',
@@ -245,5 +318,6 @@ async def connect_configured_chain(
         to_mode='unavailable',
         reason=prior_reason,
         outcome='exhausted',
+        **capacity_fallback_kwargs(prior_capacity_subtype),
     )
     raise RuntimeError('Configured STT chain exhausted')
