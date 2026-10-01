@@ -29,6 +29,7 @@ from tests.support.firestore_query_drivers import (
     ref_transaction,
 )
 from tests.support.firestore_conversation_profiles import COUNT_PROFILES, PHOTO_PROFILES, WITHOUT_PHOTOS_PROFILES
+from tests.support import firestore_outside_query_drivers as outside_drivers
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -2290,3 +2291,6 @@ _add(
         'when a retryable failure row has no transcript text',
     )
 )
+
+for entry in (*outside_drivers.DRIVERS.values(), *outside_drivers.COVERED_BY.values(), *outside_drivers.SKIPS.values()):
+    _add(entry)

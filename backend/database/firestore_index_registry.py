@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .firestore_outside_index_requirements import OUTSIDE_SERVING_FIELD_INDEXES
 from .firestore_query_types import (
     FirestoreIndexField,
     FirestoreIndexRequirement,
@@ -2049,4 +2050,4 @@ def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
         }
         for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS
     ]
-    return {'indexes': indexes, 'fieldOverrides': field_overrides}
+    return {'indexes': indexes, 'fieldOverrides': [*field_overrides, *OUTSIDE_SERVING_FIELD_INDEXES]}

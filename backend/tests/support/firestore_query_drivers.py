@@ -11,6 +11,7 @@ every terminal query shape.
 from __future__ import annotations
 
 import ast
+import asyncio
 import copy
 import datetime as datetime_module
 import hashlib
@@ -229,7 +230,7 @@ def _freeze_module_clocks() -> Iterator[None]:
     with ExitStack() as stack:
         for module in list(sys.modules.values()):
             name = getattr(module, '__name__', '') or ''
-            if name != 'database' and not name.startswith('database.'):
+            if name != 'database' and not name.startswith(('database.', 'utils.', 'routers.', 'services.', 'jobs.')):
                 continue
             for attr in ('datetime', 'date'):
                 bound = module.__dict__.get(attr)
@@ -427,6 +428,7 @@ def run_driver(entry: DriverEntry, client: RecordingFirestore | None = None) -> 
         patch_stack.enter_context(_freeze_module_clocks())
         for patcher in entry.patchers:
             patch_stack.enter_context(patcher(client))
+        fn = import_function(entry.function)
 
         unclassified: list[str] = []
         for name, param in signature.parameters.items():
@@ -484,6 +486,8 @@ def run_driver(entry: DriverEntry, client: RecordingFirestore | None = None) -> 
                 with client.recording_context(entry.function, combo):
                     try:
                         result = fn(**kwargs)
+                        if inspect.isawaitable(result):
+                            result = asyncio.run(result)
                         if inspect.isgenerator(result) or isinstance(result, Iterator):
                             list(result)
                     except Exception as error:

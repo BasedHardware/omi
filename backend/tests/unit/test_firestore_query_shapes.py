@@ -41,6 +41,11 @@ from scripts import firestore_query_shapes as export_mod
 from tests.support.firestore_index_rules import is_served, required_index
 from tests.support.firestore_conversation_profiles import PROFILES, discover_conversation_callers
 from tests.support.firestore_query_driver_registry import COVERED_BY, DRIVERS, SKIPS
+from tests.support.firestore_outside_query_drivers import BODY_DIGEST as OUTSIDE_BODY_DIGEST
+from tests.support.firestore_serving_query_inventory import (
+    discover_serving_query_functions,
+    serving_function_body_digest,
+)
 from tests.support.firestore_query_drivers import (
     FROZEN_NOW,
     CallerProfile,
@@ -142,7 +147,7 @@ def _real_count_verdict(manifest: dict) -> dict:
 
 @pytest.fixture(scope='module')
 def discovered_keys() -> set[str]:
-    return {row['key'] for row in discover_query_functions(DATABASE_ROOT)}
+    return {row['key'] for row in discover_serving_query_functions(BACKEND_ROOT)}
 
 
 def test_registry_covers_all_discovered_functions(discovered_keys):
@@ -288,12 +293,12 @@ def test_digest_pinned_entries_unchanged():
             continue
         if not entry.body_digest:
             bad.append(f'{key}: expect_observed=False without a body digest')
-        elif entry.body_digest != function_body_digest(key):
+        elif entry.body_digest != serving_function_body_digest(key):
             bad.append(f'{key}: body changed since review — re-review coverage')
     for key, entry in SKIPS.items():
         if entry.body_digest is None:
             bad.append(f'{key}: skip without a body digest')
-        elif entry.body_digest != function_body_digest(key):
+        elif entry.body_digest != serving_function_body_digest(key):
             bad.append(f'{key}: body changed since skip review — re-review the skip')
     assert not bad, '; '.join(bad)
 
@@ -382,7 +387,7 @@ def test_registry_body_digests_are_frozen_literals():
     assert isinstance(digest_node, ast.Dict), 'BODY_DIGEST must be a literal dict'
     pinned = ast.literal_eval(digest_node)
     expected = {key: entry.body_digest for key, entry in {**COVERED_BY, **SKIPS}.items() if entry.body_digest}
-    assert pinned == expected
+    assert pinned | OUTSIDE_BODY_DIGEST == expected
 
 
 def test_function_body_digest_tracks_signature_and_body(tmp_path):
