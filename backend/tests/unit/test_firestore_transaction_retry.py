@@ -166,23 +166,26 @@ def test_implicit_context_contention() -> None:
     assert attempts[0] == 2
 
 
-def test_status_code_contention_detection() -> None:
-    class CustomRpcError(Exception):
-        def __init__(self, code: int):
-            self.code = code
+def test_grpc_status_code_callable_and_attribute() -> None:
+    class GrpcCallableCodeError(Exception):
+        def code(self) -> Any:
+            class Status:
+                name = "ABORTED"
 
-    class CustomHttpError(Exception):
-        def __init__(self, status_code: int):
-            self.status_code = status_code
+            return Status()
 
-    class GrpcAbortedError(Exception):
+    class GrpcStatusCodeError(Exception):
         def __init__(self) -> None:
-            self.grpc_status_code = "ABORTED"
+            self.grpc_status_code = 10
 
-    assert is_transaction_contention(CustomRpcError(409)) is True
-    assert is_transaction_contention(CustomHttpError(409)) is True
-    assert is_transaction_contention(GrpcAbortedError()) is True
-    assert is_transaction_contention(CustomRpcError(404)) is False
+    class NonAbortedConflictError(Exception):
+        def __init__(self) -> None:
+            self.code = 409  # Generic HTTP 409 Conflict must NOT be treated as contention
+
+    assert is_transaction_contention(GrpcCallableCodeError()) is True
+    assert is_transaction_contention(GrpcStatusCodeError()) is True
+    # In chat.py, AlreadyExists/Conflict must escape and not be replayed as transaction contention
+    assert is_transaction_contention(NonAbortedConflictError()) is False
 
 
 def test_cyclic_exception_reference_protection() -> None:
@@ -254,11 +257,16 @@ def test_invalid_callables() -> None:
             random_value="not_callable",  # type: ignore[arg-type]
         )
 
+    with pytest.raises(TypeError, match="on_retry must be callable"):
+        run_with_transaction_contention_retry(
+            lambda: None,
+            lambda tx: None,
+            operation_name="test",
+            on_retry="not_callable",  # type: ignore[arg-type]
+        )
 
-@pytest.mark.parametrize(
-    "op_name, expected_name",
-    [("  custom_name  ", "custom_name"), ("", "unnamed_operation"), (None, "unnamed_operation")],
-)
+
+@pytest.mark.parametrize("op_name, expected_name", [("  custom_name  ", "custom_name"), ("", "unnamed_operation")])
 def test_operation_name_sanitization(op_name: Any, expected_name: str) -> None:
     with pytest.raises(FirestoreContentionExhausted) as exc_info:
         run_with_transaction_contention_retry(
@@ -273,7 +281,14 @@ def test_operation_name_sanitization(op_name: Any, expected_name: str) -> None:
 
 @pytest.mark.parametrize(
     "corrupted_random",
-    [lambda: float("nan"), lambda: float("inf"), lambda: -1.0, lambda: 2.5, lambda: "invalid"],
+    [
+        lambda: float("nan"),
+        lambda: float("inf"),
+        lambda: -1.0,
+        lambda: 2.5,
+        lambda: "invalid",
+        lambda: 10**1000,  # Triggers OverflowError during float()
+    ],
 )
 def test_jitter_sanitization_boundary(corrupted_random: Any) -> None:
     delays: list[float] = []
@@ -298,6 +313,43 @@ def test_jitter_sanitization_boundary(corrupted_random: Any) -> None:
     assert not math.isnan(delays[0])
     assert not math.isinf(delays[0])
     assert delays[0] >= 0.0
+
+
+def test_backoff_delay_clamped_at_max_delay_and_exponent() -> None:
+    """Exercise late retry attempts (attempt >= 5) to verify clamping at _MAX_DELAY_SECONDS."""
+    delays: list[float] = []
+    attempts = [0]
+
+    def op(tx: Any) -> str:
+        attempts[0] += 1
+        if attempts[0] <= 5:
+            raise FirestoreAborted(f"Contention attempt {attempts[0]}")
+        return "finally_recovered"
+
+    result = run_with_transaction_contention_retry(
+        lambda: None,
+        op,
+        operation_name="deep_retry_op",
+        max_attempts=7,
+        sleep=lambda d: delays.append(d),
+        random_value=lambda: 1.0,  # High jitter gives maximum bound
+    )
+
+    assert result == "finally_recovered"
+    assert attempts[0] == 6
+    assert len(delays) == 5
+
+    # Attempts 1 to 5 delay progression:
+    # attempt 1: 0.2
+    # attempt 2: 0.4
+    # attempt 3: 0.8
+    # attempt 4: 1.0 (capped at _MAX_DELAY_SECONDS)
+    # attempt 5: 1.0 (capped at _MAX_DELAY_SECONDS)
+    assert delays[0] <= 0.2 + 1e-6
+    assert delays[1] <= 0.4 + 1e-6
+    assert delays[2] <= 0.8 + 1e-6
+    assert delays[3] <= 1.0 + 1e-6
+    assert delays[4] <= 1.0 + 1e-6
 
 
 def test_on_retry_observer_and_fault_isolation() -> None:

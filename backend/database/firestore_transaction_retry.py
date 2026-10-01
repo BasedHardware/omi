@@ -9,6 +9,7 @@ replayed.
 
 from __future__ import annotations
 
+from collections import deque
 import logging
 import math
 import random
@@ -42,14 +43,14 @@ def is_transaction_contention(error: BaseException) -> bool:
     """Check if an exception or any wrapped cause/context represents Firestore transaction contention.
 
     Traverses both explicit causal chains (``__cause__``) and implicit exception contexts
-    (``__context__``), as well as multi-exception groups, while guarding against cyclical
-    references.
+    (``__context__``), as well as multi-exception groups, using a double-ended queue for linear
+    traversal while guarding against cyclical references.
     """
-    queue: list[BaseException] = [error]
+    queue: deque[BaseException] = deque([error])
     seen: set[int] = set()
 
     while queue:
-        current = queue.pop(0)
+        current = queue.popleft()
         curr_id = id(current)
         if curr_id in seen:
             continue
@@ -58,15 +59,14 @@ def is_transaction_contention(error: BaseException) -> bool:
         if isinstance(current, FirestoreAborted):
             return True
 
-        # Check for status codes indicating Aborted (HTTP 409 Conflict / gRPC 10 ABORTED)
-        code = getattr(current, "code", None)
-        status_code = getattr(current, "status_code", None)
+        # Check for raw gRPC RpcError status via callable code() or attribute
+        raw_code = getattr(current, "code", None)
+        code_val = raw_code() if callable(raw_code) else raw_code
         grpc_status = getattr(current, "grpc_status_code", None)
-        grpc_name = getattr(grpc_status, "name", None)
 
-        if code == 409 or status_code == 409:
+        if code_val in (10, "10", "ABORTED") or getattr(code_val, "name", None) == "ABORTED":
             return True
-        if grpc_status in (10, "10", "ABORTED") or grpc_name == "ABORTED":
+        if grpc_status in (10, "10", "ABORTED") or getattr(grpc_status, "name", None) == "ABORTED":
             return True
 
         if getattr(current, "__cause__", None) is not None:
@@ -104,7 +104,7 @@ def run_with_transaction_contention_retry(
     replayed.  Firestore aborts are atomic, so callers must keep all writes and
     idempotency checks inside ``operation``.
     """
-    if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or max_attempts < 1:
+    if type(max_attempts) is not int or max_attempts < 1:
         raise ValueError("max_attempts must be positive")
 
     if not callable(transaction_factory):
@@ -115,10 +115,10 @@ def run_with_transaction_contention_retry(
         raise TypeError("sleep must be callable")
     if not callable(random_value):
         raise TypeError("random_value must be callable")
+    if on_retry is not None and not callable(on_retry):
+        raise TypeError("on_retry must be callable")
 
-    clean_op_name = (
-        operation_name.strip() if isinstance(operation_name, str) and operation_name.strip() else "unnamed_operation"
-    )
+    clean_op_name = operation_name.strip() if operation_name and operation_name.strip() else "unnamed_operation"
 
     for attempt in range(1, max_attempts + 1):
         try:
@@ -151,7 +151,7 @@ def run_with_transaction_contention_retry(
 
             try:
                 raw_jitter = float(random_value())
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 raw_jitter = 0.5
             if math.isnan(raw_jitter) or math.isinf(raw_jitter):
                 raw_jitter = 0.5
