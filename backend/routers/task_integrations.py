@@ -748,9 +748,7 @@ async def handle_oauth_callback(
                 integration_data['refresh_token'] = refresh_token
 
             if supports_refresh:
-                expires_at = compute_expires_at(expires_in)
-                if expires_at:
-                    integration_data['expires_at'] = expires_at
+                integration_data['expires_at'] = compute_expires_at(expires_in)
 
             try:
                 additional_data = await provider_config.fetch_additional_data(client, access_token)

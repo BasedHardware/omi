@@ -51,9 +51,9 @@ def compute_expires_at(expires_in: Any) -> Optional[str]:
     """Safely compute ISO 8601 expiry timestamp from expires_in seconds.
 
     Accepts int, float, or numeric strings. Returns None if expires_in is missing,
-    non-numeric, non-finite, non-positive, or represents an out-of-range duration.
+    boolean, non-numeric, non-finite, non-positive, or represents an out-of-range duration.
     """
-    if expires_in is None:
+    if expires_in is None or isinstance(expires_in, bool):
         return None
     try:
         seconds = float(expires_in)
@@ -132,9 +132,7 @@ async def refresh_oauth_token(
             }
             if new_refresh_token:
                 update_payload['refresh_token'] = new_refresh_token
-            expires_at = compute_expires_at(expires_in)
-            if expires_at:
-                update_payload['expires_at'] = expires_at
+            update_payload['expires_at'] = compute_expires_at(expires_in)
             await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, update_payload)
             return {**integration, **update_payload}
         else:
@@ -417,4 +415,4 @@ async def create_task_internal(
 
     except Exception as e:
         logger.error(f"Error creating task in {app_key}: {sanitize(str(e))}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": sanitize(str(e))}
