@@ -20,6 +20,11 @@ resolve every UID to the control nano arm, even with a live flag or allowlist. W
 before J: increasing K moves the Jev window and may absorb Jev users into
 keep-all; the upper bound is capped at 100.
 
+The production keep-all arm starts 2026-10-01 and runs for at least 14 days
+before evaluation. At K=2, membership is the static UID hash window [0,2)
+using the `relevance-arm-v1` salt; a user's assignment does not change during
+the experiment.
+
 Owner flip is universal when `MEMORY_OWNER_JEV_FLIP_ENABLED` is on; INV-MEM-5
 forbids UID cohorts in live owner attribution. `MEMORY_OWNER_JEV_FLIP_PERCENT`
 is a universal control: 0 disables scoring, 100 permits it when the flag is on;
@@ -38,8 +43,9 @@ locked classifier/label set; shadow scores alone are not nano counterfactuals.
 
 ## Admission, durability and privacy
 
-Both deployment stages declare keep-all percentage 0 and daily caps 60000. Dev
-runs both shadows at 100 on the scraped processing hosts (backend-listen, pusher
+Dev declares keep-all percentage 0 and daily caps 60000; prod declares
+keep-all percentage 2. Both stages retain daily caps of 60000. Dev runs both
+shadows at 100 on the scraped processing hosts (backend-listen, pusher
 and the Cloud Run backend service) and retains both live flags on with the live
 relevance `CONVERSATION_RELEVANCE_JEV_PERCENT` and owner
 `MEMORY_OWNER_JEV_FLIP_PERCENT` pinned to 0 on all four live-flag hosts
@@ -50,7 +56,7 @@ Dev backend-sync and backend-sync-backfill stay at 0: their Cloud
 Run revisions have no GMP sidecar/exporter allowlist entry, so their shadow
 outcomes and latency would be invisible (see utils/metrics.py). Prod declares
 both shadow percentages 100 on backend-listen, pusher and Cloud Run backend,
-backend-sync and backend-sync-backfill, with live flags absent, keep-all 0 and
+backend-sync and backend-sync-backfill, with live flags absent, keep-all 2 and
 caps unchanged. The production configuration is in its own removable commit.
 The Firestore TTL policy on collection group `jev_shadow`, field `expire_at`,
 in project `based-hardware` was enabled 2026-10-01 and verified ACTIVE by the
@@ -135,6 +141,6 @@ Report decision counts separately from unique conversations.
 ## Acceptance bars
 
 Population and measurement: shadow scores all model-tier, transcript-only, <=100-word conversations (dedupe by conversation+transcript hash; note decisions != conversations because `SYNC_UPDATE`/`CLIENT_FINALIZE` re-assess). Ground truth is (a) David's labels on his OWN account only (no agent or human reads other users' transcripts), stratified on nano verdict x Jev verdict x score band {0.85-0.93, 0.93-0.95, 0.95-0.97, >0.97} and on source, reweighted by inclusion probability (Horvitz-Thompson), with a locked confirmation set that is never used for threshold tuning; (b) behavioral outcomes for the whole population from the randomized keep-all arm (opens, stars, shares, edits, chat citations, deletes within 7 days, restores; restores are heavily censored and used only for a monotonicity check).
-Discard GO requires all of: shadow >= 5,000 scored conversations over >= 300 users, Jev failure rate < 5%, p95 latency <= 2.5 s; share of Jev discards (P(discard) > 0.95) judged worth keeping <= 5% on >= 250 stratified David labels; predicted incremental paid-notes spend (conversations nano discards but Jev keeps x measured $0.0024 per kept conversation) <= $25/day or a higher threshold that meets the cap with the same safety bar; and in the keep-all arm (2% of users, >= 14 days) the open rate of conversations nano would have discarded is >= 5%. If that open rate is below 5%, flipping discard is NO-GO (value of keeping is not visible in behavior) and nano stays.
+Discard GO requires all of: shadow >= 5,000 scored conversations over >= 300 users, Jev failure rate < 5%, p95 latency <= 2.5 s; share of Jev discards (P(discard) > 0.95) judged worth keeping <= 5% on >= 250 stratified David labels; predicted incremental paid-notes spend (conversations nano discards but Jev keeps x measured $0.0024 per kept conversation) <= $25/day or a higher threshold that meets the cap with the same safety bar; and in the production keep-all arm (2% of users, starting 2026-10-01 and running for at least 14 days) the open rate of conversations nano would have discarded is >= 5%. At approximately 18,000 nano discards/day, the arm is expected to keep about 360 extra conversations/day, costing about $0.90/day uncached at $0.0024 each. To stop the arm, set the production keep-all percentage back to 0 and redeploy; conversations kept while users were in the arm remain kept. If the open rate is below 5%, flipping discard is NO-GO (value of keeping is not visible in behavior) and nano stays.
 Owner flip GO requires all of: prod shadow P(user) >= 0.9 share among answered third-party candidates within 15-40% (benchmark ~25%; dev showed 74% and must be explained, e.g. by source, empty user name or prompt preamble, before any prod flip); >= 150 David labels stratified by source with Wilson 95% lower bound on precision >= 0.90; flips stay reversible via the stored `attribution_override` record.
 Ramp aborts (automatic, any one): Jev failure rate > 5%; p95 latency regresses > 2x; arm actual discard rate differs from the shadow prediction by > 20% relative; empty-title rate among Jev-kept conversations rises; 7-day deletes of kept conversations rise; notes spend per daily active user exceeds cap. Cohorts: 1% -> 10% -> 50% -> 100%, 24 h soak each; the ramp proves operational safety only, quality comes from labels and the keep-all arm.

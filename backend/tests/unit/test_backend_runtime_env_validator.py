@@ -3178,7 +3178,7 @@ def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
         expected = {
             'CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT': '100',
             'MEMORY_OWNER_JEV_SHADOW_PERCENT': '100',
-            'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT': '0',
+            'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT': '2',
             'CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP': '60000',
             'MEMORY_OWNER_JEV_SHADOW_DAILY_CAP': '60000',
         }
