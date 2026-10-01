@@ -158,8 +158,8 @@ def _stable_id(prefix: str, *parts: object) -> str:
     for part in parts:
         if part is None or (isinstance(part, str) and not part.strip()):
             raise ValueError("identifier parts must not be empty or whitespace")
-    raw = '\x1f'.join(str(part).strip() for part in parts).encode('utf-8')
-    return f'{prefix.strip()}_{hashlib.sha256(raw).hexdigest()[:32]}'
+    raw = '\x1f'.join(str(part) for part in parts).encode('utf-8')
+    return f'{prefix}_{hashlib.sha256(raw).hexdigest()[:32]}'
 
 
 def _request_hash(payload: dict[str, Any]) -> str:
@@ -347,7 +347,7 @@ def get_projection(
     uid: str,
     *,
     device_scope: str,
-    now: datetime,
+    now: datetime | str,
     include_expired: bool = False,
     account_generation: int = 0,
     firestore_client: Any = None,
@@ -382,7 +382,8 @@ def get_projection(
     )
     if projection is None:
         return None
-    return projection if include_expired or projection.expires_at > now else None
+    normalized_now = _normalize_task_datetime(now)
+    return projection if include_expired or projection.expires_at > normalized_now else None
 
 
 def _decision_records(raw_records: list[Any], evaluation_id: str) -> list[DecisionRecord]:
@@ -398,9 +399,8 @@ def _decision_records(raw_records: list[Any], evaluation_id: str) -> list[Decisi
     for record in raw_records:
         try:
             records.append(DecisionRecord.model_validate(record))
-        except (ValidationError, TypeError, ValueError, KeyError) as e:
-            if isinstance(e, ValidationError):
-                _record_malformed_embedded_payload(evaluation_id=evaluation_id, error=e)
+        except ValidationError as e:
+            _record_malformed_embedded_payload(evaluation_id=evaluation_id, error=e)
     records.sort(key=lambda record: record.subject_id)
     return records
 
@@ -459,9 +459,8 @@ def _valid_evaluation_projection(
         return None
     try:
         projection = WhatMattersNowProjection.model_validate(raw_projection)
-    except (ValidationError, TypeError, ValueError, KeyError) as e:
-        if isinstance(e, ValidationError):
-            _record_malformed_embedded_payload(evaluation_id=evaluation_id, error=e)
+    except ValidationError as e:
+        _record_malformed_embedded_payload(evaluation_id=evaluation_id, error=e)
         return None
     normalized_now = _normalize_task_datetime(now)
     if projection.evaluation_id != evaluation_id or projection.expires_at <= normalized_now:
