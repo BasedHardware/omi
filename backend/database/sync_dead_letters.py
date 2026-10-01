@@ -58,8 +58,10 @@ def _client(firestore_client: Any = None) -> Any:
 
 
 def _doc_ref(client: Any, job_id: str) -> Any:
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
     collection = sync_stage.collection_name(DEAD_LETTERS_COLLECTION)
-    return client.collection(collection).document(job_id)
+    return client.collection(collection).document(job_id.strip())
 
 
 def _emit_confirmed(doc: dict[str, Any]) -> None:
@@ -95,6 +97,12 @@ def record_dead_letter_pending(
     Raises on Firestore failure; callers must let that fail the publish closed
     rather than terminalizing Redis without the durable record.
     """
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    job_id = job_id.strip()
+    if uid is not None and isinstance(uid, str):
+        uid = uid.strip()
+
     client = _client(firestore_client)
     doc_ref = _doc_ref(client, job_id)
     now = datetime.now(timezone.utc)
@@ -113,7 +121,10 @@ def record_dead_letter_pending(
             'created_at': existing.get('created_at') or now,
         }
         if conversation_id or existing.get('conversation_id'):
-            record['conversation_id'] = conversation_id or existing.get('conversation_id')
+            conv_val = conversation_id or existing.get('conversation_id')
+            if isinstance(conv_val, str):
+                conv_val = conv_val.strip()
+            record['conversation_id'] = conv_val
         transaction.set(doc_ref, record, merge=True)
         return record
 
@@ -122,6 +133,9 @@ def record_dead_letter_pending(
 
 def get_dead_letter(job_id: str, *, firestore_client: Any = None) -> Optional[dict[str, Any]]:
     """Return the ledger doc for ``job_id`` or ``None`` when it does not exist."""
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    job_id = job_id.strip()
     client = _client(firestore_client)
     snapshot = _doc_ref(client, job_id).get()
     if not getattr(snapshot, 'exists', False):
@@ -138,6 +152,9 @@ def confirm_dead_letter(job_id: str, *, firestore_client: Any = None) -> Optiona
     returns ``did_transition=False``, so redeliveries and transaction retries
     cannot double-count the confirmed cohort.
     """
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    job_id = job_id.strip()
     client = _client(firestore_client)
     doc_ref = _doc_ref(client, job_id)
     now = datetime.now(timezone.utc)
@@ -160,8 +177,14 @@ def confirm_dead_letter(job_id: str, *, firestore_client: Any = None) -> Optiona
 
 def _validate_dead_letter_identity(doc: dict[str, Any], job_id: str, uid: Any) -> None:
     """Fail closed when a ledger doc does not belong to this job/uid pair."""
-    if doc.get('job_id') != job_id or (isinstance(uid, str) and uid and doc.get('uid') != uid):
-        raise RuntimeError(f'sync dead-letter identity mismatch for job {job_id}')
+    if not isinstance(doc, dict):
+        raise ValueError('ledger doc must be a dictionary')
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    norm_job_id = job_id.strip()
+    norm_uid = uid.strip() if isinstance(uid, str) else uid
+    if doc.get('job_id') != norm_job_id or (isinstance(norm_uid, str) and norm_uid and doc.get('uid') != norm_uid):
+        raise RuntimeError(f'sync dead-letter identity mismatch for job {norm_job_id}')
 
 
 def ensure_dead_letter_confirmed(
@@ -181,13 +204,16 @@ def ensure_dead_letter_confirmed(
     a uid, so a fabricated replacement can never pass for the real record. Any
     identity mismatch fails closed instead of confirming someone else's doc.
     """
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    job_id = job_id.strip()
     existing = get_dead_letter(job_id, firestore_client=firestore_client)
     if existing is None:
-        if not isinstance(uid, str) or not uid:
+        if not isinstance(uid, str) or not uid.strip():
             raise RuntimeError(f'sync dead-letter missing and uid unavailable for job {job_id}')
         record_dead_letter_pending(
             job_id=job_id,
-            uid=uid,
+            uid=uid.strip(),
             conversation_id=conversation_id,
             failure_code=failure_code,
             firestore_client=firestore_client,
