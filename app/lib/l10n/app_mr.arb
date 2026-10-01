@@ -11328,5 +11328,9 @@
     "updateAvailableTitle": "अपडेट उपलब्ध आहे",
     "updateAvailableMessage": "Omi ची नवीन आवृत्ती तयार आहे, दुरुस्त्या आणि सुधारणांसह.",
     "updateRequiredTitle": "अपडेट आवश्यक आहे",
-    "updateRequiredMessage": "Omi ची ही आवृत्ती आता समर्थित नाही. रेकॉर्डिंग आणि सिंक सुरू ठेवण्यासाठी अपडेट करा."
+    "updateRequiredMessage": "Omi ची ही आवृत्ती आता समर्थित नाही. रेकॉर्डिंग आणि सिंक सुरू ठेवण्यासाठी अपडेट करा.",
+    "autoRemoveSyncedCopiesTitle": "सिंक केलेल्या प्रती आपोआप काढा",
+    "autoRemoveSyncedCopiesDays": "सिंक केलेल्या प्रती {days} दिवसांनंतर हटवल्या जातात",
+    "autoRemoveSyncedCopiesDescription": "सिंकनंतर {days} दिवसांनी स्थानिक प्रती हटवते. क्लाउड प्रती ठेवल्या जातात.",
+    "localCopiesSection": "स्थानिक प्रती"
 }

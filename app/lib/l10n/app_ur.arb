@@ -11328,5 +11328,9 @@
     "updateAvailableTitle": "اپ ڈیٹ دستیاب ہے",
     "updateAvailableMessage": "Omi کا نیا ورژن تیار ہے، اصلاحات اور بہتریوں کے ساتھ۔",
     "updateRequiredTitle": "اپ ڈیٹ ضروری ہے",
-    "updateRequiredMessage": "Omi کا یہ ورژن اب تعاون یافتہ نہیں ہے۔ ریکارڈنگ اور سنک جاری رکھنے کے لیے اپ ڈیٹ کریں۔"
+    "updateRequiredMessage": "Omi کا یہ ورژن اب تعاون یافتہ نہیں ہے۔ ریکارڈنگ اور سنک جاری رکھنے کے لیے اپ ڈیٹ کریں۔",
+    "autoRemoveSyncedCopiesTitle": "سنک کی گئی کاپیاں خودکار طور پر ہٹائیں",
+    "autoRemoveSyncedCopiesDays": "سنک کی گئی کاپیاں {days} دن بعد حذف ہو جاتی ہیں",
+    "autoRemoveSyncedCopiesDescription": "سنک کے {days} دن بعد مقامی کاپیاں حذف کر دیتا ہے۔ کلاؤڈ کاپیاں محفوظ رہتی ہیں۔",
+    "localCopiesSection": "مقامی کاپیاں"
 }

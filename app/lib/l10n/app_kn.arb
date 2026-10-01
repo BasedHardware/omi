@@ -11328,5 +11328,9 @@
     "updateAvailableTitle": "ಅಪ್‌ಡೇಟ್ ಲಭ್ಯವಿದೆ",
     "updateAvailableMessage": "Omi ನ ಹೊಸ ಆವೃತ್ತಿ ಸಿದ್ಧವಾಗಿದೆ, ಸರಿಪಡಿಸುವಿಕೆಗಳು ಮತ್ತು ಸುಧಾರಣೆಗಳೊಂದಿಗೆ.",
     "updateRequiredTitle": "ಅಪ್‌ಡೇಟ್ ಅಗತ್ಯವಿದೆ",
-    "updateRequiredMessage": "Omi ನ ಈ ಆವೃತ್ತಿಗೆ ಇನ್ನು ಬೆಂಬಲವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಸಿಂಕ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಡೇಟ್ ಮಾಡಿ."
+    "updateRequiredMessage": "Omi ನ ಈ ಆವೃತ್ತಿಗೆ ಇನ್ನು ಬೆಂಬಲವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಸಿಂಕ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಡೇಟ್ ಮಾಡಿ.",
+    "autoRemoveSyncedCopiesTitle": "ಸಿಂಕ್ ಆದ ಪ್ರತಿಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ತೆಗೆದುಹಾಕಿ",
+    "autoRemoveSyncedCopiesDays": "ಸಿಂಕ್ ಆದ ಪ್ರತಿಗಳು {days} ದಿನಗಳ ನಂತರ ಅಳಿಸಲ್ಪಡುತ್ತವೆ",
+    "autoRemoveSyncedCopiesDescription": "ಸಿಂಕ್ ಆದ {days} ದಿನಗಳ ನಂತರ ಸ್ಥಳೀಯ ಪ್ರತಿಗಳನ್ನು ಅಳಿಸುತ್ತದೆ. ಕ್ಲೌಡ್ ಪ್ರತಿಗಳನ್ನು ಇರಿಸಲಾಗುತ್ತದೆ.",
+    "localCopiesSection": "ಸ್ಥಳೀಯ ಪ್ರತಿಗಳು"
 }

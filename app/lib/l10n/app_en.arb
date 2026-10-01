@@ -14483,5 +14483,33 @@
     "updateRequiredMessage": "This version of Omi is no longer supported. Update to keep recording and syncing.",
     "@updateRequiredMessage": {
         "description": "Message of the pop-up when this app version is no longer supported and must be updated"
+    },
+    "autoRemoveSyncedCopiesTitle": "Auto-Remove Synced Copies",
+    "autoRemoveSyncedCopiesDays": "Synced copies deleted after {days} days",
+    "autoRemoveSyncedCopiesDescription": "Deletes local copies {days} days after sync. Cloud copies are kept.",
+    "localCopiesSection": "Local Copies",
+    "@autoRemoveSyncedCopiesTitle": {
+        "description": "Settings row title: automatically remove synced phone-local recording copies"
+    },
+    "@autoRemoveSyncedCopiesDays": {
+        "description": "Subtitle for the auto-remove toggle showing the retention window",
+        "placeholders": {
+            "days": {
+                "type": "int",
+                "example": "30"
+            }
+        }
+    },
+    "@autoRemoveSyncedCopiesDescription": {
+        "description": "Footer description for the auto-remove synced copies setting",
+        "placeholders": {
+            "days": {
+                "type": "int",
+                "example": "30"
+            }
+        }
+    },
+    "@localCopiesSection": {
+        "description": "Section header above the auto-remove synced copies setting"
     }
 }

@@ -3806,5 +3806,9 @@
     "updateAvailableTitle": "Atualização disponível",
     "updateAvailableMessage": "Uma nova versão do Omi está pronta, com correções e melhorias.",
     "updateRequiredTitle": "Atualização necessária",
-    "updateRequiredMessage": "Esta versão do Omi não é mais suportada. Atualize para continuar gravando e sincronizando."
+    "updateRequiredMessage": "Esta versão do Omi não é mais suportada. Atualize para continuar gravando e sincronizando.",
+    "autoRemoveSyncedCopiesTitle": "Remover cópias sincronizadas automaticamente",
+    "autoRemoveSyncedCopiesDays": "As cópias sincronizadas são excluídas após {days} dias",
+    "autoRemoveSyncedCopiesDescription": "Exclui cópias locais {days} dias após a sincronização. As cópias na nuvem são mantidas.",
+    "localCopiesSection": "Cópias locais"
 }

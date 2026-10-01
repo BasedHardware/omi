@@ -3771,5 +3771,9 @@
     "updateAvailableTitle": "Có bản cập nhật",
     "updateAvailableMessage": "Phiên bản mới của Omi đã sẵn sàng, với các bản sửa lỗi và cải tiến.",
     "updateRequiredTitle": "Cần cập nhật",
-    "updateRequiredMessage": "Phiên bản Omi này không còn được hỗ trợ. Hãy cập nhật để tiếp tục ghi âm và đồng bộ."
+    "updateRequiredMessage": "Phiên bản Omi này không còn được hỗ trợ. Hãy cập nhật để tiếp tục ghi âm và đồng bộ.",
+    "autoRemoveSyncedCopiesTitle": "Tự động xóa bản sao đã đồng bộ",
+    "autoRemoveSyncedCopiesDays": "Bản sao đã đồng bộ bị xóa sau {days} ngày",
+    "autoRemoveSyncedCopiesDescription": "Xóa bản sao cục bộ {days} ngày sau khi đồng bộ. Bản sao trên đám mây được giữ lại.",
+    "localCopiesSection": "Bản sao cục bộ"
 }
