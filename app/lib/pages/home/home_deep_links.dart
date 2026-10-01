@@ -84,7 +84,9 @@ Future<void> openHomeDeepLink(
   Future<Memory?> Function(String)? memoryById,
   void Function(Memory)? onMemoryOpened,
   void Function()? onItemUnavailable,
+  bool Function()? canOpen,
 }) async {
+  if (canOpen != null && !canOpen()) return;
   final id = link.id;
   switch (link.alias) {
     case 'conversations':
@@ -95,7 +97,7 @@ Future<void> openHomeDeepLink(
       if (id == null) return;
       final provider = context.read<MemoriesProvider>();
       final memory = await (memoryById?.call(id) ?? _resolveIndexedMemoryById(id));
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (memory == null) {
         if (onItemUnavailable != null) {
           onItemUnavailable();
@@ -120,7 +122,7 @@ Future<void> openHomeDeepLink(
             ? result.data
             : null;
       }
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (task == null || !siriTaskIsIndexable(task, DateTime.now())) {
         if (onItemUnavailable != null) {
           onItemUnavailable();
@@ -140,7 +142,7 @@ Future<void> openHomeDeepLink(
     case 'apps':
       if (id == null) return;
       final app = await context.read<AppProvider>().getAppFromId(id);
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (app == null) {
         OmiFeedback.info(context, context.l10n.appNotFoundOrRemoved);
         return;
@@ -148,7 +150,7 @@ Future<void> openHomeDeepLink(
       unawaited(routeToPage(context, AppDetailPage(app: app)));
     case 'chat':
       await _prepareChat(context, id);
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       unawaited(
         openChatSheet(context, ChatPage(isPivotBottom: false, startFresh: true, initialDraft: link.query['draft'])),
       );
@@ -165,7 +167,7 @@ Future<void> openHomeDeepLink(
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
       final conversation = await getConversationById(id);
-      if (!context.mounted) return;
+      if (!context.mounted || (canOpen != null && !canOpen())) return;
       if (FirebaseAuth.instance.currentUser?.uid != uid || conversation == null) {
         Logger.debug('Conversation not found: $id');
         OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);

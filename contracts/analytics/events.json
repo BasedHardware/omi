@@ -2670,7 +2670,9 @@
             "siri",
             "shortcuts",
             "spotlight",
-            "unknown"
+            "unknown",
+            "app_intent",
+            "user_activity"
           ]
         }
       },

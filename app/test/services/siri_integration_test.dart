@@ -206,10 +206,47 @@ class _CooldownHost extends RecordingSiriHost {
   Future<List<SiriTelemetryRecord>> takeTelemetry() async => [];
 }
 
+class _PendingRouteHost extends SiriIndexApi {
+  SiriPendingRoute? pending;
+  final acknowledgments = <bool>[];
+
+  @override
+  Future<SiriPendingRoute?> takePendingRoute() async => pending;
+
+  @override
+  Future<void> finishPendingRoute(String route, String uid, int generation, bool delivered) async {
+    expect((route, uid, generation), (pending?.route, pending?.uid, pending?.generation));
+    acknowledgments.add(delivered);
+    if (delivered) pending = null;
+  }
+}
+
 void main() {
+  test('pending Spotlight route is acknowledged only after its exact owner route opens', () async {
+    final host = _PendingRouteHost()
+      ..pending = SiriPendingRoute(route: '/conversation/c-1', uid: 'owner-a', generation: 4);
+    final seen = <(String, String, int)>[];
+    var delivered = false;
+    final siri = SiriIntegration.forTest(host, 'owner-a', routeOpener: (route, uid, generation) async {
+      seen.add((route, uid, generation));
+      return delivered;
+    });
+
+    await siri.deliverPendingRoute();
+    expect(host.acknowledgments, [false]);
+    expect(host.pending, isNotNull);
+    delivered = true;
+    await siri.deliverPendingRoute();
+    expect(host.acknowledgments, [false, true]);
+    expect(host.pending, isNull);
+    expect(seen, [('/conversation/c-1', 'owner-a', 4), ('/conversation/c-1', 'owner-a', 4)]);
+  });
+
   test('native openChat telemetry maps to the registered Siri intent', () {
     final intent = siri_events.SiriIntentPerformedIntent.values.singleWhere((value) => value.name == 'openChat');
     expect(intent.wireName, 'open_chat');
+    expect(siri_events.SiriIntentPerformedInvokedVia.appIntent.wireName, 'app_intent');
+    expect(siri_events.SiriIntentPerformedInvokedVia.userActivity.wireName, 'user_activity');
   });
 
   test('removal repair retries keep a capped interval without a terminal attempt', () {

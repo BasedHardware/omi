@@ -9,7 +9,7 @@ import 'package:omi/utils/logger.dart';
 
 /// Opens a deep-link route (`/conversation/abc`, `/apps/xyz`, `/settings/data-privacy`) inside the
 /// Home that is already on screen.
-typedef HomeRouteOpener = Future<void> Function(String route);
+typedef HomeRouteOpener = Future<void> Function(String route, {bool Function()? canOpen});
 
 /// Navigation that must land in the one Home shell instead of stacking a second one
 /// (docs/ux-contract.md §1, nav #3).
@@ -19,12 +19,17 @@ typedef HomeRouteOpener = Future<void> Function(String route);
 /// deep link, let Home push the destination on top of itself — parent before child.
 abstract final class HomeNavigation {
   static HomeRouteOpener? _opener;
+  static void Function()? onHomeMounted;
 
   /// Whether a Home shell is mounted (it is the first route of the root navigator).
   static bool get isHomeMounted => _opener != null;
 
   /// Called by the Home page in `initState` / `dispose`.
-  static void register(HomeRouteOpener opener) => _opener = opener;
+  static void register(HomeRouteOpener opener) {
+    _opener = opener;
+    final callback = onHomeMounted;
+    if (callback != null) scheduleMicrotask(callback);
+  }
 
   static void unregister(HomeRouteOpener opener) {
     // `==`, not identical: two tear-offs of the same method are equal but not identical.
@@ -49,20 +54,21 @@ abstract final class HomeNavigation {
   static Future<bool> openRoute(
     String route, {
     NavigatorState? navigator,
+    bool Function()? canOpen,
     Duration timeout = const Duration(seconds: 15),
     Duration pollInterval = const Duration(milliseconds: 50),
   }) async {
     final deadline = DateTime.now().add(timeout);
-    while (_opener == null && DateTime.now().isBefore(deadline)) {
+    while ((_opener == null || (canOpen != null && !canOpen())) && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(pollInterval);
     }
     final opener = _opener;
-    if (opener == null) {
+    if (opener == null || (canOpen != null && !canOpen())) {
       Logger.debug('HomeNavigation: no Home mounted; dropping $route');
       return false;
     }
     (navigator ?? globalNavigatorKey.currentState)?.popUntil((r) => r.isFirst);
-    await opener(route);
-    return true;
+    await opener(route, canOpen: canOpen);
+    return canOpen == null || canOpen();
   }
 }
