@@ -113,11 +113,12 @@ audio or enable automatic language detection. See Deepgram's
 
 Cancel and await the task running the transcriber to stop it. The SDK stops
 sending PCM, sends Deepgram's `CloseStream`, and keeps receiving final transcripts
-until the server closes or `drain_timeout` expires (default: five seconds).
+until the server closes or the receive timeout expires. `drain_timeout` bounds
+both the terminal send and the receive wait (default: five seconds per phase).
 Callbacks can therefore run while cancellation is being awaited. Set
-`drain_timeout=0` on `create_transcriber("deepgram", ...)` to close without waiting
-for final results. A server EOF or connection error still follows the reconnect
-path; it does not send `CloseStream`.
+`drain_timeout=0` on `create_transcriber("deepgram", ...)` to skip waiting for final
+results; the terminal send still has a five-second timeout. A server EOF or
+connection error follows the reconnect path; it does not send `CloseStream`.
 
 ### Local Development Setup
 

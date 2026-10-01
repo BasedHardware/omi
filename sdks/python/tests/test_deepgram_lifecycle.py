@@ -340,7 +340,50 @@ def test_deepgram_drain_timeout_or_send_failure_cleans_up(close_send_fails):
 
         assert ws.closed
         assert receiver_cancelled.is_set()
+        if not close_send_fails:
+            assert ws.sent_chunks == [json.dumps({"type": "CloseStream"})]
         assert connect.call_count == 1
+        assert asyncio.all_tasks() == {asyncio.current_task()}
+
+    asyncio.run(scenario())
+
+
+def test_deepgram_blocked_closestream_send_is_bounded():
+    async def scenario():
+        receiving = asyncio.Event()
+        sending_close = asyncio.Event()
+        send_cancelled = asyncio.Event()
+        receiver_cancelled = asyncio.Event()
+
+        class BlockedWebSocket(FakeWebSocket):
+            async def __anext__(self):
+                receiving.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    receiver_cancelled.set()
+
+            async def send(self, chunk):
+                assert json.loads(chunk).get("type") == "CloseStream"
+                sending_close.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    send_cancelled.set()
+
+        ws = BlockedWebSocket()
+        with patch("websockets.connect", return_value=ws):
+            transcriber = DeepgramTranscriber("fake-key", drain_timeout=0.01)
+            task = asyncio.create_task(transcriber.run(asyncio.Queue()))
+            await asyncio.wait_for(receiving.wait(), 1)
+            task.cancel()
+            await asyncio.wait_for(sending_close.wait(), 1)
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, 1)
+
+        assert send_cancelled.is_set()
+        assert receiver_cancelled.is_set()
+        assert ws.closed
         assert asyncio.all_tasks() == {asyncio.current_task()}
 
     asyncio.run(scenario())

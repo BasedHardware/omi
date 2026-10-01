@@ -86,7 +86,10 @@ class DeepgramTranscriber:
                         send_task.cancel()
                         await asyncio.gather(send_task, return_exceptions=True)
                         try:
-                            await ws.send(json.dumps({"type": "CloseStream"}))
+                            await asyncio.wait_for(
+                                ws.send(json.dumps({"type": "CloseStream"})),
+                                timeout=self.drain_timeout or 5.0,
+                            )
                             await asyncio.wait_for(
                                 asyncio.shield(recv_task), timeout=self.drain_timeout
                             )
