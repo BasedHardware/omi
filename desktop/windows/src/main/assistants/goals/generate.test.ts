@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // generate.ts imports electron + the session/notify/appSettings singletons only
 // for its REAL side-effects. The unit tests here drive the pure helpers and the
 // injected-deps flow, so the singletons are stubbed inert.
-vi.mock('electron', () => ({ net: { fetch: vi.fn() }, BrowserWindow: { getAllWindows: () => [] } }))
+const h = vi.hoisted(() => ({ fetch: vi.fn() }))
+vi.mock('electron', () => ({ net: { fetch: h.fetch }, BrowserWindow: { getAllWindows: () => [] } }))
 vi.mock('../core/session', () => ({
   getBackendSession: () => null,
   getSessionEpoch: () => 0,
@@ -20,8 +21,10 @@ import {
   parseGoalSuggestion,
   buildCandidateWith,
   createCandidateWith,
+  generateSuggestionText,
   realCreateDeps,
   validateLinkedTaskIds,
+  MODEL,
   type CandidateDeps,
   type CreateDeps,
   type GoalCandidate,
@@ -29,6 +32,7 @@ import {
 } from './generate'
 import { setAppSettings } from '../../appSettings'
 import type { GoalContextData } from './context'
+import type { BackendSession } from '../core/session'
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -255,6 +259,43 @@ describe('createCandidateWith (phase 2 — write)', () => {
       })
     })
     expect((await createCandidateWith(d, withLinks)).status).toBe('created')
+  })
+})
+
+describe('generateSuggestionText — proxy transport', () => {
+  it('sends the bounded goals attribution headers through the shared transport', async () => {
+    h.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({ suggested_title: 'G', suggested_target: 5 })
+                }
+              ]
+            }
+          }
+        ]
+      })
+    })
+    const session: BackendSession = { apiBase: 'a', desktopApiBase: 'd', token: 't' }
+    const text = await generateSuggestionText(session, 'prompt')
+    expect(text).toContain('suggested_title')
+    expect(h.fetch).toHaveBeenCalledTimes(1)
+    const [url, init] = h.fetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`d/v1/proxy/gemini/models/${MODEL}:generateContent`)
+    expect(init.method).toBe('POST')
+    expect(init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer t',
+      'X-Omi-Lane': 'goals',
+      'X-Omi-Workload': 'interactive'
+    })
+    expect(['windows', 'macos', 'linux', 'unknown']).toContain(
+      (init.headers as Record<string, string>)['X-App-Platform']
+    )
   })
 })
 

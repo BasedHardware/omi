@@ -1,11 +1,5 @@
 import Foundation
 
-enum GeminiWorkloadClass: String {
-  case interactive
-  case extraction
-  case maintenance
-}
-
 // MARK: - Thinking Budget Configuration
 
 /// Controls how many tokens Gemini 2.5 spends on internal reasoning.
@@ -188,6 +182,7 @@ struct GeminiResponse: Decodable {
 /// the Gemini API key server-side. Auth uses Firebase Bearer token.
 actor GeminiClient {
   private let model: String
+  private let lane: GeminiLane
   private let workload: GeminiWorkloadClass
 
   /// Backend proxy base URL resolved through the identity-bound endpoint policy.
@@ -363,6 +358,7 @@ actor GeminiClient {
     apiKey: String? = nil,
     model: String = ModelQoS.Gemini.proactive,
     fallbackModel: String? = nil,
+    lane: GeminiLane,
     workload: GeminiWorkloadClass
   ) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
@@ -374,6 +370,7 @@ actor GeminiClient {
     }
     self.model = model
     self.fallbackModel = fallbackModel
+    self.lane = lane
     self.workload = workload
     // Which model a proactive assistant actually runs on is a product decision with a
     // measurable click-through cost, and until now it was invisible at runtime — the model
@@ -638,8 +635,11 @@ actor GeminiClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
+        urlRequest.applyGeminiProxyHeaders(
+          lane: lane,
+          workload: workload,
+          authorization: try await authHeader()
+        )
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
@@ -715,8 +715,11 @@ actor GeminiClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
+        urlRequest.applyGeminiProxyHeaders(
+          lane: lane,
+          workload: workload,
+          authorization: try await authHeader()
+        )
         urlRequest.timeoutInterval = timeout
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -789,8 +792,11 @@ actor GeminiClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
+        urlRequest.applyGeminiProxyHeaders(
+          lane: lane,
+          workload: workload,
+          authorization: try await authHeader()
+        )
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -1096,8 +1102,11 @@ extension GeminiClient {
           var urlRequest = URLRequest(url: url)
           urlRequest.httpMethod = "POST"
           urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-          urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-          urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
+          urlRequest.applyGeminiProxyHeaders(
+            lane: lane,
+            workload: workload,
+            authorization: try await authHeader()
+          )
           urlRequest.timeoutInterval = 300
           urlRequest.httpBody = requestBody
 

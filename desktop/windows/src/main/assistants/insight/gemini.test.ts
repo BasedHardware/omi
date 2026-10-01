@@ -144,6 +144,19 @@ describe('runTwoPhasePipeline', () => {
     expect(h.fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('emits the bounded attribution headers on the proxy request', async () => {
+    queueResponses([fc('no_advice', { context_summary: 'c', current_activity: 'a' })])
+    await runTwoPhasePipeline(deps())
+    const [url, init] = h.fetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/v1/proxy/gemini/models/')
+    expect(init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer t',
+      'X-Omi-Lane': 'insight',
+      'X-Omi-Workload': 'extraction'
+    })
+  })
+
   it('Phase 1 TOLERATES an unknown tool (continues); Phase 2 still reachable', async () => {
     queueResponses([
       fc('bogus_tool', { whatever: 1 }), // unknown in phase 1 → continue

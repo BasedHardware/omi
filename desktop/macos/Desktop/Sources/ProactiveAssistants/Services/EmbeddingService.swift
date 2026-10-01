@@ -93,7 +93,8 @@ actor EmbeddingService {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+    request.applyGeminiProxyHeaders(
+      lane: .embedding, workload: .maintenance, authorization: try await authHeader())
     request.timeoutInterval = 30
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
@@ -148,7 +149,8 @@ actor EmbeddingService {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+    request.applyGeminiProxyHeaders(
+      lane: .embedding, workload: .maintenance, authorization: try await authHeader())
     request.timeoutInterval = 60
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 

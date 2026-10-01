@@ -13,10 +13,22 @@ extension DesktopAutomationActionRegistry {
         guard AppBuild.isNonProduction else {
           return ["error": "proactive_assistant_proxy_routes is disabled on production bundles"]
         }
+        guard let geminiURL = URL(string: GeminiClient.proxyBaseURL) else {
+          return ["error": "invalid gemini proxy base url"]
+        }
+        var geminiRequest = URLRequest(url: geminiURL)
+        geminiRequest.applyGeminiProxyHeaders(
+          lane: .taskExtraction,
+          workload: .extraction,
+          authorization: ""
+        )
         return [
           "gemini_proxy_base_url": GeminiClient.proxyBaseURL,
           "embedding_proxy_base_url": EmbeddingService.proxyBaseURL,
           "proactivity_base_url": ProactiveLaneClient.backendBaseURL,
+          "gemini_lane": geminiRequest.value(forHTTPHeaderField: "X-Omi-Lane") ?? "",
+          "gemini_workload": geminiRequest.value(forHTTPHeaderField: "X-Omi-Workload") ?? "",
+          "gemini_client_platform": geminiRequest.value(forHTTPHeaderField: "X-App-Platform") ?? "",
         ]
       }
 

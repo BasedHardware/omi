@@ -64,4 +64,23 @@ describe('analyzeScreenshot — retry classification', () => {
     })
     expect(h.fetch).toHaveBeenCalledTimes(1)
   })
+
+  it('emits the bounded attribution headers on the proxy request', async () => {
+    h.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: '{}' }] } }] })
+    })
+    await analyzeScreenshot(session(), 'sys', 'prompt', 'BASE64')
+    const [url, init] = h.fetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/v1/proxy/gemini/models/')
+    expect(init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer t',
+      'X-Omi-Lane': 'focus',
+      'X-Omi-Workload': 'extraction'
+    })
+    expect(['windows', 'macos', 'linux', 'unknown']).toContain(
+      (init.headers as Record<string, string>)['X-App-Platform']
+    )
+  })
 })

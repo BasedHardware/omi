@@ -7,6 +7,8 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityPolicy.swift
   - desktop/macos/Desktop/Sources/Chat/KnowledgeLedgerPromptProjection.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiLane.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiProxyRequestHeaders.swift
   - desktop/macos/Desktop/Sources/Services/SubscriptionEntitlementService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerObservationAdapters.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerProjection.swift
@@ -28,6 +30,9 @@ steps:
       result.detail.gemini_proxy_base_url: https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
       result.detail.embedding_proxy_base_url: https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
       result.detail.proactivity_base_url: https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
+      result.detail.gemini_lane: task_extraction
+      result.detail.gemini_workload: extraction
+      result.detail.gemini_client_platform: macos
 
   - id: S2
     name: Exercise pure knowledge-ledger foundation contracts

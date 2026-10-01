@@ -29,6 +29,7 @@ import database._client as firestore_client_module
 from database.llm_gateway_accounting import ATTEMPTS_COLLECTION
 from llm_gateway.gateway.accounting import CostStatus, PricedUsage, ProviderResponseMetadata, ProviderUsage, UsageStatus
 from routers import desktop_proxy, omni_relay
+from utils.llm import desktop_gemini_telemetry
 from utils.llm import managed_spend_ledger as ledger
 from utils.llm.managed_spend_ledger import (
     DESKTOP_PROXY_CALLER,
@@ -327,7 +328,9 @@ def _telemetry(provider: str, *, uid: str | None = UID, payer: str = 'omi') -> d
 @pytest.fixture
 def scheduled(monkeypatch) -> list[ManagedAttempt]:
     calls: list[ManagedAttempt] = []
-    monkeypatch.setattr(desktop_proxy, 'schedule_managed_attempt', lambda attempt: calls.append(attempt) or True)
+    monkeypatch.setattr(
+        desktop_gemini_telemetry, 'schedule_managed_attempt', lambda attempt: calls.append(attempt) or True
+    )
     monkeypatch.setattr(desktop_proxy.sys, 'stdout', io.StringIO())
     return calls
 

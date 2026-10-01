@@ -80,6 +80,19 @@ describe('geminiWire', () => {
     expect(urlOf(0)).toContain(`/models/${TASK_MODEL}:generateContent`)
   })
 
+  it('emits the bounded attribution headers on the proxy request', async () => {
+    h.fetch.mockResolvedValueOnce(ok(fc('no_task_found', {})))
+    await sendInitialTurn(initial)
+    const init = h.fetch.mock.calls[0][1] as RequestInit
+    expect(urlOf(0)).toContain('/v1/proxy/gemini/models/')
+    expect(init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer t',
+      'X-Omi-Lane': 'task_extraction',
+      'X-Omi-Workload': 'extraction'
+    })
+  })
+
   it('subsequent turn omits tool_config and appends the exact functionCall/functionResponse round-trip', async () => {
     h.fetch.mockResolvedValueOnce(ok(fcSig('search_similar', { query: 'deck' }, 'SIG123')))
     const { turn, contents } = await sendInitialTurn(initial)
