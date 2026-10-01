@@ -11322,6 +11322,8 @@
     "collapseAction": "Згарнуць",
     "speakerTagPromptNotMeAction": "Не я",
     "confidenceNextLabels": "{count, plural, =1{Пазначце яго яшчэ ў 1 размове.} other{Пазначце яго яшчэ ў {count} размовах.}}",
+    "siriShortcutsSetupHint": "Уключыце Omi ў Камандах → Siri. Скажыце «{askPhrase}» або «{questionPhrase}», а затым задайце сваё пытанне.",
+    "siriShortcutsSearchHint": " Также можно сказать «{searchPhrase} for what I did today».",
     "updateAvailableTitle": "Даступнае абнаўленне",
     "updateAvailableMessage": "Новая версія Omi гатовая: з выпраўленнямі і паляпшэннямі.",
     "updateRequiredTitle": "Патрабуецца абнаўленне",

@@ -113,6 +113,10 @@ abstract class SiriIndexApi {
   void finishPendingRoute(String route, String uid, int generation, bool delivered);
   bool isEnabled();
   List<SiriTelemetryRecord> takeTelemetry();
+
+  /// True only when the Runner was compiled with the Siri toolchain, so Dart can
+  /// skip App Shortcuts UI (e.g. the Shortcuts button) in stable-compiler builds.
+  bool appShortcutsAvailable();
   @async
   void donateAction(String uid, String type, String id);
 }

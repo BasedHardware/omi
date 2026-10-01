@@ -3800,6 +3800,8 @@
     "collapseAction": "Recolher",
     "speakerTagPromptNotMeAction": "Não sou eu",
     "confidenceNextLabels": "{count, plural, =1{Etiquete-os em mais 1 conversa.} other{Etiquete-os em mais {count} conversas.}}",
+    "siriShortcutsSetupHint": "Ative o Omi em Atalhos → Siri. Diga “{askPhrase}” ou “{questionPhrase}” e faça sua pergunta.",
+    "siriShortcutsSearchHint": " Também pode dizer “{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "Atualização disponível",
     "updateAvailableMessage": "Uma nova versão do Omi está pronta, com correções e melhorias.",
     "updateRequiredTitle": "Atualização necessária",

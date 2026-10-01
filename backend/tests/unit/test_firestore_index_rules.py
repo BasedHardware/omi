@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from database.firestore_index_registry import firebase_index_manifest
 from scripts.firestore_index_oracle import equivalent_suggestion
 from tests.support.firestore_index_rules import (
     ASC,
@@ -569,3 +570,73 @@ def test_merging_fixture_replay(case):
     resolved = resolved_candidate_index(shape, manifest)
     assert resolved.fields == spec.fields
     assert resolved.equality_fields == spec.equality_fields
+
+
+def _generated_manifest():
+    return firebase_index_manifest()
+
+
+@pytest.mark.parametrize(
+    'collection,field',
+    [
+        ('conversations', 'id'),
+        ('conversations', 'source'),
+        ('conversations', 'status'),
+        ('fair_use_events', 'case_ref'),
+        ('fcm_tokens', 'app_version'),
+        ('fcm_tokens', 'token'),
+        ('llm_usage', 'date'),
+        ('processing_memories', 'created_at'),
+        ('candidate_integration_outbox', 'status'),
+        ('chat_first_proactive_intents', 'delivery_state'),
+        ('memory_outbox', 'status'),
+        ('projection_repairs', 'status'),
+        ('task_recurrence_inbox', 'status'),
+    ],
+)
+def test_declared_field_requirement_serves_collection_group_single_field_shapes(collection, field):
+    query = QueryShape(
+        collection_group=collection,
+        scope='COLLECTION_GROUP',
+        filters=(QueryFilter(field, '==', 'x'),),
+    )
+    assert is_served(query, _generated_manifest())
+
+
+def test_declared_contains_requirement_serves_collection_group_array_shapes():
+    query = QueryShape(
+        collection_group='memories',
+        scope='COLLECTION_GROUP',
+        filters=(QueryFilter('tags', 'array_contains', 'x'),),
+    )
+    assert is_served(query, _generated_manifest())
+
+
+def test_collection_group_single_field_not_served_by_mismatched_scope_or_field():
+    manifest = _generated_manifest()
+    assert not is_served(
+        QueryShape(
+            collection_group='conversations',
+            scope='COLLECTION_GROUP',
+            filters=(QueryFilter('unrelated_field', '==', 'x'),),
+        ),
+        manifest,
+    )
+    collection_only = {
+        'indexes': [],
+        'fieldOverrides': [
+            {
+                'collectionGroup': 'memory_outbox',
+                'fieldPath': 'status',
+                'indexes': [{'queryScope': 'COLLECTION', 'order': ASC}],
+            }
+        ],
+    }
+    assert not is_served(
+        QueryShape(
+            collection_group='memory_outbox',
+            scope='COLLECTION_GROUP',
+            filters=(QueryFilter('status', '==', 'x'),),
+        ),
+        collection_only,
+    )

@@ -12135,6 +12135,16 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Ieslēdziet Omi sadaļā Saīsnes → Siri. Sakiet „$askPhrase“ vai „$questionPhrase“ un pēc tam uzdodiet savu jautājumu.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Varat arī teikt „$searchPhrase for what I did today“.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Pieejams atjauninājums';
 
   @override

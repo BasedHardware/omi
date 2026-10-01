@@ -1,14 +1,59 @@
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from database.firestore_index_registry import firebase_index_manifest
+from database.firestore_index_registry import FIELD_INDEX_REQUIREMENTS, firebase_index_manifest
 from scripts import reconcile_firestore_indexes
 
 SOURCE_COMMIT = 'a' * 40
+_FIELD_REQUIREMENTS = {
+    (requirement.collection_group, requirement.field_path): requirement for requirement in FIELD_INDEX_REQUIREMENTS
+}
+
+
+def _field_request(*, ready: bool = True):
+    """Fake the Admin REST field endpoints for every declared field requirement."""
+
+    calls = []
+
+    def request(method, url, payload):
+        calls.append((method, url, payload))
+        match = re.search(r'collectionGroups/([^/]+)/fields/([^/?]+)', url)
+        assert match, url
+        collection_group, field_path = match.group(1), match.group(2)
+        requirement = _FIELD_REQUIREMENTS[(collection_group, field_path)]
+        indexes = [
+            {'queryScope': 'COLLECTION', 'fields': [{'fieldPath': field_path, 'order': 'ASCENDING'}], 'state': 'READY'},
+            {
+                'queryScope': 'COLLECTION',
+                'fields': [{'fieldPath': field_path, 'order': 'DESCENDING'}],
+                'state': 'READY',
+            },
+            {
+                'queryScope': 'COLLECTION',
+                'fields': [{'fieldPath': field_path, 'arrayConfig': 'CONTAINS'}],
+                'state': 'READY',
+            },
+        ]
+        if ready:
+            for mode in requirement.collection_group_modes:
+                field = {'fieldPath': field_path}
+                if mode == 'CONTAINS':
+                    field['arrayConfig'] = 'CONTAINS'
+                else:
+                    field['order'] = mode
+                indexes.append({'queryScope': 'COLLECTION_GROUP', 'fields': [field], 'state': 'READY'})
+        return {
+            'name': f'projects/dev-project/databases/(default)/collectionGroups/{collection_group}/fields/{field_path}',
+            'indexConfig': {'usesAncestorConfig': False, 'indexes': indexes},
+        }
+
+    request.calls = calls
+    return request
 
 
 def _ready_indexes():
@@ -53,6 +98,7 @@ def test_reconcile_provisions_missing_indexes_and_waits_for_every_index():
         poll_interval_seconds=1,
         provision_missing=True,
         runner=runner,
+        field_request=_field_request(),
         sleep=sleeps.append,
         monotonic=iter((0, 0, 1, 1)).__next__,
     )
@@ -91,12 +137,13 @@ def test_reconcile_issues_every_async_create_before_waiting_for_the_full_manifes
         poll_interval_seconds=1,
         provision_missing=True,
         runner=runner,
+        field_request=_field_request(),
         sleep=lambda _seconds: None,
     )
 
     assert [kind for kind, _command in events] == ['list', 'create', 'create', 'list']
     assert all('--async' in command for kind, command in events if kind == 'create')
-    assert f'{len(indexes)} composite indexes READY' in capsys.readouterr().out
+    assert f'{len(indexes)} composite indexes' in capsys.readouterr().out
 
 
 def test_check_only_reads_the_live_inventory_without_writing(capsys, tmp_path):
@@ -116,6 +163,7 @@ def test_check_only_reads_the_live_inventory_without_writing(capsys, tmp_path):
         proposal_output=tmp_path / 'proposal.json',
         source_commit=SOURCE_COMMIT,
         runner=runner,
+        field_request=_field_request(),
     )
 
     assert commands == [
@@ -131,7 +179,7 @@ def test_check_only_reads_the_live_inventory_without_writing(capsys, tmp_path):
         ]
     ]
     expected_count = len(firebase_index_manifest()['indexes'])
-    assert f'{expected_count} composite indexes READY' in capsys.readouterr().out
+    assert f'{expected_count} composite indexes' in capsys.readouterr().out
     assert not (tmp_path / 'proposal.json').exists()
 
 
@@ -154,6 +202,7 @@ def test_check_only_fails_on_missing_indexes_without_writing(tmp_path):
             proposal_output=proposal_path,
             source_commit=SOURCE_COMMIT,
             runner=runner,
+            field_request=_field_request(),
             clock=lambda: datetime(2026, 7, 15, tzinfo=timezone.utc),
         )
 
@@ -176,9 +225,12 @@ def test_check_only_fails_on_missing_indexes_without_writing(tmp_path):
     assert {json.dumps(index, sort_keys=True) for index in proposal['create_indexes']} == expected_entries
     assert len(proposal['blocking_indexes']) == len(expected_entries)
     assert {entry['state'] for entry in proposal['blocking_indexes']} == {'MISSING'}
+    assert proposal['create_field_indexes'] == []
+    assert proposal['blocking_field_indexes'] == []
     serialized = json.dumps(proposal)
     assert 'resource_name' not in serialized
     assert '/indexes/index-id' not in serialized
+    assert '/fields/' not in serialized
     validated = reconcile_firestore_indexes.validate_schema_proposal(
         proposal_path=proposal_path,
         manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
@@ -207,6 +259,7 @@ def test_check_only_does_not_propose_duplicate_creation_for_nonready_index(tmp_p
             proposal_output=proposal_path,
             source_commit=SOURCE_COMMIT,
             runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(indexes)),
+            field_request=_field_request(),
             clock=lambda: datetime(2026, 7, 15, tzinfo=timezone.utc),
         )
 
@@ -303,6 +356,7 @@ def test_check_only_requires_proposal_metadata_before_any_command(tmp_path):
             check_only=True,
             proposal_output=tmp_path / 'proposal.json',
             runner=lambda command, **_kwargs: commands.append(command),
+            field_request=_field_request(),
         )
 
     assert commands == []
@@ -323,6 +377,7 @@ def test_check_only_rejects_long_proposal_ttl_before_any_command(tmp_path):
             source_commit=SOURCE_COMMIT,
             proposal_ttl_seconds=3601,
             runner=lambda command, **_kwargs: commands.append(command),
+            field_request=_field_request(),
         )
 
     assert commands == []
@@ -341,6 +396,7 @@ def test_check_only_rejects_redundant_dry_run_before_any_command():
             check_only=True,
             dry_run=True,
             runner=lambda command, **_kwargs: commands.append(command),
+            field_request=_field_request(),
         )
 
     assert commands == []
@@ -451,6 +507,7 @@ def test_provision_missing_uses_gcloud_with_every_manifest_field_and_waits_for_r
         poll_interval_seconds=1,
         provision_missing=True,
         runner=runner,
+        field_request=_field_request(),
         sleep=lambda _seconds: None,
         monotonic=iter((0, 0, 1, 1)).__next__,
     )
@@ -573,6 +630,11 @@ def test_writer_and_check_only_share_exact_signature_matching(monkeypatch, check
         'expected_index_signatures',
         lambda _manifest: {implicit_signature},
     )
+    monkeypatch.setattr(
+        reconcile_firestore_indexes,
+        'expected_field_requirements',
+        lambda _manifest: (),
+    )
 
     def runner(command, **_kwargs):
         if command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']:
@@ -592,6 +654,7 @@ def test_writer_and_check_only_share_exact_signature_matching(monkeypatch, check
             poll_interval_seconds=1,
             check_only=check_only,
             runner=runner,
+            field_request=_field_request(),
             sleep=lambda _seconds: None,
             monotonic=iter((0, 2)).__next__,
             **proposal_kwargs,
@@ -723,6 +786,7 @@ def test_provisioning_dry_run_only_lists_indexes_and_does_not_write(capsys):
         poll_interval_seconds=1,
         dry_run=True,
         runner=runner,
+        field_request=_field_request(),
     )
 
     assert commands == [
@@ -755,6 +819,7 @@ def test_provisioning_fails_closed_when_gcloud_cannot_create_a_missing_index():
             poll_interval_seconds=1,
             provision_missing=True,
             runner=runner,
+            field_request=_field_request(),
         )
 
 
@@ -773,6 +838,7 @@ def test_reconcile_fails_when_a_required_index_never_becomes_ready():
             poll_interval_seconds=1,
             provision_missing=True,
             runner=runner,
+            field_request=_field_request(),
             sleep=lambda _seconds: None,
             monotonic=iter((0, 2)).__next__,
         )
@@ -819,6 +885,7 @@ def test_check_only_reports_live_indexes_the_manifest_does_not_declare(capsys, t
         proposal_output=tmp_path / 'proposal.json',
         source_commit=SOURCE_COMMIT,
         runner=runner,
+        field_request=_field_request(),
     )
 
     output = capsys.readouterr().out
@@ -841,6 +908,7 @@ def test_manifest_declared_indexes_are_never_reported_as_unmanaged(capsys):
         poll_interval_seconds=1,
         dry_run=True,
         runner=runner,
+        field_request=_field_request(),
     )
 
     assert 'Unmanaged Firestore index' not in capsys.readouterr().out
@@ -878,3 +946,190 @@ def test_datastore_mode_indexes_are_not_reported_as_unmanaged_native_drift():
     )
 
     assert reconcile_firestore_indexes.unmanaged_live_indexes(expected=set(), live_indexes=[live]) == []
+
+
+def test_check_only_blocks_on_a_missing_field_override_alone(tmp_path):
+    proposal_path = tmp_path / 'proposal.json'
+    field_api = _field_request(ready=False)
+
+    with pytest.raises(RuntimeError, match='proposal written'):
+        reconcile_firestore_indexes.reconcile(
+            project='dev-project',
+            database='(default)',
+            manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
+            timeout_seconds=30,
+            poll_interval_seconds=1,
+            check_only=True,
+            proposal_output=proposal_path,
+            source_commit=SOURCE_COMMIT,
+            runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(_ready_indexes())),
+            field_request=field_api,
+            clock=lambda: datetime(2026, 7, 15, tzinfo=timezone.utc),
+        )
+
+    assert all(method == 'GET' for method, _url, _payload in field_api.calls)
+    proposal = json.loads(proposal_path.read_text(encoding='utf-8'))
+    assert proposal['create_indexes'] == []
+    assert proposal['blocking_indexes'] == []
+    additive = [override for override in firebase_index_manifest()['fieldOverrides'] if override['indexes']]
+    assert {json.dumps(override, sort_keys=True) for override in proposal['create_field_indexes']} == {
+        json.dumps(override, sort_keys=True) for override in additive
+    }
+    assert {entry['state'] for entry in proposal['blocking_field_indexes']} == {'MISSING'}
+    assert len(proposal['blocking_field_indexes']) == len(additive)
+    validated = reconcile_firestore_indexes.validate_schema_proposal(
+        proposal_path=proposal_path,
+        manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
+        project='dev-project',
+        database='(default)',
+        source_commit=SOURCE_COMMIT,
+        ttl_seconds=3600,
+        clock=lambda: datetime(2026, 7, 15, 0, 30, tzinfo=timezone.utc),
+    )
+    assert validated == proposal
+
+
+def test_schema_proposal_rejects_tampered_and_destructive_field_overrides(tmp_path):
+    proposal_path = tmp_path / 'proposal.json'
+    with pytest.raises(RuntimeError, match='proposal written'):
+        reconcile_firestore_indexes.reconcile(
+            project='dev-project',
+            database='(default)',
+            manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
+            timeout_seconds=30,
+            poll_interval_seconds=1,
+            check_only=True,
+            proposal_output=proposal_path,
+            source_commit=SOURCE_COMMIT,
+            runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(_ready_indexes())),
+            field_request=_field_request(ready=False),
+            clock=lambda: datetime(2026, 7, 15, tzinfo=timezone.utc),
+        )
+
+    manifest_path = Path(__file__).resolve().parents[3] / 'firestore.indexes.json'
+    validate_kwargs = dict(
+        proposal_path=proposal_path,
+        manifest_path=manifest_path,
+        project='dev-project',
+        database='(default)',
+        source_commit=SOURCE_COMMIT,
+        ttl_seconds=3600,
+        clock=lambda: datetime(2026, 7, 15, 0, 30, tzinfo=timezone.utc),
+    )
+
+    tampered = json.loads(proposal_path.read_text(encoding='utf-8'))
+    tampered['create_field_indexes'][0]['fieldPath'] = 'forged_field'
+    tampered['input_sha256'] = reconcile_firestore_indexes._canonical_sha256(
+        {key: tampered[key] for key in tampered if key not in {'input_sha256', 'proposal_sha256'}}
+    )
+    tampered['proposal_sha256'] = reconcile_firestore_indexes._canonical_sha256(
+        {key: tampered[key] for key in tampered if key != 'proposal_sha256'}
+    )
+    proposal_path.write_text(json.dumps(tampered), encoding='utf-8')
+    with pytest.raises(ValueError, match='not an additive field override'):
+        reconcile_firestore_indexes.validate_schema_proposal(**validate_kwargs)
+
+    destructive = json.loads(proposal_path.read_text(encoding='utf-8'))
+    exemption = next(override for override in firebase_index_manifest()['fieldOverrides'] if override['indexes'] == [])
+    destructive['create_field_indexes'] = [exemption]
+    destructive['blocking_field_indexes'] = [{'override': exemption, 'state': 'MISSING'}]
+    destructive['input_sha256'] = reconcile_firestore_indexes._canonical_sha256(
+        {key: destructive[key] for key in destructive if key not in {'input_sha256', 'proposal_sha256'}}
+    )
+    destructive['proposal_sha256'] = reconcile_firestore_indexes._canonical_sha256(
+        {key: destructive[key] for key in destructive if key != 'proposal_sha256'}
+    )
+    proposal_path.write_text(json.dumps(destructive), encoding='utf-8')
+    with pytest.raises(ValueError, match='not an additive field override'):
+        reconcile_firestore_indexes.validate_schema_proposal(**validate_kwargs)
+
+
+def test_dry_run_reports_field_readiness_without_writing(capsys):
+    field_api = _field_request(ready=False)
+
+    reconcile_firestore_indexes.reconcile(
+        project='dev-project',
+        database='(default)',
+        manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
+        timeout_seconds=30,
+        poll_interval_seconds=1,
+        dry_run=True,
+        runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(_ready_indexes())),
+        field_request=field_api,
+    )
+
+    output = capsys.readouterr().out
+    assert 'Firestore field override dry run: memory_outbox.status is MISSING' in output
+    assert all(method == 'GET' for method, _url, _payload in field_api.calls)
+
+
+def test_provision_missing_applies_union_field_patch():
+    applied: dict[tuple[str, str], dict] = {}
+
+    def _serve_field(key, ready):
+        collection_group, field_path = key
+        requirement = _FIELD_REQUIREMENTS[key]
+        indexes = [
+            {'queryScope': 'COLLECTION', 'fields': [{'fieldPath': field_path, 'order': 'ASCENDING'}], 'state': 'READY'},
+            {
+                'queryScope': 'COLLECTION',
+                'fields': [{'fieldPath': field_path, 'order': 'DESCENDING'}],
+                'state': 'READY',
+            },
+            {
+                'queryScope': 'COLLECTION',
+                'fields': [{'fieldPath': field_path, 'arrayConfig': 'CONTAINS'}],
+                'state': 'READY',
+            },
+        ]
+        if ready:
+            for mode in requirement.collection_group_modes:
+                field = {'fieldPath': field_path}
+                if mode == 'CONTAINS':
+                    field['arrayConfig'] = 'CONTAINS'
+                else:
+                    field['order'] = mode
+                indexes.append({'queryScope': 'COLLECTION_GROUP', 'fields': [field], 'state': 'READY'})
+        return {
+            'name': f'projects/dev-project/databases/(default)/collectionGroups/{collection_group}/fields/{field_path}',
+            'indexConfig': {'usesAncestorConfig': False, 'indexes': indexes},
+        }
+
+    def request(method, url, payload):
+        if 'operations/' in url:
+            return {'done': True}
+        match = re.search(r'collectionGroups/([^/]+)/fields/([^/?]+)', url)
+        assert match, url
+        key = (match.group(1), match.group(2))
+        if method == 'PATCH':
+            applied[key] = payload
+            return {'name': 'projects/dev-project/databases/(default)/operations/op'}
+        return _serve_field(key, ready=key in applied)
+
+    reconcile_firestore_indexes.reconcile(
+        project='dev-project',
+        database='(default)',
+        manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
+        timeout_seconds=30,
+        poll_interval_seconds=1,
+        provision_missing=True,
+        runner=lambda _command, **_kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(_ready_indexes())),
+        field_request=request,
+        sleep=lambda _seconds: None,
+    )
+
+    assert set(applied) == set(_FIELD_REQUIREMENTS)
+    for (collection_group, field_path), payload in applied.items():
+        requirement = _FIELD_REQUIREMENTS[(collection_group, field_path)]
+        modes = {
+            (index['queryScope'], index['fields'][0].get('order') or index['fields'][0].get('arrayConfig'))
+            for index in payload['indexConfig']['indexes']
+        }
+        assert {('COLLECTION_GROUP', mode) for mode in requirement.collection_group_modes} <= modes
+        assert {
+            ('COLLECTION', 'ASCENDING'),
+            ('COLLECTION', 'DESCENDING'),
+            ('COLLECTION', 'CONTAINS'),
+        } <= modes
+        assert 'ttlConfig' not in payload
+        assert payload['indexConfig']['indexes'][0].get('state') is None

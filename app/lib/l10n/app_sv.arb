@@ -3765,6 +3765,8 @@
     "collapseAction": "Dölj",
     "speakerTagPromptNotMeAction": "Inte jag",
     "confidenceNextLabels": "{count, plural, =1{Märk dem i 1 konversation till.} other{Märk dem i {count} konversationer till.}}",
+    "siriShortcutsSetupHint": "Slå på Omi i Genvägar → Siri. Säg ”{askPhrase}” eller ”{questionPhrase}” och ställ sedan din fråga.",
+    "siriShortcutsSearchHint": " Du kan också säga ”{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "Uppdatering tillgänglig",
     "updateAvailableMessage": "En ny version av Omi är klar, med rättningar och förbättringar.",
     "updateRequiredTitle": "Uppdatering krävs",
