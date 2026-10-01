@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
 import 'package:omi/services/siri_integration.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' as siri_events;
 
 class RecordingSiriHost extends SiriIndexApi {
   String? owner;
@@ -206,6 +207,11 @@ class _CooldownHost extends RecordingSiriHost {
 }
 
 void main() {
+  test('native openChat telemetry maps to the registered Siri intent', () {
+    final intent = siri_events.SiriIntentPerformedIntent.values.singleWhere((value) => value.name == 'openChat');
+    expect(intent.wireName, 'open_chat');
+  });
+
   test('removal repair retries keep a capped interval without a terminal attempt', () {
     const base = Duration(seconds: 1);
     expect(siriRemovalRetryDelay(base, 0), const Duration(seconds: 1));

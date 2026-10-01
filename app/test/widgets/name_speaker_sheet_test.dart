@@ -74,6 +74,31 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
   });
+  testWidgets('Someone else excludes the rejected near match and requires an explicit choice', (tester) async {
+    final assignments = <String>[];
+    await _pumpSheet(
+      tester,
+      people: [_person('maya', 'Maya'), _person('sam', 'Sam')],
+      suggestion: SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg0', suggestedPersonId: 'maya'),
+      onSpeakerAssigned: (_, id, __, ___, ____) async {
+        assignments.add(id);
+        return false;
+      },
+    );
+    expect(_chipNames(tester), contains('Sam'));
+    expect(_chipNames(tester), isNot(contains('Maya')));
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(assignments, isEmpty);
+    await tester.tap(find.text('Sam'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(assignments, ['sam']);
+  });
+
   testWidgets('sheet closes while a speaker save is pending and the transcript rolls back on failure', (tester) async {
     final response = Completer<bool>();
     final provider = ConversationDetailProvider(

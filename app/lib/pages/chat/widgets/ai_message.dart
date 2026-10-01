@@ -18,7 +18,6 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
-import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
@@ -385,8 +384,8 @@ Widget buildMessageWidget(
   // Native content blocks. Both are additive chrome: an absent or malformed
   // block leaves the answer exactly as it renders today.
   final reviewCard = showTypingIndicator ? null : message.memoryReviewCard;
-  final followUp = showTypingIndicator ? null : message.followUpQuestion;
-  if (evidence == null && !appendBlocks && reviewCard == null && followUp == null) return messageWidget;
+  // Follow-ups are transient composer suggestions, not part of each historical answer's chrome.
+  if (evidence == null && !appendBlocks && reviewCard == null) return messageWidget;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
@@ -411,7 +410,6 @@ Widget buildMessageWidget(
         // can never become an external action.
         ChatEvidenceReferenceList(envelope: evidence),
       ],
-      if (followUp != null) ...[const SizedBox(height: 8), ChatFollowUpChip(question: followUp, onSend: sendMessage)],
     ],
   );
 }

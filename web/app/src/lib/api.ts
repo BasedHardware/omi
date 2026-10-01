@@ -2,7 +2,6 @@ import { getIdToken } from './firebase';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
-  invalidateCacheKey,
   invalidationPatterns,
   fetchWithCache,
   cacheKeys,
@@ -261,19 +260,15 @@ export async function deleteConversation(id: string): Promise<void> {
 
 /**
  * Get the approved screenshot set (banner + strip) for a conversation.
- * Uses the same fetch-with-cache idiom as `getConversation`; a short TTL
- * balances against the frame set's signed URLs expiring after 60 minutes.
+ * Deliberately uncached: every response carries signed URLs that expire
+ * after 60 minutes, and a cached GET that resolved after a delete would
+ * serve the deleted frames again on reopen. The set is small.
  */
 export async function getConversationScreenFrames(
   conversationId: string,
 ): Promise<ConversationScreenFrameSet> {
-  return fetchWithCache<ConversationScreenFrameSet>(
-    cacheKeys.screenFrames(conversationId),
-    () =>
-      fetchWithAuth<ConversationScreenFrameSet>(
-        `/v1/conversations/${conversationId}/screenshots`,
-      ),
-    { ttl: CACHE_TTL.SHORT },
+  return fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots`,
   );
 }
 
@@ -291,7 +286,6 @@ export async function deleteScreenFrame(
     `/v1/conversations/${conversationId}/screenshots/${frameId}`,
     { method: 'DELETE' },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -303,7 +297,6 @@ export async function deleteAllScreenFrames(
     `/v1/conversations/${conversationId}/screenshots`,
     { method: 'DELETE' },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -320,7 +313,6 @@ export async function patchScreenFrameSharing(
     `/v1/conversations/${conversationId}/screenshot-sharing`,
     { method: 'PATCH', body: JSON.stringify(body) },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 

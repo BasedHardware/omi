@@ -764,12 +764,11 @@ struct ConversationDetailView: View {
 
   @ViewBuilder
   private var summaryBeforeScreenshots: some View {
-    let selection = ConversationSummarySelection.primarySummary(for: displayConversation)
-
-    // Overview section (selected app result, or the structured fallback)
-    if !selection.content.isEmpty {
-      overviewSection
-    }
+    // Overview section (selected app result, structured fallback, or the empty
+    // state) — mounted unconditionally so its "Summarize with an app" picker
+    // stays reachable even before a first summary exists. `ConversationSummaryBody`
+    // renders a dedicated empty state for `.empty`, so there is no blank gap.
+    overviewSection
 
     ConversationPhotoGallery(
       conversationID: displayConversation.id,

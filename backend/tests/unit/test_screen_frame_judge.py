@@ -211,3 +211,47 @@ def test_the_wire_frame_still_enforces_the_caption_contract():
                 "banner_suitability": 0.5,
             }
         )
+
+
+def test_notes_evidence_is_normalised_rather_than_dropping_the_frame():
+    """The notes evidence fields follow the caption rule: Vertex treats schema
+    limits as advisory, so an overlong summary or name list is trimmed, never
+    turned into judge_call_failed."""
+    family = "\U0001f468‍\U0001f469‍\U0001f467"  # a ZWJ sequence straddling the cut
+    judgement = ScreenFrameJudgement(
+        outcome="approved_clean",
+        caption="c",
+        labels=[],
+        banner_suitability=0.5,
+        screen_summary=("x" * 276) + family + " trailing text",
+        visible_participant_names=[" Jordan  Rivera ", "jordan rivera", "", 7, *[f"Person {i}" for i in range(12)]],
+    )
+
+    assert len(judgement.screen_summary) <= 280
+    assert not judgement.screen_summary.endswith("‍")
+    assert judgement.visible_participant_names[0] == "Jordan Rivera"
+    assert len(judgement.visible_participant_names) == 8
+    assert "jordan rivera" not in judgement.visible_participant_names
+
+
+def test_notes_evidence_defaults_when_the_model_omits_it():
+    judgement = ScreenFrameJudgement.model_validate(
+        {
+            "outcome": "approved_clean",
+            "caption": "c",
+            "labels": [],
+            "banner_suitability": 0.5,
+            "screen_summary": None,
+            "visible_participant_names": None,
+        }
+    )
+
+    assert judgement.screen_summary == ""
+    assert judgement.visible_participant_names == []
+
+
+def test_prompt_asks_for_call_tile_names_but_not_the_owner_tile():
+    prompt = judge_mod._PRIVACY_PROMPT
+    assert "visible_participant_names" in prompt and "screen_summary" in prompt
+    assert '"You"' in prompt
+    assert policy_mod.get_purpose_policy("meeting_note_v1").prompt_version.endswith(".v2")

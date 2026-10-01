@@ -405,6 +405,75 @@ final class DeviceDisconnected extends RegisteredEvent {
   Map<String, Object> get properties => {};
 }
 
+enum DeviceDisconnectedDetailedReason {
+  cleanDisconnect("clean_disconnect"),
+  connectionTimeout("connection_timeout"),
+  remoteDeviceTerminated("remote_device_terminated"),
+  connectionFailedInstantPassed("connection_failed_instant_passed"),
+  pairedToAnotherPhone("paired_to_another_phone"),
+  linkKeyMismatch("link_key_mismatch"),
+  pairingLost("pairing_lost"),
+  appClosed("app_closed"),
+  manual("manual"),
+  gattError("gatt_error"),
+  unknown("unknown");
+  const DeviceDisconnectedDetailedReason(this.wireName);
+  final String wireName;
+}
+
+enum DeviceDisconnectedDetailedAppState {
+  foreground("foreground"),
+  background("background"),
+  inactive("inactive"),
+  unknown("unknown");
+  const DeviceDisconnectedDetailedAppState(this.wireName);
+  final String wireName;
+}
+
+final class DeviceDisconnectedDetailed extends RegisteredEvent {
+  const DeviceDisconnectedDetailed({required this.reason, required this.reasonCode, required this.appState});
+  final DeviceDisconnectedDetailedReason reason;
+  final int reasonCode;
+  final DeviceDisconnectedDetailedAppState appState;
+  @override
+  String get wireName => "Device Disconnected Detailed";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "reason_code": reasonCode, "app_state": appState.wireName};
+}
+
+final class DiagnosticsSent extends RegisteredEvent {
+  const DiagnosticsSent({required this.bundleBytes, required this.disconnectCount, required this.schemaVersion});
+  final int bundleBytes;
+  final int disconnectCount;
+  final int schemaVersion;
+  @override
+  String get wireName => "Diagnostics Sent";
+  @override
+  Map<String, Object> get properties => {"bundle_bytes": bundleBytes, "disconnect_count": disconnectCount, "schema_version": schemaVersion};
+}
+
+enum DiagnosticsSendFailedFailureStage {
+  buildBundle("build_bundle"),
+  dialogCancelled("dialog_cancelled"),
+  upload("upload"),
+  ticketParse("ticket_parse");
+  const DiagnosticsSendFailedFailureStage(this.wireName);
+  final String wireName;
+}
+
+final class DiagnosticsSendFailed extends RegisteredEvent {
+  const DiagnosticsSendFailed({required this.bundleBytes, required this.disconnectCount, required this.schemaVersion, required this.failureStage, required this.statusCode});
+  final int bundleBytes;
+  final int disconnectCount;
+  final int schemaVersion;
+  final DiagnosticsSendFailedFailureStage failureStage;
+  final int statusCode;
+  @override
+  String get wireName => "Diagnostics Send Failed";
+  @override
+  Map<String, Object> get properties => {"bundle_bytes": bundleBytes, "disconnect_count": disconnectCount, "schema_version": schemaVersion, "failure_stage": failureStage.wireName, "status_code": statusCode};
+}
+
 final class SpeechProfileCapturePageClicked extends RegisteredEvent {
   const SpeechProfileCapturePageClicked();
   @override
@@ -1425,7 +1494,8 @@ enum SpeakerTagPromptAnswerSubmittedAnswer {
   newPerson("new_person"),
   someoneElse("someone_else"),
   skip("skip"),
-  unknown("unknown");
+  unknown("unknown"),
+  notAPerson("not_a_person");
   const SpeakerTagPromptAnswerSubmittedAnswer(this.wireName);
   final String wireName;
 }
@@ -1590,7 +1660,8 @@ enum SiriIntentPerformedIntent {
   completeTask("complete_task"),
   createTask("create_task"),
   startListening("start_listening"),
-  stopListening("stop_listening");
+  stopListening("stop_listening"),
+  openChat("open_chat");
   const SiriIntentPerformedIntent(this.wireName);
   final String wireName;
 }
@@ -1705,4 +1776,34 @@ final class SiriIndexRebuilt extends RegisteredEvent {
   String get wireName => "Siri Index Rebuilt";
   @override
   Map<String, Object> get properties => {"platform": platform.wireName, "entity_counts": entityCounts, "duration_ms": durationMs, "outcome": outcome.wireName};
+}
+
+enum ConversationUntitledRenderedSurface {
+  list("list"),
+  map("map"),
+  actions("actions"),
+  homeWidget("home_widget");
+  const ConversationUntitledRenderedSurface(this.wireName);
+  final String wireName;
+}
+
+enum ConversationUntitledRenderedAgeBucket {
+  under1h("under_1h"),
+  under1d("under_1d"),
+  under7d("under_7d"),
+  under30d("under_30d"),
+  over30d("over_30d");
+  const ConversationUntitledRenderedAgeBucket(this.wireName);
+  final String wireName;
+}
+
+final class ConversationUntitledRendered extends RegisteredEvent {
+  const ConversationUntitledRendered({required this.surface, required this.ageBucket, required this.summaryRetryable});
+  final ConversationUntitledRenderedSurface surface;
+  final ConversationUntitledRenderedAgeBucket ageBucket;
+  final bool summaryRetryable;
+  @override
+  String get wireName => "Conversation Untitled Rendered";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName, "age_bucket": ageBucket.wireName, "summary_retryable": summaryRetryable};
 }

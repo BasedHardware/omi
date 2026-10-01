@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from database import conversations as conversations_db
 from database import voice_profiles as voice_profiles_db
 from models.speaker_tag_prompts import (
+    IgnoredVoicesResponse,
     SpeakerTagPromptAnswerRequest,
     SpeakerTagPromptAnswerResponse,
     SpeakerTagPromptClip,
@@ -106,6 +107,26 @@ def get_speaker_tag_prompt_clip(
         audio_base64=base64.b64encode(pcm_to_wav(pcm)).decode('ascii'),
         duration_seconds=round(len(pcm) / (2 * CLIP_SAMPLE_RATE), 3),
     )
+
+
+@router.get(
+    '/v1/speaker-tag-prompts/ignored-voices', tags=['speaker-tag-prompts'], response_model=IgnoredVoicesResponse
+)
+def get_ignored_voices(uid: str = Depends(auth.get_current_user_uid)):
+    """Voices the user marked Not a Person, newest first."""
+    return service.list_ignored_voices(uid)
+
+
+@router.delete(
+    '/v1/speaker-tag-prompts/ignored-voices/{conversation_id}/{speaker_id}',
+    tags=['speaker-tag-prompts'],
+    status_code=204,
+)
+def restore_ignored_voice(conversation_id: str, speaker_id: int, uid: str = Depends(auth.get_current_user_uid)):
+    """Undo Not a Person: Omi may ask about this voice again."""
+    if not service.restore_ignored_voice(uid, conversation_id, speaker_id):
+        raise HTTPException(status_code=404, detail='Voice not found')
+    return Response(status_code=204)
 
 
 @router.get('/v1/users/voice-profile-settings', tags=['v1'], response_model=VoiceProfileSettings)

@@ -149,6 +149,52 @@ def test_accepting_suggested_first_then_summary_reuses_task_and_saves_link(harne
     assert len(tasks(db)) == 1
 
 
+def test_same_commitment_in_two_conversations_keeps_both_provenance_links(harness):
+    client, db = harness
+    first_candidate = prepare(client).json()['candidate_id']
+    first_task = accept(client, first_candidate).json()['task_id']
+    second_path = ('users', UID, 'conversations', 'conversation-2')
+    db.rows[second_path] = {
+        'structured': {
+            'title': 'Budget follow-up',
+            'action_items': [
+                {
+                    'description': 'Send the budget',
+                    'capture_owner': 'user',
+                    'capture_confidence': 0.9,
+                    'ownership_confidence': 1.0,
+                    'due_at': DUE,
+                    'source_segment_ids': ['segment-2'],
+                }
+            ],
+        }
+    }
+    second = {
+        'conversation_id': 'conversation-2',
+        'action_item_index': 0,
+        'expected_description': 'Send the budget',
+    }
+
+    prepared = client.post(
+        '/v1/candidates/from-conversation',
+        headers={**HEADERS, 'Idempotency-Key': 'summary-gesture-2'},
+        json=second,
+    )
+    assert prepared.status_code == 200, prepared.text
+    assert prepared.json()['candidate_id'] == first_candidate
+    accepted = client.post(
+        f'/v1/candidates/{first_candidate}/accept',
+        headers={**HEADERS, 'Idempotency-Key': 'summary-gesture-2'},
+        json={'summary_item': second},
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()['task_id'] == first_task
+    assert db.rows[second_path]['structured']['action_items'][0]['target_task_id'] == first_task
+    task = tasks(db)[0]
+    assert task['conversation_id'] == 'conversation-1'
+    assert [ref['id'] for ref in task['provenance']] == ['conversation-1', 'conversation-2']
+
+
 @pytest.mark.parametrize(
     'mutation', ['description', 'due_at', 'capture_owner', 'deleted', 'is_locked', 'different_link']
 )

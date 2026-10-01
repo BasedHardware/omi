@@ -172,6 +172,9 @@ def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[
         'update_conversation_segment_text': 'prepare_conversation_for_read',
         'migrate_conversations_level_batch': 'decode_manual_speaker_assignments',
         'create_conversation_if_absent_with_lifecycle': None,
+        # Field-scoped display-only translation merge: reads the transaction
+        # snapshot inside _write and preserves raw text/projections (#15247).
+        'materialize_translation': None,
     }
     errors = []
     for node in tree.body:

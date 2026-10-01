@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import SystemMessage
@@ -34,7 +34,8 @@ from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
 from utils.llm.action_item_normalization import normalize_action_item_due_dates as _normalize_action_item_due_dates
-from utils.llm.meeting_notes_rich_prompts import rich_static_instructions, rich_volatile_instructions
+from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_instructions, screen_frames_message
+from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
 from utils.llm.meeting_notes_presentation import enforce_conversation_note_presentation
 from utils.llm.meeting_notes_validation import (
     sanitize_structured_speaker_placeholders,
@@ -1275,6 +1276,7 @@ def get_conversation_notes(
     meeting_context: Optional[str] = None,
     rich_context_enabled: bool = False,
     roster: Optional[MeetingRoster] = None,
+    screen_frames: Sequence[NotesFrameImage] = (),
 ) -> Structured:
     """Generate sections, actions, and events in one coherent model call.
 
@@ -1351,6 +1353,8 @@ def get_conversation_notes(
         _gpt56_cacheable_system_message(static_instructions, cache_enabled=cache_enabled, formatted=True),
         SystemMessage(content=volatile_instructions),
     ]
+    if rich_mode and screen_frames:
+        messages.append(screen_frames_message(screen_frames))
     cache_key = CONVERSATION_NOTES_CACHE_KEY if cache_enabled else None
     cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
     model = get_llm(
