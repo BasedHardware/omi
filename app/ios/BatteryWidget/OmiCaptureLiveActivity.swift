@@ -403,10 +403,9 @@ private struct CaptureWaveform: View {
                     let scale = scale(for: index)
                     Capsule()
                         .frame(width: Self.barWidth,
-                               height: max(3, height * Self.levels[index % Self.levels.count]))
-                        .scaleEffect(x: 1, y: scale)
-                        // Quarter-cycle updates keep the HTML's 1.6 s cadence in silence too.
-                        // Stop holds the last phase rather than resetting every bar's height.
+                               height: max(3, height * Self.levels[index % Self.levels.count]) * scale)
+                        // Keep each phase in the bar's bounds rather than a drawing transform.
+                        // Silence keeps the cadence; Stop holds the current phase.
                         .animation(reduceMotion || luminanceReduced ? nil :
                             .timingCurve(0.42, 0, 0.58, 1, duration: breathing ? 0.4 : 0.2),
                             value: scale)
