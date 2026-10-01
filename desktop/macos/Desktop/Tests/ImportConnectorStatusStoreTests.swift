@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -183,12 +184,15 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
       return
     }
     let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
+    var didEmitSync = false
+    let cancellable = store.connectorDidSync.sink { _ in didEmitSync = true }
     store.markSynced(
       connectorID: "calendar",
       sourceCount: 178,
       memoryCount: 192,
       lastDeltaCount: 178
     )
+    didEmitSync = false
 
     store.markDisconnected(connectorID: "calendar")
 
@@ -200,6 +204,23 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     XCTAssertEqual(immediate.primaryText, "Not connected")
     XCTAssertFalse(reloaded.isConnected)
     XCTAssertEqual(reloaded.primaryText, "Not connected")
+    XCTAssertFalse(didEmitSync, "disconnect must not masquerade as a successful sync")
+    _ = cancellable
+  }
+
+  func testCalendarDisconnectRemainsAvailableForBackendGrantWithoutLocalSync() {
+    XCTAssertTrue(
+      ImportConnectorSheet.shouldShowCalendarDisconnect(
+        localSyncConnected: false,
+        backendGrantConnected: true))
+    XCTAssertTrue(
+      ImportConnectorSheet.shouldShowCalendarDisconnect(
+        localSyncConnected: true,
+        backendGrantConnected: false))
+    XCTAssertFalse(
+      ImportConnectorSheet.shouldShowCalendarDisconnect(
+        localSyncConnected: false,
+        backendGrantConnected: false))
   }
 
   private func makeDefaults() -> (defaults: UserDefaults, suiteName: String) {

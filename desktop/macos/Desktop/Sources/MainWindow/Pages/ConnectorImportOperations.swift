@@ -144,9 +144,7 @@ enum ConnectorImportOperations {
   /// error that strands a locally connected import card.
   @MainActor
   static func disconnectCalendar(
-    performDelete: @escaping @MainActor () async throws -> Void = {
-      try await APIClient.shared.disconnectGoogleCalendarGrant()
-    }
+    performDelete: @escaping @MainActor () async throws -> Void
   ) async -> Outcome {
     do {
       try await performDelete()
