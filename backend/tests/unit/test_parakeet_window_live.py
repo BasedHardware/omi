@@ -2025,7 +2025,7 @@ async def test_periodic_noise_flushes_once_per_long_silence_with_bounded_context
         for outcome in ('performed', 'answered_empty', 'answered_text')
     }
     initial_requests = len(client.requests)
-    cycles = 100  # >8 minutes, beyond the PCM/context caps
+    cycles = 40  # 208s: more than two 90s retention horizons, beyond the PCM/context caps
     for cycle in range(cycles):
         previous.raw._next_post = 0  # stress the capture-rate ceiling; wall pacing can only reduce POSTs
         sample = await _fragment_frame(actual, clock, sample, speech=True)
