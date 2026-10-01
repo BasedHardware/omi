@@ -777,7 +777,11 @@ def validate_runtime_env(
         cloud_run_state = _fetch_live_cloud_run_state(env_config)
 
     if cloud_run_state is not None:
-        errors.extend(validate_jev_uid_allowlist(stage=env, scope=f'{env}/cloud_run', config=cloud_run_state))
+        errors.extend(
+            validate_jev_uid_allowlist(
+                stage=env, scope=f'{env}/cloud_run', config=cloud_run_state, allow_empty_residue=True
+            )
+        )
         errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
         errors.extend(_validate_sync_ledger_fence_mode(env_config, cloud_run_state))
     return errors

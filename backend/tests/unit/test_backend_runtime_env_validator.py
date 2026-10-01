@@ -3255,15 +3255,36 @@ def test_prod_rejects_jev_uid_allowlist_undeclared_in_chart(tmp_path):
     assert any('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in error.message for error in errors)
 
 
-def test_prod_rejects_jev_uid_allowlist_undeclared_in_cloud_run_state(tmp_path, monkeypatch):
-    validator = load_validator()
-    prod = validator._get_env_config(validator._load_yaml(validator.DEFAULT_MANIFEST), 'prod')
-    state = render_cloud_run_state(prod, monkeypatch)
-    state['services']['backend-sync']['env'].append({'name': 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'value': ''})
-    path = tmp_path / 'state.json'
-    path.write_text(json.dumps(state))
-    errors = validator.validate_runtime_env(env='prod', cloud_run_state_path=path)
-    assert any('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in error.message for error in errors)
+@pytest.mark.parametrize(
+    'entry,rejected',
+    [
+        ({'name': 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'value': ''}, False),
+        ({'name': 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'}, False),
+        ({'name': 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'value': 'synthetic-user'}, True),
+        ({'name': 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'valueFrom': {'secretKeyRef': {'name': 's'}}}, True),
+    ],
+)
+def test_prod_live_state_tolerates_only_empty_jev_allowlist_residue(entry, rejected):
+    # Live services that once declared the variable keep an empty entry until the deploy's
+    # --remove-env-vars strips it; anything that could select an account stays rejected.
+    from scripts.runtime_env_jev_contract import validate_jev_uid_allowlist
+
+    state = {'services': {'backend-sync': {'env': [entry]}}}
+    errors = validate_jev_uid_allowlist(stage='prod', scope='prod/cloud_run', config=state, allow_empty_residue=True)
+    assert bool(errors) is rejected
+    # Manifests, charts and every non-live caller stay strict about even an empty declaration.
+    assert validate_jev_uid_allowlist(stage='prod', scope='prod/cloud_run', config=state)
+
+
+def test_deploy_actions_remove_the_retired_jev_allowlist_env():
+    for relative in (
+        '.github/actions/deploy-backend-stack/action.yml',
+        '.github/actions/sync-backfill-lifecycle/action.yml',
+    ):
+        text = (ROOT.parent / relative).read_text()
+        lines = [line for line in text.splitlines() if '--remove-env-vars=' in line and 'MEMORY_ENABLED_USERS' in line]
+        assert lines, relative
+        assert all('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST' in line for line in lines), relative
 
 
 def test_jev_uid_allowlist_contract_survives_cyclic_yaml_aliases():
