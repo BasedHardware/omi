@@ -49,7 +49,7 @@ def _request(request: dict[str, Any], operation: str) -> dict[str, Any]:
         raise ValueError("incident_url must identify an Omi GitHub incident")
     if not _REQUEST_ID.fullmatch(request_id):
         raise ValueError("request_id must identify this GitHub Actions attempt")
-    if type(generation) is not int or isinstance(generation, bool) or generation < 0:
+    if type(generation) is not int or generation < 0:
         raise ValueError("expected_generation is invalid")
     normal_path = request.get("normal_path_unavailable")
     if operation == "rollout":
@@ -194,7 +194,7 @@ def _execute(
         validated,
         operation,
         manifest,
-        effective_now,
+        now=effective_now,
     )
 
 

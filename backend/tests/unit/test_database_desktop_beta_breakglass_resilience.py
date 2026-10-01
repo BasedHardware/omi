@@ -1,6 +1,7 @@
 """Unit tests verifying defensive boundary guards in desktop_beta_breakglass."""
 
 from datetime import datetime, timezone
+from unittest.mock import patch
 import pytest
 
 from database.desktop_beta_breakglass import (
@@ -87,9 +88,8 @@ def test_execute_coerces_naive_datetime():
         })()
     })()
     # Test that _commit is called with timezone-aware datetime
-    from unittest.mock import patch
     with patch("database.desktop_beta_breakglass._commit") as mock_commit:
         mock_commit.return_value = {"status": "ok"}
         _execute("rollback", req, firestore_client=mock_client, now=naive_dt)
-        called_dt = mock_commit.call_args[0][8]
+        called_dt = mock_commit.call_args.kwargs.get("now") or mock_commit.call_args[0][8]
         assert called_dt.tzinfo == timezone.utc
