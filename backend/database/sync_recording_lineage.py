@@ -79,8 +79,9 @@ def get_recording_generations(
         raise ValueError('finished_after must be a datetime')
     if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
         raise ValueError('limit must be a positive integer')
+    if limit > MAX_LINEAGE_LIMIT:
+        raise ValueError(f'limit must not exceed {MAX_LINEAGE_LIMIT}')
 
-    clamped_limit = min(limit, MAX_LINEAGE_LIMIT)
     uid = uid.strip()
     origin_id = origin_id.strip()
 
@@ -93,7 +94,7 @@ def get_recording_generations(
         query.order_by('started_at', direction=firestore.Query.DESCENDING)
         .order_by('finished_at', direction=firestore.Query.DESCENDING)
         .select(list(LINEAGE_FIELD_PATHS))
-        .limit(clamped_limit + 1)
+        .limit(limit + 1)
     )
     return _rows(query)
 
@@ -108,8 +109,9 @@ def get_origin_generation(
         raise ValueError('origin_id must be a non-empty string')
     if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
         raise ValueError('limit must be a positive integer')
+    if limit > MAX_LINEAGE_LIMIT:
+        raise ValueError(f'limit must not exceed {MAX_LINEAGE_LIMIT}')
 
-    clamped_limit = min(limit, MAX_LINEAGE_LIMIT)
     uid = uid.strip()
     origin_id = origin_id.strip()
 
@@ -117,6 +119,6 @@ def get_origin_generation(
         _collection(uid, firestore_client)
         .where(filter=FieldFilter('external_data.recording_session_id', '==', origin_id))
         .select(list(LINEAGE_FIELD_PATHS))
-        .limit(clamped_limit + 1)
+        .limit(limit + 1)
     )
     return _rows(query)

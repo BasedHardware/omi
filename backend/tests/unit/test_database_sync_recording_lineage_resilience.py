@@ -98,15 +98,22 @@ def test_get_recording_generations_validates_inputs() -> None:
         get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=True, firestore_client=mock_client)  # type: ignore[arg-type]
 
 
-def test_get_recording_generations_clamps_large_limit() -> None:
-    """Verify limit is clamped to MAX_LINEAGE_LIMIT."""
+def test_get_recording_generations_preserves_limit_plus_one_and_rejects_excess() -> None:
+    """Verify limit + 1 query pattern is preserved and limit exceeding MAX_LINEAGE_LIMIT is rejected."""
     mock_query = _MockQuery([])
     mock_client = _MockClient(mock_query)
     now = datetime.now(timezone.utc)
 
-    # Query with limit > MAX_LINEAGE_LIMIT
-    get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=9999, firestore_client=mock_client)
+    # Valid limit requests limit + 1 documents
+    get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=8, firestore_client=mock_client)
+    assert mock_query._limit == 9
+
+    get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=MAX_LINEAGE_LIMIT, firestore_client=mock_client)
     assert mock_query._limit == MAX_LINEAGE_LIMIT + 1
+
+    # Query with limit > MAX_LINEAGE_LIMIT raises ValueError
+    with pytest.raises(ValueError, match=f"limit must not exceed {MAX_LINEAGE_LIMIT}"):
+        get_recording_generations("u1", "orig-1", started_before=now, finished_after=now, limit=MAX_LINEAGE_LIMIT + 1, firestore_client=mock_client)
 
 
 def test_get_origin_generation_validates_inputs() -> None:
@@ -124,10 +131,16 @@ def test_get_origin_generation_validates_inputs() -> None:
         get_origin_generation("u1", "orig-1", limit=0, firestore_client=mock_client)
 
 
-def test_get_origin_generation_clamps_large_limit() -> None:
-    """Verify get_origin_generation clamps limit to MAX_LINEAGE_LIMIT."""
+def test_get_origin_generation_preserves_limit_plus_one_and_rejects_excess() -> None:
+    """Verify get_origin_generation preserves limit + 1 pattern and rejects limit > MAX_LINEAGE_LIMIT."""
     mock_query = _MockQuery([])
     mock_client = _MockClient(mock_query)
 
-    get_origin_generation("u1", "orig-1", limit=2000, firestore_client=mock_client)
+    get_origin_generation("u1", "orig-1", limit=5, firestore_client=mock_client)
+    assert mock_query._limit == 6
+
+    get_origin_generation("u1", "orig-1", limit=MAX_LINEAGE_LIMIT, firestore_client=mock_client)
     assert mock_query._limit == MAX_LINEAGE_LIMIT + 1
+
+    with pytest.raises(ValueError, match=f"limit must not exceed {MAX_LINEAGE_LIMIT}"):
+        get_origin_generation("u1", "orig-1", limit=MAX_LINEAGE_LIMIT + 1, firestore_client=mock_client)
