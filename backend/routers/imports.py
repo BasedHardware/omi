@@ -4,6 +4,7 @@ Import endpoints for importing data from external sources.
 
 import logging
 import os
+import re
 from typing import List
 
 from utils.executors import db_executor, storage_executor, run_blocking
@@ -15,6 +16,7 @@ import database.import_jobs as import_jobs_db
 from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
+from utils.log_sanitizer import sanitize
 from utils.multipart import IMPORT_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
@@ -23,6 +25,28 @@ logger = logging.getLogger(__name__)
 
 # Temp directory for uploaded files
 TEMP_DIR = '_temp'
+
+
+def _validate_job_id(job_id: str) -> None:
+    if (
+        not job_id
+        or not isinstance(job_id, str)
+        or not job_id.strip()
+        or '/' in job_id
+        or '\\' in job_id
+        or '..' in job_id
+        or len(job_id) > 128
+    ):
+        raise HTTPException(status_code=400, detail="Invalid job ID format")
+
+
+def _sanitize_upload_filename(filename: str) -> str:
+    """Sanitize client-supplied filename to prevent path traversal and arbitrary file write."""
+    base_name = os.path.basename(filename or '')
+    safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', base_name)
+    if not safe_name.lower().endswith('.zip') or safe_name in ('.zip', '..zip') or safe_name.startswith('.'):
+        return 'upload.zip'
+    return safe_name
 
 
 class DeleteLimitlessConversationsResponse(BaseModel):
@@ -60,9 +84,16 @@ async def import_limitless_data(
     # Create import job
     job = await run_blocking(db_executor, create_import_job, uid, ImportSourceType.limitless)
 
-    # Save uploaded file to temp directory
+    # Save uploaded file to temp directory securely
     os.makedirs(TEMP_DIR, exist_ok=True)
-    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{file.filename}")
+    safe_name = _sanitize_upload_filename(file.filename)
+    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{safe_name}")
+
+    # Canonical path check: ensure zip_path is strictly within TEMP_DIR
+    abs_temp = os.path.abspath(TEMP_DIR)
+    abs_zip = os.path.abspath(zip_path)
+    if not abs_zip.startswith(abs_temp + os.sep) and abs_zip != abs_temp:
+        zip_path = os.path.join(abs_temp, f"{job.id}_safe.zip")
 
     try:
         # Stream the file to disk to avoid loading it all into memory
@@ -73,14 +104,15 @@ async def import_limitless_data(
         finally:
             f.close()
     except Exception as e:
+        logger.error(f"Failed to save uploaded file for job {job.id}: {sanitize(str(e))}")
         # Clean up on error
         await run_blocking(
             db_executor,
             import_jobs_db.update_import_job,
             job.id,
-            {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"},
+            {'status': ImportJobStatus.failed.value, 'error': "Failed to save uploaded file"},
         )
-        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file. Please try again.")
 
     # Start background processing
     storage_executor.submit(process_limitless_import, job.id, uid, zip_path, language)
@@ -152,6 +184,7 @@ def get_import_job_status(
     Returns:
         ImportJobResponse with current job status and progress
     """
+    _validate_job_id(job_id)
     job = import_jobs_db.get_import_job(job_id)
 
     if not job:
@@ -182,6 +215,7 @@ def get_import_job_status(
 @router.post('/v1/import/jobs/{job_id}/cancel', response_model=ImportJobResponse, tags=['import'])
 def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Cancel a pending or processing import job."""
+    _validate_job_id(job_id)
     job = import_jobs_db.get_import_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Import job not found")
@@ -211,6 +245,7 @@ class DeleteImportJobResponse(BaseModel):
 @router.delete('/v1/import/jobs/{job_id}', response_model=DeleteImportJobResponse, tags=['import'])
 def delete_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete a finished (completed, failed, or cancelled) import job."""
+    _validate_job_id(job_id)
     job = import_jobs_db.get_import_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Import job not found")
