@@ -12166,4 +12166,7 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData => 'Se exportă datele tale… Ține Omi deschis; conturile mari pot dura câteva minute.';
 }

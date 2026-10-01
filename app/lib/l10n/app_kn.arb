@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "ಈ ಮಾತನಾಡುವವರ ಪ್ರತಿ ಸಾಲಿಗೂ ಅನ್ವಯಿಸುತ್ತದೆ",
     "collapseAction": "ಕುಗ್ಗಿಸಿ",
     "speakerTagPromptNotMeAction": "ನಾನಲ್ಲ",
-    "confidenceNextLabels": "{count, plural, =1{ಇನ್ನೂ 1 ಸಂಭಾಷಣೆಯಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.} other{ಇನ್ನೂ {count} ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.}}"
+    "confidenceNextLabels": "{count, plural, =1{ಇನ್ನೂ 1 ಸಂಭಾಷಣೆಯಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.} other{ಇನ್ನೂ {count} ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.}}",
+    "exportingAllData": "ನಿಮ್ಮ ಡೇಟಾವನ್ನು ರಫ್ತು ಮಾಡಲಾಗುತ್ತಿದೆ… Omi ಅನ್ನು ತೆರೆದಿರಿಸಿ; ದೊಡ್ಡ ಖಾತೆಗಳಿಗೆ ಹಲವು ನಿಮಿಷಗಳು ಬೇಕಾಗಬಹುದು."
 }

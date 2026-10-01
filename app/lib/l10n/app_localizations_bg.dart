@@ -12156,4 +12156,8 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Експортиране на вашите данни… Не затваряйте Omi; при големи акаунти може да отнеме няколко минути.';
 }

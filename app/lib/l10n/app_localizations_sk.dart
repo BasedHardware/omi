@@ -12104,4 +12104,8 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Exportujú sa vaše údaje… Nechajte Omi otvorené; pri veľkých účtoch to môže trvať niekoľko minút.';
 }

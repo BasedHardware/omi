@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "ఈ స్పీకర్ చెప్పిన ప్రతి పంక్తికి వర్తిస్తుంది",
     "collapseAction": "కుదించు",
     "speakerTagPromptNotMeAction": "నేను కాదు",
-    "confidenceNextLabels": "{count, plural, =1{ఇంకా 1 సంభాషణలో వారికి లేబుల్ చేయండి.} other{ఇంకా {count} సంభాషణల్లో వారికి లేబుల్ చేయండి.}}"
+    "confidenceNextLabels": "{count, plural, =1{ఇంకా 1 సంభాషణలో వారికి లేబుల్ చేయండి.} other{ఇంకా {count} సంభాషణల్లో వారికి లేబుల్ చేయండి.}}",
+    "exportingAllData": "మీ డేటా ఎగుమతి అవుతోంది… Omi ను తెరిచే ఉంచండి; పెద్ద ఖాతాలకు కొన్ని నిమిషాలు పట్టవచ్చు."
 }

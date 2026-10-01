@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Attiecas uz katru šī runātāja rindu",
     "collapseAction": "Sakļaut",
     "speakerTagPromptNotMeAction": "Ne es",
-    "confidenceNextLabels": "{count, plural, =1{Atzīmējiet viņus vēl 1 sarunā.} other{Atzīmējiet viņus vēl {count} sarunās.}}"
+    "confidenceNextLabels": "{count, plural, =1{Atzīmējiet viņus vēl 1 sarunā.} other{Atzīmējiet viņus vēl {count} sarunās.}}",
+    "exportingAllData": "Notiek jūsu datu eksports… Turiet Omi atvērtu; lieliem kontiem tas var ilgt vairākas minūtes."
 }

@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Se aplică tuturor replicilor acestui vorbitor",
     "collapseAction": "Restrânge",
     "speakerTagPromptNotMeAction": "Nu sunt eu",
-    "confidenceNextLabels": "{count, plural, =1{Etichetează-i în încă 1 conversație.} other{Etichetează-i în încă {count} conversații.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etichetează-i în încă 1 conversație.} other{Etichetează-i în încă {count} conversații.}}",
+    "exportingAllData": "Se exportă datele tale… Ține Omi deschis; conturile mari pot dura câteva minute."
 }

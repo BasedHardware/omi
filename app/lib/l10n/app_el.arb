@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Ισχύει για κάθε γραμμή αυτού του ομιλητή",
     "collapseAction": "Σύμπτυξη",
     "speakerTagPromptNotMeAction": "Δεν είμαι εγώ",
-    "confidenceNextLabels": "{count, plural, =1{Επισημάνετέ τους σε 1 ακόμη συνομιλία.} other{Επισημάνετέ τους σε {count} ακόμη συνομιλίες.}}"
+    "confidenceNextLabels": "{count, plural, =1{Επισημάνετέ τους σε 1 ακόμη συνομιλία.} other{Επισημάνετέ τους σε {count} ακόμη συνομιλίες.}}",
+    "exportingAllData": "Εξαγωγή των δεδομένων σας… Κρατήστε το Omi ανοιχτό· οι μεγάλοι λογαριασμοί μπορεί να χρειαστούν αρκετά λεπτά."
 }

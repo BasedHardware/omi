@@ -11895,4 +11895,7 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData => '正在导出您的数据… 请保持 Omi 打开；大型账户可能需要几分钟。';
 }

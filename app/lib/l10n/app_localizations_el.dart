@@ -12192,4 +12192,8 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Εξαγωγή των δεδομένων σας… Κρατήστε το Omi ανοιχτό· οι μεγάλοι λογαριασμοί μπορεί να χρειαστούν αρκετά λεπτά.';
 }

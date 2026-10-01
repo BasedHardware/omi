@@ -3800,5 +3800,6 @@
     "speakerSuggestionAppliesToSpeaker": "Dotyczy każdej wypowiedzi tego mówcy",
     "collapseAction": "Zwiń",
     "speakerTagPromptNotMeAction": "To nie ja",
-    "confidenceNextLabels": "{count, plural, =1{Oznacz je jeszcze w 1 rozmowie.} other{Oznacz je jeszcze w {count} rozmowach.}}"
+    "confidenceNextLabels": "{count, plural, =1{Oznacz je jeszcze w 1 rozmowie.} other{Oznacz je jeszcze w {count} rozmowach.}}",
+    "exportingAllData": "Trwa eksportowanie Twoich danych… Nie zamykaj Omi; duże konta mogą potrwać kilka minut."
 }

@@ -3800,5 +3800,6 @@
     "speakerSuggestionAppliesToSpeaker": "Bu konuşmacının tüm satırlarına uygulanır",
     "collapseAction": "Daralt",
     "speakerTagPromptNotMeAction": "Ben değilim",
-    "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}"
+    "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}",
+    "exportingAllData": "Verileriniz dışa aktarılıyor… Omi'yi açık tutun; büyük hesaplar birkaç dakika sürebilir."
 }

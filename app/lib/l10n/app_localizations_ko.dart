@@ -11920,4 +11920,7 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData => '데이터를보내는 중… Omi를 열어 두세요. 데이터가 많은 계정은 몇 분 정도 걸릴 수 있습니다.';
 }

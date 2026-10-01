@@ -24,7 +24,7 @@ from database import (
 )
 from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
-from services.users.data_export import iter_user_data_export
+from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
@@ -228,6 +228,7 @@ class UserDataExportResponse(BaseModel):
     action_items: List[Dict[str, Any]] = Field(default_factory=list)
     task_data: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
     chat_messages: List[Dict[str, Any]] = Field(default_factory=list)
+    export_complete: Optional[bool] = None
 
 
 class StoreRecordingPermissionResponse(BaseModel):
@@ -2257,15 +2258,38 @@ def get_llm_top_features(
 # response_model omitted: this streams a chunked JSON document via StreamingResponse (not a single JSON object);
 # the responses= override documents the streamed shape in OpenAPI without enforcing response_model validation.
 @router.get('/v1/users/export', tags=['v1'], responses={200: {'model': UserDataExportResponse}})
-def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
-    """Export all user data for GDPR/CCPA compliance from a disk-backed spool."""
+def export_all_user_data(
+    stream: Annotated[
+        bool,
+        Query(
+            description=(
+                'Stream the export lazily instead of spooling it server-side before headers. '
+                'When true, clients MUST verify the body ends with the "export_complete": true '
+                'completion suffix; a truncated body is a failed export even after HTTP 200.'
+            )
+        ),
+    ] = False,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Export all user data for GDPR/CCPA compliance."""
+    headers = {
+        'Content-Disposition': 'attachment; filename="omi-export.json"',
+        'Cache-Control': 'private, no-store',
+    }
+    if stream:
+        headers['X-Accel-Buffering'] = 'no'
+        return StreamingResponse(
+            iter_user_data_export_streaming(uid),
+            media_type='application/json',
+            headers=headers,
+        )
     # Iterator construction eagerly validates and spools the complete export,
     # including retained image bytes, before HTTP 200 and headers are committed.
     export_stream = iter_user_data_export(uid)
     return StreamingResponse(
         export_stream,
         media_type='application/json',
-        headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
+        headers=headers,
     )
 
 

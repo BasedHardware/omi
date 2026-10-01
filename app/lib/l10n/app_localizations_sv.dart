@@ -12120,4 +12120,7 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData => 'Exporterar dina data… Håll Omi öppen; stora konton kan ta flera minuter.';
 }

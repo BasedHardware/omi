@@ -12017,4 +12017,7 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData => 'מייצא את הנתונים שלך… השאירו את Omi פתוח; חשבונות גדולים עשויים לקחת מספר דקות.';
 }

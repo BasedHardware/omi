@@ -12123,4 +12123,8 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Mengekspor data Anda… Biarkan Omi tetap terbuka; akun besar bisa memakan waktu beberapa menit.';
 }

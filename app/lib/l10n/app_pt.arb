@@ -3800,5 +3800,6 @@
     "speakerSuggestionAppliesToSpeaker": "Vale para todas as falas deste falante",
     "collapseAction": "Recolher",
     "speakerTagPromptNotMeAction": "Não sou eu",
-    "confidenceNextLabels": "{count, plural, =1{Etiquete-os em mais 1 conversa.} other{Etiquete-os em mais {count} conversas.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etiquete-os em mais 1 conversa.} other{Etiquete-os em mais {count} conversas.}}",
+    "exportingAllData": "Exportando seus dados… Mantenha o Omi aberto; contas grandes podem levar vários minutos."
 }

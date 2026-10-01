@@ -12144,4 +12144,8 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Mengeksport data anda… Biarkan Omi terbuka; akaun besar mungkin mengambil masa beberapa minit.';
 }

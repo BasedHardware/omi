@@ -12122,4 +12122,8 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'آپ کا ڈیٹا ایکسپورٹ ہو رہا ہے… Omi کو کھلا رکھیں؛ بڑے اکاؤنٹس میں کئی منٹ لگ سکتے ہیں۔';
 }

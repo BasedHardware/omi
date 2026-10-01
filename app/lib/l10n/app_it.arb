@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Vale per ogni riga di questo interlocutore",
     "collapseAction": "Comprimi",
     "speakerTagPromptNotMeAction": "Non sono io",
-    "confidenceNextLabels": "{count, plural, =1{Etichettali in 1 altra conversazione.} other{Etichettali in altre {count} conversazioni.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etichettali in 1 altra conversazione.} other{Etichettali in altre {count} conversazioni.}}",
+    "exportingAllData": "Esportazione dei tuoi dati in corso… Tieni Omi aperta; gli account di grandi dimensioni possono richiedere diversi minuti."
 }

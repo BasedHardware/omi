@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "Датычыцца ўсіх радкоў гэтага спікера",
     "collapseAction": "Згарнуць",
     "speakerTagPromptNotMeAction": "Не я",
-    "confidenceNextLabels": "{count, plural, =1{Пазначце яго яшчэ ў 1 размове.} other{Пазначце яго яшчэ ў {count} размовах.}}"
+    "confidenceNextLabels": "{count, plural, =1{Пазначце яго яшчэ ў 1 размове.} other{Пазначце яго яшчэ ў {count} размовах.}}",
+    "exportingAllData": "Экспарт вашых даных… Не закрывайце Omi; вялікія ўліковыя запісы могуць патрабаваць некалькі хвілін."
 }

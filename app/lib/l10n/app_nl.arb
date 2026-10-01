@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Geldt voor elke regel van deze spreker",
     "collapseAction": "Samenvouwen",
     "speakerTagPromptNotMeAction": "Niet ik",
-    "confidenceNextLabels": "{count, plural, =1{Label ze in nog 1 gesprek.} other{Label ze in nog {count} gesprekken.}}"
+    "confidenceNextLabels": "{count, plural, =1{Label ze in nog 1 gesprek.} other{Label ze in nog {count} gesprekken.}}",
+    "exportingAllData": "Je gegevens worden geëxporteerd… Houd Omi open; grote accounts kunnen enkele minuten duren."
 }

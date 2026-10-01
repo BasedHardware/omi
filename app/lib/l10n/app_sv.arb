@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Gäller alla repliker från den här talaren",
     "collapseAction": "Dölj",
     "speakerTagPromptNotMeAction": "Inte jag",
-    "confidenceNextLabels": "{count, plural, =1{Märk dem i 1 konversation till.} other{Märk dem i {count} konversationer till.}}"
+    "confidenceNextLabels": "{count, plural, =1{Märk dem i 1 konversation till.} other{Märk dem i {count} konversationer till.}}",
+    "exportingAllData": "Exporterar dina data… Håll Omi öppen; stora konton kan ta flera minuter."
 }

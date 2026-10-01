@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "اس اسپیکر کی ہر سطر پر لاگو ہوتا ہے",
     "collapseAction": "سمیٹیں",
     "speakerTagPromptNotMeAction": "میں نہیں",
-    "confidenceNextLabels": "{count, plural, =1{انہیں مزید 1 گفتگو میں لیبل کریں۔} other{انہیں مزید {count} گفتگوؤں میں لیبل کریں۔}}"
+    "confidenceNextLabels": "{count, plural, =1{انہیں مزید 1 گفتگو میں لیبل کریں۔} other{انہیں مزید {count} گفتگوؤں میں لیبل کریں۔}}",
+    "exportingAllData": "آپ کا ڈیٹا ایکسپورٹ ہو رہا ہے… Omi کو کھلا رکھیں؛ بڑے اکاؤنٹس میں کئی منٹ لگ سکتے ہیں۔"
 }

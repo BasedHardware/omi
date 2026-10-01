@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Gilt für jede Zeile dieses Sprechers",
     "collapseAction": "Einklappen",
     "speakerTagPromptNotMeAction": "Nicht ich",
-    "confidenceNextLabels": "{count, plural, =1{Markiere sie in 1 weiteren Gespräch.} other{Markiere sie in {count} weiteren Gesprächen.}}"
+    "confidenceNextLabels": "{count, plural, =1{Markiere sie in 1 weiteren Gespräch.} other{Markiere sie in {count} weiteren Gesprächen.}}",
+    "exportingAllData": "Deine Daten werden exportiert… Lass Omi geöffnet; bei großen Konten kann das mehrere Minuten dauern."
 }

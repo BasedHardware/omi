@@ -12111,4 +12111,7 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData => 'Eksporterer dataene dine… Hold Omi åpen; store kontoer kan ta flere minutter.';
 }

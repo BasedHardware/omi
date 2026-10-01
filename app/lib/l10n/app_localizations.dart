@@ -21782,6 +21782,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Label them in 1 more conversation.} other{Label them in {count} more conversations.}}'**
   String confidenceNextLabels(int count);
+
+  /// Data export progress sheet - status text while the account export downloads
+  ///
+  /// In en, this message translates to:
+  /// **'Exporting your data… Keep Omi open; large accounts can take several minutes.'**
+  String get exportingAllData;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

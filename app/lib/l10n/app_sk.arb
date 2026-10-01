@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Platí pre všetky vety tohto hovoriaceho",
     "collapseAction": "Zbaliť",
     "speakerTagPromptNotMeAction": "Nie som to ja",
-    "confidenceNextLabels": "{count, plural, =1{Označte ich ešte v 1 konverzácii.} other{Označte ich ešte v {count} konverzáciách.}}"
+    "confidenceNextLabels": "{count, plural, =1{Označte ich ešte v 1 konverzácii.} other{Označte ich ešte v {count} konverzáciách.}}",
+    "exportingAllData": "Exportujú sa vaše údaje… Nechajte Omi otvorené; pri veľkých účtoch to môže trvať niekoľko minút."
 }

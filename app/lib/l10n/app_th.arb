@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "ใช้กับทุกบรรทัดจากผู้พูดคนนี้",
     "collapseAction": "ย่อ",
     "speakerTagPromptNotMeAction": "ไม่ใช่ฉัน",
-    "confidenceNextLabels": "{count, plural, =1{ติดป้ายชื่อคนนี้ในการสนทนาอีก 1 รายการ} other{ติดป้ายชื่อคนนี้ในการสนทนาอีก {count} รายการ}}"
+    "confidenceNextLabels": "{count, plural, =1{ติดป้ายชื่อคนนี้ในการสนทนาอีก 1 รายการ} other{ติดป้ายชื่อคนนี้ในการสนทนาอีก {count} รายการ}}",
+    "exportingAllData": "กำลังส่งออกข้อมูลของคุณ… โปรดเปิด Omi ค้างไว้ บัญชีขนาดใหญ่อาจใช้เวลาหลายนาที"
 }

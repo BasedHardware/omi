@@ -12150,4 +12150,8 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Je gegevens worden geëxporteerd… Houd Omi open; grote accounts kunnen enkele minuten duren.';
 }

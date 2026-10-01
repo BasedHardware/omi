@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "S'aplica a totes les línies d'aquest parlant",
     "collapseAction": "Replega",
     "speakerTagPromptNotMeAction": "No sóc jo",
-    "confidenceNextLabels": "{count, plural, =1{Etiqueta'ls en 1 conversa més.} other{Etiqueta'ls en {count} converses més.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etiqueta'ls en 1 conversa més.} other{Etiqueta'ls en {count} converses més.}}",
+    "exportingAllData": "S'estan exportant les teves dades… No tanquis Omi; els comptes grans poden trigar diversos minuts."
 }

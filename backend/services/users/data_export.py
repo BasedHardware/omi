@@ -256,50 +256,62 @@ def _export_photo_manifest(
     return result
 
 
-def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iterator[str]:
+def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str] | None) -> Iterator[str]:
     yield "{\n"
 
     profile = cast(JsonRecord | None, get_user_profile(uid))
     yield ('  "profile": ' + _dumps(profile if profile else {}, indent=2) + ",\n")
 
-    # Photo manifests can contain base64 image bytes. Spool them independently
-    # while conversations stream so account size cannot turn export into an
-    # unbounded resident list.
-    photo_spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8")
-    photo_count = 0
-    try:
-        yield '  "conversations": [\n'
-        first = True
-        for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
-            if conv is None:
-                continue
-            if not first:
-                yield ",\n"
-            first = False
-            yield "    " + _dumps(conv, indent=4)
-        yield "\n  ],\n"
+    yield '  "conversations": [\n'
+    first = True
+    for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
+        if conv is None:
+            continue
+        if not first:
+            yield ",\n"
+        first = False
+        yield "    " + _dumps(conv, indent=4)
+    yield "\n  ],\n"
 
-        for conversation_id, photo in conversations_db.iter_all_conversation_photos(uid):
-            if not isinstance(photo, Mapping):
-                continue
+    if memories_spool is None:
+        photo_rows = (
+            _export_photo_manifest(uid, str(conversation_id), photo, require_bytes=False)
+            for conversation_id, photo in conversations_db.iter_all_conversation_photos(uid)
+            if isinstance(photo, Mapping)
+        )
+        first_photo = next(photo_rows, None)
+        if first_photo is not None:
+            yield '  "conversation_photo_manifest": '
+            yield from _yield_json_array(chain((first_photo,), photo_rows))
+            yield ",\n"
+    else:
+        # Photo manifests can contain base64 image bytes. Spool them independently
+        # while conversations stream so account size cannot turn export into an
+        # unbounded resident list.
+        photo_spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8")
+        photo_count = 0
+        try:
+            for conversation_id, photo in conversations_db.iter_all_conversation_photos(uid):
+                if not isinstance(photo, Mapping):
+                    continue
+                if photo_count:
+                    photo_spool.write(",\n")
+                photo_spool.write("    ")
+                _dump(
+                    _export_photo_manifest(uid, str(conversation_id), photo, require_bytes=False),
+                    photo_spool,
+                    indent=4,
+                )
+                photo_count += 1
+
             if photo_count:
-                photo_spool.write(",\n")
-            photo_spool.write("    ")
-            _dump(
-                _export_photo_manifest(uid, str(conversation_id), photo, require_bytes=False),
-                photo_spool,
-                indent=4,
-            )
-            photo_count += 1
-
-        if photo_count:
-            yield '  "conversation_photo_manifest": [\n'
-            photo_spool.seek(0)
-            while chunk := photo_spool.read(64 * 1024):
-                yield chunk
-            yield "\n  ],\n"
-    finally:
-        photo_spool.close()
+                yield '  "conversation_photo_manifest": [\n'
+                photo_spool.seek(0)
+                while chunk := photo_spool.read(64 * 1024):
+                    yield chunk
+                yield "\n  ],\n"
+        finally:
+            photo_spool.close()
 
     # Frame-request metadata is user-owned audit history. Keep it separate from
     # conversation JSON and include a byte manifest for each referenced object.
@@ -352,8 +364,14 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
             yield ",\n"
 
     yield '  "memories": '
-    while chunk := memories_spool.read(64 * 1024):
-        yield chunk
+    if memories_spool is None:
+        yield from _yield_json_array(
+            memory.model_dump(mode="json")
+            for memory in MemoryService().iter_portability_export_memories(uid, include_archive=True)
+        )
+    else:
+        while chunk := memories_spool.read(64 * 1024):
+            yield chunk
     yield ',\n'
 
     yield '  "memory_review_data": {\n'
@@ -416,7 +434,10 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
         yield "    " + _dumps(msg, indent=4)
     yield "\n  ]\n"
 
-    yield "}\n"
+    if memories_spool is None:
+        yield ',\n  "export_complete": true\n}\n'
+    else:
+        yield "}\n"
 
 
 def _iter_spooled_export_and_close(export_spool: IO[str]) -> Iterator[str]:
@@ -445,3 +466,7 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
     finally:
         memories_spool.close()
     return _iter_spooled_export_and_close(export_spool)
+
+
+def iter_user_data_export_streaming(uid: str) -> Iterator[str]:
+    return _iter_user_data_export_from_spool(uid, None)

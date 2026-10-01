@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/user_data_export.dart' as export_user_data;
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/people_wire.g.dart' as people_wire;
@@ -966,49 +966,16 @@ Future<bool> setMentorNotificationSettings(int frequency) async {
 
 /// Streams the /v1/users/export endpoint directly to a file, avoiding loading
 /// the entire JSON into memory. Returns the file path on success, null on failure.
-Future<String?> exportUserDataToFile(String filePath) async {
-  final file = File(filePath);
-  IOSink? sink;
-  try {
-    final response = await makeRawApiCall(url: '${Env.apiBaseUrl}v1/users/export', method: 'GET');
-    if (response.statusCode != 200) {
-      Logger.debug('exportUserDataToFile failed: ${response.statusCode}');
-      return null;
-    }
-    final downloadSink = file.openWrite();
-    sink = downloadSink;
-    var bytesWritten = 0;
-    await for (final chunk in response.stream) {
-      downloadSink.add(chunk);
-      bytesWritten += chunk.length;
-    }
-    await downloadSink.flush();
-    await downloadSink.close();
-    sink = null;
-    if (bytesWritten == 0) {
-      Logger.debug('exportUserDataToFile failed: empty response body');
-      if (await file.exists()) {
-        await file.delete();
-      }
-      return null;
-    }
-    return filePath;
-  } catch (e) {
-    Logger.debug('exportUserDataToFile error: $e');
-    final openSink = sink;
-    if (openSink != null) {
-      try {
-        await openSink.close();
-      } catch (_) {}
-    }
-    if (await file.exists()) {
-      try {
-        await file.delete();
-      } catch (_) {}
-    }
-    return null;
-  }
-}
+Future<String?> exportUserDataToFile(
+  String filePath, {
+  void Function(int bytesReceived)? onProgress,
+  Future<void>? abortTrigger,
+}) =>
+    export_user_data.exportUserDataToFile(
+      filePath,
+      onProgress: onProgress,
+      abortTrigger: abortTrigger,
+    );
 
 Future<Map<String, dynamic>?> getFairUseStatus() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/fair-use/status', headers: {}, method: 'GET', body: '');

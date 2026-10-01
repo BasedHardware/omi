@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Kehtib kõigile selle kõneleja ridadele",
     "collapseAction": "Ahenda",
     "speakerTagPromptNotMeAction": "Pole mina",
-    "confidenceNextLabels": "{count, plural, =1{Märgi nad veel 1 vestluses.} other{Märgi nad veel {count} vestluses.}}"
+    "confidenceNextLabels": "{count, plural, =1{Märgi nad veel 1 vestluses.} other{Märgi nad veel {count} vestluses.}}",
+    "exportingAllData": "Teie andmete eksportimine… Hoidke Omi avatud; suurte kontode puhul võib see võtta mitu minutit."
 }

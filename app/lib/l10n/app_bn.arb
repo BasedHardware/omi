@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "এই বক্তার প্রতিটি লাইনে প্রযোজ্য",
     "collapseAction": "গুটিয়ে নিন",
     "speakerTagPromptNotMeAction": "আমি নই",
-    "confidenceNextLabels": "{count, plural, =1{আরও 1টি কথোপকথনে তাদের লেবেল করুন।} other{আরও {count}টি কথোপকথনে তাদের লেবেল করুন।}}"
+    "confidenceNextLabels": "{count, plural, =1{আরও 1টি কথোপকথনে তাদের লেবেল করুন।} other{আরও {count}টি কথোপকথনে তাদের লেবেল করুন।}}",
+    "exportingAllData": "আপনার ডেটা রপ্তানি করা হচ্ছে… Omi খোলা রাখুন; বড় অ্যাকাউন্টের ক্ষেত্রে কয়েক মিনিট লাগতে পারে।"
 }

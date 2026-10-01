@@ -12157,4 +12157,8 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Az adatai exportálása folyamatban… Tartsa nyitva az Omi-t; a nagy fiókok több percet is igénybe vehetnek.';
 }

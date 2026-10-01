@@ -12123,4 +12123,8 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Verileriniz dışa aktarılıyor… Omi\'yi açık tutun; büyük hesaplar birkaç dakika sürebilir.';
 }

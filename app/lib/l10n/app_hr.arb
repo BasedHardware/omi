@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "Primjenjuje se na sve retke ovog govornika",
     "collapseAction": "Sažmi",
     "speakerTagPromptNotMeAction": "Nisam ja",
-    "confidenceNextLabels": "{count, plural, =1{Označite ih u još 1 razgovoru.} other{Označite ih u još {count} razgovora.}}"
+    "confidenceNextLabels": "{count, plural, =1{Označite ih u još 1 razgovoru.} other{Označite ih u još {count} razgovora.}}",
+    "exportingAllData": "Izvoz vaših podataka… Držite Omi otvorenim; veliki računi mogu potrajati nekoliko minuta."
 }

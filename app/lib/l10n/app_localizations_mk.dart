@@ -12175,4 +12175,8 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Вашите податоци се извезуваат… Држете го Omi отворено; за големи сметки може да треба неколку минути.';
 }

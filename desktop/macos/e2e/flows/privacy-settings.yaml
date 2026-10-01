@@ -1,10 +1,13 @@
 version: 2
 name: privacy-settings
 tier: 2
-description: Hermetic Settings privacy toggle snapshot via bridge action
+description: Hermetic privacy settings and complete account export through the loopback data backend
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/DataExport/AccountDataExportModel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/DataExport/AccountDataExportView.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+DataExport.swift
 preconditions:
   - automation_bridge_ready
 
@@ -26,6 +29,13 @@ steps:
       ok: true
 
   - id: S3
+    name: Download and validate a complete account export from the loopback fixture
+    bridge.action:
+      name: settings_export_data_fixture
+    expect:
+      result.detail.completed: "true"
+
+  - id: S4
     name: Logs clean
     log.expect:
       absent:

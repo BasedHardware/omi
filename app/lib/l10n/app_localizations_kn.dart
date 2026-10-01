@@ -12149,4 +12149,8 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'ನಿಮ್ಮ ಡೇಟಾವನ್ನು ರಫ್ತು ಮಾಡಲಾಗುತ್ತಿದೆ… Omi ಅನ್ನು ತೆರೆದಿರಿಸಿ; ದೊಡ್ಡ ಖಾತೆಗಳಿಗೆ ಹಲವು ನಿಮಿಷಗಳು ಬೇಕಾಗಬಹುದು.';
 }

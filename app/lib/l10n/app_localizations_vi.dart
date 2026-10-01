@@ -12105,4 +12105,7 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData => 'Đang xuất dữ liệu của bạn… Hãy giữ Omi mở; tài khoản lớn có thể mất vài phút.';
 }

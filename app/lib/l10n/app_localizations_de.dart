@@ -12208,4 +12208,8 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Deine Daten werden exportiert… Lass Omi geöffnet; bei großen Konten kann das mehrere Minuten dauern.';
 }

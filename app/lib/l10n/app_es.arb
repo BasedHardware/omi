@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Se aplica a todas las líneas de este hablante",
     "collapseAction": "Contraer",
     "speakerTagPromptNotMeAction": "No soy yo",
-    "confidenceNextLabels": "{count, plural, =1{Etiquétalos en 1 conversación más.} other{Etiquétalos en {count} conversaciones más.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etiquétalos en 1 conversación más.} other{Etiquétalos en {count} conversaciones más.}}",
+    "exportingAllData": "Exportando tus datos… Mantén Omi abierto; las cuentas grandes pueden tardar varios minutos."
 }

@@ -12126,4 +12126,8 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Извоз ваших података… Држите Omi отвореним; велики налози могу потрајати неколико минута.';
 }

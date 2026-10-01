@@ -12147,4 +12147,8 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'Exportando tus datos… Mantén Omi abierto; las cuentas grandes pueden tardar varios minutos.';
 }

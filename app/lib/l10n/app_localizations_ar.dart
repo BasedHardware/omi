@@ -12039,4 +12039,7 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData => 'جارٍ تصدير بياناتك… أبقِ Omi مفتوحًا؛ فالحسابات الكبيرة قد تستغرق عدة دقائق.';
 }

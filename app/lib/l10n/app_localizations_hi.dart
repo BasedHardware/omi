@@ -12093,4 +12093,8 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get exportingAllData =>
+      'आपका डेटा निर्यात किया जा रहा है… Omi को खुला रखें; बड़े खातों में कई मिनट लग सकते हैं।';
 }

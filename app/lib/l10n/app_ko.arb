@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "이 화자의 모든 발언에 적용돼요",
     "collapseAction": "접기",
     "speakerTagPromptNotMeAction": "제가 아니에요",
-    "confidenceNextLabels": "{count, plural, =1{대화 1개에서 더 라벨을 지정해 주세요.} other{대화 {count}개에서 더 라벨을 지정해 주세요.}}"
+    "confidenceNextLabels": "{count, plural, =1{대화 1개에서 더 라벨을 지정해 주세요.} other{대화 {count}개에서 더 라벨을 지정해 주세요.}}",
+    "exportingAllData": "데이터를보내는 중… Omi를 열어 두세요. 데이터가 많은 계정은 몇 분 정도 걸릴 수 있습니다."
 }
