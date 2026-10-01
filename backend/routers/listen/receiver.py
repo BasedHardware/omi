@@ -81,7 +81,6 @@ from utils.stt.streaming import (
     connect_stt_socket_with_fallback,
     deepgram_fallback_model,
     get_stt_service_for_language,
-    make_stream_callback,
     modulate_is_configured_fallback,
     parakeet_is_configured_fallback,
     process_audio_dg,
@@ -89,6 +88,7 @@ from utils.stt.streaming import (
     process_audio_soniox,
     process_audio_parakeet,
 )
+from routers.listen.stt_callbacks import build_stt_callbacks
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.transcribe_decisions import (
@@ -113,18 +113,12 @@ from utils.observability.transcription import (
     record_live_stt_failover_accepted,
 )
 from utils.metrics import (
-    AUDIO_TIMELINE_REJECT_REASONS,
     OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL,
-    OMI_AUDIO_TIMELINE_MAPPED_TOTAL,
     OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL,
-    OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL,
     OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL,
-    OMI_AUDIO_TIMELINE_REJECTS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL,
     audio_timeline_provider_label,
-    audio_timeline_past_send_bucket,
-    audio_timeline_send_path_label,
 )
 from utils.product_telemetry import emit_product_event
 
@@ -368,7 +362,12 @@ class ListenReceiver(ReplayFilterMixin):
         else:
             ring.write(decoded, now)
 
-    def _enqueue_translated_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
+    def _enqueue_translated_segments(
+        self,
+        segments: List[Dict[str, Any]],
+        provider: Optional[str] = None,
+        speaker_epoch: Optional[SpeakerProviderEpoch] = None,
+    ) -> None:
         """Owner-resolve epoch-translated segments before they enter the buffer.
 
         Segments arrive with absolute projected wall start/end plus the private
@@ -406,7 +405,7 @@ class ListenReceiver(ReplayFilterMixin):
             kept.append(segment)
             OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='mapped').inc()
         if kept:
-            self._enqueue_stt_segments(kept, provider=provider)
+            self._enqueue_stt_segments(kept, provider=provider, speaker_epoch=speaker_epoch)
 
     def _fallback_unplaced(self, segment: Dict[str, Any], kept: List[Dict[str, Any]], outcome: str) -> None:
         segment['audio_alignment'] = 'unplaced'
@@ -436,7 +435,10 @@ class ListenReceiver(ReplayFilterMixin):
         return self.host.state.current_conversation_id
 
     def _enqueue_clock_positioned_segments(
-        self, segments: List[Dict[str, Any]], provider: Optional[str] = None
+        self,
+        segments: List[Dict[str, Any]],
+        provider: Optional[str] = None,
+        speaker_epoch: Optional[SpeakerProviderEpoch] = None,
     ) -> None:
         """Attach a private capture window for speaker ID in clock-only mode.
 
@@ -449,7 +451,7 @@ class ListenReceiver(ReplayFilterMixin):
                 segment.pop('_capture_start_sample', None)
                 segment.pop('_capture_end_sample', None)
                 segment['_capture_window_unavailable'] = True
-            self._enqueue_stt_segments(segments, provider=provider)
+            self._enqueue_stt_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
             return
         for segment in segments:
             start_sample = segment.pop('_capture_start_sample', None)
@@ -462,7 +464,7 @@ class ListenReceiver(ReplayFilterMixin):
                     segment['_capture_abs_end'] = abs_end
                     continue
             segment['_capture_window_unavailable'] = True
-        self._enqueue_stt_segments(segments, provider=provider)
+        self._enqueue_stt_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
 
     def _run_on_listen_loop(self, action, segments: List[Dict[str, Any]]) -> None:
         """Run a provider callback on the listen event loop.
@@ -566,7 +568,12 @@ class ListenReceiver(ReplayFilterMixin):
             processor.segment_buffer.extend(dict(raw) for raw in segments)
         raise RuntimeError('Late STT callback could not be persisted')
 
-    def _enqueue_epoch_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
+    def _enqueue_epoch_segments(
+        self,
+        segments: List[Dict[str, Any]],
+        provider: Optional[str] = None,
+        speaker_epoch: Optional[SpeakerProviderEpoch] = None,
+    ) -> None:
         """Owner-resolve epoch-translated segments by the pinned persistence mode.
 
         The managed live chain routes its callbacks through here so it uses
@@ -575,9 +582,9 @@ class ListenReceiver(ReplayFilterMixin):
         when not.
         """
         if self.capture_timeline_v2:
-            self._enqueue_translated_segments(segments, provider=provider)
+            self._enqueue_translated_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
         else:
-            self._enqueue_clock_positioned_segments(segments, provider=provider)
+            self._enqueue_clock_positioned_segments(segments, provider=provider, speaker_epoch=speaker_epoch)
 
     @staticmethod
     def _record_elapsed_validation(provider: str, interval: Optional[Tuple[int, int]], gate: Any) -> None:
@@ -587,113 +594,8 @@ class ListenReceiver(ReplayFilterMixin):
         ).inc()
 
     def _build_stt_callbacks(self) -> Tuple[Any, Any, Optional[ProviderEpochTranslator]]:
-        """Fresh legacy callbacks bound to one provider epoch's translator.
-
-        Every selected socket — initial fallback and send-path failover — gets
-        its own epoch translator created at callback-creation time, so a late
-        callback from an obsolete epoch can never be mapped through a later
-        epoch's accepted send spans. Without a capture timeline the callbacks
-        keep today's gate-remapping behavior exactly.
-
-        With the clock on and v2 persistence off (flag-off prod), the
-        non-passthrough callback keeps today's ``make_stream_callback``
-        semantics: the active gate's ``remap_segments`` runs on provider
-        timestamps before anything is persisted or emitted, and the epoch
-        translation only *attaches* the capture window (it never rewrites
-        ``start``/``end``), so stored and WebSocket times are byte-identical
-        to the flag-off baseline. With v2 on, the send-map translation
-        replaces the gate mapper — both must never apply.
-        """
-        timeline = self.capture_timeline
-        if timeline is None:
-            base = self._enqueue_stt_segments
-
-            def plain(segments: List[Dict[str, Any]]) -> None:
-                base(segments)
-
-            return (
-                make_stream_callback(plain, self.vad_gate, False),
-                make_stream_callback(plain, self.vad_gate, True),
-                None,
-            )
-
-        def record_reject(reason: str) -> None:
-            mode = 'v2' if self.capture_timeline_v2 else 'legacy'
-            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=mode, outcome='rejected').inc()
-            OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(
-                mode=mode,
-                reason=reason if reason in AUDIO_TIMELINE_REJECT_REASONS else 'other',
-                provider=audio_timeline_provider_label(epoch.provider_label),
-                send_path=audio_timeline_send_path_label(epoch.send_path),
-            ).inc()
-
-        def record_mapped() -> None:
-            OMI_AUDIO_TIMELINE_MAPPED_TOTAL.labels(
-                mode='v2' if self.capture_timeline_v2 else 'legacy',
-                provider=audio_timeline_provider_label(epoch.provider_label),
-                send_path=audio_timeline_send_path_label(epoch.send_path),
-            ).inc()
-            if not self.capture_timeline_v2:
-                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='legacy', outcome='mapped').inc()
-
-        def record_recovered(reason: str) -> None:
-            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='recovered').inc()
-
-        epoch = ProviderEpochTranslator(
-            timeline,
-            int(self.host.request.sample_rate),
-            on_reject=record_reject,
-            on_mapped=record_mapped,
-            on_recover=record_recovered,
-            on_past_send=lambda seconds: OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL.labels(
-                provider=audio_timeline_provider_label(epoch.provider_label),
-                send_path=audio_timeline_send_path_label(epoch.send_path),
-                bucket=audio_timeline_past_send_bucket(seconds),
-            ).inc(),
-            owner_at_send=self._proven_send_owner,
-            project_times=self.capture_timeline_v2,
-        )
-        epoch.set_validation_callback(
-            lambda provider, interval: self._record_elapsed_validation(provider, interval, self.vad_gate)
-        )
-        epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
-
-        if self.capture_timeline_v2:
-            # v2: the translation projects start/end onto the capture wall
-            # axis; the gate's provider-time mapper must not also apply.
-            def translate_and_enqueue(segments: List[Dict[str, Any]]) -> None:
-                translated = epoch.translate(segments)
-                if translated:
-                    self._enqueue_translated_segments(translated, provider=epoch.provider_label)
-
-            return (
-                self._loop_hop(translate_and_enqueue),
-                self._loop_hop(translate_and_enqueue),
-                epoch,
-            )
-
-        def clock_only(passthrough: bool):
-            def translate_remap_enqueue(segments: List[Dict[str, Any]]) -> None:
-                # Attach the capture window from the *provider* timestamps
-                # (they index the accepted send spans); start/end are not
-                # rewritten, so the gate remap below sees exactly the values
-                # origin/main's make_stream_callback saw.
-                translated = epoch.translate(segments)
-                if not translated:
-                    return
-                if epoch.replay_origin_sample is not None:
-                    epoch.stitch_replayed_timestamps(translated)
-                elif self.vad_gate is not None and not passthrough:
-                    self.vad_gate.remap_segments(translated)
-                self._enqueue_clock_positioned_segments(translated, provider=epoch.provider_label)
-
-            return translate_remap_enqueue
-
-        return (
-            self._loop_hop(clock_only(False)),
-            self._loop_hop(clock_only(True)),
-            epoch,
-        )
+        """Fresh legacy callbacks bound to one provider stream's epoch (see stt_callbacks.build_stt_callbacks)."""
+        return build_stt_callbacks(self)
 
     def _loop_hop(self, callback):
         """Bind a provider callback to the listen loop (see `_run_on_listen_loop`)."""
@@ -776,7 +678,12 @@ class ListenReceiver(ReplayFilterMixin):
         """Read the actual provider after connection fallback, never the initial selection."""
         return getattr(self.host.stt_service, 'value', self.host.stt_service)
 
-    def _enqueue_stt_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
+    def _enqueue_stt_segments(
+        self,
+        segments: List[Dict[str, Any]],
+        provider: Optional[str] = None,
+        speaker_epoch: Optional[SpeakerProviderEpoch] = None,
+    ) -> None:
         """Persist the provider epoch before local speaker numbers enter the conversation."""
         observe_live_segments(self.host, normalize_brand_segments(segments), provider or self._serving_provider())
         pending = self._pending_live_failover
@@ -785,7 +692,7 @@ class ListenReceiver(ReplayFilterMixin):
             if pending.settled:
                 self._pending_live_failover = None
         self._capture('capture_inbound_stt', segments)
-        self.speaker_provider_epoch.stamp(segments, provider or self._serving_provider())
+        (speaker_epoch or self.speaker_provider_epoch).stamp(segments, provider or self._serving_provider())
         self.host.transcripts.enqueue(segments)
 
     def _settle_pending_live_failover_failure(self, socket: Any = None) -> None:

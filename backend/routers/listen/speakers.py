@@ -6,7 +6,7 @@ import asyncio
 import io
 import logging
 from collections import deque
-from typing import Any, Deque, Dict, Optional, Tuple, cast
+from typing import Any, Deque, Dict, Mapping, Optional, Tuple, cast
 
 import av
 import numpy as np
@@ -55,7 +55,15 @@ MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
 #   not a loss).
 # - rejected: the manual receipt named this voice as nobody, so it emits nothing.
 SPEAKER_ID_EXIT_REASONS = frozenset(
-    {'window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped', 'rejected'}
+    {
+        'window_outside_buffer',
+        'too_short',
+        'no_pcm',
+        'stale_generation',
+        'already_mapped',
+        'rejected',
+        'manual_decision',
+    }
 )
 
 
@@ -313,6 +321,24 @@ class SpeakerMatcher:
             if stale:
                 self.host.emit_speaker_suggestion(voice, '', '', segment_id, retracted=True)
 
+    def _manual_voice_decision(self, receipt: Mapping, speaker_id: int) -> Optional[Mapping]:
+        """The newest positive receipt decision naming this voice, if scope-bound ones match."""
+        covering = (receipt.get('speakers') or {}).get(str(speaker_id))
+        candidates = [covering] if isinstance(covering, Mapping) else []
+        candidates += [
+            entry
+            for entry in (receipt.get('segments') or {}).values()
+            if isinstance(entry, Mapping) and entry.get('speaker_id') == speaker_id
+        ]
+        positive = [entry for entry in candidates if not entry.get('rejection')]
+        if not positive:
+            return None
+        decision = max(positive, key=lambda entry: entry.get('generation', 0))
+        scope = decision.get('speaker_id_scope')
+        if decision.get('source') == 'carried' and scope is not None and scope != self._voice_scopes.get(speaker_id):
+            return None
+        return decision
+
     async def _match_unmapped(
         self, speaker_id: int, segment: dict[str, Any], generation: int, conversation_id: Optional[str]
     ) -> None:
@@ -420,6 +446,7 @@ class SpeakerMatcher:
             # after the read, then publish synchronously.
             owner_reserved = False
             rejected: Dict[int, dict] = {}
+            receipt: Mapping[str, Any] = {}
             if conversation_id:
                 try:
                     receipt = await self.host.persistence.call(
@@ -438,6 +465,25 @@ class SpeakerMatcher:
                     self._retract_rejected_voice(voice, self._voice_segments.get(voice))
                 self.host.state.speaker_map_dirty = True
                 self._record_exit('rejected', speaker_id)
+                return
+            manual = self._manual_voice_decision(receipt, speaker_id)
+            if manual is not None:
+                person_id = USER_SELF_PERSON_ID if manual.get('is_user') else manual.get('person_id')
+                known = self.person_embeddings.get(person_id) if person_id else None
+                voice_wide = manual.get('source') == 'carried' or manual is (receipt.get('speakers') or {}).get(
+                    str(speaker_id)
+                )
+                if person_id and known and voice_wide:
+                    status = (
+                        SpeakerIdentityStatus.user
+                        if person_id == USER_SELF_PERSON_ID
+                        else SpeakerIdentityStatus.not_user
+                    )
+                    self.speaker_to_person[speaker_id] = (person_id, known['name'])
+                    self.voice_identity_status[speaker_id] = status
+                    self.segment_identity_status[segment['id']] = status
+                    self.host.state.speaker_map_dirty = True
+                self._record_exit('manual_decision', speaker_id)
                 return
             voice_groups = self._provider_epoch_voice_groups()
             decisions = arbitrate_owner_matches(

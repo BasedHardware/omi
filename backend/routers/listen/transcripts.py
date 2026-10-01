@@ -834,6 +834,7 @@ class TranscriptProcessor:
                 )
                 offset = self.host.state.first_audio_byte_timestamp - started_ts
                 self.speaker_id_allocator.hydrate(data.get('transcript_segments', []))
+                self.speaker_id_allocator.hydrate_receipt(data.get('manual_speaker_assignments') or {})
                 for raw in raw_segments:
                     self.speaker_id_allocator.assign(raw)
                     raw['start'] += offset
@@ -1056,6 +1057,7 @@ class TranscriptProcessor:
             if segments:
                 state.last_transcript_time = time.time()
                 self.speaker_id_allocator.hydrate(data.get('transcript_segments', []))
+                self.speaker_id_allocator.hydrate_receipt(data.get('manual_speaker_assignments') or {})
                 for raw in segments:
                     self.speaker_id_allocator.assign(raw)
                     raw['start'] = float(raw['start']) - started_ts

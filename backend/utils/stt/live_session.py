@@ -14,6 +14,7 @@ from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, mode as routing_mode
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
+from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
 
@@ -135,6 +136,7 @@ class LiveChainSession:
 
         async def build(service: st.STTService) -> STTSocket:
             is_window = service == st.STTService.parakeet and window
+            stream_epoch = SpeakerProviderEpoch()
             try:
                 gate = build_gate(is_window)
             except Exception:
@@ -169,7 +171,9 @@ class LiveChainSession:
                         translated = epoch.translate(seg_list)
                         if translated:
                             leg.note_selection_transcript(translated)
-                            self.receiver._enqueue_epoch_segments(translated, provider=service.value)
+                            self.receiver._enqueue_epoch_segments(
+                                translated, provider=service.value, speaker_epoch=stream_epoch
+                            )
 
                     self.receiver._run_on_listen_loop(translate_on_loop, segments)
                     return
@@ -195,7 +199,9 @@ class LiveChainSession:
                             segment['start'], segment['end'] = start, end
                             self.last_end = end
                         leg.note_selection_transcript(translated)
-                        self.receiver._enqueue_epoch_segments(translated, provider=service.value)
+                        self.receiver._enqueue_epoch_segments(
+                            translated, provider=service.value, speaker_epoch=stream_epoch
+                        )
 
                     self.receiver._run_on_listen_loop(attach_then_rebase, segments)
                     return
@@ -208,7 +214,7 @@ class LiveChainSession:
                     segment['start'], segment['end'] = start, end
                     self.last_end = end
                 leg.note_selection_transcript(segments)
-                self.receiver._enqueue_stt_segments(segments, provider=service.value)
+                self.receiver._enqueue_stt_segments(segments, provider=service.value, speaker_epoch=stream_epoch)
 
             raw = None
             try:
@@ -241,6 +247,7 @@ class LiveChainSession:
                     # initial service. Set its clock policy before first send.
                     epoch.provider_label = service.value
                 leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
+                leg.speaker_provider_epoch = stream_epoch
                 return leg
             except BaseException:
                 if raw is not None:
@@ -293,6 +300,9 @@ class LiveChainSession:
             st.STTService.modulate: 'velma-2',
             st.STTService.deepgram: dg_model,
         }[actual]
+        selected_epoch = getattr(socket, 'speaker_provider_epoch', None)
+        if selected_epoch is not None:
+            self.receiver.speaker_provider_epoch = selected_epoch
         self.generation = generation
         self.receiver.vad_gate = self
         return socket
@@ -317,6 +327,7 @@ class LiveLegSocket(STTSocket):
         # Audio-timeline v2: the provider epoch translator that records
         # accepted sends and maps provider times to the capture timeline.
         self._send_tracker = send_tracker
+        self.speaker_provider_epoch: SpeakerProviderEpoch | None = None
         self._dead = False
         self._seconds = 0.0
         self._replaying = False

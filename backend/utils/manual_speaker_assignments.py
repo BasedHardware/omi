@@ -29,7 +29,7 @@ class LiveTranscriptReplayReceipt(BaseModel):
     )
 
 
-def manual_owner_reserved(receipt: dict) -> bool:
+def manual_owner_reserved(receipt: Mapping) -> bool:
     """An explicit owner decision reserves the owner even without a voiceprint."""
     return any(
         isinstance(entry, dict) and entry.get('is_user') is True
@@ -63,6 +63,12 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
         by_segment = overrides.get(segment.get('id'))
         by_speaker = speakers.get(str(segment.get('speaker_id')))
         negative = rejected.get(segment.get('speaker_id'))
+        if (
+            by_speaker is not None
+            and by_speaker.get('source') == 'carried'
+            and by_speaker.get('speaker_id_scope') != segment.get('speaker_id_scope')
+        ):
+            by_speaker = None
         if negative is not None and negative.get('speaker_id_scope') is not None:
             if negative['speaker_id_scope'] != segment.get('speaker_id_scope'):
                 negative = None

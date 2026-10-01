@@ -1204,12 +1204,12 @@ sequenceDiagram
 
 All three REST assignment forms use `database.conversations.assign_conversation_speaker`.
 It persists manual overrides/defaults, invalidates contributing profiles, and clears
-client projections atomically. Live/sync writers overlay those decisions; live
-writers preserve unseen appends and explicitly identify merged-away segments.
-Manually curated conversations cannot be automatic sync bridge donors.
-When a sync bridge retires an ID already open on a client, its tombstone is
-followed on detail reads. Assignment follows the same owner-scoped redirect
-inside its transaction. A donor speaker number is translated through its
+client projections atomically; live/sync writers overlay decisions, keep unseen
+appends, and identify merged-away segments. When a sync bridge retires an ID already
+open on a client, its tombstone is followed on detail reads. Manually curated
+conversations are never sync bridge donors, and a same-stream rollover carries the
+active scope's winning manual decisions as `source:'carried'` generation-1 entries.
+Assignment follows the same owner-scoped redirect inside its transaction. A donor speaker number is translated through its
 stable segment IDs before updating the survivor, because bridge allocation
 can give that number to another voice. A missing or user-deleted survivor
 remains a 404; missing selected segments fail instead of labeling another
