@@ -376,7 +376,9 @@ async def connect_stt_socket_with_fallback(
     use_config: Optional[bool] = None,
     routing_uid: Optional[str] = None,
     routing_language: Optional[str] = None,
-    routing_pin_primary: bool = False,
+    routing_languages: tuple[str, ...] = (),
+    routing_models: dict[str, str | None] | None = None,
+    failed_targets: set[str] | None = None,
 ) -> Tuple[STTSocket, STTService]:
     """Connect a serving provider; see ARCHITECTURE.md (incident history)."""
     if configured_chain_enabled() if use_config is None else use_config:
@@ -395,7 +397,9 @@ async def connect_stt_socket_with_fallback(
             models=stt_service_models,
             routing_uid=routing_uid,
             routing_language=routing_language,
-            routing_pin_primary=routing_pin_primary,
+            routing_languages=routing_languages,
+            routing_models=routing_models,
+            failed_targets=failed_targets,
         )
     circuit = _circuit_for_primary(primary_service)
 

@@ -12,7 +12,11 @@ from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
-from utils.stt.live_health import health, mode as routing_mode
+from utils.stt.live_health import health, bounded_language
+from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
+from utils.stt.live_target_connect import connect_modulate
+from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
+from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
@@ -38,12 +42,15 @@ WINDOW_VAD_CONTINUE_THRESHOLD = 0.65
 class LiveChainSession:
     def __init__(self, receiver: Any) -> None:
         self.receiver = receiver
+        if not hasattr(receiver, '_stt_failed_targets'):
+            receiver._stt_failed_targets = set()
         self.audio_seconds = 0.0
         self.last_end = 0.0
         self.generation = 0
         self.speech_ms = 0
         self.total_speech_ms = 0
         self.vad_mode = 'off'
+        self._routing_target_entry: Target | None = None
 
     def consume_speech_ms_delta(self) -> int:
         delta, self.speech_ms = self.speech_ms, 0
@@ -81,6 +88,12 @@ class LiveChainSession:
         )
         window = parakeet_token == 'parakeet-window'
         parakeet_allowed = parakeet_token is not None
+        engine_models = {
+            'parakeet': parakeet_token,
+            'modulate': 'velma-2',
+            'soniox': 'soniox',
+            'deepgram': dg_model,
+        }
         if any(token in models for token in ('parakeet', 'parakeet-window')) and not parakeet_allowed:
             record_fallback(
                 component='stt_selection',
@@ -149,6 +162,13 @@ class LiveChainSession:
 
         async def build(service: st.STTService) -> STTSocket:
             is_window = service == st.STTService.parakeet and window
+            target = connecting_target.get()
+            if target is not None and (
+                target.family != service.value
+                or not engine_matches(target, engine_models)
+                or (target.id == 'parakeet-window' and not os.getenv('HOSTED_PARAKEET_API_URL'))
+            ):
+                raise TargetEngineMismatch('Selected target differs from the session engine')
             try:
                 gate = build_gate(is_window)
             except Exception:
@@ -243,7 +263,7 @@ class LiveChainSession:
                         callback, sample_rate, language, profile=host.language_profile, keywords=keywords
                     )
                 elif service == st.STTService.modulate:
-                    raw = await st.process_audio_modulate(callback, sample_rate, language)
+                    raw = await connect_modulate(callback, sample_rate, language)
                 else:
                     raw = await st.process_audio_dg(
                         callback,
@@ -295,7 +315,15 @@ class LiveChainSession:
         if same_provider:
             if primary_missing:
                 raise st.ParakeetConnectionError('config_incomplete')
-            socket, actual = await primary(), host.stt_service
+            try:
+                target = self._routing_target_entry if routing_on(uid) else None
+            except ValueError:
+                target = None
+            token = connecting_target.set(target)
+            try:
+                socket, actual = await primary(), host.stt_service
+            finally:
+                connecting_target.reset(token)
         else:
             socket, actual = await st.connect_stt_socket_with_fallback(
                 primary_service=host.stt_service,
@@ -308,10 +336,12 @@ class LiveChainSession:
                 use_config=True,
                 routing_uid=uid,
                 routing_language=host.language,
-                routing_pin_primary=host.stt_model == 'parakeet-window'
-                or getattr(host.language_profile, 'arm', None) == 'hintable',
+                routing_languages=tuple(getattr(host.language_profile, 'expected', ())),
+                routing_models=engine_models,
+                failed_targets=self.receiver._stt_failed_targets,
             )
         host.stt_service = actual
+        self._routing_target_entry = getattr(socket, '_routing_target_entry', None)
         host.stt_model = {
             st.STTService.parakeet: 'parakeet-window' if window else 'parakeet',
             st.STTService.soniox: 'soniox',
@@ -351,6 +381,33 @@ class LiveLegSocket(STTSocket):
         self._first_speech_at: float | None = None
         self._speech_ms_for_health = 0
         self._transcript_outcome: str | None = None
+        target = connecting_target.get()
+        self._routing_target_entry = target
+        self.routing_target = (
+            target.id
+            if target
+            else (
+                'parakeet'
+                if service.value == 'parakeet' and not window
+                else DEFAULT_IDS.get(service.value, service.value)
+            )
+        )
+        self.routing_model = (
+            'parakeet-window' if window else 'parakeet' if service.value == 'parakeet' else service.value
+        )
+        self.routing_endpoint = getattr(raw, 'routing_endpoint', None)
+        self._health_language = bounded_language(session.receiver.host.language)
+        self._cost_generations = health.cost_generations(self.routing_target, self._health_language)
+        self._cost_recorded = False
+        self._cost_censored_no_text = False
+        self._target_death_recorded = False
+        self._closing_for_health = False
+        try:
+            self._routing_active = target is not None and routing_on(
+                getattr(getattr(session.receiver.host, 'request', None), 'uid', None)
+            )
+        except ValueError:
+            self._routing_active = False
         self._health_success: Callable[[], None] = lambda: None
         self._health_close: Callable[[], None] = lambda: None
         self.retired_for_replay = False
@@ -452,9 +509,31 @@ class LiveLegSocket(STTSocket):
     @property
     def is_connection_dead(self) -> bool:
         dead = self._dead or self.raw.is_connection_dead
+        if dead and not self._closing_for_health:
+            self._record_cost_outcome(True)
         if dead and self._pending_selection is not None:
             self._pending_selection.note_failure(self.typed_death_reason)
         return dead
+
+    def record_target_death(self, reason: str) -> bool:
+        target = self._routing_target_entry
+        if (
+            not self._routing_active
+            or target is None
+            or (target.id == DEFAULT_IDS.get(target.family) and target.endpoint is None)
+        ):
+            return False
+        if self._target_death_recorded:
+            return True
+        self._target_death_recorded = True
+        circuit = target_circuit(target)
+        if reason in ACCOUNT_REJECTION_REASONS:
+            circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+            health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
+            health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
+        else:
+            circuit.record_serve_failure()
+        return True
 
     def _release_open_gauge(self) -> None:
         if not self._open_gauge_released:
@@ -495,15 +574,19 @@ class LiveLegSocket(STTSocket):
         if self._transcript_outcome is not None:
             return
         self._transcript_outcome = outcome
+        if outcome == 'no_text':
+            self._record_cost_outcome(False)
         health.record(self.service.value, self.session.receiver.host.language, outcome)
-        if routing_mode() == 'on':
+        if self._routing_active:
             if outcome == 'text':
                 self._health_success()
-            else:
+            elif not self._cost_censored_no_text:
                 self._health_close()
-                circuit = st._circuit_for_primary(self.service)  # type: ignore[reportPrivateUsage]
+                circuit = target_circuit(self._routing_target_entry, st._circuit_for_primary(self.service))  # type: ignore[reportPrivateUsage]
                 circuit.record_serve_failure()
                 health.quarantine(self.service.value, 'selection', circuit.serve_error_bench_seconds)
+            else:
+                self._health_close()
 
     def _check_no_text_deadline(self) -> None:
         if self._first_speech_at is None or self._transcript_outcome is not None:
@@ -513,12 +596,12 @@ class LiveLegSocket(STTSocket):
 
     @property
     def defers_selection_success(self) -> bool:
-        return self.window or routing_mode() == 'on'
+        return self.window or self._routing_active
 
     def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
         from utils.stt.parakeet_window import WindowedParakeetSocket
 
-        if routing_mode() == 'on':
+        if self._routing_active:
             self._health_success, self._health_close = on_success, on_close
         elif isinstance(self.raw, WindowedParakeetSocket):
             self.raw.set_health_callbacks(on_success, on_close)
@@ -572,6 +655,8 @@ class LiveLegSocket(STTSocket):
         setattr(gate, 'process_audio', process_replay_capture)
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
+        if self._closing_for_health:
+            return False
         if self.is_connection_dead:
             return False
         from utils.stt.parakeet_window import WindowedParakeetSocket
@@ -596,6 +681,7 @@ class LiveLegSocket(STTSocket):
                     try:
                         self.raw.finish()
                     finally:
+                        self._record_cost_outcome(True)
                         self._release_open_gauge()
                     record_fallback(
                         component='vad',
@@ -628,6 +714,7 @@ class LiveLegSocket(STTSocket):
                 sent_spans = tuple(output.send_spans) if output is not None else ()
         try:
             if audio and self.raw.send(audio) is not True:
+                self._record_cost_outcome(True)
                 self.finish()
                 self._dead = True
                 return False
@@ -683,6 +770,9 @@ class LiveLegSocket(STTSocket):
         self.raw.finalize()
 
     def finish(self) -> None:
+        dead = self.is_connection_dead
+        self._censor_early_teardown(dead)
+        self._closing_for_health = True
         try:
             if self.is_connection_dead and self._pending_selection is not None:
                 self._pending_selection.note_failure(self.typed_death_reason)
@@ -695,12 +785,50 @@ class LiveLegSocket(STTSocket):
                 and self._speech_ms_for_health >= 1000
             ):
                 self._record_transcript_outcome('no_text')
-            elif self._transcript_outcome is None and routing_mode() == 'on':
+            elif self._transcript_outcome is None and self._routing_active:
                 self._health_close()
+            self._record_cost_outcome(dead)
             self._release_open_gauge()
 
+    def _record_cost_outcome(self, dead: bool) -> None:
+        if not self._cost_recorded and self._first_speech_at is not None and self._speech_ms_for_health >= 1000:
+            self._cost_recorded = True
+            outcome = 'failover' if dead else self._transcript_outcome or 'no_text'
+            if self._cost_censored_no_text and self._transcript_outcome != 'text':
+                return
+            try:
+                health.record_session(
+                    self.routing_target,
+                    self._health_language,
+                    outcome,
+                    self._cost_generations,
+                    getattr(getattr(self.session.receiver.host, 'request', None), 'uid', None),
+                )
+            except Exception:
+                record_fallback(
+                    component='stt_selection',
+                    from_mode=self.service.value,
+                    to_mode=self.service.value,
+                    reason='config_incomplete',
+                    outcome='degraded',
+                )
+
+    def _censor_early_teardown(self, dead: bool) -> None:
+        if (
+            not self._closing_for_health
+            and not dead
+            and self._transcript_outcome is None
+            and self._first_speech_at is not None
+            and time.monotonic() - self._first_speech_at < max(1.0, float(os.getenv('STT_NO_TEXT_SECONDS', '30')))
+        ):
+            self._cost_censored_no_text = True
+
     async def drain_and_close(self) -> None:
+        dead = self.is_connection_dead
+        self._censor_early_teardown(dead)
+        self._closing_for_health = True
         try:
             await st.drain_stt_socket(self.raw)
         finally:
+            self._record_cost_outcome(dead)
             self.finish()
