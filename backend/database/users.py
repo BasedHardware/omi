@@ -481,9 +481,8 @@ def mark_user_deletion_wipe_failed(uid: str, error: str = ''):
         'wipe_status': 'failed',
         'wipe_failed_at': datetime.now(timezone.utc),
         'wipe_attempts': firestore.Increment(1),
+        'wipe_error': str(error or 'unspecified_failure'),
     }
-    if error:
-        payload['wipe_error'] = str(error)
     account_deletion_document(uid).set(payload, merge=True)
 
 
@@ -496,8 +495,8 @@ def mark_user_deletion_wipe_terminal_failed(uid: str, reason: str = '', error: s
         {
             'wipe_status': 'terminal_failed',
             'wipe_terminal_at': datetime.now(timezone.utc),
-            'terminal_reason': str(reason or ''),
-            'terminal_error': str(error or ''),
+            'terminal_reason': str(reason or 'max_attempts_exceeded'),
+            'terminal_error': str(error or 'unknown_failure_detail'),
         },
         merge=True,
     )
@@ -706,9 +705,14 @@ def get_pending_deletion_wipes(
         failed_at = data.get('wipe_failed_at')
         # A record with no ``wipe_failed_at`` predates the backoff and stays immediately
         # actionable: a missing timestamp must never be a reason to stop retrying a wipe.
-        # Backoff applies to all failed records; once elapsed, capped records are returned
-        # so reconcile_pending_deletion_wipes can transition them to terminal_failed.
-        if failed_at and failed_at + deletion_wipe_retry_delay(attempts) > now:
+        # Backoff applies only to retryable records (attempts < DELETION_WIPE_MAX_ATTEMPTS).
+        # Capped records must never be filtered out or delayed by backoff so the reconciler
+        # can immediately transition them to terminal_failed.
+        if (
+            attempts < DELETION_WIPE_MAX_ATTEMPTS
+            and failed_at
+            and failed_at + deletion_wipe_retry_delay(attempts) > now
+        ):
             continue
         result.append(data | {'uid': doc.id})
 
@@ -846,6 +850,7 @@ def _claim_deletion_wipe_txn(
                     'wipe_status': 'terminal_failed',
                     'wipe_terminal_at': now,
                     'terminal_reason': 'max_attempts_exceeded',
+                    'terminal_error': str(data.get('wipe_error') or f'max attempts ({attempts}) exceeded'),
                 },
             )
             return None

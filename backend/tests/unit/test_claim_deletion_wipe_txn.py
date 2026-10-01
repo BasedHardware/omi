@@ -615,12 +615,14 @@ def test_claim_txn_caps_attempts_and_transitions_to_terminal_failed():
         'wipe_status': 'failed',
         'wipe_attempts': users_db.DELETION_WIPE_MAX_ATTEMPTS,
         'wipe_failed_at': now - timedelta(hours=2),
+        'wipe_error': 'Firestore 403 permission denied',
     }
     result, updates = _run_claim(data)
     assert result is None
     assert len(updates) == 1
     assert updates[0][1]['wipe_status'] == 'terminal_failed'
     assert updates[0][1]['terminal_reason'] == 'max_attempts_exceeded'
+    assert updates[0][1]['terminal_error'] == 'Firestore 403 permission denied'
 
 
 def test_claim_txn_respects_backoff_inside_transaction():
@@ -734,3 +736,47 @@ def test_get_pending_deletion_wipes_returns_capped_failed_for_dead_lettering():
     uids = [r['uid'] for r in result]
     assert 'eligible1' in uids
     assert 'capped1' in uids
+
+
+def test_get_pending_deletion_wipes_never_filters_out_capped_failed_wipes_even_during_backoff():
+    now = datetime.now(timezone.utc)
+    docs_by_status = {
+        'failed': [
+            {
+                'uid': 'freshly_capped_failed',
+                'wipe_status': 'failed',
+                'wipe_attempts': users_db.DELETION_WIPE_MAX_ATTEMPTS,
+                # Failed just 10 seconds ago (deep within the 1-hour retry backoff window)
+                'wipe_failed_at': now - timedelta(seconds=10),
+                'wipe_error': 'Cloud Tasks 404 queue not found',
+            },
+            {
+                'uid': 'uncapped_backing_off',
+                'wipe_status': 'failed',
+                'wipe_attempts': 2,
+                # Failed 10 seconds ago, NOT capped -> MUST be filtered out by backoff
+                'wipe_failed_at': now - timedelta(seconds=10),
+            },
+        ],
+        'pending': [],
+        'running': [],
+        'retrying': [],
+    }
+    fake_collection = _FakeCollection(docs_by_status)
+    with patch.object(users_db, 'account_deletion_collection', lambda **_kwargs: fake_collection):
+        result = users_db.get_pending_deletion_wipes(limit=10)
+
+    uids = [r['uid'] for r in result]
+    assert 'freshly_capped_failed' in uids, 'Capped failed wipe must NEVER be filtered out by backoff'
+    assert 'uncapped_backing_off' not in uids, 'Uncapped failed wipe within backoff window must be skipped'
+
+
+def test_mark_user_deletion_wipe_failed_persists_default_error_when_none():
+    doc_ref = MagicMock()
+    with patch.object(users_db, 'account_deletion_document', return_value=doc_ref):
+        users_db.mark_user_deletion_wipe_failed('uid123')
+
+    assert doc_ref.set.called
+    payload = doc_ref.set.call_args[0][0]
+    assert payload['wipe_status'] == 'failed'
+    assert payload['wipe_error'] == 'unspecified_failure'

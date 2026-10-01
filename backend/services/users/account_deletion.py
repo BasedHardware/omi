@@ -382,14 +382,17 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures] or [
             current_operation
         ]
-        error_msg = (
-            '; '.join(
-                f"{f.get('operation')}: {f.get('error')}"
-                for f in required_failures + best_effort_failures
-                if f.get('error')
-            )
-            or f"failed operations: {', '.join(failed_operations)}"
-        )
+        error_parts = [
+            f"{f.get('operation')}: {f.get('error')}"
+            for f in required_failures + best_effort_failures
+            if f.get('error')
+        ]
+        if error_parts:
+            error_msg = '; '.join(error_parts)
+        elif str(e):
+            error_msg = f"{current_operation}: {e}"
+        else:
+            error_msg = f"failed operations: {', '.join(failed_operations)}"
         # Mark the wipe as failed so a reconciliation worker can retry. Do NOT mark
         # completed — that would hide a partial wipe from the recovery path.
         try:
@@ -613,8 +616,9 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
         attempts = raw_attempts if isinstance(raw_attempts, int) and raw_attempts > 0 else 0
         max_attempts = getattr(users_db, 'DELETION_WIPE_MAX_ATTEMPTS', 10)
         if attempts >= max_attempts:
+            failure_detail = str(record.get('wipe_error') or f'exhausted after {attempts} attempts')
             users_db.mark_user_deletion_wipe_terminal_failed(
-                uid, reason='reconciliation_attempts_exhausted', error=str(record.get('wipe_error', ''))
+                uid, reason='reconciliation_attempts_exhausted', error=failure_detail
             )
             _emit_deletion_telemetry(
                 uid,
