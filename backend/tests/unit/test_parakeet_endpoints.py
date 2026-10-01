@@ -1,3 +1,4 @@
+import asyncio
 import io
 import os
 import sys
@@ -6,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import numpy as np
+import httpx
 import pytest
 import soundfile as sf
 
@@ -202,6 +204,49 @@ class TestBatchMetricsEndpoint:
         resp = client.get("/batch/metrics")
         assert resp.status_code == 200
         assert resp.json() == {}
+
+    @pytest.mark.asyncio
+    async def test_metrics_responds_while_real_batch_engine_awaits_inference(self, monkeypatch):
+        app, mod, gpu, _ = _make_app_with_mocks()
+        engine = BatchEngine(gpu, max_batch_size=1, max_inflight=1, vram_safety_factor=0)
+        monkeypatch.setattr(mod, 'batch_engine', engine)
+        monkeypatch.setattr(engine, '_get_audio_duration', lambda _path: 1.0)
+        inference = asyncio.get_running_loop().create_future()
+        entered = asyncio.Event()
+
+        def submit(*_args):
+            entered.set()
+            return inference, None
+
+        gpu.submit.side_effect = submit
+        await engine.start()
+        first = asyncio.create_task(engine.submit('synthetic-first.wav', lane='live'))
+        second = None
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            second = asyncio.create_task(engine.submit('synthetic-second.wav', lane='live'))
+            await asyncio.sleep(0)
+            assert engine._batches_inflight == 1
+            assert len(engine._pending) == 1
+            # The metrics handler neither waits on inference nor acquires the
+            # batch lock, even when another producer currently owns it.
+            async with engine._lock:
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+                    response = await asyncio.wait_for(client.get('/batch/metrics'), 1)
+                assert response.status_code == 200
+                assert response.json()['live_pending_requests'] == 1
+                assert response.json()['pending_requests'] == 1
+                assert response.json()['backfill_pending_requests'] == 0
+                assert response.json()['total_requests'] == 2
+                assert response.json()['total_batches'] == 1
+                assert not inference.done()
+                assert not first.done()
+                assert not second.done()
+        finally:
+            if not inference.done():
+                inference.set_result([{'text': ''}])
+            await asyncio.gather(first, *([second] if second is not None else []), return_exceptions=True)
+            await engine.stop()
 
 
 def test_live_window_marker_excludes_request_from_prerecorded_error_metric():

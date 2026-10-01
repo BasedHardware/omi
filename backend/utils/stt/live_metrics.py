@@ -8,6 +8,9 @@ WINDOW_ADMISSION = Counter('omi_stt_window_admissions_total', 'Window admission 
 WINDOW_PRESSURE_REFRESH = Counter(
     'omi_stt_window_batch_pressure_refresh_total', 'Batch pressure fleet refresh outcomes', ['outcome']
 )
+WINDOW_PRESSURE_REPLICAS = Gauge(
+    'omi_stt_window_batch_pressure_replicas', 'Fresh and DNS-ready GPU replicas for window admission', ['state']
+)
 WINDOW_PRESSURE_REFUSAL = Counter(
     'omi_stt_window_batch_pressure_refusals_total', 'Window batch pressure refusals', ['reason']
 )
