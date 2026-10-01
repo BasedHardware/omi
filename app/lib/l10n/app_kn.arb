@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "ಹೊಸ ಆವೃತ್ತಿ ಲಭ್ಯವಿದೆ",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "ಇಲ್ಲ",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.",
+    "tasksEmptyStateMessage": "ಕಾರ್ಯವನ್ನು ರಚಿಸಲು ಸಂಭಾಷಣೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿ.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11326,5 +11322,9 @@
     "collapseAction": "ಕುಗ್ಗಿಸಿ",
     "speakerTagPromptNotMeAction": "ನಾನಲ್ಲ",
     "confidenceNextLabels": "{count, plural, =1{ಇನ್ನೂ 1 ಸಂಭಾಷಣೆಯಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.} other{ಇನ್ನೂ {count} ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.}}",
-    "transcriptSpeakerCount": "{count, plural, =1{1 ಭಾಷಣಕಾರ} other{{count} ಭಾಷಣಕಾರರು}}"
+    "transcriptSpeakerCount": "{count, plural, =1{1 ಭಾಷಣಕಾರ} other{{count} ಭಾಷಣಕಾರರು}}",
+    "updateAvailableTitle": "ಅಪ್‌ಡೇಟ್ ಲಭ್ಯವಿದೆ",
+    "updateAvailableMessage": "Omi ನ ಹೊಸ ಆವೃತ್ತಿ ಸಿದ್ಧವಾಗಿದೆ, ಸರಿಪಡಿಸುವಿಕೆಗಳು ಮತ್ತು ಸುಧಾರಣೆಗಳೊಂದಿಗೆ.",
+    "updateRequiredTitle": "ಅಪ್‌ಡೇಟ್ ಅಗತ್ಯವಿದೆ",
+    "updateRequiredMessage": "Omi ನ ಈ ಆವೃತ್ತಿಗೆ ಇನ್ನು ಬೆಂಬಲವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಸಿಂಕ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಡೇಟ್ ಮಾಡಿ."
 }

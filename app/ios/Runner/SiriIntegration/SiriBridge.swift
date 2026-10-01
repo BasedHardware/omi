@@ -46,6 +46,9 @@ final class SiriBridge: SiriIndexApi {
     #endif
 
     func retryPendingWipeOnLaunch() {
+        #if OMI_SIRI_PROBE
+        if SiriDebugProbe.spotlightModeActive { return }
+        #endif
         Task {
             do {
                 if try await SiriSnapshotStore.shared.maintainOnLaunch() {
@@ -59,6 +62,7 @@ final class SiriBridge: SiriIndexApi {
 
     func installNativeAuthFence() {
         #if OMI_SIRI_PROBE
+        if SiriDebugProbe.spotlightModeActive { return }
         let arguments = ProcessInfo.processInfo.arguments
         // The ordinary no-engine probe deliberately binds a fake Siri UID
         // without a Firebase user. The separate Auth-emulator probe exercises
@@ -148,7 +152,11 @@ final class SiriBridge: SiriIndexApi {
         currentActivity = activity
         activity.becomeCurrent()
     }
-    func takePendingRoute() throws -> String? { SiriSnapshotStore.shared.pendingRoute() }
+    func takePendingRoute() throws -> SiriPendingRoute? { SiriSnapshotStore.shared.pendingRoute() }
+    func finishPendingRoute(route: String, uid: String, generation: Int64, delivered: Bool) throws {
+        SiriSnapshotStore.shared.finishPendingRoute(route: route, uid: uid,
+                                                    generation: generation, delivered: delivered)
+    }
     func isEnabled() throws -> Bool { SiriSnapshotStore.shared.enabled }
     func takeTelemetry() throws -> [SiriTelemetryRecord] { SiriTelemetry.take() }
     func donateAction(uid: String, type: String, id: String, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -166,21 +174,47 @@ final class SiriBridge: SiriIndexApi {
 
     func memoryCreated(_ id: String) { events?.memoryCreated(id: id) { _ in } }
     func taskChanged(_ id: String) { events?.taskChanged(id: id) { _ in } }
-    func navigate(_ route: String) {
+    static func entityRoute(kind: String, id: String) -> String {
+        let encodedID = id.addingPercentEncoding(
+            withAllowedCharacters: CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? id
+        return "omi://\(kind)/\(encodedID)"
+    }
+    @discardableResult
+    func navigate(_ route: String, entryPath: String = "unknown") -> Bool {
         let appRoute = route.hasPrefix("omi://") ? "/" + String(route.dropFirst(6)) : route
-        SiriSnapshotStore.shared.setPendingRoute(appRoute)
+        let started = Date()
+        let claim = SiriSnapshotStore.shared.claimPendingRoute(appRoute, entryPath: entryPath, started: started)
+        let pending: SiriPendingRoute
+        switch claim {
+        case .accepted(let route): pending = route
+        case .duplicate:
+            if entryPath != "unknown" {
+                SiriTelemetry.intent("open", outcome: "ok", started: started, entryPath: entryPath)
+            }
+            return true
+        case .rejected:
+            if entryPath != "unknown" {
+                SiriTelemetry.intent("open", outcome: "auth", started: started, entryPath: entryPath)
+            }
+            return false
+        }
         let acknowledged: (Bool) -> Void = { delivered in
-            if delivered { SiriSnapshotStore.shared.clearPendingRoute(ifMatching: appRoute) }
+            SiriSnapshotStore.shared.finishPendingRoute(route: appRoute, uid: pending.uid,
+                generation: pending.generation, delivered: delivered)
         }
         #if OMI_SIRI_PROBE
         if let routeDeliveryProbe {
             routeDeliveryProbe(appRoute, acknowledged)
-            return
+            return true
         }
         #endif
-        events?.openRoute(route: appRoute) { result in
-            if case .success(let delivered) = result { acknowledged(delivered) }
+        events?.openRoute(route: appRoute, uid: pending.uid, generation: pending.generation) { result in
+            switch result {
+            case .success(let delivered): acknowledged(delivered)
+            case .failure: acknowledged(false)
+            }
         }
+        return true
     }
     func setListening(_ enabled: Bool) async throws {
         guard let events else { throw SiriSession.Failure.server }
@@ -253,21 +287,23 @@ enum SiriTelemetry {
         default: return "server"
         }
     }
-    static func intent(_ name: String, outcome: String, started: Date) {
+    static func intent(_ name: String, outcome: String, started: Date, entryPath: String = "unknown") {
         append(kind: "intent", intent: name, outcome: outcome,
-               latencyMs: CheckedIntegerConversion.int64(max(0, Date().timeIntervalSince(started) * 1000)) ?? 0, entityCounts: 0)
+               latencyMs: CheckedIntegerConversion.int64(max(0, Date().timeIntervalSince(started) * 1000)) ?? 0,
+               entityCounts: 0, entryPath: entryPath)
     }
     static func index(outcome: String, started: Date, count: Int) {
         append(kind: "index", intent: "", outcome: outcome,
-               latencyMs: CheckedIntegerConversion.int64(max(0, Date().timeIntervalSince(started) * 1000)) ?? 0, entityCounts: Int64(count))
+               latencyMs: CheckedIntegerConversion.int64(max(0, Date().timeIntervalSince(started) * 1000)) ?? 0,
+               entityCounts: Int64(count), entryPath: "unknown")
     }
     private static func append(kind: String, intent: String, outcome: String,
-                               latencyMs: Int64, entityCounts: Int64) {
+                               latencyMs: Int64, entityCounts: Int64, entryPath: String) {
         guard let defaults, let uid = SiriSession.shared.currentConfig()?.uid else { return }
         lock.lock(); defer { lock.unlock() }
         var rows = defaults.array(forKey: key) as? [[String: Any]] ?? []
         rows.append(["uid": uid, "kind": kind, "intent": intent, "outcome": outcome,
-                     "latencyMs": latencyMs, "entityCounts": entityCounts])
+                     "latencyMs": latencyMs, "entityCounts": entityCounts, "entryPath": entryPath])
         let records: [[String: PlistValue]] = rows.suffix(100).map { row in
             var record: [String: PlistValue] = [:]
             record["uid"] = .string(row["uid"] as? String ?? "")
@@ -276,6 +312,7 @@ enum SiriTelemetry {
             record["outcome"] = .string(row["outcome"] as? String ?? "")
             record["latencyMs"] = .int64(row["latencyMs"] as? Int64 ?? 0)
             record["entityCounts"] = .int64(row["entityCounts"] as? Int64 ?? 0)
+            record["entryPath"] = .string(row["entryPath"] as? String ?? "unknown")
             return record
         }
         try? SafeDefaults.setPlistRecords(records, forKey: key, in: defaults)
@@ -293,7 +330,8 @@ enum SiriTelemetry {
                   let latency = (row["latencyMs"] as? NSNumber)?.int64Value,
                   let count = (row["entityCounts"] as? NSNumber)?.int64Value else { return nil }
             return SiriTelemetryRecord(kind: kind, intent: intent, outcome: outcome,
-                                       latencyMs: latency, entityCounts: count)
+                                       latencyMs: latency, entityCounts: count,
+                                       entryPath: row["entryPath"] as? String ?? "unknown")
         }
     }
 }
@@ -325,7 +363,8 @@ final class SiriBridge: SiriIndexApi {
     func setEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func setCurrentScreen(route: String, entityId: String?) throws {}
     func publishSessionConfig(config: SiriSessionConfig, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
-    func takePendingRoute() throws -> String? { nil }
+    func takePendingRoute() throws -> SiriPendingRoute? { nil }
+    func finishPendingRoute(route: String, uid: String, generation: Int64, delivered: Bool) throws {}
     func isEnabled() throws -> Bool { false }
     func takeTelemetry() throws -> [SiriTelemetryRecord] { [] }
     func donateAction(uid: String, type: String, id: String, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }

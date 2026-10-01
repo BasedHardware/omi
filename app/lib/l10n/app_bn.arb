@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "নতুন সংস্করণ উপলব্ধ",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "না",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "আপনার কথোপকথন থেকে কাজগুলি এখানে উপস্থিত হবে।\nম্যানুয়ালি একটি তৈরি করতে + ট্যাপ করুন।",
+    "tasksEmptyStateMessage": "একটি কাজ তৈরি করতে কথোপকথন শুরু করুন।",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11326,5 +11322,9 @@
     "collapseAction": "গুটিয়ে নিন",
     "speakerTagPromptNotMeAction": "আমি নই",
     "confidenceNextLabels": "{count, plural, =1{আরও 1টি কথোপকথনে তাদের লেবেল করুন।} other{আরও {count}টি কথোপকথনে তাদের লেবেল করুন।}}",
-    "transcriptSpeakerCount": "{count, plural, =1{১ জন বক্তা} other{{count} জন বক্তা}}"
+    "transcriptSpeakerCount": "{count, plural, =1{১ জন বক্তা} other{{count} জন বক্তা}}",
+    "updateAvailableTitle": "আপডেট উপলব্ধ",
+    "updateAvailableMessage": "Omi-এর নতুন সংস্করণ প্রস্তুত, সংশোধন ও উন্নতিসহ।",
+    "updateRequiredTitle": "আপডেট প্রয়োজন",
+    "updateRequiredMessage": "Omi-এর এই সংস্করণ আর সমর্থিত নয়। রেকর্ডিং ও সিঙ্ক চালিয়ে যেতে আপডেট করুন।"
 }

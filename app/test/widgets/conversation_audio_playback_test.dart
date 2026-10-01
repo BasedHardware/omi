@@ -16,21 +16,21 @@ import 'package:omi/widgets/conversation_bottom_bar.dart';
 final _start = DateTime.utc(2026, 9, 24, 9, 39);
 
 AudioFile _file(String id, {double duration = 60, int? startsAfterSeconds}) => AudioFile(
-      id: id,
-      uid: 'u',
-      conversationId: 'c',
-      chunkTimestamps: const [],
-      duration: duration,
-      startedAt: startsAfterSeconds == null ? null : _start.add(Duration(seconds: startsAfterSeconds)),
-    );
+  id: id,
+  uid: 'u',
+  conversationId: 'c',
+  chunkTimestamps: const [],
+  duration: duration,
+  startedAt: startsAfterSeconds == null ? null : _start.add(Duration(seconds: startsAfterSeconds)),
+);
 
 AudioFileUrlInfo _url(String id, String status, {double duration = 60}) => AudioFileUrlInfo(
-      id: id,
-      status: status,
-      signedUrl: status == 'cached' ? 'https://audio.test/$id.mp3' : null,
-      contentType: status == 'cached' ? 'audio/mpeg' : null,
-      duration: duration,
-    );
+  id: id,
+  status: status,
+  signedUrl: status == 'cached' ? 'https://audio.test/$id.mp3' : null,
+  contentType: status == 'cached' ? 'audio/mpeg' : null,
+  duration: duration,
+);
 
 /// Stands in for just_audio's native player: every player starts, and loading a source fails the
 /// way AVPlayer reports an expired or refused URL (AVFoundationErrorDomain -11800).
@@ -40,7 +40,8 @@ void _fakeAudioPlatformThatCannotLoad(WidgetTester tester) {
     if (call.method != 'init') return <String, dynamic>{};
     final id = (call.arguments as Map)['id'] as String;
     messenger.setMockMethodCallHandler(MethodChannel('com.ryanheise.just_audio.methods.$id'), (call) async {
-      if (call.method == 'load') throw PlatformException(code: '-11800', message: 'The operation could not be completed');
+      if (call.method == 'load')
+        throw PlatformException(code: '-11800', message: 'The operation could not be completed');
       return <String, dynamic>{};
     });
     for (final stream in ['events', 'data']) {
@@ -115,21 +116,17 @@ void main() {
     });
 
     test('parts without start times still play, but transcript taps cannot be placed', () {
-      final plan = ConversationPlaybackPlan.resolve(
-        AudioUrlsResponse(files: [_url('a', 'cached')]),
-        [_file('a')],
-        conversationStart: _start,
-      );
+      final plan = ConversationPlaybackPlan.resolve(AudioUrlsResponse(files: [_url('a', 'cached')]), [
+        _file('a'),
+      ], conversationStart: _start);
       expect(plan.parts, hasLength(1));
       expect(plan.mapper, isNull);
     });
 
     test('a part with no recorded length takes the URL’s length', () {
-      final plan = ConversationPlaybackPlan.resolve(
-        AudioUrlsResponse(files: [_url('a', 'cached', duration: 42)]),
-        [_file('a', duration: 0, startsAfterSeconds: 0)],
-        conversationStart: _start,
-      );
+      final plan = ConversationPlaybackPlan.resolve(AudioUrlsResponse(files: [_url('a', 'cached', duration: 42)]), [
+        _file('a', duration: 0, startsAfterSeconds: 0),
+      ], conversationStart: _start);
       expect(plan.duration, const Duration(seconds: 42));
     });
 
@@ -187,8 +184,9 @@ void main() {
       return provider;
     }
 
-    testWidgets('a refused or failed request says so at once instead of spinning, and the next tap retries',
-        (tester) async {
+    testWidgets('a refused or failed request says so at once instead of spinning, and the next tap retries', (
+      tester,
+    ) async {
       var fetches = 0;
       await pumpBar(tester, (_) async {
         fetches++;
@@ -217,8 +215,9 @@ void main() {
       expect(find.bySemanticsLabel('Play'), findsOneWidget);
     });
 
-    testWidgets('waits while the audio is built, then reports a file that will not load and leaves Play',
-        (tester) async {
+    testWidgets('waits while the audio is built, then reports a file that will not load and leaves Play', (
+      tester,
+    ) async {
       final responses = [
         AudioUrlsResponse(files: [_url('a', 'pending')], pollAfterMs: 10),
         AudioUrlsResponse(files: [_url('a', 'cached')]),

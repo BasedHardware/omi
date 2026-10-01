@@ -1220,7 +1220,6 @@
     "appsCount": "앱 ({count})",
     "privateAppsCount": "비공개 앱 ({count})",
     "publicAppsCount": "공개 앱 ({count})",
-    "newVersionAvailable": "새 버전 사용 가능",
     "no": "아니요",
     "subscriptionCancelledSuccessfully": "구독이 성공적으로 취소되었습니다. 현재 결제 기간이 끝날 때까지 유효합니다.",
     "failedToCancelSubscription": "구독 취소에 실패했습니다. 다시 시도해 주세요.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "길이: {seconds}초",
     "additionalSpeechSampleRemoved": "추가 음성 샘플이 삭제되었습니다",
     "consentDataMessage": "계속하면 대화, 녹음 및 개인 정보가 서버에 안전하게 저장됩니다. 오디오 녹음 및 텍스트 변환은 제3자 AI 서비스(전사를 위한 Deepgram 및 분석을 위한 OpenAI 포함)에 의해 처리되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.",
-    "tasksEmptyStateMessage": "대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요.",
+    "tasksEmptyStateMessage": "대화를 시작하여 할 일을 만드세요.",
     "clearChatAction": "채팅 삭제",
     "enableApps": "앱 활성화",
     "omiAppName": "Omi",
@@ -3766,5 +3765,9 @@
     "collapseAction": "접기",
     "speakerTagPromptNotMeAction": "제가 아니에요",
     "confidenceNextLabels": "{count, plural, =1{대화 1개에서 더 라벨을 지정해 주세요.} other{대화 {count}개에서 더 라벨을 지정해 주세요.}}",
-    "transcriptSpeakerCount": "{count, plural, =1{화자 1명} other{화자 {count}명}}"
+    "transcriptSpeakerCount": "{count, plural, =1{화자 1명} other{화자 {count}명}}",
+    "updateAvailableTitle": "업데이트 가능",
+    "updateAvailableMessage": "수정 사항과 개선 사항이 담긴 새 버전의 Omi가 준비되었습니다.",
+    "updateRequiredTitle": "업데이트 필요",
+    "updateRequiredMessage": "이 버전의 Omi는 더 이상 지원되지 않습니다. 계속 녹음하고 동기화하려면 업데이트하세요."
 }

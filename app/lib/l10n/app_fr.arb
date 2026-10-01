@@ -1220,7 +1220,6 @@
     "appsCount": "Applications ({count})",
     "privateAppsCount": "Applications privées ({count})",
     "publicAppsCount": "Applications publiques ({count})",
-    "newVersionAvailable": "Nouvelle version disponible",
     "no": "Non",
     "subscriptionCancelledSuccessfully": "Abonnement annulé avec succès. Il restera actif jusqu'à la fin de la période de facturation en cours.",
     "failedToCancelSubscription": "Échec de l'annulation de l'abonnement. Veuillez réessayer.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Durée : {seconds} secondes",
     "additionalSpeechSampleRemoved": "Échantillon vocal supplémentaire supprimé",
     "consentDataMessage": "En continuant, vos conversations, enregistrements et informations personnelles seront stockés en toute sécurité sur nos serveurs. Vos enregistrements audio et transcriptions sont traités par des services d'IA tiers (notamment Deepgram pour la transcription et OpenAI pour l'analyse) afin de vous fournir des informations alimentées par l'IA et d'activer toutes les fonctionnalités de l'application.",
-    "tasksEmptyStateMessage": "Les tâches de vos conversations apparaîtront ici.\nAppuyez sur + pour en créer une manuellement.",
+    "tasksEmptyStateMessage": "Démarrez une conversation pour créer une tâche.",
     "clearChatAction": "Effacer le chat",
     "enableApps": "Activer les applications",
     "omiAppName": "Omi",
@@ -3801,5 +3800,9 @@
     "collapseAction": "Réduire",
     "speakerTagPromptNotMeAction": "Ce n’est pas moi",
     "confidenceNextLabels": "{count, plural, =1{Étiquetez-les dans 1 conversation de plus.} other{Étiquetez-les dans {count} conversations de plus.}}",
-    "transcriptSpeakerCount": "{count, plural, =1{1 intervenant} other{{count} intervenants}}"
+    "transcriptSpeakerCount": "{count, plural, =1{1 intervenant} other{{count} intervenants}}",
+    "updateAvailableTitle": "Mise à jour disponible",
+    "updateAvailableMessage": "Une nouvelle version d'Omi est prête, avec des corrections et des améliorations.",
+    "updateRequiredTitle": "Mise à jour requise",
+    "updateRequiredMessage": "Cette version d'Omi n'est plus prise en charge. Mettez à jour pour continuer à enregistrer et à synchroniser."
 }

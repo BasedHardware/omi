@@ -68,7 +68,9 @@ def writer(monkeypatch):
 
 
 def _write(monkeypatch, writer, old_items):
-    monkeypatch.setattr(writer.action_items_db, "get_action_items_by_conversation", lambda uid, cid: list(old_items))
+    monkeypatch.setattr(
+        writer.action_items_db, "get_action_items_by_conversation", lambda uid, cid, **kw: list(old_items)
+    )
     writer._write_action_items("uid-1", _conversation())
 
 

@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "גרסה חדשה זמינה",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "לא",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "משימות משיחותיך יופיעו כאן.\nלחץ + כדי ליצור אחת ידנית.",
+    "tasksEmptyStateMessage": "התחילו שיחה כדי ליצור משימה.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11326,5 +11322,9 @@
     "collapseAction": "כווץ",
     "speakerTagPromptNotMeAction": "לא אני",
     "confidenceNextLabels": "{count, plural, =1{תייגו אותם בעוד שיחה 1.} other{תייגו אותם בעוד {count} שיחות.}}",
-    "transcriptSpeakerCount": "{count, plural, =1{דובר אחד} other{{count} דוברים}}"
+    "transcriptSpeakerCount": "{count, plural, =1{דובר אחד} other{{count} דוברים}}",
+    "updateAvailableTitle": "יש עדכון זמין",
+    "updateAvailableMessage": "גרסה חדשה של Omi מוכנה, עם תיקונים ושיפורים.",
+    "updateRequiredTitle": "נדרש עדכון",
+    "updateRequiredMessage": "הגרסה הזו של Omi כבר לא נתמכת. יש לעדכן כדי להמשיך להקליט ולסנכרן."
 }

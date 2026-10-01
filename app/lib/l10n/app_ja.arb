@@ -1221,7 +1221,6 @@
     "appsCount": "アプリ ({count})",
     "privateAppsCount": "プライベートアプリ ({count})",
     "publicAppsCount": "公開アプリ ({count})",
-    "newVersionAvailable": "新しいバージョンが利用可能です",
     "no": "いいえ",
     "subscriptionCancelledSuccessfully": "サブスクリプションが正常にキャンセルされました。現在の請求期間の終了まで有効です。",
     "failedToCancelSubscription": "サブスクリプションのキャンセルに失敗しました。もう一度お試しください。",
@@ -1546,7 +1545,7 @@
     "durationSeconds": "長さ: {seconds} 秒",
     "additionalSpeechSampleRemoved": "追加の音声サンプルを削除しました",
     "consentDataMessage": "続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。",
-    "tasksEmptyStateMessage": "会話からのタスクがここに表示されます。\n手動で作成するには + をタップしてください。",
+    "tasksEmptyStateMessage": "会話を始めてタスクを作成しましょう。",
     "clearChatAction": "チャットを消去",
     "enableApps": "アプリを有効化",
     "omiAppName": "Omi",
@@ -3766,5 +3765,9 @@
     "collapseAction": "折りたたむ",
     "speakerTagPromptNotMeAction": "自分ではない",
     "confidenceNextLabels": "{count, plural, =1{あと1件の会話でラベルを付けてください。} other{あと{count}件の会話でラベルを付けてください。}}",
-    "transcriptSpeakerCount": "{count, plural, =1{話者 1人} other{話者 {count}人}}"
+    "transcriptSpeakerCount": "{count, plural, =1{話者 1人} other{話者 {count}人}}",
+    "updateAvailableTitle": "アップデートがあります",
+    "updateAvailableMessage": "Omiの新しいバージョンが利用できます。不具合の修正と改善が含まれています。",
+    "updateRequiredTitle": "アップデートが必要です",
+    "updateRequiredMessage": "このバージョンのOmiはサポートが終了しました。録音と同期を続けるにはアップデートしてください。"
 }

@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "కొత్త సంస్కరణ లభ్యమైంది",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "లేదు",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "మీ సంభాషణల నుండి చర్యలు ఇక్కడ కనిపిస్తాయి.\n+ నిర్ణయం చేయడానికి ట్యాప్ చేయండి.",
+    "tasksEmptyStateMessage": "పనిని సృష్టించడానికి సంభాషణను ప్రారంభించండి.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11326,5 +11322,9 @@
     "collapseAction": "కుదించు",
     "speakerTagPromptNotMeAction": "నేను కాదు",
     "confidenceNextLabels": "{count, plural, =1{ఇంకా 1 సంభాషణలో వారికి లేబుల్ చేయండి.} other{ఇంకా {count} సంభాషణల్లో వారికి లేబుల్ చేయండి.}}",
-    "transcriptSpeakerCount": "{count, plural, =1{1 వక్త} other{{count} వక్తలు}}"
+    "transcriptSpeakerCount": "{count, plural, =1{1 వక్త} other{{count} వక్తలు}}",
+    "updateAvailableTitle": "అప్‌డేట్ అందుబాటులో ఉంది",
+    "updateAvailableMessage": "Omi కొత్త వెర్షన్ సిద్ధంగా ఉంది, సవరణలు మరియు మెరుగుదలలతో.",
+    "updateRequiredTitle": "అప్‌డేట్ అవసరం",
+    "updateRequiredMessage": "Omi యొక్క ఈ వెర్షన్‌కు ఇకపై మద్దతు లేదు. రికార్డింగ్ మరియు సింక్ కొనసాగించడానికి అప్‌డేట్ చేయండి."
 }

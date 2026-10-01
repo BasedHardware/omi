@@ -35,8 +35,17 @@ Ambiguous lease/probe writes require an exact live-body
 match and a new generation before ownership is adopted; no blind overwrite retry.
 
 lease.json fences each prefix with an owner token, expiry and generation match.
-It lasts 120 seconds and renews every 40 seconds, on publication, and before each
-transaction/write. Active leases reject another resume or rollback. Expired or
+It lasts 120 seconds; a heartbeat checks every 40 seconds and the single lease
+writer renews only at half-TTL, or to publish the initial reconciled state.
+Every publication and transaction verifies the live generation/body with reads.
+Clock samples use unique create-only names. All GCS PUTs (including manifests and
+retries) wait at least two seconds after the preceding RPC to that object. The
+SDK retry predicate admits fenced retries with jittered exponential backoff in a
+15-second budget; exact live bytes/new generation reconcile ambiguous commits.
+An I/O outage stops with ArtifactError; LeaseLost requires a changed owner or
+GCS-time expiry. Diagnostics include per-stage lease PUT attempts and the maximum
+observed per-object attempt rate, without object names.
+Active leases reject another resume or rollback. Expired or
 released leases admit a new reconciling owner; it cannot mutate until durable
 intents/receipts have been imported and reconciled. Lost/expired ownership stops
 before the next mutation. A lease cannot cancel an already submitted transaction;
@@ -136,6 +145,9 @@ _STAGE_FIELDS = frozenset(
         'generation',
         'duration_seconds',
         'remaining_seconds',
+        'lease_writes',
+        'object_writes',
+        'max_object_write_rate',
         'cause_type',
         'check',
     }
@@ -182,6 +194,7 @@ _STAGE_CAUSES = frozenset(
 _stage_lock = threading.Lock()
 _stage_last: dict[tuple[str, str, str, str], float] = {}
 _stage_counts: Counter[tuple[str, str, str, str]] = Counter()
+_stage_context = threading.local()
 
 
 def stage_event(stage: str, event: str, **fields: Any) -> None:
@@ -217,6 +230,8 @@ def stage_event(stage: str, event: str, **fields: Any) -> None:
 @contextmanager
 def observed_stage(name: str, **fields: Any) -> Iterator[None]:
     started = time.monotonic()
+    previous = getattr(_stage_context, 'name', None)
+    _stage_context.name = name
     stage_event(name, 'start', **fields)
     try:
         yield
@@ -225,6 +240,8 @@ def observed_stage(name: str, **fields: Any) -> Iterator[None]:
         raise
     else:
         stage_event(name, 'end', duration_seconds=round(time.monotonic() - started, 3), **fields)
+    finally:
+        _stage_context.name = previous
 
 
 _imports_started = 0.0
@@ -483,6 +500,128 @@ class LeaseLost(ArtifactError):
     pass
 
 
+class ArtifactIO:
+    """Single PUT boundary: pace each object and reconcile fenced retries.
+
+    Unique immutable names need no delay on their first PUT. Every subsequent
+    attempt waits two seconds after the preceding RPC finished, including errors.
+    SDK automatic write retries stay disabled so the gate sees every attempt.
+    """
+
+    MIN_WRITE_INTERVAL = 2.0
+    WRITE_BUDGET = 15.0
+
+    def __init__(self, *, monotonic: Callable[[], float], sleep: Callable[[float], None]):
+        self.monotonic = monotonic
+        self.sleep = sleep
+        self.lock = threading.Lock()
+        self.objects: dict[str, dict[str, Any]] = {}
+        self.lease_writes: Counter[str] = Counter()
+        self.total_writes = 0
+        self.max_write_rate = 0.0
+
+    def timeout(self, deadline: float | None) -> float:
+        remaining = 10.0 if deadline is None else min(10.0, deadline - self.monotonic())
+        if remaining <= 0:
+            raise ArtifactError('artifact I/O retry budget exhausted')
+        return remaining
+
+    def latest(self, blob: Any, *, deadline: float | None = None) -> Any:
+        for attempt in range(3):
+            fresh = blob.bucket.blob(blob.name)
+            try:
+                fresh.reload(timeout=self.timeout(deadline), retry=None)
+                return fresh
+            except Exception as exc:
+                if not GCS_RETRY_PREDICATE(exc) or attempt == 2:
+                    raise
+                stage_event('lease_renew', 'error', check='metadata_read', cause_type=type(exc).__name__)
+                self.sleep(min(0.25 * 2**attempt, self.timeout(deadline)))
+        raise RuntimeError('unreachable')
+
+    def read(self, blob: Any, *, deadline: float | None = None) -> tuple[Any, bytes]:
+        for attempt in range(3):
+            fresh = self.latest(blob, deadline=deadline)
+            try:
+                return fresh, fresh.download_as_bytes(
+                    if_generation_match=int(fresh.generation), timeout=self.timeout(deadline), retry=None
+                )
+            except Exception as exc:
+                if not GCS_RETRY_PREDICATE(exc) or attempt == 2:
+                    raise
+                self.sleep(min(0.25 * 2**attempt, self.timeout(deadline)))
+        raise RuntimeError('unreachable')
+
+    def upload(self, blob: Any, data: bytes | str, *, generation: int, stage: str, lease: bool = False) -> Any:
+        payload = data.encode() if isinstance(data, str) else data
+        with self.lock:
+            state = self.objects.setdefault(blob.name, {'lock': threading.Lock(), 'finished': None, 'started': None})
+        deadline = self.monotonic() + self.WRITE_BUDGET
+        with state['lock']:
+            for attempt in range(5):
+                if state['finished'] is not None:
+                    delay = max(0.0, state['finished'] + self.MIN_WRITE_INTERVAL - self.monotonic())
+                    if delay >= deadline - self.monotonic():
+                        raise ArtifactError('artifact write retry budget exhausted')
+                    self.sleep(delay)
+                remaining = deadline - self.monotonic()
+                if remaining <= 0:
+                    raise ArtifactError('artifact write retry budget exhausted')
+                started = self.monotonic()
+                if state['started'] is not None:
+                    self.max_write_rate = max(self.max_write_rate, 1 / (started - state['started']))
+                state['started'] = started
+                self.total_writes += 1
+                if lease:
+                    caller = getattr(_stage_context, 'name', None) or stage
+                    self.lease_writes[caller] += 1
+                    stage_event(
+                        caller,
+                        'tick',
+                        lease_writes=self.lease_writes[caller],
+                        max_object_write_rate=self.max_write_rate,
+                    )
+                stage_event(stage, 'tick', object_writes=attempt + 1, max_object_write_rate=self.max_write_rate)
+                try:
+                    blob.upload_from_string(
+                        payload,
+                        content_type='application/json',
+                        if_generation_match=generation,
+                        timeout=min(5.0, remaining),
+                        retry=None,
+                    )
+                    return blob
+                except Exception as exc:
+                    stage_event(stage, 'error', check='write', cause_type=type(exc).__name__)
+                    # Even a precondition failure may be an already-committed
+                    # retry. Exact bytes + a new live version are required.
+                    try:
+                        fresh, actual = self.read(blob, deadline=deadline)
+                    except NotFound:
+                        fresh, actual = None, None
+                    if fresh is not None and actual is not None and int(fresh.generation) != generation:
+                        if actual == payload:
+                            stage_event(
+                                stage, 'recovered', from_generation=generation, generation=int(fresh.generation)
+                            )
+                            return fresh
+                        if lease:
+                            current = json.loads(actual)
+                            intended = json.loads(payload)
+                            if isinstance(current.get('owner'), str) and current['owner'] != intended['owner']:
+                                raise LeaseLost('artifact lease owner changed') from None
+                            raise ArtifactError('artifact lease commit unresolved') from None
+                        raise ArtifactError('artifact write generation changed') from None
+                    if not GCS_RETRY_PREDICATE(exc):
+                        raise ArtifactError('artifact write refused') from exc
+                    if attempt == 4:
+                        raise ArtifactError('artifact write retry budget exhausted') from exc
+                    self.sleep(min(0.5 * 2**attempt + random.uniform(0, 0.2), max(0, deadline - self.monotonic())))
+                finally:
+                    state['finished'] = self.monotonic()
+        raise RuntimeError('unreachable')
+
+
 class RunLease:
     TTL = 120.0
     # Firestore transactions have a server-enforced 270s limit; use a 300s
@@ -492,22 +631,25 @@ class RunLease:
     WRITE_ATTEMPTS = 5
     RETRY_BACKOFF_SECONDS = 8.0
     RETRY_JITTER_SECONDS = 0.2
-    TAKEOVER_GRACE = TRANSACTION_ATTEMPT_SECONDS * WRITE_ATTEMPTS + (WRITE_ATTEMPTS - 1) * (
-        RETRY_BACKOFF_SECONDS + RETRY_JITTER_SECONDS
+    TAKEOVER_GRACE = max(
+        28 * 60 + 33,
+        TRANSACTION_ATTEMPT_SECONDS * WRITE_ATTEMPTS
+        + (WRITE_ATTEMPTS - 1) * (RETRY_BACKOFF_SECONDS + RETRY_JITTER_SECONDS),
     )
     SKEW_ALLOWANCE = 60.0
 
-    def __init__(self, blob: Any):
+    def __init__(self, blob: Any, io: ArtifactIO):
         self.blob = blob
+        self.io = io
         self.owner = uuid.uuid4().hex
         # A read of unchanged metadata is not a current server-time sample.
-        # Rewrite this owner-specific probe and use the GCS-assigned timestamp.
-        self.probe = blob.bucket.blob(blob.name.rsplit('/', 1)[0] + f'/clock/{self.owner}.json')
-        self.probe_generation = 0
+        # Use create-only probes and their GCS-assigned timestamps.
+        self.probe: Any = None
         self.generation: int | None = None
         self.expires = 0.0
         self.ready = False
         self.lost = False
+        self.failed = False
         self.lock = threading.RLock()
         self.stop = threading.Event()
         self.thread: threading.Thread | None = None
@@ -516,80 +658,27 @@ class RunLease:
     def server_timestamp(blob: Any, *, created: bool = False) -> float:
         stamp = blob.updated or (blob.time_created if created else None)
         if not isinstance(stamp, datetime) or stamp.tzinfo is None:
-            raise LeaseLost('artifact lease has no server timestamp')
+            raise ArtifactError('artifact lease has no server timestamp')
         return stamp.timestamp()
 
     def latest(self, blob: Any) -> Any:
-        # SDK Blob.reload() includes its cached generation in the request.
         # An unbound Blob reads the live object, including in versioned buckets.
-        for attempt in range(3):
-            fresh = blob.bucket.blob(blob.name)
-            try:
-                fresh.reload(timeout=10, retry=None)
-                return fresh
-            except Exception as exc:
-                # Share the SDK policy, including HTTP status codes and wrapped
-                # transport failures, without enabling automatic write retries.
-                if not GCS_RETRY_PREDICATE(exc):
-                    raise
-                stage_event('lease_renew', 'error', check='metadata_read', cause_type=type(exc).__name__)
-                if attempt == 2:
-                    raise
-                time.sleep(0.25 * 2**attempt)
-        raise RuntimeError('unreachable')
+        return self.io.latest(blob)
 
     def server_now(self) -> float:
-        created = self.probe_generation == 0
-        old_generation = self.probe_generation
-        try:
-            self.probe.upload_from_string(
-                json.dumps({'owner': self.owner}),
-                content_type='application/json',
-                if_generation_match=old_generation,
-                timeout=10,
-                retry=None,
-            )
-        except Exception as exc:
-            if not GCS_RETRY_PREDICATE(exc):
-                raise
-            stage_event('lease_probe', 'error', check='write', cause_type=type(exc).__name__)
-            fresh = self.latest(self.probe)
-            if int(fresh.generation) == old_generation or json.loads(
-                fresh.download_as_bytes(if_generation_match=int(fresh.generation), timeout=10, retry=None)
-            ) != {'owner': self.owner}:
-                raise LeaseLost('artifact clock probe commit unresolved') from None
-            self.probe = fresh
-            stage_event('lease_probe', 'recovered', from_generation=old_generation, generation=int(fresh.generation))
-        self.probe_generation = int(self.probe.generation)
-        return self.server_timestamp(self.probe, created=created)
+        # A unique create-only object gives a fresh GCS time sample without ever
+        # rewriting a hot clock object. Local wall time never judges expiry.
+        self.probe = self.blob.bucket.blob(
+            self.blob.name.rsplit('/', 1)[0] + f'/clock/{self.owner}/{uuid.uuid4().hex}.json'
+        )
+        self.probe = self.io.upload(self.probe, json.dumps({'owner': self.owner}), generation=0, stage='lease_probe')
+        return self.server_timestamp(self.probe, created=True)
 
     def _write(self, generation: int, *, ready: bool, expires: float) -> None:
         record = {'owner': self.owner, 'expires': expires, 'clock': 'gcs', 'state': 'ready' if ready else 'reconciling'}
-        try:
-            self.blob.upload_from_string(
-                json.dumps(record),
-                content_type='application/json',
-                if_generation_match=generation,
-                timeout=10,
-                retry=None,
-            )
-        except Exception as exc:
-            if not GCS_RETRY_PREDICATE(exc):
-                raise
-            stage_event('lease_renew', 'error', check='write', cause_type=type(exc).__name__)
-            # A lease PUT can commit before its response is lost. Adopt it only
-            # after a live read proves the exact intended body AND a new version.
-            fresh = self.latest(self.blob)
-            if (
-                int(fresh.generation) == generation
-                or json.loads(
-                    fresh.download_as_bytes(if_generation_match=int(fresh.generation), timeout=10, retry=None)
-                )
-                != record
-            ):
-                raise LeaseLost('artifact lease commit unresolved') from None
-            self.blob = fresh
-            stage_event('lease_renew', 'recovered', from_generation=generation, generation=int(fresh.generation))
+        self.blob = self.io.upload(
+            self.blob, json.dumps(record), generation=generation, stage='lease_renew', lease=True
+        )
         self.generation = int(self.blob.generation)
         self.expires = expires
         self.ready = ready
@@ -604,9 +693,9 @@ class RunLease:
             stage_event('lease_acquire', 'start')
             now = self.server_now()
             try:
-                self.blob = self.latest(self.blob)
+                self.blob, payload = self.io.read(self.blob)
                 generation = int(self.blob.generation)
-                prior = json.loads(self.blob.download_as_bytes(if_generation_match=generation, timeout=10, retry=None))
+                prior = json.loads(payload)
                 expiry = prior.get('expires')
                 # Old-format leases used an untrusted local clock. Ignore their
                 # expiry and derive it from GCS metadata plus the maximum TTL.
@@ -629,19 +718,25 @@ class RunLease:
                 self._write(generation, ready=fresh, expires=self.server_now() + self.TTL)
                 stage_event('lease_acquire', 'end', from_generation=generation, generation=self.generation)
             except Exception as exc:
-                self.lost = True
+                self.lost = isinstance(exc, LeaseLost)
+                self.failed = not self.lost
                 stage_event('lease_acquire', 'error', check='write', cause_type=type(exc).__name__)
-                raise LeaseLost('artifact run lease acquisition failed') from exc
+                if self.lost:
+                    raise LeaseLost('artifact run lease acquisition failed') from exc
+                raise ArtifactError('artifact lease acquisition unavailable') from exc
 
     def renew(self, *, require_ready: bool = False, reconciled: bool = False) -> None:
         with self.lock:
+            if self.failed:
+                raise ArtifactError('artifact lease I/O stopped')
             if self.lost or self.generation is None:
                 self.lost = True
                 raise LeaseLost('artifact run lease lost or expired')
             if require_ready and not self.ready:
                 raise LeaseLost('artifact run requires reconciliation')
             try:
-                self.blob = self.latest(self.blob)
+                self.blob, payload = self.io.read(self.blob)
+                record = json.loads(payload)
                 if int(self.blob.generation) != self.generation:
                     stage_event(
                         'lease_renew',
@@ -650,13 +745,14 @@ class RunLease:
                         from_generation=self.generation,
                         generation=int(self.blob.generation),
                     )
-                    raise LeaseLost('artifact run lease generation changed')
-                record = json.loads(
-                    self.blob.download_as_bytes(if_generation_match=self.generation, timeout=10, retry=None)
-                )
-                if record.get('owner') != self.owner or record.get('expires') != self.expires:
+                    if isinstance(record.get('owner'), str) and record['owner'] != self.owner:
+                        raise LeaseLost('artifact run lease owner changed')
+                    raise ArtifactError('artifact run lease generation unresolved')
+                if record.get('owner') != self.owner:
                     stage_event('lease_renew', 'error', check='owner_changed', generation=self.generation)
                     raise LeaseLost('artifact run lease owner changed')
+                if record.get('expires') != self.expires:
+                    raise ArtifactError('artifact run lease expiry unresolved')
                 remaining = self.expires - self.server_now()
                 if remaining <= 0:
                     stage_event(
@@ -667,9 +763,14 @@ class RunLease:
                         remaining_seconds=round(remaining, 3),
                     )
                     raise LeaseLost('artifact run lease expired')
-                self._write(self.generation, ready=self.ready or reconciled, expires=self.server_now() + self.TTL)
+                # All callers and the heartbeat share this lock and write gate.
+                # Between renewals, the live generation/body read still fences
+                # every intent and mutation; these calls cannot extend the TTL.
+                if remaining <= self.TTL / 2 or (reconciled and not self.ready):
+                    self._write(self.generation, ready=self.ready or reconciled, expires=self.server_now() + self.TTL)
             except Exception as exc:
-                self.lost = True
+                self.lost = isinstance(exc, LeaseLost)
+                self.failed = not self.lost
                 self.stop.set()
                 stage_event(
                     'lease_renew',
@@ -678,10 +779,14 @@ class RunLease:
                     check='ownership_or_io',
                     cause_type=type(exc).__name__,
                 )
-                raise LeaseLost('artifact run lease renewal failed') from exc
+                if self.lost:
+                    raise LeaseLost('artifact run lease renewal failed') from exc
+                raise ArtifactError('artifact lease I/O unavailable') from exc
 
     def check_alive(self) -> None:
         with self.lock:
+            if self.failed:
+                raise ArtifactError('artifact lease I/O stopped')
             if self.lost or self.generation is None:
                 raise LeaseLost('artifact run lease lost')
 
@@ -694,7 +799,8 @@ class RunLease:
         def heartbeat() -> None:
             while not self.stop.wait(self.TTL / 3):
                 try:
-                    self.renew()
+                    with observed_stage('heartbeat'):
+                        self.renew()
                 except ArtifactError:
                     return  # all subsequent publications/mutations fail closed
 
@@ -706,10 +812,11 @@ class RunLease:
         if self.thread is not None:
             self.thread.join(timeout=1)
         with self.lock:
-            if self.generation is None or self.lost:
+            if self.generation is None or self.lost or self.failed:
                 return
             try:
-                self._write(self.generation, ready=False, expires=self.server_now())
+                with observed_stage('lease_release'):
+                    self._write(self.generation, ready=False, expires=self.server_now())
                 stage_event('lease_release', 'end', generation=self.generation)
             except Exception as exc:
                 stage_event('lease_release', 'error', check='write', cause_type=type(exc).__name__)
@@ -725,7 +832,15 @@ class ArtifactMirror:
     run.lock and incomplete atomic-save temporaries are local control files.
     """
 
-    def __init__(self, uri: str, client: Any, *, heartbeat: bool = True):
+    def __init__(
+        self,
+        uri: str,
+        client: Any,
+        *,
+        heartbeat: bool = True,
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ):
         parsed = urlsplit(uri)
         prefix = parsed.path.strip('/')
         if (
@@ -744,16 +859,18 @@ class ArtifactMirror:
         self.generation = 0
         self.files: dict[str, Any] = {}
         self.failed = False
-        self.lease = RunLease(self.bucket.blob(self.prefix + 'lease.json'))
+        self.io = ArtifactIO(monotonic=monotonic, sleep=sleep)
+        self.lease = RunLease(self.bucket.blob(self.prefix + 'lease.json'), self.io)
         self.heartbeat = heartbeat
 
     def publish(self, files: dict[str, Any]) -> None:
         self.lease.renew()
         try:
-            self.manifest.upload_from_string(
+            self.manifest = self.io.upload(
+                self.manifest,
                 json.dumps({'version': 1, 'files': files}, sort_keys=True),
-                content_type='application/json',
-                if_generation_match=self.generation,
+                generation=self.generation,
+                stage='snapshot',
             )
             self.generation = int(self.manifest.generation)
             self.files = files
@@ -840,7 +957,7 @@ class ArtifactMirror:
             if files.get(name, {}).get('sha256') == checksum:
                 continue
             blob = self.bucket.blob(self.prefix + f'_snapshots/{uuid.uuid4().hex}/{name}')
-            blob.upload_from_string(data, if_generation_match=0)
+            blob = self.io.upload(blob, data, generation=0, stage='snapshot')
             files[name] = {'object': blob.name, 'generation': int(blob.generation), 'sha256': checksum}
         if files != self.files:
             self.publish(files)
@@ -862,16 +979,8 @@ class ArtifactMirror:
         data = json.dumps(record, sort_keys=True).encode()
         blob = self.bucket.blob(self.prefix + name)
         try:
-            blob.upload_from_string(data, if_generation_match=0, timeout=10)
+            self.io.upload(blob, data, generation=0, stage='intent' if intent else 'receipt')
         except Exception:
-            # The server may have accepted an upload whose response was lost.
-            # Only identical durable bytes permit the mutation or receipt retry.
-            try:
-                blob.reload(timeout=10)
-                if blob.download_as_bytes(if_generation_match=int(blob.generation), timeout=10) == data:
-                    return
-            except Exception:
-                pass
             self.failed = True
             raise ArtifactError('immutable artifact publication failed') from None
 
@@ -1988,6 +2097,19 @@ def main() -> int:
         finally:
             for remote in reversed(mirrors):
                 remote.lease.close()
+            writes: Counter[str] = Counter()
+            max_rate = max((remote.io.max_write_rate for remote in mirrors), default=0.0)
+            for remote in mirrors:
+                writes.update(remote.io.lease_writes)
+            for stage, count in writes.items():
+                stage_event(stage, 'end', check='write', lease_writes=count, max_object_write_rate=max_rate)
+            stage_event(
+                'shutdown',
+                'end',
+                lease_writes=sum(writes.values()),
+                object_writes=sum(remote.io.total_writes for remote in mirrors),
+                max_object_write_rate=max_rate,
+            )
             for lock_file in reversed(locks):
                 lock_file.close()
             if previous_sigterm is not None:
