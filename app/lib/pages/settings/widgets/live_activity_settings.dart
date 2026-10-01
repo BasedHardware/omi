@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/preferences.dart';
@@ -13,23 +12,39 @@ class LiveActivitySettings extends StatefulWidget {
   State<LiveActivitySettings> createState() => _LiveActivitySettingsState();
 }
 
-class _LiveActivitySettingsState extends State<LiveActivitySettings> {
+class _LiveActivitySettingsState extends State<LiveActivitySettings> with WidgetsBindingObserver {
   static const _channel = MethodChannel(LiveActivityBridge.channelName);
   bool _supported = false;
   bool _saving = false;
   bool _enabled = true;
 
+  bool get _isIOS => defaultTargetPlatform == TargetPlatform.iOS;
+
   @override
   void initState() {
     super.initState();
     _enabled = SharedPreferencesUtil().showCaptureLiveActivity;
-    if (Platform.isIOS) _load();
+    WidgetsBinding.instance.addObserver(this);
+    if (_isIOS) _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Live Activities can be switched off for Omi in iOS Settings.
+    if (state == AppLifecycleState.resumed && _isIOS) _load();
   }
 
   Future<void> _load() async {
     try {
       final value = await _channel.invokeMapMethod<String, Object?>('availability');
-      if (mounted) setState(() => _supported = value?['supported'] == true);
+      // While iOS has Live Activities off for Omi, this switch would change nothing.
+      if (mounted) setState(() => _supported = value?['supported'] == true && value?['authorized'] == true);
     } on PlatformException {
       // A system presentation is optional on older iOS versions.
     } on MissingPluginException {
@@ -38,15 +53,25 @@ class _LiveActivitySettingsState extends State<LiveActivitySettings> {
   }
 
   Future<void> _setEnabled(bool value) async {
+    final previous = _enabled;
     setState(() => _saving = true);
     try {
       if (!await SharedPreferencesUtil().setShowCaptureLiveActivity(value)) {
         throw StateError('Preference was not saved');
       }
       if (mounted) setState(() => _enabled = value);
-      await _channel.invokeMethod<void>('setEnabled', value);
+      try {
+        await _channel.invokeMethod<void>('setEnabled', value);
+      } catch (_) {
+        // The native presentation kept the old choice, so the preference does too.
+        await SharedPreferencesUtil().setShowCaptureLiveActivity(previous);
+        rethrow;
+      }
     } catch (_) {
-      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      if (mounted) {
+        setState(() => _enabled = previous);
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
