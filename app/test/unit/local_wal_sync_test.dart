@@ -546,7 +546,34 @@ void main() {
       expect(sync.testWals, hasLength(2));
     });
 
-    test('streamed WALs born synced (all frames acked) carry a syncedAt stamp', () async {
+    test('never touches synced sdcard or pendant flash copies however old', () async {
+      SharedPreferencesUtil().autoRemoveSyncedCopies = true;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final oldSd = syncedCopy(syncedAt: now - 400 * Duration.secondsPerDay, storage: WalStorage.sdcard);
+      final oldFlash = syncedCopy(syncedAt: now - 400 * Duration.secondsPerDay, storage: WalStorage.flashPage);
+      sync.testWals = [oldSd, oldFlash];
+
+      final removed = await sync.enforceSyncedCopyRetentionForTesting();
+
+      expect(removed, 0);
+      expect(sync.testWals, hasLength(2));
+    });
+
+    test('honors a non-default retention window', () async {
+      SharedPreferencesUtil().autoRemoveSyncedCopies = true;
+      SharedPreferencesUtil().autoRemoveSyncedCopiesDays = 7;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final eightDaysOld = syncedCopy(syncedAt: now - 8 * Duration.secondsPerDay);
+      final fiveDaysOld = syncedCopy(syncedAt: now - 5 * Duration.secondsPerDay);
+      sync.testWals = [eightDaysOld, fiveDaysOld];
+
+      final removed = await sync.enforceSyncedCopyRetentionForTesting();
+
+      expect(removed, 1);
+      expect(sync.testWals, [fiveDaysOld]);
+    });
+
+    test('streamed WALs born synced (all frames acked) carry syncedAt == 0', () async {
       SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
       final key = FrameSyncKey([0x77]);
       sync.onFrameCaptured(WalFrame(payload: [1], syncKey: key));
@@ -555,7 +582,11 @@ void main() {
 
       final wal = sync.testWals.single;
       expect(wal.status, WalStatus.synced);
-      expect(wal.syncedAt, greaterThan(0));
+      // Socket-send bookkeeping is transport, not server confirmation, so the
+      // retention clock must NOT start: only server-confirmed transitions
+      // (upload fast-path / reconciler) stamp syncedAt. The transcript
+      // acknowledgement flow owns this copy's lifecycle instead.
+      expect(wal.syncedAt, 0);
     });
   });
 

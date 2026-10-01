@@ -573,9 +573,9 @@ class LocalWalSyncImpl implements LocalWalSync {
           geolocation: _copyGeolocation(_sessionGeolocation),
           recordingSessionId: _activeRecordingSessionId,
         );
-        if (wal.status == WalStatus.synced) {
-          wal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
-        }
+        // Transport-only sync (socket send) must NOT start the retention
+        // clock: syncedAt stays 0 so the sweep never treats an
+        // unacknowledged streamed copy as server-confirmed.
         _wals.add(wal);
       } else {
         wal = _wals[walIdx];
@@ -595,9 +595,14 @@ class LocalWalSyncImpl implements LocalWalSync {
         }
         wal.syncedFrameOffset = syncedOffset;
         wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
-        if (wal.status == WalStatus.synced && wal.syncedAt == 0) {
-          wal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
+        if (wal.status != WalStatus.synced) {
+          // New unacknowledged frames invalidate the retention clock: the
+          // next server-confirmed transition must re-stamp syncedAt so the
+          // whole WAL ages from fresh confirmation, not a prior one.
+          wal.syncedAt = 0;
         }
+        // Transport-only sync (socket send) never starts the retention clock:
+        // syncedAt stays 0 until a server-confirmed transition stamps it.
         _wals[walIdx] = wal;
       }
 
@@ -697,19 +702,28 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// recordings whose [Wal.syncedAt] is older than the retention window.
   /// Cloud storage keeps the data — the server ack is what makes the local
   /// copy redundant. Records with an unknown sync time (syncedAt == 0: synced
-  /// before the field existed) are deliberately never removed.
+  /// before the field existed, or a live-streamed copy whose status came from
+  /// transport-only socket sends rather than a server acknowledgement) are
+  /// deliberately never removed.
   ///
   /// Best-effort and quiet: a record whose file delete fails stays for the
   /// next hook. Returns the number of local copies removed.
   @visibleForTesting
   Future<int> enforceSyncedCopyRetentionForTesting() => _removeExpiredSyncedCopies();
 
+  @override
+  Future<int> applySyncedCopyRetention() => _removeExpiredSyncedCopies();
+
   Future<int> _removeExpiredSyncedCopies() async {
     final prefs = SharedPreferencesUtil();
     if (!prefs.autoRemoveSyncedCopies) return 0;
     final generation = _sessionGeneration;
     final cutoff = _now().millisecondsSinceEpoch ~/ 1000 - prefs.autoRemoveSyncedCopiesDays * Duration.secondsPerDay;
-    final expired = _wals
+    // All three durable buckets: retired (logged-out) and foreign-owner
+    // (parked at load) records occupy the same device storage as the active
+    // account's, so the retention preference applies to them too — matching
+    // the device-wide scope of _enforceRetentionPolicy.
+    final expired = [..._retiredWals, ..._foreignWals, ..._wals]
         .where((wal) =>
             wal.storage == WalStorage.disk &&
             wal.status == WalStatus.synced &&
@@ -886,9 +900,9 @@ class LocalWalSyncImpl implements LocalWalSync {
         geolocation: _copyGeolocation(_sessionGeolocation),
         recordingSessionId: _activeRecordingSessionId,
       );
-      if (tailWal.status == WalStatus.synced) {
-        tailWal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
-      }
+      // Transport-only sync (socket send) must NOT start the retention
+      // clock: syncedAt stays 0 so the sweep never treats an
+      // unacknowledged streamed tail copy as server-confirmed.
       _wals = List.from(_wals)..add(tailWal);
     }
 
@@ -1114,6 +1128,13 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (wals.isEmpty) {
       Logger.debug("All synced!");
       DebugLogManager.logInfo('Local upload: no files to sync');
+      // No pending work does not mean no retention work: expired synced
+      // copies must still age out even when every WAL is already synced.
+      try {
+        await _removeExpiredSyncedCopies();
+      } catch (e) {
+        Logger.warning('Synced-copy retention sweep failed: $e');
+      }
       return null;
     }
 

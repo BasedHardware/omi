@@ -16,7 +16,7 @@ void main() {
       expect(SharedPreferencesUtil().autoRemoveSyncedCopies, isFalse);
     });
 
-    test('fresh install before onboarding keeps the ON default and stays unmarked', () async {
+    test('fresh install before onboarding keeps the ON default and is marked pre-onboarding', () async {
       SharedPreferences.setMockInitialValues({});
       await SharedPreferencesUtil.init();
 
@@ -65,7 +65,7 @@ void main() {
       expect(SharedPreferencesUtil().autoRemoveSyncedCopies, isTrue);
     });
 
-    test('signing out clears the marker so the next account migrates again', () async {
+    test('a signed-out install is marked as pre-onboarding and keeps the ON default', () async {
       SharedPreferences.setMockInitialValues({
         'onboardingCompleted': true,
         'autoRemoveSyncedCopiesDefaultMigrated': true,

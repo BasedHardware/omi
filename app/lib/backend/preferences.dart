@@ -897,8 +897,16 @@ class SharedPreferencesUtil {
       return;
     }
     final alreadySet = prefs.containsKey('autoRemoveSyncedCopies');
-    await prefs.setBool('autoRemoveSyncedCopies', alreadySet ? prefs.getBool('autoRemoveSyncedCopies') ?? true : false);
-    await prefs.setBool(markerKey, true);
+    final pinned = await prefs.setBool(
+      'autoRemoveSyncedCopies',
+      alreadySet ? prefs.getBool('autoRemoveSyncedCopies') ?? true : false,
+    );
+    // Only commit the marker after the pin write succeeded, so a failed write
+    // retries on the next launch instead of leaving an existing install on the
+    // ON default with the migration reported complete.
+    if (pinned) {
+      await prefs.setBool(markerKey, true);
+    }
   }
 
   /// Retention window, in days, for synced phone-local copies.

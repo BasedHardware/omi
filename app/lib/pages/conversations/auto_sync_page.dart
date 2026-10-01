@@ -402,25 +402,25 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.only(left: 4, top: 20, bottom: 10),
-          child: Text(
-            context.l10n.localCopiesSection,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
-          child: OmiSettingsRow.toggle(
-            leading: const Icon(Icons.auto_delete),
-            title: context.l10n.autoRemoveSyncedCopiesTitle,
-            subtitle: context.l10n.autoRemoveSyncedCopiesDescription(autoRemoveDays),
-            value: autoRemoveOn,
-            onChanged: (value) {
-              SharedPreferencesUtil().autoRemoveSyncedCopies = value;
-              setState(() {});
-            },
-          ),
+        OmiSettingsGroup(
+          header: context.l10n.localCopiesSection,
+          children: [
+            OmiSettingsRow.toggle(
+              leading: const Icon(Icons.auto_delete),
+              title: context.l10n.autoRemoveSyncedCopiesTitle,
+              subtitle: context.l10n.autoRemoveSyncedCopiesDescription(autoRemoveDays),
+              value: autoRemoveOn,
+              onChanged: (value) async {
+                SharedPreferencesUtil().autoRemoveSyncedCopies = value;
+                if (value) {
+                  // Apply immediately: expired copies should not wait for the
+                  // next sync pass or app restart.
+                  await context.read<SyncProvider>().applySyncedCopyRetention();
+                }
+                if (context.mounted) setState(() {});
+              },
+            ),
+          ],
         ),
       ],
     );
@@ -877,8 +877,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             }
           }
         },
-        onToggleAutoRemove: (value) {
+        onToggleAutoRemove: (value) async {
           SharedPreferencesUtil().autoRemoveSyncedCopies = value;
+          if (value) {
+            // Apply immediately: expired copies should not wait for the next
+            // sync pass or app restart.
+            await context.read<SyncProvider>().applySyncedCopyRetention();
+          }
           if (context.mounted) setState(() {});
         },
       ),
