@@ -12,8 +12,12 @@ from database import conversations as conversations_db
 from database import speaker_learning as speaker_learning_db
 from database import users as users_db
 from database import voice_profiles as voice_profiles_db
-from database.audio_timeline import chunk_span_bounds
-from utils.audio_timeline import coverage_outcome, is_audio_timeline_v2, segment_wall_window
+from utils.audio_timeline import (
+    chunk_span_bounds,
+    coverage_outcome,
+    is_audio_timeline_v2,
+    segment_wall_window,
+)
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL, OMI_PERSON_VOICE_LEARNING_TOTAL
 from utils.speaker_learning_policy import (
