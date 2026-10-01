@@ -9,6 +9,14 @@ namespace stt {
 enum class Engine { Deepgram, Whisper, Parakeet };
 
 inline std::string ParakeetWsUrl(std::string api_url, int sample_rate = 16000) {
+  const auto fragment = api_url.find('#');
+  if (fragment != std::string::npos) api_url.erase(fragment);
+  std::string query;
+  const auto query_start = api_url.find('?');
+  if (query_start != std::string::npos) {
+    query = api_url.substr(query_start + 1);
+    api_url.erase(query_start);
+  }
   while (!api_url.empty() && api_url.back() == '/') api_url.pop_back();
   auto replace_prefix = [&](const std::string& from, const std::string& to) {
     if (api_url.rfind(from, 0) == 0) {
@@ -17,7 +25,18 @@ inline std::string ParakeetWsUrl(std::string api_url, int sample_rate = 16000) {
   };
   replace_prefix("https://", "wss://");
   replace_prefix("http://", "ws://");
-  return api_url + "/v3/stream?sample_rate=" + std::to_string(sample_rate);
+  std::string result = api_url + "/v3/stream?sample_rate=" + std::to_string(sample_rate);
+  for (std::size_t start = 0; start < query.size();) {
+    const auto end = query.find('&', start);
+    const auto param = query.substr(start, end == std::string::npos ? end : end - start);
+    // Preserve encoded query values while replacing every stale sample rate.
+    if (!param.empty() && param.substr(0, param.find('=')) != "sample_rate") {
+      result += "&" + param;
+    }
+    if (end == std::string::npos) break;
+    start = end + 1;
+  }
+  return result;
 }
 
 inline std::string DeepgramWsUrl(int sample_rate = 16000) {
