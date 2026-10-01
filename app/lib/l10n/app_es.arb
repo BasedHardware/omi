@@ -3765,5 +3765,11 @@
     "speakerSuggestionAppliesToSpeaker": "Se aplica a todas las líneas de este hablante",
     "collapseAction": "Contraer",
     "speakerTagPromptNotMeAction": "No soy yo",
-    "confidenceNextLabels": "{count, plural, =1{Etiquétalos en 1 conversación más.} other{Etiquétalos en {count} conversaciones más.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etiquétalos en 1 conversación más.} other{Etiquétalos en {count} conversaciones más.}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Voz aprendida} pending{Aprendiendo la voz…} disabled{El guardado de voz está desactivado} other{Voz aún no aprendida}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi reconocerá a {name} la próxima vez.} pending{Esto tarda unos segundos.} disabled{Activa el guardado de voces en Ajustes para que Omi pueda reconocer a {name}.} other{Omi necesita más habla clara de {name} y seguirá intentándolo.}}",
+    "speakerLabelText": "{part, select, likely{Probable} soundsLike{Suena como {name}} notPerson{No es {name}} carried{Sigue siendo {name}. Heredado de tu última conversación.} change{Cambiar} alsoTitle{¿Es también {name}?} alsoBody{Omi encontró la misma voz en conversaciones anteriores.} confirmed{Confirmaste esta etiqueta} other{Revisar}}",
+    "speakerLabelTalkTime": "{duration} de esta voz",
+    "speakerLabelLinesLabeled": "Líneas etiquetadas: {count}",
+    "speakerLabelEarlierMatches": "Conversaciones anteriores con esta voz: {count}"
 }

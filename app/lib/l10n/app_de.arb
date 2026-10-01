@@ -3765,5 +3765,11 @@
     "speakerSuggestionAppliesToSpeaker": "Gilt für jede Zeile dieses Sprechers",
     "collapseAction": "Einklappen",
     "speakerTagPromptNotMeAction": "Nicht ich",
-    "confidenceNextLabels": "{count, plural, =1{Markiere sie in 1 weiteren Gespräch.} other{Markiere sie in {count} weiteren Gesprächen.}}"
+    "confidenceNextLabels": "{count, plural, =1{Markiere sie in 1 weiteren Gespräch.} other{Markiere sie in {count} weiteren Gesprächen.}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Stimme gelernt} pending{Stimme wird gelernt…} disabled{Stimmspeicherung ist aus} other{Stimme noch nicht gelernt}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi erkennt {name} beim nächsten Mal.} pending{Das dauert ein paar Sekunden.} disabled{Aktiviere in den Einstellungen das Speichern von Stimmen, damit Omi {name} erkennen kann.} other{Omi braucht mehr klare Sprache von {name} und versucht es weiter.}}",
+    "speakerLabelText": "{part, select, likely{Wahrscheinlich} soundsLike{Klingt wie {name}} notPerson{Nicht {name}} carried{Weiterhin {name}. Aus deinem letzten Gespräch übernommen.} change{Ändern} alsoTitle{Ist das auch {name}?} alsoBody{Omi hat dieselbe Stimme in früheren Gesprächen gefunden.} confirmed{Du hast dieses Label bestätigt} other{Prüfen}}",
+    "speakerLabelTalkTime": "{duration} dieser Stimme",
+    "speakerLabelLinesLabeled": "Zugeordnete Zeilen: {count}",
+    "speakerLabelEarlierMatches": "Frühere Gespräche mit dieser Stimme: {count}"
 }

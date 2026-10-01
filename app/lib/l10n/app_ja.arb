@@ -3765,5 +3765,11 @@
     "speakerSuggestionAppliesToSpeaker": "この話者のすべての発言に適用されます",
     "collapseAction": "折りたたむ",
     "speakerTagPromptNotMeAction": "自分ではない",
-    "confidenceNextLabels": "{count, plural, =1{あと1件の会話でラベルを付けてください。} other{あと{count}件の会話でラベルを付けてください。}}"
+    "confidenceNextLabels": "{count, plural, =1{あと1件の会話でラベルを付けてください。} other{あと{count}件の会話でラベルを付けてください。}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{声を学習しました} pending{声を学習中…} disabled{声の保存はオフです} other{声はまだ学習されていません}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{次回から Omi が{name}さんを認識します。} pending{数秒かかります。} disabled{Omi が{name}さんを認識できるように、設定で声の保存をオンにしてください。} other{Omi は{name}さんのはっきりした音声がもっと必要です。引き続き試みます。}}",
+    "speakerLabelText": "{part, select, likely{候補} soundsLike{{name}さんの声に似ています} notPerson{{name}さんではない} carried{引き続き{name}さんです。前回の会話から引き継ぎました。} change{変更} alsoTitle{これも{name}さんですか？} alsoBody{Omi は過去の会話で同じ声を見つけました。} confirmed{このラベルを確認済みです} other{確認する}}",
+    "speakerLabelTalkTime": "この声の{duration}",
+    "speakerLabelLinesLabeled": "ラベルを付けた行数：{count}",
+    "speakerLabelEarlierMatches": "この声の過去の会話数：{count}"
 }

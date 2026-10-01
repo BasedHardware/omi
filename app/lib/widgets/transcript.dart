@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/widgets/speaker_label.dart';
+import 'package:omi/widgets/speaker_label_badge.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -48,6 +49,11 @@ class TranscriptWidget extends StatefulWidget {
   final List<String> leadingItemIds;
   final TranscriptSegmentBuilder? segmentBuilder;
 
+  /// "Yes" / "Not <name>" under the first line Omi named by voice. Both null hides the question
+  /// and leaves only the Likely badge.
+  final void Function(TranscriptSegment segment)? onConfirmSpeakerLabel;
+  final void Function(TranscriptSegment segment)? onRejectSpeakerLabel;
+
   const TranscriptWidget({
     super.key,
     required this.segments,
@@ -74,6 +80,8 @@ class TranscriptWidget extends StatefulWidget {
     this.leadingItems = const [],
     this.leadingItemIds = const [],
     this.segmentBuilder,
+    this.onConfirmSpeakerLabel,
+    this.onRejectSpeakerLabel,
   }) : assert(leadingItems.length == leadingItemIds.length);
 
   @override
@@ -819,6 +827,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget build(BuildContext context) {
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     // One resolver per build: every bubble is named with the conversation's dense numbering.
+    final askSegmentIds = widget.onConfirmSpeakerLabel != null && widget.onRejectSpeakerLabel != null
+        ? firstAutoLabelSegmentIds(widget.segments)
+        : const <String>{};
     final names = SpeakerNames.forSegments(
       widget.segments,
       people: people,
@@ -868,7 +879,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 final segment = widget.segments[segmentIndex];
                 final customSegment = widget.segmentBuilder?.call(context, segment, segmentIndex);
                 Widget child = customSegment == null
-                    ? _buildSegmentItem(segmentIndex, people, names)
+                    ? _buildSegmentItem(segmentIndex, people, names, askSegmentIds)
                     : Container(key: _segmentKeys[segment.id], child: customSegment);
                 if (widget.separator && segmentIndex > 0) {
                   child = Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 4), child]);
@@ -955,11 +966,22 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     );
   }
 
-  Widget _buildSegmentItem(int segmentIdx, List<Person> people, SpeakerNames names) {
+  Widget _buildSegmentItem(int segmentIdx, List<Person> people, SpeakerNames names, Set<String> askSegmentIds) {
     final data = widget.segments[segmentIdx];
     final Person? person = personById(people, data.personId);
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
+    final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
+    // The badge marks the start of a speaker's turn, not every line of it.
+    final startsTurn = previous == null ||
+        previous.isUser ||
+        previous.speakerId != data.speakerId ||
+        previous.personId != data.personId ||
+        previous.speakerLabelSource != data.speakerLabelSource;
+    final confirm = widget.onConfirmSpeakerLabel;
+    final reject = widget.onRejectSpeakerLabel;
+    final asksToConfirm =
+        person != null && confirm != null && reject != null && !isTagging && askSegmentIds.contains(data.id);
     return Container(
       key: _segmentKeys[data.id],
       child: Padding(
@@ -1021,6 +1043,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               ),
                             ),
                           ),
+                          if (startsTurn && person != null && !isTagging) ...[
+                            const SizedBox(width: 4),
+                            SpeakerLabelBadge(source: data.speakerLabelSource),
+                          ],
                           if (isTagging) ...[
                             const SizedBox(width: 6),
                             const OmiSpinner(size: OmiSpinnerSize.small),
@@ -1029,6 +1055,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       ),
                     ),
                   ],
+
+                  if (asksToConfirm)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: OmiSpacing.xxs),
+                      child: SpeakerLikelyConfirm(
+                        name: person.name,
+                        onYes: () => confirm(data),
+                        onNot: () => reject(data),
+                      ),
+                    ),
 
                   // Chat bubble
                   Row(

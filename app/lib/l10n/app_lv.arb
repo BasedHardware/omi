@@ -3765,5 +3765,11 @@
     "speakerSuggestionAppliesToSpeaker": "Attiecas uz katru šī runātāja rindu",
     "collapseAction": "Sakļaut",
     "speakerTagPromptNotMeAction": "Ne es",
-    "confidenceNextLabels": "{count, plural, =1{Atzīmējiet viņus vēl 1 sarunā.} other{Atzīmējiet viņus vēl {count} sarunās.}}"
+    "confidenceNextLabels": "{count, plural, =1{Atzīmējiet viņus vēl 1 sarunā.} other{Atzīmējiet viņus vēl {count} sarunās.}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Balss apgūta} pending{Apgūst balsi…} disabled{Balss saglabāšana ir izslēgta} other{Balss vēl nav apgūta}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi nākamreiz atpazīs {name}.} pending{Tas aizņem dažas sekundes.} disabled{Ieslēdziet balsu saglabāšanu iestatījumos, lai Omi varētu atpazīt {name}.} other{Omi vajag vairāk skaidras {name} runas, un tas turpinās mēģināt.}}",
+    "speakerLabelText": "{part, select, likely{Iespējams} soundsLike{Izklausās pēc {name}} notPerson{Nav {name}} carried{Joprojām {name}. Pārnests no jūsu pēdējās sarunas.} change{Mainīt} alsoTitle{Vai šī ir arī {name}?} alsoBody{Omi atrada to pašu balsi iepriekšējās sarunās.} confirmed{Jūs apstiprinājāt šo birku} other{Pārskatīt}}",
+    "speakerLabelTalkTime": "{duration} no šīs balss",
+    "speakerLabelLinesLabeled": "Atzīmētās rindas: {count}",
+    "speakerLabelEarlierMatches": "Iepriekšējās sarunas ar šo balsi: {count}"
 }

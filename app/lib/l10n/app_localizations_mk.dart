@@ -12175,4 +12175,66 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Гласот е научен',
+        'pending': 'Се учи гласот…',
+        'disabled': 'Зачувувањето на глас е исклучено',
+        'other': 'Гласот сѐ уште не е научен',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi ќе препознае $name следниот пат.',
+        'pending': 'Ова трае неколку секунди.',
+        'disabled': 'Вклучете го зачувувањето на гласови во Поставки за Omi да може да препознава $name.',
+        'other': 'На Omi му треба појасен говор од $name и ќе продолжи да се обидува.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Веројатно',
+        'soundsLike': 'Звучи како $name',
+        'notPerson': 'Не е $name',
+        'carried': 'Сѐ уште е $name. Пренесено од вашиот последен разговор.',
+        'change': 'Промени',
+        'alsoTitle': 'Дали и ова е $name?',
+        'alsoBody': 'Omi го најде истиот глас во претходни разговори.',
+        'confirmed': 'Ја потврдивте оваа ознака',
+        'other': 'Прегледај',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration од овој глас';
+  }
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Означени линии: $count';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Претходни разговори со овој глас: $count';
+  }
 }

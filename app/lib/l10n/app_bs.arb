@@ -11325,5 +11325,11 @@
     "speakerSuggestionAppliesToSpeaker": "Odnosi se na svaki red ovog govornika",
     "collapseAction": "Sažmi",
     "speakerTagPromptNotMeAction": "Nisam ja",
-    "confidenceNextLabels": "{count, plural, =1{Označite ih u još 1 razgovoru.} other{Označite ih u još {count} razgovora.}}"
+    "confidenceNextLabels": "{count, plural, =1{Označite ih u još 1 razgovoru.} other{Označite ih u još {count} razgovora.}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Glas je naučen} pending{Učenje glasa…} disabled{Spremanje glasa je isključeno} other{Glas još nije naučen}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi će prepoznati osobu {name} sljedeći put.} pending{Ovo traje nekoliko sekundi.} disabled{Uključite spremanje glasova u postavkama da bi Omi mogao prepoznati osobu {name}.} other{Omi treba više jasnog govora osobe {name} i nastavit će pokušavati.}}",
+    "speakerLabelText": "{part, select, likely{Vjerovatno} soundsLike{Zvuči kao {name}} notPerson{Nije {name}} carried{I dalje {name}. Preneseno iz vašeg posljednjeg razgovora.} change{Promijeni} alsoTitle{Je li ovo također {name}?} alsoBody{Omi je pronašao isti glas u ranijim razgovorima.} confirmed{Potvrdili ste ovu oznaku} other{Pregledaj}}",
+    "speakerLabelTalkTime": "{duration} ovog glasa",
+    "speakerLabelLinesLabeled": "Označeni redovi: {count}",
+    "speakerLabelEarlierMatches": "Raniji razgovori s ovim glasom: {count}"
 }

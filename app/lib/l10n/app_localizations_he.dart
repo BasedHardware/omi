@@ -12017,4 +12017,66 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'הקול נלמד',
+        'pending': 'לומד את הקול…',
+        'disabled': 'שמירת קול כבויה',
+        'other': 'הקול עדיין לא נלמד',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi יזהה את $name בפעם הבאה.',
+        'pending': 'זה לוקח כמה שניות.',
+        'disabled': 'הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את $name.',
+        'other': 'Omi צריך עוד דיבור ברור של $name וימשיך לנסות.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'סביר',
+        'soundsLike': 'נשמע כמו $name',
+        'notPerson': 'לא $name',
+        'carried': 'עדיין $name. הועבר מהשיחה האחרונה שלך.',
+        'change': 'שינוי',
+        'alsoTitle': 'האם זה גם $name?',
+        'alsoBody': 'Omi מצא את אותו קול בשיחות קודמות.',
+        'confirmed': 'אישרת את התווית הזו',
+        'other': 'סקירה',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration מהקול הזה';
+  }
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'שורות שסומנו: $count';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'שיחות קודמות עם הקול הזה: $count';
+  }
 }

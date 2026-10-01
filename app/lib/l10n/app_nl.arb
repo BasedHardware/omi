@@ -3765,5 +3765,11 @@
     "speakerSuggestionAppliesToSpeaker": "Geldt voor elke regel van deze spreker",
     "collapseAction": "Samenvouwen",
     "speakerTagPromptNotMeAction": "Niet ik",
-    "confidenceNextLabels": "{count, plural, =1{Label ze in nog 1 gesprek.} other{Label ze in nog {count} gesprekken.}}"
+    "confidenceNextLabels": "{count, plural, =1{Label ze in nog 1 gesprek.} other{Label ze in nog {count} gesprekken.}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Stem geleerd} pending{Stem leren…} disabled{Stem opslaan staat uit} other{Stem nog niet geleerd}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi herkent {name} de volgende keer.} pending{Dit duurt een paar seconden.} disabled{Zet stemmen opslaan aan in Instellingen zodat Omi {name} kan herkennen.} other{Omi heeft meer duidelijke spraak van {name} nodig en blijft het proberen.}}",
+    "speakerLabelText": "{part, select, likely{Waarschijnlijk} soundsLike{Klinkt als {name}} notPerson{Niet {name}} carried{Nog steeds {name}. Overgenomen uit je laatste gesprek.} change{Wijzigen} alsoTitle{Is dit ook {name}?} alsoBody{Omi heeft dezelfde stem in eerdere gesprekken gevonden.} confirmed{Je hebt dit label bevestigd} other{Bekijken}}",
+    "speakerLabelTalkTime": "{duration} van deze stem",
+    "speakerLabelLinesLabeled": "Gelabelde regels: {count}",
+    "speakerLabelEarlierMatches": "Eerdere gesprekken met deze stem: {count}"
 }

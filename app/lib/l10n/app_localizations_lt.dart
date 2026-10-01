@@ -12131,4 +12131,66 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Balsas išmoktas',
+        'pending': 'Mokomasi balso…',
+        'disabled': 'Balso išsaugojimas išjungtas',
+        'other': 'Balsas dar neišmoktas',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi kitą kartą atpažins $name.',
+        'pending': 'Tai užtrunka kelias sekundes.',
+        'disabled': 'Įjunkite balsų išsaugojimą nustatymuose, kad Omi galėtų atpažinti $name.',
+        'other': 'Omi reikia daugiau aiškios $name kalbos ir toliau bandys.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Tikėtina',
+        'soundsLike': 'Skamba kaip $name',
+        'notPerson': 'Ne $name',
+        'carried': 'Vis dar $name. Perkelta iš paskutinio pokalbio.',
+        'change': 'Keisti',
+        'alsoTitle': 'Ar tai taip pat $name?',
+        'alsoBody': 'Omi rado tą patį balsą ankstesniuose pokalbiuose.',
+        'confirmed': 'Patvirtinote šią žymą',
+        'other': 'Peržiūrėti',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration šio balso';
+  }
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Pažymėtos eilutės: $count';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Ankstesni pokalbiai su šiuo balsu: $count';
+  }
 }

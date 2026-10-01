@@ -3800,5 +3800,11 @@
     "speakerSuggestionAppliesToSpeaker": "Bu konuşmacının tüm satırlarına uygulanır",
     "collapseAction": "Daralt",
     "speakerTagPromptNotMeAction": "Ben değilim",
-    "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}"
+    "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Ses öğrenildi} pending{Ses öğreniliyor…} disabled{Ses kaydetme kapalı} other{Ses henüz öğrenilmedi}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi bir dahaki sefere {name} kişisini tanıyacak.} pending{Bu birkaç saniye sürer.} disabled{Omi {name} kişisini tanıyabilsin diye Ayarlar’da ses kaydetmeyi açın.} other{Omi, {name} kişisinin daha net konuşmasına ihtiyaç duyuyor ve denemeye devam edecek.}}",
+    "speakerLabelText": "{part, select, likely{Muhtemel} soundsLike{{name} gibi duyuluyor} notPerson{{name} değil} carried{Hâlâ {name}. Son sohbetinizden aktarıldı.} change{Değiştir} alsoTitle{Bu da {name} mi?} alsoBody{Omi aynı sesi önceki sohbetlerde buldu.} confirmed{Bu etiketi onayladınız} other{İncele}}",
+    "speakerLabelTalkTime": "Bu sesten {duration}",
+    "speakerLabelLinesLabeled": "Etiketlenen satırlar: {count}",
+    "speakerLabelEarlierMatches": "Bu sesle önceki sohbetler: {count}"
 }

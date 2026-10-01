@@ -12149,4 +12149,66 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'ಧ್ವನಿಯನ್ನು ಕಲಿತಿದೆ',
+        'pending': 'ಧ್ವನಿಯನ್ನು ಕಲಿಯಲಾಗುತ್ತಿದೆ…',
+        'disabled': 'ಧ್ವನಿ ಉಳಿಸುವಿಕೆ ಆಫ್ ಆಗಿದೆ',
+        'other': 'ಧ್ವನಿಯನ್ನು ಇನ್ನೂ ಕಲಿತಿಲ್ಲ',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi ಮುಂದಿನ ಬಾರಿ $name ಅವರನ್ನು ಗುರುತಿಸುತ್ತದೆ.',
+        'pending': 'ಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕು.',
+        'disabled': 'Omi $name ಅವರನ್ನು ಗುರುತಿಸಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಧ್ವನಿ ಉಳಿಸುವಿಕೆಯನ್ನು ಆನ್ ಮಾಡಿ.',
+        'other': 'Omi ಗೆ $name ಅವರ ಇನ್ನಷ್ಟು ಸ್ಪಷ್ಟ ಮಾತು ಬೇಕು, ಮತ್ತು ಅದು ಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'ಸಂಭವನೀಯ',
+        'soundsLike': '$name ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ',
+        'notPerson': '$name ಅಲ್ಲ',
+        'carried': 'ಇನ್ನೂ $name. ನಿಮ್ಮ ಕೊನೆಯ ಸಂಭಾಷಣೆಯಿಂದ ಮುಂದುವರಿದಿದೆ.',
+        'change': 'ಬದಲಿಸಿ',
+        'alsoTitle': 'ಇದು ಕೂಡ $name ಅವರೇ?',
+        'alsoBody': 'Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.',
+        'confirmed': 'ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ',
+        'other': 'ಪರಿಶೀಲಿಸಿ',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'ಈ ಧ್ವನಿಯ $duration';
+  }
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'ಲೇಬಲ್ ಹಾಕಿದ ಸಾಲುಗಳು: $count';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'ಈ ಧ್ವನಿಯೊಂದಿಗೆ ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳು: $count';
+  }
 }

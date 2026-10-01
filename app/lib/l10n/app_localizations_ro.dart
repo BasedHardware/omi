@@ -12166,4 +12166,66 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Voce învățată',
+        'pending': 'Se învață vocea…',
+        'disabled': 'Salvarea vocii este dezactivată',
+        'other': 'Vocea nu a fost încă învățată',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi va recunoaște persoana $name data viitoare.',
+        'pending': 'Durează câteva secunde.',
+        'disabled': 'Activează salvarea vocilor în Setări ca Omi să poată recunoaște persoana $name.',
+        'other': 'Omi are nevoie de mai multă vorbire clară de la $name și va continua să încerce.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Probabil',
+        'soundsLike': 'Sună ca $name',
+        'notPerson': 'Nu este $name',
+        'carried': 'Tot $name. Preluat din ultima ta conversație.',
+        'change': 'Schimbă',
+        'alsoTitle': 'Este și aceasta $name?',
+        'alsoBody': 'Omi a găsit aceeași voce în conversații anterioare.',
+        'confirmed': 'Ai confirmat această etichetă',
+        'other': 'Revizuiește',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration din această voce';
+  }
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Rânduri etichetate: $count';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Conversații anterioare cu această voce: $count';
+  }
 }

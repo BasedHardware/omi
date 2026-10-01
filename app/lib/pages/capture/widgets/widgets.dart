@@ -207,6 +207,8 @@ getTranscriptWidget(
   List<Widget> leadingItems = const [],
   List<String> leadingItemIds = const [],
   TranscriptSegmentBuilder? segmentBuilder,
+  void Function(TranscriptSegment segment)? onConfirmSpeakerLabel,
+  void Function(TranscriptSegment segment)? onRejectSpeakerLabel,
 }) {
   if (conversationCreating) {
     return const Padding(padding: EdgeInsets.only(top: 80), child: Center(child: OmiSpinner()));
@@ -244,6 +246,8 @@ getTranscriptWidget(
       leadingItems: leadingItems,
       leadingItemIds: leadingItemIds,
       segmentBuilder: segmentBuilder,
+      onConfirmSpeakerLabel: onConfirmSpeakerLabel,
+      onRejectSpeakerLabel: onRejectSpeakerLabel,
     );
   }
 

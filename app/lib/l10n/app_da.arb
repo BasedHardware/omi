@@ -3807,5 +3807,11 @@
     "speakerSuggestionAppliesToSpeaker": "Gælder for alle linjer fra denne taler",
     "collapseAction": "Skjul",
     "speakerTagPromptNotMeAction": "Ikke mig",
-    "confidenceNextLabels": "{count, plural, =1{Mærk dem i 1 samtale mere.} other{Mærk dem i {count} samtaler mere.}}"
+    "confidenceNextLabels": "{count, plural, =1{Mærk dem i 1 samtale mere.} other{Mærk dem i {count} samtaler mere.}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Stemme lært} pending{Lærer stemmen…} disabled{Lagring af stemmer er slået fra} other{Stemmen er ikke lært endnu}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi genkender {name} næste gang.} pending{Det tager et par sekunder.} disabled{Slå lagring af stemmer til i Indstillinger, så Omi kan genkende {name}.} other{Omi har brug for mere tydelig tale fra {name} og bliver ved med at prøve.}}",
+    "speakerLabelText": "{part, select, likely{Sandsynlig} soundsLike{Lyder som {name}} notPerson{Ikke {name}} carried{Stadig {name}. Overført fra din seneste samtale.} change{Skift} alsoTitle{Er det også {name}?} alsoBody{Omi fandt den samme stemme i tidligere samtaler.} confirmed{Du har bekræftet denne etiket} other{Gennemgå}}",
+    "speakerLabelTalkTime": "{duration} af denne stemme",
+    "speakerLabelLinesLabeled": "Mærkede linjer: {count}",
+    "speakerLabelEarlierMatches": "Tidligere samtaler med denne stemme: {count}"
 }

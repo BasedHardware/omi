@@ -12098,4 +12098,66 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Voice learned',
+        'pending': 'Learning voice…',
+        'disabled': 'Voice saving is off',
+        'other': 'Voice not learned yet',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi will recognize $name next time.',
+        'pending': 'This takes a few seconds.',
+        'disabled': 'Turn on saving voices in Settings so Omi can recognize $name.',
+        'other': 'Omi needs more clear speech from $name and will keep trying.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Likely',
+        'soundsLike': 'Sounds like $name',
+        'notPerson': 'Not $name',
+        'carried': 'Still $name. Carried over from your last conversation.',
+        'change': 'Change',
+        'alsoTitle': 'Is this also $name?',
+        'alsoBody': 'Omi found the same voice in earlier conversations.',
+        'confirmed': 'You confirmed this label',
+        'other': 'Review',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration of this voice';
+  }
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Lines labeled: $count';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Earlier conversations with this voice: $count';
+  }
 }

@@ -12,7 +12,9 @@ import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/conversations.dart' as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
+import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -30,6 +32,8 @@ typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
 typedef ConversationReprocessCall = Future<ServerConversation?> Function(String,
     {String? appId, bool requireSpeakerReceipt});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
+typedef SpeakerRejectionCall = Future<ApiResult<void>>
+    Function(String conversationId, int speakerId, SpeakerRejection kind, {String? personId, List<String>? segmentIds});
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
@@ -38,12 +42,15 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     SpeakerAssignmentCall? assignSpeaker,
     ConversationReprocessCall? reprocess,
     ConversationDetailFetchCall? fetchConversation,
+    SpeakerRejectionCall? rejectSpeaker,
   })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
+        _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
         _reprocess = reprocess ?? reProcessConversationServer,
         _fetchConversation = fetchConversation ?? getConversationById;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
   final ConversationDetailFetchCall _fetchConversation;
+  final SpeakerRejectionCall _rejectSpeaker;
   String? _speakerSummaryConversationId;
   int _speakerEditGeneration = 0;
   final Map<String, int> _speakerEditGenerationByConversation = {};
@@ -125,7 +132,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _speakerSummaryRefreshTimer = null;
     final self = personId == 'user';
     final person = self ? null : personId;
-    final before = {for (final segment in selected) segment: (segment.isUser, segment.personId)};
+    final before = {
+      for (final segment in selected) segment: (segment.isUser, segment.personId, segment.speakerLabelSource)
+    };
     final changed = selected.any((s) => s.isUser != self || s.personId != person);
     final generation = ++_speakerEditGeneration;
     _speakerEditGenerationByConversation[target.id] = generation;
@@ -134,6 +143,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     for (final segment in selected) {
       segment.isUser = self;
       segment.personId = person;
+      segment.speakerLabelSource = 'manual';
     }
     conversationProvider?.updateConversation(target);
     notifyListeners();
@@ -159,7 +169,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<bool> _persistSpeakerAssignment(
     ServerConversation target,
     List<TranscriptSegment> selected,
-    Map<TranscriptSegment, (bool, String?)> before,
+    Map<TranscriptSegment, (bool, String?, String?)> before,
     int generation,
     bool changed,
     List<String> segmentIds,
@@ -328,10 +338,43 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
+  /// Tells Omi the label on [segment]'s voice is wrong: every line of that voice carrying the same
+  /// label is cleared at once, and restored if the server did not accept the rejection.
+  Future<bool> rejectSpeakerLabel(TranscriptSegment segment, SpeakerRejection kind) async {
+    final target = conversationOrNull;
+    if (target == null || loadingReprocessConversation) return false;
+    final rejectedPerson = segment.personId;
+    final wasUser = segment.isUser;
+    final selected = target.transcriptSegments
+        .where((s) => s.speakerId == segment.speakerId && s.isUser == wasUser && s.personId == rejectedPerson)
+        .toList();
+    if (selected.isEmpty) return false;
+    final before = {for (final s in selected) s: (s.isUser, s.personId, s.speakerLabelSource)};
+    final generation = ++_speakerEditGeneration;
+    _speakerEditGenerationByConversation[target.id] = generation;
+    for (final s in selected) {
+      s.isUser = false;
+      s.personId = null;
+      s.speakerLabelSource = null;
+    }
+    conversationProvider?.updateConversation(target);
+    notifyListeners();
+    final result = await _rejectSpeaker(
+      target.id,
+      segment.speakerId,
+      kind,
+      personId: kind == SpeakerRejection.notPerson ? rejectedPerson : null,
+      segmentIds: [for (final s in selected) s.id],
+    );
+    if (result is ApiSuccess<void>) return true;
+    _rollbackSpeakerAssignment(target, selected, before, generation, null);
+    return false;
+  }
+
   void _rollbackSpeakerAssignment(
     ServerConversation target,
     List<TranscriptSegment> selected,
-    Map<TranscriptSegment, (bool, String?)> before,
+    Map<TranscriptSegment, (bool, String?, String?)> before,
     int generation,
     VoidCallback? onFailed,
   ) {
@@ -340,6 +383,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       final original = before[segment]!;
       segment.isUser = original.$1;
       segment.personId = original.$2;
+      segment.speakerLabelSource = original.$3;
     }
     _speakerEditGeneration++;
     conversationProvider?.updateConversation(target);

@@ -3765,5 +3765,11 @@
     "speakerSuggestionAppliesToSpeaker": "Koskee kaikkia tämän puhujan rivejä",
     "collapseAction": "Tiivistä",
     "speakerTagPromptNotMeAction": "En ole minä",
-    "confidenceNextLabels": "{count, plural, =1{Nimeä heidät vielä 1 keskustelussa.} other{Nimeä heidät vielä {count} keskustelussa.}}"
+    "confidenceNextLabels": "{count, plural, =1{Nimeä heidät vielä 1 keskustelussa.} other{Nimeä heidät vielä {count} keskustelussa.}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Ääni opittu} pending{Opitaan ääntä…} disabled{Äänen tallennus on pois päältä} other{Ääntä ei ole vielä opittu}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi tunnistaa henkilön {name} ensi kerralla.} pending{Tämä kestää muutaman sekunnin.} disabled{Ota äänten tallennus käyttöön asetuksissa, jotta Omi voi tunnistaa henkilön {name}.} other{Omi tarvitsee lisää selkeää puhetta henkilöltä {name} ja yrittää edelleen.}}",
+    "speakerLabelText": "{part, select, likely{Todennäköinen} soundsLike{Kuulostaa henkilöltä {name}} notPerson{Ei {name}} carried{Edelleen {name}. Siirretty edellisestä keskustelustasi.} change{Vaihda} alsoTitle{Onko tämä myös {name}?} alsoBody{Omi löysi saman äänen aiemmista keskusteluista.} confirmed{Vahvistit tämän nimen} other{Tarkista}}",
+    "speakerLabelTalkTime": "{duration} tästä äänestä",
+    "speakerLabelLinesLabeled": "Nimetyt rivit: {count}",
+    "speakerLabelEarlierMatches": "Aiemmat keskustelut tällä äänellä: {count}"
 }

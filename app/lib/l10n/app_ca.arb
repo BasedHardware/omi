@@ -3765,5 +3765,11 @@
     "speakerSuggestionAppliesToSpeaker": "S'aplica a totes les línies d'aquest parlant",
     "collapseAction": "Replega",
     "speakerTagPromptNotMeAction": "No sóc jo",
-    "confidenceNextLabels": "{count, plural, =1{Etiqueta'ls en 1 conversa més.} other{Etiqueta'ls en {count} converses més.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etiqueta'ls en 1 conversa més.} other{Etiqueta'ls en {count} converses més.}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Veu apresa} pending{Aprenent la veu…} disabled{El desament de veus està desactivat} other{Veu encara no apresa}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi reconeixerà {name} la propera vegada.} pending{Això triga uns segons.} disabled{Activa el desament de veus a Configuració perquè Omi pugui reconèixer {name}.} other{Omi necessita més parla clara de {name} i continuarà intentant-ho.}}",
+    "speakerLabelText": "{part, select, likely{Probable} soundsLike{Sona com {name}} notPerson{No és {name}} carried{Continua sent {name}. Heretat de la teva última conversa.} change{Canvia} alsoTitle{Aquesta veu també és {name}?} alsoBody{Omi ha trobat la mateixa veu en converses anteriors.} confirmed{Has confirmat aquesta etiqueta} other{Revisa}}",
+    "speakerLabelTalkTime": "{duration} d’aquesta veu",
+    "speakerLabelLinesLabeled": "Línies etiquetades: {count}",
+    "speakerLabelEarlierMatches": "Converses anteriors amb aquesta veu: {count}"
 }

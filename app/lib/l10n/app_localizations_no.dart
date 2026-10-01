@@ -12111,4 +12111,66 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Stemmen er lært',
+        'pending': 'Lærer stemmen…',
+        'disabled': 'Lagring av stemmer er slått av',
+        'other': 'Stemmen er ikke lært ennå',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi gjenkjenner $name neste gang.',
+        'pending': 'Dette tar noen sekunder.',
+        'disabled': 'Slå på lagring av stemmer i Innstillinger, så Omi kan gjenkjenne $name.',
+        'other': 'Omi trenger mer tydelig tale fra $name og fortsetter å prøve.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Sannsynlig',
+        'soundsLike': 'Høres ut som $name',
+        'notPerson': 'Ikke $name',
+        'carried': 'Fortsatt $name. Videreført fra den siste samtalen din.',
+        'change': 'Endre',
+        'alsoTitle': 'Er dette også $name?',
+        'alsoBody': 'Omi fant den samme stemmen i tidligere samtaler.',
+        'confirmed': 'Du har bekreftet denne etiketten',
+        'other': 'Gjennomgå',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration av denne stemmen';
+  }
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Merkede linjer: $count';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Tidligere samtaler med denne stemmen: $count';
+  }
 }

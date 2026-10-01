@@ -11325,5 +11325,11 @@
     "speakerSuggestionAppliesToSpeaker": "ಈ ಮಾತನಾಡುವವರ ಪ್ರತಿ ಸಾಲಿಗೂ ಅನ್ವಯಿಸುತ್ತದೆ",
     "collapseAction": "ಕುಗ್ಗಿಸಿ",
     "speakerTagPromptNotMeAction": "ನಾನಲ್ಲ",
-    "confidenceNextLabels": "{count, plural, =1{ಇನ್ನೂ 1 ಸಂಭಾಷಣೆಯಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.} other{ಇನ್ನೂ {count} ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.}}"
+    "confidenceNextLabels": "{count, plural, =1{ಇನ್ನೂ 1 ಸಂಭಾಷಣೆಯಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.} other{ಇನ್ನೂ {count} ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.}}",
+    "speakerLabelVoiceStatus": "{state, select, learned{ಧ್ವನಿಯನ್ನು ಕಲಿತಿದೆ} pending{ಧ್ವನಿಯನ್ನು ಕಲಿಯಲಾಗುತ್ತಿದೆ…} disabled{ಧ್ವನಿ ಉಳಿಸುವಿಕೆ ಆಫ್ ಆಗಿದೆ} other{ಧ್ವನಿಯನ್ನು ಇನ್ನೂ ಕಲಿತಿಲ್ಲ}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi ಮುಂದಿನ ಬಾರಿ {name} ಅವರನ್ನು ಗುರುತಿಸುತ್ತದೆ.} pending{ಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕು.} disabled{Omi {name} ಅವರನ್ನು ಗುರುತಿಸಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಧ್ವನಿ ಉಳಿಸುವಿಕೆಯನ್ನು ಆನ್ ಮಾಡಿ.} other{Omi ಗೆ {name} ಅವರ ಇನ್ನಷ್ಟು ಸ್ಪಷ್ಟ ಮಾತು ಬೇಕು, ಮತ್ತು ಅದು ಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.}}",
+    "speakerLabelText": "{part, select, likely{ಸಂಭವನೀಯ} soundsLike{{name} ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ} notPerson{{name} ಅಲ್ಲ} carried{ಇನ್ನೂ {name}. ನಿಮ್ಮ ಕೊನೆಯ ಸಂಭಾಷಣೆಯಿಂದ ಮುಂದುವರಿದಿದೆ.} change{ಬದಲಿಸಿ} alsoTitle{ಇದು ಕೂಡ {name} ಅವರೇ?} alsoBody{Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.} confirmed{ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ} other{ಪರಿಶೀಲಿಸಿ}}",
+    "speakerLabelTalkTime": "ಈ ಧ್ವನಿಯ {duration}",
+    "speakerLabelLinesLabeled": "ಲೇಬಲ್ ಹಾಕಿದ ಸಾಲುಗಳು: {count}",
+    "speakerLabelEarlierMatches": "ಈ ಧ್ವನಿಯೊಂದಿಗೆ ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳು: {count}"
 }
