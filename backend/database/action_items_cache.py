@@ -133,22 +133,23 @@ def bump_action_items_list_version(uid: str) -> None:
 
 
 def get_action_items_list_version(uid: str) -> Optional[int]:
-    """Current invalidation version, or ``None`` when Redis cannot answer.
+    """Current invalidation version, or ``None`` when Redis cannot answer or uid is invalid.
 
     ``None`` means "do not use the cache for this request" — it is not the same
     as version 0, which is a legitimate never-written-yet user.
     """
-    key = _version_key(uid)
-    if not key:
-        return 0
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        return None
+    key = _version_key(clean_uid)
     try:
         client = getattr(redis_db, 'r', None)
         if client is None:
-            logger.warning('action-items list cache: redis client uninitialized for version read uid=%s', uid)
+            logger.warning('action-items list cache: redis client uninitialized for version read uid=%s', clean_uid)
             return None
         raw = client.get(key)
     except (redis_pkg.exceptions.RedisError, AttributeError) as e:
-        logger.warning('action-items list cache: version read failed uid=%s: %s', uid, e)
+        logger.warning('action-items list cache: version read failed uid=%s: %s', clean_uid, e)
         return None
     if raw is None:
         return 0
@@ -161,7 +162,9 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
 
 def list_cache_key(uid: str, version: int, params: Dict[str, Any]) -> str:
     """Address one list page. Params are hashed so the key length is bounded."""
-    clean_uid = _clean_uid(uid) or 'anonymous'
+    clean_uid = _clean_uid(uid)
+    if not clean_uid:
+        return ''
     safe_version = max(0, int(version)) if isinstance(version, int) and not isinstance(version, bool) else 0
     safe_params = dict(params) if isinstance(params, dict) else {}
     fingerprint = hashlib.sha256(
@@ -237,14 +240,14 @@ def if_none_match_matches(header_value: Optional[str], etag: str) -> bool:
     if '*' in candidates:
         return True
 
-    def _normalize(tag: str) -> str:
+    def _strip_weak(tag: str) -> str:
         s = tag.strip()
         if s.startswith('W/'):
-            s = s[2:].strip()
-        return s.strip('"')
+            return s[2:].strip()
+        return s
 
-    normalized_etag = _normalize(etag)
+    normalized_etag = _strip_weak(etag)
     for candidate in candidates:
-        if _normalize(candidate) == normalized_etag:
+        if _strip_weak(candidate) == normalized_etag:
             return True
     return False

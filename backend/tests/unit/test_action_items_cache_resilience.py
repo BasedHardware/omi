@@ -127,6 +127,11 @@ def test_get_action_items_list_version_happy_path():
     with patch("database.action_items_cache.redis_db.r", fake_client):
         assert get_action_items_list_version("user123") == 0
 
+    # Rejected / invalid UID bypasses cache -> None
+    assert get_action_items_list_version("") is None
+    assert get_action_items_list_version("   ") is None
+    assert get_action_items_list_version("bad\nuid") is None
+
 
 def test_get_action_items_list_version_fail_open_redis_error():
     fake_client = MagicMock()
@@ -151,9 +156,10 @@ def test_list_cache_key_generation():
     key2 = list_cache_key("u1", 2, params_reversed)
     assert key1 == key2
 
-    # Malformed version or uid handled gracefully
+    # Invalid UID produces empty key to bypass cache
     key3 = list_cache_key("", -5, None)  # type: ignore[arg-type]
-    assert key3.startswith("ail:anonymous:0:")
+    assert key3 == ""
+    assert list_cache_key("bad\nuid", 1, {}) == ""
 
 
 def test_compute_etag():
@@ -274,12 +280,13 @@ def test_if_none_match_matches():
     assert if_none_match_matches("*", 'W/"123"') is True
     assert if_none_match_matches('"other", *', 'W/"123"') is True
 
-    # Exact and normalized weak / strong comparisons
+    # Exact and normalized weak / strong comparisons (quotes preserved per RFC 9110)
     assert if_none_match_matches('W/"123"', 'W/"123"') is True
     assert if_none_match_matches('"123"', 'W/"123"') is True
-    assert if_none_match_matches('123', 'W/"123"') is True
     assert if_none_match_matches('W/"123"', '"123"') is True
     assert if_none_match_matches('  W/"123"  ', 'W/"123"') is True
+    # Unquoted candidate is not a valid entity tag and does not match
+    assert if_none_match_matches('123', 'W/"123"') is False
 
     # List of candidate tags
     assert if_none_match_matches('"old1", "123", "old2"', 'W/"123"') is True
