@@ -34,6 +34,7 @@ class PeopleProvider extends BaseProvider {
   /// True when the last load failed; the list then shows what was cached, or an error state.
   bool loadFailed = false;
   bool _listening = false;
+  bool _confidenceLoaded = false;
 
   Future<void> initialize() {
     loading = true;
@@ -49,6 +50,7 @@ class PeopleProvider extends BaseProvider {
   Future<void> refresh() => setPeople();
 
   void clearUserData() {
+    _confidenceLoaded = false;
     people = [];
     selectedIds.clear();
     selecting = false;
@@ -61,10 +63,13 @@ class PeopleProvider extends BaseProvider {
   }
 
   Future<void> setPeople() async {
+    _confidenceLoaded = false;
+    notifyListeners();
     final value = await _loadPeople();
     loading = false;
     loadFailed = value == null;
     if (value != null) {
+      _confidenceLoaded = true;
       people = [
         ...value,
         ...people.where((person) => person.id.startsWith('optimistic-person:')),
@@ -196,7 +201,20 @@ class PeopleProvider extends BaseProvider {
   // ---- Pinning and clean-up ----
 
   /// Pins or unpins at once and rolls back when the server refuses. Returns true when stored.
-  Future<bool> setPinned(String personId, bool pinned) async {
+  final Map<String, Future<bool>> _pinOperations = {};
+
+  Future<bool> setPinned(String personId, bool pinned) {
+    final previous = _pinOperations[personId];
+    final operation =
+        previous == null ? _applyPinned(personId, pinned) : previous.then((_) => _applyPinned(personId, pinned));
+    _pinOperations[personId] = operation;
+    operation.whenComplete(() {
+      if (identical(_pinOperations[personId], operation)) _pinOperations.remove(personId);
+    });
+    return operation;
+  }
+
+  Future<bool> _applyPinned(String personId, bool pinned) async {
     final index = people.indexWhere((p) => p.id == personId);
     if (index == -1) return false;
     final before = people[index];
@@ -204,7 +222,13 @@ class PeopleProvider extends BaseProvider {
     people[index] = before.copyWith(pinned: pinned, pinnedAt: () => pinned ? DateTime.now() : null);
     selectedIds.remove(personId);
     notifyListeners();
-    final ok = await _setPinned(personId, pinned);
+    bool ok;
+    try {
+      ok = await _setPinned(personId, pinned);
+    } catch (e) {
+      Logger.debug('Failed to pin person $personId: $e');
+      ok = false;
+    }
     final current = people.indexWhere((p) => p.id == personId);
     if (!ok && current != -1) {
       people[current] = before;
@@ -217,8 +241,11 @@ class PeopleProvider extends BaseProvider {
   }
 
   /// Unverified, unpinned people: what Clean Up offers to delete. Pinned people are never included.
-  List<Person> get cleanUpCandidates =>
-      people.where((p) => !p.pinned && p.confidence == 'unverified' && !p.id.startsWith('optimistic-person:')).toList();
+  List<Person> get cleanUpCandidates => !_confidenceLoaded
+      ? []
+      : people
+          .where((p) => !p.pinned && p.confidence == 'unverified' && !p.id.startsWith('optimistic-person:'))
+          .toList();
 
   // ---- Multi-select ----
 
@@ -240,6 +267,11 @@ class PeopleProvider extends BaseProvider {
         if (p.pinned) p.id
     };
     selectedIds.addAll(personIds.where((id) => !pinned.contains(id)));
+    notifyListeners();
+  }
+
+  void deselectAll(Iterable<String> personIds) {
+    selectedIds.removeAll(personIds);
     notifyListeners();
   }
 

@@ -482,8 +482,13 @@ are retracted through the sync bridge seam, retained audio is copied when the
 survivor keeps cloud audio, and the survivor is reprocessed once per merge
 (`ProcessingTrigger.SMART_MERGE`) under a revision lease. A committed merge whose
 cleanup or refresh fails fails the finalization attempt; every retry resumes the
-donor, whatever the mode. Late repair WALs that target a donor append to its
-survivor (`utils/sync/assignment.py`). The absorb advances the survivor's
+donor, whatever the mode, before the fanout claim (which fences the discarded
+donor and so closes the job), after checking its job epoch/generation/binding.
+Stale or terminal jobs never resume. A failed refresh releases its unique invocation
+lease; even same-job refreshes are exclusive. A processing receipt tied to both
+merge and sync revisions lets a failed vector write retry without rerunning the
+completed processing bundle. Deferred retraction keeps cleanup retryable. Late
+repair WALs that target a donor append to its survivor (`utils/sync/assignment.py`). The absorb advances the survivor's
 `sync_content_revision` to fence an older processor, and the refresh write
 requires the current lease owner and revision.
 
@@ -1484,13 +1489,25 @@ fill the 90-second window ring. A fresh 40 ms blip after a full silence ring
 previously admitted 280 ms with pre-roll and failed on the next packet,
 before the 12-second first-text deadline (armed on speech send) was due.
 
-Managed window sessions flush a stranded fragment only after **5 seconds of
-trailing capture silence**. This exceeds ordinary 1.5–4 second pauses and
-leaves seven seconds of the startup budget for pacing and the POST. VAD
-end-of-speech, 1.5 seconds of admitted silence, and the legacy 2-second
-wall-idle timer do not flush a managed fragment. If speech resumes before
-selection, it stays in the same sentence-anchored context. Direct socket
-callers retain their explicit finalize, idle and close behavior.
+Managed window sessions retain the original VAD end-of-speech POST and
+1.5-second provider-silence / 2-second wall-idle paths for ordinary utterances
+with **at least one second of unresolved VAD-admitted speech**. This uses the
+existing startup short-episode boundary, excluding retained answered-empty
+context: a prior answered clip cannot make a new blip eligible. Pause POSTs
+keep sentence anchoring; an empty managed idle answer also keeps its anchor,
+PCM and exact replay so a mid-utterance decode can recover with more context.
+The first-text rescue remains 12 seconds from the episode's first speech;
+there is no new forced-POST timer or POST-relative deadline extension.
+
+Short fragments below that boundary bypass the ordinary pause/idle
+paths and wait for **5 seconds of trailing capture silence** before their
+stranded flush. This exceeds ordinary 1.5–4 second pauses and leaves seven
+seconds of the startup budget for pacing and the POST. If speech resumes
+before selection, it stays in the same sentence-anchored context. Direct
+socket callers retain their explicit finalize, idle and close behavior.
+An ordinary utterance that remains unresolved after those earlier POSTs can
+still use the existing long-silence accounting path; restoring cadence does
+not remove its answered-empty replay retention.
 
 A stranded clip shorter than 1.5 seconds receives zero padding for its POST;
 timestamp validation, embeddings and replay still use its original duration
@@ -1943,3 +1960,29 @@ source-fenced display materialization, and an explicit bounded detail-read
 request. Per the owner decision of 2026-09-29 these switches ship enabled
 (default on) with kill switches back to legacy behavior. Current clients send
 visibility edges but do not renew a lease or opt into detail translation.
+
+### Jev population measurement (EXP-004)
+
+Conversation processing assigns stable per-user relevance arms (`relevance_arm`).
+The owner flip flag is universal when enabled (INV-MEM-5); owner *measurement*
+stays candidate-sampled. Existing live flags are dev-on, prod-off; dev pins
+relevance and universal owner live percentages to zero for shadow coverage.
+Owner percentage permits only 100 (everyone) or 0 (off); invalid/intermediate
+values fail closed. Either malformed relevance arm percentage selects nano. The ambiguous model tier
+can be policy-kept by `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT`; deterministic
+rules, restores, calendar retention and plan gates retain their precedence.
+
+Both processing hosts submit advisory relevance/owner questions through
+`utils/conversations/jev_shadow.py` after the relevant live decision. Percentages
+sample conversation IDs for relevance and conversation+candidate hashes for
+owner, defaults are off, and Redis atomically dedupes content hashes and caps
+daily calls (60000 per lane). Owner hash selection sees the complete eligible
+batch before submission and selects at most eight unique candidates; eight owner
+slots and two relevance slots bound queued/active work on a ten-worker pool. IO stays in the worker; slow or unavailable services drop measurement without
+changing the conversation or memory. All durable `users/{uid}/jev_shadow` records
+are text-free and have a 60-day expiry. Owner records carry integer candidate
+position/population metadata. First-write-wins records preserve scores and expiry
+on retries; late commits after a worker timeout are valid and counted once by
+(uid, document ID), separately from attempt metrics. Drops are coverage losses.
+The protocol and TTL deployment prerequisite
+are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).

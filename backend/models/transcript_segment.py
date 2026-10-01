@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, Optional, List, Tuple
 import uuid
 import re
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 from pydantic.json_schema import SkipJsonSchema
 
 from models.other import Person
@@ -99,18 +99,16 @@ class TranscriptSegment(BaseModel):
     # looks real after a round-trip.
     _speaker_id_synthesized: bool = PrivateAttr(default=False)
 
-    def model_dump(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
-        # The ordinary model schema and every v1 dump stay unchanged. Only a
-        # v2 unplaced segment carries this internal marker into persistence
-        # and WebSocket payloads; Pydantic's model serializer would erase the
-        # public TranscriptSegment OpenAPI shape entirely.
-        data = super().model_dump(*args, **kwargs)
-        if self.audio_alignment is not None:
-            data['audio_alignment'] = self.audio_alignment
-        if self.audio_capture_run is not None:
-            data['audio_capture_run'] = self.audio_capture_run
-        if self.voice_candidates is not None:
-            data['voice_candidates'] = self.voice_candidates
+    @model_serializer(mode='wrap')
+    def _serialize_internal_evidence(self, handler):
+        # A wrap serializer also runs when a parent conversation is dumped. Leave
+        # the return type inferred so Pydantic retains the public field schema.
+        # Omit absent internal markers to keep ordinary v1 payloads unchanged.
+        data = handler(self)
+        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
+            value = getattr(self, key)
+            if value is not None:
+                data[key] = value
         return data
 
     def __init__(self, **data: Any):

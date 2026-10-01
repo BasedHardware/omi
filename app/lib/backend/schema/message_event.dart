@@ -153,6 +153,7 @@ class SpeakerLabelSuggestionEvent extends MessageEvent {
 
   /// With an empty [personId]: a pinned person this voice nearly matched. A question, never a label.
   final String? suggestedPersonId;
+  final bool retracted;
 
   SpeakerLabelSuggestionEvent({
     required this.speakerId,
@@ -160,19 +161,23 @@ class SpeakerLabelSuggestionEvent extends MessageEvent {
     required this.personName,
     required this.segmentId,
     this.suggestedPersonId,
+    this.retracted = false,
   }) : super(eventType: 'speaker_label_suggestion');
 
   factory SpeakerLabelSuggestionEvent.fromJson(Map<String, dynamic> json) {
+    final retracted = json['retracted'] == true;
     if (json['speaker_id'] is! int ||
         (json['speaker_id'] as int) < 0 ||
         json['person_id'] is! String ||
         json['person_name'] is! String ||
-        (json['person_name'] as String).trim().isEmpty ||
+        (!retracted && (json['person_name'] as String).trim().isEmpty) ||
+        (retracted && (json['person_id'] != '' || json['person_name'] != '')) ||
         json['segment_id'] is! String ||
         (json['segment_id'] as String).isEmpty) {
       return SpeakerLabelSuggestionEvent.empty();
     }
     return SpeakerLabelSuggestionEvent(
+      retracted: retracted,
       speakerId: json['speaker_id'],
       personId: json['person_id'],
       personName: json['person_name'],

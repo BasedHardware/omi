@@ -26,6 +26,14 @@ receipts are recovered using the existing full-row after digest. GCS failures
 stop further mutations; an ambiguous upload permits a mutation only if identical
 bytes can be read back from its immutable object.
 
+Stage diagnostics go to stderr as rate-bounded JSON with closed stage/check names,
+counts, durations and lease generation transitions. No record identifiers, payloads
+or exception bodies are emitted. Startup imports are timed before lease acquisition;
+cleanup failures cannot replace the original error. The GCS SDK retry predicate
+classifies transient metadata reads within a bounded budget and ambiguous writes.
+Ambiguous lease/probe writes require an exact live-body
+match and a new generation before ownership is adopted; no blind overwrite retry.
+
 lease.json fences each prefix with an owner token, expiry and generation match.
 It lasts 120 seconds and renews every 40 seconds, on publication, and before each
 transaction/write. Active leases reject another resume or rollback. Expired or
@@ -65,6 +73,7 @@ import argparse
 from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -81,12 +90,147 @@ import sys
 import threading
 import time
 from types import SimpleNamespace
-from typing import Any, Callable, Iterable, IO
+from typing import Any, Callable, Iterable, Iterator, IO
 import uuid
 from urllib.parse import urlsplit
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
+
+# Stdlib-only, closed-schema diagnostics can run before heavy backend imports.
+_STAGE_NAMES = frozenset(
+    {
+        'imports',
+        'arguments',
+        'storage_client',
+        'artifact_create',
+        'artifact_download',
+        'initial_snapshot',
+        'runtime_client',
+        'reconcile',
+        'discovery',
+        'classification',
+        'page',
+        'snapshot',
+        'intent',
+        'receipt',
+        'rollback',
+        'final_upload',
+        'shutdown',
+        'lease_acquire',
+        'lease_renew',
+        'lease_probe',
+        'lease_release',
+        'heartbeat',
+    }
+)
+_STAGE_FIELDS = frozenset(
+    {
+        'count',
+        'files',
+        'processed',
+        'workers',
+        'uid_count',
+        'apply',
+        'from_generation',
+        'generation',
+        'duration_seconds',
+        'remaining_seconds',
+        'cause_type',
+        'check',
+    }
+)
+_STAGE_CHECKS = frozenset(
+    {'metadata_read', 'write', 'ownership_or_io', 'occupied', 'generation_changed', 'owner_changed', 'expired'}
+)
+_STAGE_CAUSES = frozenset(
+    {
+        'Aborted',
+        'Conflict',
+        'DeadlineExceeded',
+        'NotFound',
+        'ServiceUnavailable',
+        'TooManyRequests',
+        'InternalServerError',
+        'BadGateway',
+        'GatewayTimeout',
+        'ReadTimeout',
+        'ConnectTimeout',
+        'Timeout',
+        'ConnectionError',
+        'ChunkedEncodingError',
+        'TransportError',
+        'PreconditionFailed',
+        'Forbidden',
+        'Unauthorized',
+        'BadRequest',
+        'ValueError',
+        'TypeError',
+        'RuntimeError',
+        'OSError',
+        'FileNotFoundError',
+        'PermissionError',
+        'LeaseLost',
+        'ArtifactError',
+        'CannotClassify',
+        'KeyboardInterrupt',
+        'InterruptedError',
+        'AssertionError',
+        'SystemExit',
+    }
+)
+_stage_lock = threading.Lock()
+_stage_last: dict[tuple[str, str, str, str], float] = {}
+_stage_counts: Counter[tuple[str, str, str, str]] = Counter()
+
+
+def stage_event(stage: str, event: str, **fields: Any) -> None:
+    # Names and numeric fields are never populated from customer records/paths.
+    if stage not in _STAGE_NAMES or event not in ('start', 'end', 'error', 'recovered', 'tick'):
+        raise ValueError('invalid stage event')
+    if not set(fields).issubset(_STAGE_FIELDS):
+        raise ValueError('invalid stage fields')
+    if 'check' in fields and fields['check'] not in _STAGE_CHECKS:
+        raise ValueError('invalid stage check')
+    if 'cause_type' in fields and fields['cause_type'] not in _STAGE_CAUSES:
+        fields['cause_type'] = 'OtherError'
+    if any(
+        not isinstance(value, (int, float, bool, type(None)))
+        for key, value in fields.items()
+        if key not in ('cause_type', 'check')
+    ):
+        raise ValueError('stage fields must be numeric')
+    with _stage_lock:
+        key = (stage, event, fields.get('check', ''), fields.get('cause_type', ''))
+        now = time.monotonic()
+        _stage_counts[key] += 1
+        if key in _stage_last and now - _stage_last[key] < 30:
+            return
+        _stage_last[key] = now
+        print(
+            json.dumps({'stage': stage, 'event': event, 'occurrences': _stage_counts[key], **fields}),
+            file=sys.stderr,
+            flush=True,
+        )
+
+
+@contextmanager
+def observed_stage(name: str, **fields: Any) -> Iterator[None]:
+    started = time.monotonic()
+    stage_event(name, 'start', **fields)
+    try:
+        yield
+    except BaseException as exc:
+        stage_event(name, 'error', duration_seconds=round(time.monotonic() - started, 3), cause_type=type(exc).__name__)
+        raise
+    else:
+        stage_event(name, 'end', duration_seconds=round(time.monotonic() - started, 3), **fields)
+
+
+_imports_started = 0.0
+if __name__ == '__main__':
+    _imports_started = time.monotonic()
+    stage_event('imports', 'start')
 
 from cryptography.fernet import Fernet
 from google.api_core.exceptions import (
@@ -98,6 +242,7 @@ from google.api_core.exceptions import (
 )
 from google.cloud import firestore, storage
 from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.storage.retry import DEFAULT_RETRY as GCS_DEFAULT_RETRY
 
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationSource
@@ -111,6 +256,9 @@ from utils.conversations.relevance_rules import deterministic_relevance
 from utils.conversations.wake_word import find_wake_word_matches
 from utils.release_probe import is_release_probe_uid
 
+if __name__ == '__main__':
+    stage_event('imports', 'end', duration_seconds=round(time.monotonic() - _imports_started, 3))
+
 JOBS = 'conversation_finalization_jobs'
 JOB_FILTERS = {
     'last_failure_code': 'recovery_structure_unavailable',
@@ -119,6 +267,8 @@ JOB_FILTERS = {
 }
 ALLOWED_FIELDS = {'discarded', 'relevance_decision', 'structured.title'}
 RETRYABLE = (Aborted, Conflict, DeadlineExceeded, ServiceUnavailable)
+# The SDK exposes no public predicate accessor; share its pinned retry policy.
+GCS_RETRY_PREDICATE = GCS_DEFAULT_RETRY._predicate  # pyright: ignore[reportPrivateUsage]
 AUDIO_DURATION_BUCKETS = ('0', '<5s', '5-30s', '30-120s', '>120s', 'unknown')
 BREAKDOWN_CATEGORIES = ('R', 'K', 'discard_protected', 'empty_not_discardable')
 logger = logging.getLogger('untitled_repair')
@@ -369,31 +519,81 @@ class RunLease:
             raise LeaseLost('artifact lease has no server timestamp')
         return stamp.timestamp()
 
+    def latest(self, blob: Any) -> Any:
+        # SDK Blob.reload() includes its cached generation in the request.
+        # An unbound Blob reads the live object, including in versioned buckets.
+        for attempt in range(3):
+            fresh = blob.bucket.blob(blob.name)
+            try:
+                fresh.reload(timeout=10, retry=None)
+                return fresh
+            except Exception as exc:
+                # Share the SDK policy, including HTTP status codes and wrapped
+                # transport failures, without enabling automatic write retries.
+                if not GCS_RETRY_PREDICATE(exc):
+                    raise
+                stage_event('lease_renew', 'error', check='metadata_read', cause_type=type(exc).__name__)
+                if attempt == 2:
+                    raise
+                time.sleep(0.25 * 2**attempt)
+        raise RuntimeError('unreachable')
+
     def server_now(self) -> float:
         created = self.probe_generation == 0
-        self.probe.upload_from_string(
-            json.dumps({'owner': self.owner}),
-            content_type='application/json',
-            if_generation_match=self.probe_generation,
-            timeout=10,
-            retry=None,
-        )
+        old_generation = self.probe_generation
+        try:
+            self.probe.upload_from_string(
+                json.dumps({'owner': self.owner}),
+                content_type='application/json',
+                if_generation_match=old_generation,
+                timeout=10,
+                retry=None,
+            )
+        except Exception as exc:
+            if not GCS_RETRY_PREDICATE(exc):
+                raise
+            stage_event('lease_probe', 'error', check='write', cause_type=type(exc).__name__)
+            fresh = self.latest(self.probe)
+            if int(fresh.generation) == old_generation or json.loads(
+                fresh.download_as_bytes(if_generation_match=int(fresh.generation), timeout=10, retry=None)
+            ) != {'owner': self.owner}:
+                raise LeaseLost('artifact clock probe commit unresolved') from None
+            self.probe = fresh
+            stage_event('lease_probe', 'recovered', from_generation=old_generation, generation=int(fresh.generation))
         self.probe_generation = int(self.probe.generation)
         return self.server_timestamp(self.probe, created=created)
 
     def _write(self, generation: int, *, ready: bool, expires: float) -> None:
-        self.blob.upload_from_string(
-            json.dumps(
-                {'owner': self.owner, 'expires': expires, 'clock': 'gcs', 'state': 'ready' if ready else 'reconciling'}
-            ),
-            content_type='application/json',
-            if_generation_match=generation,
-            timeout=10,
-            retry=None,
-        )
+        record = {'owner': self.owner, 'expires': expires, 'clock': 'gcs', 'state': 'ready' if ready else 'reconciling'}
+        try:
+            self.blob.upload_from_string(
+                json.dumps(record),
+                content_type='application/json',
+                if_generation_match=generation,
+                timeout=10,
+                retry=None,
+            )
+        except Exception as exc:
+            if not GCS_RETRY_PREDICATE(exc):
+                raise
+            stage_event('lease_renew', 'error', check='write', cause_type=type(exc).__name__)
+            # A lease PUT can commit before its response is lost. Adopt it only
+            # after a live read proves the exact intended body AND a new version.
+            fresh = self.latest(self.blob)
+            if (
+                int(fresh.generation) == generation
+                or json.loads(
+                    fresh.download_as_bytes(if_generation_match=int(fresh.generation), timeout=10, retry=None)
+                )
+                != record
+            ):
+                raise LeaseLost('artifact lease commit unresolved') from None
+            self.blob = fresh
+            stage_event('lease_renew', 'recovered', from_generation=generation, generation=int(fresh.generation))
         self.generation = int(self.blob.generation)
         self.expires = expires
         self.ready = ready
+        stage_event('lease_renew', 'tick', from_generation=generation, generation=self.generation)
 
     def acquire(self, *, fresh: bool = False) -> None:
         with self.lock:
@@ -401,9 +601,10 @@ class RunLease:
                 self.renew()
                 return
             generation = 0
+            stage_event('lease_acquire', 'start')
             now = self.server_now()
             try:
-                self.blob.reload(timeout=10, retry=None)
+                self.blob = self.latest(self.blob)
                 generation = int(self.blob.generation)
                 prior = json.loads(self.blob.download_as_bytes(if_generation_match=generation, timeout=10, retry=None))
                 expiry = prior.get('expires')
@@ -420,14 +621,17 @@ class RunLease:
                     or not math.isfinite(expiry)
                     or now < expiry + self.TAKEOVER_GRACE + self.SKEW_ALLOWANCE
                 ):
+                    stage_event('lease_acquire', 'error', check='occupied', generation=generation)
                     raise LeaseLost('artifact run lease is occupied')
             except NotFound:
                 pass
             try:
                 self._write(generation, ready=fresh, expires=self.server_now() + self.TTL)
-            except Exception:
+                stage_event('lease_acquire', 'end', from_generation=generation, generation=self.generation)
+            except Exception as exc:
                 self.lost = True
-                raise LeaseLost('artifact run lease acquisition failed') from None
+                stage_event('lease_acquire', 'error', check='write', cause_type=type(exc).__name__)
+                raise LeaseLost('artifact run lease acquisition failed') from exc
 
     def renew(self, *, require_ready: bool = False, reconciled: bool = False) -> None:
         with self.lock:
@@ -437,27 +641,55 @@ class RunLease:
             if require_ready and not self.ready:
                 raise LeaseLost('artifact run requires reconciliation')
             try:
-                self.blob.reload(timeout=10, retry=None)
+                self.blob = self.latest(self.blob)
                 if int(self.blob.generation) != self.generation:
+                    stage_event(
+                        'lease_renew',
+                        'error',
+                        check='generation_changed',
+                        from_generation=self.generation,
+                        generation=int(self.blob.generation),
+                    )
                     raise LeaseLost('artifact run lease generation changed')
                 record = json.loads(
                     self.blob.download_as_bytes(if_generation_match=self.generation, timeout=10, retry=None)
                 )
-                if (
-                    record.get('owner') != self.owner
-                    or record.get('expires') != self.expires
-                    or self.expires <= self.server_now()
-                ):
+                if record.get('owner') != self.owner or record.get('expires') != self.expires:
+                    stage_event('lease_renew', 'error', check='owner_changed', generation=self.generation)
                     raise LeaseLost('artifact run lease owner changed')
+                remaining = self.expires - self.server_now()
+                if remaining <= 0:
+                    stage_event(
+                        'lease_renew',
+                        'error',
+                        check='expired',
+                        generation=self.generation,
+                        remaining_seconds=round(remaining, 3),
+                    )
+                    raise LeaseLost('artifact run lease expired')
                 self._write(self.generation, ready=self.ready or reconciled, expires=self.server_now() + self.TTL)
-            except Exception:
+            except Exception as exc:
                 self.lost = True
                 self.stop.set()
-                raise LeaseLost('artifact run lease renewal failed') from None
+                stage_event(
+                    'lease_renew',
+                    'error',
+                    generation=self.generation,
+                    check='ownership_or_io',
+                    cause_type=type(exc).__name__,
+                )
+                raise LeaseLost('artifact run lease renewal failed') from exc
+
+    def check_alive(self) -> None:
+        with self.lock:
+            if self.lost or self.generation is None:
+                raise LeaseLost('artifact run lease lost')
 
     def start(self) -> None:
         if self.thread is not None:
             return
+
+        stage_event('heartbeat', 'start')
 
         def heartbeat() -> None:
             while not self.stop.wait(self.TTL / 3):
@@ -478,7 +710,9 @@ class RunLease:
                 return
             try:
                 self._write(self.generation, ready=False, expires=self.server_now())
-            except Exception:
+                stage_event('lease_release', 'end', generation=self.generation)
+            except Exception as exc:
+                stage_event('lease_release', 'error', check='write', cause_type=type(exc).__name__)
                 pass  # generation fence prevents releasing another owner's lease
             self.lost = True
 
@@ -491,7 +725,7 @@ class ArtifactMirror:
     run.lock and incomplete atomic-save temporaries are local control files.
     """
 
-    def __init__(self, uri: str, client: Any, *, heartbeat: bool = False):
+    def __init__(self, uri: str, client: Any, *, heartbeat: bool = True):
         parsed = urlsplit(uri)
         prefix = parsed.path.strip('/')
         if (
@@ -541,6 +775,7 @@ class ArtifactMirror:
         self.lease.acquire()
         if self.heartbeat:
             self.lease.start()
+        self.manifest = self.bucket.blob(self.manifest.name)
         self.manifest.reload()
         self.generation = int(self.manifest.generation)
         snapshot = json.loads(self.manifest.download_as_bytes(if_generation_match=self.generation))
@@ -586,6 +821,8 @@ class ArtifactMirror:
             os.replace(temporary, destination)
 
     def upload(self, path: Path) -> None:
+        started = time.monotonic()
+        stage_event('snapshot', 'start', files=len(self.files))
         self.lease.renew()
         if self.failed:
             raise RuntimeError('artifact publication requires fresh resume')
@@ -609,15 +846,19 @@ class ArtifactMirror:
             self.publish(files)
         else:
             # Even an unchanged writer must detect a concurrent publication.
+            self.manifest = self.bucket.blob(self.manifest.name)
             self.manifest.reload()
             if int(self.manifest.generation) != self.generation:
                 self.failed = True
                 raise RuntimeError('concurrent artifact writer')
 
+        stage_event('snapshot', 'end', files=len(self.files), duration_seconds=round(time.monotonic() - started, 3))
+
     def immutable(self, name: str, record: dict[str, Any], *, intent: bool = False) -> None:
         if self.failed:
             raise ArtifactError('artifact publication stopped')
         self.lease.renew(require_ready=intent)
+        stage_event('intent' if intent else 'receipt', 'tick')
         data = json.dumps(record, sort_keys=True).encode()
         blob = self.bucket.blob(self.prefix + name)
         try:
@@ -1108,6 +1349,8 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
         'apply': log.config['apply'],
     }
     audit_written = False
+    if log.artifacts is not None:
+        log.artifacts.lease.check_alive()
     job: dict[str, Any] = {}
     try:
         job_snapshot = runtime.client.collection(JOBS).document(job_id).get()
@@ -1194,7 +1437,9 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
     return dict(record, outcome=reason)
 
 
-def discovery_pages(client: Any, cursor: str | None, page_size: int) -> Iterable[list[Any]]:
+def discovery_pages(
+    client: Any, cursor: str | None, page_size: int, lease: RunLease | None = None
+) -> Iterable[list[Any]]:
     while True:
         query = client.collection(JOBS)
         for field, value in JOB_FILTERS.items():
@@ -1202,7 +1447,12 @@ def discovery_pages(client: Any, cursor: str | None, page_size: int) -> Iterable
         query = query.order_by('__name__').limit(page_size)
         if cursor:
             query = query.start_after({'__name__': client.collection(JOBS).document(cursor)})
-        page = list(query.stream())
+        if lease is not None:
+            lease.check_alive()
+        with observed_stage('discovery'):
+            page = list(query.stream())
+        if lease is not None:
+            lease.check_alive()
         if not page:
             return
         yield page
@@ -1263,7 +1513,8 @@ def run(
     error_window: int = 50,
 ) -> dict[str, Any]:
     limiter = RateLimiter(max_writes_per_second)
-    reconcile_pending(runtime, log)
+    with observed_stage('reconcile'):
+        reconcile_pending(runtime, log)
     if log.unresolved_intents():
         summary: dict[str, Any] = {
             'apply': log.config['apply'],
@@ -1297,7 +1548,11 @@ def run(
     uids = set(log.config['uids'])
     ids = set(log.config['conversation_ids'])
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for page in discovery_pages(runtime.client, log.cursor, page_size):
+        for page in discovery_pages(
+            runtime.client, log.cursor, page_size, log.artifacts.lease if log.artifacts else None
+        ):
+            page_started = time.monotonic()
+            stage_event('page', 'start', count=len(page), processed=processed)
             chosen = [
                 s.id
                 for s in page
@@ -1311,6 +1566,8 @@ def run(
                 complete_page = False
             # Submit at most workers at a time; no unbounded executor queue.
             for offset in range(0, len(chosen), workers):
+                batch_started = time.monotonic()
+                stage_event('classification', 'start', count=len(chosen[offset : offset + workers]))
                 futures = [
                     pool.submit(evaluate, runtime, log, job_id, limiter=limiter)
                     for job_id in chosen[offset : offset + workers]
@@ -1335,6 +1592,12 @@ def run(
                     error = result['outcome'] == 'error'
                     recent.append(error)
                     frozen |= error
+                stage_event(
+                    'classification',
+                    'end',
+                    count=len(futures),
+                    duration_seconds=round(time.monotonic() - batch_started, 3),
+                )
                 if len(recent) == error_window and sum(recent) / error_window > error_threshold:
                     stopped = True
                     break
@@ -1342,6 +1605,15 @@ def run(
                 log.checkpoint(page[-1].id)
             else:
                 log.mirror()  # cursor freezes must never freeze durable pages
+            if log.artifacts is not None:
+                log.artifacts.lease.check_alive()
+            stage_event(
+                'page',
+                'end',
+                count=len(page),
+                processed=processed,
+                duration_seconds=round(time.monotonic() - page_started, 3),
+            )
             if stopped or (limit is not None and processed >= limit):
                 break
     if frozen or any(
@@ -1586,7 +1858,7 @@ def main() -> int:
         if args.conversation_id_file
         else []
     )
-    config = {
+    config: dict[str, Any] = {
         'apply': args.apply,
         'include_kept_titles': args.include_kept_titles,
         'uids': sorted({digest(uid) for uid in args.uid}),
@@ -1600,10 +1872,13 @@ def main() -> int:
     logging.basicConfig(level=logging.WARNING, format='%(levelname)s %(name)s %(message)s')
     logs: list[RunLog] = []
     locks: list[IO[Any]] = []
-    storage_client = storage.Client() if args.artifact_uri or (args.rollback or '').startswith('gs://') else None
+    stage_event('arguments', 'end', uid_count=len(config['uids']), workers=args.workers, apply=args.apply)
+    with observed_stage('storage_client'):
+        storage_client = storage.Client() if args.artifact_uri or (args.rollback or '').startswith('gs://') else None
     mirror = ArtifactMirror(args.artifact_uri, storage_client, heartbeat=True) if args.artifact_uri else None
     mirrors = [mirror] if mirror is not None else []
     previous_sigterm = None
+    primary_error: BaseException | None = None
     if mirror is not None and threading.current_thread() is threading.main_thread():
 
         def stop_for_sigterm(signum: int, frame: Any) -> None:
@@ -1619,21 +1894,25 @@ def main() -> int:
             locks.append(lock_file)
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             if mirror is not None:
-                mirror.download(path)
+                with observed_stage('artifact_download'):
+                    mirror.download(path)
             log = RunLog(path, config, resume=True)
         else:
             if path.exists():
                 raise ValueError('run directory already exists')
             if mirror is not None:
-                mirror.create()
+                with observed_stage('artifact_create'):
+                    mirror.create()
             log = RunLog(path, config)
             lock_file = (path / 'run.lock').open('a')
             locks.append(lock_file)
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         logs.append(log)
         log.artifacts = mirror
-        log.mirror()  # Publish config and audit.key before any Firestore work.
-        runtime = Runtime(importlib.import_module('database._client').get_firestore_client())
+        with observed_stage('initial_snapshot'):
+            log.mirror()  # Publish config and audit.key before any Firestore work.
+        with observed_stage('runtime_client'):
+            runtime = Runtime(importlib.import_module('database._client').get_firestore_client())
         if args.rollback:
             source_mirror = None
             if args.rollback.startswith('gs://'):
@@ -1661,21 +1940,23 @@ def main() -> int:
             locks.append(source_lock)
             fcntl.flock(source_lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             if source_mirror is not None:
-                source_mirror.download(source_path, archive_parent=path.parent)
+                with observed_stage('artifact_download'):
+                    source_mirror.download(source_path, archive_parent=path.parent)
             source_config = json.loads((source_path / 'config.json').read_text())
             source = RunLog(source_path, source_config, resume=True)
             source.artifacts = source_mirror
             logs.append(source)
-            summary = rollback(
-                runtime,
-                source,
-                log,
-                qps=args.max_writes_per_second,
-                workers=args.workers,
-                limit=args.limit,
-                error_threshold=args.error_threshold,
-                error_window=args.error_window,
-            )
+            with observed_stage('rollback'):
+                summary = rollback(
+                    runtime,
+                    source,
+                    log,
+                    qps=args.max_writes_per_second,
+                    workers=args.workers,
+                    limit=args.limit,
+                    error_threshold=args.error_threshold,
+                    error_window=args.error_window,
+                )
         else:
             summary = run(
                 runtime,
@@ -1687,6 +1968,10 @@ def main() -> int:
                 error_threshold=args.error_threshold,
                 error_window=args.error_window,
             )
+    except BaseException as exc:
+        stage_event('shutdown', 'error', cause_type=type(exc).__name__)
+        primary_error = exc
+        raise
     finally:
         try:
             # Attempt every source/target even if an earlier upload fails. Any
@@ -1694,10 +1979,11 @@ def main() -> int:
             failures: list[Exception] = []
             for journal in logs:
                 try:
-                    journal.mirror()
+                    with observed_stage('final_upload'):
+                        journal.mirror()
                 except Exception as exc:
                     failures.append(exc)
-            if failures:
+            if failures and primary_error is None:
                 raise failures[0]
         finally:
             for remote in reversed(mirrors):
@@ -1706,6 +1992,7 @@ def main() -> int:
                 lock_file.close()
             if previous_sigterm is not None:
                 signal.signal(signal.SIGTERM, previous_sigterm)
+    stage_event('shutdown', 'end', count=summary['exit_code'])
     print(json.dumps(summary, sort_keys=True))
     return summary['exit_code']
 
