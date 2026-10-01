@@ -50,7 +50,12 @@ from tests.support.firestore_query_drivers import (
     function_body_digest,
     run_driver,
 )
-from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
+from tests.support.firestore_shape_recorder import (
+    QueryFilter,
+    QueryShape,
+    RecordingFirestore,
+    install_recorder,
+)
 
 import database.conversations
 
@@ -620,6 +625,55 @@ def test_export_schema_and_counts(export_payload):
 
 def test_export_is_deterministic(export_pair):
     assert export_pair[0] == export_pair[1]
+
+
+def test_evaluate_shapes_served_duplicate_does_not_erase_unserved():
+    """A served representative must not drop an unserved one sharing the stable id."""
+    sig = {'collection_group': 'c'}
+    gap = _entry('dup-certain', served=False, signature=sig)
+    served = _entry('dup-certain', served=True, signature=sig)
+    for entries in ([served, gap], [gap, served]):
+        assert 'dup-certain' in export_mod.evaluate_shapes(entries)['known_gaps']
+    uncertain_gap = _entry('dup-uncertain', served=False, uncertain=True, reason='r', signature=sig)
+    served_uncertain = _entry('dup-uncertain', served=True, uncertain=True, reason='r', signature=sig)
+    for entries in ([served_uncertain, uncertain_gap], [uncertain_gap, served_uncertain]):
+        assert 'dup-uncertain' in export_mod.evaluate_shapes(entries)['uncertain']
+
+
+def test_same_signature_singleton_and_multi_in_retain_refused_case():
+    """Stable ids exclude in-list cardinality, but service now depends on it."""
+    fields = lambda *prefix: [
+        *[{'fieldPath': field, 'order': 'ASCENDING'} for field in prefix],
+        {'fieldPath': 'created_at', 'order': 'ASCENDING'},
+        {'fieldPath': '__name__', 'order': 'ASCENDING'},
+    ]
+    manifest = {
+        'indexes': [
+            {'collectionGroup': 'conversations', 'queryScope': 'COLLECTION', 'fields': fields('status', 'a')},
+            {'collectionGroup': 'conversations', 'queryScope': 'COLLECTION', 'fields': fields('status', 'b')},
+        ],
+        'fieldOverrides': [],
+    }
+
+    def make(values):
+        return QueryShape(
+            collection_group='conversations',
+            filters=(
+                QueryFilter('a', '==', 1),
+                QueryFilter('b', '==', 1),
+                QueryFilter('status', 'in', values),
+            ),
+            orders=(('created_at', 'ASCENDING'),),
+        )
+
+    singleton = export_mod.shape_verdict(make([1]), manifest)
+    multi = export_mod.shape_verdict(make([1, 2]), manifest)
+    assert singleton['id'] == multi['id']
+    assert singleton['served'] is True
+    assert multi['served'] is False
+    for entries in ([singleton, multi], [multi, singleton]):
+        computed = export_mod.evaluate_shapes(entries)
+        assert singleton['id'] in computed['uncertain']
 
 
 def test_export_main_writes_exact_path(tmp_path, driver_results, monkeypatch, capsys):

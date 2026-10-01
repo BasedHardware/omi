@@ -1116,6 +1116,16 @@ OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
     ['outcome'],
 )
 
+# Per task written by a conversation's action-item replace
+# (utils/conversations/action_item_identity.py). Emitted from every processing host,
+# several unscraped, so the `event=action_item_identity` log line is the backup.
+OMI_ACTION_ITEM_IDENTITY_TOTAL = Counter(
+    'omi_action_item_identity_total',
+    'Task identity on a conversation task replace. outcome is a closed set: '
+    'reused_identity|new|skipped_already_exported|disabled',
+    ['outcome'],
+)
+
 # Conversation shape at first durable completed persist. source is a closed
 # 6-value vocabulary (live/sync/import/integration/desktop/unknown). Sync
 # children are emitted from backend-sync, which is not scraped today; the
