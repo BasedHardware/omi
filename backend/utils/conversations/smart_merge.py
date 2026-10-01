@@ -21,6 +21,10 @@ commits, N is a donor: cleanup and refresh failures raise
 resumes them on every later attempt, regardless of mode, and never runs N's
 own derived effects. The finalizer runs that resume before its fanout claim,
 which fences the discarded donor; a failed refresh releases its own lease.
+A refresh lease held by another live invocation is waited out inside the
+attempt (it is contention, not a failure, and must not spend the job's attempt
+budget); an abandoned lease is taken over once it expires. A deferred donor
+retraction (legal hold, destructive gate) never blocks the survivor refresh.
 
 Races are settled by the survivor revision (``smart_merge.revision`` and
 ``refreshed_revision``): an absorb needs no refresh owed, so a refresh never
@@ -29,8 +33,10 @@ persists a transcript older than the latest absorb.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
+import time
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
@@ -43,6 +49,9 @@ from config.conversation_smart_merge import (
     PRECEDING_QUERY_LIMIT,
     QUESTION_VERSION,
     REFRESH_LEASE_SECONDS,
+    REFRESH_WAIT_FIRST_POLL_SECONDS,
+    REFRESH_WAIT_MAX_POLL_SECONDS,
+    REFRESH_WAIT_SECONDS,
     SmartMergeMode,
     smart_merge_mode,
     smart_merge_uid_allowed,
@@ -98,6 +107,18 @@ class SmartMergeIncomplete(RuntimeError):
     """An absorb committed but its cleanup or survivor refresh did not finish; retry the job."""
 
 
+class RefreshLeaseBusy(SmartMergeIncomplete):
+    """Another invocation holds a live refresh lease on the survivor that still owes a refresh."""
+
+    def __init__(self) -> None:
+        super().__init__('refresh_lease_busy')
+
+
+# Test seams for a fake clock; production sleeps on the event loop (no thread held).
+_sleep = asyncio.sleep
+_monotonic = time.monotonic
+
+
 # --------------------------------------------------------------------------- entry
 
 
@@ -115,14 +136,54 @@ async def smart_merge_step(
     free donor check, so ``off`` stays I/O-free.
     """
     if is_donor(initial_row):
-        await run_blocking(postprocess_executor, finish_absorb, uid, conversation_id, owner=owner, resumed=True)
+        await _finish_absorb_behind_live_holder(uid, conversation_id, owner=owner, resumed=True)
         return True
     mode = smart_merge_mode()
     if mode is SmartMergeMode.OFF:
         return False
-    return await run_blocking(
-        postprocess_executor, decide_and_apply, uid, conversation_id, mode=mode, trigger=trigger, owner=owner
-    )
+    try:
+        return await run_blocking(
+            postprocess_executor, decide_and_apply, uid, conversation_id, mode=mode, trigger=trigger, owner=owner
+        )
+    except RefreshLeaseBusy:
+        # The absorb committed and N is a donor; only its survivor refresh waits.
+        await _finish_absorb_behind_live_holder(uid, conversation_id, owner=owner, resumed=False, busy=True)
+        return True
+
+
+async def _finish_absorb_behind_live_holder(
+    uid: str, donor_id: str, *, owner: str, resumed: bool, busy: bool = False
+) -> None:
+    """Run ``finish_absorb``, waiting out a refresh lease another live invocation holds.
+
+    A busy lease is contention, not a failure: failing the attempt would send
+    the job straight back through the retry path, spending its attempt budget
+    in about a second and dead-lettering it before a crashed holder's lease can
+    expire. Never claims a live lease (the claim transaction rejects one), so
+    two refreshes of one survivor never overlap; an abandoned lease is taken
+    over by the normal claim once it expires, under this invocation's own token.
+    Sleeps on the event loop, holding no executor thread, and gives up (one
+    failed attempt) only after a full lease lifetime of polling.
+    """
+    deadline: Optional[float] = None
+    delay = REFRESH_WAIT_FIRST_POLL_SECONDS
+    while True:
+        if busy:
+            now = _monotonic()
+            if deadline is None:
+                deadline = now + REFRESH_WAIT_SECONDS
+                record_conversation_smart_merge_refresh('lease_busy')
+                logger.info('event=smart_merge outcome=refresh_wait')
+            if now >= deadline:
+                logger.warning('event=smart_merge outcome=incomplete step=refresh cause=refresh_lease_busy')
+                raise RefreshLeaseBusy()
+            await _sleep(min(delay, deadline - now))
+            delay = min(delay * 2, REFRESH_WAIT_MAX_POLL_SECONDS)
+        try:
+            await run_blocking(postprocess_executor, finish_absorb, uid, donor_id, owner=owner, resumed=resumed)
+            return
+        except RefreshLeaseBusy:
+            busy = True
 
 
 def decide_and_apply(
@@ -248,6 +309,8 @@ def _decide(
         try:
             refresh_survivor(uid, survivor_id, owner=owner)
         except Exception as error:
+            if isinstance(error, RefreshLeaseBusy):
+                record_conversation_smart_merge_refresh('lease_busy')
             logger.warning(
                 'event=smart_merge outcome=owed_refresh_failed exception_type=%s uid=%s survivor=%s',
                 type(error).__name__,
@@ -446,6 +509,9 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
     Idempotent: the cleanup receipt and the survivor's ``refreshed_revision``
     make a repeat after a completed run a read-only no-op. ``resumed`` marks a
     finalization retry of the donor; its success is logged as ``resumed_ok``.
+    A deferred retraction leaves its receipt pending and raises only after the
+    refresh ran. ``RefreshLeaseBusy`` passes through unlogged: the caller waits
+    for the live holder and reports only if it gives up.
     """
     step = 'cleanup'
     try:
@@ -455,9 +521,17 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
         survivor_id = str(smart_merge_state(donor).get('survivor_id') or '')
         if not survivor_id:
             return
-        _cleanup_donor(uid, donor_id, donor, survivor_id)
+        retraction_deferred = _cleanup_donor(uid, donor_id, donor, survivor_id)
         step = 'refresh'
         refresh_survivor(uid, survivor_id, owner=owner)
+        if retraction_deferred:
+            # A held source still owes retraction; keep the job retryable for it.
+            # The sync bridge also replays the pending receipt on a later
+            # append to the survivor (utils/sync/bridge.py), past this budget.
+            step = 'cleanup'
+            raise SmartMergeIncomplete('donor_cleanup_deferred')
+    except RefreshLeaseBusy:
+        raise
     except Exception as error:
         # Bounded: no ids, no message text (provider errors can quote transcript).
         logger.warning('event=smart_merge outcome=incomplete step=%s cause=%s', step, _incomplete_cause(error))
@@ -471,8 +545,8 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
 _DEFERRED_RETRACTION = (DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable)
 
 
-def _cleanup_donor(uid: str, donor_id: str, donor: Mapping[str, Any], survivor_id: str) -> None:
-    """The sync bridge's receipt protocol, for one donor."""
+def _cleanup_donor(uid: str, donor_id: str, donor: Mapping[str, Any], survivor_id: str) -> bool:
+    """The sync bridge's receipt protocol, for one donor; True when its retraction was deferred."""
     donor_revision = donor.get('sync_content_revision')
     survivor = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE) or {}
     live_survivor = bool(survivor) and not survivor.get('deleted')
@@ -508,24 +582,30 @@ def _cleanup_donor(uid: str, donor_id: str, donor: Mapping[str, Any], survivor_i
     if not deferred and (needs_cleanup or needs_copy):
         if not mark_sync_bridge_cleaned(uid, donor_id, donor_revision, audio_target):
             raise SmartMergeIncomplete('donor_receipt_revision_changed')
-    if deferred:
-        # A held source still owes retraction. Do not close its only durable retry.
-        raise SmartMergeIncomplete('donor_cleanup_deferred')
+    # A held source keeps its receipt pending; the survivor refresh does not wait for it.
+    return deferred
+
+
+def _invocation_owner(owner: str) -> str:
+    """Job ids survive lease expiry and redelivery; each invocation gets its own lease token,
+    so a late release or completion by an earlier invocation cannot touch a newer one's lease."""
+    return f'{owner}:{uuid4().hex}'
 
 
 def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
-    """Regenerate the survivor once for its current revision, under a short lease."""
-    # Job ids survive lease expiry and redelivery. Each invocation needs its own
-    # token so a late failure cannot release a newer delivery of the same job.
-    owner = f'{owner}:{uuid4().hex}'
+    """Regenerate the survivor once for its current revision, under a short lease.
+
+    Raises ``RefreshLeaseBusy`` when another invocation's lease is still live and
+    the refresh is still owed; an expired lease is taken over by the claim.
+    """
+    owner = _invocation_owner(owner)
     claimed = smart_merge_db.claim_survivor_refresh(
         uid, survivor_id, owner=owner, now=datetime.now(timezone.utc), lease_seconds=REFRESH_LEASE_SECONDS
     )
     if claimed is None:
         row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
         if row and not row.get('deleted') and refresh_owed(row):
-            record_conversation_smart_merge_refresh('lease_busy')
-            raise SmartMergeIncomplete('refresh_lease_busy')
+            raise RefreshLeaseBusy()
         return
     try:
         _refresh_claimed(uid, survivor_id, claimed, owner=owner)

@@ -109,4 +109,16 @@ PRECEDING_QUERY_LIMIT = 6
 # A survivor refresh lease outlives one slow reprocess, never a crashed worker for long.
 REFRESH_LEASE_SECONDS = 10 * 60
 
+# A donor whose survivor another invocation is refreshing waits for that holder
+# inside its finalization attempt (polls back off from the first to the max
+# interval) instead of failing it: a failed attempt is redelivered at once and
+# a busy lease would spend the job's whole attempt budget in about a second.
+# One lease lifetime plus one poll covers any lease seen at the first poll,
+# including a crashed holder's, which then expires and is taken over. The
+# finalization job lease, Cloud Tasks dispatch deadline and handler timeout
+# (1500 s each) leave room for the wait plus one refresh.
+REFRESH_WAIT_FIRST_POLL_SECONDS = 2.0
+REFRESH_WAIT_MAX_POLL_SECONDS = 30.0
+REFRESH_WAIT_SECONDS = REFRESH_LEASE_SECONDS + REFRESH_WAIT_MAX_POLL_SECONDS
+
 QUESTION_VERSION = 'adjacent_merge_a_iv1'

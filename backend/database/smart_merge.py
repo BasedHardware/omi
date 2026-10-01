@@ -202,7 +202,14 @@ def claim_survivor_refresh(
     lease_seconds: int,
     firestore_client: Any = None,
 ) -> Optional[int]:
-    """Take the refresh lease for an owed survivor refresh; the revision to refresh, or ``None``."""
+    """Take the refresh lease for an owed survivor refresh; the revision to refresh, or ``None``.
+
+    A live lease excludes every claimant, including another invocation of the
+    same job. An expired one (its holder crashed, or outlived the lease) is
+    taken over in this transaction under the caller's new token; every later
+    lease-holder write (processing persist, checkpoint, completion, release)
+    compares that token, so the previous holder can no longer touch it.
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = _collection(client, uid).document(survivor_id)
 
