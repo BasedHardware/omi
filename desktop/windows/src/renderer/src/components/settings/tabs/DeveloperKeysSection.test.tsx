@@ -4,8 +4,9 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { DeveloperKeysSection } from './DeveloperKeysSection'
 import { SettingsSearchProvider } from '../SettingsSearchProvider'
 
+const { getIdToken } = vi.hoisted(() => ({ getIdToken: vi.fn() }))
 vi.mock('../../../lib/firebase', () => ({
-  auth: { currentUser: { getIdToken: () => Promise.resolve('test-token') } }
+  auth: { currentUser: { getIdToken } }
 }))
 vi.mock('../../../lib/billing', () => ({
   fetchSubscription: vi.fn().mockResolvedValue({}),
@@ -16,6 +17,7 @@ const validatedProviders = vi.fn()
 const enroll = vi.fn()
 
 beforeEach(() => {
+  getIdToken.mockReset().mockResolvedValue('test-token')
   validatedProviders.mockReset()
   enroll.mockReset()
   ;(window as unknown as { omi: unknown }).omi = {
@@ -79,6 +81,50 @@ describe('DeveloperKeysSection provider-scoped BYOK', () => {
     expect(enroll).toHaveBeenCalledWith('test-token')
     expect(screen.getByText('Transcription: Omi plan allowance')).not.toBeNull()
     expect(screen.getByText('Chat and AI: BYOK keys active')).not.toBeNull()
+    expect(screen.queryByText('Transcription: Deepgram BYOK')).toBeNull()
+  })
+
+  it('refreshes enrollment after saving a replacement key while signed out', async () => {
+    validatedProviders
+      .mockResolvedValueOnce(['openrouter', 'deepgram'])
+      .mockResolvedValueOnce(['openrouter'])
+    getIdToken.mockResolvedValue(undefined)
+    render(<DeveloperKeysSection />, { wrapper: SettingsSearchProvider })
+    expect(await screen.findByText('Transcription: Deepgram BYOK')).not.toBeNull()
+
+    vi.useFakeTimers()
+    fireEvent.change(screen.getByDisplayValue('saved-key'), {
+      target: { value: 'replacement-key' }
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600)
+    })
+
+    expect(enroll).not.toHaveBeenCalled()
+    expect(screen.getByText('Transcription: Omi plan allowance')).not.toBeNull()
+    expect(screen.queryByText('Transcription: Deepgram BYOK')).toBeNull()
+  })
+
+  it('clears checking and treats enrollment as unknown when its status lookup fails', async () => {
+    validatedProviders
+      .mockResolvedValueOnce(['openrouter', 'deepgram'])
+      .mockRejectedValueOnce(new Error('IPC unavailable'))
+    enroll.mockResolvedValue({ active: true, results: { deepgram: { ok: true } } })
+    render(<DeveloperKeysSection />, { wrapper: SettingsSearchProvider })
+    expect(await screen.findByText('Transcription: Deepgram BYOK')).not.toBeNull()
+
+    vi.useFakeTimers()
+    fireEvent.change(screen.getByDisplayValue('saved-key'), {
+      target: { value: 'replacement-key' }
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600)
+    })
+
+    expect(screen.queryAllByText('Checking…')).toHaveLength(0)
+    expect(
+      screen.getByText('Transcription status unavailable — reopen settings to check')
+    ).not.toBeNull()
     expect(screen.queryByText('Transcription: Deepgram BYOK')).toBeNull()
   })
 })

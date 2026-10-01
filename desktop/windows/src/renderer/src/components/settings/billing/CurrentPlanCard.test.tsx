@@ -11,6 +11,7 @@ describe('CurrentPlanCard provider-scoped BYOK', () => {
     ['plan_within_allowance', 'Transcription: Omi plan allowance'],
     ['plan_allowance_exhausted', 'Transcription: Omi plan allowance'],
     ['byok', 'Transcription: Deepgram BYOK'],
+    ['allowance_unavailable', 'Transcription allowance unavailable — refresh to check'],
     [undefined, 'Transcription allowance unavailable — refresh to check']
   ])('shows the server transcription allowance for %s', (reason, expected) => {
     const sub: UserSubscriptionResponse = {

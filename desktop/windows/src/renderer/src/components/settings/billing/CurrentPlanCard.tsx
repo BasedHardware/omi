@@ -59,7 +59,8 @@ export function CurrentPlanCard(props: {
           <div>
             {sub.transcription_allowance?.reason === 'byok'
               ? 'Transcription: Deepgram BYOK'
-              : sub.transcription_allowance
+              : sub.transcription_allowance &&
+                  sub.transcription_allowance.reason !== 'allowance_unavailable'
                 ? 'Transcription: Omi plan allowance'
                 : 'Transcription allowance unavailable — refresh to check'}
           </div>

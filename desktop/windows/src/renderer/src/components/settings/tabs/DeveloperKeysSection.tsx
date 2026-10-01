@@ -72,7 +72,7 @@ export function DeveloperKeysSection(): React.JSX.Element {
   // Whether the backend enrollment actually succeeded — the banner must not
   // claim "Free plan active" off key presence alone: an invalid or rejected key
   // stays in the fields while activation stays off.
-  const [validatedProviders, setValidatedProviders] = useState<ByokProvider[]>([])
+  const [validatedProviders, setValidatedProviders] = useState<ByokProvider[] | null>(null)
   const [reveal, setReveal] = useState<Record<ByokProvider, boolean>>({
     openrouter: false,
     openai: false,
@@ -97,14 +97,17 @@ export function DeveloperKeysSection(): React.JSX.Element {
       keysRef.current = merged
       setKeys(merged)
     })
-    void window.omi.byokValidatedProviders().then(setValidatedProviders)
+    void window.omi
+      .byokValidatedProviders()
+      .then(setValidatedProviders)
+      .catch(() => setValidatedProviders(null))
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [])
 
-  const hasActiveLLMByok = validatedProviders.some((p) => BYOK_LLM_PROVIDERS.includes(p))
-  const hasTranscriptionByok = validatedProviders.includes('deepgram')
+  const hasActiveLLMByok = validatedProviders?.some((p) => BYOK_LLM_PROVIDERS.includes(p)) ?? false
+  const hasTranscriptionByok = validatedProviders?.includes('deepgram') ?? false
   const hasAnyKey = BYOK_PROVIDERS.some((p) => keys[p].trim().length > 0)
 
   // Persist the current key set, then reconcile backend activation. Runs
@@ -120,11 +123,14 @@ export function DeveloperKeysSection(): React.JSX.Element {
     const token = await auth.currentUser?.getIdToken().catch(() => undefined)
     if (!token) {
       // Not signed in — keys are saved; enrollment happens once authenticated.
+      const validated = await window.omi.byokValidatedProviders().catch(() => null)
+      if (gen !== enrollGenRef.current) return
+      setValidatedProviders(validated)
       setChecking(false)
       return
     }
     const result = await window.omi.byokEnroll(token)
-    const validated = await window.omi.byokValidatedProviders()
+    const validated = await window.omi.byokValidatedProviders().catch(() => null)
     if (gen !== enrollGenRef.current) return
     setValidatedProviders(validated)
     setChecking(false)
@@ -212,7 +218,9 @@ export function DeveloperKeysSection(): React.JSX.Element {
           <div className="mt-2 text-sm text-text-tertiary">
             {hasTranscriptionByok
               ? 'Transcription: Deepgram BYOK'
-              : 'Transcription: Omi plan allowance'}
+              : validatedProviders
+                ? 'Transcription: Omi plan allowance'
+                : 'Transcription status unavailable — reopen settings to check'}
           </div>
         </div>
       </div>
