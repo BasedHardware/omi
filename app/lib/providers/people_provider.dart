@@ -243,6 +243,11 @@ class PeopleProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void deselectAll(Iterable<String> personIds) {
+    selectedIds.removeAll(personIds);
+    notifyListeners();
+  }
+
   void toggleSelected(String personId) {
     if (people.any((p) => p.id == personId && p.pinned)) return;
     if (!selectedIds.remove(personId)) selectedIds.add(personId);
