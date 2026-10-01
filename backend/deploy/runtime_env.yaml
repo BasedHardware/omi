@@ -2107,7 +2107,7 @@ environments:
             value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '0'
+            value: '5'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
             value: '8'
