@@ -153,3 +153,14 @@ def test_retrieve_file_paths_v2_write_failure_keeps_private_filename_out_of_resp
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == 'Unable to stage sync file'
     assert upload.filename not in exc_info.value.detail
+
+
+def test_retrieve_file_paths_v2_rejects_traversal_job_id(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    upload = _StubUploadFile(filename='rec_1720000000.bin')
+
+    for bad_job_id in ('..', '.', 'job/sub', 'job\\sub', '', '   '):
+        with pytest.raises(HTTPException) as exc_info:
+            mod._retrieve_file_paths_v2([upload], 'u1', bad_job_id)
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == 'Invalid job ID'

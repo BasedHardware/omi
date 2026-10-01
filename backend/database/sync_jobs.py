@@ -171,8 +171,8 @@ def create_sync_job(
     if isinstance(total_segments, bool) or not isinstance(total_segments, int) or total_segments < 0:
         raise ValueError('total_segments must be a non-negative integer')
     if job_id is not None:
-        if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
-            raise ValueError('job_id must be a non-empty string without slashes')
+        if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id or '\\' in job_id or job_id.strip() in ('.', '..'):
+            raise ValueError('job_id must be a non-empty string without slashes or path traversal')
         job_id = job_id.strip()
     else:
         job_id = str(uuid.uuid4())
@@ -218,7 +218,7 @@ def create_sync_job(
 
 
 def delete_sync_job(job_id: str) -> None:
-    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id or '\\' in job_id or job_id.strip() in ('.', '..'):
         return
     r.delete(_key(f'{JOB_KEY_PREFIX}{job_id.strip()}'))
 
@@ -231,7 +231,7 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
     the run lease, re-read, then use the fenced finalizer. Inline work owns
     its own terminal transition, including executor leaves still in flight.
     """
-    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id or '\\' in job_id or job_id.strip() in ('.', '..'):
         return None
     data = r.get(_key(f'{JOB_KEY_PREFIX}{job_id.strip()}'))
     if not data:
@@ -631,9 +631,9 @@ def _sync_job_finalization_updates(
     failed = result.get('failed_segments', 0)
     total = result.get('total_segments', 0)
     if not isinstance(failed, int) or isinstance(failed, bool) or failed < 0:
-        failed = 0
+        raise ValueError('failed_segments must be a non-negative integer')
     if not isinstance(total, int) or isinstance(total, bool) or total < 0:
-        total = 0
+        raise ValueError('total_segments must be a non-negative integer')
 
     if total > 0 and failed >= total:
         status = 'failed'

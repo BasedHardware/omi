@@ -1585,6 +1585,9 @@ def _cleanup_files(file_paths: Iterable[str]):
 
 def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id or '\\' in job_id or job_id.strip() in ('.', '..'):
+        raise HTTPException(status_code=400, detail='Invalid job ID')
+    job_id = job_id.strip()
     directory = f'syncing/{uid}/{job_id}/'
     os.makedirs(directory, exist_ok=True)
     paths = []
