@@ -1119,8 +1119,8 @@ def test_manual_firestore_readiness_contract_allows_one_staged_workflow_control_
 def test_firestore_readiness_contract_requires_validation_before_artifact_upload(workflow_name):
     validator = load_validator()
     workflow_path = ROOT.parent / '.github/workflows' / workflow_name
-    workflow = validator._load_yaml(workflow_path)
-    steps = workflow['jobs']['firestore_readiness']['steps']
+    action = validator._load_yaml(ROOT.parent / '.github/actions/firestore-readiness/action.yml')
+    steps = action['runs']['steps']
     upload_index = next(index for index, step in enumerate(steps) if step.get('uses') == 'actions/upload-artifact@v7')
     upload = steps.pop(upload_index)
     validation_index = next(
@@ -1128,7 +1128,7 @@ def test_firestore_readiness_contract_requires_validation_before_artifact_upload
     )
     steps.insert(validation_index, upload)
 
-    errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
+    errors = validator._validate_firestore_readiness_composite(f'cloud_run_workflow/{workflow_path}', action)
 
     assert any('only a successfully validated bounded proposal may be uploaded' in error.message for error in errors)
 
@@ -1138,12 +1138,12 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
     validator = load_validator()
     workflow_path = ROOT.parent / '.github/workflows' / workflow_name
     workflow = validator._load_yaml(workflow_path)
-    auth = next(
+    gate = next(
         step
         for step in workflow['jobs']['firestore_readiness']['steps']
-        if step.get('uses') == 'google-github-actions/auth@v3'
+        if 'firestore-readiness' in str(step.get('uses', ''))
     )
-    auth['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
+    gate['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
 
     errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
 
@@ -2959,6 +2959,7 @@ _JEV_PROCESS_CONVERSATION_HOSTS = {
     'cloud_run/backend',
     'cloud_run/backend-sync',
 }
+_JEV_LIVE_RELEVANCE_HOSTS = _JEV_PROCESS_CONVERSATION_HOSTS | {'cloud_run/backend-sync-backfill'}
 
 
 def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():
@@ -3040,25 +3041,34 @@ def _manifest_env_blocks(env_config: dict) -> list[tuple[str, dict]]:
 
 
 def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
-    jev_flags = (CONVERSATION_RELEVANCE_JEV_ENABLED_ENV, MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
+    dev_jev_flags = (CONVERSATION_RELEVANCE_JEV_ENABLED_ENV, MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
 
     for env_name in ('dev', 'prod'):
         env_config = validator._get_env_config(manifest, env_name)
         for scope, env_block in _manifest_env_blocks(env_config):
-            for flag in jev_flags:
+            for flag in dev_jev_flags:
                 entry = env_block.get(flag)
                 if env_name == 'dev' and scope in _JEV_PROCESS_CONVERSATION_HOSTS:
                     assert entry == {'value': 'true', 'category': 'rollout'}, (
                         f'{env_name}/{scope} runs process_conversation; {flag} must be '
                         f"an explicit 'true' rollout flag, got {entry!r}"
                     )
-                else:
+                elif env_name == 'dev':
                     assert entry is None, (
                         f'{env_name}/{scope} must not carry {flag} '
                         '(Jev flags belong only to the four dev process_conversation hosts)'
                     )
+            if env_name == 'prod':
+                enabled = env_block.get(CONVERSATION_RELEVANCE_JEV_ENABLED_ENV)
+                percent = env_block.get('CONVERSATION_RELEVANCE_JEV_PERCENT')
+                if scope in _JEV_LIVE_RELEVANCE_HOSTS:
+                    assert enabled == {'value': 'true', 'category': 'rollout'}, scope
+                    assert percent == {'value': '1', 'category': 'rollout'}, scope
+                else:
+                    assert enabled is None and percent is None, scope
+                assert env_block.get(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV) is None, scope
 
     for chart_path in (
         ROOT / 'charts/backend-listen/dev_omi_backend_listen_values.yaml',
@@ -3066,7 +3076,7 @@ def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
     ):
         text = chart_path.read_text(encoding='utf-8')
         entries = parse_env_entries(text)
-        for flag in jev_flags:
+        for flag in dev_jev_flags:
             assert text.count(f'- name: {flag}\n') == 1, f'{chart_path.name} must declare {flag} exactly once'
             assert entries[flag].value == 'true', f'{chart_path.name} {flag} must be the literal true'
         gateway_entry = entries.get('OMI_LLM_GATEWAY_URL')
@@ -3078,8 +3088,9 @@ def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
         ROOT / 'charts/pusher/prod_omi_pusher_values.yaml',
     ):
         entries = parse_env_entries(chart_path.read_text(encoding='utf-8'))
-        for flag in jev_flags:
-            assert flag not in entries, f'{chart_path.name} must not carry {flag}'
+        assert entries[CONVERSATION_RELEVANCE_JEV_ENABLED_ENV].value == 'true', chart_path.name
+        assert entries['CONVERSATION_RELEVANCE_JEV_PERCENT'].value == '1', chart_path.name
+        assert MEMORY_OWNER_JEV_FLIP_ENABLED_ENV not in entries, chart_path.name
 
     dev_config = validator._get_env_config(manifest, 'dev')
     for service_name in ('backend-listen', 'pusher'):
@@ -3101,7 +3112,7 @@ def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
     for service_name in ('backend', 'backend-sync'):
         rendered_env = {entry['name']: entry.get('value') for entry in rendered['services'][service_name]['env']}
         assert rendered_env['OMI_LLM_GATEWAY_URL'] == 'http://jev-gateway-render.invalid:8080'
-        for flag in jev_flags:
+        for flag in dev_jev_flags:
             assert rendered_env[flag] == 'true'
 
 
@@ -3164,15 +3175,20 @@ def test_dev_owner_shadow_hosts_disable_live_owner_scoring():
     assert measured_hosts == shadow_hosts
 
 
-def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
+def test_prod_jev_stage_contract_enables_stage_values_only_on_process_hosts():
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     prod = validator._get_env_config(manifest, 'prod')
     hosts = set()
     for scope, env_block in _manifest_env_blocks(prod):
         assert 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST' not in env_block, scope
-        assert CONVERSATION_RELEVANCE_JEV_ENABLED_ENV not in env_block, scope
         assert MEMORY_OWNER_JEV_FLIP_ENABLED_ENV not in env_block, scope
+        if scope not in _JEV_LIVE_RELEVANCE_HOSTS:
+            assert CONVERSATION_RELEVANCE_JEV_ENABLED_ENV not in env_block, scope
+            assert 'CONVERSATION_RELEVANCE_JEV_PERCENT' not in env_block, scope
+            continue
+        assert env_block[CONVERSATION_RELEVANCE_JEV_ENABLED_ENV]['value'] == 'true', scope
+        assert env_block['CONVERSATION_RELEVANCE_JEV_PERCENT']['value'] in {'1', '10', '50', '100'}, scope
         if scope not in _JEV_PROCESS_CONVERSATION_HOSTS:
             continue
         hosts.add(scope)
@@ -3188,6 +3204,8 @@ def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
     # backend-sync-backfill is not a shadow host but also processes conversations.
     backfill = dict(_manifest_env_blocks(prod))['cloud_run/backend-sync-backfill']
     assert backfill['CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT']['value'] == '2'
+    assert backfill[CONVERSATION_RELEVANCE_JEV_ENABLED_ENV]['value'] == 'true'
+    assert backfill['CONVERSATION_RELEVANCE_JEV_PERCENT']['value'] in {'1', '10', '50', '100'}
 
 
 def test_prod_rejects_jev_uid_allowlist_declared_on_every_host(tmp_path):
@@ -3256,3 +3274,23 @@ def test_jev_uid_allowlist_contract_survives_cyclic_yaml_aliases():
     assert validate_jev_uid_allowlist(stage='prod', scope='cloud_run/backend', config=cyclic) == []
     cyclic['env'].append({JEV_UID_ALLOWLIST: {'value': ''}})
     assert len(validate_jev_uid_allowlist(stage='prod', scope='cloud_run/backend', config=cyclic)) >= 1
+
+
+def test_deploy_actions_remove_the_retired_jev_allowlist_env():
+    # gcloud deploy keeps variables it is not told to drop, so a prod service that once declared
+    # the retired allowlist keeps it (even empty) until the deploy lists it for removal. The
+    # backfill worker is cloned from live backend-sync env BEFORE backend-sync is redeployed, so
+    # its clone must drop the variable in prod only: dev still declares the allowlist for
+    # dogfooding and the clone is where the dev backfill service gets it.
+    name = 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'
+    stack = (ROOT.parent / '.github/actions/deploy-backend-stack/action.yml').read_text().splitlines()
+    stack_lines = [line for line in stack if '--remove-env-vars=' in line and 'MEMORY_ENABLED_USERS' in line]
+    assert stack_lines and all(name in line for line in stack_lines)
+    lifecycle = (ROOT.parent / '.github/actions/sync-backfill-lifecycle/action.yml').read_text().splitlines()
+    deploy_removals = [line for line in lifecycle if '--remove-env-vars=' in line and 'MEMORY_ENABLED_USERS' in line]
+    assert deploy_removals and all(name in line for line in deploy_removals)
+    clone_removals = [line for line in lifecycle if line.lstrip().startswith('REMOVE_ENV_VARS:')]
+    assert clone_removals
+    for line in clone_removals:
+        assert f"inputs.project_id == 'based-hardware' && ',{name}'" in line
+        assert line.count(name) == 1

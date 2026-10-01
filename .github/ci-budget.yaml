@@ -201,13 +201,13 @@
       "budget_p50_minutes": 3,
       "display_name": "Backend unit guardrails",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 65,
+      "expected_runs_per_day": 72,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "PR M workflow/action coverage widening: forecast ceil(65 * 1.10) = 72 daily executions from the prior sample; the 3-minute p50 budget and CI-tier condition are unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -219,7 +219,7 @@
       "budget_p50_minutes": 9,
       "display_name": "Backend unit shard ${{ matrix.shard }}/4",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 107,
+      "expected_runs_per_day": 118,
       "if": null,
       "matrix": {
         "shard": [
@@ -232,7 +232,7 @@
       "matrix_size": 4,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "PR M workflow/action coverage widening: forecast ceil(107 * 1.10) = 118 daily executions from the prior sample; four shards and the 9-minute p50 budget are unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -244,7 +244,7 @@
       "budget_p50_minutes": 1,
       "display_name": "Backend unit suite",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 105,
+      "expected_runs_per_day": 116,
       "if": "${{ always() && !cancelled() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -254,7 +254,7 @@
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "PR M workflow/action coverage widening: forecast ceil(105 * 1.10) = 116 daily executions from the prior sample; the 1-minute aggregate-job budget and success dependency are unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -266,13 +266,13 @@
       "budget_p50_minutes": 1,
       "display_name": "Resolve CI Tier",
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 107,
+      "expected_runs_per_day": 118,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "New in #19593: one label read; 2026-09-28 PR run took 23s",
+      "rationale": "PR M workflow/action coverage widening: forecast ceil(107 * 1.10) = 118 daily executions from the prior sample; the 1-minute tier-resolution budget is unchanged. This is a reviewed forecast, not a new measured sample; re-seed after the next weekly audit.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -489,13 +489,13 @@
       "budget_p50_minutes": 9,
       "display_name": "Linux package \u00b7 helper smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 9-minute p50 budget are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -507,13 +507,13 @@
       "budget_p50_minutes": 8,
       "display_name": "Windows build smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 8-minute p50 budget are unchanged.",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
@@ -525,13 +525,13 @@
       "budget_p50_minutes": 7,
       "display_name": "Typecheck \u00b7 Lint \u00b7 Test",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 7-minute p50 budget are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2741,7 +2741,7 @@
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "PR M widens workflow/action path coverage so a new backend-image shipment cannot omit Firestore readiness. Forecast 10% more selected job executions than the existing September sample, rounded upward; job duration budgets and global caps remain unchanged. Re-seed from the next weekly audit.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -2755,6 +2755,7 @@
             ".github/actions/ci-tier/**",
             ".github/actions/deploy-backend-stack/**",
             ".github/actions/sync-backfill-lifecycle/**",
+            ".github/actions/firestore-readiness/**",
             ".github/actions/release-eligibility/action.yml",
             ".github/actions/transcription-release-candidate-probe/**",
             ".github/workflows/backend-checks.yml",
@@ -2785,6 +2786,7 @@
             ".github/scripts/verify_backend_release_admission.py",
             ".github/scripts/verify_release_eligibility.py",
             ".github/workflows/sync_ledger_fence_cutover.yml",
+            ".github/workflows/**",
             "scripts/changed-files",
             "scripts/install-git-hooks.sh",
             "scripts/pre-push",
@@ -2808,6 +2810,7 @@
             ".github/actions/ci-tier/**",
             ".github/actions/deploy-backend-stack/**",
             ".github/actions/sync-backfill-lifecycle/**",
+            ".github/actions/firestore-readiness/**",
             ".github/actions/release-eligibility/action.yml",
             ".github/actions/transcription-release-candidate-probe/**",
             ".github/workflows/backend-checks.yml",
@@ -2838,6 +2841,7 @@
             ".github/scripts/verify_backend_release_admission.py",
             ".github/scripts/verify_release_eligibility.py",
             ".github/workflows/sync_ledger_fence_cutover.yml",
+            ".github/workflows/**",
             "scripts/changed-files",
             "scripts/install-git-hooks.sh",
             "scripts/pre-push",
@@ -2927,7 +2931,7 @@
     "desktop-windows-ci.yml": {
       "name": "Desktop Windows CI",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Refresh pre-existing inventory drift: the current upstream workflow already triggers for desktop_windows_release.yml. This PR does not edit that workflow; forecast one additional execution per day per job for the existing release path, with duration budgets and global caps unchanged.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -2935,7 +2939,8 @@
           ],
           "paths": [
             "desktop/windows/**",
-            ".github/workflows/desktop-windows-ci.yml"
+            ".github/workflows/desktop-windows-ci.yml",
+            ".github/workflows/desktop_windows_release.yml"
           ]
         },
         "push": {
@@ -2944,7 +2949,8 @@
           ],
           "paths": [
             "desktop/windows/**",
-            ".github/workflows/desktop-windows-ci.yml"
+            ".github/workflows/desktop-windows-ci.yml",
+            ".github/workflows/desktop_windows_release.yml"
           ]
         }
       }

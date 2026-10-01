@@ -61,6 +61,30 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch }}
 
+      - name: Resolve checked-out source identity
+        run: |
+          set -euo pipefail
+          echo "CHECKED_OUT_SHA=$(git rev-parse 'HEAD^{commit}')" >> "$GITHUB_ENV"
+
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ env.CHECKED_OUT_SHA }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
       - name: Google Auth (development WIF)
         id: auth-wif
         if: github.event.inputs.environment == 'development'

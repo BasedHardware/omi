@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 import time
+import urllib.error
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -96,21 +97,138 @@ def expected_index_signatures(manifest: Mapping[str, Any]) -> set[IndexSignature
     return {_index_signature(index) for index in indexes if isinstance(index, Mapping)}
 
 
-def verify_manifest_source(manifest_path: Path) -> dict[str, Any]:
+_SOURCE_ROOT_REGISTRY_SNIPPET = (
+    'import json, sys\n'
+    'sys.path.insert(0, sys.argv[1])\n'
+    'from database.firestore_index_registry import firebase_index_manifest\n'
+    'json.dump(firebase_index_manifest(), sys.stdout)\n'
+)
+SOURCE_ROOT_REGISTRY_TIMEOUT_SECONDS = 60.0
+REGISTRY_RELATIVE_PATH = Path('backend') / 'database' / 'firestore_index_registry.py'
+
+
+def _generated_manifest_at_source_root(source_root: Path) -> dict[str, Any]:
+    """Regenerate the manifest from the registry inside a separate checkout.
+
+    The registry is imported in a bounded subprocess of this same interpreter so
+    the deploying workflow's registry can validate a manifest checked out at the
+    admitted target SHA without importing target code into this process.
+    """
+
+    registry_path = source_root / REGISTRY_RELATIVE_PATH
+    if not registry_path.is_file():
+        raise ValueError(f'{source_root} does not contain {REGISTRY_RELATIVE_PATH}')
+    try:
+        result = subprocess.run(
+            [sys.executable, '-c', _SOURCE_ROOT_REGISTRY_SNIPPET, str(source_root / 'backend')],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=SOURCE_ROOT_REGISTRY_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError('source-root index registry did not produce a manifest before the bound expired') from exc
+    if result.returncode != 0:
+        tail = '\n'.join((result.stderr or '').splitlines()[-20:])[-4000:]
+        raise ValueError(f'source-root index registry failed to generate a manifest: {tail}')
+    try:
+        generated = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError('source-root index registry did not emit a JSON manifest') from exc
+    if not isinstance(generated, dict):
+        raise ValueError('source-root index registry manifest must be an object')
+    return generated
+
+
+_PREREGISTRY_FIELD_MODES = {'order': {'ASCENDING', 'DESCENDING'}, 'arrayConfig': {'CONTAINS'}}
+
+
+def _validated_preregistry_manifest(manifest_path: Path) -> dict[str, Any]:
+    """Structurally validate a manifest committed before the registry existed.
+
+    There is no registry to regenerate from, so the checked-in manifest is the
+    declaration of record; every entry is validated (never silently skipped)
+    and the manifest is returned as-is so proposal hashes cover it verbatim.
+    """
+
     try:
         loaded = json.loads(manifest_path.read_text(encoding='utf-8'))
     except json.JSONDecodeError as exc:
         raise ValueError(f'{manifest_path} is not valid JSON') from exc
     if not isinstance(loaded, dict):
         raise ValueError(f'{manifest_path} must contain an object')
-    generated = firebase_index_manifest()
+    indexes = loaded.get('indexes')
+    if not isinstance(indexes, list):
+        raise ValueError(f'{manifest_path} must contain an indexes list')
+    for position, index in enumerate(indexes):
+        scope = f'indexes[{position}]'
+        if not isinstance(index, Mapping):
+            raise ValueError(f'Firestore manifest {scope} must be an object')
+        collection_group = index.get('collectionGroup')
+        if not isinstance(collection_group, str) or not collection_group:
+            raise ValueError(f'Firestore manifest {scope} must contain a nonempty collectionGroup')
+        if not isinstance(index.get('queryScope'), str) or index['queryScope'] not in _GCLOUD_QUERY_SCOPES:
+            raise ValueError(f'Firestore manifest {scope} has an unsupported queryScope')
+        fields = index.get('fields')
+        if not isinstance(fields, list):
+            raise ValueError(f'Firestore manifest {scope} must contain a fields list')
+        for field in fields:
+            if not isinstance(field, Mapping) or not isinstance(field.get('fieldPath'), str) or not field['fieldPath']:
+                raise ValueError(f'Firestore manifest {scope} field must contain a nonempty fieldPath')
+            present = [mode for mode in _PREREGISTRY_FIELD_MODES if mode in field]
+            if (
+                len(present) != 1
+                or not isinstance(field[present[0]], str)
+                or field[present[0]] not in _PREREGISTRY_FIELD_MODES[present[0]]
+            ):
+                raise ValueError(f'Firestore manifest {scope} field must set exactly one valid order or arrayConfig')
+    candidate = dict(loaded)
+    candidate.setdefault('fieldOverrides', [])
+    field_indexes.expected_field_requirements(candidate)
+    print(f'{manifest_path} predates the index registry; validated the declared manifest as-is')
+    return loaded
+
+
+def verify_manifest_source(manifest_path: Path, source_root: Path | None = None) -> dict[str, Any]:
+    if source_root is None:
+        try:
+            loaded = json.loads(manifest_path.read_text(encoding='utf-8'))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f'{manifest_path} is not valid JSON') from exc
+        if not isinstance(loaded, dict):
+            raise ValueError(f'{manifest_path} must contain an object')
+        generated = firebase_index_manifest()
+        if loaded != generated:
+            raise ValueError('firestore.indexes.json is not generated from the repository index registry')
+        return generated
+
+    source_root = source_root.resolve()
+    expected_manifest = (source_root / 'firestore.indexes.json').resolve()
+    if manifest_path.resolve() != expected_manifest:
+        raise ValueError(f'--source-root requires the manifest at {expected_manifest}')
+    if not (source_root / REGISTRY_RELATIVE_PATH).is_file():
+        if not manifest_path.is_file():
+            print(f'{manifest_path} predates the index registry and declares no manifest; nothing to verify')
+            return {'indexes': [], 'fieldOverrides': []}
+        return _validated_preregistry_manifest(manifest_path)
+    try:
+        loaded = json.loads(manifest_path.read_text(encoding='utf-8'))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f'{manifest_path} is not valid JSON') from exc
+    if not isinstance(loaded, dict):
+        raise ValueError(f'{manifest_path} must contain an object')
+    generated = _generated_manifest_at_source_root(source_root)
     if loaded != generated:
         raise ValueError('firestore.indexes.json is not generated from the repository index registry')
     return generated
 
 
 def expected_field_requirements(manifest: Mapping[str, Any]) -> tuple[FieldIndexRequirement, ...]:
-    return field_indexes.expected_field_requirements(manifest)
+    candidate = manifest
+    if 'fieldOverrides' not in manifest:
+        candidate = dict(manifest)
+        candidate['fieldOverrides'] = []
+    return field_indexes.expected_field_requirements(candidate)
 
 
 def gcloud_create_index_command(*, project: str, database: str, signature: IndexSignature) -> list[str]:
@@ -143,7 +261,38 @@ def gcloud_create_index_command(*, project: str, database: str, signature: Index
     return [*command, '--async', '--quiet']
 
 
-def list_live_indexes(*, project: str, database: str, runner: CommandRunner = subprocess.run) -> list[LiveIndex]:
+READ_RETRY_DELAYS_SECONDS = (2.0, 5.0, 10.0)
+_READ_LIST_TRANSIENT_MARKERS = (
+    'unavailable',
+    'deadline_exceeded',
+    'resource_exhausted',
+    '429',
+    '500',
+    '502',
+    '503',
+    '504',
+    'connection reset',
+    'timed out',
+)
+_READ_LIST_PERMANENT_MARKERS = ('401', '403', '404')
+_READ_LIST_TIMEOUT_SECONDS = 120.0
+
+
+def _listing_failure_is_transient(stderr: str) -> bool:
+    lowered = stderr.casefold()
+    if any(marker in lowered for marker in _READ_LIST_PERMANENT_MARKERS):
+        return False
+    return any(marker in lowered for marker in _READ_LIST_TRANSIENT_MARKERS)
+
+
+def list_live_indexes(
+    *,
+    project: str,
+    database: str,
+    runner: CommandRunner = subprocess.run,
+    retry_read: bool = False,
+    sleep: Callable[[float], None] = time.sleep,
+) -> list[LiveIndex]:
     """Read live Admin API resources without normalizing distinct index shapes."""
     command = [
         'gcloud',
@@ -155,9 +304,30 @@ def list_live_indexes(*, project: str, database: str, runner: CommandRunner = su
         f'--database={database}',
         '--format=json',
     ]
-    result = runner(command, cwd=ROOT, check=False, capture_output=True, text=True)
-    if result.returncode != 0:
+    result = None
+    for attempt in range(len(READ_RETRY_DELAYS_SECONDS) + 1):
+        kwargs: dict[str, Any] = dict(cwd=ROOT, check=False, capture_output=True, text=True)
+        if retry_read:
+            kwargs['timeout'] = _READ_LIST_TIMEOUT_SECONDS
+        try:
+            result = runner(command, **kwargs)
+        except (subprocess.TimeoutExpired, TimeoutError, urllib.error.URLError) as exc:
+            transient = isinstance(exc, (subprocess.TimeoutExpired, TimeoutError)) or _field_read_is_transient(exc)
+            if retry_read and transient and attempt < len(READ_RETRY_DELAYS_SECONDS):
+                sleep(READ_RETRY_DELAYS_SECONDS[attempt])
+                continue
+            raise RuntimeError('Firestore composite-index listing failed') from exc
+        if result.returncode == 0:
+            break
+        if (
+            retry_read
+            and attempt < len(READ_RETRY_DELAYS_SECONDS)
+            and _listing_failure_is_transient(getattr(result, 'stderr', '') or '')
+        ):
+            sleep(READ_RETRY_DELAYS_SECONDS[attempt])
+            continue
         raise RuntimeError('Firestore composite-index listing failed')
+    assert result is not None
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -461,6 +631,7 @@ def validate_schema_proposal(
     database: str,
     source_commit: str,
     ttl_seconds: int,
+    source_root: Path | None = None,
     clock: Clock = lambda: datetime.now(timezone.utc),
 ) -> dict[str, Any]:
     """Validate a proposal artifact before it can cross the workflow boundary."""
@@ -478,7 +649,7 @@ def validate_schema_proposal(
 
     _validate_proposal_ttl(ttl_seconds)
     expected_commit = _normalize_source_commit(source_commit)
-    manifest = verify_manifest_source(manifest_path)
+    manifest = verify_manifest_source(manifest_path, source_root=source_root)
     expected_signatures = expected_index_signatures(manifest)
     _require_exact_keys(
         loaded,
@@ -654,6 +825,36 @@ def validate_schema_proposal(
     return loaded
 
 
+_FIELD_READ_TRANSIENT_STATUSES = {429, 500, 502, 503, 504}
+
+
+def _field_read_is_transient(exc: BaseException | None) -> bool:
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code in _FIELD_READ_TRANSIENT_STATUSES
+    if isinstance(exc, (urllib.error.URLError, TimeoutError)):
+        return True
+    if isinstance(exc, field_indexes.FieldIndexError):
+        return _field_read_is_transient(exc.__cause__)
+    return False
+
+
+def _retrying_field_read_request(field_request, sleep: Callable[[float], None]):
+    """Retry transient field-config GETs; mutations and permanent errors fail at once."""
+
+    def wrapped(method: str, url: str, payload: Mapping[str, Any] | None = None, **kwargs):
+        attempt = 0
+        while True:
+            try:
+                return field_request(method, url, payload, **kwargs)
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, field_indexes.FieldIndexError) as exc:
+                if method != 'GET' or not _field_read_is_transient(exc) or attempt >= len(READ_RETRY_DELAYS_SECONDS):
+                    raise
+                sleep(READ_RETRY_DELAYS_SECONDS[attempt])
+                attempt += 1
+
+    return wrapped
+
+
 def live_field_requirement_states(
     *,
     requirements: Iterable,
@@ -683,12 +884,13 @@ def check_indexes_and_write_proposal(
     proposal_ttl_seconds: int,
     runner: CommandRunner = subprocess.run,
     field_request=field_indexes.field_api_request,
+    sleep: Callable[[float], None] = time.sleep,
     clock: Clock = lambda: datetime.now(timezone.utc),
 ) -> None:
     """Check one live snapshot and emit a bounded proposal when readiness fails."""
 
     expected_set = set(expected)
-    live_indexes = list_live_indexes(project=project, database=database, runner=runner)
+    live_indexes = list_live_indexes(project=project, database=database, runner=runner, retry_read=True, sleep=sleep)
     states = expected_index_states(
         expected=expected_set,
         live_indexes=live_indexes,
@@ -700,7 +902,7 @@ def check_indexes_and_write_proposal(
         requirements=field_requirements,
         project=project,
         database=database,
-        field_request=field_request,
+        field_request=_retrying_field_read_request(field_request, sleep),
     )
     pending = {signature: state for signature, state in states.items() if state != 'READY'}
     pending_fields = {key: state for key, state in field_states.items() if state != 'READY'}
@@ -857,6 +1059,7 @@ def reconcile(
     proposal_output: Path | None = None,
     source_commit: str | None = None,
     proposal_ttl_seconds: int = DEFAULT_PROPOSAL_TTL_SECONDS,
+    source_root: Path | None = None,
     runner: CommandRunner = subprocess.run,
     field_request=field_indexes.field_api_request,
     sleep: Callable[[float], None] = time.sleep,
@@ -865,6 +1068,8 @@ def reconcile(
 ) -> None:
     if sum((check_only, dry_run, provision_missing)) > 1:
         raise ValueError('--check-only, --dry-run, and --provision-missing cannot be combined')
+    if source_root is not None and not check_only:
+        raise ValueError('--source-root is only valid with --check-only or --validate-proposal')
     if check_only:
         if proposal_output is None or not source_commit:
             raise ValueError('--check-only requires --proposal-output and --source-commit')
@@ -872,7 +1077,7 @@ def reconcile(
         _validate_proposal_ttl(proposal_ttl_seconds)
     elif proposal_output is not None or source_commit is not None:
         raise ValueError('--proposal-output and --source-commit require --check-only')
-    manifest = verify_manifest_source(manifest_path)
+    manifest = verify_manifest_source(manifest_path, source_root=source_root)
     expected = expected_index_signatures(manifest)
     field_requirements = expected_field_requirements(manifest)
     if dry_run:
@@ -912,6 +1117,7 @@ def reconcile(
             proposal_ttl_seconds=proposal_ttl_seconds,
             runner=runner,
             field_request=field_request,
+            sleep=sleep,
             clock=clock,
         )
         return
@@ -962,6 +1168,11 @@ def main() -> int:
     parser.add_argument('--proposal-output', type=Path)
     parser.add_argument('--validate-proposal', type=Path)
     parser.add_argument('--source-commit')
+    parser.add_argument(
+        '--source-root',
+        type=Path,
+        help='read the manifest and index registry from this checked-out source tree instead of the script\'s own',
+    )
     parser.add_argument('--proposal-ttl-seconds', type=int, default=DEFAULT_PROPOSAL_TTL_SECONDS)
     parser.add_argument(
         '--dry-run', action='store_true', help='validate the manifest and print the no-write reconciliation plan'
@@ -980,6 +1191,7 @@ def main() -> int:
                 database=args.database,
                 source_commit=args.source_commit,
                 ttl_seconds=args.proposal_ttl_seconds,
+                source_root=args.source_root.resolve() if args.source_root else None,
             )
             print('Firestore schema proposal validation passed')
             return 0
@@ -997,6 +1209,7 @@ def main() -> int:
             proposal_output=args.proposal_output.resolve() if args.proposal_output else None,
             source_commit=args.source_commit,
             proposal_ttl_seconds=args.proposal_ttl_seconds,
+            source_root=args.source_root.resolve() if args.source_root else None,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         print(f'ERROR: {exc}', file=sys.stderr)
