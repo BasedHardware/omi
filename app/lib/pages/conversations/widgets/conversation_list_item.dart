@@ -357,46 +357,45 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
                     child: Semantics(
                       selected: isSelectionMode ? isSelected : null,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: double.maxFinite,
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? OmiColors.surface3
-                              : (isSelectionMode && !isEligible)
-                                  ? OmiColors.surface2
-                                  : OmiColors.surface1,
-                          borderRadius: OmiRadius.xlAll,
-                          border: isSelected
-                              ? Border.all(color: OmiColors.accent, width: 2)
-                              : (isSelectionMode && !isEligible)
-                                  ? Border.all(color: OmiColors.border, width: 1)
-                                  : null,
-                        ),
-                        child: ClipRRect(
-                          borderRadius: OmiRadius.xlAll,
-                          child: Dismissible(
-                            // Keep the dismissible state stable when the conversation provider
-                            // refreshes. A UniqueKey here recreated every row during unrelated
-                            // notifications, forcing extra layout/paint work while scrolling.
-                            key: ValueKey('conversation_dismissible_${widget.conversation.id}'),
-                            direction:
-                                isSelectionMode || isMerging ? DismissDirection.none : DismissDirection.endToStart,
-                            // The card stays; a small red delete button comes in at its edge.
-                            background: _SwipeDeleteReveal(progress: _swipe),
-                            onUpdate: (details) => _swipe.value = details.progress,
-                            // One delete path (D5): confirm unless opted out, then Undo.
-                            confirmDismiss: (direction) async {
-                              HapticFeedback.mediumImpact();
-                              trackConversationAction(
-                                  ConversationActionAction.delete, ConversationActionSurface.rowSwipe);
-                              return confirmConversationDelete(context);
-                            },
-                            onDismissed: (direction) {
-                              final conversation = widget.conversation;
-                              PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
-                              unawaited(deleteConversationsWithUndo(context, [conversation]));
-                            },
+                      child: Dismissible(
+                        // Keep the dismissible state stable when the conversation provider
+                        // refreshes. A UniqueKey here recreated every row during unrelated
+                        // notifications, forcing extra layout/paint work while scrolling.
+                        key: ValueKey('conversation_dismissible_${widget.conversation.id}'),
+                        direction: isSelectionMode || isMerging ? DismissDirection.none : DismissDirection.endToStart,
+                        // The whole card slides; a small red delete button comes in where it was.
+                        background: _SwipeDeleteReveal(progress: _swipe),
+                        onUpdate: (details) => _swipe.value = details.progress,
+                        // One delete path (D5): confirm unless opted out, then Undo.
+                        confirmDismiss: (direction) async {
+                          HapticFeedback.mediumImpact();
+                          trackConversationAction(ConversationActionAction.delete, ConversationActionSurface.rowSwipe);
+                          return confirmConversationDelete(context);
+                        },
+                        onDismissed: (direction) {
+                          final conversation = widget.conversation;
+                          PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
+                          unawaited(deleteConversationsWithUndo(context, [conversation]));
+                        },
+                        child: AnimatedContainer(
+                          key: const ValueKey('conversation_card'),
+                          duration: const Duration(milliseconds: 200),
+                          width: double.maxFinite,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? OmiColors.surface3
+                                : (isSelectionMode && !isEligible)
+                                    ? OmiColors.surface2
+                                    : OmiColors.surface1,
+                            borderRadius: OmiRadius.xlAll,
+                            border: isSelected
+                                ? Border.all(color: OmiColors.accent, width: 2)
+                                : (isSelectionMode && !isEligible)
+                                    ? Border.all(color: OmiColors.border, width: 1)
+                                    : null,
+                          ),
+                          child: ClipRRect(
+                            borderRadius: OmiRadius.xlAll,
                             child: Padding(
                               padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
                               child: _buildMobileLayout(context),
@@ -599,9 +598,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 }
 
-/// What a conversation row shows behind it as it is swiped to delete: the row's own card, with a
-/// round red delete button at its trailing edge that grows in as the swipe nears the point where
-/// letting go deletes. The same trash icon as the row menu.
+/// What a conversation row leaves behind as its card is swiped away to delete: a round red delete
+/// button at the trailing edge that grows in as the swipe nears the point where letting go
+/// deletes. The same trash icon as the row menu.
 class _SwipeDeleteReveal extends StatelessWidget {
   const _SwipeDeleteReveal({required this.progress});
 

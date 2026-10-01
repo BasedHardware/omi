@@ -1,5 +1,5 @@
-/// Swiping a conversation row to delete (#20038): the row's card stays and a round red delete button
-/// grows in at its edge; the full-width red block is gone. The confirm and Undo path is unchanged.
+/// Swiping a conversation row to delete (#20038): the whole card slides and a round red delete button
+/// grows in where it was; the full-width red block is gone. The confirm and Undo path is unchanged.
 library;
 
 import 'package:flutter/material.dart';
@@ -77,9 +77,14 @@ void main() {
     expect(partway, greaterThan(0));
     expect(partway, lessThan(1));
 
+    final cardAtRest = tester.getRect(find.byKey(const ValueKey('conversation_card')));
     await gesture.moveBy(const Offset(-320, 0));
     await tester.pump();
     expect(revealOpacity(tester), 1);
+    final cardSwiped = tester.getRect(find.byKey(const ValueKey('conversation_card')));
+    expect(cardSwiped.size, cardAtRest.size, reason: 'the card moves whole, its own edge and padding with it');
+    expect(cardSwiped.right, lessThan(tester.getRect(find.byKey(const ValueKey('conversation_swipe_delete'))).left),
+        reason: 'the button sits in the space the card left, not on top of it');
     expect(tester.getSize(find.byKey(const ValueKey('conversation_swipe_delete'))), const Size(44, 44));
     expect(hasRedBlock(tester), isFalse, reason: 'only the round button is red');
     await gesture.up();
