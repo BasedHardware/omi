@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "Важи за сваку реплику овог говорника",
     "collapseAction": "Скупи",
     "speakerTagPromptNotMeAction": "Нисам ја",
-    "confidenceNextLabels": "{count, plural, =1{Означите их у још 1 разговору.} other{Означите их у још {count} разговора.}}"
+    "confidenceNextLabels": "{count, plural, =1{Означите их у још 1 разговору.} other{Означите их у још {count} разговора.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 govornik} other{Govornika: {count}}}"
 }

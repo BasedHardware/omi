@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "适用于该说话人的每一行",
     "collapseAction": "收起",
     "speakerTagPromptNotMeAction": "不是我",
-    "confidenceNextLabels": "{count, plural, =1{再在 1 个对话中为对方添加标签。} other{再在 {count} 个对话中为对方添加标签。}}"
+    "confidenceNextLabels": "{count, plural, =1{再在 1 个对话中为对方添加标签。} other{再在 {count} 个对话中为对方添加标签。}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 位发言人} other{{count} 位发言人}}"
 }

@@ -11895,4 +11895,15 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 位发言人',
+      one: '1 位发言人',
+    );
+    return '$_temp0';
+  }
 }

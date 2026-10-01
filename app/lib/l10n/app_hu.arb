@@ -3861,5 +3861,6 @@
     "speakerSuggestionAppliesToSpeaker": "Ennek a beszélőnek minden sorára vonatkozik",
     "collapseAction": "Összecsukás",
     "speakerTagPromptNotMeAction": "Nem én vagyok",
-    "confidenceNextLabels": "{count, plural, =1{Címkézd meg őket még 1 beszélgetésben.} other{Címkézd meg őket még {count} beszélgetésben.}}"
+    "confidenceNextLabels": "{count, plural, =1{Címkézd meg őket még 1 beszélgetésben.} other{Címkézd meg őket még {count} beszélgetésben.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 beszélő} other{{count} beszélő}}"
 }

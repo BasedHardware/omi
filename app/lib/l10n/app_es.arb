@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Se aplica a todas las líneas de este hablante",
     "collapseAction": "Contraer",
     "speakerTagPromptNotMeAction": "No soy yo",
-    "confidenceNextLabels": "{count, plural, =1{Etiquétalos en 1 conversación más.} other{Etiquétalos en {count} conversaciones más.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etiquétalos en 1 conversación más.} other{Etiquétalos en {count} conversaciones más.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 participante} other{{count} participantes}}"
 }

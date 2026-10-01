@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Koskee kaikkia tämän puhujan rivejä",
     "collapseAction": "Tiivistä",
     "speakerTagPromptNotMeAction": "En ole minä",
-    "confidenceNextLabels": "{count, plural, =1{Nimeä heidät vielä 1 keskustelussa.} other{Nimeä heidät vielä {count} keskustelussa.}}"
+    "confidenceNextLabels": "{count, plural, =1{Nimeä heidät vielä 1 keskustelussa.} other{Nimeä heidät vielä {count} keskustelussa.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 puhuja} other{{count} puhujaa}}"
 }

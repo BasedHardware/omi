@@ -3807,5 +3807,6 @@
     "speakerSuggestionAppliesToSpeaker": "Gælder for alle linjer fra denne taler",
     "collapseAction": "Skjul",
     "speakerTagPromptNotMeAction": "Ikke mig",
-    "confidenceNextLabels": "{count, plural, =1{Mærk dem i 1 samtale mere.} other{Mærk dem i {count} samtaler mere.}}"
+    "confidenceNextLabels": "{count, plural, =1{Mærk dem i 1 samtale mere.} other{Mærk dem i {count} samtaler mere.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 taler} other{{count} talere}}"
 }

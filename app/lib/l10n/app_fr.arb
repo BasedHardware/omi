@@ -3800,5 +3800,6 @@
     "speakerSuggestionAppliesToSpeaker": "S'applique à toutes les lignes de ce locuteur",
     "collapseAction": "Réduire",
     "speakerTagPromptNotMeAction": "Ce n’est pas moi",
-    "confidenceNextLabels": "{count, plural, =1{Étiquetez-les dans 1 conversation de plus.} other{Étiquetez-les dans {count} conversations de plus.}}"
+    "confidenceNextLabels": "{count, plural, =1{Étiquetez-les dans 1 conversation de plus.} other{Étiquetez-les dans {count} conversations de plus.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 intervenant} other{{count} intervenants}}"
 }

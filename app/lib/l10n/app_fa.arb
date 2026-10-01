@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "برای همه‌ی جمله‌های این گوینده اعمال می‌شود",
     "collapseAction": "جمع کردن",
     "speakerTagPromptNotMeAction": "من نیستم",
-    "confidenceNextLabels": "{count, plural, =1{آن‌ها را در 1 گفتگوی دیگر برچسب بزنید.} other{آن‌ها را در {count} گفتگوی دیگر برچسب بزنید.}}"
+    "confidenceNextLabels": "{count, plural, =1{آن‌ها را در 1 گفتگوی دیگر برچسب بزنید.} other{آن‌ها را در {count} گفتگوی دیگر برچسب بزنید.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{۱ گوینده} other{{count} گوینده}}"
 }

@@ -12215,4 +12215,15 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nagsasalita',
+      one: '1 nagsasalita',
+    );
+    return '$_temp0';
+  }
 }

@@ -3800,5 +3800,6 @@
     "speakerSuggestionAppliesToSpeaker": "Относится ко всем репликам этого говорящего",
     "collapseAction": "Свернуть",
     "speakerTagPromptNotMeAction": "Не я",
-    "confidenceNextLabels": "{count, plural, =1{Отметьте их ещё в 1 разговоре.} other{Отметьте их ещё в {count} разговорах.}}"
+    "confidenceNextLabels": "{count, plural, =1{Отметьте их ещё в 1 разговоре.} other{Отметьте их ещё в {count} разговорах.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 участник} other{Участников: {count}}}"
 }

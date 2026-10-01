@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "Velja za vse vrstice tega govorca",
     "collapseAction": "Strni",
     "speakerTagPromptNotMeAction": "Nisem jaz",
-    "confidenceNextLabels": "{count, plural, =1{Označite jih še v 1 pogovoru.} other{Označite jih še v {count} pogovorih.}}"
+    "confidenceNextLabels": "{count, plural, =1{Označite jih še v 1 pogovoru.} other{Označite jih še v {count} pogovorih.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 govorec} other{Govorci: {count}}}"
 }

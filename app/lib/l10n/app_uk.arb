@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Застосовується до кожного рядка цього мовця",
     "collapseAction": "Згорнути",
     "speakerTagPromptNotMeAction": "Не я",
-    "confidenceNextLabels": "{count, plural, =1{Позначте їх ще в 1 розмові.} other{Позначте їх ще в {count} розмовах.}}"
+    "confidenceNextLabels": "{count, plural, =1{Позначте їх ще в 1 розмові.} other{Позначте їх ще в {count} розмовах.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 учасник} other{Учасників: {count}}}"
 }

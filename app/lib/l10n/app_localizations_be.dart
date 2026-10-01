@@ -12143,4 +12143,15 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удзельнікаў: $count',
+      one: '1 удзельнік',
+    );
+    return '$_temp0';
+  }
 }

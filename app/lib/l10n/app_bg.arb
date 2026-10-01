@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Важи за всеки ред от този говорител",
     "collapseAction": "Свий",
     "speakerTagPromptNotMeAction": "Не съм аз",
-    "confidenceNextLabels": "{count, plural, =1{Етикетирайте човека в още 1 разговор.} other{Етикетирайте човека в още {count} разговора.}}"
+    "confidenceNextLabels": "{count, plural, =1{Етикетирайте човека в още 1 разговор.} other{Етикетирайте човека в още {count} разговора.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 говорител} other{{count} говорители}}"
 }

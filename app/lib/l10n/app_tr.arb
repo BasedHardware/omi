@@ -3800,5 +3800,6 @@
     "speakerSuggestionAppliesToSpeaker": "Bu konuşmacının tüm satırlarına uygulanır",
     "collapseAction": "Daralt",
     "speakerTagPromptNotMeAction": "Ben değilim",
-    "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}"
+    "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 konuşmacı} other{{count} konuşmacı}}"
 }

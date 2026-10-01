@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Gjelder alle replikker fra denne taleren",
     "collapseAction": "Skjul",
     "speakerTagPromptNotMeAction": "Ikke meg",
-    "confidenceNextLabels": "{count, plural, =1{Merk dem i 1 samtale til.} other{Merk dem i {count} samtaler til.}}"
+    "confidenceNextLabels": "{count, plural, =1{Merk dem i 1 samtale til.} other{Merk dem i {count} samtaler til.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 taler} other{{count} talere}}"
 }

@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "이 화자의 모든 발언에 적용돼요",
     "collapseAction": "접기",
     "speakerTagPromptNotMeAction": "제가 아니에요",
-    "confidenceNextLabels": "{count, plural, =1{대화 1개에서 더 라벨을 지정해 주세요.} other{대화 {count}개에서 더 라벨을 지정해 주세요.}}"
+    "confidenceNextLabels": "{count, plural, =1{대화 1개에서 더 라벨을 지정해 주세요.} other{대화 {count}개에서 더 라벨을 지정해 주세요.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{화자 1명} other{화자 {count}명}}"
 }

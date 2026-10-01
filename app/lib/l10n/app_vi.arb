@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Áp dụng cho mọi dòng của người nói này",
     "collapseAction": "Thu gọn",
     "speakerTagPromptNotMeAction": "Không phải tôi",
-    "confidenceNextLabels": "{count, plural, =1{Hãy gắn nhãn họ trong 1 cuộc trò chuyện nữa.} other{Hãy gắn nhãn họ trong {count} cuộc trò chuyện nữa.}}"
+    "confidenceNextLabels": "{count, plural, =1{Hãy gắn nhãn họ trong 1 cuộc trò chuyện nữa.} other{Hãy gắn nhãn họ trong {count} cuộc trò chuyện nữa.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 người nói} other{{count} người nói}}"
 }

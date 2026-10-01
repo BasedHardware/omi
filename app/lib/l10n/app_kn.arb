@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "ಈ ಮಾತನಾಡುವವರ ಪ್ರತಿ ಸಾಲಿಗೂ ಅನ್ವಯಿಸುತ್ತದೆ",
     "collapseAction": "ಕುಗ್ಗಿಸಿ",
     "speakerTagPromptNotMeAction": "ನಾನಲ್ಲ",
-    "confidenceNextLabels": "{count, plural, =1{ಇನ್ನೂ 1 ಸಂಭಾಷಣೆಯಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.} other{ಇನ್ನೂ {count} ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.}}"
+    "confidenceNextLabels": "{count, plural, =1{ಇನ್ನೂ 1 ಸಂಭಾಷಣೆಯಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.} other{ಇನ್ನೂ {count} ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 ಭಾಷಣಕಾರ} other{{count} ಭಾಷಣಕಾರರು}}"
 }

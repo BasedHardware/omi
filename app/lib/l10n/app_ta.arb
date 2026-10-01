@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "இந்தப் பேச்சாளரின் எல்லா வரிகளுக்கும் பொருந்தும்",
     "collapseAction": "சுருக்கு",
     "speakerTagPromptNotMeAction": "நான் இல்லை",
-    "confidenceNextLabels": "{count, plural, =1{இன்னும் 1 உரையாடலில் அவர்களுக்கு லேபிள் இடுங்கள்.} other{இன்னும் {count} உரையாடல்களில் அவர்களுக்கு லேபிள் இடுங்கள்.}}"
+    "confidenceNextLabels": "{count, plural, =1{இன்னும் 1 உரையாடலில் அவர்களுக்கு லேபிள் இடுங்கள்.} other{இன்னும் {count} உரையாடல்களில் அவர்களுக்கு லேபிள் இடுங்கள்.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 பேச்சாளர்} other{{count} பேச்சாளர்கள்}}"
 }

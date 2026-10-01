@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "חל על כל השורות של דובר זה",
     "collapseAction": "כווץ",
     "speakerTagPromptNotMeAction": "לא אני",
-    "confidenceNextLabels": "{count, plural, =1{תייגו אותם בעוד שיחה 1.} other{תייגו אותם בעוד {count} שיחות.}}"
+    "confidenceNextLabels": "{count, plural, =1{תייגו אותם בעוד שיחה 1.} other{תייגו אותם בעוד {count} שיחות.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{דובר אחד} other{{count} דוברים}}"
 }

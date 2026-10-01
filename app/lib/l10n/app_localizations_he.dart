@@ -12017,4 +12017,15 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count דוברים',
+      one: 'דובר אחד',
+    );
+    return '$_temp0';
+  }
 }

@@ -11325,5 +11325,6 @@
     "speakerSuggestionAppliesToSpeaker": "Nalalapat sa bawat linya mula sa speaker na ito",
     "collapseAction": "I-collapse",
     "speakerTagPromptNotMeAction": "Hindi ako",
-    "confidenceNextLabels": "{count, plural, =1{I-label sila sa 1 pang usapan.} other{I-label sila sa {count} pang usapan.}}"
+    "confidenceNextLabels": "{count, plural, =1{I-label sila sa 1 pang usapan.} other{I-label sila sa {count} pang usapan.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 nagsasalita} other{{count} nagsasalita}}"
 }

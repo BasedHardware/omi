@@ -14441,5 +14441,14 @@
                 "type": "int"
             }
         }
+    },
+    "transcriptSpeakerCount": "{count, plural, =1{1 speaker} other{{count} speakers}}",
+    "@transcriptSpeakerCount": {
+        "description": "How many people spoke, after the length in the transcript's heading: Transcript · 14 min · 2 speakers",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

@@ -3765,5 +3765,6 @@
     "speakerSuggestionAppliesToSpeaker": "Taikoma kiekvienai šio kalbėtojo eilutei",
     "collapseAction": "Sutraukti",
     "speakerTagPromptNotMeAction": "Ne aš",
-    "confidenceNextLabels": "{count, plural, =1{Pažymėkite juos dar 1 pokalbyje.} other{Pažymėkite juos dar {count} pokalbiuose.}}"
+    "confidenceNextLabels": "{count, plural, =1{Pažymėkite juos dar 1 pokalbyje.} other{Pažymėkite juos dar {count} pokalbiuose.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 kalbėtojas} other{Kalbėtojų: {count}}}"
 }

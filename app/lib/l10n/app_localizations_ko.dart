@@ -11920,4 +11920,15 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '화자 $count명',
+      one: '화자 1명',
+    );
+    return '$_temp0';
+  }
 }
