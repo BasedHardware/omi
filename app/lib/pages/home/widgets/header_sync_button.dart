@@ -13,7 +13,11 @@ import 'package:omi/widgets/header_circle_button.dart';
 /// row on Home. Neutral in every state (INV-UI-1): a filled circle and a black-and-white count
 /// badge, with no status colour while files wait on the device.
 class HeaderSyncButton extends StatelessWidget {
-  const HeaderSyncButton({super.key, required this.hasPairedDevice, required this.onTap});
+  const HeaderSyncButton({
+    super.key,
+    required this.hasPairedDevice,
+    required this.onTap,
+  });
 
   final bool hasPairedDevice;
   final VoidCallback onTap;

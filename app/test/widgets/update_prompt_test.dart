@@ -20,18 +20,16 @@ void main() {
 
   Future<void> show(WidgetTester tester, {bool required = false, String? notes}) async {
     calls = [];
-    await tester.pumpWidget(
-      feedbackHarness(
-        (context) => showUpdatePrompt(
-          context,
-          required: required,
-          releaseNotes: notes,
-          onUpdate: () => calls.add('update'),
-          onLater: () => calls.add('later'),
-        ),
-        platform: TargetPlatform.iOS,
+    await tester.pumpWidget(feedbackHarness(
+      (context) => showUpdatePrompt(
+        context,
+        required: required,
+        releaseNotes: notes,
+        onUpdate: () => calls.add('update'),
+        onLater: () => calls.add('later'),
       ),
-    );
+      platform: TargetPlatform.iOS,
+    ));
     await tapTrigger(tester);
   }
 
@@ -73,9 +71,7 @@ void main() {
     await show(tester, required: true);
     expect(find.text('Update required'), findsOneWidget);
     expect(
-      find.text('This version of Omi is no longer supported. Update to keep recording and syncing.'),
-      findsOneWidget,
-    );
+        find.text('This version of Omi is no longer supported. Update to keep recording and syncing.'), findsOneWidget);
     expect(later, findsNothing);
     expect(tester.widget<BottomSheet>(sheet).showDragHandle, isFalse);
 

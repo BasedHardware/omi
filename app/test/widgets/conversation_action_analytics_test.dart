@@ -23,11 +23,11 @@ import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 ServerConversation _conversation(String id) => ServerConversation(
-  id: id,
-  createdAt: DateTime(2026, 9, 20, 10),
-  structured: Structured('Design review', 'Overview', emoji: '🧠'),
-  status: ConversationStatus.completed,
-);
+      id: id,
+      createdAt: DateTime(2026, 9, 20, 10),
+      structured: Structured('Design review', 'Overview', emoji: '🧠'),
+      status: ConversationStatus.completed,
+    );
 
 void main() {
   late _RecordingAdapter adapter;
@@ -49,11 +49,9 @@ void main() {
     // carries only these.
     return adapter.events
         .where((e) => e.$1 == 'Conversation Action')
-        .map(
-          (e) => Map<String, Object>.fromEntries(
-            e.$2.entries.where((p) => !p.key.startsWith('app_') && p.key != 'platform' && p.key != 'trigger'),
-          ),
-        )
+        .map((e) => Map<String, Object>.fromEntries(
+              e.$2.entries.where((p) => !p.key.startsWith('app_') && p.key != 'platform' && p.key != 'trigger'),
+            ))
         .toList();
   }
 
@@ -91,21 +89,19 @@ void main() {
     });
 
     Future<void> pumpPage(WidgetTester tester) async {
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
-            ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
-            ChangeNotifierProvider<AppProvider>.value(value: apps),
-            ChangeNotifierProvider<FolderProvider>.value(value: folders),
-          ],
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: ConversationDetailPage(conversation: item),
-          ),
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
+          ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+          ChangeNotifierProvider<AppProvider>.value(value: apps),
+          ChangeNotifierProvider<FolderProvider>.value(value: folders),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ConversationDetailPage(conversation: item),
         ),
-      );
+      ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
     }
@@ -149,21 +145,19 @@ void main() {
 
     Future<void> pumpRow(WidgetTester tester, ServerConversation conversation) async {
       provider.conversations = [conversation];
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<ConversationProvider>.value(value: provider),
-            ChangeNotifierProvider<ConnectivityProvider>(create: (_) => ConnectivityProvider()),
-          ],
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(
-              body: ConversationListItem(conversation: conversation, date: DateTime(2026, 9, 20), conversationIdx: 0),
-            ),
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ConversationProvider>.value(value: provider),
+          ChangeNotifierProvider<ConnectivityProvider>(create: (_) => ConnectivityProvider()),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: ConversationListItem(conversation: conversation, date: DateTime(2026, 9, 20), conversationIdx: 0),
           ),
         ),
-      );
+      ));
     }
 
     testWidgets('a long-press menu choice records row_long_press', (tester) async {

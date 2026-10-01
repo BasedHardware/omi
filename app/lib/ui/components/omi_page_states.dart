@@ -116,14 +116,13 @@ class OmiErrorState extends StatelessWidget {
 }
 
 class _StateLayout extends StatelessWidget {
-  const _StateLayout({
-    required this.glyph,
-    this.title,
-    this.titleLayoutReference,
-    this.message,
-    this.messageLayoutReference,
-    this.action,
-  });
+  const _StateLayout(
+      {required this.glyph,
+      this.title,
+      this.titleLayoutReference,
+      this.message,
+      this.messageLayoutReference,
+      this.action});
 
   final Widget glyph;
   final String? title;
@@ -179,7 +178,10 @@ class _StateLayout extends StatelessWidget {
                   ],
                 ),
             ],
-            if (action != null) ...[const SizedBox(height: OmiSpacing.lg), action!],
+            if (action != null) ...[
+              const SizedBox(height: OmiSpacing.lg),
+              action!,
+            ],
           ],
         ),
       ),

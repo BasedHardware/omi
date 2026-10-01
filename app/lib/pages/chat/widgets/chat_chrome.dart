@@ -28,43 +28,31 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
       leading: const Center(child: OmiCloseButton.circled(key: Key('chat_close'))),
       centerTitle: true,
       title: _ChatDismissRegion(
-        child: app == null
-            ? Semantics(
-                label: context.l10n.askOmi,
-                header: true,
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(color: OmiColors.border, borderRadius: OmiRadius.pillAll),
-                ),
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+          child: app == null
+              ? Semantics(
+                  label: context.l10n.askOmi,
+                  header: true,
+                  child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(color: OmiColors.border, borderRadius: OmiRadius.pillAll)))
+              : Row(mainAxisSize: MainAxisSize.min, children: [
                   ChatAppAvatar(app: app),
                   const SizedBox(width: OmiSpacing.xs),
-                  Flexible(
-                    child: Text(app.getName(), overflow: TextOverflow.ellipsis, style: OmiType.callout),
-                  ),
-                ],
-              ),
-      ),
+                  Flexible(child: Text(app.getName(), overflow: TextOverflow.ellipsis, style: OmiType.callout)),
+                ])),
       // Balance the close control so the dismissal handle stays centered without a history button.
       actions: const [SizedBox(width: kToolbarHeight)],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
               preferredSize: const Size.fromHeight(32),
               child: SizedBox(
-                height: 32,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
+                  height: 32,
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     const OmiSpinner(size: OmiSpinnerSize.small),
                     const SizedBox(width: OmiSpacing.xs),
                     Flexible(child: Text(context.l10n.syncingMessages, style: OmiType.footnote)),
-                  ],
-                ),
-              ),
+                  ])),
             )
           : null,
     );
@@ -91,28 +79,22 @@ class _ChatDismissRegionState extends State<_ChatDismissRegion> {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    key: const Key('chat_drag_handle'),
-    behavior: HitTestBehavior.opaque,
-    dragStartBehavior: DragStartBehavior.down,
-    onVerticalDragStart: (_) {
-      final route = ModalRoute.of(context);
-      if (route is ChatSheetRoute &&
-          route.startDismissDrag(
-            extent: MediaQuery.sizeOf(context).height,
-            reduceMotion: MediaQuery.disableAnimationsOf(context),
-          )) {
-        _route = route;
-      }
-    },
-    onVerticalDragUpdate: (details) => _route?.updateDismissDrag(details.primaryDelta ?? 0),
-    onVerticalDragCancel: () => _finish(0, cancelled: true),
-    onVerticalDragEnd: (details) => _finish(details.primaryVelocity ?? 0),
-    child: SizedBox(
-      width: double.infinity,
-      height: kToolbarHeight,
-      child: Center(child: widget.child),
-    ),
-  );
+        key: const Key('chat_drag_handle'),
+        behavior: HitTestBehavior.opaque,
+        dragStartBehavior: DragStartBehavior.down,
+        onVerticalDragStart: (_) {
+          final route = ModalRoute.of(context);
+          if (route is ChatSheetRoute &&
+              route.startDismissDrag(
+                  extent: MediaQuery.sizeOf(context).height, reduceMotion: MediaQuery.disableAnimationsOf(context))) {
+            _route = route;
+          }
+        },
+        onVerticalDragUpdate: (details) => _route?.updateDismissDrag(details.primaryDelta ?? 0),
+        onVerticalDragCancel: () => _finish(0, cancelled: true),
+        onVerticalDragEnd: (details) => _finish(details.primaryVelocity ?? 0),
+        child: SizedBox(width: double.infinity, height: kToolbarHeight, child: Center(child: widget.child)),
+      );
 }
 
 class ChatOfflineHint extends StatelessWidget {

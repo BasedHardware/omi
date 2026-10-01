@@ -22,22 +22,18 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       var status = 200;
-      final provider = composeTypedConversationProvider(
-        ConversationApi(
-          baseUrl: 'http://fixture.invalid/',
-          send: (_) async => http.Response(status == 200 ? '[]' : '{}', status),
-        ),
-      );
+      final provider = composeTypedConversationProvider(ConversationApi(
+        baseUrl: 'http://fixture.invalid/',
+        send: (_) async => http.Response(status == 200 ? '[]' : '{}', status),
+      ));
       addTearDown(provider.dispose);
       final screen = await buildTypedConversationScreen(provider) as MaterialApp;
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildOmiTheme(brightness: brightness),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: const [Locale('en')],
-          home: screen.home,
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(
+        theme: buildOmiTheme(brightness: brightness),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: screen.home,
+      ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 

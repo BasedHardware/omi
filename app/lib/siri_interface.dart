@@ -47,17 +47,8 @@ class SiriSessionConfig {
   String deviceIdHash;
   String? token;
   int? tokenExpiresAtMs;
-  SiriSessionConfig(
-    this.uid,
-    this.generation,
-    this.baseUrl,
-    this.profile,
-    this.appVersion,
-    this.appBuild,
-    this.deviceIdHash,
-    this.token,
-    this.tokenExpiresAtMs,
-  );
+  SiriSessionConfig(this.uid, this.generation, this.baseUrl, this.profile, this.appVersion, this.appBuild,
+      this.deviceIdHash, this.token, this.tokenExpiresAtMs);
 }
 
 class SiriTelemetryRecord {

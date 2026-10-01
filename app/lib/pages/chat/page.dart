@@ -297,10 +297,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                       child: provider.isLoadingMessages && !provider.hasCachedMessages
                           ? OmiLoadingState(label: provider.firstTimeLoadingText)
                           : provider.isClearingChat
-                          ? OmiLoadingState(label: context.l10n.deletingMessages)
-                          : (provider.messages.isEmpty)
-                          ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
-                          : _buildTranscript(provider),
+                              ? OmiLoadingState(label: context.l10n.deletingMessages)
+                              : (provider.messages.isEmpty)
+                                  ? ChatGreeting(
+                                      isConnected: connectivityProvider.isConnected,
+                                      name: prefs.givenName,
+                                    )
+                                  : _buildTranscript(provider),
                     ),
                     _buildComposer(context, provider, connectivityProvider),
                   ],
@@ -434,8 +437,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
         final voiceActive = voiceRecorderProvider.isActive;
         final recording = voiceRecorderProvider.state == VoiceRecorderState.recording;
         final latest = provider.messages.isEmpty ? null : provider.messages.last;
-        final followUp =
-            latest != null &&
+        final followUp = latest != null &&
                 latest.sender == MessageSender.ai &&
                 !provider.isReplyFailed(latest) &&
                 !provider.chatMutationInProgress &&
@@ -476,8 +478,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
             if (provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat)
               ChatSuggestions(
                 isConnected: connectivityProvider.isConnected,
-                hasExistingData:
-                    _chatScope != null ||
+                hasExistingData: _chatScope != null ||
                     (context.watch<ConversationProvider?>()?.conversations.isNotEmpty ?? false) ||
                     (context.watch<MemoriesProvider?>()?.memories.isNotEmpty ?? false),
                 onSelected: (prompt) {
@@ -628,8 +629,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                             builder: (context, value, child) {
                               final hasText = value.text.trim().isNotEmpty;
                               if (!hasText) return const SizedBox.shrink();
-                              final canSend =
-                                  hasText &&
+                              final canSend = hasText &&
                                   !provider.sendingMessage &&
                                   !provider.isUploadingFiles &&
                                   connectivityProvider.isConnected;
@@ -1137,7 +1137,9 @@ class _SelectedTextChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ExcludeSemantics(child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary)),
+            ExcludeSemantics(
+              child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary),
+            ),
             const SizedBox(width: OmiSpacing.xs),
             Flexible(
               child: Text(

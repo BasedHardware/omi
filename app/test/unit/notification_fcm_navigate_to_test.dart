@@ -31,24 +31,27 @@ void main() {
   group('NotificationUtil.routeFromFcmData (capture recovery)', () {
     test('routes the exact capture_recovery payload to device settings', () {
       expect(
-        NotificationUtil.routeFromFcmData(const {'push_type': 'capture_recovery', 'action': 'repair_device'}),
+        NotificationUtil.routeFromFcmData(
+          const {'push_type': 'capture_recovery', 'action': 'repair_device'},
+        ),
         '/settings/device',
       );
     });
 
     test('capture_recovery ignores a spoofed navigate_to for the route', () {
       expect(
-        NotificationUtil.routeFromFcmData(const {
-          'push_type': 'capture_recovery',
-          'action': 'repair_device',
-          'navigate_to': '/chat/omi',
-        }),
+        NotificationUtil.routeFromFcmData(
+          const {'push_type': 'capture_recovery', 'action': 'repair_device', 'navigate_to': '/chat/omi'},
+        ),
         '/settings/device',
       );
     });
 
     test('an unknown push_type routes nowhere', () {
-      expect(NotificationUtil.routeFromFcmData(const {'push_type': 'marketing', 'navigate_to': '/chat/omi'}), isNull);
+      expect(
+        NotificationUtil.routeFromFcmData(const {'push_type': 'marketing', 'navigate_to': '/chat/omi'}),
+        isNull,
+      );
     });
 
     test('a mismatched capture_recovery action routes nowhere — never falling back to navigate_to', () {
@@ -66,7 +69,10 @@ void main() {
     });
 
     test('a non-string push_type is not a typed push and falls back to navigate_to', () {
-      expect(NotificationUtil.routeFromFcmData(const {'push_type': 42, 'navigate_to': '/chat/omi'}), '/chat/omi');
+      expect(
+        NotificationUtil.routeFromFcmData(const {'push_type': 42, 'navigate_to': '/chat/omi'}),
+        '/chat/omi',
+      );
     });
   });
 
@@ -91,17 +97,14 @@ void main() {
         CaptureWedgeMonitor.instance = previousMonitor;
       });
 
-      await tester.pumpWidget(
-        MaterialApp(
-          navigatorKey: globalNavigatorKey,
-          home: const Scaffold(body: SizedBox()),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(
+        navigatorKey: globalNavigatorKey,
+        home: const Scaffold(body: SizedBox()),
+      ));
 
-      final routed = await NotificationUtil.handleFcmDataTap(const {
-        'push_type': 'capture_recovery',
-        'action': 'repair_device',
-      });
+      final routed = await NotificationUtil.handleFcmDataTap(
+        const {'push_type': 'capture_recovery', 'action': 'repair_device'},
+      );
 
       expect(routed, isTrue);
       expect(opened, ['/settings/device']);
@@ -114,18 +117,14 @@ void main() {
       HomeNavigation.register(opener);
       addTearDown(() => HomeNavigation.unregister(opener));
 
-      await tester.pumpWidget(
-        MaterialApp(
-          navigatorKey: globalNavigatorKey,
-          home: const Scaffold(body: SizedBox()),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(
+        navigatorKey: globalNavigatorKey,
+        home: const Scaffold(body: SizedBox()),
+      ));
 
-      final routed = await NotificationUtil.handleFcmDataTap(const {
-        'push_type': 'capture_recovery',
-        'action': 'open_app',
-        'navigate_to': '/chat/omi',
-      });
+      final routed = await NotificationUtil.handleFcmDataTap(
+        const {'push_type': 'capture_recovery', 'action': 'open_app', 'navigate_to': '/chat/omi'},
+      );
 
       expect(routed, isFalse);
       expect(opened, isEmpty);

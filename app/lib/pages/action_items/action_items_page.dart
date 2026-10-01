@@ -81,8 +81,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       final phase = provider.apiViewState.phase;
-      final typedResultAlreadyProjected =
-          phase == ApiViewPhase.error ||
+      final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
           phase == ApiViewPhase.locked ||
           phase == ApiViewPhase.terminal ||
           phase == ApiViewPhase.authenticationRequired ||
@@ -440,8 +439,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
         final apiPhase = provider.apiViewState.phase;
         // Successful empty results use the existing icon and conversation guidance.
-        final showTypedStatus =
-            apiPhase == ApiViewPhase.error ||
+        final showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
             apiPhase == ApiViewPhase.authenticationRequired;
@@ -460,19 +458,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : showTypedStatus
-                      ? CustomScrollView(
-                          controller: _scrollController,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          slivers: [
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: Center(child: ActionItemsApiStatus(provider: provider)),
-                            ),
-                          ],
-                        )
-                      : categorizedItems.values.every((l) => l.isEmpty)
-                      ? _buildEmptyTasksList()
-                      : _buildTasksList(categorizedItems, provider),
+                          ? CustomScrollView(
+                              controller: _scrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              slivers: [
+                                SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: Center(child: ActionItemsApiStatus(provider: provider)),
+                                ),
+                              ],
+                            )
+                          : categorizedItems.values.every((l) => l.isEmpty)
+                              ? _buildEmptyTasksList()
+                              : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               // The empty state points to conversation capture on Home.
@@ -503,7 +501,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent()))],
+      slivers: [
+        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
+      ],
     );
   }
 
