@@ -47,6 +47,43 @@ class AppReview(BaseModel):
             responded_at=datetime.fromisoformat(responded_at) if isinstance(responded_at, str) else None,
         )
 
+    @classmethod
+    def deserialize_safe(cls, data: Any) -> Optional["AppReview"]:
+        """Build an AppReview from a raw stored record, returning None if validation fails
+        so a single malformed or legacy review cannot crash review endpoints with HTTP 500."""
+        if isinstance(data, cls):
+            return data
+        if not data or not isinstance(data, dict):
+            return None
+        try:
+            return cls(**data)
+        except (ValidationError, TypeError, ValueError):
+            logger.warning('Skipping malformed app review doc: %s', data.get('uid'))
+            return None
+
+    @classmethod
+    def from_records(cls, records: Any) -> List["AppReview"]:
+        """Safely deserialize a collection of review records, skipping any malformed entries."""
+        if not records or isinstance(records, (str, bytes)):
+            return []
+        if isinstance(records, Mapping):
+            records = records.values()
+        try:
+            iterator = iter(records)
+        except TypeError:
+            return []
+        items = []
+        for r in iterator:
+            if isinstance(r, cls):
+                items.append(r)
+                continue
+            if not isinstance(r, Mapping) or not r.get('review'):
+                continue
+            safe = cls.deserialize_safe(r)
+            if safe is not None:
+                items.append(safe)
+        return items
+
 
 class AuthStep(BaseModel):
     name: str
@@ -208,6 +245,18 @@ class App(AppBaseModel):
     payment_product_id: Optional[str] = None
     payment_price_id: Optional[str] = None
     payment_link_id: Optional[str] = None
+
+    @field_validator('reviews', mode='before')
+    @classmethod
+    def sanitize_reviews(cls, v: Any) -> List[Any]:
+        return AppReview.from_records(v)
+
+    @field_validator('user_review', mode='before')
+    @classmethod
+    def sanitize_user_review(cls, v: Any) -> Optional[Any]:
+        if not v:
+            return None
+        return AppReview.deserialize_safe(v)
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None

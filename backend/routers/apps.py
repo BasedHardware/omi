@@ -1043,9 +1043,8 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     """
     # Check if user already has a persona
     persona = await run_blocking(db_executor, get_user_persona_by_uid, uid)
-    if persona:
-        # Return existing persona
-        return persona
+    if persona and (safe := _safe_app_from_dict(persona)):
+        return safe
 
     # Create a new persona for the user
     user = await run_blocking(db_executor, get_user_from_uid, uid)
@@ -1406,8 +1405,7 @@ def reply_to_review(app_id: str, data: ReplyToReviewRequest, uid: str = Depends(
 @router.get('/v1/apps/{app_id}/reviews', tags=['v1'], response_model=List[AppReview])
 def app_reviews(app_id: str):
     reviews = get_app_reviews(app_id)
-    reviews = [details for details in reviews.values() if details.get('review')]
-    return reviews
+    return AppReview.from_records(reviews.values())
 
 
 @router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'], response_model=AppMutationResponse)
