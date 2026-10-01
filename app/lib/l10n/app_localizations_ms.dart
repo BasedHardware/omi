@@ -12142,6 +12142,16 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Hidupkan Omi dalam Pintasan → Siri. Katakan “$askPhrase” atau “$questionPhrase”, kemudian ajukan soalan anda.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Anda juga boleh katakan “$searchPhrase for what I did today”.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Kemas kini tersedia';
 
   @override

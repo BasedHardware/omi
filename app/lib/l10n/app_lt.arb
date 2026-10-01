@@ -3765,6 +3765,8 @@
     "collapseAction": "Sutraukti",
     "speakerTagPromptNotMeAction": "Ne aš",
     "confidenceNextLabels": "{count, plural, =1{Pažymėkite juos dar 1 pokalbyje.} other{Pažymėkite juos dar {count} pokalbiuose.}}",
+    "siriShortcutsSetupHint": "Įjunkite Omi skyriuje Sparčieji klavišai → Siri. Pasakykite „{askPhrase}“ arba „{questionPhrase}“, tada užduokite savo klausimą.",
+    "siriShortcutsSearchHint": " Taip pat galite pasakyti „{searchPhrase} for what I did today“.",
     "updateAvailableTitle": "Yra naujinys",
     "updateAvailableMessage": "Nauja Omi versija paruošta – su pataisymais ir patobulinimais.",
     "updateRequiredTitle": "Būtina atnaujinti",

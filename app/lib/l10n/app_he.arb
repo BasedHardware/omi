@@ -11322,6 +11322,8 @@
     "collapseAction": "כווץ",
     "speakerTagPromptNotMeAction": "לא אני",
     "confidenceNextLabels": "{count, plural, =1{תייגו אותם בעוד שיחה 1.} other{תייגו אותם בעוד {count} שיחות.}}",
+    "siriShortcutsSetupHint": "הפעילו את Omi בקיצורי דרך ← Siri. אמרו “{askPhrase}” או “{questionPhrase}” ואז שאלו את השאלה.",
+    "siriShortcutsSearchHint": " ואפשר גם לומר “{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "יש עדכון זמין",
     "updateAvailableMessage": "גרסה חדשה של Omi מוכנה, עם תיקונים ושיפורים.",
     "updateRequiredTitle": "נדרש עדכון",

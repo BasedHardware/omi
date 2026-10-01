@@ -3765,6 +3765,8 @@
     "collapseAction": "ย่อ",
     "speakerTagPromptNotMeAction": "ไม่ใช่ฉัน",
     "confidenceNextLabels": "{count, plural, =1{ติดป้ายชื่อคนนี้ในการสนทนาอีก 1 รายการ} other{ติดป้ายชื่อคนนี้ในการสนทนาอีก {count} รายการ}}",
+    "siriShortcutsSetupHint": "เปิด Omi ใน คำสั่งลัด → Siri พูดว่า “{askPhrase}” หรือ “{questionPhrase}” แล้วพูดคำถามของคุณ",
+    "siriShortcutsSearchHint": " คุณยังสามารถพูดว่า “{searchPhrase} for what I did today” ได้อีกด้วย",
     "updateAvailableTitle": "มีอัปเดตใหม่",
     "updateAvailableMessage": "Omi เวอร์ชันใหม่พร้อมแล้ว พร้อมการแก้ไขและการปรับปรุง",
     "updateRequiredTitle": "ต้องอัปเดต",

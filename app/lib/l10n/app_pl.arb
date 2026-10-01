@@ -3800,6 +3800,8 @@
     "collapseAction": "Zwiń",
     "speakerTagPromptNotMeAction": "To nie ja",
     "confidenceNextLabels": "{count, plural, =1{Oznacz je jeszcze w 1 rozmowie.} other{Oznacz je jeszcze w {count} rozmowach.}}",
+    "siriShortcutsSetupHint": "Włącz Omi w Skrótach → Siri. Powiedz „{askPhrase}” albo „{questionPhrase}”, a następnie zadaj pytanie.",
+    "siriShortcutsSearchHint": " Możesz też powiedzieć „{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "Dostępna aktualizacja",
     "updateAvailableMessage": "Nowa wersja Omi jest gotowa – z poprawkami i ulepszeniami.",
     "updateRequiredTitle": "Wymagana aktualizacja",

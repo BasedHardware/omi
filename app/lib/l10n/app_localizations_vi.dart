@@ -12103,6 +12103,16 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Bật Omi trong Lối tắt → Siri. Nói “$askPhrase” hoặc “$questionPhrase”, sau đó đặt câu hỏi của bạn.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Bạn cũng có thể nói “$searchPhrase for what I did today”.';
+  }
+
+  @override
   String get updateAvailableTitle => 'Có bản cập nhật';
 
   @override
