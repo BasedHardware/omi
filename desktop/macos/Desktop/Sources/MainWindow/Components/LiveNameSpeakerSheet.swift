@@ -73,9 +73,7 @@ struct LiveNameSpeakerSheet: View {
 
         Button(action: save) {
           if isSaving {
-            ProgressView()
-              .scaleEffect(0.5)
-              .frame(width: 14, height: 14)
+            ProgressView().controlSize(.small)
           } else {
             Text("Save")
           }
@@ -198,9 +196,7 @@ struct LiveNameSpeakerSheet: View {
               Task { await createAndSelect() }
             }) {
               if isCreating {
-                ProgressView()
-                  .scaleEffect(0.5)
-                  .frame(width: 14, height: 14)
+                ProgressView().controlSize(.small)
               } else {
                 Text("Add")
                   .scaledFont(size: OmiType.caption, weight: .medium)
