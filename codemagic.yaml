@@ -396,6 +396,7 @@ workflows:
         - app_env
         - firebase
         - shorebird
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for collect_mobile_release_admission.py
       vars:
         APP_ID: 6502156163
       flutter: 3.44.5
@@ -762,6 +763,7 @@ workflows:
         - firebase
         - google_play
         - shorebird
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for collect_mobile_release_admission.py
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
@@ -2333,20 +2335,32 @@ workflows:
 
           xattr -cr "$APP_BUNDLE"
 
-          # Sign ffmpeg (inside SPM resource bundle)
-          FFMPEG_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/ffmpeg"
-          if [ -f "$FFMPEG_PATH" ]; then
-            codesign --force --options runtime --timestamp \
-              --sign "$SIGN_IDENTITY" "$FFMPEG_PATH"
+          # SwiftPM can place resources at the bundle root or under
+          # Contents/Resources. Sign every native payload in either layout.
+          RESOURCE_BUNDLE="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle"
+          if [ ! -d "$RESOURCE_BUNDLE" ]; then
+            echo "ERROR: SwiftPM resource bundle is missing: $RESOURCE_BUNDLE" >&2
+            exit 1
           fi
 
           # Sign node with JIT entitlements (V8 requires MAP_JIT under Hardened Runtime)
           NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
-          if [ -f "$NODE_BUNDLE_PATH" ]; then
-            codesign --force --options runtime --timestamp \
-              --sign "$SIGN_IDENTITY" \
-              --entitlements Desktop/Node.entitlements \
-              "$NODE_BUNDLE_PATH"
+          while IFS= read -r -d '' native_bin; do
+            if file "$native_bin" | grep -q 'Mach-O'; then
+              if [ "$native_bin" = "$NODE_BUNDLE_PATH" ]; then
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" \
+                  --entitlements Desktop/Node.entitlements \
+                  "$native_bin"
+              else
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" "$native_bin"
+              fi
+            fi
+          done < <(find "$RESOURCE_BUNDLE" -type f -print0)
+          if [ ! -f "$NODE_BUNDLE_PATH" ]; then
+            echo "ERROR: bundled node is missing: $NODE_BUNDLE_PATH" >&2
+            exit 1
           fi
 
           # Sign agent native binaries
@@ -2454,6 +2468,10 @@ workflows:
       - name: Notarize stable and Beta apps concurrently
         script: |
           set -euo pipefail
+          scripts/check-desktop-bundle-signatures.sh "$APP_BUNDLE"
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            scripts/check-desktop-bundle-signatures.sh "$BUILD_DIR/$BETA_APP_NAME.app"
+          fi
           NOTARIZE_ARGS=(
             --kind app
             --work-dir "$BUILD_DIR/notarization"
@@ -2896,17 +2914,35 @@ workflows:
     environment:
       groups:
         - google_play
+      # Per-run inputs, overridden by the API trigger's environment.variables (Codemagic only injects
+      # overrides for declared variables). The placeholders are rejected by mobile_store_promote.py,
+      # so a run without explicit inputs fails closed; empty-string defaults fail yaml validation.
       vars:
-        CONFIRM: ""
-        PROMOTE_PLATFORM: ""
-        PROMOTE_VERSION: ""
-        PROMOTE_IOS_BUILD: ""
-        PROMOTE_ANDROID_BUILD: ""
+        CONFIRM: "not-confirmed"
+        PROMOTE_PLATFORM: "unset"
+        PROMOTE_VERSION: "unset"
+        PROMOTE_IOS_BUILD: "0"
+        PROMOTE_ANDROID_BUILD: "0"
     working_directory: app
     scripts:
       - name: Submit explicitly selected existing builds
         script: |
           set -euo pipefail
+          # Inputs come from the API trigger's environment.variables when Codemagic injects them;
+          # when the declared placeholders are still in place, the committed request file
+          # scripts/store_promotion_request.json is the reviewed source of truth for this run.
+          REQ="scripts/store_promotion_request.json"
+          if [ "${CONFIRM:-not-confirmed}" = "not-confirmed" ] && [ -f "$REQ" ]; then
+            CONFIRM="$(jq -r '.confirm // ""' "$REQ")"
+            PROMOTE_PLATFORM="$(jq -r '.platform // ""' "$REQ")"
+            PROMOTE_VERSION="$(jq -r '.version // ""' "$REQ")"
+            PROMOTE_IOS_BUILD="$(jq -r '.ios_build // ""' "$REQ")"
+            PROMOTE_ANDROID_BUILD="$(jq -r '.android_build // ""' "$REQ")"
+          fi
+          # The declared "0" placeholders mean "not supplied".
+          [ "${PROMOTE_IOS_BUILD:-}" = "0" ] && PROMOTE_IOS_BUILD=""
+          [ "${PROMOTE_ANDROID_BUILD:-}" = "0" ] && PROMOTE_ANDROID_BUILD=""
+          echo "promotion inputs: platform=${PROMOTE_PLATFORM:-} version=${PROMOTE_VERSION:-} ios=${PROMOTE_IOS_BUILD:-} android=${PROMOTE_ANDROID_BUILD:-} confirm_set=$([ "${CONFIRM:-}" = "submit-for-review" ] && echo yes || echo no)"
           python3 scripts/mobile_store_promote.py \
             --confirm "${CONFIRM:-}" \
             --platform "${PROMOTE_PLATFORM:-}" \

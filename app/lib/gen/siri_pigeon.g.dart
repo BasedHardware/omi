@@ -616,6 +616,25 @@ class SiriIndexApi {
     ;
   }
 
+  /// Clear one owner's persisted snapshot and Spotlight index before a fresh authoritative traversal.
+  Future<void> repairOwnerIndex(String uid) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.repairOwnerIndex$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uid]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
   Future<int> wipe() async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.wipe$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(

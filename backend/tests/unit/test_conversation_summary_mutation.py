@@ -51,7 +51,7 @@ class _DB:
 
     def document(self, _name):
         self._document_calls += 1
-        return self.ref if self._document_calls == 2 else self
+        return self.ref if self._document_calls % 2 == 0 else self
 
     def transaction(self):
         return self.tx

@@ -450,6 +450,12 @@ def get_cached_signed_url(blob_path: str) -> str:
     return signed_url.decode()
 
 
+def get_cached_signed_url_ttl(blob_path: str) -> int:
+    """Seconds the cached signed URL has left (0 when absent); the cache entry expires just before the signature."""
+    ttl = r.ttl(f'urls:{blob_path}')
+    return ttl if isinstance(ttl, int) and ttl > 0 else 0
+
+
 def delete_cached_signed_url(blob_path: str) -> None:
     """Evict a cached signed URL. Callers deleting the underlying blob must call
     this too — a delete that leaves a still-live cached signed URL handing out

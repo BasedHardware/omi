@@ -217,6 +217,10 @@ def extract_conversations(data: Any) -> List[Dict[str, Any]]:
     - Bare arrays: [ {...}, {...} ]
     - Wrapped dicts: {"conversations": [...]}, {"items": [...]}, {"data": [...]}
     - Single conversation dict: { "id": "...", ... }
+
+    Ensures that empty envelopes or invalid dict payloads (such as API error responses
+    like {"detail": "..."}) return an empty list instead of falling through and
+    creating phantom conversation files.
     """
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
@@ -225,7 +229,9 @@ def extract_conversations(data: Any) -> List[Dict[str, Any]]:
             val = data.get(key)
             if isinstance(val, list):
                 return [item for item in val if isinstance(item, dict)]
-        return [data]
+        if any(key in data for key in ("id", "transcript_segments", "structured", "started_at", "created_at")):
+            return [data]
+        return []
     return []
 
 

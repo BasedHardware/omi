@@ -152,6 +152,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 
+def _safe_app_from_dict(app: Optional[dict]) -> Optional[App]:
+    if not isinstance(app, dict):
+        return None
+    try:
+        return App(**app)
+    except (ValidationError, TypeError):
+        return None
+
+
 class AppSelectOption(PydanticBaseModel):
     title: str
     id: str
@@ -877,7 +886,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
-    if 'external_integration' in data:
+    if isinstance(data.get('external_integration'), dict):
         backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
@@ -1013,7 +1022,7 @@ async def update_persona(
 def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
     app = get_persona_by_uid(uid)
     # print(app)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='Persona not found')
     if app.uid != uid:
@@ -1102,12 +1111,18 @@ def update_app(
             f.write(file.file.read())
         img_url = upload_app_logo(file_path, app_id)
         data['image'] = img_url
+    # Ownership was checked on the path id; a body `id` must not retarget the write to another app.
+    data['id'] = app_id
     data['updated_at'] = datetime.now(timezone.utc)
 
-    # Backward compatibility: Set app_home_url from first auth step if not provided
-    if 'external_integration' in data:
+    # Backfill app_home_url from auth steps; explicit null clears the integration, non-dicts fail validation.
+    if isinstance(data.get('external_integration'), dict):
         backfill_app_home_url_from_auth_steps(data['external_integration'])
         _set_instructions_url_flag(data['external_integration'])
+
+    for field in ('name', 'category', 'author', 'description', 'image', 'capabilities'):
+        if field in data and data[field] is None:
+            del data[field]
 
     try:
         update_app = AppUpdate.model_validate(data)
@@ -1133,11 +1148,11 @@ def update_app(
 
     # payment link
     upsert_app_payment_link(
-        data.get('id'),
+        app_id,
         data.get('is_paid', False),
         data.get('price'),
         data.get('payment_plan'),
-        data.get('uid'),
+        uid,
         previous_price=app.get("price", 0),
     )
 
@@ -1224,7 +1239,7 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 @router.get('/v1/apps/{app_id}', tags=['v1'], response_model=App)
 def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id_with_reviews(app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if not app.approved and app.uid != uid:
@@ -1272,7 +1287,7 @@ def get_app_categories():
 @router.post('/v1/apps/review', tags=['v1'], response_model=AppMutationResponse)
 def review_app(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -1311,7 +1326,7 @@ def review_app(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_
 @router.patch('/v1/apps/{app_id}/review', tags=['v1'], response_model=AppMutationResponse)
 def update_app_review(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -1352,7 +1367,7 @@ def update_app_review(app_id: str, data: ReviewAppRequest, uid: str = Depends(au
 @router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'], response_model=AppMutationResponse)
 def reply_to_review(app_id: str, data: ReplyToReviewRequest, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -1398,7 +1413,7 @@ def app_reviews(app_id: str):
 @router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'], response_model=AppMutationResponse)
 def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.uid != uid:
@@ -2059,7 +2074,10 @@ async def mcp_oauth_callback(code: str, state: str):
         )
     except Exception as e:
         logger.error(f"Token exchange failed: {e}")
-        return HTMLResponse('<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code for access token.</p></body></html>', status_code=502)
+        return HTMLResponse(
+            '<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code for access token.</p></body></html>',
+            status_code=502,
+        )
 
     # Update stored tokens
     oauth_tokens['access_token'] = token_data['access_token']
@@ -2072,7 +2090,10 @@ async def mcp_oauth_callback(code: str, state: str):
         tools = await discover_mcp_tools(server_url, token_data['access_token'])
     except Exception as e:
         logger.error(f"Tool discovery failed: {e}")
-        return HTMLResponse('<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools on the MCP server.</p></body></html>', status_code=502)
+        return HTMLResponse(
+            '<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools on the MCP server.</p></body></html>',
+            status_code=502,
+        )
 
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
@@ -2219,7 +2240,7 @@ def _disabled_app_install_detail(app: App, uid: str) -> str:
 @router.post('/v1/apps/enable', response_model=AppMutationResponse)
 async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
-    app = App(**app) if app else None
+    app = _safe_app_from_dict(app)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.disabled:
@@ -2260,8 +2281,9 @@ def disable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.
         disable_app(uid, app_id)
         app = get_available_app_by_id(app_id, uid)
         if app:
-            app = App(**app)
-            if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
+            app = _safe_app_from_dict(app)
+            is_public = (app.private is None or not app.private) if app else False
+            if app and is_public and (app.uid is None or app.uid != uid) and not is_tester(uid):
                 decrease_app_installs_count(app_id)
         record_product_event('app_enabled', request=request, op='disable')
         return {'status': 'ok'}

@@ -28,6 +28,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils import app_integrations
 from utils import cloud_tasks
 from utils.conversations.finalizer import ConversationFinalizationDisposition, ConversationFinalizationError
+from utils.conversations.recovery import RecoveryStructureUnavailableError
 import utils.conversations.finalizer as persisted_finalizer
 import services.conversation_finalization as finalization_service
 
@@ -676,6 +677,102 @@ async def test_worker_dead_letters_the_final_failed_attempt(monkeypatch):
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'dead_letter'}
     dead_letter.assert_called_once_with('job-1', 1, 1, 3)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ('enabled', 'source_error', 'terminal_expected'),
+    [
+        (True, RecoveryStructureUnavailableError('minimum'), True),
+        (False, RecoveryStructureUnavailableError('minimum'), False),
+        (True, TimeoutError('provider timeout'), False),
+    ],
+)
+async def test_recovery_minimum_ends_on_first_failure_only_when_enabled(
+    monkeypatch, enabled, source_error, terminal_expected
+):
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', str(enabled).lower())
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(finalization_router, 'should_skip_background_account_mutation', lambda uid: False)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 3, 'attempt_count': 1},
+    )
+    monkeypatch.setattr(
+        jobs_db,
+        'get_finalization_job',
+        lambda job_id: {
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'processing_trigger': 'server_recovery',
+            'fanout_status': 'pending',
+        },
+    )
+    error = ConversationFinalizationError('processing_failed')
+    error.__cause__ = source_error
+    monkeypatch.setattr(finalization_router, 'finalize_persisted_conversation', AsyncMock(side_effect=error))
+    terminal = MagicMock(return_value=True)
+    retryable = MagicMock(return_value=True)
+    monkeypatch.setattr(finalization_router, 'final_attempt_failed', terminal)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 5)
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': 'job-1', 'dispatch_generation': 1}), task_retry_count=0
+    )
+
+    if terminal_expected:
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'dead_letter'}
+        terminal.assert_called_once_with('job-1', 1, 3, 2, failure_code='recovery_structure_unavailable')
+        retryable.assert_not_called()
+    else:
+        assert response.status_code == 500
+        terminal.assert_not_called()
+        retryable.assert_called_once_with('job-1', 1, 3, 'processing_failed')
+
+
+@pytest.mark.anyio
+async def test_recovery_minimum_completes_committed_fanout(monkeypatch):
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(finalization_router, 'should_skip_background_account_mutation', lambda uid: False)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 3, 'attempt_count': 1},
+    )
+    monkeypatch.setattr(
+        jobs_db,
+        'get_finalization_job',
+        lambda job_id: {
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'processing_trigger': 'server_recovery',
+            'fanout_status': 'completed',
+        },
+    )
+    error = ConversationFinalizationError('processing_failed')
+    error.__cause__ = RecoveryStructureUnavailableError('minimum')
+    monkeypatch.setattr(finalization_router, 'finalize_persisted_conversation', AsyncMock(side_effect=error))
+    terminal = MagicMock()
+    complete = MagicMock(return_value=True)
+    monkeypatch.setattr(finalization_router, 'final_attempt_failed', terminal)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', complete)
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': 'job-1', 'dispatch_generation': 1}), task_retry_count=0
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'done'}
+    complete.assert_called_once_with('job-1', 1, 3)
+    terminal.assert_not_called()
 
 
 @pytest.mark.anyio

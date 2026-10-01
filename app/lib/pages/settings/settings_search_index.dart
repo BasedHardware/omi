@@ -20,6 +20,7 @@ enum SettingsDestination {
   integrations,
   permissions,
   memories,
+  goals,
   language,
   customVocabulary,
   voiceProfile,
@@ -28,7 +29,6 @@ enum SettingsDestination {
   transcription,
   conversationDisplay,
   conversationTimeout,
-  homeScreen,
   phoneCalls,
   dataPrivacy,
   exportData,
@@ -89,7 +89,6 @@ const _device = 'lib/pages/settings/device_settings.dart';
 const _deviceInfo = 'lib/pages/settings/device/device_info_groups.dart';
 const _permissions = 'lib/pages/settings/permissions_page.dart';
 const _developer = 'lib/pages/settings/developer.dart';
-const _homeScreen = 'lib/pages/settings/home_screen_settings_page.dart';
 
 bool _whenDeviceConnected(SettingsSearchScope s) => s.deviceConnected;
 bool _whenSupportLinks(SettingsSearchScope s) => s.supportLinks;
@@ -138,7 +137,6 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Notifications & Display group
   SettingsSearchEntry('notifications', (l) => l.notifications, SettingsDestination.notifications, _groups),
-  SettingsSearchEntry('homeScreen', (l) => l.homeScreen, SettingsDestination.homeScreen, _groups),
   SettingsSearchEntry(
       'conversationDisplay', (l) => l.conversationDisplay, SettingsDestination.conversationDisplay, _groups),
   SettingsSearchEntry('appearance', (l) => l.appearance, SettingsDestination.notificationsGroup, _groups),
@@ -150,7 +148,6 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Data & Privacy group
   SettingsSearchEntry('dataProtection', (l) => l.dataProtection, SettingsDestination.dataPrivacy, _groups),
-  SettingsSearchEntry('memories', (l) => l.memories, SettingsDestination.memories, _groups),
   SettingsSearchEntry('exportAllData', (l) => l.exportAllData, SettingsDestination.exportData, _groups),
   SettingsSearchEntry('importData', (l) => l.importData, SettingsDestination.importData, _groups),
   SettingsSearchEntry('dataAndPrivacy', (l) => l.dataAndPrivacy, SettingsDestination.privacyGroup, _drawer),
@@ -164,6 +161,10 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   // Feedback (on the sheet, where Intercom is supported)
   SettingsSearchEntry('feedbackBug', (l) => l.feedbackBug, SettingsDestination.feedback, _drawer,
       visible: _whenSupportLinks),
+
+  // Memories and Goals (on the sheet)
+  SettingsSearchEntry('memories', (l) => l.memories, SettingsDestination.memories, _drawer),
+  SettingsSearchEntry('goals', (l) => l.goals, SettingsDestination.goals, _drawer),
 
   // Developer Settings (opens the page directly)
   SettingsSearchEntry('developerSettings', (l) => l.developerSettings, SettingsDestination.developer, _drawer),
@@ -190,12 +191,6 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('bluetooth', (l) => l.bluetooth, SettingsDestination.permissions, _permissions),
   SettingsSearchEntry('location', (l) => l.location, SettingsDestination.permissions, _permissions),
   SettingsSearchEntry('backgroundActivity', (l) => l.backgroundActivity, SettingsDestination.permissions, _permissions),
-
-  // Home screen
-  SettingsSearchEntry('goalTracker', (l) => l.goalTracker, SettingsDestination.homeScreen, _homeScreen),
-  SettingsSearchEntry('dailyScore', (l) => l.dailyScore, SettingsDestination.homeScreen, _homeScreen),
-  SettingsSearchEntry(
-      'showPhoneCallButtonTitle', (l) => l.showPhoneCallButtonTitle, SettingsDestination.homeScreen, _homeScreen),
 
   // Developer settings
   SettingsSearchEntry('creatorPayouts', (l) => l.creatorPayouts, SettingsDestination.creatorPayouts, _developer),

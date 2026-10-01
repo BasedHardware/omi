@@ -40,6 +40,7 @@ void main() {
     final io = DeviceGuidedVoiceIO(createMemoryRequest: (_, __, ___) async => memory);
 
     expect(await io.remember('I like coffee'), isTrue);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.rows['guided-1']?.content, 'I like coffee');
   });
 }

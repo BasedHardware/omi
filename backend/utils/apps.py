@@ -41,7 +41,6 @@ from database.apps import (
 )
 from database.auth import get_user_name
 from database.conversations import get_conversations
-from database.memories import get_memories
 from database._client import db as firestore_db
 from utils.memory.memory_service import MemoryService
 from database.redis_db import (
@@ -692,7 +691,10 @@ def upsert_app_payment_link(
         logger.warning(f"App is not found, app_id: {app_id}")
         return None
 
-    app = App(**app_data)
+    app = _safe_build_app(app_data)
+    if not app:
+        logger.warning(f"Cannot upsert payment link for malformed app, app_id: {app_id}")
+        return None
 
     if previous_price and previous_price == price:
         logger.info(f"App price is existing, app_id: {app_id}")
@@ -817,8 +819,14 @@ async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
     """Generate a persona prompt based on user memories and conversations."""
 
     # Get latest memories and user info — exclude locked content
-    all_memories = await run_blocking(db_executor, get_memories, uid, limit=250)
-    memories = [m for m in all_memories if not m.get('is_locked')]
+    universal_memories = await run_blocking(
+        db_executor,
+        MemoryService(db_client=firestore_db).read,
+        uid,
+        limit=250,
+        offset=0,
+    )
+    memories = [m.dict() for m in universal_memories if not m.is_locked]
     user_name = await run_blocking(db_executor, get_user_name, uid)
 
     # Get and condense recent conversations — exclude locked content
@@ -902,7 +910,8 @@ async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
 
 def generate_persona_desc(uid: str, persona_name: str):
     """Generate a persona description based on user memories."""
-    memories = get_memories(uid, limit=250)
+    universal_memories = MemoryService(db_client=firestore_db).read(uid, limit=250, offset=0)
+    memories = [m.dict() for m in universal_memories]
 
     with track_usage(uid, Features.PERSONA):
         persona_description = generate_persona_description(memories, persona_name)

@@ -17,6 +17,7 @@ import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/ui/ui.dart';
@@ -75,7 +76,9 @@ class ConversationDetailHeader extends StatelessWidget {
                       recordings: recordings,
                       onTap: () {
                         trackConversationAction(
-                            ConversationActionAction.recordingsOpen, ConversationActionSurface.detailBody);
+                          ConversationActionAction.recordingsOpen,
+                          ConversationActionSurface.detailBody,
+                        );
                         onOpenRecordings(recordings);
                       },
                     ),
@@ -93,7 +96,7 @@ class ConversationDetailHeader extends StatelessWidget {
 
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
     final titleStyle = OmiType.title3.copyWith(height: 1.25);
-    // The title is one line, so the emoji centres on it.
+    // The title field grows from one to two lines; centre the emoji against its current height.
     return Row(
       children: [
         if (!conversation.discarded) ...[
@@ -107,6 +110,7 @@ class ConversationDetailHeader extends StatelessWidget {
                   focusNode: provider.titleFocusNode,
                   controller: provider.titleController,
                   style: titleStyle,
+                  hintText: transcriptFallbackTitle(conversation),
                 ),
         ),
       ],
@@ -252,10 +256,7 @@ class _HeaderChip extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (trailing == true) ...[
-            const SizedBox(width: 2),
-            Icon(Icons.keyboard_arrow_down, size: 16, color: color),
-          ],
+          if (trailing == true) ...[const SizedBox(width: 2), Icon(Icons.keyboard_arrow_down, size: 16, color: color)],
         ],
       ),
     );

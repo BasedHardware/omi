@@ -28,18 +28,13 @@ class SettingsDrawer extends StatefulWidget {
 
   /// Opens Settings; resolves when the sheet closes (callers compare settings after that).
   static Future<void> show(BuildContext context) {
-    // Settings is a grouped list: surface1 rows on the black page colour, so the sheet itself is
-    // surface0 (showOmiSheet paints surface1). Same shell otherwise: OmiSheetScaffold content,
-    // framework drag handle, trailing close X.
-    final showSheet = showModalBottomSheet<void>; // omi-ux-allow: raw-bottom-sheet -- surface0 grouped sheet
-    return showSheet(
+    // Settings is a grouped list: surface1 rows on the page colour, so the sheet itself is surface0
+    // (showOmiSheet paints surface1). Same shell otherwise: framework drag handle, own header with
+    // a trailing close X. The surface is read on every rebuild, so switching Light/Dark from a page
+    // opened here repaints the sheet too.
+    return showOmiSurfaceSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      backgroundColor: OmiColors.surface0,
-      shape: const RoundedRectangleBorder(borderRadius: OmiRadius.sheetTop),
-      clipBehavior: Clip.antiAlias,
+      surface: () => OmiColors.surface0,
       builder: (context) => const FractionallySizedBox(heightFactor: 0.92, child: SettingsDrawer()),
     );
   }
@@ -171,6 +166,16 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 tag: SettingsTag(l10n.beta, OmiColors.warning)),
             _row(SettingsDestination.privacyGroup,
                 key: 'settings_group_privacy', icon: FontAwesomeIcons.shield, title: l10n.dataAndPrivacy),
+          ],
+        ),
+        const SizedBox(height: OmiSpacing.xl),
+        // Memories and Goals left the Home tabs (David, 2026-09-29): one tap from the sheet.
+        OmiSettingsGroup(
+          children: [
+            _row(SettingsDestination.memories,
+                key: 'settings_row_memories', icon: FontAwesomeIcons.brain, title: l10n.memories),
+            _row(SettingsDestination.goals,
+                key: 'settings_row_goals', icon: FontAwesomeIcons.bullseye, title: l10n.goals),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),

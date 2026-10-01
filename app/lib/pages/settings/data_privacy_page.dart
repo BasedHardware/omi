@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/gestures.dart';
@@ -27,21 +28,20 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   int _siriRevision = 0;
 
   Future<void> _loadSiriSetting() async {
+    final revision = _siriRevision;
     try {
       final enabled = await SiriIntegration.instance.isEnabled();
-      if (mounted) setState(() => _siriEnabled = enabled);
+      if (mounted && revision == _siriRevision) setState(() => _siriEnabled = enabled);
     } catch (_) {/* Keep the default until native state is available. */}
   }
 
-  Future<void> _setSiriEnabled(bool enabled) async {
+  void _setSiriEnabled(bool enabled) {
     final revision = ++_siriRevision;
     final previous = _siriEnabled;
     setState(() => _siriEnabled = enabled);
-    try {
-      await SiriIntegration.instance.setEnabled(enabled);
-    } catch (_) {
+    unawaited(SiriIntegration.instance.setEnabled(enabled).catchError((Object _) {
       if (mounted && revision == _siriRevision) setState(() => _siriEnabled = previous);
-    }
+    }));
   }
 
   @override

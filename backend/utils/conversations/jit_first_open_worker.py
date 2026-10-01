@@ -58,7 +58,7 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
     people: list[Person] = []
     person_ids = conversation.get_person_ids()
     if person_ids:
-        people = [Person(**item) for item in processing.users_db.get_people_by_ids(uid, list(set(person_ids)))]
+        people = Person.deserialize_many_safe(processing.users_db.get_people_by_ids(uid, list(set(person_ids))))
 
     if not complete_state('folder_assignment'):
         authorize('folder_assignment')

@@ -1,3 +1,0 @@
-{
-  "change": "Fixed repeated recording restarts when a microphone briefly alternates between silence and live audio"
-}

@@ -167,6 +167,36 @@ def test_late_audio_copies_without_retracting_completed_ancestor(system):
     copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
 
 
+def test_bridge_redirect_cycle_is_bounded_as_assignment_conflict_subtype(monkeypatch):
+    from utils.sync import bridge
+
+    monkeypatch.setattr(
+        bridge.conversations_db,
+        'get_conversation',
+        lambda uid, conversation_id: {'id': conversation_id, 'sync_merged_into': 'loop'},
+    )
+
+    with pytest.raises(bridge.SyncAssignmentConflict, match='redirect cycle') as exc_info:
+        bridge.finish_sync_bridges('u', 'loop')
+
+    assert exc_info.value.subtype == 'redirect_cycle'
+
+
+def test_bridge_source_shape_conflict_uses_other_subtype(monkeypatch):
+    from utils.sync import bridge
+
+    rows = {
+        'survivor': {'id': 'survivor', 'sync_merged_from': ['donor']},
+        'donor': {'id': 'donor', 'deleted': False},
+    }
+    monkeypatch.setattr(bridge.conversations_db, 'get_conversation', lambda uid, cid: rows.get(cid))
+
+    with pytest.raises(bridge.SyncAssignmentConflict, match='source missing or not a tombstone') as exc_info:
+        bridge.finish_sync_bridges('u', 'survivor')
+
+    assert exc_info.value.subtype == 'other'
+
+
 def test_receipt_does_not_mark_a_newer_tombstone_revision(system):
     store, ingest, retract, copy = system
     ingest(0)

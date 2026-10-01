@@ -120,3 +120,37 @@ def _conv(segments):
 )
 def test_conversation_matches_speaker(conversation, speaker_id, expected):
     assert search_mod.conversation_matches_speaker(conversation, speaker_id) is expected
+
+
+def _stream(rows):
+    def fetch(limit, offset):
+        return rows[offset : offset + limit]
+
+    return fetch
+
+
+def test_browse_finds_speaker_beyond_the_latest_page():
+    # 200 newest conversations without the person, then 3 with them: the old Typesense-first-page
+    # post-filter returned nothing here.
+    rows = [{"id": f"n{i}", "transcript_segments": [{"person_id": "other"}]} for i in range(200)]
+    rows += [{"id": f"m{i}", "transcript_segments": [{"person_id": "p1"}]} for i in range(3)]
+    result = search_mod.browse_conversations_by_speaker(_stream(rows), "p1", page=1, per_page=20)
+    assert [c["id"] for c in result["items"]] == ["m0", "m1", "m2"]
+    assert result["total_pages"] == 1
+
+
+def test_browse_paginates_and_reports_more():
+    rows = [{"id": f"m{i}", "transcript_segments": [{"person_id": "p1"}]} for i in range(25)]
+    first = search_mod.browse_conversations_by_speaker(_stream(rows), "p1", page=1, per_page=10)
+    second = search_mod.browse_conversations_by_speaker(_stream(rows), "p1", page=2, per_page=10)
+    third = search_mod.browse_conversations_by_speaker(_stream(rows), "p1", page=3, per_page=10)
+    assert [len(first["items"]), len(second["items"]), len(third["items"])] == [10, 10, 5]
+    assert first["total_pages"] == 2 and second["total_pages"] == 3 and third["total_pages"] == 3
+
+
+def test_browse_skips_locked_and_stops_at_scan_cap():
+    rows = [{"id": "locked", "is_locked": True, "transcript_segments": [{"person_id": "p1"}]}]
+    rows += [{"id": f"n{i}", "transcript_segments": []} for i in range(120)]
+    result = search_mod.browse_conversations_by_speaker(_stream(rows), "p1", page=1, per_page=5, scan_cap=100, batch=50)
+    assert result["items"] == []
+    assert result["total_pages"] == 2  # cap hit before the end: the client may ask for more

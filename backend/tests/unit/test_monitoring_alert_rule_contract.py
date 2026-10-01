@@ -814,6 +814,8 @@ def test_live_transcription_success_alert_measures_the_user_felt_outcome():
     paged, because every existing rule watched provider plumbing instead of
     the session outcome. too_short sessions stay out of the denominator so
     quiet nights cannot page, and the >= 50 volume guard keeps no-data healthy.
+    Failed reconnect sockets are counted as no_transcript, so a reconnect storm
+    grows the denominator and cannot hide a near-zero success ratio.
     """
     for export_name, rules in _all_rule_exports().items():
         rule = rules[LIVE_TRANSCRIPTION_SUCCESS_RULE]
@@ -821,7 +823,7 @@ def test_live_transcription_success_alert_measures_the_user_felt_outcome():
         assert rule["labels"]["severity"] == "critical", export_name
         assert rule["labels"]["impact"] == "user-experience", export_name
         assert rule["noDataState"] == "OK", export_name
-        assert rule["for"] == "5m", export_name
+        assert rule["for"] == "10m", export_name
         exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
         assert exprs[0] == LIVE_TRANSCRIPTION_SUCCESS_TOTAL_EXPR, export_name
         assert exprs[0] != exprs[1], export_name
@@ -832,6 +834,39 @@ def test_live_transcription_success_alert_measures_the_user_felt_outcome():
         assert math_nodes == ["$A >= 50 && $B < 0.90"], export_name
         assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
         assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
+
+
+def test_soniox_budget_exhaustion_alert_pages_from_a_close_in_five_minutes():
+    uid = "omi-soniox-budget-exhausted"
+    expected_expr = (
+        'sum(increase(omi_stt_stream_close_total{job="backend-listen-metrics",provider="soniox",'
+        'reason="provider_budget_exhausted"}[5m]))'
+    )
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[uid]
+        assert rule["title"] == "Soniox balance exhausted — top up now", export_name
+        assert rule["annotations"]["summary"] == "Soniox balance exhausted — top up now", export_name
+        assert rule["labels"]["alert_identity"] == uid, export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        assert rule["for"] == "0s", export_name
+        exprs = [node["model"]["expr"] for node in rule["data"] if node["model"].get("expr")]
+        assert exprs == [expected_expr], export_name
+        math_nodes = [node["model"]["expression"] for node in rule["data"] if node["model"].get("type") == "math"]
+        assert math_nodes == ["$A > 0"], export_name
+
+
+def test_soniox_runway_and_modulate_fallback_alerts_name_the_operator_lever():
+    for export_name, rules in _all_rule_exports().items():
+        for percent in (70, 90):
+            rule = rules[f"omi-soniox-runway-{percent}"]
+            assert "top up Soniox" in rule["annotations"]["summary"], export_name
+            assert f"$B >= 0.{percent}" in rule["data"][2]["model"]["expression"], export_name
+            assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
+            assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
+        incident = rules["omi-modulate-failing-soniox"]
+        assert "Modulate failing" in incident["annotations"]["summary"], export_name
+        assert "traffic on Soniox" in incident["annotations"]["summary"], export_name
+        assert incident["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
 
 
 def test_live_transcription_success_alert_fires_when_no_transcribed_series_exists():
@@ -1201,6 +1236,23 @@ def test_windowed_live_stt_rules_cover_admission_and_pre_audio_failures():
             assert rule['noDataState'] == 'OK'
             assert any('$A' in d['model'].get('expression', '') for d in rule['data'])
             assert (REPO / rule['annotations']['runbook']).is_file()
+
+
+def test_window_canary_batch_protection_pages_telegram_before_sync_degrades():
+    expected = {
+        'omi-stt-batch-queue-depth': 'parakeet_batch_pending_requests',
+        'omi-stt-batch-queue-latency': 'parakeet_queue_duration_seconds_bucket',
+        'omi-stt-sync-prerecorded-errors': 'parakeet_prerecorded_requests_total',
+    }
+    for rules in _all_rule_exports().values():
+        for uid, metric in expected.items():
+            rule = rules[uid]
+            assert metric in ' '.join(d['model'].get('expr', '') for d in rule['data'])
+            assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert rule['noDataState'] == 'Alerting'
+            assert rule['isPaused'] is False
+            assert 'Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0' in rule['annotations']['summary']
+            assert rule['for'] == '2m'
 
 
 LISTEN_DASHBOARD = MONITORING / "dashboards/gke/backend-listen.json"

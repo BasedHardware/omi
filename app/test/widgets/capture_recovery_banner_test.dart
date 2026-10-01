@@ -18,11 +18,17 @@ void main() {
 
   List<({String event, Map<String, Object> properties})> events = [];
 
-  CaptureWedgeMonitor makeMonitor({bool flagEnabled = true, Future<void> Function()? transferRetry}) {
+  CaptureWedgeMonitor makeMonitor({
+    bool flagEnabled = true,
+    DateTime Function()? now,
+    Future<void> Function()? transferRetry,
+    Future<void> Function(String deviceId)? bleRetry,
+  }) {
     return CaptureWedgeMonitor(
+      now: now,
       featureGate: () async => flagEnabled,
       track: (event, properties) => events.add((event: event, properties: properties)),
-      bleRetry: (_) async {},
+      bleRetry: bleRetry ?? (_) async {},
       transferRetry: transferRetry,
       appBuild: () => '1',
       platform: () => 'ios',
@@ -67,8 +73,8 @@ void main() {
   setUp(() => events = []);
 
   group('CaptureRecoveryBanner', () {
-    testWidgets('renders the repair prompt once the wedge is declared', (tester) async {
-      final monitor = makeMonitor();
+    testWidgets('renders reconnect action after a failed automatic BLE retry', (tester) async {
+      final monitor = makeMonitor(bleRetry: (_) async => throw StateError('BLE unavailable'));
       wedge(monitor);
 
       await pumpBanner(tester, monitor);
@@ -117,7 +123,7 @@ void main() {
       expect(forEvent('Capture Recovery Actioned').single['surface'], 'banner');
     });
 
-    testWidgets('stale upload backlog shows a persistent sync warning and retries transfer on tap', (tester) async {
+    testWidgets('stale upload backlog retries transfer without a duplicate banner', (tester) async {
       var retries = 0;
       final monitor = makeMonitor(
         flagEnabled: false,
@@ -128,17 +134,27 @@ void main() {
       monitor.observeWalBacklog(pendingCount: 2, oldestPendingAt: DateTime.now().subtract(const Duration(hours: 3)));
 
       await pumpBanner(tester, monitor);
-      final context = tester.element(find.byType(CaptureRecoveryBanner));
-      expect(find.text(AppLocalizations.of(context).recordingsNotSynced), findsOneWidget);
       expect(retries, 1, reason: 'declaration attempts one automatic recovery');
+      expect(find.byKey(const Key('capture_recovery_banner')), findsNothing);
+      expect(forEvent('Capture Wedge Detected').single['trigger'], CaptureWedgeMonitor.triggerUploadSilence);
+      expect(forEvent('Capture Recovery Prompt Shown'), isEmpty);
+    });
 
-      await tester.tap(find.byKey(const Key('capture_recovery_banner')));
-      await tester.pump();
-      await tester.pump();
+    testWidgets('two minutes of byte-producing silence has no banner', (tester) async {
+      var now = DateTime(2026, 9, 28);
+      var retries = 0;
+      final monitor = makeMonitor(now: () => now, transferRetry: () async => retries++);
+      final handle = monitor.onCaptureSessionConnected(deviceId: 'dev-a', source: 'omi');
+      monitor.onSocketBytesSent(handle, 640);
+      now = now.add(const Duration(minutes: 2));
+      monitor.runConnectedWatchdog();
 
-      expect(retries, 2);
-      expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
-      expect(forEvent('Capture Recovery Actioned').single['surface'], 'banner');
+      await pumpBanner(tester, monitor);
+      expect(find.byKey(const Key('capture_recovery_banner')), findsNothing);
+      expect(retries, 1);
+      expect(forEvent('Capture Wedge Detected').single['trigger'], CaptureWedgeMonitor.triggerBytesSentNoTranscript);
+      expect(forEvent('Capture Recovery Prompt Shown'), isEmpty);
+      monitor.dispose();
     });
 
     testWidgets('retention eviction shows a localized phone-storage risk warning', (tester) async {

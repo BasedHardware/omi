@@ -22,11 +22,13 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
 from models.action_item import ActionItemResponse
+from utils.conversations.deterministic_minimum import TITLE_MAX_CHARS, deterministic_minimum_title
 from utils.conversations.duration import conversation_duration_seconds
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -269,3 +271,17 @@ def test_capture_group_collapse_fixture_is_well_formed():
                 assert row['id'] in expected, case['name']
         for members in by_group.values():
             assert len([m for m in members if m in expected]) == 1, case['name']
+
+
+def test_backend_deterministic_title_matches_the_shared_vectors():
+    """``deterministic_title.json``: the clients' last-resort title is this helper."""
+    fixture = _fixture('deterministic_title.json')
+    assert fixture['max_chars'] == TITLE_MAX_CHARS
+    assert fixture['cases']
+    for case in fixture['cases']:
+        conversation = SimpleNamespace(
+            transcript_segments=[SimpleNamespace(text=text) for text in case['segments']], started_at=None
+        )
+        # started_at=None makes the transcript-free branch return the bare label.
+        expected = case['expected_title'] if case['expected_title'] is not None else 'Recording'
+        assert deterministic_minimum_title(conversation) == expected, case['name']

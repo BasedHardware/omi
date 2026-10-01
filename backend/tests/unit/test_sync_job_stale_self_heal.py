@@ -7,7 +7,14 @@ test_sync_status_read_ownership covers this reader through the real HTTP route.
 import json
 import time
 
+import pytest
+
 import database.sync_jobs as sync_jobs
+
+
+@pytest.fixture(autouse=True)
+def _prod_sync_stage(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
 
 
 class _FakeRedis:

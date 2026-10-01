@@ -1,13 +1,18 @@
 import sys
 from contextlib import nullcontext
+from datetime import datetime, timezone
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 
 import routers.conversations as conv_router
+from models.conversation import Conversation
+from models.structured import Structured
+from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import AppUsageAttribution
+from utils.conversations import speaker_resolution as speaker_stage
 
 
 def _app(*, app_id='summary-app', summarizes=True, disabled=False):
@@ -100,6 +105,60 @@ def test_plain_regenerate_still_succeeds_without_app_validation():
     assert process.call_args.kwargs['app_id'] is None
     assert process.call_args.kwargs['explicit_app'] is None
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.NON_USER_REPROCESS
+
+
+def test_reprocess_response_acknowledges_receipt_aware_summary_only_after_success():
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None,
+        available_app=None,
+        enabled=False,
+    )
+    response = Response()
+
+    def process_with_receipt(*args, speaker_receipt_observer, **kwargs):
+        speaker_receipt_observer(True)
+        return model
+
+    with p1, p2, p3, p4, p5, p6, process_patch as process:
+        process.side_effect = process_with_receipt
+        result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1', response=response)
+
+    assert result is model
+    assert response.headers['x-omi-speaker-receipt-summary'] == '1'
+
+
+def test_reprocess_fetch_error_does_not_acknowledge_receipt(monkeypatch):
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None,
+        available_app=None,
+        enabled=False,
+    )
+    now = datetime(2026, 9, 28, tzinfo=timezone.utc)
+    transcript = Conversation(
+        id='c1',
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        structured=Structured(),
+        transcript_segments=[TranscriptSegment(id='s', text='Synthetic', speaker_id=0, is_user=False, start=0, end=2)],
+        private_cloud_sync_enabled=False,
+    )
+
+    def fail_read(uid, conversation_id):
+        raise RuntimeError('receipt store unavailable')
+
+    def process_without_receipt(*args, speaker_receipt_observer, **kwargs):
+        speaker_receipt_observer(speaker_stage.resolve_speakers_for_processing('u1', transcript))
+        return model
+
+    monkeypatch.setattr(speaker_stage.conversations_db, 'get_manual_speaker_receipt', fail_read)
+    response = Response()
+    with p1, p2, p3, p4, p5, p6, process_patch as process:
+        process.side_effect = process_without_receipt
+        result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1', response=response)
+
+    assert result is model
+    assert 'x-omi-speaker-receipt-summary' not in response.headers
 
 
 def test_valid_explicit_selection_reaches_processing_with_explicit_attribution():

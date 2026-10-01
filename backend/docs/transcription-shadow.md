@@ -121,13 +121,13 @@ processing, so this is a separate follow-up before a Cloud Run ramp.
 ## Dev operator readout
 
 The normal dev pusher qualification probe sends the 17-word LibriSpeech fixture
-eight times, or 136 spoken fixture words, followed by near-silence while the
-socket stays open. It checks terminal finalization and requires the durable
-fixture phrase in the client conversation. Since trailing STT segments can
-flush into a rollover conversation, the base probe accepts at least one
-fixture pass's words and at most 120% of all eight sends in that client
-conversation. It records the observed and 136 sent words as scalar diagnostics
-and prints the failure stage in CI, but does **not** enroll private-cloud sync or
+eight times at its 100 ms PCM cadence, or 136 spoken fixture words, followed
+by near-silence while the socket stays open. It checks terminal finalization
+and requires the durable fixture phrase in the client conversation. Since
+trailing STT segments can flush into a rollover conversation, the base probe
+accepts at least four passes' words and at most 120% of all eight sends in
+that client conversation. It records the observed and 136 sent words as scalar
+diagnostics and prints the failure stage in CI, but does **not** enroll private-cloud sync or
 check stored audio. Run its existing
 `--alignment-scenario` with the fixed `omi-release-probe` token after the dev
 pusher deployment. That scenario enrolls the isolated test account if needed,

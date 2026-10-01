@@ -97,12 +97,14 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.fetchActionItems();
+    await SiriIntegration.current.drainIndexForTest();
     return (provider, host);
   }
 
   test('confirmed create immediately indexes the server ID', () async {
     final (provider, host) = await makeProvider();
     expect(await provider.createActionItem(description: 'Created task'), isNotNull);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.indexed['created']?.title, 'Created task');
   });
 
@@ -110,11 +112,14 @@ void main() {
     final original = _item('task');
     final (provider, host) = await makeProvider(rows: [original]);
     expect(await provider.updateActionItemState(original, true), isTrue);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.indexed['task']?.completed, isTrue);
     expect(await provider.updateActionItemDescription(original, 'Renamed'), isTrue);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.indexed['task']?.title, 'Renamed');
     final dueAt = DateTime.utc(2026, 10, 1);
     expect(await provider.updateActionItemDueDate(original, dueAt), isTrue);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.indexed['task']?.dueAtMs, dueAt.millisecondsSinceEpoch);
   });
 
@@ -127,6 +132,7 @@ void main() {
     final (confirmed, confirmedHost) = await makeProvider(rows: [original]);
     confirmed.stageDeleteActionItem(original);
     expect(await confirmed.commitStagedDelete(original.id), isTrue);
+    await SiriIntegration.current.drainIndexForTest();
     expect(confirmedHost.deleted, ['task']);
   });
 
@@ -135,6 +141,7 @@ void main() {
     provider.startSelectionWithItem('a');
     provider.selectItem('b');
     expect(await provider.deleteSelectedItems(), isTrue);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.deleted.toSet(), {'a', 'b'});
   });
 
@@ -144,8 +151,10 @@ void main() {
     expect(host.indexed.keys, contains('staged'));
     provider.stageDeleteActionItem(item);
     await provider.fetchActionItems();
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.indexed.keys, contains('staged'));
     expect(await provider.undoStagedDelete('staged'), isTrue);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.indexed.keys, contains('staged'));
   });
 
@@ -156,6 +165,7 @@ void main() {
     provider.startSelectionWithItem('bulk-a');
     provider.selectItem('bulk-b');
     expect(await provider.deleteSelectedItems(), isFalse);
+    await SiriIntegration.current.drainIndexForTest();
     await provider.fetchActionItems();
     expect(provider.actionItems.map((item) => item.id), isNot(contains('unrelated')));
   });
@@ -170,6 +180,7 @@ void main() {
     final provider = ActionItemsProvider(actionItemsApi: typed);
     addTearDown(provider.dispose);
     expect(await provider.fetchActionItems(), isTrue);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.indexed.keys, contains('unseen'));
     expect(host.indexed.keys, contains('visible'));
   });

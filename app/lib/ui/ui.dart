@@ -15,6 +15,8 @@
 /// | Empty / failed / first-load page body | `OmiEmptyState`, `OmiErrorState`, `OmiLoadingState` |
 /// | Settings | `OmiSettingsGroup` of `OmiSettingsRow` / `OmiSettingsRow.toggle`, `OmiSectionHeader`, `OmiSwitch` |
 /// | Search | `OmiSearchField(placeholder:)` |
+/// | Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:)` |
+/// | A level (confidence, voice match) | `OmiLevelMeter(level:, semanticsLabel:)` — three neutral steps, never a percentage |
 /// | Confirm / alert | `showOmiConfirm`, `showOmiConfirmWithOptOut`, `showOmiAlert` |
 /// | Toasts, undo, copy | `OmiFeedback.confirm/info/error/undo`, `OmiClipboard.copy` |
 /// | Dates, durations, speaker names | `OmiDateFormat.of(context)`, `OmiDuration`, `SpeakerNames` |
@@ -29,6 +31,8 @@ library;
 
 export 'components/omi_button.dart';
 export 'components/omi_edit_sheet.dart';
+export 'components/omi_filter_chip.dart';
+export 'components/omi_level_meter.dart';
 export 'components/omi_icon_button.dart';
 export 'components/omi_nav_buttons.dart';
 export 'components/omi_page_states.dart';

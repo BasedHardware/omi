@@ -39,6 +39,20 @@ def test_parakeet_values_own_explicit_stream_capacity_and_allocation(environment
     assert int(values['autoscaling']['requestsPerPod']) < int(env['PARAKEET_STREAM_CAPACITY'])
 
 
+def test_prod_parakeet_autoscaling_and_zone_spread_contract():
+    values = _values('prod')
+
+    assert values['autoscaling']['minReplicas'] == 3
+    assert values['autoscaling']['maxReplicas'] == 6
+    assert values['topologySpreadConstraints'] == [
+        {
+            'maxSkew': 1,
+            'topologyKey': 'topology.kubernetes.io/zone',
+            'whenUnsatisfiable': 'ScheduleAnyway',
+        }
+    ]
+
+
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_parakeet_probes_remove_and_recycle_fatal_gpu_workers(environment):
     values = _values(environment)
@@ -85,12 +99,25 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
     assert 'name: PARAKEET_STREAM_CAPACITY\n              value: "25"' in rendered
     assert 'name: PARAKEET_STREAM_ALLOCATION_PERCENT\n              value: "100"' in rendered
     deployment = next(document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'Deployment')
+    hpa = next(
+        document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'HorizontalPodAutoscaler'
+    )
+    assert hpa['spec']['minReplicas'] == 3
+    assert hpa['spec']['maxReplicas'] == 6
     assert 'progressDeadlineSeconds' not in deployment['spec']
     container = deployment['spec']['template']['spec']['containers'][0]
     assert container['readinessProbe']['httpGet']['path'] == '/health'
     assert container['readinessProbe']['failureThreshold'] == 1
     assert container['livenessProbe']['httpGet']['path'] == '/health'
     assert container['livenessProbe']['failureThreshold'] == 3
+    assert deployment['spec']['template']['spec']['topologySpreadConstraints'] == [
+        {
+            'maxSkew': 1,
+            'topologyKey': 'topology.kubernetes.io/zone',
+            'whenUnsatisfiable': 'ScheduleAnyway',
+            'labelSelector': {'matchLabels': deployment['spec']['selector']['matchLabels']},
+        }
+    ]
 
 
 def test_rendered_dev_deployment_allows_cold_model_startup():
@@ -131,3 +158,34 @@ def test_parakeet_pod_runs_one_uvicorn_process_for_its_gpu(dockerfile_name):
 
     command = next(line for line in dockerfile.splitlines() if line.startswith('CMD ["uvicorn"'))
     assert '--workers' not in command
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_headless_batch_pressure_service_selects_each_ready_gpu_pod(environment):
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm is not installed')
+    rendered = subprocess.run(
+        [
+            helm,
+            'template',
+            f'{environment}-omi-parakeet',
+            str(CHART),
+            '-f',
+            str(CHART / f'{environment}_omi_parakeet_values.yaml'),
+            '--set-string',
+            'image.tag=abc1234',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    services = {
+        document['metadata']['name']: document
+        for document in yaml.safe_load_all(rendered)
+        if document and document.get('kind') == 'Service'
+    }
+    name = f'{environment}-omi-parakeet'
+    assert services[f'{name}-headless']['spec']['clusterIP'] == 'None'
+    assert services[f'{name}-headless']['spec']['selector'] == services[name]['spec']['selector']
+    assert services[f'{name}-headless']['spec']['ports'][0]['port'] == 8080

@@ -38,7 +38,7 @@ Pending task-create Candidates also have a conservative semantic claim in additi
 includes normalized description, owner, exact due instant, recurrence, goal, and workstream; it deliberately excludes
 evidence, source, confidence annotations, due confidence, and priority. Concurrent captures of that exact work merge
 into one pending Candidate with stable, deduplicated evidence and maximum confidence values. Caller keys still replay
-their original result indefinitely. A pending semantic claimant is reused only within the same 14-day product window;
+their original result indefinitely. A pending semantic claimant is reused only within the same two-day suggestion window;
 a fresh capture after that window starts a new Candidate so stale low-confidence sidecars cannot bury current work.
 An accepted Candidate continues to absorb exact cross-source captures and enrich
 its task while that deterministic task remains active and still matches the claimed description, owner, due date,
@@ -47,7 +47,7 @@ Candidate releases the claim so the work may recur as a new Candidate.
 
 `GET /v1/candidates?surface=suggested` is the product projection for Suggested Tasks. It is available to every
 authenticated account and uses workflow control only as an account-generation/proactive-choice fence. It returns at
-most five pending, routeable creates from the current generation that are no more than 14 days old, have evidence,
+most five pending, routeable creates from the current generation whose two-day suggestion window is still open, have evidence,
 and meet both confidence floors. Exact duplicate creates are collapsed. Generic Candidate CRUD remains available
 under the universal contract and is not redefined by this product projection. Active Later/Dismiss attention
 overrides use the same bounded Candidate key as What Matters Now and are removed before the five-card cap, so they
@@ -109,6 +109,15 @@ not part of a code merge.
 
 Task acceptance uses a Firestore transaction and a deterministic task ID, so concurrent retries create or mutate
 one task and return the same receipt. Reusing an idempotency key with a different proposal is a conflict.
+`POST /v1/candidates/{candidate_id}/accept` returns `409` for a pending task or workstream
+Candidate at or past `expires_at` (or `created_at + SUGGESTION_TTL` for legacy rows without it).
+Both resolvers check the stored Candidate inside each transaction attempt, using the shared
+read-side expiry predicate and a fresh clock sample. No task, workstream, outbox, or delivery
+is produced for an expired accept. A previously accepted Candidate still replays its receipt
+after the original deadline. The deadline is evaluated at the resolution check, not a promised
+server commit timestamp. Expiry remains derived: rejection does not rewrite `pending` to
+`expired`, delete history, or introduce a TTL/backfill job. Explicit `/expire` remains a separate
+terminal transition. Legacy staged-promotion claim/recovery behavior is unchanged.
 When a Candidate mutates an existing task, the task's creation `source` remains authoritative and its provenance
 is merged with the Candidate evidence using structural deduplication; review feedback never rewrites origin history.
 Accepted task-create integrations are written to a durable outbox in that transaction, then leased and marked

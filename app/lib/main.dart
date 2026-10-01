@@ -15,6 +15,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -177,6 +178,7 @@ bool _serviceManagerInitialized = false;
 
 Future<void> _reportBootCrash(String kind, Object error, StackTrace? stack, {FlutterErrorDetails? details}) async {
   if (PhysicalQualification.enabled) return;
+  unawaited(AppReviewService().recordBadExperience(AppReviewBadExperience.fatalError));
   try {
     await BootJournal.instance.record(kind, 'observed', error: error);
     final breadcrumbs = await BootJournal.instance.breadcrumbs();
@@ -233,7 +235,8 @@ Future _init() async {
       flutterError: (details) {
         if (PhysicalQualification.enabled) {
           unawaited(
-              PhysicalQualification.runtimeEvent('flutter_error', error: details.exception, stack: details.stack));
+            PhysicalQualification.runtimeEvent('flutter_error', error: details.exception, stack: details.stack),
+          );
           return;
         }
         unawaited(_reportBootCrash('flutter_error', details.exception, details.stack, details: details));
@@ -258,8 +261,10 @@ Future _init() async {
   }
 
   if (Env.profile.usesFirebaseAuthEmulator) {
-    await PhysicalQualification.startupStage('auth_emulator',
-        () => FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort));
+    await PhysicalQualification.startupStage(
+      'auth_emulator',
+      () => FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort),
+    );
   }
 
   await PhysicalQualification.startupStage('platform_services', PlatformManager.initializeServices);
@@ -287,13 +292,17 @@ Future _init() async {
     }
     if (restored == null) {
       await PhysicalQualification.startupStage(
-          'fixture_signin', () => AuthService.instance.signInWithLocalDevToken(uid: PhysicalQualification.fixtureUid));
+        'fixture_signin',
+        () => AuthService.instance.signInWithLocalDevToken(uid: PhysicalQualification.fixtureUid),
+      );
     }
     SharedPreferencesUtil().onboardingCompleted = true;
   }
 
   bool isAuth = await PhysicalQualification.startupStage(
-      'resolve_auth', () => resolveStartupAuth(() => AuthService.instance.getIdToken()));
+    'resolve_auth',
+    () => resolveStartupAuth(() => AuthService.instance.getIdToken()),
+  );
   if (isAuth) {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     PlatformManager.instance.analytics.identify(
@@ -311,7 +320,9 @@ Future _init() async {
     final bootstrapUser = FirebaseAuth.instance.currentUser;
     if (bootstrapUser != null && !bootstrapUser.isAnonymous) {
       await PhysicalQualification.startupStage(
-          'bind_owner', () => AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid));
+        'bind_owner',
+        () => AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid),
+      );
     }
   }
   initOpus(await PhysicalQualification.startupStage<dynamic>('opus_load', opus_flutter.load));
@@ -435,9 +446,11 @@ Future<void> _start({bool forceFull = false}) async {
     });
   }
   runApp(const MyApp());
-  unawaited(SiriIntegration.instance.takePendingRoute().then((route) {
-    if (route != null) SiriIntegration.instance.openRoute(route);
-  }));
+  unawaited(
+    SiriIntegration.instance.takePendingRoute().then((route) {
+      if (route != null) SiriIntegration.instance.openRoute(route);
+    }),
+  );
   if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
 }
 

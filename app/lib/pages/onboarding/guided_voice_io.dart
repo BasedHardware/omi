@@ -112,8 +112,10 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
       }
       return saved;
     } on SpeechProfileUploadException catch (e) {
-      PlatformManager.instance.analytics
-          .speechProfileUploadFailed(reason: 'http_${e.statusCode}', statusCode: e.statusCode);
+      PlatformManager.instance.analytics.speechProfileUploadFailed(
+        reason: 'http_${e.statusCode}',
+        statusCode: e.statusCode,
+      );
       if (e.statusCode == 503) throw VoiceEnrollmentUnavailable();
       rethrow;
     } catch (_) {
@@ -131,7 +133,7 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
     // retries keep the same confirmed content and successful answers are skipped.
     final memory = await _createMemoryRequest(text, 'private', 'system').timeout(const Duration(seconds: 30));
     if (memory == null) return false;
-    await SiriIntegration.current.upsertMemories([memory]);
+    SiriIntegration.current.queueUpsertMemories([memory]);
     return true;
   }
 

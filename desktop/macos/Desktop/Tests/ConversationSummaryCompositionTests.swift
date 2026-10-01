@@ -124,6 +124,46 @@ final class ConversationSummaryCompositionTests: XCTestCase {
     XCTAssertFalse(rendered.contains("First detail."))
   }
 
+  /// #19829: on a conversation with no summary yet (deferred placeholder, or any newly captured
+  /// conversation before its first summary lands), the "Summarize with an app" picker used to be
+  /// unreachable because its host section only mounted when `selection.content` was non-empty.
+  /// The picker button renders as plain SwiftUI `Text`, which never becomes a discrete
+  /// `NSTextView`/`NSTextField` the way `OmiMarkdown`'s deliberate AppKit prose does, so this
+  /// verifies the button's presence by its `_FocusRingView` — the one focusable-control marker
+  /// AppKit attaches to a hosted SwiftUI `Button` regardless of how its label is drawn.
+  func testDetailViewExposesSummarizePickerWhenConversationHasNoSummaryYet() throws {
+    let conversation = makeConversation(overview: "", sections: [])
+    XCTAssertEqual(ConversationSummarySelection.primarySummary(for: conversation).kind, .empty)
+
+    let host = NSHostingView(
+      rootView: ConversationDetailView(conversation: conversation, onBack: {})
+        .frame(width: 900, height: 700)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: 900, height: 700)
+    let window = NSWindow(
+      contentRect: host.frame,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    window.contentView = host
+    NonintrusiveTestWindow.orderIn(window)
+    defer {
+      window.orderOut(nil)
+      window.contentView = nil
+    }
+    host.layoutSubtreeIfNeeded()
+
+    // The summary pane is the one `_NSGraphicsView` in this tree (the page header's back/edit/
+    // delete controls live outside it) — scope the search there so a header control can never
+    // be mistaken for the "Summarize with an app" picker.
+    let summaryPane = try XCTUnwrap(
+      descendants(NSView.self, from: host).first { String(describing: type(of: $0)) == "_NSGraphicsView" })
+    XCTAssertTrue(
+      descendants(NSView.self, from: summaryPane).contains { String(describing: type(of: $0)) == "_FocusRingView" },
+      "the \"Summarize with an app\" picker button must stay reachable even with no summary yet")
+  }
+
   func testSecondaryAppCardsRenderDocumentBlocksForShortAndTruncatedOutput() throws {
     for suffix in ["", String(repeating: " continuation", count: 30)] {
       let data = try JSONSerialization.data(withJSONObject: ["content": "## Secondary\n\n- Supporting detail." + suffix]
