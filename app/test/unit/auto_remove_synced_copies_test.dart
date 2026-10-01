@@ -24,7 +24,23 @@ void main() {
 
       expect(SharedPreferencesUtil().autoRemoveSyncedCopies, isTrue);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool('autoRemoveSyncedCopiesDefaultMigrated'), isNull);
+      expect(prefs.getBool('autoRemoveSyncedCopiesDefaultMigrated'), isTrue);
+    });
+
+    test('a fresh install that onboards after first launch still defaults ON', () async {
+      // Launch 1: brand-new install, pre-onboarding.
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      await SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault();
+      expect(SharedPreferencesUtil().autoRemoveSyncedCopies, isTrue);
+
+      // The user onboards during launch 1.
+      SharedPreferencesUtil().onboardingCompleted = true;
+
+      // Launch 2: migration must NOT pin the now-onboarded install OFF.
+      await SharedPreferencesUtil.reload();
+      await SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault();
+      expect(SharedPreferencesUtil().autoRemoveSyncedCopies, isTrue);
     });
 
     test('an explicit user choice is never overwritten', () async {
@@ -63,9 +79,11 @@ void main() {
 
       await SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault();
 
-      // Signed-out device is not onboarded: stays on the ON default, unmarked.
+      // Signed-out device is not onboarded: re-marked as a pre-onboarding
+      // install, which keeps the ON default and blocks any later upgrade-style
+      // OFF pinning for the next account.
       expect(SharedPreferencesUtil().autoRemoveSyncedCopies, isTrue);
-      expect((await SharedPreferences.getInstance()).getBool('autoRemoveSyncedCopiesDefaultMigrated'), isNull);
+      expect((await SharedPreferences.getInstance()).getBool('autoRemoveSyncedCopiesDefaultMigrated'), isTrue);
     });
   });
 }

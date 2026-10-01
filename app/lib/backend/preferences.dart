@@ -877,25 +877,25 @@ class SharedPreferencesUtil {
 
   set autoRemoveSyncedCopies(bool value) => saveBool('autoRemoveSyncedCopies', value);
 
-  /// One-time split of the auto-remove default: installs that predate the
-  /// preference (onboarding already completed) are pinned OFF — they never saw
-  /// the setting, so silent deletion must not start under them. Fresh installs
-  /// keep the getter's ON default: their local copies are only a safety copy
-  /// of cloud data. Runs after SharedPreferencesUtil.init() on every launch;
-  /// the marker keeps it a single branch after the first pass.
+  /// One-time split of the auto-remove default, decided on the FIRST launch
+  /// that runs this build. `onboardingCompleted == true` can only mean "an
+  /// existing install upgraded" on that first launch — on any later launch it
+  /// equally describes a fresh install that onboarded since, which must keep
+  /// the getter's ON default. So:
+  /// - already onboarded → existing user: pin OFF once (key first, marker
+  ///   second, so a crash mid-migration re-runs instead of half-applying);
+  /// - not yet onboarded → mark the install immediately so later launches
+  ///   never mistake it for an upgrade; the ON default governs it until the
+  ///   user toggles.
   Future<void> migrateAutoRemoveSyncedCopiesDefault() async {
     const markerKey = 'autoRemoveSyncedCopiesDefaultMigrated';
     final prefs = _preferences;
     if (prefs == null) return;
     if (prefs.getBool(markerKey) ?? false) return;
     if (!(prefs.getBool('onboardingCompleted') ?? false)) {
-      // Not onboarded yet: a fresh install or a pre-onboarding launch. Leave
-      // the key unwritten so the ON default applies; re-evaluated next launch.
+      await prefs.setBool(markerKey, true);
       return;
     }
-    // Decide BEFORE writing any marker: if the process dies mid-migration the
-    // next launch retries, whereas a marker written first could leave an
-    // existing install permanently stuck on the getter's ON default.
     final alreadySet = prefs.containsKey('autoRemoveSyncedCopies');
     await prefs.setBool('autoRemoveSyncedCopies', alreadySet ? prefs.getBool('autoRemoveSyncedCopies') ?? true : false);
     await prefs.setBool(markerKey, true);
