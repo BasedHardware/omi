@@ -5,7 +5,7 @@ import os
 import secrets
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List, Tuple, Dict, Any, Optional, Set, cast
+from typing import List, Tuple, Dict, Any, Optional, Set, cast, Mapping
 
 import httpx
 from fastapi import HTTPException
@@ -249,6 +249,18 @@ def _clamp_review_score(score: Any) -> float:
         return 0.0
 
 
+def _extract_rating_stats(reviews: Any) -> Tuple[Optional[float], int]:
+    """Compute (rating_avg, rating_count) safely from raw review records, clamping scores and avoiding KeyError."""
+    if not isinstance(reviews, Mapping):
+        return None, 0
+    scores = [
+        _clamp_review_score(x.get('score'))
+        for x in reviews.values()
+        if isinstance(x, Mapping) and x.get('score') is not None
+    ]
+    return (sum(scores) / len(scores) if scores else None), len(scores)
+
+
 def weighted_rating(app: App) -> float:
     C = 3.0  # Assume 3.0 is the mean rating across all apps
     m = 5  # Minimum number of ratings required to be considered
@@ -328,14 +340,7 @@ def get_popular_apps() -> List[App]:
             app_dict = app
             app_dict['installs'] = apps_install.get(app['id'], 0)
             reviews = apps_reviews.get(app['id'], {})
-            sorted_reviews = reviews.values()
-            rating_avg = (
-                sum([_clamp_review_score(x['score']) for x in sorted_reviews]) / len(sorted_reviews)
-                if reviews
-                else None
-            )
-            app_dict['rating_avg'] = rating_avg
-            app_dict['rating_count'] = len(sorted_reviews)
+            app_dict['rating_avg'], app_dict['rating_count'] = _extract_rating_stats(reviews)
             built_app = _safe_build_app(app_dict)
             if built_app is not None:
                 apps.append(built_app)
@@ -406,16 +411,10 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         app_dict['installs'] = apps_install.get(app['id'], 0)
         if include_reviews:
             reviews = apps_review.get(app['id'], {})
-            sorted_reviews = reviews.values()
-            rating_avg = (
-                sum([_clamp_review_score(x['score']) for x in sorted_reviews]) / len(sorted_reviews)
-                if reviews
-                else None
-            )
-            app_dict['reviews'] = [details for details in reviews.values() if details['review']]
+            app_dict['rating_avg'], app_dict['rating_count'] = _extract_rating_stats(reviews)
+            app_dict['reviews'] = [d for d in reviews.values() if isinstance(d, Mapping) and d.get('review')]
             app_dict['user_review'] = reviews.get(uid)
-            app_dict['rating_avg'] = rating_avg
-            app_dict['rating_count'] = len(sorted_reviews)
+
         built_app = _safe_build_app(app_dict)
         if built_app is not None:
             apps.append(built_app)
@@ -460,13 +459,8 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> Dict[s
     app['money_made'] = get_app_money_made_amount(app['id']) if not app['private'] else None
     app['usage_count'] = get_app_usage_count(app['id']) if not app['private'] else None
     reviews = get_app_reviews(app['id'])
-    sorted_reviews = reviews.values()
-    rating_avg = (
-        sum([_clamp_review_score(x['score']) for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-    )
-    app['reviews'] = [details for details in reviews.values() if details['review']]
-    app['rating_avg'] = rating_avg
-    app['rating_count'] = len(sorted_reviews)
+    app['rating_avg'], app['rating_count'] = _extract_rating_stats(reviews)
+    app['reviews'] = [d for d in reviews.values() if isinstance(d, Mapping) and d.get('review')]
     app['user_review'] = reviews.get(uid) if uid else None
 
     # enabled
@@ -553,15 +547,9 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
             app_dict['installs'] = apps_installs.get(app['id'], 0)
             if include_reviews:
                 reviews = apps_reviews.get(app['id'], {})
-                sorted_reviews = reviews.values()
-                rating_avg = (
-                    sum([_clamp_review_score(x['score']) for x in sorted_reviews]) / len(sorted_reviews)
-                    if reviews
-                    else None
-                )
+                app_dict['rating_avg'], app_dict['rating_count'] = _extract_rating_stats(reviews)
                 app_dict['reviews'] = []
-                app_dict['rating_avg'] = rating_avg
-                app_dict['rating_count'] = len(sorted_reviews)
+
             built_app = _safe_build_app(app_dict)
             if built_app is not None:
                 apps.append(built_app)
@@ -1646,7 +1634,7 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
     endpoint = typed_tool.get('endpoint')
 
     if not name or not isinstance(name, str):
-        logger.warning(f"⚠️ Tool missing required 'name' field")
+        logger.warning("⚠️ Tool missing required 'name' field")
         return None
 
     if not description or not isinstance(description, str):

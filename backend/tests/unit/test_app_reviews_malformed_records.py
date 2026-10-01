@@ -10,8 +10,11 @@ trigger unhandled ResponseValidationError / HTTP 500 crashes on:
 from datetime import datetime
 from typing import Any
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from models.app import App, AppReview
+from routers.apps import _safe_app_from_dict, get_or_create_user_persona
+from utils.apps import _extract_rating_stats
 
 
 def _valid_review_dict(uid: str = "user_1") -> dict[str, Any]:
@@ -41,7 +44,7 @@ def _valid_app_dict(app_id: str = "app_123") -> dict[str, Any]:
 
 
 class TestAppReviewSafeDeserialization(unittest.TestCase):
-    """Test suite for AppReview.deserialize_safe and AppReview.from_records."""
+    """Test suite for AppReview.deserialize_safe, AppReview.from_records, and compute_rating_stats."""
 
     def test_deserialize_safe_valid_review(self):
         data = _valid_review_dict("u1")
@@ -152,6 +155,58 @@ class TestAppReviewSafeDeserialization(unittest.TestCase):
         self.assertEqual(AppReview.from_records({}), [])
         self.assertEqual(AppReview.from_records(""), [])
 
+    def test_compute_rating_stats_valid_and_missing_fields(self):
+        records = [
+            {"uid": "u1", "score": 4.0, "review": "good"},
+            {"uid": "u2", "review": "no score"},  # Missing score - must not raise KeyError
+            {"uid": "u3", "score": "not-a-number", "review": "bad score"},  # Non-numeric score
+            {"uid": "u4", "score": 5.0},  # Missing review - still has valid score
+            {"uid": "u5", "score": 6.0, "review": "high score"},  # Out of range clamped to 5.0
+            {"uid": "u6", "score": -2.0, "review": "negative score"},  # Negative clamped to 0.0
+        ]
+        # Valid scores: 4.0, 5.0, 5.0 (clamped), 0.0 (clamped) -> sum=14.0 / 4 = 3.5
+        avg, count = AppReview.compute_rating_stats(records)
+        self.assertEqual(count, 4)
+        self.assertEqual(avg, 3.5)
+
+    def test_compute_rating_stats_falsy_and_empty(self):
+        self.assertEqual(AppReview.compute_rating_stats(None), (None, 0))
+        self.assertEqual(AppReview.compute_rating_stats([]), (None, 0))
+        self.assertEqual(AppReview.compute_rating_stats({}), (None, 0))
+        self.assertEqual(AppReview.compute_rating_stats(""), (None, 0))
+        self.assertEqual(AppReview.compute_rating_stats([{"uid": "u1"}]), (None, 0))
+
+
+class TestRatingAggregationSafety(unittest.TestCase):
+    """Test suite ensuring rating aggregation helpers tolerate missing fields without KeyError."""
+
+    def test_extract_rating_stats_resilience(self):
+        reviews = {
+            "u1": {"uid": "u1", "score": 4.0, "review": "great"},
+            "u2": {"uid": "u2", "review": "missing score entirely"},  # Missing 'score'
+            "u3": "not-a-dict",  # Corrupted entry
+            "u4": {"uid": "u4", "score": 10.0, "review": "out of range"},  # Clamped to 5.0
+        }
+        avg, count = _extract_rating_stats(reviews)
+        self.assertEqual(count, 2)
+        self.assertEqual(avg, 4.5)  # (4.0 + 5.0) / 2
+
+    def test_extract_rating_stats_falsy(self):
+        self.assertEqual(_extract_rating_stats(None), (None, 0))
+        self.assertEqual(_extract_rating_stats({}), (None, 0))
+        self.assertEqual(_extract_rating_stats([]), (None, 0))
+
+    def test_reviews_list_extraction_missing_review_key(self):
+        """Guard against KeyError: 'review' when raw Redis reviews miss 'review' key."""
+        reviews = {
+            "u1": {"uid": "u1", "score": 5.0, "review": "Valid"},
+            "u2": {"uid": "u2", "score": 4.0},  # Missing 'review' key
+            "u3": None,
+        }
+        filtered = [d for d in reviews.values() if isinstance(d, dict) and d.get("review")]
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["uid"], "u1")
+
 
 class TestAppModelReviewFieldSanitization(unittest.TestCase):
     """Test suite ensuring App model fields tolerate malformed review documents."""
@@ -182,7 +237,7 @@ class TestAppModelReviewFieldSanitization(unittest.TestCase):
         self.assertEqual(app_valid.user_review.uid, "u_good")
 
 
-class TestEndpointResilience(unittest.TestCase):
+class TestEndpointResilience(unittest.IsolatedAsyncioTestCase):
     """Test suite ensuring endpoint logic recovers cleanly from malformed records."""
 
     def test_app_reviews_endpoint_contract_resilience(self):
@@ -202,19 +257,74 @@ class TestEndpointResilience(unittest.TestCase):
         for r in result:
             self.assertIsInstance(r, AppReview)
 
-    def test_persona_safe_deserialization_contract_resilience(self):
-        """Contract: When DB returns a malformed persona doc, App.deserialize_safe returns None,
+    def test_safe_app_from_dict_contract_resilience(self):
+        """Contract: When DB returns a malformed persona doc, _safe_app_from_dict returns None,
         allowing get_or_create_user_persona to fall back to generation instead of raising HTTP 500."""
         malformed_persona = {
             "id": "persona_corrupt",
             # missing required App fields: name, category, author, description, image, capabilities
         }
-        self.assertIsNone(App.deserialize_safe(malformed_persona))
+        self.assertIsNone(_safe_app_from_dict(malformed_persona))
 
         valid_persona = _valid_app_dict("persona_good")
-        safe = App.deserialize_safe(valid_persona)
+        safe = _safe_app_from_dict(valid_persona)
         self.assertIsNotNone(safe)
         self.assertEqual(safe.id, "persona_good")
+
+    async def test_get_or_create_user_persona_malformed_record_deleted_and_regenerated(self):
+        """Contract: When DB returns a corrupt persona record, get_or_create_user_persona must delete
+        the malformed document from Firestore and Redis cache before creating a replacement,
+        preventing duplicate persona proliferation and non-convergent recovery."""
+        import routers.apps as apps_router
+
+        malformed_persona = {"id": "corrupt_persona_123", "uid": "user_test"}
+
+        with (
+            patch.object(apps_router, "get_user_persona_by_uid", return_value=malformed_persona),
+            patch.object(apps_router, "delete_app_from_db") as mock_del_db,
+            patch.object(apps_router, "delete_app_cache_by_id") as mock_del_cache,
+            patch.object(
+                apps_router,
+                "get_user_from_uid",
+                return_value={"display_name": "Test User", "email": "test@example.com"},
+            ),
+            patch.object(apps_router, "increment_username", return_value="testuser"),
+            patch.object(apps_router, "generate_persona_prompt", new=AsyncMock(return_value="Generated Prompt")),
+            patch.object(apps_router, "save_username"),
+            patch.object(apps_router, "add_app_to_db") as mock_add_db,
+        ):
+            result = await get_or_create_user_persona(uid="user_test")
+
+            # Corrupt persona must be cleaned up from DB and cache
+            mock_del_db.assert_called_once_with("corrupt_persona_123")
+            mock_del_cache.assert_called_once_with("corrupt_persona_123")
+
+            # A new persona was created and added to DB
+            mock_add_db.assert_called_once()
+            self.assertEqual(result["uid"], "user_test")
+            self.assertEqual(result["author"], "Test User")
+
+    async def test_get_or_create_user_persona_valid_record_returned_without_deletion(self):
+        """Contract: When DB returns a valid persona record, get_or_create_user_persona returns it
+        immediately without calling delete_app_from_db or generating a new persona."""
+        import routers.apps as apps_router
+
+        valid_persona = _valid_app_dict("persona_existing")
+        valid_persona["category"] = "personality-emulation"
+        valid_persona["capabilities"] = ["persona"]
+
+        with (
+            patch.object(apps_router, "get_user_persona_by_uid", return_value=valid_persona),
+            patch.object(apps_router, "delete_app_from_db") as mock_del_db,
+            patch.object(apps_router, "delete_app_cache_by_id") as mock_del_cache,
+            patch.object(apps_router, "add_app_to_db") as mock_add_db,
+        ):
+            result = await get_or_create_user_persona(uid="user_1")
+
+            mock_del_db.assert_not_called()
+            mock_del_cache.assert_not_called()
+            mock_add_db.assert_not_called()
+            self.assertEqual(result.id, "persona_existing")
 
 
 if __name__ == "__main__":
