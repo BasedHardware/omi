@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "புதிய பதிப்பு கிடைக்கிறது",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "இல்லை",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -11325,5 +11321,9 @@
     "speakerSuggestionAppliesToSpeaker": "இந்தப் பேச்சாளரின் எல்லா வரிகளுக்கும் பொருந்தும்",
     "collapseAction": "சுருக்கு",
     "speakerTagPromptNotMeAction": "நான் இல்லை",
-    "confidenceNextLabels": "{count, plural, =1{இன்னும் 1 உரையாடலில் அவர்களுக்கு லேபிள் இடுங்கள்.} other{இன்னும் {count} உரையாடல்களில் அவர்களுக்கு லேபிள் இடுங்கள்.}}"
+    "confidenceNextLabels": "{count, plural, =1{இன்னும் 1 உரையாடலில் அவர்களுக்கு லேபிள் இடுங்கள்.} other{இன்னும் {count} உரையாடல்களில் அவர்களுக்கு லேபிள் இடுங்கள்.}}",
+    "updateAvailableTitle": "புதுப்பிப்பு கிடைக்கிறது",
+    "updateAvailableMessage": "Omi-இன் புதிய பதிப்பு தயார், திருத்தங்களும் மேம்பாடுகளும் உடன்.",
+    "updateRequiredTitle": "புதுப்பிப்பு தேவை",
+    "updateRequiredMessage": "Omi-இன் இந்தப் பதிப்பு இனி ஆதரிக்கப்படாது. பதிவுசெய்வதையும் ஒத்திசைப்பதையும் தொடர புதுப்பிக்கவும்."
 }

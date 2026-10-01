@@ -1220,7 +1220,6 @@
     "appsCount": "Εφαρμογές ({count})",
     "privateAppsCount": "Ιδιωτικές εφαρμογές ({count})",
     "publicAppsCount": "Δημόσιες εφαρμογές ({count})",
-    "newVersionAvailable": "Νέα έκδοση διαθέσιμη",
     "no": "Όχι",
     "subscriptionCancelledSuccessfully": "Η συνδρομή ακυρώθηκε επιτυχώς. Θα παραμείνει ενεργή μέχρι το τέλος της τρέχουσας περιόδου χρέωσης.",
     "failedToCancelSubscription": "Αποτυχία ακύρωσης συνδρομής. Παρακαλώ δοκιμάστε ξανά.",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "Ισχύει για κάθε γραμμή αυτού του ομιλητή",
     "collapseAction": "Σύμπτυξη",
     "speakerTagPromptNotMeAction": "Δεν είμαι εγώ",
-    "confidenceNextLabels": "{count, plural, =1{Επισημάνετέ τους σε 1 ακόμη συνομιλία.} other{Επισημάνετέ τους σε {count} ακόμη συνομιλίες.}}"
+    "confidenceNextLabels": "{count, plural, =1{Επισημάνετέ τους σε 1 ακόμη συνομιλία.} other{Επισημάνετέ τους σε {count} ακόμη συνομιλίες.}}",
+    "updateAvailableTitle": "Διαθέσιμη ενημέρωση",
+    "updateAvailableMessage": "Μια νέα έκδοση του Omi είναι έτοιμη, με διορθώσεις και βελτιώσεις.",
+    "updateRequiredTitle": "Απαιτείται ενημέρωση",
+    "updateRequiredMessage": "Αυτή η έκδοση του Omi δεν υποστηρίζεται πλέον. Κάντε ενημέρωση για να συνεχίσετε την εγγραφή και τον συγχρονισμό."
 }

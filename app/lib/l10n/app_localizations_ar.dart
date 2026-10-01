@@ -3936,9 +3936,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'إصدار جديد متاح';
-
-  @override
   String get no => 'لا';
 
   @override
@@ -12039,4 +12036,16 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'يتوفر تحديث';
+
+  @override
+  String get updateAvailableMessage => 'إصدار جديد من Omi جاهز، مع إصلاحات وتحسينات.';
+
+  @override
+  String get updateRequiredTitle => 'التحديث مطلوب';
+
+  @override
+  String get updateRequiredMessage => 'لم يعد هذا الإصدار من Omi مدعومًا. حدّث التطبيق لمواصلة التسجيل والمزامنة.';
 }

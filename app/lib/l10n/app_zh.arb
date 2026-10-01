@@ -1224,7 +1224,6 @@
     "appsCount": "应用 ({count})",
     "privateAppsCount": "私有应用 ({count})",
     "publicAppsCount": "公开应用 ({count})",
-    "newVersionAvailable": "新版本可用",
     "no": "否",
     "subscriptionCancelledSuccessfully": "订阅已成功取消。它将保持有效直到当前计费周期结束。",
     "failedToCancelSubscription": "取消订阅失败。请重试。",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "适用于该说话人的每一行",
     "collapseAction": "收起",
     "speakerTagPromptNotMeAction": "不是我",
-    "confidenceNextLabels": "{count, plural, =1{再在 1 个对话中为对方添加标签。} other{再在 {count} 个对话中为对方添加标签。}}"
+    "confidenceNextLabels": "{count, plural, =1{再在 1 个对话中为对方添加标签。} other{再在 {count} 个对话中为对方添加标签。}}",
+    "updateAvailableTitle": "有可用更新",
+    "updateAvailableMessage": "Omi 新版本已就绪，包含问题修复和改进。",
+    "updateRequiredTitle": "需要更新",
+    "updateRequiredMessage": "此版本的 Omi 已不再受支持。请更新以继续录音和同步。"
 }

@@ -1220,7 +1220,6 @@
     "appsCount": "แอป ({count})",
     "privateAppsCount": "แอปส่วนตัว ({count})",
     "publicAppsCount": "แอปสาธารณะ ({count})",
-    "newVersionAvailable": "มีเวอร์ชันใหม่",
     "no": "ไม่",
     "subscriptionCancelledSuccessfully": "ยกเลิกการสมัครสมาชิกสำเร็จ จะยังคงใช้งานได้จนถึงสิ้นสุดรอบบิลปัจจุบัน",
     "failedToCancelSubscription": "ไม่สามารถยกเลิกการสมัครสมาชิกได้ กรุณาลองอีกครั้ง",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "ใช้กับทุกบรรทัดจากผู้พูดคนนี้",
     "collapseAction": "ย่อ",
     "speakerTagPromptNotMeAction": "ไม่ใช่ฉัน",
-    "confidenceNextLabels": "{count, plural, =1{ติดป้ายชื่อคนนี้ในการสนทนาอีก 1 รายการ} other{ติดป้ายชื่อคนนี้ในการสนทนาอีก {count} รายการ}}"
+    "confidenceNextLabels": "{count, plural, =1{ติดป้ายชื่อคนนี้ในการสนทนาอีก 1 รายการ} other{ติดป้ายชื่อคนนี้ในการสนทนาอีก {count} รายการ}}",
+    "updateAvailableTitle": "มีอัปเดตใหม่",
+    "updateAvailableMessage": "Omi เวอร์ชันใหม่พร้อมแล้ว พร้อมการแก้ไขและการปรับปรุง",
+    "updateRequiredTitle": "ต้องอัปเดต",
+    "updateRequiredMessage": "Omi เวอร์ชันนี้ไม่รองรับแล้ว อัปเดตเพื่อบันทึกและซิงค์ต่อ"
 }

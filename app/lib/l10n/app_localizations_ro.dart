@@ -3989,9 +3989,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Versiune nouă disponibilă';
-
-  @override
   String get no => 'Nu';
 
   @override
@@ -12166,4 +12163,17 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Actualizare disponibilă';
+
+  @override
+  String get updateAvailableMessage => 'O versiune nouă de Omi este gata, cu remedieri și îmbunătățiri.';
+
+  @override
+  String get updateRequiredTitle => 'Actualizare necesară';
+
+  @override
+  String get updateRequiredMessage =>
+      'Această versiune de Omi nu mai este acceptată. Actualizați pentru a continua înregistrarea și sincronizarea.';
 }

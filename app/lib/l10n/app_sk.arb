@@ -1220,7 +1220,6 @@
     "appsCount": "Aplikácie ({count})",
     "privateAppsCount": "Súkromné aplikácie ({count})",
     "publicAppsCount": "Verejné aplikácie ({count})",
-    "newVersionAvailable": "K dispozícii je nová verzia",
     "no": "Nie",
     "subscriptionCancelledSuccessfully": "Predplatné bolo úspešne zrušené. Zostane aktívne do konca aktuálneho fakturačného obdobia.",
     "failedToCancelSubscription": "Zrušenie predplatného zlyhalo. Skúste to prosím znova.",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "Platí pre všetky vety tohto hovoriaceho",
     "collapseAction": "Zbaliť",
     "speakerTagPromptNotMeAction": "Nie som to ja",
-    "confidenceNextLabels": "{count, plural, =1{Označte ich ešte v 1 konverzácii.} other{Označte ich ešte v {count} konverzáciách.}}"
+    "confidenceNextLabels": "{count, plural, =1{Označte ich ešte v 1 konverzácii.} other{Označte ich ešte v {count} konverzáciách.}}",
+    "updateAvailableTitle": "K dispozícii je aktualizácia",
+    "updateAvailableMessage": "Nová verzia Omi je pripravená, s opravami a vylepšeniami.",
+    "updateRequiredTitle": "Vyžaduje sa aktualizácia",
+    "updateRequiredMessage": "Táto verzia Omi už nie je podporovaná. Aktualizujte ju, aby ste mohli ďalej nahrávať a synchronizovať."
 }

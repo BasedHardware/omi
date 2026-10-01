@@ -3973,9 +3973,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Có phiên bản mới';
-
-  @override
   String get no => 'Không';
 
   @override
@@ -12105,4 +12102,17 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Có bản cập nhật';
+
+  @override
+  String get updateAvailableMessage => 'Phiên bản mới của Omi đã sẵn sàng, với các bản sửa lỗi và cải tiến.';
+
+  @override
+  String get updateRequiredTitle => 'Cần cập nhật';
+
+  @override
+  String get updateRequiredMessage =>
+      'Phiên bản Omi này không còn được hỗ trợ. Hãy cập nhật để tiếp tục ghi âm và đồng bộ.';
 }

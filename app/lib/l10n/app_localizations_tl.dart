@@ -4001,9 +4001,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Ang Bagong Bersyon ay Available';
-
-  @override
   String get no => 'Hindi';
 
   @override
@@ -12215,4 +12212,17 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'May available na update';
+
+  @override
+  String get updateAvailableMessage => 'Handa na ang bagong bersyon ng Omi, may mga ayos at pagpapahusay.';
+
+  @override
+  String get updateRequiredTitle => 'Kailangang mag-update';
+
+  @override
+  String get updateRequiredMessage =>
+      'Hindi na sinusuportahan ang bersyong ito ng Omi. Mag-update para patuloy na makapag-record at makapag-sync.';
 }

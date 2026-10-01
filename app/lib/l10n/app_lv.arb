@@ -1220,7 +1220,6 @@
     "appsCount": "Lietotnes ({count})",
     "privateAppsCount": "Privātās lietotnes ({count})",
     "publicAppsCount": "Publiskās lietotnes ({count})",
-    "newVersionAvailable": "Pieejama jauna versija",
     "no": "Nē",
     "subscriptionCancelledSuccessfully": "Abonements veiksmīgi atcelts. Tas paliks aktīvs līdz pašreizējā norēķinu perioda beigām.",
     "failedToCancelSubscription": "Neizdevās atcelt abonementu. Lūdzu, mēģiniet vēlreiz.",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "Attiecas uz katru šī runātāja rindu",
     "collapseAction": "Sakļaut",
     "speakerTagPromptNotMeAction": "Ne es",
-    "confidenceNextLabels": "{count, plural, =1{Atzīmējiet viņus vēl 1 sarunā.} other{Atzīmējiet viņus vēl {count} sarunās.}}"
+    "confidenceNextLabels": "{count, plural, =1{Atzīmējiet viņus vēl 1 sarunā.} other{Atzīmējiet viņus vēl {count} sarunās.}}",
+    "updateAvailableTitle": "Pieejams atjauninājums",
+    "updateAvailableMessage": "Jaunā Omi versija ir gatava – ar labojumiem un uzlabojumiem.",
+    "updateRequiredTitle": "Nepieciešams atjauninājums",
+    "updateRequiredMessage": "Šī Omi versija vairs netiek atbalstīta. Atjauniniet, lai turpinātu ierakstīt un sinhronizēt."
 }

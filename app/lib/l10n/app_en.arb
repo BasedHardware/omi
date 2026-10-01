@@ -4472,10 +4472,6 @@
             }
         }
     },
-    "newVersionAvailable": "New Version Available",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "No",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -14441,5 +14437,21 @@
                 "type": "int"
             }
         }
+    },
+    "updateAvailableTitle": "Update available",
+    "@updateAvailableTitle": {
+        "description": "Title of the pop-up that offers a newer version of the app"
+    },
+    "updateAvailableMessage": "A new version of Omi is ready, with fixes and improvements.",
+    "@updateAvailableMessage": {
+        "description": "Message of the pop-up that offers a newer version of the app"
+    },
+    "updateRequiredTitle": "Update required",
+    "@updateRequiredTitle": {
+        "description": "Title of the pop-up when this app version is no longer supported and must be updated"
+    },
+    "updateRequiredMessage": "This version of Omi is no longer supported. Update to keep recording and syncing.",
+    "@updateRequiredMessage": {
+        "description": "Message of the pop-up when this app version is no longer supported and must be updated"
     }
 }

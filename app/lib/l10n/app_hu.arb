@@ -1220,7 +1220,6 @@
     "appsCount": "Alkalmazások ({count})",
     "privateAppsCount": "Privát alkalmazások ({count})",
     "publicAppsCount": "Nyilvános alkalmazások ({count})",
-    "newVersionAvailable": "Új verzió elérhető",
     "no": "Nem",
     "subscriptionCancelledSuccessfully": "Előfizetés sikeresen lemondva. Az aktuális számlázási időszak végéig aktív marad.",
     "failedToCancelSubscription": "Az előfizetés lemondása sikertelen. Kérjük, próbálja újra.",
@@ -3861,5 +3860,9 @@
     "speakerSuggestionAppliesToSpeaker": "Ennek a beszélőnek minden sorára vonatkozik",
     "collapseAction": "Összecsukás",
     "speakerTagPromptNotMeAction": "Nem én vagyok",
-    "confidenceNextLabels": "{count, plural, =1{Címkézd meg őket még 1 beszélgetésben.} other{Címkézd meg őket még {count} beszélgetésben.}}"
+    "confidenceNextLabels": "{count, plural, =1{Címkézd meg őket még 1 beszélgetésben.} other{Címkézd meg őket még {count} beszélgetésben.}}",
+    "updateAvailableTitle": "Frissítés érhető el",
+    "updateAvailableMessage": "Elkészült az Omi új verziója, javításokkal és fejlesztésekkel.",
+    "updateRequiredTitle": "Frissítés szükséges",
+    "updateRequiredMessage": "Az Omi ezen verziója már nem támogatott. Frissítsen a felvétel és a szinkronizálás folytatásához."
 }

@@ -1220,7 +1220,6 @@
     "appsCount": "{count} Apps",
     "privateAppsCount": "{count} private Apps",
     "publicAppsCount": "Öffentliche Apps ({count})",
-    "newVersionAvailable": "Neue Version verfügbar",
     "no": "Nein",
     "subscriptionCancelledSuccessfully": "Abonnement erfolgreich gekündigt. Es bleibt bis zum Ende des aktuellen Abrechnungszeitraums aktiv.",
     "failedToCancelSubscription": "Kündigung des Abonnements fehlgeschlagen. Bitte versuchen Sie es erneut.",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "Gilt für jede Zeile dieses Sprechers",
     "collapseAction": "Einklappen",
     "speakerTagPromptNotMeAction": "Nicht ich",
-    "confidenceNextLabels": "{count, plural, =1{Markiere sie in 1 weiteren Gespräch.} other{Markiere sie in {count} weiteren Gesprächen.}}"
+    "confidenceNextLabels": "{count, plural, =1{Markiere sie in 1 weiteren Gespräch.} other{Markiere sie in {count} weiteren Gesprächen.}}",
+    "updateAvailableTitle": "Update verfügbar",
+    "updateAvailableMessage": "Eine neue Version von Omi ist bereit, mit Fehlerbehebungen und Verbesserungen.",
+    "updateRequiredTitle": "Update erforderlich",
+    "updateRequiredMessage": "Diese Version von Omi wird nicht mehr unterstützt. Aktualisieren Sie, um weiterhin aufzunehmen und zu synchronisieren."
 }

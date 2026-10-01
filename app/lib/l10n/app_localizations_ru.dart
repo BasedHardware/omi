@@ -3976,9 +3976,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Доступна новая версия';
-
-  @override
   String get no => 'Нет';
 
   @override
@@ -12150,4 +12147,17 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Доступно обновление';
+
+  @override
+  String get updateAvailableMessage => 'Новая версия Omi готова: с исправлениями и улучшениями.';
+
+  @override
+  String get updateRequiredTitle => 'Требуется обновление';
+
+  @override
+  String get updateRequiredMessage =>
+      'Эта версия Omi больше не поддерживается. Обновите приложение, чтобы продолжить запись и синхронизацию.';
 }

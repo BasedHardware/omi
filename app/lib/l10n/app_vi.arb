@@ -1220,7 +1220,6 @@
     "appsCount": "Ứng dụng ({count})",
     "privateAppsCount": "Ứng dụng riêng tư ({count})",
     "publicAppsCount": "Ứng dụng công khai ({count})",
-    "newVersionAvailable": "Có phiên bản mới",
     "no": "Không",
     "subscriptionCancelledSuccessfully": "Đã hủy đăng ký thành công. Nó sẽ vẫn hoạt động cho đến cuối kỳ thanh toán hiện tại.",
     "failedToCancelSubscription": "Không thể hủy đăng ký. Vui lòng thử lại.",
@@ -3765,5 +3764,9 @@
     "speakerSuggestionAppliesToSpeaker": "Áp dụng cho mọi dòng của người nói này",
     "collapseAction": "Thu gọn",
     "speakerTagPromptNotMeAction": "Không phải tôi",
-    "confidenceNextLabels": "{count, plural, =1{Hãy gắn nhãn họ trong 1 cuộc trò chuyện nữa.} other{Hãy gắn nhãn họ trong {count} cuộc trò chuyện nữa.}}"
+    "confidenceNextLabels": "{count, plural, =1{Hãy gắn nhãn họ trong 1 cuộc trò chuyện nữa.} other{Hãy gắn nhãn họ trong {count} cuộc trò chuyện nữa.}}",
+    "updateAvailableTitle": "Có bản cập nhật",
+    "updateAvailableMessage": "Phiên bản mới của Omi đã sẵn sàng, với các bản sửa lỗi và cải tiến.",
+    "updateRequiredTitle": "Cần cập nhật",
+    "updateRequiredMessage": "Phiên bản Omi này không còn được hỗ trợ. Hãy cập nhật để tiếp tục ghi âm và đồng bộ."
 }

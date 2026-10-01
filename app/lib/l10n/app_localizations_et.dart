@@ -3969,9 +3969,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Uus versioon saadaval';
-
-  @override
   String get no => 'Ei';
 
   @override
@@ -12108,4 +12105,17 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Värskendus on saadaval';
+
+  @override
+  String get updateAvailableMessage => 'Omi uus versioon on valmis – parandused ja täiustused.';
+
+  @override
+  String get updateRequiredTitle => 'Värskendus on vajalik';
+
+  @override
+  String get updateRequiredMessage =>
+      'Seda Omi versiooni enam ei toetata. Värskenda, et jätkata salvestamist ja sünkroonimist.';
 }
