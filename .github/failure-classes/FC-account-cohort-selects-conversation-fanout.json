@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-account-cohort-selects-conversation-fanout",
+  "violated_contract": "INV-MEM-5 requires every account to share one memory and task policy. A live conversation discard rollout keyed by UID, including an explicit UID allowlist, pins accounts to different memory/task fan-out behavior.",
+  "canonical_prevention": "Assign live relevance treatment from the same stable conversation identity used by keep-all and shadow measurement. Preserve keep-all precedence and monotone percentage ranges. Reject UID override declarations in production and prove the live path never reads them outside explicit dev dogfooding.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_jev_ramp.py",
+    "backend/scripts/runtime_env_jev_contract.py",
+    "backend/tests/unit/test_backend_runtime_env_validator.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/config/jev_decisions.py",
+    "backend/deploy/runtime_env/",
+    "backend/utils/conversations/"
+  ],
+  "status": "open"
+}

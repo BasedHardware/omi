@@ -3170,6 +3170,7 @@ def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
     prod = validator._get_env_config(manifest, 'prod')
     hosts = set()
     for scope, env_block in _manifest_env_blocks(prod):
+        assert 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST' not in env_block, scope
         assert CONVERSATION_RELEVANCE_JEV_ENABLED_ENV not in env_block, scope
         assert MEMORY_OWNER_JEV_FLIP_ENABLED_ENV not in env_block, scope
         if scope not in _JEV_PROCESS_CONVERSATION_HOSTS:
@@ -3187,3 +3188,61 @@ def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
     # backend-sync-backfill is not a shadow host but also processes conversations.
     backfill = dict(_manifest_env_blocks(prod))['cloud_run/backend-sync-backfill']
     assert backfill['CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT']['value'] == '2'
+
+
+@pytest.mark.parametrize(
+    'kind,service',
+    [
+        ('gke', 'backend-listen'),
+        ('gke', 'pusher'),
+        ('services', 'backend'),
+        ('services', 'backend-sync'),
+        ('services', 'backend-sync-backfill'),
+        ('services', 'backend-integration'),
+        ('jobs', 'notifications-job'),
+        ('desktop_backend', ''),
+    ],
+)
+@pytest.mark.parametrize('binding', [{'value': ''}, {'value': 'synthetic-user'}, {'secret': 'synthetic-secret'}])
+def test_prod_rejects_jev_uid_allowlist_declarations(tmp_path, kind, service, binding):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = validator._get_env_config(manifest, 'prod')
+    if kind == 'gke':
+        host = prod['gke'][service]
+    elif kind == 'desktop_backend':
+        host = prod[kind]
+    else:
+        host = prod['cloud_run'][kind][service]
+    host.setdefault('env', {})['CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'] = binding
+    path = tmp_path / 'manifest.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='prod', manifest_path=path)
+    assert any('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in error.message for error in errors)
+
+
+def test_prod_rejects_jev_uid_allowlist_undeclared_in_chart(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = validator._get_env_config(manifest, 'prod')
+    host = prod['gke']['pusher']
+    values = validator._load_yaml(ROOT.parent / host['values_file'])
+    values['env'].append({'name': 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'value': ''})
+    chart = tmp_path / 'values.yaml'
+    write_yaml(chart, values)
+    host['values_file'] = str(chart)
+    path = tmp_path / 'manifest.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='prod', manifest_path=path)
+    assert any('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in error.message for error in errors)
+
+
+def test_prod_rejects_jev_uid_allowlist_undeclared_in_cloud_run_state(tmp_path, monkeypatch):
+    validator = load_validator()
+    prod = validator._get_env_config(validator._load_yaml(validator.DEFAULT_MANIFEST), 'prod')
+    state = render_cloud_run_state(prod, monkeypatch)
+    state['services']['backend-sync']['env'].append({'name': 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'value': ''})
+    path = tmp_path / 'state.json'
+    path.write_text(json.dumps(state))
+    errors = validator.validate_runtime_env(env='prod', cloud_run_state_path=path)
+    assert any('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in error.message for error in errors)
