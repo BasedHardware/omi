@@ -75,6 +75,23 @@ class _MockQuery:
 
 
 class _MockTransaction:
+    def __init__(self) -> None:
+        self._read_only = False
+        self._max_attempts = 1
+        self._id: bytes | None = None
+
+    def _begin(self, retry_id: bytes | None = None) -> None:
+        self._id = retry_id or b'mock-transaction'
+
+    def _commit(self) -> None:
+        pass
+
+    def _rollback(self) -> None:
+        pass
+
+    def _clean_up(self) -> None:
+        self._id = None
+
     def set(self, doc_ref: _MockDocRef, payload: dict[str, Any], merge: bool = False) -> None:
         doc_ref.set(payload, merge=merge)
 
@@ -112,7 +129,6 @@ class _MockClient:
 @pytest.fixture(autouse=True)
 def _patch_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OMI_ENV_STAGE", "prod")
-    monkeypatch.setattr("google.cloud.firestore.transactional", lambda fn: fn)
 
 
 def test_register_job_validates_inputs() -> None:
@@ -139,8 +155,8 @@ def test_register_job_normalizes_and_registers() -> None:
     assert second is False
 
 
-def test_due_pending_and_due_owners_limit_validation() -> None:
-    """Verify due_pending and due_owners strictly validate limit and clamp."""
+def test_due_pending_and_due_owners_limit_validation_and_clamping() -> None:
+    """Verify due_pending and due_owners strictly validate limit and clamp to [1, 500]."""
     mock_client = _MockClient()
 
     with pytest.raises(ValueError, match="limit must be a positive integer"):
@@ -151,6 +167,44 @@ def test_due_pending_and_due_owners_limit_validation() -> None:
 
     with pytest.raises(ValueError, match="limit must be a positive integer"):
         due_owners(limit=-1, firestore_client=mock_client)
+
+    # Intercept query limit to assert clamping below and above bounds [1, 500]
+    recorded_limits: list[int] = []
+    original_col = mock_client.collection
+
+    def _recording_collection(name: str) -> Any:
+        col = original_col(name)
+        orig_where = col.where
+
+        def _recording_where(*args: Any, **kwargs: Any) -> Any:
+            q = orig_where(*args, **kwargs)
+            orig_limit = q.limit
+
+            def _recording_limit(count: int) -> Any:
+                recorded_limits.append(count)
+                return orig_limit(count)
+
+            q.limit = _recording_limit
+            return q
+
+        col.where = _recording_where
+        return col
+
+    mock_client.collection = _recording_collection  # type: ignore[method-assign]
+
+    # Valid limits within bounds
+    due_pending(limit=50, firestore_client=mock_client)
+    assert recorded_limits[-1] == 50
+
+    due_owners(limit=1, firestore_client=mock_client)
+    assert recorded_limits[-1] == 1
+
+    # Limit above 500 is clamped to 500
+    due_pending(limit=999, firestore_client=mock_client)
+    assert recorded_limits[-1] == 500
+
+    due_owners(limit=5000, firestore_client=mock_client)
+    assert recorded_limits[-1] == 500
 
 
 def test_begin_renew_finish_job_validates_inputs() -> None:
