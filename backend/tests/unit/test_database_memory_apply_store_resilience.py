@@ -1,7 +1,5 @@
 """Hermetic unit tests verifying defensive boundary guards in database.memory_apply_store."""
 
-from datetime import datetime, timezone
-import os
 from unittest.mock import MagicMock
 import pytest
 
@@ -14,7 +12,7 @@ from database.memory_apply_store import (
     tombstone_memory_items_firestore,
 )
 from models.memory_apply import MemoryControlState
-from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.memory_operations import MemoryOperation
 
 
 def test_privacy_deletion_receipt_id_guards_inputs(monkeypatch):
@@ -103,7 +101,7 @@ def test_replace_conversation_source_firestore_guards_inputs():
         head_commit_id="head0",
         account_generation=1,
         source_generation=1,
-        linearized_sequence=1,
+        commit_sequence=1,
     )
 
     with pytest.raises(ValueError, match="uid must be a non-empty string"):
@@ -157,7 +155,7 @@ def test_tombstone_memory_items_firestore_guards_inputs():
         head_commit_id="head0",
         account_generation=1,
         source_generation=1,
-        linearized_sequence=1,
+        commit_sequence=1,
     )
     with pytest.raises(ValueError, match="uid must be a non-empty string"):
         tombstone_memory_items_firestore(

@@ -3343,6 +3343,7 @@ def cleanup_expired_memory_deletion_receipts(
     """
     if not isinstance(uid, str) or not uid.strip():
         raise ValueError("uid must be a non-empty string")
+    clean_uid = uid.strip()
     if db_client is None:
         raise ValueError("db_client must not be None")
     if not isinstance(limit, int) or isinstance(limit, bool):
@@ -3371,7 +3372,7 @@ def cleanup_expired_memory_deletion_receipts(
     else:
         raise TypeError("now must be a datetime, ISO timestamp string, or None")
 
-    collection = db_client.collection(MemoryCollections(uid=uid.strip()).memory_deletion_receipts)
+    collection = db_client.collection(MemoryCollections(uid=clean_uid).memory_deletion_receipts)
 
     try:
         query = collection.where("expires_at", "<=", cutoff).limit(bounded_limit)
@@ -3383,7 +3384,7 @@ def cleanup_expired_memory_deletion_receipts(
         # linearization gate. A hold that wins first preserves every receipt;
         # a cleanup that wins first completes before a hold can activate.
         with destructive_operation_gate(
-            uid,
+            clean_uid,
             kind="retention_cleanup",
             firestore_client=db_client,
         ):
@@ -3396,7 +3397,7 @@ def cleanup_expired_memory_deletion_receipts(
                     expires_at = payload.get("expires_at")
                     if (
                         payload.get("schema_version") == "memory_deletion_receipt.v2"
-                        and payload.get("uid") == uid
+                        and payload.get("uid") == clean_uid
                         and payload.get("receipt_id") == str(row.id)
                         and isinstance(payload.get("privacy_epoch_commit_id"), str)
                         and payload.get("privacy_epoch_commit_id")
@@ -3413,7 +3414,7 @@ def cleanup_expired_memory_deletion_receipts(
                     commit_id = payload.get("commit_id")
                     if (
                         payload.get("schema_version") != "memory_deletion_receipt.v1"
-                        or payload.get("uid") != uid
+                        or payload.get("uid") != clean_uid
                         or not isinstance(memory_ids, list)
                         or not memory_ids
                         or not all(isinstance(memory_id, str) and memory_id for memory_id in memory_ids)
@@ -3428,7 +3429,7 @@ def cleanup_expired_memory_deletion_receipts(
                     ):
                         continue
                     operation_snapshot = db_client.document(
-                        f"{MemoryCollections(uid=uid).memory_operations}/{operation_id}"
+                        f"{MemoryCollections(uid=clean_uid).memory_operations}/{operation_id}"
                     ).get()
                     operation_payload = (
                         operation_snapshot.to_dict() if getattr(operation_snapshot, "exists", False) else None
@@ -3442,7 +3443,7 @@ def cleanup_expired_memory_deletion_receipts(
                     items_match = True
                     for memory_id in memory_ids:
                         item_snapshot = db_client.document(
-                            f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
+                            f"{MemoryCollections(uid=clean_uid).memory_items}/{memory_id}"
                         ).get()
                         item_payload = item_snapshot.to_dict() if getattr(item_snapshot, "exists", False) else None
                         if (
