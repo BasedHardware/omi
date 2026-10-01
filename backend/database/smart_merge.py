@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from google.cloud import firestore
@@ -217,13 +217,64 @@ def claim_survivor_refresh(
             return None
         lease = state.get('refresh_lease') or {}
         until = lease.get('until')
-        if lease.get('owner') not in (None, owner) and isinstance(until, datetime) and until > now:
+        if lease.get('owner') is not None and isinstance(until, datetime) and until > now:
             return None
         state['refresh_lease'] = {'owner': owner, 'until': now + timedelta(seconds=lease_seconds)}
         transaction.update(ref, {SMART_MERGE_FIELD: state})
         return revision
 
     return run_transactional(client, claim)
+
+
+def release_survivor_refresh(uid: str, survivor_id: str, *, owner: str, firestore_client: Any = None) -> bool:
+    """Drop the refresh lease after a failed refresh, only while ``owner`` still holds it."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = _collection(client, uid).document(survivor_id)
+
+    @firestore.transactional
+    def release(transaction) -> bool:
+        row = ref.get(transaction=transaction).to_dict()
+        if not row or row.get('deleted'):
+            return False
+        state = dict(row.get(SMART_MERGE_FIELD) or {})
+        if (state.get('refresh_lease') or {}).get('owner') != owner:
+            return False
+        state.pop('refresh_lease', None)
+        transaction.update(ref, {SMART_MERGE_FIELD: state})
+        return True
+
+    return run_transactional(client, release)
+
+
+def checkpoint_survivor_processing(
+    uid: str, survivor_id: str, *, owner: str, revision: int, sync_revision: Any, firestore_client: Any = None
+) -> bool:
+    """Receipt the completed processing bundle before the independently retryable vector write."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = _collection(client, uid).document(survivor_id)
+
+    @firestore.transactional
+    def checkpoint(transaction) -> bool:
+        row = ref.get(transaction=transaction).to_dict()
+        if not row or row.get('deleted'):
+            return False
+        state = dict(row.get(SMART_MERGE_FIELD) or {})
+        lease = state.get('refresh_lease') or {}
+        until = lease.get('until')
+        if (
+            int(state.get('revision') or 0) != revision
+            or row.get('sync_content_revision') != sync_revision
+            or lease.get('owner') != owner
+            or not isinstance(until, datetime)
+            or until <= datetime.now(timezone.utc)
+        ):
+            return False
+        state['processed_revision'] = revision
+        state['processed_sync_revision'] = sync_revision
+        transaction.update(ref, {SMART_MERGE_FIELD: state})
+        return True
+
+    return run_transactional(client, checkpoint)
 
 
 def complete_survivor_refresh(
