@@ -780,6 +780,8 @@ overlay:
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          PINECONE_INDEX_NAME:
+            value: memories-backend
       x-connector-sync-job:
         env:
           OMI_CUSTOMER_DATA_PROJECT:

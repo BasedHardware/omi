@@ -856,6 +856,8 @@ overlay:
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          PINECONE_INDEX_NAME:
+            value: memories-backend-dev
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
         forbidden_env:
