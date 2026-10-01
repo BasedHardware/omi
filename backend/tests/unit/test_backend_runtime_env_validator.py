@@ -3170,6 +3170,7 @@ def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
     prod = validator._get_env_config(manifest, 'prod')
     hosts = set()
     for scope, env_block in _manifest_env_blocks(prod):
+        assert 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST' not in env_block, scope
         assert CONVERSATION_RELEVANCE_JEV_ENABLED_ENV not in env_block, scope
         assert MEMORY_OWNER_JEV_FLIP_ENABLED_ENV not in env_block, scope
         if scope not in _JEV_PROCESS_CONVERSATION_HOSTS:
@@ -3187,3 +3188,71 @@ def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():
     # backend-sync-backfill is not a shadow host but also processes conversations.
     backfill = dict(_manifest_env_blocks(prod))['cloud_run/backend-sync-backfill']
     assert backfill['CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT']['value'] == '2'
+
+
+def test_prod_rejects_jev_uid_allowlist_declared_on_every_host(tmp_path):
+    # One full validation with the declaration on every prod host: the walk reaches each scope.
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = validator._get_env_config(manifest, 'prod')
+    hosts = [
+        *prod['gke'].values(),
+        *prod['cloud_run']['services'].values(),
+        *prod['cloud_run']['jobs'].values(),
+        prod['desktop_backend'],
+    ]
+    for host in hosts:
+        host.setdefault('env', {})['CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'] = {'value': ''}
+    path = tmp_path / 'manifest.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='prod', manifest_path=path)
+    rejected = [e for e in errors if 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in e.message]
+    assert len(rejected) >= len(hosts)
+
+
+@pytest.mark.parametrize('binding', [{'value': ''}, {'value': 'synthetic-user'}, {'secret': 'synthetic-secret'}])
+def test_jev_uid_allowlist_contract_rejects_every_binding_shape(binding):
+    from scripts.runtime_env_jev_contract import JEV_UID_ALLOWLIST, validate_jev_uid_allowlist
+
+    errors = validate_jev_uid_allowlist(stage='prod', scope='gke/pusher', config={'env': {JEV_UID_ALLOWLIST: binding}})
+    assert errors and 'dev-only' in errors[0].message
+    assert (
+        validate_jev_uid_allowlist(stage='dev', scope='gke/pusher', config={'env': {JEV_UID_ALLOWLIST: binding}}) == []
+    )
+
+
+def test_prod_rejects_jev_uid_allowlist_undeclared_in_chart(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = validator._get_env_config(manifest, 'prod')
+    host = prod['gke']['pusher']
+    values = validator._load_yaml(ROOT.parent / host['values_file'])
+    values['env'].append({'name': 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'value': ''})
+    chart = tmp_path / 'values.yaml'
+    write_yaml(chart, values)
+    host['values_file'] = str(chart)
+    path = tmp_path / 'manifest.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='prod', manifest_path=path)
+    assert any('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in error.message for error in errors)
+
+
+def test_prod_rejects_jev_uid_allowlist_undeclared_in_cloud_run_state(tmp_path, monkeypatch):
+    validator = load_validator()
+    prod = validator._get_env_config(validator._load_yaml(validator.DEFAULT_MANIFEST), 'prod')
+    state = render_cloud_run_state(prod, monkeypatch)
+    state['services']['backend-sync']['env'].append({'name': 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'value': ''})
+    path = tmp_path / 'state.json'
+    path.write_text(json.dumps(state))
+    errors = validator.validate_runtime_env(env='prod', cloud_run_state_path=path)
+    assert any('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST is dev-only' in error.message for error in errors)
+
+
+def test_jev_uid_allowlist_contract_survives_cyclic_yaml_aliases():
+    from scripts.runtime_env_jev_contract import JEV_UID_ALLOWLIST, validate_jev_uid_allowlist
+
+    cyclic: dict = {'env': []}
+    cyclic['env'].append(cyclic)
+    assert validate_jev_uid_allowlist(stage='prod', scope='cloud_run/backend', config=cyclic) == []
+    cyclic['env'].append({JEV_UID_ALLOWLIST: {'value': ''}})
+    assert len(validate_jev_uid_allowlist(stage='prod', scope='cloud_run/backend', config=cyclic)) >= 1
