@@ -830,6 +830,32 @@ stop the batch and cancellation propagates. Apple Reminders retains its single
 push. This is best-effort export, not a durable retry queue: the worker does not
 automatically repeat an uncertain provider create after a failed marker write.
 
+A reprocess (smart-merge survivor refresh, user reprocess, sync update, server
+recovery) replaces the conversation's tasks. A new item whose description has the
+same exact canonical form (width/typography normalized, ordinary text case-folded,
+sentence punctuation and whitespace collapsed; internal punctuation, numeric signs,
+numeric compatibility symbols and Unicode joiners retained; code-bearing descriptions
+retain case) as a prior
+row of the same conversation keeps that row's id and export
+marker (`utils/conversations/action_item_identity.py`), so its cloud task-app
+copy (Todoist, Asana, ClickUp, Google Tasks) is not created again; reworded or
+new items are delivered as before. Apple Reminders keeps the previous behavior:
+an Apple-linked or pending row (`apple_reminder_id` set, `export_platform` =
+`apple_reminders`, or `sync_requested` set) never lends its id, so a reprocess
+pushes a second reminder. Pending pushes use fresh ids too, so a delayed client
+callback cannot attach an old Apple copy to the replacement row. The old Omi
+local notification is cancelled; the old Apple Reminders copy is left alone,
+as on main.
+The Reminders sync is last-writer-wins on Omi `updated_at` vs the reminder's
+`lastModifiedDate`, and the replaced row has no edit timestamp, so a kept link
+would let the extraction overwrite a title or due date the user edited in
+Reminders; the duplicate keeps that edited copy. With prior rows, delivery is
+queued only after the task vectors are written. An unexpected planner error
+falls back to the kill-switch plan (`outcome=planner_error`).
+`ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` (unset = on, any unrecognized value =
+off) restores recreate-under-fresh-ids; `event=action_item_identity` logs the
+per-replace counts.
+
 With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant
 names and organizations come from the resolved calendar or screen-derived

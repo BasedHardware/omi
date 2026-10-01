@@ -211,6 +211,7 @@ from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
+from utils.conversations.action_item_identity import plan_replacement
 from utils.conversations.calendar_linking import get_overlapping_calendar_event
 from utils.conversations.meeting_treatment import (
     MIN_MEETING_DURATION_SECONDS,
@@ -2155,18 +2156,17 @@ def _write_action_items(uid: str, conversation: Conversation):
     ]
 
     old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
+    # A task that survives re-extraction keeps its id and export marker (no re-send).
+    identity = plan_replacement(conversation.id, action_items_data, old_items)
     old_ids = [item['id'] for item in old_items]
     if old_ids:
         delete_action_item_vectors_batch(uid, old_ids)
     action_items_db.delete_action_items_for_conversation(uid, conversation.id)
     try:
         for item in old_items:
-            # The replaced rows may own client-scheduled reminders, which the client
-            # only cancels on the deletion data message (#5085). Reprocessing re-creates
-            # the tasks under new ids and schedules their reminders below, so leaving
-            # these armed duplicates every surviving task and keeps reminders for
-            # dropped ones.
-            if item.get('due_at') and not item.get('completed'):
+            # Replaced rows may own client reminders, cancelled only by the deletion data
+            # message (#5085); a kept id is rescheduled in one message after the create.
+            if item.get('due_at') and not item.get('completed') and item['id'] not in identity.reused_ids:
                 sync_action_item_reminder(
                     user_id=uid,
                     action_item_id=item['id'],
@@ -2179,7 +2179,7 @@ def _write_action_items(uid: str, conversation: Conversation):
         # conversation its new extraction.
         logger.error(f"Error cancelling replaced task reminders for {conversation.id}: {e}")
 
-    action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    action_item_ids = action_items_db.create_action_items_batch(uid, identity.items, **identity.create_kwargs())
     logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
 
     emit_product_event(
@@ -2193,8 +2193,10 @@ def _write_action_items(uid: str, conversation: Conversation):
         },
     )
 
-    for idx, action_item in enumerate(conversation.structured.action_items):
-        if action_item.due_at and idx < len(action_item_ids):
+    for idx, action_item in enumerate(conversation.structured.action_items[: len(action_item_ids)]):
+        if identity.reconcile_kept_reminder(uid, action_item_ids[idx], action_item, sync_action_item_reminder):
+            continue
+        if action_item.due_at:
             send_action_item_data_message(
                 user_id=uid,
                 action_item_id=action_item_ids[idx],
@@ -2202,20 +2204,18 @@ def _write_action_items(uid: str, conversation: Conversation):
                 due_at=action_item.due_at.isoformat(),
             )
 
-    created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
+    created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, identity.items)]
 
     def _run_auto_sync():
-        asyncio.run(auto_sync_action_items_batch(uid, created_items))
+        asyncio.run(auto_sync_action_items_batch(uid, identity.deliverable(created_items)))
 
-    submit_with_context(postprocess_executor, _run_auto_sync)
-
+    if not identity.deliver_after_persist:
+        submit_with_context(postprocess_executor, _run_auto_sync)
     upsert_action_item_vectors_batch(
-        uid,
-        [
-            {'action_item_id': aid, 'description': data['description']}
-            for aid, data in zip(action_item_ids, action_items_data)
-        ],
+        uid, [{'action_item_id': item['id'], 'description': item['description']} for item in created_items]
     )
+    if identity.deliver_after_persist:  # a failed attempt above queues nothing for its retry to repeat
+        submit_with_context(postprocess_executor, _run_auto_sync)
 
 
 def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):

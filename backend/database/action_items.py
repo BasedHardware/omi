@@ -408,7 +408,7 @@ def create_action_items_batch(
     uid: str,
     action_items_data: List[Dict[str, Any]],
     *,
-    document_ids: Optional[List[str]] = None,
+    document_ids: Optional[List[Optional[str]]] = None,
 ) -> List[str]:
     """
     Create multiple action items in a batch operation.
@@ -416,6 +416,7 @@ def create_action_items_batch(
     Args:
         uid: User ID
         action_items_data: List of action item data dictionaries
+        document_ids: Optional per-item ids; a None entry gets a fresh Firestore id
 
     Returns:
         List of created action item IDs
@@ -443,9 +444,8 @@ def create_action_items_batch(
         if action_item_data.get('completed', False) and not action_item_data.get('completed_at'):
             action_item_data['completed_at'] = datetime.now(timezone.utc)
 
-        doc_ref = (
-            action_items_ref.document(document_ids[index]) if document_ids is not None else action_items_ref.document()
-        )
+        reserved_id = document_ids[index] if document_ids is not None else None
+        doc_ref = action_items_ref.document(reserved_id) if reserved_id is not None else action_items_ref.document()
         prepared_items.append(action_item_data)
         document_refs.append(doc_ref)
         doc_refs.append(doc_ref.id)
@@ -551,6 +551,7 @@ ACTION_ITEMS_LIST_SELECT_FIELDS = (
     'export_date',
     'export_platform',
     'apple_reminder_id',
+    'sync_requested',
 )
 
 
