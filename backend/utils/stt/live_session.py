@@ -346,6 +346,7 @@ class LiveLegSocket(STTSocket):
         self._speech_capture_end = 0
         self._seconds = 0.0
         self._replaying = False
+        self._replay_passthrough = False
         self._pending_selection: PendingLiveFailover | None = None
         self._ingest_gain: SessionPcmGain | None = None
         self._open_gauge_released = False
@@ -556,7 +557,7 @@ class LiveLegSocket(STTSocket):
                 self.gate.mode = 'off'
                 self.gate = None
                 self.session.vad_mode = 'off'
-        audio = data if output is None or self.passthrough else output.audio_to_send
+        audio = data if output is None or self.passthrough or self._replay_passthrough else output.audio_to_send
         if output is not None and output.is_speech and self._first_speech_at is None:
             self._first_speech_at = time.monotonic()
         if output is not None and output.is_speech:
@@ -580,7 +581,7 @@ class LiveLegSocket(STTSocket):
                 self.finish()
                 self._dead = True
                 return False
-            if output is not None and output.should_finalize:
+            if output is not None and output.should_finalize and not self._replay_passthrough:
                 if self.window and isinstance(self.raw, WindowedParakeetSocket):
                     self.raw.finalize(vad_pause=True)
                 else:
@@ -617,10 +618,15 @@ class LiveLegSocket(STTSocket):
                 self._pending_capture_sample = start_sample
             self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
         self._replaying = True
+        ring = getattr(self.session.receiver, '_window_ring', None)
+        # Source admission and capture retention already decided this replay
+        # span. A different VAD score must not discard or finalize its middle.
+        self._replay_passthrough = callable(ring) and ring() is not None
         try:
             return self.send(data, start_sample=start_sample)
         finally:
             self._replaying = False
+            self._replay_passthrough = False
 
     def finalize(self) -> None:
         self.raw.finalize()

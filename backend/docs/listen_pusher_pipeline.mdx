@@ -654,6 +654,9 @@ A failed replacement is excluded by its actual provider, including a rejection
 at the final health check, and the receiver tries the remaining eligible chain.
 Callbacks from an epoch retired for replay are fenced, including callbacks
 queued on the listen loop, so the failed epoch cannot duplicate replayed words.
+The retained window span bypasses downstream VAD gating and finalize signals
+during replay: speech admitted with window gain cannot be discarded by a
+different downstream VAD decision. Ordinary sends keep their existing gate.
 Each adopted replacement gets 15 seconds of new capture headroom while it
 processes a potentially full source backlog. The finite three-provider suffix
 bounds retention at 135 seconds; stalled un-emitted audio still fails over

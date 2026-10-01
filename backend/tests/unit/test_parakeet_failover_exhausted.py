@@ -7,6 +7,7 @@ import pytest
 import routers.listen.receiver as receiver_module
 from tests.unit.test_parakeet_window_live import Client, _flush_capture, _receiver_for_anchor_replay, runtime
 from utils.stt import streaming as st
+from utils.stt import vad_gate
 from utils.stt.live_session import LiveLegSocket
 
 
@@ -270,5 +271,29 @@ async def test_enabled_soniox_reconnect_uses_full_window_obligation_not_fifteen_
         legs['soniox'][0].callback([{'text': 'retired tail', 'start': 0.0, 'end': 20.12}])
         assert base.emitted == []
         assert actual._window_ring().capture_bounds == (0, 321920)
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_window_replay_is_not_gated_again_when_replacement_vad_misses_source_speech(monkeypatch):
+    # Source window admission has gain and a 300ms tail; emulate quiet speech
+    # admitted there that the downstream gate would classify as silence.
+    monkeypatch.setattr(vad_gate.VADStreamingGate, '_run_vad', lambda gate, _pcm: gate._hangover_ms == 300)
+    actual, base, previous, legs, capture = await setup_chain(monkeypatch)
+    actual.host.request.vad_gate_override = 'enabled'
+    try:
+        assert await actual._failover_stt_socket()
+        assert b''.join(legs['modulate'][0].sent) == capture
+        legs['modulate'][0].is_connection_dead = True
+        legs['modulate'][0].typed_death_reason = 'modulate_serve_error'
+        assert await actual._failover_stt_socket()
+        assert actual.stt_socket.gate.mode == 'active'
+        assert not actual.stt_socket.gate._run_vad(capture)
+        assert b''.join(legs['soniox'][0].sent) == capture
+        assert actual._window_ring().capture_bounds == (0, 1920)
+        # The caller's active gate still governs new capture after replay.
+        await _flush_capture(actual, b'\x03\x00' * 640, 1920)
+        assert b''.join(legs['soniox'][0].sent) == capture
     finally:
         await actual._drain_stt_sockets()
