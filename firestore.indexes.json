@@ -2947,6 +2947,12 @@
       "fieldPath": "windowTitle",
       "ttl": false,
       "indexes": []
+    },
+    {
+      "collectionGroup": "conversations",
+      "fieldPath": "live_transcript_replay_receipt",
+      "ttl": false,
+      "indexes": []
     }
   ]
 }

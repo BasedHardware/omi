@@ -1955,6 +1955,7 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('sync_backfill_sequencer', 'active_payload'),
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
+    ('conversations', 'live_transcript_replay_receipt'),
 )
 
 

@@ -8,9 +8,18 @@ from dataclasses import dataclass
 from typing import Optional
 import uuid
 
+from pydantic import BaseModel, Field, StrictStr
+
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
 TEACHING_CANDIDATE_LIMIT = 3
+LIVE_TRANSCRIPT_REPLAY_RECEIPT_LIMIT = 4096
+
+
+class LiveTranscriptReplayReceipt(BaseModel):
+    model_config = {'extra': 'forbid'}
+
+    absorbed_ids: list[StrictStr] = Field(max_length=LIVE_TRANSCRIPT_REPLAY_RECEIPT_LIMIT)
 
 
 def manual_owner_reserved(receipt: dict) -> bool:
@@ -215,7 +224,9 @@ class LiveTranscriptMerge:
     absorbed_into: dict[str, str]
 
 
-def merge_live_segments(persisted: list[dict], fresh: list[dict], receipt: dict) -> LiveTranscriptMerge:
+def merge_live_segments(
+    persisted: list[dict], fresh: list[dict], receipt: dict, *, absorbed_ids: Optional[list[str]] = None
+) -> LiveTranscriptMerge:
     """Plan only the mutable tail and fresh batch against the transaction's receipt.
 
     Reconstruct models on every attempt: combine_segments mutates its inputs.
@@ -226,6 +237,7 @@ def merge_live_segments(persisted: list[dict], fresh: list[dict], receipt: dict)
     # Filter IDs before combine_segments, which otherwise merges/appends the
     # same words a second time. Also dedupe repeated IDs in one fresh batch.
     seen_ids = {str(segment['id']) for segment in persisted if segment.get('id')}
+    seen_ids.update(str(absorbed_id) for absorbed_id in (absorbed_ids or []))
     unique_fresh = []
     for segment in fresh:
         segment_id = segment.get('id')

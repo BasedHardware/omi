@@ -137,7 +137,18 @@ Audio-timeline v2 retains at most the configured segment-buffer limit in each
 of its pending and unplaced fallback queues. If pending text fills the first
 queue, new text enters the legacy transaction as unplaced, retaining its ID
 and SEND conversation owner. A retry after an ambiguous commit filters IDs
-already stored inside that transaction. If both queues fill during a store
+already stored inside that transaction, plus the durable
+`live_transcript_replay_receipt`: segment IDs absorbed by an earlier committed
+merge no longer exist in the stored transcript, so the transaction also treats
+the receipt's `absorbed_ids` as seen before planning the fresh batch. The
+receipt is written in the same `transaction.update` as the merged transcript,
+holds at most 4,096 absorbed IDs (the pending, fallback, and in-flight drain
+limits combined plus headroom), is stored encrypted and zlib-compressed
+independent of the document's data-protection level, and never leaves the
+document — `prepare_conversation_for_read` drops it before any read response.
+It covers ordinary retry drains, not arbitrary historic replay: a document
+without the field plans exactly as before, and its first fixed commit starts
+the receipt. If both queues fill during a store
 outage, admission raises an explicit capacity error and emits a metric; the
 callback cannot buffer transcript indefinitely.
 
@@ -1890,7 +1901,13 @@ explicit follow-ups. See `utils/sync/ARCHITECTURE.md` for recovery and indexing 
 Live capture passes fresh, unmerged STT segments to `update_conversation_segments(live_segments=...)`.
 The transaction reads the current transcript and manual receipt, then merges only
 its tail and the fresh batch, after applying the receipt to both so compared
-provenance is post-decision. A segment covered by a selected-ID decision blocks all
+provenance is post-decision. Every attempt also rebuilds the
+`live_transcript_replay_receipt` absorbed-ID set from the document — never from
+caller state — so a retry after a lost acknowledgement cannot merge the same
+words twice; a present-but-malformed receipt fails the transaction closed
+without writing. Absorption-map keys append in insertion order, truncated to
+the newest 4,096, and the receipt is rewritten only when a merge absorbs new
+IDs. A segment covered by a selected-ID decision blocks all
 concatenation and partial sentence transfer. A speaker-wide default is a boundary:
 that speaker's segments only append to each other in chronological order (no sentence
 repair, no late arrivals), and never exchange words with another speaker. Clears,
