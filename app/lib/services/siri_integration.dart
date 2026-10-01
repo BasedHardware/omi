@@ -104,6 +104,7 @@ class SiriIntegration extends SiriEventsApi {
         _testMemoryPageFetcher = null,
         _testTaskPageFetcher = null,
         _testConversationPageFetcher = null,
+        _testRouteOpener = null,
         _prepareTimeout = const Duration(milliseconds: 1500),
         _nativeTimeout = const Duration(seconds: 12),
         _indexCooldown = const Duration(seconds: 30),
@@ -119,6 +120,7 @@ class SiriIntegration extends SiriEventsApi {
     SiriMemoryPageFetcher? memoryPageFetcher,
     SiriTaskPageFetcher? taskPageFetcher,
     SiriConversationPageFetcher? conversationPageFetcher,
+    Future<bool> Function(String route, String uid, int generation)? routeOpener,
     Duration prepareTimeout = const Duration(milliseconds: 1500),
     Duration nativeTimeout = const Duration(seconds: 12),
     Duration indexCooldown = const Duration(seconds: 30),
@@ -132,6 +134,7 @@ class SiriIntegration extends SiriEventsApi {
         _testMemoryPageFetcher = memoryPageFetcher,
         _testTaskPageFetcher = taskPageFetcher,
         _testConversationPageFetcher = conversationPageFetcher,
+        _testRouteOpener = routeOpener,
         _prepareTimeout = prepareTimeout,
         _nativeTimeout = nativeTimeout,
         _indexCooldown = indexCooldown,
@@ -150,6 +153,7 @@ class SiriIntegration extends SiriEventsApi {
   final SiriMemoryPageFetcher? _testMemoryPageFetcher;
   final SiriTaskPageFetcher? _testTaskPageFetcher;
   final SiriConversationPageFetcher? _testConversationPageFetcher;
+  final Future<bool> Function(String route, String uid, int generation)? _testRouteOpener;
   final Duration _prepareTimeout;
   final Duration _nativeTimeout;
   final Duration _indexCooldown;
@@ -161,6 +165,7 @@ class SiriIntegration extends SiriEventsApi {
     // Intents can finish while Flutter is absent; drain the native buffer on
     // every launch, then again after the signed-in session mirror is refreshed.
     _drainLaunchTelemetry();
+    HomeNavigation.onHomeMounted = () => unawaited(deliverPendingRoute());
   }
 
   /// The launch drain destructively takes the native telemetry buffer, so it
@@ -188,6 +193,7 @@ class SiriIntegration extends SiriEventsApi {
 
   int _accountGeneration = 0;
   int? _nativeGeneration;
+  bool _deliveringPendingRoute = false;
   Future<void> _nativeTail = Future<void>.value();
   Future<void> _queuedIndexTail = Future<void>.value();
   DateTime? _indexSuspendedUntil;
@@ -552,6 +558,7 @@ class SiriIntegration extends SiriEventsApi {
     if (uid == null || generation != _accountGeneration) return;
     _uid = uid;
     await refreshSession(user!);
+    if (_currentOwner(uid, generation)) unawaited(deliverPendingRoute());
     _scheduleOwnerWideRefresh(uid, generation);
   }
 
@@ -985,7 +992,24 @@ class SiriIntegration extends SiriEventsApi {
     }
   }
 
-  Future<String?> takePendingRoute() async => _isIOS ? _host.takePendingRoute() : null;
+  Future<void> deliverPendingRoute() async {
+    if (!_isIOS || _deliveringPendingRoute) return;
+    _deliveringPendingRoute = true;
+    try {
+      final pending = await _host.takePendingRoute();
+      if (pending == null) return;
+      var delivered = false;
+      try {
+        delivered = await openRoute(pending.route, pending.uid, pending.generation);
+      } finally {
+        await _host.finishPendingRoute(pending.route, pending.uid, pending.generation, delivered);
+      }
+    } catch (error) {
+      Logger.debug('Siri pending route delivery failed: $error');
+    } finally {
+      _deliveringPendingRoute = false;
+    }
+  }
 
   @override
   void memoryCreated(String id) {
@@ -1000,7 +1024,12 @@ class SiriIntegration extends SiriEventsApi {
   }
 
   @override
-  Future<bool> openRoute(String route) => HomeNavigation.openRoute(route);
+  Future<bool> openRoute(String route, String uid, int generation) =>
+      _testRouteOpener?.call(route, uid, generation) ??
+      HomeNavigation.openRoute(
+        route,
+        canOpen: () => _uid == uid && _nativeGeneration == generation && FirebaseAuth.instance.currentUser?.uid == uid,
+      );
 
   @override
   Future<void> setListening(bool enabled) async {
@@ -1091,7 +1120,10 @@ class SiriIntegration extends SiriEventsApi {
             platform: siri_events.SiriIntentPerformedPlatform.ios,
             outcome: outcomes.isEmpty ? siri_events.SiriIntentPerformedOutcome.server : outcomes.first,
             latencyMs: row.latencyMs,
-            invokedVia: siri_events.SiriIntentPerformedInvokedVia.unknown,
+            invokedVia: siri_events.SiriIntentPerformedInvokedVia.values.firstWhere(
+              (value) => value.wireName == row.entryPath,
+              orElse: () => siri_events.SiriIntentPerformedInvokedVia.unknown,
+            ),
           ),
         );
       } else if (row.kind == 'index') {

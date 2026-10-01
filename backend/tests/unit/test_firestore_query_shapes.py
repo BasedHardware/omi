@@ -31,16 +31,19 @@ import sys
 import textwrap
 import types
 from datetime import date, datetime, timezone
+from itertools import product
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from scripts import firestore_query_shapes as export_mod
-from tests.support.firestore_index_rules import required_index
+from tests.support.firestore_index_rules import is_served, required_index
+from tests.support.firestore_conversation_profiles import PROFILES, discover_conversation_callers
 from tests.support.firestore_query_driver_registry import COVERED_BY, DRIVERS, SKIPS
 from tests.support.firestore_query_drivers import (
     FROZEN_NOW,
+    CallerProfile,
     DriverEntry,
     DriverResult,
     _FrozenDate,
@@ -130,10 +133,10 @@ def _real_count_verdict(manifest: dict) -> dict:
         with client.recording_context('database.conversations.get_conversations_count', {}):
             database.conversations.get_conversations_count('shape-user', start_date=FROZEN_NOW)
     shape = client.shapes[0]
-    assert shape.orders == ()
+    assert shape.orders == (('created_at', 'DESCENDING'),)
     required = required_index(shape)
     assert required is not None
-    assert dict(required.fields)['created_at'] == 'ASCENDING'
+    assert dict(required.fields)['created_at'] == 'DESCENDING'
     return export_mod.shape_verdict(shape, manifest)
 
 
@@ -159,8 +162,13 @@ def test_covered_by_references_resolve():
 
 def test_registry_domains_and_neutral_reasons_well_formed():
     for key, entry in DRIVERS.items():
-        for name, values in entry.domains.items():
-            assert values, f'{key}: domain {name} is empty'
+        assert len({profile.name for profile in entry.profiles}) == len(entry.profiles)
+        for profile in entry.profiles:
+            assert profile.name
+            assert not (profile.domains.keys() & (entry.base.keys() | entry.neutrals.keys() | entry.domains.keys()))
+        for domains in [entry.domains, *(profile.domains for profile in entry.profiles)]:
+            for name, values in domains.items():
+                assert values, f'{key}: domain {name} is empty'
         for name, spec in entry.neutrals.items():
             assert (
                 isinstance(spec, tuple) and len(spec) == 2 and str(spec[1]).strip()
@@ -342,6 +350,23 @@ def test_driver_deep_copies_arguments_across_trials(monkeypatch):
     second = run_driver(entry)
     assert not second.errors
     assert [s.signature() for s in first.shapes] == [s.signature() for s in second.shapes]
+
+
+def test_named_profiles_deep_copy_arguments_and_keep_export_provenance(monkeypatch):
+    _mutating_driver_module(monkeypatch)
+    entry = DriverEntry(
+        'driver_fixtures_mutating.mutating',
+        base={'payload': {'items': [], 'depth': {'n': 0}}},
+        profiles=(CallerProfile('one', {'flag': [True]}), CallerProfile('two', {'flag': [False]})),
+        trials=2,
+    )
+    first = run_driver(entry)
+    second = run_driver(entry)
+    assert not first.errors and not second.errors
+    assert entry.base['payload'] == {'items': [], 'depth': {'n': 0}}
+    assert [shape.to_dict() for shape in first.shapes] == [shape.to_dict() for shape in second.shapes]
+    assert [shape.parameter_combo['caller_profile'] for shape in first.shapes] == ['one', 'one', 'two', 'two']
+    assert all(shape.driver_function == entry.function for shape in first.shapes)
 
 
 def test_registry_body_digests_are_frozen_literals():
@@ -580,6 +605,21 @@ def test_uncertain_but_served_is_not_ledger_debt():
     assert computed == {'known_gaps': {}, 'uncertain': {}}
 
 
+def test_real_bounded_count_rejects_an_ascending_only_manifest():
+    manifest = {
+        'indexes': [
+            {
+                'collectionGroup': 'conversations',
+                'queryScope': 'COLLECTION',
+                'fields': [
+                    {'fieldPath': field, 'order': 'ASCENDING'} for field in ('discarded', 'created_at', '__name__')
+                ],
+            }
+        ],
+    }
+    assert not _real_count_verdict(manifest)['served']
+
+
 def test_real_shape_manifest_mutation():
     """Adding precisely the required index flips a real gap to stale."""
     unserved = _real_count_verdict({'indexes': []})
@@ -674,6 +714,133 @@ def test_same_signature_singleton_and_multi_in_retain_refused_case():
     for entries in ([singleton, multi], [multi, singleton]):
         computed = export_mod.evaluate_shapes(entries)
         assert singleton['id'] in computed['uncertain']
+
+
+@pytest.fixture(scope='module')
+def conversation_caller_inventory():
+    return discover_conversation_callers(BACKEND_ROOT)
+
+
+def test_conversation_caller_profiles_are_complete_and_fingerprinted(conversation_caller_inventory):
+    contract = json.loads((BACKEND_ROOT / 'tests/support/firestore_conversation_callers.json').read_text())
+    assert contract['schema_version'] == 1
+    expected = contract['callers']
+    actual = conversation_caller_inventory
+    assert actual == {
+        key: {name: value for name, value in row.items() if name != 'profiles'} for key, row in expected.items()
+    }, 'conversation callers changed: review the accepted domain and its named profiles before updating fingerprints'
+    bound = set()
+    for row in expected.values():
+        names = {profile.name for profile in PROFILES[row['target']]}
+        assert row['profiles'] and set(row['profiles']) <= names
+        bound.update(row['profiles'])
+    assert bound == {profile.name for profiles in PROFILES.values() for profile in profiles}
+
+
+@pytest.mark.parametrize('change', ['new-caller', 'widened-domain', 'wrapper-reference', 'assigned-alias'])
+def test_conversation_caller_sentinel_detects_domain_widening(tmp_path, change):
+    path = tmp_path / 'consumer.py'
+    path.write_text(
+        'from database.conversations import get_conversations as listing\n' 'def read(uid):\n    return listing(uid)\n'
+    )
+    before = discover_conversation_callers(tmp_path)
+    if change == 'new-caller':
+        path.write_text(path.read_text() + '\ndef new_read(uid):\n    return listing(uid, starred=True)\n')
+    elif change == 'widened-domain':
+        path.write_text(path.read_text().replace('listing(uid)', 'listing(uid, categories=["work"])'))
+    elif change == 'wrapper-reference':
+        path.write_text(
+            path.read_text().replace('listing(uid)', 'run_blocking(pool, listing, uid, date_field="started_at")')
+        )
+    else:
+        path.write_text(
+            path.read_text()
+            .replace('def read(uid):', 'alias = listing\ndef read(uid):')
+            .replace('listing(uid)', 'alias(uid, folder_id="f")')
+        )
+    after = discover_conversation_callers(tmp_path)
+    assert after != before
+    assert before and after
+    assert all(row['target'] == 'database.conversations.get_conversations' for row in after.values())
+    if change == 'new-caller':
+        assert len(after) == len(before) + 1
+
+
+def test_every_conversation_profile_is_exported_and_served(driver_results, export_payload):
+    for target, profiles in PROFILES.items():
+        result = driver_results[target]
+        assert not result.errors
+        assert {shape.parameter_combo['caller_profile'] for shape in result.shapes} == {p.name for p in profiles}
+        exported = [row for row in export_payload['shapes'] if row['driver_function'] == target]
+        assert exported and all(row['served'] for row in exported), target
+        assert {row['parameter_combo']['caller_profile']['value'] for row in exported} == {p.name for p in profiles}
+        for shape in result.shapes:
+            combo = shape.parameter_combo
+            if combo['caller_profile'].startswith('main-'):
+                assert combo['categories'] is None
+                assert not (len(combo.get('sources') or []) > 1 and len(combo.get('statuses') or []) > 1)
+                if combo['caller_profile'].startswith('main-list'):
+                    assert combo['statuses']
+
+
+@pytest.mark.parametrize(
+    'helper,status_sizes', [('get_conversations_count', [0, 1, 2]), ('get_conversations_without_photos', [1, 2])]
+)
+def test_main_conversation_profiles_preserve_the_entire_accepted_matrix(driver_results, helper, status_sizes):
+    combos = [
+        shape.parameter_combo
+        for shape in driver_results[f'database.conversations.{helper}'].shapes
+        if shape.parameter_combo['caller_profile'].startswith('main-')
+    ]
+    actual = {
+        (
+            combo['include_discarded'],
+            len(combo['statuses'] or []),
+            len(combo['sources'] or []),
+            bool(combo['folder_id']),
+            combo['starred'],
+            bool(combo['start_date']),
+            bool(combo['end_date']),
+        )
+        for combo in combos
+    }
+    expected = {
+        values
+        for values in product(
+            [False, True], status_sizes, [0, 1, 2], [False, True], [None, False, True], [False, True], [False, True]
+        )
+        if not (values[1] > 1 and values[2] > 1)
+    }
+    assert actual == expected
+
+
+@pytest.mark.parametrize('field', ['source', 'starred', 'folder_id'])
+def test_shared_desc_indexes_have_necessary_singleton_count_witnesses(driver_results, field):
+    manifest = export_mod.load_manifest(MANIFEST_PATH)
+    witnesses = [
+        shape
+        for shape in driver_results['database.conversations.get_conversations_count'].shapes
+        if shape.aggregations
+        and shape.orders == (('created_at', 'DESCENDING'),)
+        and {predicate.field for predicate in shape.filters} == {field, 'created_at'}
+    ]
+    assert witnesses, f'{field}: accepted dated count with this sole equality must be recorded'
+    without = {
+        **manifest,
+        'indexes': [
+            entry
+            for entry in manifest['indexes']
+            if not (
+                entry['collectionGroup'] == 'conversations'
+                and entry['queryScope'] == 'COLLECTION'
+                and [item['fieldPath'] for item in entry['fields']] == [field, 'created_at', '__name__']
+                and entry['fields'][1].get('order') == 'DESCENDING'
+                and entry['fields'][2].get('order') == 'DESCENDING'
+            )
+        ],
+    }
+    assert all(is_served(shape, manifest) for shape in witnesses)
+    assert all(not is_served(shape, without) for shape in witnesses)
 
 
 def test_export_main_writes_exact_path(tmp_path, driver_results, monkeypatch, capsys):

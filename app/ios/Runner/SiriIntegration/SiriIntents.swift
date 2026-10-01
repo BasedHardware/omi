@@ -246,8 +246,8 @@ struct AskOmiIntent: AppIntent {
         guard !value.isEmpty else {
             return (.result(dialog: "What would you like to ask Omi?"), "cancelled")
         }
-        if let redirect = Self.rememberRedirectDialog(for: value) {
-            return (.result(dialog: IntentDialog(redirect)), "cancelled")
+        if Self.rememberRedirectDialog(for: value) != nil {
+            return (.result(dialog: "To save that, say 'Remember something in Omi' instead."), "cancelled")
         }
         var didAttemptChatPost = false
         do {
@@ -348,28 +348,29 @@ struct OmiCreateNoteIntent {
 @AppIntent(schema: .system.open)
 struct OpenOmiIntent: OpenIntent {
     static var title: LocalizedStringResource = "Open in Omi"
-    static var supportedModes: IntentModes = .foreground(.immediate)
     @Parameter(title: "Conversation") var target: ConversationEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
-        var outcome = "server"
-        defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        do {
-            // Fence authentication before the Boolean entity check collapses
-            // Failure.auth into "no longer available", which would misclassify
-            // the deferred outcome as server instead of auth.
-            try requireSignedInSiriSession()
-            let kind = target.folder?.id == "memories" ? "memory" : "conversation"
-            guard SiriSnapshotStore.shared.containsCurrentEntity(type: kind, id: target.id) else {
-                throw SiriUnsupportedInput(kind: .open)
-            }
-            SiriBridge.shared.navigate("omi://\(kind)/\(target.id)")
-            outcome = "ok"
-            return .result()
-        } catch {
-            outcome = SiriTelemetry.outcome(error)
+        do { try requireSignedInSiriSession() }
+        catch {
+            SiriTelemetry.intent("open", outcome: SiriTelemetry.outcome(error), started: started,
+                                 entryPath: "app_intent")
             throw error
         }
+        let kind = target.folder?.id == "memories" ? "memory" : "conversation"
+        #if OMI_SIRI_PROBE
+        NSLog("[SiriSceneProbe] intent=open kind=%@ id=%@ guard=%@", kind, target.id,
+              SiriSnapshotStore.shared.containsCurrentEntity(type: kind, id: target.id) ? "pass" : "reject")
+        #endif
+        guard SiriSnapshotStore.shared.containsCurrentEntity(type: kind, id: target.id) else {
+            SiriTelemetry.intent("open", outcome: "server", started: started, entryPath: "app_intent")
+            throw SiriUnsupportedInput(kind: .open)
+        }
+        guard SiriBridge.shared.navigate(SiriBridge.entityRoute(kind: kind, id: target.id),
+                                         entryPath: "app_intent") else {
+            throw SiriSession.Failure.auth
+        }
+        return .result()
     }
 }
 
@@ -377,27 +378,24 @@ struct OpenOmiIntent: OpenIntent {
 @AppIntent(schema: .system.open)
 struct OpenOmiMemoryIntent: OpenIntent {
     static var title: LocalizedStringResource = "Open Omi memory"
-    static var supportedModes: IntentModes = .foreground(.immediate)
     @Parameter(title: "Memory") var target: MemoryEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
-        var outcome = "server"
-        defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        do {
-            // Fence authentication before the Boolean entity check collapses
-            // Failure.auth into "no longer available", which would misclassify
-            // the deferred outcome as server instead of auth.
-            try requireSignedInSiriSession()
-            guard SiriSnapshotStore.shared.containsCurrentEntity(type: "memory", id: target.id) else {
-                throw SiriUnsupportedInput(kind: .open)
-            }
-            SiriBridge.shared.navigate("omi://memory/\(target.id)")
-            outcome = "ok"
-            return .result()
-        } catch {
-            outcome = SiriTelemetry.outcome(error)
+        do { try requireSignedInSiriSession() }
+        catch {
+            SiriTelemetry.intent("open", outcome: SiriTelemetry.outcome(error), started: started,
+                                 entryPath: "app_intent")
             throw error
         }
+        guard SiriSnapshotStore.shared.containsCurrentEntity(type: "memory", id: target.id) else {
+            SiriTelemetry.intent("open", outcome: "server", started: started, entryPath: "app_intent")
+            throw SiriUnsupportedInput(kind: .open)
+        }
+        guard SiriBridge.shared.navigate(SiriBridge.entityRoute(kind: "memory", id: target.id),
+                                         entryPath: "app_intent") else {
+            throw SiriSession.Failure.auth
+        }
+        return .result()
     }
 }
 
@@ -405,27 +403,24 @@ struct OpenOmiMemoryIntent: OpenIntent {
 @AppIntent(schema: .system.open)
 struct OpenOmiTaskIntent: OpenIntent {
     static var title: LocalizedStringResource = "Open Omi task"
-    static var supportedModes: IntentModes = .foreground(.immediate)
     @Parameter(title: "Task") var target: TaskEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
-        var outcome = "server"
-        defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        do {
-            // Fence authentication before the Boolean entity check collapses
-            // Failure.auth into "no longer available", which would misclassify
-            // the deferred outcome as server instead of auth.
-            try requireSignedInSiriSession()
-            guard SiriSnapshotStore.shared.containsCurrentEntity(type: "task", id: target.id) else {
-                throw SiriUnsupportedInput(kind: .open)
-            }
-            SiriBridge.shared.navigate("omi://task/\(target.id)")
-            outcome = "ok"
-            return .result()
-        } catch {
-            outcome = SiriTelemetry.outcome(error)
+        do { try requireSignedInSiriSession() }
+        catch {
+            SiriTelemetry.intent("open", outcome: SiriTelemetry.outcome(error), started: started,
+                                 entryPath: "app_intent")
             throw error
         }
+        guard SiriSnapshotStore.shared.containsCurrentEntity(type: "task", id: target.id) else {
+            SiriTelemetry.intent("open", outcome: "server", started: started, entryPath: "app_intent")
+            throw SiriUnsupportedInput(kind: .open)
+        }
+        guard SiriBridge.shared.navigate(SiriBridge.entityRoute(kind: "task", id: target.id),
+                                         entryPath: "app_intent") else {
+            throw SiriSession.Failure.auth
+        }
+        return .result()
     }
 }
 
@@ -433,24 +428,22 @@ struct OpenOmiTaskIntent: OpenIntent {
 @AppIntent(schema: .system.open)
 struct OpenOmiFolderIntent: OpenIntent {
     static var title: LocalizedStringResource = "Open Omi folder"
-    static var supportedModes: IntentModes = .foreground(.immediate)
     @Parameter(title: "Folder") var target: OmiFolderEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
-        var outcome = "server"
-        defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        do {
-            try requireSignedInSiriSession()
-            guard target.id == "memories" || target.id == "conversations" else {
-                throw SiriUnsupportedInput(kind: .open)
-            }
-            SiriBridge.shared.navigate(target.id == "memories" ? "omi://memories" : "omi://conversations")
-            outcome = "ok"
-            return .result()
-        } catch {
-            outcome = SiriTelemetry.outcome(error)
+        do { try requireSignedInSiriSession() }
+        catch {
+            SiriTelemetry.intent("open", outcome: SiriTelemetry.outcome(error), started: started,
+                                 entryPath: "app_intent")
             throw error
         }
+        guard target.id == "memories" || target.id == "conversations" else {
+            SiriTelemetry.intent("open", outcome: "server", started: started, entryPath: "app_intent")
+            throw SiriUnsupportedInput(kind: .open)
+        }
+        guard SiriBridge.shared.navigate(target.id == "memories" ? "omi://memories" : "omi://conversations",
+                                         entryPath: "app_intent") else { throw SiriSession.Failure.auth }
+        return .result()
     }
 }
 
@@ -458,22 +451,23 @@ struct OpenOmiFolderIntent: OpenIntent {
 @AppIntent(schema: .system.open)
 struct OpenOmiListIntent: OpenIntent {
     static var title: LocalizedStringResource = "Open Omi task list"
-    static var supportedModes: IntentModes = .foreground(.immediate)
     @Parameter(title: "List") var target: OmiListEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
-        var outcome = "server"
-        defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        do {
-            try requireSignedInSiriSession()
-            guard target.id == "omi" else { throw SiriUnsupportedInput(kind: .open) }
-            SiriBridge.shared.navigate("omi://action-items")
-            outcome = "ok"
-            return .result()
-        } catch {
-            outcome = SiriTelemetry.outcome(error)
+        do { try requireSignedInSiriSession() }
+        catch {
+            SiriTelemetry.intent("open", outcome: SiriTelemetry.outcome(error), started: started,
+                                 entryPath: "app_intent")
             throw error
         }
+        guard target.id == "omi" else {
+            SiriTelemetry.intent("open", outcome: "server", started: started, entryPath: "app_intent")
+            throw SiriUnsupportedInput(kind: .open)
+        }
+        guard SiriBridge.shared.navigate("omi://action-items", entryPath: "app_intent") else {
+            throw SiriSession.Failure.auth
+        }
+        return .result()
     }
 }
 

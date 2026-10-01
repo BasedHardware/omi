@@ -372,3 +372,7 @@ tests/unit/test_live_stt_failure.py::test_terminal_live_failure_still_closes_whe
 # First test of the file amortizes the coordinator/translation import graph into its call;
 # measured 0.49s CPU in the pre-push isolated-file runner (2026-09-29), <0.3s when warm.
 tests/unit/test_translation_coordinator_demand.py::test_demand_hidden_during_reservation_blocks_dispatch
+tests/unit/test_live_transcript_replay.py::test_long_session_receipt_stays_bounded[False-standard]
+tests/unit/test_live_transcript_replay.py::test_long_session_receipt_stays_bounded[False-enhanced]
+tests/unit/test_live_transcript_replay.py::test_long_session_receipt_stays_bounded[True-standard]
+tests/unit/test_live_transcript_replay.py::test_long_session_receipt_stays_bounded[True-enhanced]

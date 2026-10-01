@@ -106,23 +106,25 @@ def _allowlisted(uid: str, name: str) -> bool:
     return uid in {value.strip() for value in os.getenv(name, '').split(',') if value.strip()}
 
 
-def relevance_arm(uid: str) -> RelevanceArm:
-    """Consecutive disjoint cohorts. Set K first: changing K moves the Jev window.
+def keep_all_selected(conversation_id: str) -> bool:
+    """Select conversations independently so no account receives a different policy."""
+    return uid_bucket(conversation_id, 'relevance-keepall-v1') < percentage('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT')
 
-    With K fixed, increasing J only extends the Jev range. K+J is capped at
-    100; increasing K can absorb existing Jev users into keep_all and shift
-    the range's upper edge. Allowlisting never overrides keep_all or flag off,
-    and an invalid percentage admits nobody — allowlists included.
-    """
+
+def relevance_arm(uid: str, conversation_id: str) -> RelevanceArm:
+    """Keep selected conversations; otherwise preserve the live Jev UID ramp."""
+    if keep_all_selected(conversation_id):
+        return 'keep_all'
+
     bucket = uid_bucket(uid, 'relevance-arm-v1')
     keep_all = _percentage_or_none('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', default=0.0)
     jev = _percentage_or_none('CONVERSATION_RELEVANCE_JEV_PERCENT', default=100.0)
     if keep_all is None or jev is None:
         return 'nano'
-    if bucket < keep_all:
-        return 'keep_all'
     if conversation_relevance_jev_enabled():
-        if bucket < min(100.0, keep_all + jev) or _allowlisted(uid, 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'):
+        if keep_all <= bucket < min(100.0, keep_all + jev) or _allowlisted(
+            uid, 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'
+        ):
             return 'jev'
     return 'nano'
 

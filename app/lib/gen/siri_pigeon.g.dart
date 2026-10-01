@@ -374,6 +374,7 @@ class SiriTelemetryRecord {
     required this.outcome,
     required this.latencyMs,
     required this.entityCounts,
+    required this.entryPath,
   });
 
   String kind;
@@ -386,6 +387,8 @@ class SiriTelemetryRecord {
 
   int entityCounts;
 
+  String entryPath;
+
   List<Object?> _toList() {
     return <Object?>[
       kind,
@@ -393,6 +396,7 @@ class SiriTelemetryRecord {
       outcome,
       latencyMs,
       entityCounts,
+      entryPath,
     ];
   }
 
@@ -407,6 +411,7 @@ class SiriTelemetryRecord {
       outcome: result[2]! as String,
       latencyMs: result[3]! as int,
       entityCounts: result[4]! as int,
+      entryPath: result[5]! as String,
     );
   }
 
@@ -419,7 +424,57 @@ class SiriTelemetryRecord {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(kind, other.kind) && _deepEquals(intent, other.intent) && _deepEquals(outcome, other.outcome) && _deepEquals(latencyMs, other.latencyMs) && _deepEquals(entityCounts, other.entityCounts);
+    return _deepEquals(kind, other.kind) && _deepEquals(intent, other.intent) && _deepEquals(outcome, other.outcome) && _deepEquals(latencyMs, other.latencyMs) && _deepEquals(entityCounts, other.entityCounts) && _deepEquals(entryPath, other.entryPath);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+}
+
+class SiriPendingRoute {
+  SiriPendingRoute({
+    required this.route,
+    required this.uid,
+    required this.generation,
+  });
+
+  String route;
+
+  String uid;
+
+  int generation;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      route,
+      uid,
+      generation,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static SiriPendingRoute decode(Object result) {
+    result as List<Object?>;
+    return SiriPendingRoute(
+      route: result[0]! as String,
+      uid: result[1]! as String,
+      generation: result[2]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! SiriPendingRoute || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(route, other.route) && _deepEquals(uid, other.uid) && _deepEquals(generation, other.generation);
   }
 
   @override
@@ -450,6 +505,9 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is SiriTelemetryRecord) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
+    }    else if (value is SiriPendingRoute) {
+      buffer.putUint8(134);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -468,6 +526,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return SiriSessionConfig.decode(readValue(buffer)!);
       case 133:
         return SiriTelemetryRecord.decode(readValue(buffer)!);
+      case 134:
+        return SiriPendingRoute.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -747,7 +807,7 @@ class SiriIndexApi {
     ;
   }
 
-  Future<String?> takePendingRoute() async {
+  Future<SiriPendingRoute?> takePendingRoute() async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.takePendingRoute$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -763,7 +823,25 @@ class SiriIndexApi {
         isNullValid: true,
     )
     ;
-    return pigeonVar_replyValue as String?;
+    return pigeonVar_replyValue as SiriPendingRoute?;
+  }
+
+  Future<void> finishPendingRoute(String route, String uid, int generation, bool delivered) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.finishPendingRoute$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[route, uid, generation, delivered]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<bool> isEnabled() async {
@@ -851,7 +929,7 @@ abstract class SiriEventsApi {
 
   void taskChanged(String id);
 
-  Future<bool> openRoute(String route);
+  Future<bool> openRoute(String route, String uid, int generation);
 
   Future<void> setListening(bool enabled);
 
@@ -909,8 +987,10 @@ abstract class SiriEventsApi {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           final List<Object?> args = message! as List<Object?>;
           final String arg_route = args[0]! as String;
+          final String arg_uid = args[1]! as String;
+          final int arg_generation = args[2]! as int;
           try {
-            final bool output = await api.openRoute(arg_route);
+            final bool output = await api.openRoute(arg_route, arg_uid, arg_generation);
             return wrapResponse(result: output);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
