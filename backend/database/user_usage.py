@@ -197,7 +197,12 @@ def _accumulate_plan_data(row: Dict[str, Any], value: Dict[str, Any]) -> None:
 
 
 def _extract_plan_usage(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """Reconstruct per-plan usage dicts from both nested `plan_usage` and flat `plan_usage.<plan>.*` keys."""
+    """Reconstruct per-plan usage dicts from both nested `plan_usage` and flat `plan_usage.<plan>.*` keys.
+
+    The two layouts are additively merged, so a single document must use only one of them: a doc
+    that carried both a nested ``plan_usage`` map and flat ``plan_usage.<plan>.*`` keys for the
+    same plan would double-count that plan. Every writer today emits exactly one layout.
+    """
     extracted: Dict[str, Dict[str, Any]] = {}
     nested_plan_usage = data.get('plan_usage')
     if isinstance(nested_plan_usage, dict):
@@ -365,7 +370,12 @@ def get_usage_by_plan(
     *,
     firestore_client: Any | None = None,
 ) -> Dict[str, Dict[str, Any]]:
-    """Join current-month chat and hourly usage under server-resolved plans."""
+    """Join current-month chat and hourly usage under server-resolved plans.
+
+    Rows are safe to join to the catalog by key. Historical rows without a
+    plan snapshot use ``_unattributed`` and retain ``None`` for unmeasured
+    cost, so this report cannot turn missing COGS into a free-looking zero.
+    """
     now = now or datetime.now(timezone.utc)
     monthly = get_monthly_chat_usage(uid, now=now, firestore_client=firestore_client)
     report: Dict[str, Dict[str, Any]] = {plan_id: dict(row) for plan_id, row in monthly['usage_by_plan'].items()}
@@ -577,7 +587,13 @@ def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str,
 
 
 def get_today_usage_stats(uid: str, start: datetime, end: datetime) -> Dict[str, Any]:
-    """Aggregates hourly usage stats for the UTC bucket range [start, end)."""
+    """Aggregates hourly usage stats for the UTC bucket range [start, end).
+
+    The range may span two UTC calendar days when it represents the caller's
+    local "today" rather than a UTC day (see get_current_user_usage) — hourly
+    docs are written keyed by UTC date, so a user whose local midnight doesn't
+    land on a UTC midnight has their day's buckets split across two UTC dates.
+    """
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
     stats: Dict[str, Any] = {key: 0 for key in _HOURLY_COUNTER_KEYS}
