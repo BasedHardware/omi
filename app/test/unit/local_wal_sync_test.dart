@@ -545,6 +545,18 @@ void main() {
       expect(removed, 0);
       expect(sync.testWals, hasLength(2));
     });
+
+    test('streamed WALs born synced (all frames acked) carry a syncedAt stamp', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final key = FrameSyncKey([0x77]);
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: key));
+      sync.markFrameSynced(key);
+      await sync.finalizeCurrentSession();
+
+      final wal = sync.testWals.single;
+      expect(wal.status, WalStatus.synced);
+      expect(wal.syncedAt, greaterThan(0));
+    });
   });
 
   group('audio_player_utils temp file serialization (no double-strip)', () {

@@ -573,6 +573,9 @@ class LocalWalSyncImpl implements LocalWalSync {
           geolocation: _copyGeolocation(_sessionGeolocation),
           recordingSessionId: _activeRecordingSessionId,
         );
+        if (wal.status == WalStatus.synced) {
+          wal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
+        }
         _wals.add(wal);
       } else {
         wal = _wals[walIdx];
@@ -592,6 +595,9 @@ class LocalWalSyncImpl implements LocalWalSync {
         }
         wal.syncedFrameOffset = syncedOffset;
         wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
+        if (wal.status == WalStatus.synced && wal.syncedAt == 0) {
+          wal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
+        }
         _wals[walIdx] = wal;
       }
 
@@ -862,27 +868,28 @@ class LocalWalSyncImpl implements LocalWalSync {
 
       // Use a distinct timerStart so we don't collide with WALs from _chunk().
       // This is the tail buffer that _chunk() left behind.
-      _wals = List.from(_wals)
-        ..add(
-          Wal(
-            codec: _codec,
-            timerStart: timerStart,
-            data: chunk,
-            storage: WalStorage.mem,
-            status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
-            device: _deviceId ?? "omi",
-            deviceModel: _deviceModel ?? "Omi",
-            seconds: chunkFrameCount ~/ _framesPerSecond,
-            totalFrames: chunkFrameCount,
-            syncedFrameOffset: syncedOffset,
-            ownerUid: _currentWalOwnerUid(),
-            captureRoot: stableEvidence ? evidenceRoot : null,
-            sourceFrameStart: stableEvidence ? evidenceStart : null,
-            sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
-            geolocation: _copyGeolocation(_sessionGeolocation),
-            recordingSessionId: _activeRecordingSessionId,
-          ),
-        );
+      final tailWal = Wal(
+        codec: _codec,
+        timerStart: timerStart,
+        data: chunk,
+        storage: WalStorage.mem,
+        status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
+        device: _deviceId ?? "omi",
+        deviceModel: _deviceModel ?? "Omi",
+        seconds: chunkFrameCount ~/ _framesPerSecond,
+        totalFrames: chunkFrameCount,
+        syncedFrameOffset: syncedOffset,
+        ownerUid: _currentWalOwnerUid(),
+        captureRoot: stableEvidence ? evidenceRoot : null,
+        sourceFrameStart: stableEvidence ? evidenceStart : null,
+        sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
+        geolocation: _copyGeolocation(_sessionGeolocation),
+        recordingSessionId: _activeRecordingSessionId,
+      );
+      if (tailWal.status == WalStatus.synced) {
+        tailWal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
+      }
+      _wals = List.from(_wals)..add(tailWal);
     }
 
     _frames = [];

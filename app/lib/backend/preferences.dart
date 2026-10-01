@@ -893,9 +893,12 @@ class SharedPreferencesUtil {
       // the key unwritten so the ON default applies; re-evaluated next launch.
       return;
     }
+    // Decide BEFORE writing any marker: if the process dies mid-migration the
+    // next launch retries, whereas a marker written first could leave an
+    // existing install permanently stuck on the getter's ON default.
+    final alreadySet = prefs.containsKey('autoRemoveSyncedCopies');
+    await prefs.setBool('autoRemoveSyncedCopies', alreadySet ? prefs.getBool('autoRemoveSyncedCopies') ?? true : false);
     await prefs.setBool(markerKey, true);
-    if (prefs.containsKey('autoRemoveSyncedCopies')) return;
-    await prefs.setBool('autoRemoveSyncedCopies', false);
   }
 
   /// Retention window, in days, for synced phone-local copies.

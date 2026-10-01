@@ -951,7 +951,7 @@ class _ManageStorageSheet extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _AutoRemoveRow(
-            value: autoRemoveOn,
+            initialValue: autoRemoveOn,
             onChanged: onToggleAutoRemove,
           ),
           if (totalCount > 0) ...[
@@ -968,12 +968,22 @@ class _ManageStorageSheet extends StatelessWidget {
 /// the two ways of reclaiming synced-copy space read as one set. Persists
 /// through [SharedPreferencesUtil.autoRemoveSyncedCopies]; both this sheet and
 /// the Offline Sync settings page write the same key, and each rereads it on
-/// build so neither can drift from the stored value.
-class _AutoRemoveRow extends StatelessWidget {
-  final bool value;
+/// build so neither can drift from the stored value. The row holds the tapped
+/// value itself: the sheet around it is stateless and does not rebuild when
+/// only the switch flips, so without local state the knob would snap back
+/// while the stored preference had already changed.
+class _AutoRemoveRow extends StatefulWidget {
+  final bool initialValue;
   final ValueChanged<bool> onChanged;
 
-  const _AutoRemoveRow({required this.value, required this.onChanged});
+  const _AutoRemoveRow({required this.initialValue, required this.onChanged});
+
+  @override
+  State<_AutoRemoveRow> createState() => _AutoRemoveRowState();
+}
+
+class _AutoRemoveRowState extends State<_AutoRemoveRow> {
+  late bool _value = widget.initialValue;
 
   @override
   Widget build(BuildContext context) {
@@ -985,8 +995,11 @@ class _AutoRemoveRow extends StatelessWidget {
         leading: const Icon(Icons.auto_delete),
         title: context.l10n.autoRemoveSyncedCopiesTitle,
         subtitle: context.l10n.autoRemoveSyncedCopiesDays(days),
-        value: value,
-        onChanged: onChanged,
+        value: _value,
+        onChanged: (value) {
+          setState(() => _value = value);
+          widget.onChanged(value);
+        },
       ),
     );
   }
