@@ -83,6 +83,13 @@ def build_export(results: Mapping[str, DriverResult], manifest: Mapping[str, Any
             {
                 'function': key,
                 'shapes': len(result.shapes),
+                'profiles': sorted(
+                    {
+                        shape.parameter_combo['caller_profile']
+                        for shape in result.shapes
+                        if 'caller_profile' in shape.parameter_combo
+                    }
+                ),
                 'errors': [
                     {'combo': {name: _encode_value(value) for name, value in e.combo.items()}, 'error': e.error}
                     for e in result.errors

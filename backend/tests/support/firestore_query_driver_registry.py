@@ -28,6 +28,7 @@ from tests.support.firestore_query_drivers import (
     ref_document,
     ref_transaction,
 )
+from tests.support.firestore_conversation_profiles import COUNT_PROFILES, PHOTO_PROFILES, WITHOUT_PHOTOS_PROFILES
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -738,16 +739,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations',
         base={'uid': UID},
-        domains={
-            'include_discarded': [False, True],
-            'statuses': [[], ['completed'], ['completed', 'in_progress']],
-            'start_date': [None, T0],
-            'end_date': [None, T1],
-            'categories': [None, ['one'], ['one', 'two']],
-            'folder_id': [None, 'folder-1'],
-            'starred': [None, False, True],
-            'date_field': ['created_at', 'started_at'],
-        },
+        profiles=PHOTO_PROFILES,
         neutrals={'limit': _LIMIT, 'offset': _OFFSET},
     )
 )
@@ -755,16 +747,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations_count',
         base={'uid': UID},
-        domains={
-            'include_discarded': [False, True],
-            'statuses': [None, ['completed'], ['completed', 'in_progress']],
-            'start_date': [None, T0],
-            'end_date': [None, T1],
-            'categories': [None, ['one'], ['one', 'two']],
-            'folder_id': [None, 'folder-1'],
-            'starred': [None, False, True],
-            'sources': [None, ['omi'], ['omi', 'desktop']],
-        },
+        profiles=COUNT_PROFILES,
     )
 )
 _add(
@@ -779,16 +762,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations_without_photos',
         base={'uid': UID},
-        domains={
-            'include_discarded': [False, True],
-            'statuses': [[], ['completed'], ['completed', 'in_progress']],
-            'sources': [None, ['omi'], ['omi', 'desktop']],
-            'start_date': [None, T0],
-            'end_date': [None, T1],
-            'categories': [None, ['one'], ['one', 'two']],
-            'folder_id': [None, 'folder-1'],
-            'starred': [None, False, True],
-        },
+        profiles=WITHOUT_PHOTOS_PROFILES,
         neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
     )
 )

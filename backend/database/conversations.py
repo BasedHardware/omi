@@ -1182,6 +1182,8 @@ def get_conversations_count(
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
     if end_date:
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+    if start_date or end_date:
+        conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
     result = conversations_ref.count().get()
     matching = int(result[0][0].value)
     matching -= _count_matching_tombstones(
