@@ -21,7 +21,7 @@ class CostHealthUnavailable(RuntimeError):
     """Expected missing cache during a Redis outage; selection uses static order."""
 
 
-PREFIX = 'omi:live-stt:cost-v2'
+PREFIX = 'omi:live-stt:cost-v3'
 CAS = """
 local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
@@ -123,8 +123,8 @@ class CostHealthMixin(ABC):
                 else:
                     state = global_state
                 result[target.id] = state
-                COST_BENCH.labels(target=target.id).set(int(state.stage == 0))
-                COST_STAGE.labels(target=target.id).set(state.stage)
+                COST_BENCH.labels(target=target.id).set(int(global_state.stage == 0))
+                COST_STAGE.labels(target=target.id).set(global_state.stage)
         return result
 
     def prefer_recovery(self, target: str, language: str) -> None:
@@ -221,7 +221,10 @@ class CostHealthMixin(ABC):
         if old.stage == new.stage:
             return
         event = 'bench' if new.stage == 0 else 'unbench' if new.stage == 100 else 'stage'
-        if not local:
+        if language == 'all':
+            COST_BENCH.labels(target=target).set(int(new.stage == 0))
+            COST_STAGE.labels(target=target).set(new.stage)
+        if not local and language == 'all':
             COST_EVENTS.labels(target=target, event=event).inc()
         n, failures = (
             (new.n, new.failures) if new.n else (old.n + int(failed is not None), old.failures + int(bool(failed)))
