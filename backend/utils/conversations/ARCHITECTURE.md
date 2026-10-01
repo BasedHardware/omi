@@ -41,9 +41,11 @@ and background processing.
   when P(discard) exceeds `JEV_DISCARD_THRESHOLD`; no answer keeps
   (`decided_by=jev`, `reason=jev_error`). Photos and wake-word invocations keep
   `conv_discard`. The record carries the probability under `jev`. EXP-004 uses
-  `relevance_arm(uid)`: consecutive keep-all then Jev user cohorts, then nano.
-  Keep-all bypasses only the reached model tier; restores/rules/plan gates remain
-  first. Set keep-all percentage before ramping Jev: changing K moves its window.
+  `relevance_arm(uid, conversation_id)`: a stable per-conversation keep-all
+  sample takes precedence over the existing Jev UID ramp; other conversations
+  use Jev or nano. Keep-all bypasses only the reached model tier;
+  restores/rules/plan gates remain first. The sampled conversation set is
+  independent of account identity.
   Unset live percentages preserve dev's flag-on=everyone behavior. Prod live
   flags remain off. `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` admits short,
   transcript-only model-tier decisions outside the Jev arm asynchronously, with

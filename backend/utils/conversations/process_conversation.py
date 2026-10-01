@@ -626,7 +626,7 @@ def _get_structured(
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).
-        arm = relevance_arm(uid)
+        arm = relevance_arm(uid, prompt_conversation_id)
         jev_discard: Optional[Callable[[], Optional[float]]] = None
         jev_transcript = relevance_transcript(segments)
         if arm == 'jev' and not has_described_photos and not has_wake_word_marker:
