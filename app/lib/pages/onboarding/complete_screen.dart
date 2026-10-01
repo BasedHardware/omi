@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
@@ -10,8 +12,15 @@ class OnboardingCompleteScreen extends StatefulWidget {
 
   /// Overrides the iOS 16 App Shortcuts gate for tests; null defers to the platform.
   final bool? showSiriHint;
+  @visibleForTesting
+  final Future<bool> Function()? appShortcutsAvailabilityProbe;
 
-  const OnboardingCompleteScreen({super.key, required this.onComplete, this.showSiriHint});
+  const OnboardingCompleteScreen({
+    super.key,
+    required this.onComplete,
+    this.showSiriHint,
+    this.appShortcutsAvailabilityProbe,
+  });
 
   @override
   State<OnboardingCompleteScreen> createState() => _OnboardingCompleteScreenState();
@@ -23,12 +32,25 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
   late Animation<double> _scaleAnimation;
   late Animation<double> _slideAnimation;
 
-  // App Shortcuts phrases require iOS 16; older systems have no Omi phrases.
-  late final bool _siriHintSupported = widget.showSiriHint ?? PlatformService.isIOSAtLeast(16);
+  // App Shortcuts phrases require iOS 16 and a Siri-enabled app build.
+  late final bool _siriHintVersionSupported = widget.showSiriHint ?? PlatformService.isIOSAtLeast(16);
+  bool _appShortcutsAvailable = false;
+
+  Future<void> _loadAppShortcutsAvailability() async {
+    try {
+      final available =
+          await (widget.appShortcutsAvailabilityProbe ?? SiriIntegration.instance.appShortcutsAvailable)();
+      if (mounted) setState(() => _appShortcutsAvailable = available);
+    } catch (_) {
+      // Fail closed: keep the hint hidden when the bridge cannot answer.
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+
+    if (_siriHintVersionSupported) _loadAppShortcutsAvailability();
 
     _fadeController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
 
@@ -109,7 +131,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                                 textAlign: TextAlign.center,
                                 style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.5),
                               ),
-                              if (_siriHintSupported) ...[
+                              if (_siriHintVersionSupported && _appShortcutsAvailable) ...[
                                 const SizedBox(height: OmiSpacing.md),
                                 Text(
                                   context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi'),
