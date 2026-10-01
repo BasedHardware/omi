@@ -19,7 +19,10 @@ block was one cohesive, self-contained addition — the natural thing to
 extract rather than excuse.
 """
 
+from __future__ import annotations
+
 import copy
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
@@ -31,8 +34,34 @@ from ._client import db, get_firestore_client
 from .conversations import conversations_collection, prepare_conversation_for_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
+logger = logging.getLogger(__name__)
+
+MAX_ID_LENGTH = 128
 screen_frames_subcollection = 'screen_frames'
 _ENCRYPTED_TEXT_FIELDS = ('caption', 'screen_summary')
+
+
+def _clean_id(id_val: Optional[str]) -> str:
+    """Validate and sanitize user, conversation, or frame ID against malformed inputs."""
+    if not isinstance(id_val, str):
+        return ""
+    cleaned = id_val.strip()
+    if (
+        not cleaned
+        or len(cleaned) > MAX_ID_LENGTH
+        or "/" in cleaned
+        or "\\" in cleaned
+        or ".." in cleaned
+        or "\x00" in cleaned
+    ):
+        return ""
+    return cleaned
+
+
+def _resolve_client(firestore_client: Any = None) -> Any:
+    if firestore_client is not None:
+        return firestore_client
+    return db
 
 
 def _prepare_screen_frame_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
@@ -84,19 +113,27 @@ def _prepare_screen_frame_for_read(frame_data: Dict[str, Any], uid: str) -> Dict
 
 
 @prepare_for_read(decrypt_func=_prepare_screen_frame_for_read)
-def get_conversation_screen_frames(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+def get_conversation_screen_frames(
+    uid: str, conversation_id: str, *, firestore_client: Any = None
+) -> List[Dict[str, Any]]:
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        return []
+
+    client = _resolve_client(firestore_client)
+    user_ref = client.collection('users').document(clean_uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(clean_conversation_id)
     frames_ref = conversation_ref.collection(screen_frames_subcollection)
     return [doc.to_dict() for doc in frames_ref.stream()]
 
 
 @set_data_protection_level(data_arg_name='frames')
-@prepare_for_write(data_arg_name='frames', prepare_func=_prepare_screen_frame_for_write)
+@prepare_for_write(data_arg_name='frames', prepare_func=_prepare_screen_frame_for_write, preserve_result=True)
 def store_conversation_screen_frames(
     uid: str,
     conversation_id: str,
-    frames: List[Dict[str, Any]],
+    frames: List[Dict[str, Any]] | Any,
     *,
     firestore_client: Any = None,
 ) -> bool:
@@ -108,9 +145,18 @@ def store_conversation_screen_frames(
     passed dict. Transactional and checks the parent conversation still
     exists, exactly like store_conversation_photos.
     """
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    user_ref = client.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        return False
+    if not isinstance(frames, (list, tuple)):
+        return False
+    if not frames:
+        return True
+
+    client = _resolve_client(firestore_client)
+    user_ref = client.collection('users').document(clean_uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(clean_conversation_id)
     frames_ref = conversation_ref.collection(screen_frames_subcollection)
     transaction = client.transaction()
 
@@ -119,24 +165,46 @@ def store_conversation_screen_frames(
         conversation_snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(conversation_snapshot, 'exists', False):
             return False
+        stored_any = False
         for frame in frames:
-            frame_id = frame['id']
+            if not isinstance(frame, dict):
+                continue
+            raw_id = frame.get('id')
+            frame_id = _clean_id(raw_id)
+            if not frame_id:
+                logger.debug(
+                    "Skipping screen frame missing or invalid ID for user %s: %s",
+                    clean_uid,
+                    raw_id,
+                )
+                continue
             frame_ref = frames_ref.document(frame_id)
             transaction.set(frame_ref, frame, merge=True)
-        transaction.update(conversation_ref, {'has_content': True})
+            stored_any = True
+        if stored_any:
+            transaction.update(conversation_ref, {'has_content': True})
         return True
 
-    return _store(transaction)
+    return bool(_store(transaction))
 
 
-def delete_conversation_screen_frame_doc(uid: str, conversation_id: str, frame_id: str) -> bool:
+def delete_conversation_screen_frame_doc(
+    uid: str, conversation_id: str, frame_id: str, *, firestore_client: Any = None
+) -> bool:
     """Delete a single screen_frame Firestore document. GCS-agnostic — see
     utils.screen_frames.store.delete_screen_frame for the composite delete
     that also removes the GCS objects and cached signed URLs.
     """
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    frame_ref = conversation_ref.collection(screen_frames_subcollection).document(frame_id)
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    clean_frame_id = _clean_id(frame_id)
+    if not clean_uid or not clean_conversation_id or not clean_frame_id:
+        return False
+
+    client = _resolve_client(firestore_client)
+    user_ref = client.collection('users').document(clean_uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(clean_conversation_id)
+    frame_ref = conversation_ref.collection(screen_frames_subcollection).document(clean_frame_id)
     snapshot = frame_ref.get()
     if not getattr(snapshot, 'exists', False):
         return False
@@ -144,7 +212,7 @@ def delete_conversation_screen_frame_doc(uid: str, conversation_id: str, frame_i
     return True
 
 
-def delete_conversation_screen_frame_docs(uid: str, conversation_id: str) -> int:
+def delete_conversation_screen_frame_docs(uid: str, conversation_id: str, *, firestore_client: Any = None) -> int:
     """Delete every screen_frame Firestore document for a conversation.
 
     IMPORTANT: Firestore does NOT cascade delete subcollections when you
@@ -152,13 +220,19 @@ def delete_conversation_screen_frame_docs(uid: str, conversation_id: str) -> int
     doc is deleted, same contract as delete_conversation_photos.
     GCS-agnostic — see utils.screen_frames.store.delete_conversation_screen_frames.
     """
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        return 0
+
+    client = _resolve_client(firestore_client)
+    user_ref = client.collection('users').document(clean_uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(clean_conversation_id)
     frames_ref = conversation_ref.collection(screen_frames_subcollection)
 
     frames = frames_ref.stream()
     deleted_count = 0
-    batch = db.batch()
+    batch = client.batch()
     batch_count = 0
 
     for frame_doc in frames:
@@ -167,7 +241,7 @@ def delete_conversation_screen_frame_docs(uid: str, conversation_id: str) -> int
         deleted_count += 1
         if batch_count >= 500:
             batch.commit()
-            batch = db.batch()
+            batch = client.batch()
             batch_count = 0
 
     if batch_count > 0:
@@ -268,34 +342,68 @@ def _read_state(conversation_ref: Any, bucket: str, field: str, rpc_timeout: Opt
     return scoped.get(field) if isinstance(scoped, dict) else None
 
 
-def _conversation_ref(uid: str, conversation_id: str) -> Any:
-    return db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+def _conversation_ref(uid: str, conversation_id: str, firestore_client: Any = None) -> Any:
+    client = _resolve_client(firestore_client)
+    return client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
 
 
-def get_conversation_screen_frame_doc(uid: str, conversation_id: str, frame_id: str) -> Dict[str, Any] | None:
+def get_conversation_screen_frame_doc(
+    uid: str, conversation_id: str, frame_id: str, *, firestore_client: Any = None
+) -> Dict[str, Any] | None:
     """One frame doc's raw fields (no decryption) — enough to check its bucket."""
-    snapshot = _conversation_ref(uid, conversation_id).collection(screen_frames_subcollection).document(frame_id).get()
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    clean_frame_id = _clean_id(frame_id)
+    if not clean_uid or not clean_conversation_id or not clean_frame_id:
+        return None
+
+    snapshot = (
+        _conversation_ref(clean_uid, clean_conversation_id, firestore_client)
+        .collection(screen_frames_subcollection)
+        .document(clean_frame_id)
+        .get()
+    )
     if not getattr(snapshot, 'exists', False):
         return None
     return snapshot.to_dict() or {}
 
 
-def bump_conversation_screen_frames_revision(uid: str, conversation_id: str, *, bucket: str) -> int:
+def bump_conversation_screen_frames_revision(
+    uid: str, conversation_id: str, *, bucket: str = LEGACY_SCREEN_FRAMES_BUCKET, firestore_client: Any = None
+) -> int:
     """Atomically increment and return this bucket's ConversationScreenFrameSet
     revision counter. Called once per enforcement pass (contract §7) — never per read.
     """
-    conversation_ref = _conversation_ref(uid, conversation_id)
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        return 0
+
+    conversation_ref = _conversation_ref(clean_uid, clean_conversation_id, firestore_client)
     conversation_ref.set(_state_payload(bucket, 'revision', firestore.Increment(1)), merge=True)
     return int(_read_state(conversation_ref, bucket, 'revision') or 0)
 
 
-def get_conversation_screen_frames_revision(uid: str, conversation_id: str, *, bucket: str) -> int:
-    return int(_read_state(_conversation_ref(uid, conversation_id), bucket, 'revision') or 0)
+def get_conversation_screen_frames_revision(
+    uid: str, conversation_id: str, *, bucket: str = LEGACY_SCREEN_FRAMES_BUCKET, firestore_client: Any = None
+) -> int:
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        return 0
+    return int(
+        _read_state(_conversation_ref(clean_uid, clean_conversation_id, firestore_client), bucket, 'revision') or 0
+    )
 
 
 def mark_conversation_screen_frames_adjudicated(
-    uid: str, conversation_id: str, *, selection_fingerprint: str, bucket: str
-) -> datetime:
+    uid: str,
+    conversation_id: str,
+    *,
+    selection_fingerprint: str,
+    bucket: str = LEGACY_SCREEN_FRAMES_BUCKET,
+    firestore_client: Any = None,
+) -> Optional[datetime]:
     """Record that an adjudication pass ran for this conversation, whatever it decided.
 
     Distinct from the revision counter on purpose. `screen_frames_revision` only moves when a
@@ -309,6 +417,11 @@ def mark_conversation_screen_frames_adjudicated(
 
     Scoped to `bucket`: a dev pass must not make a prod client skip adjudication.
     """
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        return None
+
     stamp = datetime.now(timezone.utc)
     payload = _state_payload(bucket, 'adjudicated_at', stamp)
     fingerprint_payload = _state_payload(bucket, 'selection_fingerprint', selection_fingerprint)
@@ -316,21 +429,42 @@ def mark_conversation_screen_frames_adjudicated(
         payload[_ENV_STATE_FIELD][_state_key(bucket)].update(fingerprint_payload[_ENV_STATE_FIELD][_state_key(bucket)])
     else:
         payload.update(fingerprint_payload)
-    _conversation_ref(uid, conversation_id).set(payload, merge=True)
+    _conversation_ref(clean_uid, clean_conversation_id, firestore_client).set(payload, merge=True)
     return stamp
 
 
 def get_conversation_screen_frames_adjudicated_at(
-    uid: str, conversation_id: str, *, bucket: str, rpc_timeout: Optional[float] = None
+    uid: str,
+    conversation_id: str,
+    *,
+    bucket: str = LEGACY_SCREEN_FRAMES_BUCKET,
+    rpc_timeout: Optional[float] = None,
+    firestore_client: Any = None,
 ):
-    return _read_state(_conversation_ref(uid, conversation_id), bucket, 'adjudicated_at', rpc_timeout)
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        return None
+    return _read_state(
+        _conversation_ref(clean_uid, clean_conversation_id, firestore_client), bucket, 'adjudicated_at', rpc_timeout
+    )
 
 
 def get_conversation_screen_frames_marker(
-    uid: str, conversation_id: str, *, bucket: str, rpc_timeout: Optional[float] = None
+    uid: str,
+    conversation_id: str,
+    *,
+    bucket: str = LEGACY_SCREEN_FRAMES_BUCKET,
+    rpc_timeout: Optional[float] = None,
+    firestore_client: Any = None,
 ) -> tuple[Any, Any]:
     """This bucket's (adjudicated_at, selection_fingerprint), in one bounded read."""
-    ref = _conversation_ref(uid, conversation_id)
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        return None, None
+
+    ref = _conversation_ref(clean_uid, clean_conversation_id, firestore_client)
     bounds = _rpc_bounds(rpc_timeout)
     if bucket == LEGACY_SCREEN_FRAMES_BUCKET:
         paths = [_LEGACY_STATE_FIELDS['adjudicated_at'], _LEGACY_STATE_FIELDS['selection_fingerprint']]
@@ -354,29 +488,52 @@ _CONTENT_WINDOW_FIELDS = [
 
 
 def get_conversation_content_window_fields(
-    uid: str, conversation_id: str, *, rpc_timeout: Optional[float] = None
+    uid: str, conversation_id: str, *, rpc_timeout: Optional[float] = None, firestore_client: Any = None
 ) -> Dict[str, Any] | None:
     """Only what the content window needs (decoded segments), in one bounded read."""
-    snapshot = _conversation_ref(uid, conversation_id).get(
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        return None
+
+    snapshot = _conversation_ref(clean_uid, clean_conversation_id, firestore_client).get(
         field_paths=_CONTENT_WINDOW_FIELDS, **_rpc_bounds(rpc_timeout)
     )
     if not getattr(snapshot, 'exists', False):
         return None
-    return prepare_conversation_for_read(snapshot.to_dict() or {}, uid)
+    return prepare_conversation_for_read(snapshot.to_dict() or {}, clean_uid)
 
 
-def get_conversation_screen_frames_selection_fingerprint(uid: str, conversation_id: str, *, bucket: str):
-    return _read_state(_conversation_ref(uid, conversation_id), bucket, 'selection_fingerprint')
+def get_conversation_screen_frames_selection_fingerprint(
+    uid: str, conversation_id: str, *, bucket: str = LEGACY_SCREEN_FRAMES_BUCKET, firestore_client: Any = None
+):
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        return None
+    return _read_state(
+        _conversation_ref(clean_uid, clean_conversation_id, firestore_client), bucket, 'selection_fingerprint'
+    )
 
 
-def get_conversation_screenshot_sharing_enabled(conversation: Dict[str, Any]) -> bool:
+def get_conversation_screenshot_sharing_enabled(conversation: Any) -> bool:
     """Default true for a conversation that predates this field (David's
     ruling 2026-08-20)."""
+    if not isinstance(conversation, dict):
+        return True
     value = conversation.get('screenshot_sharing_enabled')
     return True if value is None else bool(value)
 
 
-def set_conversation_screenshot_sharing_enabled(uid: str, conversation_id: str, enabled: bool) -> None:
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'screenshot_sharing_enabled': enabled})
+def set_conversation_screenshot_sharing_enabled(
+    uid: str, conversation_id: str, enabled: bool, *, firestore_client: Any = None
+) -> None:
+    clean_uid = _clean_id(uid)
+    clean_conversation_id = _clean_id(conversation_id)
+    if not clean_uid or not clean_conversation_id:
+        raise ValueError(f"Invalid uid or conversation_id: uid={uid!r}, conversation_id={conversation_id!r}")
+
+    client = _resolve_client(firestore_client)
+    user_ref = client.collection('users').document(clean_uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(clean_conversation_id)
+    conversation_ref.update({'screenshot_sharing_enabled': bool(enabled)})
