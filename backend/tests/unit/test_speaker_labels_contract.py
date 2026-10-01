@@ -3,7 +3,7 @@
 C1: ``TranscriptSegment.speaker_label_source`` — optional literal, default None.
 C2: ``Person`` voice-learning fields — flat, defaulted for legacy records.
 C4: ``RejectSpeakerRequest`` + POST reject route — body validation, durable ledger.
-C5: ``VoiceMatch``/``VoiceMatchesResponse`` + GET voice-matches route — empty list.
+C5: ``VoiceMatch``/``VoiceMatchesResponse`` + GET voice-matches route — cached matches.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from models.transcript_segment import TranscriptSegment
 from routers import speaker_labels as speaker_labels_router
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.other import endpoints as auth
+from utils import speaker_voice_matches
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 
@@ -173,7 +174,8 @@ def test_reject_route_rejects_malformed_body(client):
     assert response.status_code == 422
 
 
-def test_voice_matches_route_returns_empty_list(client):
+def test_voice_matches_route_returns_empty_list_without_voiceprint(client, monkeypatch):
+    monkeypatch.setattr(speaker_voice_matches.users_db, 'get_person', lambda uid, pid: {'id': pid})
     response = client.get('/v1/users/people/p1/voice-matches')
     assert response.status_code == 200
     assert response.json() == {'matches': []}

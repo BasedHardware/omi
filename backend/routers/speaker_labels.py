@@ -10,6 +10,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.other import endpoints as auth
 from utils.other.storage import delete_speech_profile_blob
 from utils.speaker_permissions import named_speaker_prompts_allowed
+from utils.speaker_voice_matches import find_person_voice_matches
 
 router = APIRouter()
 
@@ -63,5 +64,8 @@ def reject_speaker_label(
 
 
 @router.get('/v1/users/people/{person_id}/voice-matches', response_model=VoiceMatchesResponse, tags=['v1'])
-def get_person_voice_matches(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    return VoiceMatchesResponse()
+async def get_person_voice_matches(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    try:
+        return await find_person_voice_matches(uid, person_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail='Person not found') from error
