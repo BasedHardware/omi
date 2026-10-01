@@ -5060,8 +5060,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Bằng cách tiếp tục, các cuộc trò chuyện, bản ghi âm và thông tin cá nhân của bạn sẽ được lưu trữ an toàn trên máy chủ của chúng tôi. Bản ghi âm và bản phiên âm của bạn được xử lý bởi các dịch vụ AI bên thứ ba (bao gồm Deepgram cho phiên âm và OpenAI cho phân tích) để cung cấp cho bạn thông tin chi tiết được hỗ trợ bởi AI và kích hoạt tất cả các tính năng ứng dụng.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Các nhiệm vụ từ cuộc trò chuyện của bạn sẽ xuất hiện ở đây.\nNhấn + để tạo thủ công.';
+  String get tasksEmptyStateMessage => 'Bắt đầu cuộc trò chuyện để tạo nhiệm vụ.';
 
   @override
   String get clearChatAction => 'Xóa cuộc trò chuyện';

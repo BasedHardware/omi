@@ -5064,8 +5064,7 @@ class AppLocalizationsId extends AppLocalizations {
       'Dengan melanjutkan, percakapan, rekaman, dan informasi pribadi Anda akan disimpan dengan aman di server kami. Rekaman audio dan transkrip Anda diproses oleh layanan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan Anda wawasan berbasis AI dan mengaktifkan semua fitur aplikasi.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Tugas dari percakapan Anda akan muncul di sini.\nKetuk + untuk membuat secara manual.';
+  String get tasksEmptyStateMessage => 'Mulai percakapan untuk membuat tugas.';
 
   @override
   String get clearChatAction => 'Hapus obrolan';

@@ -3,16 +3,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
+import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
-import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/ui/ui.dart';
 
 import '../support/typed_action_items_screen.dart';
+import '../support/typed_conversation_screen.dart';
 
 void main() {
   for (final brightness in Brightness.values) {
-    testWidgets('empty Tasks keeps its icon, guidance and create action in $brightness', (tester) async {
+    testWidgets('empty Tasks keeps conversation guidance and aligns with Home in $brightness', (tester) async {
       final previousPalette = OmiColors.active;
       OmiColors.active = OmiColors.forBrightness(brightness);
       addTearDown(() => OmiColors.active = previousPalette);
@@ -47,18 +48,15 @@ void main() {
       expect(title, findsOneWidget);
       expect(hint, findsOneWidget);
       expect(icon, findsOneWidget);
-      expect(create, findsOneWidget);
+      expect(l10n.tasksEmptyStateMessage, 'Start a conversation to create a task.');
+      expect(create, findsNothing);
+      expect(find.byType(OmiButton), findsNothing);
+      expect(find.byType(FloatingActionButton), findsNothing);
       expect(tester.widget<Text>(title).style!.color, OmiColors.textPrimary);
       expect(tester.widget<Text>(hint).style!.color, OmiColors.textSecondary);
       expect(IconTheme.of(tester.element(icon)).color, OmiColors.textTertiary);
       final emptyTitleRect = tester.getRect(title);
-
-      await tester.tap(create);
-      await tester.pumpAndSettle();
-      expect(find.byType(ActionItemFormSheet), findsOneWidget);
-      await tester.tap(find.text(l10n.cancel));
-      await tester.pumpAndSettle();
-      expect(find.byType(ActionItemFormSheet), findsNothing);
+      final emptyIconRect = tester.getRect(icon);
 
       status = 503;
       await provider.forceRefreshActionItems();
@@ -74,8 +72,43 @@ void main() {
       expect(provider.apiViewState.phase, ApiViewPhase.empty);
       expect(icon, findsOneWidget);
       expect(hint, findsOneWidget);
-      expect(create, findsOneWidget);
+      expect(create, findsNothing);
       expect(tester.getRect(title), emptyTitleRect);
+
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(tester.getRect(hint).bottom, lessThan(844));
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 1));
+
+      final conversations = composeTypedConversationProvider(ConversationApi(
+        baseUrl: 'http://fixture.invalid/',
+        send: (_) async => http.Response('[]', 200),
+      ));
+      addTearDown(conversations.dispose);
+      final home = await buildTypedConversationScreen(conversations) as MaterialApp;
+      await conversations.forceRefreshConversations();
+      await tester.pumpWidget(MaterialApp(
+        theme: buildOmiTheme(brightness: brightness),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: home.home,
+      ));
+      await tester.pumpAndSettle();
+      final homeTitleRect = tester.getRect(find.text(l10n.noConversationsYet));
+      expect(emptyTitleRect.top, homeTitleRect.top);
+      expect(emptyTitleRect.center.dx, homeTitleRect.center.dx);
+      expect(emptyIconRect, tester.getRect(find.byIcon(Icons.forum_rounded)));
+
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(tester.getRect(find.text(l10n.noConversationsHeroMessage)).bottom, lessThan(844));
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(seconds: 1));

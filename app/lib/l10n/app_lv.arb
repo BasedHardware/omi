@@ -1545,7 +1545,7 @@
     "durationSeconds": "Ilgums: {seconds} sekundes",
     "additionalSpeechSampleRemoved": "Papildu balss paraugs noņemts",
     "consentDataMessage": "Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros. Jūsu audio ieraksti un transkripcijas tiek apstrādātas ar trešo pušu AI pakalpojumiem (ieskaitot Deepgram transkripcijai un OpenAI analīzei), lai sniegtu jums AI vadītus ieskatus un iespējotu visas lietotnes funkcijas.",
-    "tasksEmptyStateMessage": "Uzdevumi no jūsu sarunām parādīsies šeit.\nPieskarieties +, lai izveidotu manuāli.",
+    "tasksEmptyStateMessage": "Sāciet sarunu, lai izveidotu uzdevumu.",
     "clearChatAction": "Notīrīt tērzēšanu",
     "enableApps": "Iespējot lietotnes",
     "omiAppName": "Omi",

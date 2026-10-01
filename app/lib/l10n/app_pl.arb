@@ -1545,7 +1545,7 @@
     "durationSeconds": "Czas trwania: {seconds} sekund",
     "additionalSpeechSampleRemoved": "Dodatkowa próbka głosowa usunięta",
     "consentDataMessage": "Kontynuując, Twoje rozmowy, nagrania i dane osobowe będą bezpiecznie przechowywane na naszych serwerach. Twoje nagrania audio i transkrypcje są przetwarzane przez zewnętrzne usługi AI (w tym Deepgram do transkrypcji i OpenAI do analizy), aby dostarczyć Ci wglądy oparte na AI i umożliwić wszystkie funkcje aplikacji.",
-    "tasksEmptyStateMessage": "Zadania z twoich rozmów pojawią się tutaj.\nDotknij +, aby utworzyć ręcznie.",
+    "tasksEmptyStateMessage": "Rozpocznij rozmowę, aby utworzyć zadanie.",
     "clearChatAction": "Wyczyść czat",
     "enableApps": "Włącz aplikacje",
     "omiAppName": "Omi",

@@ -5104,8 +5104,7 @@ class AppLocalizationsFr extends AppLocalizations {
       'En continuant, vos conversations, enregistrements et informations personnelles seront stockés en toute sécurité sur nos serveurs. Vos enregistrements audio et transcriptions sont traités par des services d\'IA tiers (notamment Deepgram pour la transcription et OpenAI pour l\'analyse) afin de vous fournir des informations alimentées par l\'IA et d\'activer toutes les fonctionnalités de l\'application.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Les tâches de vos conversations apparaîtront ici.\nAppuyez sur + pour en créer une manuellement.';
+  String get tasksEmptyStateMessage => 'Démarrez une conversation pour créer une tâche.';
 
   @override
   String get clearChatAction => 'Effacer le chat';

@@ -1545,7 +1545,7 @@
     "durationSeconds": "Kestus: {seconds} sekundit",
     "additionalSpeechSampleRemoved": "Lisakõnenäidis eemaldatud",
     "consentDataMessage": "Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.",
-    "tasksEmptyStateMessage": "Teie vestlustest pärit ülesanded ilmuvad siia.\nPuudutage + käsitsi loomiseks.",
+    "tasksEmptyStateMessage": "Ülesande loomiseks alusta vestlust.",
     "clearChatAction": "Tühjenda vestlus",
     "enableApps": "Luba rakendused",
     "omiAppName": "Omi",

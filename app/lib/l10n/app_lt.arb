@@ -1979,7 +1979,7 @@
     "tasksAddedToList": "Užduotys bus pridėtos į šį sąrašą",
     "tasksCompleted": "Užduotys atliktos",
     "tasksCreatedInWorkspace": "Užduotys bus sukurtos šioje darbo srityje",
-    "tasksEmptyStateMessage": "Užduotys iš jūsų pokalbių bus rodomos čia.\nBakstelėkite + norėdami sukurti rankiniu būdu.",
+    "tasksEmptyStateMessage": "Pradėkite pokalbį, kad sukurtumėte užduotį.",
     "tasksExportedOneApp": "Užduotys gali būti eksportuojamos į vieną programėlę vienu metu.",
     "tasksFromConversationsWillAppear": "Užduotys iš jūsų pokalbių bus rodomos čia.\nSpustelėkite Kurti, kad pridėtumėte vieną rankiniu būdu.",
     "tasksLater": "Vėliau",

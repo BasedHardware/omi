@@ -1,3 +1,3 @@
 {
-  "change": "Home and Tasks keep their empty-state icons and guidance visible after loading, in light and dark mode. Tasks also keeps its Create Task button."
+  "change": "Home and Tasks keep their empty-state icons and guidance visible after loading, in light and dark mode. Empty Tasks matches Home's layout and explains how conversations create tasks."
 }

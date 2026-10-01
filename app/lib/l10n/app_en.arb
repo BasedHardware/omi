@@ -5978,9 +5978,9 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Tasks from your conversations will appear here.\nTap + to create one manually.",
+    "tasksEmptyStateMessage": "Start a conversation to create a task.",
     "@tasksEmptyStateMessage": {
-        "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
+        "description": "Guidance on the empty Tasks tab: start a conversation to create a task."
     },
     "clearChatAction": "Clear Chat",
     "@clearChatAction": {

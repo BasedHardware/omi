@@ -5930,7 +5930,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Zadaci iz vaših razgovora će se pojaviti ovdje.\nDodirnite + da ga kreirate ručno.",
+    "tasksEmptyStateMessage": "Započnite razgovor da kreirate zadatak.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },

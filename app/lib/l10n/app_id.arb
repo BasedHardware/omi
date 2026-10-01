@@ -1545,7 +1545,7 @@
     "durationSeconds": "Durasi: {seconds} detik",
     "additionalSpeechSampleRemoved": "Sampel suara tambahan dihapus",
     "consentDataMessage": "Dengan melanjutkan, percakapan, rekaman, dan informasi pribadi Anda akan disimpan dengan aman di server kami. Rekaman audio dan transkrip Anda diproses oleh layanan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan Anda wawasan berbasis AI dan mengaktifkan semua fitur aplikasi.",
-    "tasksEmptyStateMessage": "Tugas dari percakapan Anda akan muncul di sini.\nKetuk + untuk membuat secara manual.",
+    "tasksEmptyStateMessage": "Mulai percakapan untuk membuat tugas.",
     "clearChatAction": "Hapus obrolan",
     "enableApps": "Aktifkan aplikasi",
     "omiAppName": "Omi",

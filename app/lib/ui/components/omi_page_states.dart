@@ -42,8 +42,16 @@ class OmiLoadingState extends StatelessWidget {
 /// `FaIcon(FontAwesomeIcons.key)` when the screen's other controls use FontAwesome. Exactly one of
 /// the two is given; either way it is drawn 40pt in [OmiColors.textTertiary].
 class OmiEmptyState extends StatelessWidget {
-  const OmiEmptyState({super.key, this.icon, this.glyph, required this.title, this.message, this.action})
-      : assert((icon == null) != (glyph == null), 'Give OmiEmptyState exactly one of icon or glyph');
+  const OmiEmptyState({
+    super.key,
+    this.icon,
+    this.glyph,
+    required this.title,
+    this.message,
+    this.messageMinLines = 1,
+    this.action,
+  })  : assert((icon == null) != (glyph == null), 'Give OmiEmptyState exactly one of icon or glyph'),
+        assert(messageMinLines > 0);
 
   final IconData? icon;
 
@@ -52,11 +60,21 @@ class OmiEmptyState extends StatelessWidget {
 
   final String title;
   final String? message;
+
+  /// Reserves room for guidance so neighboring tabs keep their icons and titles aligned.
+  /// Longer messages still grow naturally, including with larger accessibility text.
+  final int messageMinLines;
   final Widget? action;
 
   @override
   Widget build(BuildContext context) {
-    return _StateLayout(glyph: glyph ?? Icon(icon), title: title, message: message, action: action);
+    return _StateLayout(
+      glyph: glyph ?? Icon(icon),
+      title: title,
+      message: message,
+      messageMinLines: messageMinLines,
+      action: action,
+    );
   }
 }
 
@@ -93,15 +111,29 @@ class OmiErrorState extends StatelessWidget {
 }
 
 class _StateLayout extends StatelessWidget {
-  const _StateLayout({required this.glyph, this.title, this.message, this.action});
+  const _StateLayout({required this.glyph, this.title, this.message, this.messageMinLines = 1, this.action});
 
   final Widget glyph;
   final String? title;
   final String? message;
+  final int messageMinLines;
   final Widget? action;
 
   @override
   Widget build(BuildContext context) {
+    final messageStyle = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
+    var messageMinHeight = 0.0;
+    if (message != null && messageMinLines > 1) {
+      final painter = TextPainter(
+        text: TextSpan(
+            text: List.filled(messageMinLines, ' ').join('\n'),
+            style: DefaultTextStyle.of(context).style.merge(messageStyle)),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      messageMinHeight = painter.height;
+      painter.dispose();
+    }
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxl, vertical: OmiSpacing.xl),
@@ -123,10 +155,9 @@ class _StateLayout extends StatelessWidget {
             ],
             if (message != null) ...[
               SizedBox(height: title != null ? OmiSpacing.xs : OmiSpacing.md),
-              Text(
-                message!,
-                textAlign: TextAlign.center,
-                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+              ConstrainedBox(
+                constraints: BoxConstraints(minHeight: messageMinHeight),
+                child: Text(message!, textAlign: TextAlign.center, style: messageStyle),
               ),
             ],
             if (action != null) ...[

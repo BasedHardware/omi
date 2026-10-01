@@ -1545,7 +1545,7 @@
     "durationSeconds": "Duração: {seconds} segundos",
     "additionalSpeechSampleRemoved": "Amostra de voz adicional removida",
     "consentDataMessage": "Ao continuar, suas conversas, gravações e informações pessoais serão armazenadas com segurança em nossos servidores. Suas gravações de áudio e transcrições são processadas por serviços de IA de terceiros (incluindo Deepgram para transcrição e OpenAI para análise) para fornecer insights baseados em IA e habilitar todos os recursos do aplicativo.",
-    "tasksEmptyStateMessage": "As tarefas das suas conversas aparecerão aqui.\nToque em + para criar uma manualmente.",
+    "tasksEmptyStateMessage": "Inicie uma conversa para criar uma tarefa.",
     "clearChatAction": "Limpar conversa",
     "enableApps": "Ativar aplicativos",
     "omiAppName": "Omi",

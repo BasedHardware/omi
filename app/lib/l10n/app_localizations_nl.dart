@@ -5069,8 +5069,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Door verder te gaan worden uw gesprekken, opnames en persoonlijke informatie veilig opgeslagen op onze servers. Uw audio-opnames en transcripties worden verwerkt door AI-diensten van derden (waaronder Deepgram voor transcriptie en OpenAI voor analyse) om u AI-gestuurde inzichten te bieden en alle app-functies mogelijk te maken.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Taken uit je gesprekken verschijnen hier.\nTik op + om er handmatig een te maken.';
+  String get tasksEmptyStateMessage => 'Begin een gesprek om een taak aan te maken.';
 
   @override
   String get clearChatAction => 'Chat wissen';

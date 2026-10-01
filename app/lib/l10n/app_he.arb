@@ -5930,7 +5930,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "משימות משיחותיך יופיעו כאן.\nלחץ + כדי ליצור אחת ידנית.",
+    "tasksEmptyStateMessage": "התחילו שיחה כדי ליצור משימה.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },

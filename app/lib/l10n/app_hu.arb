@@ -1545,7 +1545,7 @@
     "durationSeconds": "Időtartam: {seconds} másodperc",
     "additionalSpeechSampleRemoved": "További hangminta eltávolítva",
     "consentDataMessage": "A folytatással beszélgetéseit, felvételeit és személyes adatait biztonságosan tároljuk szervereinken. Hangfelvételeit és átiratait harmadik féltől származó AI szolgáltatások dolgozzák fel (beleértve a Deepgramot az átíráshoz és az OpenAI-t az elemzéshez), hogy AI-alapú betekintéseket nyújtsunk Önnek és az alkalmazás összes funkcióját biztosítsuk.",
-    "tasksEmptyStateMessage": "A beszélgetéseidből származó feladatok itt jelennek meg.\nKoppints a + gombra manuális létrehozáshoz.",
+    "tasksEmptyStateMessage": "Feladat létrehozásához kezdj beszélgetést.",
     "clearChatAction": "Chat törlése",
     "enableApps": "Alkalmazások engedélyezése",
     "omiAppName": "Omi",

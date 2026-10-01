@@ -1545,7 +1545,7 @@
     "durationSeconds": "Varighed: {seconds} sekunder",
     "additionalSpeechSampleRemoved": "Yderligere stemmeprøve fjernet",
     "consentDataMessage": "Ved at fortsætte vil dine samtaler, optagelser og personlige oplysninger blive sikkert gemt på vores servere. Dine lydoptagelser og udskrifter behandles af tredjeparts AI-tjenester (herunder Deepgram til transskription og OpenAI til analyse) for at give dig AI-drevne indsigter og aktivere alle appfunktioner.",
-    "tasksEmptyStateMessage": "Opgaver fra dine samtaler vises her.\nTryk på + for at oprette en manuelt.",
+    "tasksEmptyStateMessage": "Start en samtale for at oprette en opgave.",
     "clearChatAction": "Ryd chat",
     "enableApps": "Aktivér apps",
     "omiAppName": "Omi",
