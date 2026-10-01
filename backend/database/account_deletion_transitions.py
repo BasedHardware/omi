@@ -1,28 +1,26 @@
 """Account-deletion state transitions and deletion-scoped resource reads."""
 
 from datetime import datetime, timezone
+import re
 from typing import Any
 
 from database._client import get_firestore_client
 from google.cloud.firestore_v1 import transactional
 
+from database.account_deletion_marker import _clean_uid
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
+_GCE_VM_NAME_RE = re.compile(r'^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$')
+_GCE_ZONE_RE = re.compile(r'^[a-z][a-z0-9]*-[a-z0-9]+-[a-z0-9]+$')
 
-def _clean_uid(uid: Any) -> str | None:
-    """Validate user identifier."""
-    if not isinstance(uid, str):
-        return None
-    cleaned = uid.strip()
-    if not cleaned or len(cleaned) > 128:
-        return None
-    if any(c in cleaned for c in ('/', '\\', '\0')):
-        return None
-    if '..' in cleaned:
-        return None
-    if any(ord(c) < 32 or ord(c) == 127 for c in cleaned):
-        return None
-    return cleaned
+
+def _validate_gce_vm_and_zone(vm_name: str, zone: str) -> tuple[str, str]:
+    """Validate GCE instance and zone names according to RFC 1035 label constraints."""
+    if not isinstance(vm_name, str) or not _GCE_VM_NAME_RE.match(vm_name):
+        raise ValueError(f"Invalid GCE vm_name: {vm_name!r}")
+    if not isinstance(zone, str) or not _GCE_ZONE_RE.match(zone):
+        raise ValueError(f"Invalid GCE zone: {zone!r}")
+    return vm_name, zone
 
 
 def read_agent_vm_migration_journals(uid: str, *, firestore_client: Any | None = None) -> list[dict[str, Any]]:
@@ -81,10 +79,7 @@ def record_late_agent_vm_cleanup(
     zone: str,
     expected_instance_id: str | None = None,
 ) -> bool:
-    if not isinstance(vm_name, str) or not vm_name.strip() or not isinstance(zone, str) or not zone.strip():
-        raise ValueError('vm_name and zone must be non-empty strings')
-    clean_vm = vm_name.strip()
-    clean_zone = zone.strip()
+    valid_vm, valid_zone = _validate_gce_vm_and_zone(vm_name, zone)
     snapshot = doc_ref.get(transaction=transaction)
     exists = bool(getattr(snapshot, 'exists', False))
     raw_status = (getattr(snapshot, 'to_dict', lambda: {})() or {}).get('wipe_status') if exists else None
@@ -93,7 +88,7 @@ def record_late_agent_vm_cleanup(
         return False
     if expected_instance_id is not None and (not expected_instance_id.isascii() or not expected_instance_id.isdigit()):
         raise ValueError('late Agent VM cleanup instance identity must be numeric')
-    pending = {'vmName': clean_vm, 'zone': clean_zone}
+    pending = {'vmName': valid_vm, 'zone': valid_zone}
     if expected_instance_id is not None:
         pending['expectedInstanceId'] = expected_instance_id
     transaction.set(
@@ -117,10 +112,7 @@ def adopt_legacy_late_agent_vm_cleanup(
     expected_instance_id: str,
 ) -> bool:
     """Add a provider identity fence to an exact pre-fence cleanup record."""
-    if not isinstance(vm_name, str) or not vm_name.strip() or not isinstance(zone, str) or not zone.strip():
-        raise ValueError('vm_name and zone must be non-empty strings')
-    clean_vm = vm_name.strip()
-    clean_zone = zone.strip()
+    valid_vm, valid_zone = _validate_gce_vm_and_zone(vm_name, zone)
     if not expected_instance_id.isascii() or not expected_instance_id.isdigit():
         raise ValueError('late Agent VM cleanup instance identity must be numeric')
     snapshot = doc_ref.get(transaction=transaction)
@@ -131,7 +123,7 @@ def adopt_legacy_late_agent_vm_cleanup(
     pending = data.get('late_agent_vm_cleanup')
     if not account_deletion_blocks_access(status) or not isinstance(pending, dict):
         return False
-    if pending.get('vmName') != clean_vm or pending.get('zone') != clean_zone:
+    if pending.get('vmName') != valid_vm or pending.get('zone') != valid_zone:
         return False
     current_id = pending.get('expectedInstanceId')
     if current_id is not None:
