@@ -52,15 +52,21 @@ def _now() -> datetime:
 
 
 def _root(client: Any, uid: str) -> Any:
-    return client.collection(COLLECTION).document(uid)
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    return client.collection(COLLECTION).document(uid.strip())
 
 
 def _pending_ref(client: Any, uid: str, job_id: str) -> Any:
-    return client.collection(PENDING_COLLECTION).document(job_id)
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    return client.collection(PENDING_COLLECTION).document(job_id.strip())
 
 
 def _pending_for_uid(client: Any, uid: str) -> Any:
-    return client.collection(PENDING_COLLECTION).where('uid', '==', uid)
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    return client.collection(PENDING_COLLECTION).where('uid', '==', uid.strip())
 
 
 def _data(snapshot: Any) -> dict[str, Any]:
@@ -70,10 +76,14 @@ def _data(snapshot: Any) -> dict[str, Any]:
 def is_registered(uid: str, job_id: str, *, firestore_client: Any = None) -> bool:
     """Resolve an uncertain admission acknowledgement without dropping durable work."""
     _require_production()
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
     client = firestore_client or get_firestore_client()
     if _data(_pending_ref(client, uid, job_id).get()):
         return True
-    return _data(_root(client, uid).get()).get('active_job_id') == job_id
+    return _data(_root(client, uid).get()).get('active_job_id') == job_id.strip()
 
 
 def register_job(
@@ -87,10 +97,21 @@ def register_job(
 ) -> bool:
     """Persist an accepted job before 202; safe to repeat after an uncertain write."""
     _require_production()
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    if not isinstance(payload, dict):
+        raise ValueError('payload must be a dictionary')
+
+    uid = uid.strip()
+    job_id = job_id.strip()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     pending = _pending_ref(client, uid, job_id)
     accepted_at = now or _now()
+    if accepted_at.tzinfo is None:
+        accepted_at = accepted_at.replace(tzinfo=timezone.utc)
     try:
         sort_at = (
             datetime.fromtimestamp(oldest_capture_at, timezone.utc) if oldest_capture_at is not None else accepted_at
@@ -149,11 +170,14 @@ def due_pending(
     *, limit: int = 100, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> list[dict[str, Any]]:
     _require_production()
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        raise ValueError('limit must be a positive integer')
+    clamped_limit = max(1, min(limit, 500))
     client = firestore_client or get_firestore_client()
     docs = (
         client.collection(PENDING_COLLECTION)
         .where('reconcile_at', '<=', now or _now())
-        .limit(max(1, min(limit, 500)))
+        .limit(clamped_limit)
         .stream()
     )
     return [{'id': doc.id, **_data(doc)} for doc in docs]
@@ -161,6 +185,9 @@ def due_pending(
 
 def defer_pending(job_id: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> None:
     _require_production()
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    job_id = job_id.strip()
     client = firestore_client or get_firestore_client()
     try:
         client.collection(PENDING_COLLECTION).document(job_id).update(
@@ -173,9 +200,14 @@ def defer_pending(job_id: str, *, firestore_client: Any = None, now: Optional[da
 def claim_next(uid: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> Optional[dict[str, Any]]:
     """Promote the oldest waiting capture into a fenced dispatch reservation."""
     _require_production()
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    uid = uid.strip()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     current = now or _now()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
 
     @firestore.transactional
     def commit(transaction: Any) -> Optional[dict[str, Any]]:
@@ -223,9 +255,20 @@ def begin_job(
 ) -> bool:
     """A stale Cloud Task epoch can never enter the transcription pipeline."""
     _require_production()
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+        raise ValueError('epoch must be a non-negative integer')
+
+    uid = uid.strip()
+    job_id = job_id.strip()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     current = now or _now()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
 
     @firestore.transactional
     def commit(transaction: Any) -> bool:
@@ -250,9 +293,20 @@ def renew_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> bool:
     _require_production()
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+        raise ValueError('epoch must be a non-negative integer')
+
+    uid = uid.strip()
+    job_id = job_id.strip()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
     current = now or _now()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
 
     @firestore.transactional
     def commit(transaction: Any) -> bool:
@@ -277,6 +331,15 @@ def finish_job(
 ) -> bool:
     """Only the current epoch releases the UID; duplicate completion is inert."""
     _require_production()
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
+    if not isinstance(job_id, str) or not job_id.strip() or '/' in job_id:
+        raise ValueError('job_id must be a non-empty string without slashes')
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+        raise ValueError('epoch must be a non-negative integer')
+
+    uid = uid.strip()
+    job_id = job_id.strip()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
 
@@ -296,17 +359,22 @@ def finish_job(
 
 def get_owner(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
     _require_production()
+    if not isinstance(uid, str) or not uid.strip() or '/' in uid:
+        raise ValueError('uid must be a non-empty string without slashes')
     client = firestore_client or get_firestore_client()
-    return _data(_root(client, uid).get())
+    return _data(_root(client, uid.strip()).get())
 
 
 def due_owners(
     *, limit: int = 100, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> list[dict[str, Any]]:
     _require_production()
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        raise ValueError('limit must be a positive integer')
+    clamped_limit = max(1, min(limit, 500))
     client = firestore_client or get_firestore_client()
     docs = (
-        client.collection(COLLECTION).where('reconcile_at', '<=', now or _now()).limit(max(1, min(limit, 500))).stream()
+        client.collection(COLLECTION).where('reconcile_at', '<=', now or _now()).limit(clamped_limit).stream()
     )
     return [{'uid': doc.id, **_data(doc)} for doc in docs]
 
