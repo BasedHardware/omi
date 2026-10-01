@@ -8,7 +8,9 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from google.api_core.exceptions import GatewayTimeout, InternalServerError
 from google.auth.credentials import AnonymousCredentials
+from requests.exceptions import ConnectionError as RequestsConnectionError, ReadTimeout
 
 from scripts import repair_recovery_dead_letter_untitled as repair
 from models.client_processing import ClientProcessing
@@ -27,6 +29,7 @@ JOB_ID = 'job-one'
 JOB_PATH = (repair.JOBS, JOB_ID)
 ROW_PATH = ('users', UID, 'conversations', CID)
 TEXT = 'We need to move the release to Thursday. Alice will finish the deployment.'
+GCS_TRANSIENT_ERRORS = (InternalServerError, GatewayTimeout, ReadTimeout, RequestsConnectionError)
 
 
 def row(text=''):
@@ -1918,6 +1921,79 @@ def test_fresh_run_lease_failure_with_live_gcs_metadata_is_recoverable(tmp_path,
     assert not client.transactions
 
 
+@pytest.mark.parametrize('error_type', GCS_TRANSIENT_ERRORS)
+@pytest.mark.parametrize('operation', ['metadata_read', 'lease_commit', 'probe_commit'])
+def test_sdk_transient_lease_io_recovers_without_reissuing_commits(
+    tmp_path, monkeypatch, capsys, error_type, operation
+):
+    storage = FakeStorage()
+    storage.serial = 1790821367159500
+    storage.server_clock.now = 1790821367.063
+    mirror = artifact(storage)
+    mirror.create()
+    old_generation = mirror.lease.generation
+    reload, upload = FakeBlob.reload, FakeBlob.upload_from_string
+    attempts, commits = [], []
+
+    def fail_once_read(blob, **kwargs):
+        if blob.name.endswith('/lease.json'):
+            attempts.append(kwargs)
+            if len(attempts) == 1:
+                raise error_type(UID + TEXT)
+        return reload(blob, **kwargs)
+
+    def lose_ack(blob, data, **kwargs):
+        result = upload(blob, data, **kwargs)
+        target = mirror.lease.blob.name if operation == 'lease_commit' else mirror.lease.probe.name
+        if blob.name == target:
+            commits.append(kwargs)
+            if len(commits) == 1:
+                raise error_type(UID + TEXT)
+        return result
+
+    monkeypatch.setattr(repair.time, 'sleep', lambda _: None)
+    if operation == 'metadata_read':
+        monkeypatch.setattr(FakeBlob, 'reload', fail_once_read)
+    else:
+        monkeypatch.setattr(FakeBlob, 'upload_from_string', lose_ack)
+    mirror.lease.renew()
+    assert not mirror.lease.lost and mirror.lease.generation > old_generation
+    live_generation, live_bytes = storage.objects[('test-bucket', mirror.lease.blob.name)]
+    assert mirror.lease.generation == live_generation
+    assert json.loads(live_bytes) == {
+        'owner': mirror.lease.owner,
+        'expires': mirror.lease.expires,
+        'clock': 'gcs',
+        'state': 'ready',
+    }
+    if operation == 'metadata_read':
+        assert len(attempts) == 2
+        assert all(call == {'timeout': 10, 'retry': None} for call in attempts)
+    else:
+        # Renewal samples server time twice; neither committed PUT is reissued.
+        assert len(commits) == (2 if operation == 'probe_commit' else 1)
+        assert len({call['if_generation_match'] for call in commits}) == len(commits)
+    logs = capsys.readouterr().err
+    assert UID not in logs and TEXT not in logs
+
+
+@pytest.mark.parametrize('error_type', GCS_TRANSIENT_ERRORS)
+def test_sdk_transient_metadata_read_exhausts_bounded_budget(tmp_path, monkeypatch, error_type):
+    mirror = artifact(FakeStorage())
+    mirror.create()
+    attempts = []
+
+    def unavailable(blob, **kwargs):
+        attempts.append(kwargs)
+        raise error_type(UID + TEXT)
+
+    monkeypatch.setattr(FakeBlob, 'reload', unavailable)
+    monkeypatch.setattr(repair.time, 'sleep', lambda _: None)
+    with pytest.raises(repair.LeaseLost):
+        mirror.lease.renew()
+    assert len(attempts) == 3 and mirror.lease.lost
+
+
 def test_live_generation_read_detects_takeover_even_if_old_version_is_retained(tmp_path):
     _, _, log = setup(tmp_path)
     storage, clock = FakeStorage(), ManualClock()
@@ -1998,8 +2074,9 @@ def test_heartbeat_keeps_lease_during_three_minute_read_phase(tmp_path, monkeypa
     assert mirror.lease.thread is not None and not mirror.lease.thread.is_alive()
 
 
+@pytest.mark.parametrize('error_type', (repair.DeadlineExceeded, *GCS_TRANSIENT_ERRORS))
 @pytest.mark.parametrize('state', ['unchanged', 'other_owner'])
-def test_lease_ack_reconciliation_does_not_accept_unchanged_or_other_owner(tmp_path, monkeypatch, state):
+def test_lease_ack_reconciliation_does_not_accept_unchanged_or_other_owner(tmp_path, monkeypatch, state, error_type):
     _, _, log = setup(tmp_path)
     storage = FakeStorage()
     mirror = artifact(storage)
@@ -2013,7 +2090,7 @@ def test_lease_ack_reconciliation_does_not_accept_unchanged_or_other_owner(tmp_p
                 changed = json.loads(data)
                 changed['owner'] = 'another-owner'
                 upload(blob, json.dumps(changed), **kwargs)
-            raise repair.DeadlineExceeded(UID + TEXT)
+            raise error_type(UID + TEXT)
         return upload(blob, data, **kwargs)
 
     monkeypatch.setattr(FakeBlob, 'upload_from_string', fail_before_commit)

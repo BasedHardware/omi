@@ -29,8 +29,9 @@ bytes can be read back from its immutable object.
 Stage diagnostics go to stderr as rate-bounded JSON with closed stage/check names,
 counts, durations and lease generation transitions. No record identifiers, payloads
 or exception bodies are emitted. Startup imports are timed before lease acquisition;
-cleanup failures cannot replace the original error. Transient metadata reads retry
-within a bounded budget. Ambiguous lease/probe writes require an exact live-body
+cleanup failures cannot replace the original error. The GCS SDK retry predicate
+classifies transient metadata reads within a bounded budget and ambiguous writes.
+Ambiguous lease/probe writes require an exact live-body
 match and a new generation before ownership is adopted; no blind overwrite retry.
 
 lease.json fences each prefix with an owner token, expiry and generation match.
@@ -150,6 +151,15 @@ _STAGE_CAUSES = frozenset(
         'NotFound',
         'ServiceUnavailable',
         'TooManyRequests',
+        'InternalServerError',
+        'BadGateway',
+        'GatewayTimeout',
+        'ReadTimeout',
+        'ConnectTimeout',
+        'Timeout',
+        'ConnectionError',
+        'ChunkedEncodingError',
+        'TransportError',
         'PreconditionFailed',
         'Forbidden',
         'Unauthorized',
@@ -229,10 +239,10 @@ from google.api_core.exceptions import (
     DeadlineExceeded,
     NotFound,
     ServiceUnavailable,
-    TooManyRequests,
 )
 from google.cloud import firestore, storage
 from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.storage.retry import DEFAULT_RETRY as GCS_DEFAULT_RETRY
 
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationSource
@@ -257,6 +267,8 @@ JOB_FILTERS = {
 }
 ALLOWED_FIELDS = {'discarded', 'relevance_decision', 'structured.title'}
 RETRYABLE = (Aborted, Conflict, DeadlineExceeded, ServiceUnavailable)
+# The SDK exposes no public predicate accessor; share its pinned retry policy.
+GCS_RETRY_PREDICATE = GCS_DEFAULT_RETRY._predicate  # pyright: ignore[reportPrivateUsage]
 AUDIO_DURATION_BUCKETS = ('0', '<5s', '5-30s', '30-120s', '>120s', 'unknown')
 BREAKDOWN_CATEGORIES = ('R', 'K', 'discard_protected', 'empty_not_discardable')
 logger = logging.getLogger('untitled_repair')
@@ -515,7 +527,11 @@ class RunLease:
             try:
                 fresh.reload(timeout=10, retry=None)
                 return fresh
-            except (ServiceUnavailable, DeadlineExceeded, TooManyRequests) as exc:
+            except Exception as exc:
+                # Share the SDK policy, including HTTP status codes and wrapped
+                # transport failures, without enabling automatic write retries.
+                if not GCS_RETRY_PREDICATE(exc):
+                    raise
                 stage_event('lease_renew', 'error', check='metadata_read', cause_type=type(exc).__name__)
                 if attempt == 2:
                     raise
@@ -533,7 +549,9 @@ class RunLease:
                 timeout=10,
                 retry=None,
             )
-        except (ServiceUnavailable, DeadlineExceeded, TooManyRequests) as exc:
+        except Exception as exc:
+            if not GCS_RETRY_PREDICATE(exc):
+                raise
             stage_event('lease_probe', 'error', check='write', cause_type=type(exc).__name__)
             fresh = self.latest(self.probe)
             if int(fresh.generation) == old_generation or json.loads(
@@ -555,7 +573,9 @@ class RunLease:
                 timeout=10,
                 retry=None,
             )
-        except (ServiceUnavailable, DeadlineExceeded, TooManyRequests) as exc:
+        except Exception as exc:
+            if not GCS_RETRY_PREDICATE(exc):
+                raise
             stage_event('lease_renew', 'error', check='write', cause_type=type(exc).__name__)
             # A lease PUT can commit before its response is lost. Adopt it only
             # after a live read proves the exact intended body AND a new version.
