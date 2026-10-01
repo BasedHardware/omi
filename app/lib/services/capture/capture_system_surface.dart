@@ -32,7 +32,6 @@ class CaptureSystemSurface {
   bool _ready = false;
   CaptureOwned? _listener;
   Timer? _heartbeat;
-  Timer? _waveTick;
   Future<void> _delivery = Future.value();
 
   Future<void> start() async {
@@ -44,14 +43,6 @@ class CaptureSystemSurface {
     if (meter != null) {
       capture.systemSurfaceAudioTap = meter.add;
     }
-    // The HTML wave breathes every 1.6 seconds, regardless of speech. Advance
-    // each quarter-cycle while capture runs, including silent and unmetered sources.
-    // ActivityKit animates these bounded updates; it cannot run an infinite loop.
-    _waveTick = capture.lifetime.periodic(const Duration(milliseconds: 400), (_) {
-      if (_closed || !_ready) return;
-      final value = snapshot;
-      if (value['active'] == true && value['paused'] == false) _changed(force: true);
-    });
     try {
       await sink.start(_act);
       if (_closed) return;
@@ -119,7 +110,7 @@ class CaptureSystemSurface {
       'batch': batch,
       'startedAt': _anchor == null ? 0.0 : _anchor!.millisecondsSinceEpoch / 1000,
       'elapsed': _anchor == null ? 0 : (_pausedAt ?? now).difference(_anchor!).inSeconds.clamp(0, 2147483647),
-      // Fractional capture time holds the decorative wave's phase across Stop / Start.
+      // The OS animates the wave from startedAt; this fractional time holds its phase on Stop.
       'waveTime':
           _anchor == null ? 0.0 : (_pausedAt ?? now).difference(_anchor!).inMilliseconds.clamp(0, 2147483647000) / 1000,
       'paused': paused,
@@ -147,8 +138,8 @@ class CaptureSystemSurface {
   void _changed({bool force = false}) {
     if (_closed || !_ready) return;
     final value = snapshot;
-    // Elapsed time is drawn by the OS. Only a frozen value is significant.
-    // The wave tick paces animation; audio levels never start or stop the loop.
+    // Elapsed time and the wave are drawn by the OS. Only frozen values are significant,
+    // and audio levels never cause an update.
     final fingerprint = {...value}
       ..remove('elapsed')
       ..remove('waveTime')
@@ -202,7 +193,6 @@ class CaptureSystemSurface {
     if (_closed) return;
     _closed = true;
     _heartbeat?.cancel();
-    _waveTick?.cancel();
     final meter = voiceMeter;
     if (meter != null) {
       if (capture.systemSurfaceAudioTap == meter.add) capture.systemSurfaceAudioTap = null;
