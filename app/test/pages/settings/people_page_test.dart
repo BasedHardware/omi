@@ -214,6 +214,59 @@ void main() {
     expect(provider.people.map((p) => p.id), ['p-maya']);
   });
 
+  testWidgets('filtered Select All deletes only visible rows and names every target', (tester) async {
+    final deleted = <String>[];
+    final provider = await _pump(tester, deletePersonById: (id) async {
+      deleted.add(id);
+      return true;
+    });
+    await tester.tap(find.byKey(const Key('people_filter_lowConfidence')));
+    await tester.pumpAndSettle();
+    provider.beginSelection();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('people_select_all')));
+    await tester.pumpAndSettle();
+    expect(provider.selectedIds, {'p-because', 'p-cs', 'p-ines'});
+    await tester.tap(find.byKey(const Key('people_delete_selected')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete 3 People?'), findsOneWidget);
+    final dialog = find.byType(AlertDialog);
+    for (final name in ['Because', 'Cs', 'Inês Moreira']) {
+      expect(find.descendant(of: dialog, matching: find.textContaining(name)), findsWidgets);
+    }
+    expect(find.descendant(of: dialog, matching: find.textContaining('Sam Okafor')), findsNothing);
+    await _confirmDialog(tester, 'Delete');
+    expect(deleted.toSet(), {'p-because', 'p-cs', 'p-ines'});
+  });
+
+  testWidgets('changing search or filter clears selection before another delete', (tester) async {
+    final deleted = <String>[];
+    final provider = await _pump(tester, deletePersonById: (id) async {
+      deleted.add(id);
+      return true;
+    });
+    await tester.enterText(find.byType(TextField), 'sam');
+    await tester.pumpAndSettle();
+    provider.beginSelection();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('people_select_all')));
+    await tester.pumpAndSettle();
+    expect(provider.selectedIds, {'p-sam'});
+    await tester.enterText(find.byType(TextField), 'cs');
+    await tester.pumpAndSettle();
+    expect(provider.selectedIds, isEmpty);
+    await tester.tap(find.byKey(const Key('people_select_all')));
+    await tester.pumpAndSettle();
+    expect(provider.selectedIds, {'p-cs'});
+    await tester.tap(find.byKey(const Key('people_filter_pinned')));
+    await tester.pumpAndSettle();
+    expect(provider.selectedIds, isEmpty);
+    await tester.tap(find.byKey(const Key('people_delete_selected')));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(deleted, isEmpty);
+  });
+
   testWidgets('Clean Up preselects unsure unpinned people, lets one be kept, and confirms', (tester) async {
     final deleted = <String>[];
     final provider = await _pump(tester, deletePersonById: (id) async {

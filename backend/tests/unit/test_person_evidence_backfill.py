@@ -111,3 +111,37 @@ def test_script_is_dry_run_by_default_and_does_not_advance_checkpoint(monkeypatc
     assert script.main(['--uid', 'u', '--checkpoint', str(checkpoint), '--apply']) == 0
     assert store.rows[PATH]['label_evidence']['manual_labels'] == 1
     assert checkpoint.read_text() == 'c1'
+
+
+def test_backfill_and_old_edits_reuse_durable_receipts_after_key_eviction(monkeypatch):
+    from models.person_confidence import COUNTED_KEYS_LIMIT
+
+    store = StrictFirestore()
+    store.rows[PATH] = {'id': 'p1', 'name': 'Maya'}
+    store.rows[('users', 'u', 'people', 'p2')] = {'id': 'p2', 'name': 'Sam'}
+    ids = [f'c{i}' for i in range(COUNTED_KEYS_LIMIT + 5)]
+    for cid in ids:
+        store.rows[('users', 'u', 'conversations', cid)] = {
+            'id': cid,
+            'manual_speaker_assignments': {'generation': 1, 'speakers': {'1': {'person_id': 'p1', 'generation': 1}}},
+            'transcript_segments': [
+                {
+                    'id': 's1',
+                    'speaker_id': 1,
+                    'person_id': 'p1',
+                    'is_user': False,
+                    'text': 'synthetic',
+                    'start': 0,
+                    'end': 6,
+                }
+            ],
+        }
+    backfill_person(store, 'u', 'p1', ids, NOW, apply=True)
+    evidence = store.rows[PATH]['label_evidence']
+    assert evidence['manual_labels'] == len(ids)
+    assert 'manual_labels:c0' not in evidence['counted']
+    assert backfill_person(store, 'u', 'p1', ids, NOW, apply=True) is None
+    monkeypatch.setattr(db, 'record_speaker_review', lambda *args: None)
+    db.assign_conversation_speaker('u', 'c0', person_id='p2', speaker_id=1, firestore_client=store)
+    assert store.rows[PATH]['label_evidence']['manual_labels'] == len(ids) - 1
+    assert backfill_person(store, 'u', 'p1', ids, NOW, apply=True) is None

@@ -166,7 +166,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   /// Fetch today's set when the conversations page appears. Cheap to call often.
   Future<void> loadIfDue({bool force = false}) async {
     final now = _now();
-    if (_isDisposed || visible || loading) return;
+    if (_isDisposed || visible || loading || pending != null || submitting) return;
     if (!force && _lastFetchAt != null && now.difference(_lastFetchAt!) < refetchInterval) return;
     _lastFetchAt = now;
     loading = true;
@@ -319,7 +319,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   }
 
   void undoPending() {
-    if (_isDisposed || pending == null || pending!.committed) return;
+    if (_isDisposed || submitting || pending == null || pending!.committed) return;
     pending = null;
     notifyListeners();
   }
@@ -430,11 +430,10 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   }
 
   /// The user closed the card. An unanswered set counts toward the server's back-off. A staged
-  /// answer is kept: closing is not Undo.
+  /// answer waits for the existing Undo window; the toast commits it only when that window closes.
   Future<void> close() async {
     if (_isDisposed || !visible) return;
     final answering = pending != null;
-    if (answering && !pending!.committed) unawaited(commitPending());
     _emit(
       SpeakerTagPromptsClosed(
         answeredCount: answeredCount,

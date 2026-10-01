@@ -206,3 +206,61 @@ def test_live_owner_and_named_auto_accepts_are_identical_with_prior_on_or_off(mo
             assert matcher.speaker_to_person[3][0] == expected
             observed.append((dict(matcher.speaker_to_person), dict(matcher.voice_identity_status), emitted))
         assert observed[0] == observed[1]
+
+
+def test_sync_candidates_survive_both_parent_serializations():
+    from datetime import datetime, timezone
+    from models.conversation import Conversation, CreateConversation, Structured
+
+    segment = TranscriptSegment(id='s1', text='hello', speaker_id=2, is_user=False, start=0, end=6)
+    segment.voice_candidates = [{'person_id': 'p1', 'level': 2, 'suggest': True}]
+    now = datetime.now(timezone.utc)
+    create = CreateConversation(started_at=now, finished_at=now, transcript_segments=[segment])
+    incoming = Conversation(
+        id='c1', created_at=now, structured=Structured(title='Test', overview=''), **create.model_dump()
+    )
+    assert incoming.model_dump()['transcript_segments'][0]['voice_candidates'] == segment.voice_candidates
+    assert incoming.model_dump(mode='json')['transcript_segments'][0]['voice_candidates'] == segment.voice_candidates
+    # Flag-off records and the public schema keep their prior shape.
+    segment.voice_candidates = None
+    assert 'voice_candidates' not in create.model_dump()['transcript_segments'][0]
+    for mode in ('validation', 'serialization'):
+        schema = TranscriptSegment.model_json_schema(mode=mode)
+        assert 'text' in schema['properties'] and 'voice_candidates' not in schema['properties']
+
+
+def test_live_retracts_a_near_match_when_later_audio_no_longer_matches(monkeypatch):
+    matcher, emitted = _live(monkeypatch, pinned=True, enabled=True)
+    asyncio.run(matcher.match(3, _clip('s1')))
+    assert matcher._suggested_person[3] == 'p1'
+    matcher._voice_distances[3] = {'p1': T + 0.5}
+    matcher._offer_pinned_suggestion(3, decide(matcher._voice_distances[3]), {'p1'}, 's2', set())
+    assert 3 not in matcher._suggested_person
+    assert emitted[-1] == ((3, '', '', 's2'), {'retracted': True})
+    assert matcher.voice_candidates[3] == []
+    matcher._offer_pinned_suggestion(3, decide(matcher._voice_distances[3]), {'p1'}, 's3', set())
+    assert len(emitted) == 2
+
+
+def test_live_later_audio_retracts_the_emitted_near_match(monkeypatch):
+    matcher, emitted = _live(monkeypatch, pinned=True, enabled=True)
+    asyncio.run(matcher.match(3, _clip('s1')))
+    monkeypatch.setattr(
+        speakers_mod,
+        'extract_embedding_from_bytes',
+        lambda _audio, _name: np.array([[0.0, -1.0, 0.0]], dtype=np.float32),
+    )
+    asyncio.run(matcher.match(3, {'id': 's2', 'duration': 6.0, 'abs_start': 6.0, 'abs_end': 12.0}))
+    assert 3 not in matcher.speaker_to_person
+    assert 3 not in matcher._suggested_person
+    assert emitted[-1] == ((3, '', '', 's2'), {'retracted': True})
+
+
+def test_live_replaces_a_near_match_for_the_same_speaker(monkeypatch):
+    matcher, emitted = _live(monkeypatch, pinned=True, enabled=True)
+    asyncio.run(matcher.match(3, _clip('s1')))
+    matcher.person_embeddings['p2'] = {'name': 'Sam', 'pinned': True}
+    matcher._voice_distances[3] = {'p2': T + 0.02, 'p1': T + 0.5}
+    matcher._offer_pinned_suggestion(3, decide(matcher._voice_distances[3]), {'p1', 'p2'}, 's2', set())
+    assert matcher._suggested_person[3] == 'p2'
+    assert emitted[-1] == ((3, '', 'Sam', 's2'), {'suggested_person_id': 'p2'})

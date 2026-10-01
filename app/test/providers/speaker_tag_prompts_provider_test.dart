@@ -663,7 +663,23 @@ void main() {
     h.provider.stage(SpeakerTagAnswer.me);
     await h.provider.close();
     await Future<void>.delayed(Duration.zero);
+    expect(h.answers, isEmpty, reason: 'closing must preserve the Undo window');
+    expect(h.provider.pending, isNotNull);
+    expect(h.dismissals, 0, reason: 'a staged answer is not a dismissal');
+    expect(await h.provider.commitPending(), isTrue);
     expect(h.answers.single.answer, 'me');
-    expect(h.dismissals, 0, reason: 'an answered set is not a dismissal');
+  });
+  test('closing during Undo permits undo and cannot load over the staged answer', () async {
+    final h = Harness();
+    await h.provider.loadIfDue();
+    h.provider.stage(SpeakerTagAnswer.person, personId: 'p1', displayName: 'Sam');
+    await h.provider.close();
+    await h.provider.loadIfDue(force: true);
+    expect(h.provider.pending?.personId, 'p1');
+    expect(h.answers, isEmpty);
+    h.provider.undoPending();
+    expect(await h.provider.commitPending(), isFalse);
+    expect(h.answers, isEmpty);
+    expect(h.provider.current?.id, 'a');
   });
 }
