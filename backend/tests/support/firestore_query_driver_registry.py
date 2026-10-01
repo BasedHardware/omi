@@ -55,6 +55,7 @@ _LIMIT_OPT = (None, 'optional page bound; absent does not change filters')
 _OFFSET = (0, 'row window; fixed, not filter-affecting')
 _PAGE = (25, 'scan/page bound; fixed small positive, not filter-affecting')
 _BUDGET = (None, 'request budget; RPC timeout/charge only, no filter effect')
+_EXTRA_FIELDS = (('provenance',), 'widens the select projection only; no filter or order effect')
 _DAYS = (30, 'window length; fixed, not filter-affecting')
 _NOW = (None, 'defaults to frozen clock; none/set produce identical filters')
 _NOOP = (noop, 'callback side-effect neutralized; does not affect filters')
@@ -241,12 +242,14 @@ _add(
             'due_start_date': [None, T0],
             'due_end_date': [None, T1],
         },
-        neutrals={'limit': _LIMIT_OPT, 'offset': _OFFSET, 'budget': _BUDGET},
+        neutrals={'limit': _LIMIT_OPT, 'offset': _OFFSET, 'budget': _BUDGET, 'extra_fields': _EXTRA_FIELDS},
     )
 )
 _add(
     DriverEntry(
-        'database.action_items.get_action_items_by_conversation', base={'uid': UID, 'conversation_id': 'conv-1'}
+        'database.action_items.get_action_items_by_conversation',
+        base={'uid': UID, 'conversation_id': 'conv-1'},
+        neutrals={'extra_fields': _EXTRA_FIELDS},
     )
 )
 _add(
