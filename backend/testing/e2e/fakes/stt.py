@@ -84,17 +84,29 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False, failover
     """
     from routers.listen import receiver as listen_receiver
     from routers.listen import runtime as listen_runtime
+    from config.stt_provider_policy import provider_for_service
+    from utils.stt import streaming as st
+    from utils.stt.provider_resilience import ProviderCircuitBreaker
     from utils.stt.streaming import STTService
+
+    # This seam prescribes Parakeet -> the selected replacement. Production
+    # circuits retained from another test must not change its initial vendor.
+    for provider in ('parakeet', 'modulate', 'soniox', 'deepgram'):
+        monkeypatch.setattr(
+            st, f'_{provider}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30)
+        )
 
     sockets = []
 
     async def fake_process_audio_parakeet(callback, *args, **kwargs):
         socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send and not sockets)
+        socket.provider = 'parakeet'
         sockets.append(socket)
         return socket
 
     async def fake_process_audio_modulate(callback, *args, **kwargs):
         socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send and not sockets)
+        socket.provider = 'modulate'
         sockets.append(socket)
         return socket
 
@@ -107,14 +119,17 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False, failover
         "get_stt_service_for_language",
         lambda *_args, **_kwargs: (STTService.parakeet, "en", "parakeet"),
     )
+
     # The receiver's own namespace drives mid-session failover reselection; left
     # unpatched it reads the real provider chain and reaches for un-faked
     # network clients.
-    monkeypatch.setattr(
-        listen_receiver,
-        "get_stt_service_for_language",
-        lambda *_args, **_kwargs: failover_selection,
-    )
+    def select_replacement(*_args, **kwargs):
+        service = failover_selection[0]
+        if service is not None and provider_for_service(service) in kwargs.get('exclude', ()):
+            return None, None, None
+        return failover_selection
+
+    monkeypatch.setattr(listen_receiver, "get_stt_service_for_language", select_replacement)
     monkeypatch.setattr(listen_receiver, "is_gate_enabled", lambda: False)
     monkeypatch.setattr(listen_runtime, "record_usage", lambda *args, **kwargs: None)
     return sockets
