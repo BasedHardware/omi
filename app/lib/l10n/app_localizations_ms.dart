@@ -3980,9 +3980,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Versi Baharu Tersedia';
-
-  @override
   String get no => 'Tidak';
 
   @override
@@ -5072,8 +5069,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Dengan meneruskan, perbualan, rakaman dan maklumat peribadi anda akan disimpan dengan selamat di pelayan kami. Rakaman audio dan transkrip anda diproses oleh perkhidmatan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan anda pandangan dikuasakan AI dan membolehkan semua ciri aplikasi.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Tugasan daripada perbualan anda akan muncul di sini.\nKetik + untuk mencipta secara manual.';
+  String get tasksEmptyStateMessage => 'Mulakan perbualan untuk mencipta tugasan.';
 
   @override
   String get clearChatAction => 'Kosongkan sembang';
@@ -12144,4 +12140,27 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Hidupkan Omi dalam Pintasan → Siri. Katakan “$askPhrase” atau “$questionPhrase”, kemudian ajukan soalan anda.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Anda juga boleh katakan “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Kemas kini tersedia';
+
+  @override
+  String get updateAvailableMessage => 'Versi baharu Omi sudah sedia, dengan pembetulan dan penambahbaikan.';
+
+  @override
+  String get updateRequiredTitle => 'Kemas kini diperlukan';
+
+  @override
+  String get updateRequiredMessage =>
+      'Versi Omi ini tidak lagi disokong. Kemas kini untuk terus merakam dan menyegerakkan.';
 }

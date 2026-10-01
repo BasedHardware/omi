@@ -1220,7 +1220,6 @@
     "appsCount": "Rakendused ({count})",
     "privateAppsCount": "Privaatsed rakendused ({count})",
     "publicAppsCount": "Avalikud rakendused ({count})",
-    "newVersionAvailable": "Uus versioon saadaval",
     "no": "Ei",
     "subscriptionCancelledSuccessfully": "Tellimus tühistatud edukalt. See jääb aktiivseks kuni praeguse arveldusperioodi lõpuni.",
     "failedToCancelSubscription": "Tellimuse tühistamine ebaõnnestus. Palun proovi uuesti.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Kestus: {seconds} sekundit",
     "additionalSpeechSampleRemoved": "Lisakõnenäidis eemaldatud",
     "consentDataMessage": "Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.",
-    "tasksEmptyStateMessage": "Teie vestlustest pärit ülesanded ilmuvad siia.\nPuudutage + käsitsi loomiseks.",
+    "tasksEmptyStateMessage": "Ülesande loomiseks alusta vestlust.",
     "clearChatAction": "Tühjenda vestlus",
     "enableApps": "Luba rakendused",
     "omiAppName": "Omi",
@@ -3765,5 +3764,11 @@
     "speakerSuggestionAppliesToSpeaker": "Kehtib kõigile selle kõneleja ridadele",
     "collapseAction": "Ahenda",
     "speakerTagPromptNotMeAction": "Pole mina",
-    "confidenceNextLabels": "{count, plural, =1{Märgi nad veel 1 vestluses.} other{Märgi nad veel {count} vestluses.}}"
+    "confidenceNextLabels": "{count, plural, =1{Märgi nad veel 1 vestluses.} other{Märgi nad veel {count} vestluses.}}",
+    "siriShortcutsSetupHint": "Lülitage Omi sisse jaotises Otseteed → Siri. Ütlege „{askPhrase}“ või „{questionPhrase}“ ja seejärel esitage oma küsimus.",
+    "siriShortcutsSearchHint": " Saate öelda ka „{searchPhrase} for what I did today“.",
+    "updateAvailableTitle": "Värskendus on saadaval",
+    "updateAvailableMessage": "Omi uus versioon on valmis – parandused ja täiustused.",
+    "updateRequiredTitle": "Värskendus on vajalik",
+    "updateRequiredMessage": "Seda Omi versiooni enam ei toetata. Värskenda, et jätkata salvestamist ja sünkroonimist."
 }

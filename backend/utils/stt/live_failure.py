@@ -16,6 +16,7 @@ from utils.stt.outcomes import (
     failure_from_exception,
 )
 from utils.observability.fallback import (
+    FailureFallbackKwargs,
     FirstTextDeadlineDiagnostics,
     ReplayLagDiagnostics,
     capacity_fallback_kwargs,
@@ -191,16 +192,21 @@ class PendingLiveFailover:
             **capacity_fallback_kwargs(self.capacity_subtype, self.replay_lag_diagnostics),
         )
 
-    def note_failure(self, typed_reason: str | None) -> None:
+    def note_failure(self, typed_reason: str | None, *, continuing: bool = False) -> None:
         if self._settled:
             return
         self._settled = True
+        reason = fallback_reason_for_typed_death(typed_reason)
+        details: FailureFallbackKwargs = {}
+        if reason == 'other':
+            details['failure_subtype'] = typed_reason if typed_reason in _KNOWN_FAILURE_REASONS else 'untyped'
         record_fallback(
             component=self.component,
             from_mode=self.from_mode,
             to_mode=self.to_mode,
-            reason=fallback_reason_for_typed_death(typed_reason),
-            outcome='exhausted',
+            reason=reason,
+            outcome='degraded' if continuing else 'exhausted',
+            **details,
         )
 
 

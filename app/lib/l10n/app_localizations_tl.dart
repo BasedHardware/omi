@@ -4001,9 +4001,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Ang Bagong Bersyon ay Available';
-
-  @override
   String get no => 'Hindi';
 
   @override
@@ -5096,8 +5093,7 @@ class AppLocalizationsTl extends AppLocalizations {
       'Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\nI-tap ang + upang lumikha ng isa nang manual.';
+  String get tasksEmptyStateMessage => 'Magsimula ng pag-uusap para gumawa ng gawain.';
 
   @override
   String get clearChatAction => 'Burahin ang Chat';
@@ -12215,4 +12211,27 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'I-on ang Omi sa Mga Shortcut → Siri. Sabihin ang “$askPhrase” o “$questionPhrase”, pagkatapos ay itanong ang tanong mo.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Maaari mo ring sabihin ang “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'May available na update';
+
+  @override
+  String get updateAvailableMessage => 'Handa na ang bagong bersyon ng Omi, may mga ayos at pagpapahusay.';
+
+  @override
+  String get updateRequiredTitle => 'Kailangang mag-update';
+
+  @override
+  String get updateRequiredMessage =>
+      'Hindi na sinusuportahan ang bersyong ito ng Omi. Mag-update para patuloy na makapag-record at makapag-sync.';
 }

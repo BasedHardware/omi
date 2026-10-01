@@ -402,3 +402,11 @@ def test_encode_value_non_finite_floats_are_json_safe(client, value, expected):
     encoded = client.shapes[0].to_dict()['parameter_combo']['v']
     assert encoded['value'] == expected
     json.dumps(client.shapes[0].to_dict(), allow_nan=False)
+
+
+def test_signature_id_separates_root_and_nested_same_caller(client):
+    """Same caller/group at a real root vs a nested path must never share a signature ID."""
+    client.collection('conversations').where(filter=FieldFilter('discarded', '==', False)).get()
+    client.collection('users/u1/conversations').where(filter=FieldFilter('discarded', '==', False)).get()
+    assert len(client.shapes) == 2
+    assert client.shapes[0].signature() != client.shapes[1].signature()

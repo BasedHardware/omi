@@ -1220,7 +1220,6 @@
     "appsCount": "Aplicações ({count})",
     "privateAppsCount": "Aplicações privadas ({count})",
     "publicAppsCount": "Aplicações públicas ({count})",
-    "newVersionAvailable": "Nova versão disponível",
     "no": "Não",
     "subscriptionCancelledSuccessfully": "Assinatura cancelada com sucesso. Permanecerá ativa até o final do período de faturamento atual.",
     "failedToCancelSubscription": "Falha ao cancelar a assinatura. Por favor, tente novamente.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Duração: {seconds} segundos",
     "additionalSpeechSampleRemoved": "Amostra de voz adicional removida",
     "consentDataMessage": "Ao continuar, suas conversas, gravações e informações pessoais serão armazenadas com segurança em nossos servidores. Suas gravações de áudio e transcrições são processadas por serviços de IA de terceiros (incluindo Deepgram para transcrição e OpenAI para análise) para fornecer insights baseados em IA e habilitar todos os recursos do aplicativo.",
-    "tasksEmptyStateMessage": "As tarefas das suas conversas aparecerão aqui.\nToque em + para criar uma manualmente.",
+    "tasksEmptyStateMessage": "Inicie uma conversa para criar uma tarefa.",
     "clearChatAction": "Limpar conversa",
     "enableApps": "Ativar aplicativos",
     "omiAppName": "Omi",
@@ -3800,5 +3799,11 @@
     "speakerSuggestionAppliesToSpeaker": "Vale para todas as falas deste falante",
     "collapseAction": "Recolher",
     "speakerTagPromptNotMeAction": "Não sou eu",
-    "confidenceNextLabels": "{count, plural, =1{Etiquete-os em mais 1 conversa.} other{Etiquete-os em mais {count} conversas.}}"
+    "confidenceNextLabels": "{count, plural, =1{Etiquete-os em mais 1 conversa.} other{Etiquete-os em mais {count} conversas.}}",
+    "siriShortcutsSetupHint": "Ative o Omi em Atalhos → Siri. Diga “{askPhrase}” ou “{questionPhrase}” e faça sua pergunta.",
+    "siriShortcutsSearchHint": " Também pode dizer “{searchPhrase} for what I did today”.",
+    "updateAvailableTitle": "Atualização disponível",
+    "updateAvailableMessage": "Uma nova versão do Omi está pronta, com correções e melhorias.",
+    "updateRequiredTitle": "Atualização necessária",
+    "updateRequiredMessage": "Esta versão do Omi não é mais suportada. Atualize para continuar gravando e sincronizando."
 }

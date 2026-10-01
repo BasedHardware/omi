@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -27,6 +28,28 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   bool _siriEnabled = true;
   int _siriRevision = 0;
 
+  // App Shortcuts and the native Shortcuts button require iOS 16; the
+  // searchInApp schema requires iOS 27. Older systems keep the index switch.
+  late final bool _shortcutsHintSupported = PlatformService.isIOSAtLeast(16);
+  late final bool _searchHintSupported = PlatformService.isIOSAtLeast(27);
+
+  // The native omi/shortcuts_button platform view is registered only by the
+  // Siri toolchain (Xcode 27). Stable-compiler (Xcode 26.6) builds compile the
+  // registration out, so requesting the view there cannot render; gate the
+  // section on the native capability probe. Fail closed: only render once the
+  // bridge confirms availability.
+  bool _appShortcutsAvailable = false;
+
+  Future<void> _loadAppShortcutsAvailability() async {
+    final revision = _siriRevision;
+    try {
+      final available = await SiriIntegration.instance.appShortcutsAvailable();
+      if (mounted && revision == _siriRevision) setState(() => _appShortcutsAvailable = available);
+    } catch (_) {
+      // Fail closed: leave the card hidden when the bridge cannot answer.
+    }
+  }
+
   Future<void> _loadSiriSetting() async {
     final revision = _siriRevision;
     try {
@@ -49,6 +72,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
     super.initState();
     PlatformManager.instance.analytics.dataPrivacyPageOpened();
     if (Platform.isIOS) _loadSiriSetting();
+    if (_shortcutsHintSupported) _loadAppShortcutsAvailability();
   }
 
   Widget _buildEncryptionBanner(BuildContext context) {
@@ -158,6 +182,30 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                         onChanged: _setSiriEnabled,
                       ),
                     ),
+                    if (_shortcutsHintSupported && _appShortcutsAvailable) ...[
+                      const SizedBox(height: OmiSpacing.md),
+                      Container(
+                        key: const Key('siri_shortcuts_settings'),
+                        padding: const EdgeInsets.all(OmiSpacing.md),
+                        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(context.l10n.askOmi, style: OmiType.body),
+                            const SizedBox(height: OmiSpacing.xs),
+                            Text(
+                              _searchHintSupported
+                                  ? '${context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi')}'
+                                      '${context.l10n.siriShortcutsSearchHint('Search Omi')}'
+                                  : context.l10n.siriShortcutsSetupHint('Ask Omi', 'Question for Omi'),
+                              style: OmiType.body.copyWith(color: OmiColors.textSecondary),
+                            ),
+                            const SizedBox(height: OmiSpacing.md),
+                            const SizedBox(height: 50, child: UiKitView(viewType: 'omi/shortcuts_button')),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: OmiSpacing.xxl),
                   Consumer<AppProvider>(

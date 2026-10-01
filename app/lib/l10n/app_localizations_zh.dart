@@ -3897,9 +3897,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => '新版本可用';
-
-  @override
   String get no => '否';
 
   @override
@@ -4951,7 +4948,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。';
 
   @override
-  String get tasksEmptyStateMessage => '来自您对话的任务将显示在这里。\n点击 + 手动创建。';
+  String get tasksEmptyStateMessage => '开始对话以创建任务。';
 
   @override
   String get clearChatAction => '清除聊天';
@@ -11895,4 +11892,26 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return '在快捷指令 → Siri 中开启 Omi。说“$askPhrase”或“$questionPhrase”，然后提出你的问题。';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' 你还可以说“$searchPhrase for what I did today”。';
+  }
+
+  @override
+  String get updateAvailableTitle => '有可用更新';
+
+  @override
+  String get updateAvailableMessage => 'Omi 新版本已就绪，包含问题修复和改进。';
+
+  @override
+  String get updateRequiredTitle => '需要更新';
+
+  @override
+  String get updateRequiredMessage => '此版本的 Omi 已不再受支持。请更新以继续录音和同步。';
 }

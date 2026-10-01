@@ -111,7 +111,7 @@ void main() {
       final monitor = makeMonitor();
       wedge(monitor);
       final opened = <String>[];
-      Future<void> opener(String route) async => opened.add(route);
+      Future<void> opener(String route, {bool Function()? canOpen}) async => opened.add(route);
       HomeNavigation.register(opener);
       addTearDown(() => HomeNavigation.unregister(opener));
 
