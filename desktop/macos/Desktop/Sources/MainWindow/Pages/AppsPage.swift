@@ -1174,6 +1174,11 @@ final class ImportConnectorStatusStore: ObservableObject {
     IntegrationNudgeCoordinator.shared.noteConnected(route: .importConnector(connectorID))
   }
 
+  func markDisconnected(connectorID: String) {
+    clearStoredMetrics(for: connectorID)
+    connectorDidSync.send(connectorID)
+  }
+
   private func clearStoredMetrics(for connectorID: String) {
     defaults.removeObject(forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: connectorID))
     defaults.removeObject(forKey: storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID))
@@ -1700,6 +1705,10 @@ struct ImportConnectorSheet: View {
   /// only ever wipe the text the run actually imported, never a newer paste.
   @State private var submittedDraft: String?
   @FocusState private var draftFocused: Bool
+  @State private var isDisconnecting = false
+  @State private var showingDisconnectConfirmation = false
+  @State private var disconnectStatusMessage: String?
+  @State private var disconnectErrorMessage: String?
 
   private var snapshot: ImportConnectorStatusStore.Snapshot {
     statusStore.snapshot(for: connector)
@@ -1776,6 +1785,14 @@ struct ImportConnectorSheet: View {
       // Failures stay until the next start so they can't be missed.
       runner.acknowledgeSuccess(connectorID: connector.id)
     }
+    .shellConfirmation(
+      isPresented: $showingDisconnectConfirmation,
+      title: "Disconnect Google Calendar?",
+      message: "Omi will stop syncing and using your Google Calendar. Memories already imported into Omi will remain.",
+      confirmTitle: "Disconnect"
+    ) {
+      disconnectCalendar()
+    }
   }
 
   private var connectorActionContent: some View {
@@ -1795,7 +1812,18 @@ struct ImportConnectorSheet: View {
         )
       }
       .buttonStyle(.plain)
-      .disabled(isRunning)
+      .disabled(isRunning || isDisconnecting)
+
+      if connector.id == "calendar", snapshot.isConnected {
+        Button {
+          showingDisconnectConfirmation = true
+        } label: {
+          Text("Disconnect…")
+        }
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        .disabled(isRunning || isDisconnecting)
+        .accessibilityIdentifier("calendar-import-disconnect")
+      }
 
       if connector.id == "local-files" {
         Text("Local files are indexed on-device and used to build your memory graph.")
@@ -1894,6 +1922,8 @@ struct ImportConnectorSheet: View {
   }
 
   private func startConnectorImport() {
+    disconnectStatusMessage = nil
+    disconnectErrorMessage = nil
     switch connector.id {
     case "calendar":
       startRun(
@@ -1935,6 +1965,27 @@ struct ImportConnectorSheet: View {
       }
     default:
       break
+    }
+  }
+
+  private func disconnectCalendar() {
+    guard connector.id == "calendar", !isRunning, !isDisconnecting else { return }
+    isDisconnecting = true
+    disconnectStatusMessage = nil
+    disconnectErrorMessage = nil
+    let connectorID = connector.id
+    let statusStore = statusStore
+
+    Task { @MainActor in
+      switch await ConnectorImportOperations.disconnectCalendar() {
+      case .success(_, let message):
+        runner.acknowledgeSuccess(connectorID: connectorID)
+        statusStore.markDisconnected(connectorID: connectorID)
+        disconnectStatusMessage = message
+      case .failure(let message, failureClass: _):
+        disconnectErrorMessage = message
+      }
+      isDisconnecting = false
     }
   }
 
@@ -2025,7 +2076,34 @@ struct ImportConnectorSheet: View {
 
   @ViewBuilder
   private var statusSection: some View {
-    if let run = runState, run.phase == .running {
+    if isDisconnecting {
+      statusCard {
+        HStack(alignment: .top, spacing: OmiSpacing.md) {
+          ProgressView()
+            .controlSize(.small)
+            .padding(.top, OmiSpacing.hairline)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Disconnecting Google Calendar")
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Text("Revoking Omi's future Calendar access. Imported memories will remain.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+    } else if let disconnectStatusMessage {
+      Text(disconnectStatusMessage)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.primary)
+    } else if let disconnectErrorMessage {
+      Text(disconnectErrorMessage)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(SettingsInk.notice)
+    } else if let run = runState, run.phase == .running {
       statusCard {
         HStack(alignment: .top, spacing: OmiSpacing.md) {
           ProgressView()

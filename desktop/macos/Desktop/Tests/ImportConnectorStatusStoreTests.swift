@@ -174,6 +174,34 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     XCTAssertEqual(reloadedUserAStore.snapshot(for: connector).primaryText, "12 emails")
   }
 
+  func testMarkDisconnectedClearsPersistedCalendarConnectionMetrics() {
+    let testDefaults = makeDefaults()
+    let defaults = testDefaults.defaults
+    defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+    guard let connector = ImportConnector.all.first(where: { $0.id == "calendar" }) else {
+      XCTFail("calendar connector is not registered")
+      return
+    }
+    let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
+    store.markSynced(
+      connectorID: "calendar",
+      sourceCount: 178,
+      memoryCount: 192,
+      lastDeltaCount: 178
+    )
+
+    store.markDisconnected(connectorID: "calendar")
+
+    let immediate = store.snapshot(for: connector)
+    let reloaded = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user").snapshot(
+      for: connector)
+    XCTAssertFalse(immediate.isConnected)
+    XCTAssertEqual(immediate.actionTitle, "Connect")
+    XCTAssertEqual(immediate.primaryText, "Not connected")
+    XCTAssertFalse(reloaded.isConnected)
+    XCTAssertEqual(reloaded.primaryText, "Not connected")
+  }
+
   private func makeDefaults() -> (defaults: UserDefaults, suiteName: String) {
     let suiteName = "ImportConnectorStatusStoreTests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suiteName) else {

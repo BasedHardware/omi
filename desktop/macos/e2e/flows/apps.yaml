@@ -94,6 +94,12 @@ steps:
       text_visible:
         - Home
 
+  - id: S5f
+    name: Calendar import can disconnect without deleting imported memories
+    do: "With Calendar connected on a disposable test account, reopen Apps → Imports → Calendar. Verify a Disconnect action appears beside Sync now. Open it and verify the confirmation says future Calendar access stops while imported memories remain. Cancel once to verify cancellation is non-destructive; then confirm, and verify the sheet returns to Connect Calendar while existing Calendar memories remain visible in Memories."
+    expect:
+      interactive_count: { min: 3 }
+
   - id: S6
     name: Return to Home
     do: "Click the Home pill in the top bar (accessibility identifier top-navigation-0) to leave Apps. Verify the query surface loads with the top bar visible."
