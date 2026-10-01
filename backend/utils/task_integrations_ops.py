@@ -4,6 +4,7 @@ Lives in utils/ so auto-sync (task_sync) and the HTTP router share one implement
 without violating the utils → routers import hierarchy.
 """
 
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional, Tuple
@@ -44,6 +45,24 @@ async def close_http_client():
     if http_client is not None:
         await http_client.aclose()
         http_client = None
+
+
+def compute_expires_at(expires_in: Any) -> Optional[str]:
+    """Safely compute ISO 8601 expiry timestamp from expires_in seconds.
+
+    Accepts int, float, or numeric strings. Returns None if expires_in is missing,
+    boolean, non-numeric, non-finite, non-positive, or represents an out-of-range duration.
+    """
+    if expires_in is None or isinstance(expires_in, bool):
+        return None
+    try:
+        seconds = float(expires_in)
+        if seconds <= 0 or not math.isfinite(seconds):
+            return None
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+        return expires_at.isoformat()
+    except (ValueError, TypeError, OverflowError):
+        return None
 
 
 def _build_refresh_request(app_key: str, refresh_token: str) -> dict:
@@ -113,9 +132,7 @@ async def refresh_oauth_token(
             }
             if new_refresh_token:
                 update_payload['refresh_token'] = new_refresh_token
-            if expires_in:
-                expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-                update_payload['expires_at'] = expires_at.isoformat()
+            update_payload['expires_at'] = compute_expires_at(expires_in)
             await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, update_payload)
             return {**integration, **update_payload}
         else:
@@ -150,8 +167,8 @@ async def refresh_oauth_token(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f'{app_key}: Error refreshing token: {e}')
-        raise HTTPException(status_code=500, detail=f"Error refreshing token: {str(e)}")
+        logger.error(f'{app_key}: Error refreshing token: {sanitize(str(e))}')
+        raise HTTPException(status_code=500, detail=f"Failed to refresh {name} token due to an internal error")
 
 
 async def ensure_valid_oauth_token(
@@ -206,7 +223,7 @@ async def perform_request_with_token_retry(
                 new_access_token = integration.get('access_token') or ''
                 response = await request_fn(client, new_access_token)
             except Exception as e:
-                logger.error(f'{app_key}: Token refresh failed during retry: {e}')
+                logger.error(f'{app_key}: Token refresh failed during retry: {sanitize(str(e))}')
                 return response, integration, e
     return response, integration, None
 
@@ -397,5 +414,5 @@ async def create_task_internal(
             return {"success": False, "error": f"Unsupported integration: {app_key}", "error_code": "unsupported"}
 
     except Exception as e:
-        logger.error(f"Error creating task in {app_key}: {e}")
-        return {"success": False, "error": str(e)}
+        logger.error(f"Error creating task in {app_key}: {sanitize(str(e))}")
+        return {"success": False, "error": sanitize(str(e))}
