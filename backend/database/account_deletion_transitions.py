@@ -9,17 +9,20 @@ from google.cloud.firestore_v1 import transactional
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 
-def read_agent_vm_migration_journals(uid: str) -> list[dict[str, Any]]:
+def read_agent_vm_migration_journals(uid: Any, *, firestore_client: Any | None = None) -> list[dict[str, Any]]:
     """Read migration journals before deleting the user's Firestore subtree.
 
     The journal is the durable source of truth for provider resources created
     during an Agent VM migration.  Callers must validate each returned record
     against the provider before issuing destructive requests.
     """
-    if not uid.strip():
+    if not isinstance(uid, str) or not uid.strip():
         raise ValueError('uid is required')
-    client = get_firestore_client()
-    migration_ref = client.collection('users').document(uid).collection('agentVmMigrations')
+    clean_uid = uid.strip()
+    if any(c in clean_uid for c in ("/", "\\", "\0", "..")) or len(clean_uid) > 128:
+        raise ValueError('uid must be a valid identifier without path traversal')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    migration_ref = client.collection('users').document(clean_uid).collection('agentVmMigrations')
     journals: list[dict[str, Any]] = []
     for snapshot in migration_ref.stream():
         data = snapshot.to_dict()
@@ -37,7 +40,7 @@ def read_agent_vm_migration_journals(uid: str) -> list[dict[str, Any]]:
 @transactional
 def mark_wipe_completed(transaction, doc_ref) -> bool:
     snapshot = doc_ref.get(transaction=transaction)
-    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    data = (snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
     if data.get('late_agent_vm_cleanup'):
         transaction.set(
             doc_ref,
@@ -57,18 +60,27 @@ def mark_wipe_completed(transaction, doc_ref) -> bool:
 def record_late_agent_vm_cleanup(
     transaction,
     doc_ref,
-    vm_name: str,
-    zone: str,
-    expected_instance_id: str | None = None,
+    vm_name: Any,
+    zone: Any,
+    expected_instance_id: Any = None,
 ) -> bool:
+    if not isinstance(vm_name, str) or not vm_name.strip():
+        raise ValueError('vm_name must be a non-empty string')
+    if not isinstance(zone, str) or not zone.strip():
+        raise ValueError('zone must be a non-empty string')
     snapshot = doc_ref.get(transaction=transaction)
-    raw_status = (snapshot.to_dict() or {}).get('wipe_status') if snapshot.exists else None
-    status = normalize_account_deletion_status(marker_exists=snapshot.exists, raw_status=raw_status)
+    exists = getattr(snapshot, 'exists', False)
+    raw_status = (snapshot.to_dict() or {}).get('wipe_status') if exists else None
+    status = normalize_account_deletion_status(marker_exists=exists, raw_status=raw_status)
     if not account_deletion_blocks_access(status):
         return False
-    if expected_instance_id is not None and (not expected_instance_id.isascii() or not expected_instance_id.isdigit()):
+    if expected_instance_id is not None and (
+        not isinstance(expected_instance_id, str)
+        or not expected_instance_id.isascii()
+        or not expected_instance_id.isdigit()
+    ):
         raise ValueError('late Agent VM cleanup instance identity must be numeric')
-    pending = {'vmName': vm_name, 'zone': zone}
+    pending: dict[str, Any] = {'vmName': vm_name.strip(), 'zone': zone.strip()}
     if expected_instance_id is not None:
         pending['expectedInstanceId'] = expected_instance_id
     transaction.set(
@@ -87,21 +99,30 @@ def record_late_agent_vm_cleanup(
 def adopt_legacy_late_agent_vm_cleanup(
     transaction,
     doc_ref,
-    vm_name: str,
-    zone: str,
-    expected_instance_id: str,
+    vm_name: Any,
+    zone: Any,
+    expected_instance_id: Any,
 ) -> bool:
     """Add a provider identity fence to an exact pre-fence cleanup record."""
-    if not expected_instance_id.isascii() or not expected_instance_id.isdigit():
+    if not isinstance(vm_name, str) or not vm_name.strip():
+        raise ValueError('vm_name must be a non-empty string')
+    if not isinstance(zone, str) or not zone.strip():
+        raise ValueError('zone must be a non-empty string')
+    if (
+        not isinstance(expected_instance_id, str)
+        or not expected_instance_id.isascii()
+        or not expected_instance_id.isdigit()
+    ):
         raise ValueError('late Agent VM cleanup instance identity must be numeric')
     snapshot = doc_ref.get(transaction=transaction)
-    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    exists = getattr(snapshot, 'exists', False)
+    data = (snapshot.to_dict() or {}) if exists else {}
     raw_status = data.get('wipe_status')
-    status = normalize_account_deletion_status(marker_exists=snapshot.exists, raw_status=raw_status)
+    status = normalize_account_deletion_status(marker_exists=exists, raw_status=raw_status)
     pending = data.get('late_agent_vm_cleanup')
     if not account_deletion_blocks_access(status) or not isinstance(pending, dict):
         return False
-    if pending.get('vmName') != vm_name or pending.get('zone') != zone:
+    if pending.get('vmName') != vm_name.strip() or pending.get('zone') != zone.strip():
         return False
     current_id = pending.get('expectedInstanceId')
     if current_id is not None:
