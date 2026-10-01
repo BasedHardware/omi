@@ -662,8 +662,9 @@ processes a potentially full source backlog. The finite three-provider suffix
 bounds retention at 135 seconds; stalled un-emitted audio still fails over
 before eviction. This ceiling grows from the original 90-second ring only
 while a replacement is handling its replay obligation. As soon as transcript
-progress leaves at most 90 seconds of capture, the cap returns to 90 seconds
-without evicting pending audio. A later replacement can reserve headroom again.
+progress leaves at most 75 seconds of capture, the cap returns to 90 seconds
+without evicting pending audio, leaving the full 15-second headroom free.
+A later replacement can reserve headroom again.
 The ring survives until session teardown, but emitted text continuously settles
 its contents; healthy continuous speech normally retains only its current tail.
 135 seconds of mono PCM16 is 2.16 MB at 8 kHz, 4.32 MB at 16 kHz, or 12.96 MB

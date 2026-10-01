@@ -487,10 +487,12 @@ def test_replacement_headroom_shrinks_only_after_progress_frees_base_horizon(sam
     capture = b'\x01\x00' * (105 * sample_rate)
     ring.append(capture, 0)
     assert ring.ring_seconds == 105
-    assert ring.finalize_through(14 * sample_rate) == 14 * sample_rate * 2
+    assert ring.finalize_through(29 * sample_rate) == 29 * sample_rate * 2
     assert ring.ring_seconds == 105
-    assert ring.capture_bounds == (14 * sample_rate, 105 * sample_rate)
-    assert ring.finalize_through(15 * sample_rate) == sample_rate * 2
+    assert ring.capture_bounds == (29 * sample_rate, 105 * sample_rate)
+    assert ring.finalize_through(30 * sample_rate) == sample_rate * 2
     assert ring.ring_seconds == 90
-    assert ring.snapshot() == ((15 * sample_rate, capture[15 * sample_rate * 2 :]),)
-    assert ring.would_overflow(b'\x02\x00', 105 * sample_rate)
+    assert ring.snapshot() == ((30 * sample_rate, capture[30 * sample_rate * 2 :]),)
+    # All fifteen seconds of headroom still fit after reclaiming the cap.
+    assert not ring.would_overflow(b'\x02\x00' * (15 * sample_rate), 105 * sample_rate)
+    assert ring.would_overflow(b'\x02\x00' * (15 * sample_rate + 1), 105 * sample_rate)

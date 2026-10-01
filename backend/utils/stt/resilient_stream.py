@@ -73,9 +73,11 @@ class ResilientAudio:
         self._trim()
         if self.ring_seconds > self._base_ring_seconds and self.finalized_sample > previous:
             first, end = self.capture_bounds
-            if end - first <= self._base_ring_seconds * self.sample_rate:
+            reclaim_span = max(0, self._base_ring_seconds - RING_SECONDS) * self.sample_rate
+            if end - first <= reclaim_span:
                 # Replacement headroom is temporary. Once progress has freed
-                # enough capture, restore the original horizon without eviction.
+                # enough capture, restore the original horizon with a full
+                # replacement tail still free, without evicting pending audio.
                 self.ring_seconds = self._base_ring_seconds
         return before - self.buffered_bytes
 
