@@ -38,6 +38,7 @@ import 'package:omi/pages/conversations/capture_state_labels.dart';
 
 import 'capture_state_header.dart';
 import 'package:omi/backend/http/api/speaker_labels.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
 import 'widgets/carried_speaker_banner.dart';
 import 'widgets/speaker_suggestion_chip.dart';
@@ -51,7 +52,9 @@ void switchHomeToConversationsTab(BuildContext context) {
 class ConversationCapturingPage extends StatefulWidget {
   final String? topConversationId;
 
-  const ConversationCapturingPage({super.key, this.topConversationId});
+  final SpeakerRejectionCall? rejectSpeaker;
+
+  const ConversationCapturingPage({super.key, this.topConversationId, this.rejectSpeaker});
 
   @override
   State<ConversationCapturingPage> createState() => _ConversationCapturingPageState();
@@ -62,6 +65,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool _mutePending = false;
+  bool _rejectingSuggestion = false;
   final Set<String> _closedCarriedSpeakers = {};
 
   @override
@@ -492,14 +496,34 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
 
   /// "Someone Else…" on a suggestion is an answer too: tell Omi this voice is not that person,
   /// then let the user say who it is.
-  void _rejectSuggestion(TranscriptSegment segment, Person person, CaptureProvider provider) {
+  Future<void> _rejectSuggestion(TranscriptSegment segment, Person person, CaptureProvider provider) async {
+    if (_rejectingSuggestion) return;
     final conversationId = widget.topConversationId ?? provider.topConversationId;
+    final sessionId = provider.activeCaptureSessionId;
     if (conversationId != null) {
-      unawaited(
-        rejectConversationSpeaker(conversationId, segment.speakerId, SpeakerRejection.notPerson, personId: person.id),
-      );
+      _rejectingSuggestion = true;
+      try {
+        final result = await (widget.rejectSpeaker ?? rejectConversationSpeaker)(
+          conversationId,
+          segment.speakerId,
+          SpeakerRejection.notPerson,
+          personId: person.id,
+        );
+        if (!mounted ||
+            provider.activeCaptureSessionId != sessionId ||
+            (widget.topConversationId ?? provider.topConversationId) != conversationId) return;
+        if (result is! ApiSuccess<ServerConversation>) {
+          OmiFeedback.error(context, context.l10n.speakerTagPromptAnswerFailed);
+          return;
+        }
+      } catch (_) {
+        if (mounted) OmiFeedback.error(context, context.l10n.speakerTagPromptAnswerFailed);
+        return;
+      } finally {
+        _rejectingSuggestion = false;
+      }
     }
-    _editSegmentSpeaker(segment, provider);
+    if (mounted) _editSegmentSpeaker(segment, provider);
   }
 
   /// A pinned near-miss the backend asked about for this unlabeled segment, if its person is known.

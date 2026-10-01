@@ -26,6 +26,9 @@ enum SpeakerRejection {
   final String wire;
 }
 
+typedef SpeakerRejectionCall = Future<ApiResult<ServerConversation>>
+    Function(String conversationId, int speakerId, SpeakerRejection kind, {String? personId, List<String>? segmentIds});
+
 /// Tells Omi a label on [speakerId] in this conversation is wrong, so it is cleared and that voice
 /// is not matched the same way again. [personId] is the rejected person for [SpeakerRejection.notPerson].
 Future<ApiResult<ServerConversation>> rejectConversationSpeaker(

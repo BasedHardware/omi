@@ -32,8 +32,6 @@ typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
 typedef ConversationReprocessCall = Future<ServerConversation?> Function(String,
     {String? appId, bool requireSpeakerReceipt});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
-typedef SpeakerRejectionCall = Future<ApiResult<ServerConversation>>
-    Function(String conversationId, int speakerId, SpeakerRejection kind, {String? personId, List<String>? segmentIds});
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
