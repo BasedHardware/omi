@@ -142,6 +142,16 @@ describe('HubAskBar — attachments', () => {
     expect(screen.queryByLabelText('Send')).toBeNull()
   })
 
+  it('reclaims input focus after a mouse click on Send (#20218)', () => {
+    // Clicking Send natively moves focus to the button; the composer must take it
+    // back so the next message can be typed without clicking the input again.
+    const onSubmit = vi.fn()
+    renderBar({ value: 'hi', onSubmit })
+    fireEvent.click(screen.getByLabelText('Send'))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(screen.getByPlaceholderText('Ask omi anything'))
+  })
+
   it('surfaces a note when the attachment layer rejects files (not a silent drop)', async () => {
     addAttachments.mockReturnValue({
       accepted: [],

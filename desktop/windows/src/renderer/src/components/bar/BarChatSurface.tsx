@@ -334,6 +334,11 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
     if (!text) return
     p.setDraft('')
     resumeFollow()
+    // A mouse/trackpad click on Send moves focus to the button natively (Enter
+    // never does). Reclaim it so the next message can be typed immediately — the
+    // view-change effect above only refires on a hub→conversation transition, not
+    // on a same-view follow-up send (#20218).
+    inputRef.current?.focus()
     // Flip to the conversation BEFORE awaiting the send so the reply streams into
     // the response state (always the shared Omi thread). A send refused by the
     // usage limit still lands here and surfaces its notice + restored text inline,

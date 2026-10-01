@@ -308,6 +308,16 @@ describe('BarChatSurface', () => {
     expect(props.setDraft).toHaveBeenCalledWith('')
   })
 
+  it('conversation: a mouse click on Send reclaims input focus (#20218)', () => {
+    // Clicking Send natively moves focus to the button; unlike the hub→conversation
+    // transition (handled by the [expanded, view] effect), a same-view follow-up
+    // send has nothing else to refocus the composer.
+    renderSurface({ view: 'conversation', draft: 'hello there' })
+    const input = screen.getByPlaceholderText(/Ask Omi/i)
+    fireEvent.click(screen.getByText('Send'))
+    expect(document.activeElement).toBe(input)
+  })
+
   it('conversation: an IN-QUOTA send clears the input and leaves it cleared (no restore)', async () => {
     const props = renderSurface({ view: 'conversation', draft: 'hello there' })
     fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Enter' })

@@ -70,6 +70,14 @@ export function HubAskBar(props: {
     setRejectNote(rejected.length > 0 ? describeRejections(rejected) : null)
   }
 
+  // Mouse/trackpad send moves focus to this button natively; Enter-to-send never
+  // does. Reclaim it so typing the next message doesn't require clicking the
+  // input again first (#20218).
+  const handleSendClick = (): void => {
+    onSubmit()
+    inputRef.current?.focus()
+  }
+
   const pickFiles = async (): Promise<void> => {
     try {
       const picked = await window.omi.openChatFiles()
@@ -217,7 +225,7 @@ export function HubAskBar(props: {
         ) : canSend ? (
           <button
             type="button"
-            onClick={onSubmit}
+            onClick={handleSendClick}
             aria-label="Send"
             className="focus-ring flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-home-paper transition-opacity duration-150 hover:opacity-90"
           >
