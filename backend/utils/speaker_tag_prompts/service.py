@@ -63,8 +63,10 @@ from utils.executors import (
 from utils.speaker_identification import extract_speaker_samples
 from utils.speaker_sample import verify_and_transcribe_sample, verify_and_transcribe_sample_in_worker
 from utils.speaker_tag_prompts.clips import CLIP_SAMPLE_RATE, conversation_clip_pcm, pcm_to_wav
+from utils.speaker_learning_policy import union_seconds
 from utils.speaker_tag_prompts.selection import (
     MAX_CLIP_SECONDS,
+    MAX_GAP_SECONDS,
     MIN_CLIP_SECONDS,
     PROMPT_WINDOW,
     prompt_id,
@@ -662,46 +664,82 @@ def _pool(vectors: List[List[float]]) -> List[float]:
 
 
 def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> Optional[Tuple[float, float, str]]:
-    """The confirmed stretch, if it is still the owner's and long enough: (start, end, text)."""
+    """The confirmed stretch, if it is still the owner's and long enough: (start, end, text).
+
+    A whole-speaker label may resolve to several captures; choose the longest
+    contiguous owner run (same capture scope + speaker id, gaps at most
+    MAX_GAP_SECONDS) whose distinct speech reaches MIN_CLIP_SECONDS, then
+    center-crop to MAX_CLIP_SECONDS. Cross-scope duplicates are ignored; a
+    non-owner or different speaker overlapping the window in the same scope
+    rejects that run.
+    """
     wanted = set(segment_ids)
-    chosen = [
-        segment
-        for segment in conversation.get('transcript_segments') or []
-        if segment.get('id') in wanted and segment.get('is_user')
-    ]
-    if not chosen or len(chosen) != len(wanted):
+    all_segments = list(conversation.get('transcript_segments') or [])
+    chosen = [segment for segment in all_segments if segment.get('id') in wanted and segment.get('is_user')]
+    if len(chosen) != len(wanted):
         return None
-    speaker_ids = {speaker_id_of(segment) for segment in chosen}
-    if len(speaker_ids) != 1:
-        return None
-    speaker_id = speaker_ids.pop()
-    chosen.sort(key=lambda segment: float(segment.get('start') or 0))
-    start = float(chosen[0].get('start') or 0)
-    end = max(float(segment.get('end') or 0) for segment in chosen)
-    if end - start < MIN_CLIP_SECONDS:
-        return None
-    if end - start > MAX_CLIP_SECONDS:
-        center = (start + end) / 2
-        start, end = center - MAX_CLIP_SECONDS / 2, center + MAX_CLIP_SECONDS / 2
-    others = [
-        segment
-        for segment in conversation.get('transcript_segments') or []
-        if float(segment.get('start') or 0) < end
-        and float(segment.get('end') or 0) > start
-        and speaker_id_of(segment) != speaker_id
-    ]
-    if others:
-        return None
-    text = ' '.join(
-        (segment.get('text') or '').strip()
+    if any(
+        segment.get('audio_alignment') == 'unplaced' or segment.get('start') is None or segment.get('end') is None
         for segment in chosen
-        # Overlapping, not contained: the quality gate checks the clip's words are contained in this
-        # text, so a cropped long segment must still contribute its words.
-        if float(segment.get('start') or 0) < end and float(segment.get('end') or 0) > start
-    ).strip()
-    if not text:
+    ):
         return None
-    return start, end, text
+    groups: Dict[Tuple[Any, int], List[Dict[str, Any]]] = {}
+    for segment in chosen:
+        groups.setdefault((segment.get('speaker_id_scope'), speaker_id_of(segment)), []).append(segment)
+    best = None
+    for members in groups.values():
+        members.sort(key=lambda segment: float(segment.get('start') or 0))
+        scope, speaker_id = members[0].get('speaker_id_scope'), speaker_id_of(members[0])
+        runs: List[List[Dict[str, Any]]] = [[]]
+        for segment in members:
+            previous = runs[-1]
+            if previous and float(segment.get('start') or 0) - float(previous[-1].get('end') or 0) > MAX_GAP_SECONDS:
+                runs.append([])
+            runs[-1].append(segment)
+        for run in runs:
+            speech = union_seconds([(float(s.get('start') or 0), float(s.get('end') or 0)) for s in run])
+            if speech < MIN_CLIP_SECONDS:
+                continue
+            start = float(run[0].get('start') or 0)
+            end = max(float(s.get('end') or 0) for s in run)
+            if end - start > MAX_CLIP_SECONDS:
+                center = (start + end) / 2
+                start, end = center - MAX_CLIP_SECONDS / 2, center + MAX_CLIP_SECONDS / 2
+                speech = union_seconds(
+                    [
+                        (max(float(s.get('start') or 0), start), min(float(s.get('end') or 0), end))
+                        for s in run
+                        if float(s.get('end') or 0) > start and float(s.get('start') or 0) < end
+                    ]
+                )
+                if speech < MIN_CLIP_SECONDS:
+                    continue
+            impure = any(
+                s.get('audio_alignment') != 'unplaced'
+                and s.get('start') is not None
+                and s.get('end') is not None
+                and s.get('speaker_id_scope') == scope
+                and float(s.get('start') or 0) < end
+                and float(s.get('end') or 0) > start
+                and (speaker_id_of(s) != speaker_id or not s.get('is_user'))
+                for s in all_segments
+            )
+            if impure:
+                continue
+            text = ' '.join(
+                (s.get('text') or '').strip()
+                for s in run
+                # Overlapping, not contained: the quality gate checks the clip's words are contained in this
+                # text, so a cropped long segment must still contribute its words.
+                if float(s.get('start') or 0) < end and float(s.get('end') or 0) > start
+            ).strip()
+            if not text:
+                continue
+            if best is None or speech > best[0]:
+                best = (speech, start, end, text)
+    if best is None:
+        return None
+    return best[1], best[2], best[3]
 
 
 async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: List[str]) -> str:
@@ -728,6 +766,10 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
         pcm = await run_blocking(storage_executor, conversation_clip_pcm, uid, conversation, start, end)
         if not pcm:
             outcome = 'no_audio'
+            return outcome
+        pcm = pcm[: int(round((end - start) * CLIP_SAMPLE_RATE)) * 2]
+        if len(pcm) < int(MIN_CLIP_SECONDS * CLIP_SAMPLE_RATE) * 2:
+            outcome = 'clip_not_clean'
             return outcome
         wav = pcm_to_wav(pcm)
         language = conversation.get('language') or await run_blocking(

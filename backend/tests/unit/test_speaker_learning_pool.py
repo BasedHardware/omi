@@ -16,6 +16,7 @@ import pytest
 
 from database import speaker_learning as speaker_learning_db
 from database import users
+from models.other import Person
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import speaker_identification as teaching
 from utils import speaker_sample
@@ -610,8 +611,6 @@ def test_same_scope_foreign_voice_rejects_before_verification(world):
 
 
 def test_model_derives_learning_state_from_readiness():
-    from models.other import Person
-
     ready_fields = {
         'id': 'p1',
         'name': 'Alex',

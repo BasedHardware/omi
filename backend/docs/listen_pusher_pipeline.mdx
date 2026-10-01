@@ -1356,12 +1356,12 @@ voice match, pinned first within a level. Auto-label threshold and margin never 
   that function now returns early when the user turned off
   `users/{uid}.save_other_voice_profiles` (default on). Every teaching path (tag
   sheet, tag prompts, live socket) reaches it, so the switch is enforced once.
-- **Owner** ("That's me"): the confirmed clip must be the owner's only voice for
-  5-10 s and pass `verify_and_transcribe_sample`; its embedding is pooled into
+- **Owner** ("That's me" prompt or `is_user` tag-sheet assignment): the
+  confirmed clip is the longest clean same-voice run, 5-10 s of distinct owner
+  speech, passing `verify_and_transcribe_sample`; its embedding pools into
   `users/{uid}.speaker_embedding` as the normalized mean of the enrollment
-  voiceprint (`speaker_embedding_base`, refreshed whenever another writer
-  replaced `speaker_embedding` after the last pooling) plus the last 5
-  confirmations (`owner_voice_confirmations`).
+  voiceprint (`speaker_embedding_base`, refreshed when another writer replaced
+  `speaker_embedding` after the last pooling) plus the last 5 confirmations.
 
 `GET /v1/speaker-tag-prompts/clip` streams at most 12 s of the user's own stored
 audio as WAV (`speaker_tag_prompts:clip` rate limit). Instrumentation is

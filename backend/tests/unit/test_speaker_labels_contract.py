@@ -68,7 +68,14 @@ def test_person_voice_learning_rejects_invalid_state():
 
 @pytest.mark.parametrize('state', ['learned', 'pending', 'needs_more_speech', 'disabled', 'unknown'])
 def test_person_voice_learning_accepts_literals(state):
-    assert Person(id='p1', name='Ada', voice_learning_state=state).voice_learning_state == state
+    fields = {'id': 'p1', 'name': 'Ada', 'voice_learning_state': state}
+    if state == 'learned':
+        fields.update(speech_samples=['a.wav'], speech_samples_version=3, speaker_embedding=[1.0, 0.0])
+    assert Person(**fields).voice_learning_state == state
+
+
+def test_person_voice_learning_derives_learned_only_with_ready_print():
+    assert Person(id='p1', name='Ada', voice_learning_state='learned').voice_learning_state == 'unknown'
 
 
 @pytest.mark.parametrize('kind', ['not_me', 'not_person', 'not_a_person'])

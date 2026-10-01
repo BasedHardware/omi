@@ -580,7 +580,7 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     monkeypatch.setattr(
         service,
         'conversation_clip_pcm',
-        lambda uid, conv, start, end: clipped.append((start, end)) or b'\x01\x00' * 16000,
+        lambda uid, conv, start, end: clipped.append((start, end)) or b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6),
     )
 
     async def verify(wav, rate, text, language=None):
@@ -632,7 +632,7 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
     }
     pooled = []
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * 16000)
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6))
 
     async def verify(wav, rate, text, language=None):
         assert text == 'hello there friend' and language == 'en'
@@ -658,7 +658,7 @@ def test_owner_sample_rejected_by_quality_gate_is_not_pooled(monkeypatch):
         'transcript_segments': [{'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'text': 'hi'}],
     }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * 16000)
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6))
 
     async def verify(wav, rate, text, language=None):
         return None, False, 'multi_speaker: ratio=0.40'
