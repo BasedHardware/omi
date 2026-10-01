@@ -131,7 +131,7 @@ void main() {
       final calls = <(String, int, SpeakerRejection, String?, List<String>?)>[];
       final detail = provider(value, (id, speakerId, kind, {personId, segmentIds}) async {
         calls.add((id, speakerId, kind, personId, segmentIds));
-        return const ApiSuccess<void>(null);
+        return ApiSuccess(value);
       });
 
       expect(await detail.rejectSpeakerLabel(value.transcriptSegments.first, SpeakerRejection.notPerson), isTrue);
@@ -148,7 +148,7 @@ void main() {
       String? sentPerson = 'unset';
       final detail = provider(value, (_, __, ___, {personId, segmentIds}) async {
         sentPerson = personId;
-        return const ApiSuccess<void>(null);
+        return ApiSuccess(value);
       });
 
       expect(await detail.rejectSpeakerLabel(value.transcriptSegments.last, SpeakerRejection.notMe), isTrue);
@@ -157,11 +157,30 @@ void main() {
       expect(value.transcriptSegments.last.isUser, isFalse);
     });
 
+    test('rejection clears other identities on the same scoped voice', () async {
+      final value = conversation();
+      value.transcriptSegments[2].speakerId = 1;
+      value.transcriptSegments[2].personId = 'maya';
+      final detail = provider(value, (_, __, ___, {personId, segmentIds}) async {
+        final authoritative = ServerConversation.fromJson(value.toJson());
+        for (final s in authoritative.transcriptSegments.where((s) => s.speakerId == 1)) {
+          s.personId = null;
+          s.isUser = false;
+          s.speakerLabelSource = null;
+        }
+        return ApiSuccess(authoritative);
+      });
+      expect(await detail.rejectSpeakerLabel(value.transcriptSegments.first, SpeakerRejection.notPerson), isTrue);
+      expect(detail.conversation.transcriptSegments.take(3).map((s) => s.personId), [null, null, null]);
+      detail.dispose();
+    });
+
     test('a refused rejection restores the label and how it was made', () async {
       final value = conversation();
       final detail = provider(
         value,
-        (_, __, ___, {personId, segmentIds}) async => const ApiFailure<void>(ApiProblem(ApiProblemKind.transport)),
+        (_, __, ___, {personId, segmentIds}) async =>
+            const ApiFailure<ServerConversation>(ApiProblem(ApiProblemKind.transport)),
       );
 
       expect(await detail.rejectSpeakerLabel(value.transcriptSegments.first, SpeakerRejection.notPerson), isFalse);

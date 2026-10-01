@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/people_wire.g.dart' as wire;
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
 
 /// What happens after a speaker label: rejecting a wrong one, reading whether a person's voice was
@@ -27,14 +28,14 @@ enum SpeakerRejection {
 
 /// Tells Omi a label on [speakerId] in this conversation is wrong, so it is cleared and that voice
 /// is not matched the same way again. [personId] is the rejected person for [SpeakerRejection.notPerson].
-Future<ApiResult<void>> rejectConversationSpeaker(
+Future<ApiResult<ServerConversation>> rejectConversationSpeaker(
   String conversationId,
   int speakerId,
   SpeakerRejection kind, {
   String? personId,
   List<String>? segmentIds,
 }) =>
-    executeApi<void>(
+    executeApi<ServerConversation>(
       request: ApiRequest(
         url: '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/speakers/$speakerId/reject',
         method: 'POST',
@@ -44,7 +45,7 @@ Future<ApiResult<void>> rejectConversationSpeaker(
           if (segmentIds != null) 'segment_ids': segmentIds,
         }),
       ),
-      decode: (_) {},
+      decode: (body) => ServerConversation.fromJson(_object(body)),
     );
 
 /// One person, with the server's current voice-learning state.

@@ -169,7 +169,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 match.speakerId,
                 SpeakerRejection.notPerson,
                 personId: outcome.personId,
-              ) is ApiSuccess<void>;
+              ) is ApiSuccess<ServerConversation>;
         if (saved) _outcome.removeMatch(match);
         return saved;
       },

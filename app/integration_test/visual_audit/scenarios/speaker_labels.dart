@@ -74,7 +74,7 @@ Future<void> _pumpTranscript(
       ChangeNotifierProvider(
         create: (_) => ConversationDetailProvider(
           assignSpeaker: (_, __, {isUser, personId, speakerId}) async => true,
-          rejectSpeaker: (_, __, ___, {personId, segmentIds}) async => const ApiSuccess<void>(null),
+          rejectSpeaker: (_, __, ___, {personId, segmentIds}) async => ApiSuccess(conversation),
           reprocess: (_, {appId, requireSpeakerReceipt = false}) async => conversation,
           fetchConversation: (_) async => conversation,
         )..selectedDate = conversationLocalDayKey(conversation.createdAt),

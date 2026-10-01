@@ -32,7 +32,7 @@ typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
 typedef ConversationReprocessCall = Future<ServerConversation?> Function(String,
     {String? appId, bool requireSpeakerReceipt});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
-typedef SpeakerRejectionCall = Future<ApiResult<void>>
+typedef SpeakerRejectionCall = Future<ApiResult<ServerConversation>>
     Function(String conversationId, int speakerId, SpeakerRejection kind, {String? personId, List<String>? segmentIds});
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
@@ -366,7 +366,20 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       personId: kind == SpeakerRejection.notPerson ? rejectedPerson : null,
       segmentIds: [for (final s in selected) s.id],
     );
-    if (result is ApiSuccess<void>) return true;
+    if (result case ApiSuccess<ServerConversation>(:final data)) {
+      if (!_isDisposed &&
+          _speakerEditGenerationByConversation[target.id] == generation &&
+          identical(conversationOrNull, target)) {
+        if (data.id == target.id) {
+          conversationProvider?.updateConversation(data);
+        } else {
+          conversationProvider?.replaceBridgedConversation(target.id, data);
+          selectedDate = conversationLocalDayKey(data.startedAt ?? data.createdAt);
+        }
+        setCachedConversation(data);
+      }
+      return true;
+    }
     _rollbackSpeakerAssignment(target, selected, before, generation, null);
     return false;
   }
