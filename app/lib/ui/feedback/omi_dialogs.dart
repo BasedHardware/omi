@@ -14,10 +14,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// * [showOmiAlert] — information with one button.
 /// * [OmiAlertDialog] — the widget behind all three, for code that has to hand `showDialog` a
 ///   widget (the legacy `getDialog` / `ConfirmationDialog` adapters).
+/// * [OmiDialogCard] — a dialog that holds a control, such as the "Don't ask again" row.
 ///
-/// On iOS the dialog is a `CupertinoAlertDialog` with real `CupertinoDialogAction`s (destructive
-/// actions red, the safe choice bold); elsewhere a Material `AlertDialog` with text buttons, the
-/// destructive one in [omiDialogDangerColor].
+/// On iOS [OmiAlertDialog] is a `CupertinoAlertDialog` with real `CupertinoDialogAction`s
+/// (destructive actions red, the safe choice bold); elsewhere a Material `AlertDialog` with text
+/// buttons, the destructive one in [omiDialogDangerColor]. [OmiDialogCard] is Omi's own card on
+/// every platform: the system alert is a fixed 270pt and has no room for a control.
 
 /// Destructive action colour on Material dialogs (iOS dark-mode systemRed; legible on every dark surface).
 Color get omiDialogDangerColor => OmiColors.danger;
@@ -113,14 +115,12 @@ class OmiAlertDialog extends StatelessWidget {
   Widget? _body(BuildContext context) {
     if (message == null && content == null) return null;
     if (content == null) return Text(message!);
-    final cupertino = omiUsesCupertinoDialogs(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: cupertino ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      crossAxisAlignment: omiUsesCupertinoDialogs(context) ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
         if (message != null) Text(message!),
-        // Extra content (a 44pt row) carries its own air; a gap here left a band under it.
-        if (message != null && !cupertino) const SizedBox(height: 8),
+        if (message != null) const SizedBox(height: 12),
         content!,
       ],
     );
@@ -191,7 +191,7 @@ Future<OmiConfirmResult> showOmiConfirmWithOptOut(
     context: context,
     barrierDismissible: barrierDismissible,
     builder: (dialogContext) => StatefulBuilder(
-      builder: (dialogContext, setState) => OmiAlertDialog(
+      builder: (dialogContext, setState) => OmiDialogCard(
         title: title,
         message: message,
         content: OmiCheckboxRow(
@@ -254,9 +254,8 @@ List<OmiDialogAction> _confirmActions(
 
 /// A checkbox with its label as one ≥44pt tappable row (the label toggles it too).
 ///
-/// The box sits right beside its label, drawn in the dialog's own text colour so it reads on the
-/// light and the dark dialog. The row keeps the 44pt target; its label is set low in it, so on the
-/// iOS alert the air under the message matches the alert's own 20pt above the buttons.
+/// The box sits right beside its label, drawn in the surrounding text colour so it reads on light
+/// and dark surfaces.
 class OmiCheckboxRow extends StatelessWidget {
   const OmiCheckboxRow({super.key, required this.label, required this.value, required this.onChanged});
 
@@ -277,19 +276,15 @@ class OmiCheckboxRow extends StatelessWidget {
           // At least 44pt tall (a wrapped label at a large text size grows it).
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
-            child: Align(
-              alignment: const Alignment(0, 0.7),
-              widthFactor: 1,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ExcludeSemantics(
-                    child: _OmiCheckBox(value: value, ink: ink),
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(child: Text(label, textAlign: TextAlign.start)),
-                ],
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ExcludeSemantics(
+                  child: _OmiCheckBox(value: value, ink: ink),
+                ),
+                const SizedBox(width: OmiSpacing.xs),
+                Flexible(child: Text(label, textAlign: TextAlign.start)),
+              ],
             ),
           ),
         ),
@@ -322,5 +317,163 @@ class _OmiCheckBox extends StatelessWidget {
       ),
       child: value ? Icon(Icons.check_rounded, size: 14, color: check) : null,
     );
+  }
+}
+
+/// A dialog that holds a control (the "Don't ask again" row): Omi's own card, on every platform.
+///
+/// Its width follows the screen, 32pt in from each side and at most 400pt. Title, message and
+/// [content] are centred, like the system alerts beside it, and scroll at large text sizes. The buttons are plain text in a bar
+/// along the bottom, split by hairlines like an iOS alert: a destructive action red, the default
+/// choice bold. Two buttons sit side by side and stack, the action on top, when a label would not
+/// fit.
+class OmiDialogCard extends StatelessWidget {
+  const OmiDialogCard({super.key, required this.title, this.message, this.content, required this.actions});
+
+  final String title;
+  final String? message;
+
+  /// A control under [message], such as an [OmiCheckboxRow].
+  final Widget? content;
+  final List<OmiDialogAction> actions;
+
+  static const double maxWidth = 400;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: OmiColors.surface1,
+      surfaceTintColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxl, vertical: OmiSpacing.xl),
+      shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: maxWidth),
+        child: Semantics(
+          scopesRoute: true,
+          namesRoute: true,
+          explicitChildNodes: true,
+          label: title,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    OmiSpacing.lg,
+                    OmiSpacing.lg,
+                    OmiSpacing.lg,
+                    // The 44pt row already carries air under its box.
+                    content != null ? OmiSpacing.xs : OmiSpacing.lg,
+                  ),
+                  child: Column(
+                    children: [
+                      Text(title, style: OmiType.headline, textAlign: TextAlign.center),
+                      if (message != null) ...[
+                        const SizedBox(height: OmiSpacing.xxs),
+                        // Not textSecondary: in light mode that is 60% ink, about 3.5:1 on white.
+                        // Tertiary keeps the message at 4.5:1 or better in both modes.
+                        Text(
+                          message!,
+                          style: OmiType.subhead.copyWith(color: OmiColors.textTertiary, height: 1.35),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                      if (content != null) ...[
+                        const SizedBox(height: OmiSpacing.xxs),
+                        DefaultTextStyle(style: OmiType.subhead, child: content!),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              _OmiDialogCardButtons(actions: actions),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OmiDialogCardButtons extends StatelessWidget {
+  const _OmiDialogCardButtons({required this.actions});
+
+  final List<OmiDialogAction> actions;
+
+  static const double _height = 50;
+  static const double _sidePadding = OmiSpacing.md;
+
+  TextStyle _style(OmiDialogAction action) => OmiType.body.copyWith(
+        color: action.isDestructive ? OmiColors.danger : OmiColors.textPrimary,
+        fontWeight: action.isDefault ? FontWeight.w600 : FontWeight.w400,
+      );
+
+  Widget _button(OmiDialogAction action) {
+    final style = _style(action);
+    return TextButton(
+      key: action.key,
+      onPressed: action.onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: style.color,
+        minimumSize: const Size.fromHeight(_height),
+        padding: const EdgeInsets.symmetric(horizontal: _sidePadding),
+        shape: const RoundedRectangleBorder(),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        textStyle: style,
+      ),
+      child: Text(action.label, style: style, maxLines: 1, overflow: TextOverflow.ellipsis),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hairline = Divider(height: 1, thickness: 0.5, color: OmiColors.border);
+    return LayoutBuilder(builder: (context, constraints) {
+      final half = constraints.maxWidth / 2;
+      final textScaler = MediaQuery.textScalerOf(context);
+      final textDirection = Directionality.of(context);
+      // A label fits when it and the button's side padding fit in half the bar.
+      bool fits(OmiDialogAction action) {
+        final painter = TextPainter(
+          text: TextSpan(text: action.label, style: _style(action)),
+          textDirection: textDirection,
+          textScaler: textScaler,
+          maxLines: 1,
+        )..layout();
+        final width = painter.width + 2 * _sidePadding;
+        painter.dispose();
+        return width <= half;
+      }
+
+      if (actions.length == 2 && actions.every(fits)) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            hairline,
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _button(actions.first)),
+                  VerticalDivider(width: 1, thickness: 0.5, color: OmiColors.border),
+                  Expanded(child: _button(actions.last)),
+                ],
+              ),
+            ),
+          ],
+        );
+      }
+      // Stacked: the action on top, Cancel last, the way iOS stacks an alert's buttons.
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final action in actions.reversed) ...[hairline, _button(action)],
+        ],
+      );
+    });
   }
 }

@@ -125,10 +125,16 @@ One policy, and never neither:
 | the same with "Don't ask again" (only when Undo backs it, §4) | `await showOmiConfirmWithOptOut(...)` → `OmiConfirmResult(confirmed, dontAskAgain)` |
 | information with one button | `await showOmiAlert(context, title:, message:, okLabel:)` |
 | a widget for `showDialog(builder:)` | `OmiAlertDialog(title:, message:, content:, actions: [OmiDialogAction(...)])` |
+| a dialog that holds a control ("Don't ask again") | `OmiDialogCard(title:, message:, content:, actions:)` |
 
 - Adaptive: `CupertinoAlertDialog` with `CupertinoDialogAction`s on iOS, `AlertDialog` elsewhere.
   Cancel is always present (localized) and always closes. Titles are Title Case questions
   ("Delete Conversation?").
+- A dialog with a control is `OmiDialogCard` on every platform (`showOmiConfirmWithOptOut` uses it):
+  the system alert is a fixed 270 pt and has no room for one. Its width follows the screen (32 pt
+  side margins, at most 400 pt) and its text is centred like the system alerts. Its buttons are
+  plain text in a hairline-split bar, destructive in red, the default bold, and they stack when a
+  label does not fit.
 - Legacy entry points (`ConfirmationDialog`, `OmiConfirmDialog`, `AppDialog`) are thin
   adapters over the same widget; they accept `destructive`. New code calls the functions above.
 
