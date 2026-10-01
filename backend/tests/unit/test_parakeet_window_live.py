@@ -954,11 +954,12 @@ async def test_no_first_text_bounds_fail_over_once_and_replay_all_capture(monkey
 
 
 class RacingTextClient:
-    def __init__(self, *, propagate_cancel: bool = False):
+    def __init__(self, *, propagate_cancel: bool = False, data=None):
         self.started = asyncio.Event()
         self.cancelled = asyncio.Event()
         self.release = asyncio.Event()
         self.propagate_cancel = propagate_cancel
+        self.data = data if data is not None else {'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]}
         self.requests = []
 
     async def post(self, url, **kwargs):
@@ -973,7 +974,7 @@ class RacingTextClient:
                 raise
         return httpx.Response(
             200,
-            json={'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]},
+            json=self.data,
             request=httpx.Request('POST', url),
         )
 
@@ -1314,6 +1315,280 @@ async def _settled_fragment_silence(actual, clock, sample, frames, *, wall_secon
     return sample
 
 
+def _observe_first_text_deadline_schedule(monkeypatch, raw):
+    loop = asyncio.get_running_loop()
+    call_later = loop.call_later
+    scheduled = []
+
+    def observed(delay, callback, *args, context=None):
+        if callback == raw._expire_first_text:
+            scheduled.append(delay)
+        return call_later(delay, callback, *args, context=context)
+
+    monkeypatch.setattr(loop, 'call_later', observed)
+    return scheduled
+
+
+def _fire_first_text_deadline_at_budget(raw, clock):
+    """Deliver the scheduled callback at its exact wall budget without a 12s sleep."""
+    timer = raw._first_text_timer
+    if timer is not None:
+        clock[0] = raw._deadline_speech_at + raw._first_text_deadline
+        timer.cancel()  # Replace real-loop delivery with deterministic wall time.
+        raw._expire_first_text()
+
+
+@pytest.mark.asyncio
+async def test_answered_noise_blip_does_not_fail_at_first_text_deadline(monkeypatch):
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    scheduled = _observe_first_text_deadline_schedule(monkeypatch, previous.raw)
+    sample = await _settled_fragment_silence(actual, clock, sample, 8)
+    sample = await _fragment_frame(actual, clock, sample, speech=True)
+    timer = previous.raw._first_text_timer
+    assert scheduled == [12]
+    assert timer is not None and previous.raw._first_text_deadline == 12
+    sample = await _settled_fragment_silence(actual, clock, sample, 125)
+    assert len(client.requests) == 1
+    assert previous.raw._empty_posts_since_anchor == 1
+    assert previous.raw._speech_bytes_locked(0, previous.raw._received_bytes) == int(0.28 * 16000) * 2
+    assert previous.raw._stranded_fragment_answered
+    assert not previous.raw.has_untranscribed_speech()
+    clock[0] = previous.raw._first_speech_at + 12
+    _fire_first_text_deadline_at_budget(previous.raw, clock)
+    assert not previous.is_connection_dead
+    assert previous.raw._first_text_timer is None and timer.cancelled()
+    assert previous.raw._deadline_speech_bytes == 0
+    assert previous.raw._empty_streak == 0
+    assert previous.raw._answered_empty_stranded_flushes == 1
+    assert previous.raw._admitted_speech_bytes == int(0.28 * 16000) * 2
+    assert previous.raw._answered_empty_speech_bytes == int(0.28 * 16000) * 2
+    sample = await _fragment_frame(actual, clock, sample, wall_seconds=0)
+    assert actual.stt_socket is previous
+    assert base.emitted == [] and replayed == [] and callbacks == []
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('speech_frames', [25, 50, 150])  # exactly 1, 2 and 6 admitted seconds
+async def test_real_empty_speech_keeps_original_twelve_second_rescue(monkeypatch, speech_frames, caplog):
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    scheduled = _observe_first_text_deadline_schedule(monkeypatch, previous.raw)
+    for _ in range(speech_frames):
+        sample = await _fragment_frame(actual, clock, sample, speech=True, yield_pump=False)
+    timer = previous.raw._first_text_timer
+    started_at = previous.raw._deadline_speech_at
+    assert scheduled == [12]
+    assert timer is not None and started_at == previous.raw._first_speech_at
+    # Queue the long pause before pump selection so each case has exactly
+    # one stranded answer, independent of host scheduling at the 6s pace.
+    for _ in range(125):
+        sample = await _fragment_frame(actual, clock, sample, yield_pump=False)
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+    expected_posts = 1
+    assert len(client.requests) == expected_posts
+    assert previous.raw._deadline_speech_bytes == speech_frames * 640 * 2
+    assert previous.raw._first_text_timer is timer and not timer.cancelled()
+    assert previous.raw._empty_streak == expected_posts
+    assert previous.raw._answered_empty_stranded_flushes == 1
+    clock[0] = started_at + 11.999
+    assert not previous.is_connection_dead
+    snapshot = actual._window_ring().snapshot()
+    _fire_first_text_deadline_at_budget(previous.raw, clock)
+    assert clock[0] == started_at + 12
+    assert previous.raw.death_reason == 'first_text_deadline'
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == b''.join(data for _, data in snapshot)
+    diagnostic = previous.raw.first_text_diagnostics
+    assert diagnostic.admitted_seconds == speech_frames * 0.04
+    assert diagnostic.episode_admitted_seconds == speech_frames * 0.04
+    assert diagnostic.answered_empty_admitted_seconds == speech_frames * 0.04
+    assert diagnostic.posts == expected_posts and diagnostic.empty_posts == expected_posts
+    assert diagnostic.answered_empty_stranded_flushes == 1
+    assert diagnostic.seconds_since_first_speech == 12
+    assert diagnostic.seconds_since_deadline_speech == 12
+    assert actual._pending_live_failover.first_text_diagnostics is diagnostic
+    callbacks[0]([{'text': 'Recovered.', 'start': 0, 'end': 0.5}])
+    line = next(
+        record.message for record in caplog.records if 'reason=first_text_deadline outcome=recovered' in record.message
+    )
+    assert f'vad_admitted_seconds={speech_frames * 0.04:.3f}' in line
+    assert (
+        f'posts={expected_posts} empty_posts={expected_posts} answered_empty_stranded_flushes=1 seconds_since_first_speech=12.000'
+        in line
+    )
+    assert 'seconds_since_deadline_speech=12.000' in line
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('speech_frames, episodes', [(1, 11), (13, 4), (9, 5)])
+async def test_repeated_short_empty_episodes_exhaust_cumulative_rescue_budget(monkeypatch, speech_frames, episodes):
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    scheduled = _observe_first_text_deadline_schedule(monkeypatch, previous.raw)
+    admitted_bytes = (speech_frames + 6) * 640 * 2  # exact 240ms pre-roll, included once per episode
+    for cycle in range(episodes):
+        sample = await _settled_fragment_silence(actual, clock, sample, 8)
+        for _ in range(speech_frames):
+            sample = await _fragment_frame(actual, clock, sample, speech=True)
+        timer = previous.raw._first_text_timer
+        started_at = previous.raw._deadline_speech_at
+        assert timer is not None
+        sample = await _settled_fragment_silence(actual, clock, sample, 125)
+        assert len(client.requests) == cycle + 1
+        # Each POST includes old context; overlapping answers must not recount it.
+        assert previous.raw._answered_empty_speech_bytes == (cycle + 1) * admitted_bytes
+        assert not previous.is_connection_dead
+        if cycle < episodes - 1:
+            assert (cycle + 1) * admitted_bytes < 3 * 16000 * 2
+            assert previous.raw._first_text_timer is None and timer.cancelled()
+            assert previous.raw._deadline_speech_bytes == 0
+            assert previous.raw._empty_streak == 0
+            if speech_frames == 1:
+                # Sparse blips survive PCM/replay aging; their cumulative
+                # allowance must survive too. This is not a per-ring budget.
+                sample = await _settled_fragment_silence(actual, clock, sample, 2500, settled=True)
+                assert previous.raw._answered_empty_speech_bytes == (cycle + 1) * admitted_bytes
+        else:
+            assert (cycle + 1) * admitted_bytes >= 3 * 16000 * 2
+            assert previous.raw._first_text_timer is timer and not timer.cancelled()
+            assert previous.raw._deadline_speech_bytes == admitted_bytes
+            assert previous.raw._empty_streak == 1
+    assert scheduled == [12] * episodes
+    assert previous.raw._answered_empty_stranded_flushes == episodes
+    snapshot = actual._window_ring().snapshot()
+    _fire_first_text_deadline_at_budget(previous.raw, clock)
+    assert clock[0] == started_at + 12
+    assert previous.raw.death_reason == 'first_text_deadline'
+    assert previous.raw.first_text_diagnostics.answered_empty_admitted_seconds == episodes * admitted_bytes / 32000
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == b''.join(data for _, data in snapshot)
+    assert base.emitted == []
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_only_emitted_text_resets_answered_empty_speech_budget(monkeypatch):
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    sample = await _settled_fragment_silence(actual, clock, sample, 8)
+    sample = await _fragment_frame(actual, clock, sample, speech=True)
+    sample = await _settled_fragment_silence(actual, clock, sample, 125)
+    admitted_bytes = 7 * 640 * 2
+    assert previous.raw._answered_empty_speech_bytes == admitted_bytes
+    assert len(client.requests) == 1 and base.emitted == []
+    # Six seconds of new speech returns a held, unfinished phrase. Parsing
+    # text alone must not renew the cumulative allowance.
+    client.payloads.append({'segments': [{'text': 'Held words', 'start': 0.3, 'end': 5.0}]})
+    for _ in range(150):
+        sample = await _fragment_frame(actual, clock, sample, speech=True, yield_pump=False)
+    await _wait_requests(client, 2)
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+    assert base.emitted == []
+    assert previous.raw._answered_empty_speech_bytes == admitted_bytes
+    # A long capture pause emits that phrase through the normal force path.
+    sample = await _settled_fragment_silence(actual, clock, sample, 125)
+    await _wait_requests(client, 3)
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+    assert len(client.requests) == 3
+    assert [item['text'] for item in base.emitted] == ['Held words']
+    assert previous.raw._answered_empty_speech_bytes == 0
+    client.payloads.append({'text': ''})
+    sample = await _fragment_frame(actual, clock, sample, speech=True)
+    sample = await _settled_fragment_silence(actual, clock, sample, 125)
+    await _wait_requests(client, 4)
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+    assert len(client.requests) == 4
+    assert previous.raw._answered_empty_speech_bytes == admitted_bytes
+    assert not previous.is_connection_dead
+    assert replayed == [] and callbacks == []
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('returns_text', [False, True])
+async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(monkeypatch, returns_text):
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    scheduled = _observe_first_text_deadline_schedule(monkeypatch, previous.raw)
+    sample = await _settled_fragment_silence(actual, clock, sample, 8)
+    sample = await _fragment_frame(actual, clock, sample, speech=True)
+    original_first = previous.raw._first_speech_at
+    sample = await _settled_fragment_silence(actual, clock, sample, 625)
+    assert len(client.requests) == 1 and previous.raw._first_text_timer is None
+    old_pcm = bytes(previous.raw._buf)
+    assert np.any(np.frombuffer(old_pcm, dtype=np.int16))  # Old context still available.
+    if returns_text:
+        client.payloads.append({'segments': [{'text': 'Real speech.', 'start': 0.6, 'end': 2.2}]})
+    before_latency = WINDOW_FIRST_TEXT._sum.get()
+    for _ in range(150):
+        sample = await _fragment_frame(actual, clock, sample, speech=True, yield_pump=False)
+    new_started = previous.raw._deadline_speech_at
+    assert scheduled == [12, 12]
+    assert new_started > original_first + 12
+    assert previous.raw._first_text_timer is not None
+    assert previous.raw._deadline_speech_bytes == (150 + 6) * 640 * 2  # six pre-roll frames
+    await _wait_requests(client, 2)
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+    assert actual.stt_socket is previous
+    assert not callbacks and not replayed
+    if returns_text:
+        sample = await _settled_fragment_silence(actual, clock, sample, 125)
+        assert [item['text'] for item in base.emitted] == ['Real speech.']
+        assert previous.raw._first_text_timer is None
+        assert WINDOW_FIRST_TEXT._sum.get() - before_latency == pytest.approx(31.0)
+        assert previous.raw._answered_empty_speech_bytes == 0
+        clock[0] = new_started + 12
+        assert not previous.is_connection_dead
+    else:
+        assert base.emitted == []
+        _fire_first_text_deadline_at_budget(previous.raw, clock)
+        assert previous.raw.death_reason == 'first_text_deadline'
+        assert previous.raw.first_text_diagnostics.seconds_since_deadline_speech == 12
+        assert await actual._failover_stt_socket()
+        assert len(callbacks) == 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_speech_resuming_during_empty_stranded_post_keeps_deadline(monkeypatch):
+    actual, base, previous, _client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    client = RacingTextClient(data={'text': ''})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sample = await _settled_fragment_silence(actual, clock, sample, 8)
+    sample = await _fragment_frame(actual, clock, sample, speech=True)
+    sample = await _settled_fragment_silence(actual, clock, sample, 125)
+    assert client.started.is_set() and previous.raw._post_in_flight
+    timer = previous.raw._first_text_timer
+    sample = await _fragment_frame(actual, clock, sample, speech=True)
+    client.release.set()
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+    assert previous.raw._first_text_timer is timer and not timer.cancelled()
+    assert previous.raw._has_unanswered_speech()
+    assert not previous.raw._stranded_fragment_answered
+    assert previous.raw._empty_streak == 1
+    assert len(client.requests) == 1
+    assert previous.raw._answered_empty_speech_bytes == 7 * 640 * 2
+    snapshot = actual._window_ring().snapshot()
+    _fire_first_text_deadline_at_budget(previous.raw, clock)
+    assert previous.raw.death_reason == 'first_text_deadline'
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == b''.join(data for _, data in snapshot)
+    assert base.emitted == []
+    await actual._drain_stt_sockets()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('earlier_text', [False, True])
 @pytest.mark.parametrize('response_text', [False, True])
@@ -1352,7 +1627,7 @@ async def test_late_blip_after_full_silent_ring_flushes_once_without_capacity_fa
     assert actual.stt_socket is previous
     assert actual._window_ring().buffered_bytes <= 90 * 16000 * 2
     assert len(client.requests) == 1 + int(earlier_text), previous.raw.test_job_signals
-    assert previous.raw._empty_streak == int(not response_text)
+    assert previous.raw._empty_streak == int(earlier_text and not response_text)
     assert WINDOW_STRANDED_FLUSHES.labels(outcome='performed')._value.get() == before['performed'] + 1
     assert WINDOW_STRANDED_FLUSHES.labels(outcome='answered_empty')._value.get() == before['answered_empty'] + int(
         not response_text

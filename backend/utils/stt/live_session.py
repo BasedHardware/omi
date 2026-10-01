@@ -6,7 +6,7 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from utils.observability.fallback import ReplayLagDiagnostics, record_fallback
+from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
@@ -382,6 +382,10 @@ class LiveLegSocket(STTSocket):
     @property
     def replay_lag_diagnostics(self) -> ReplayLagDiagnostics | None:
         return getattr(self.raw, 'replay_lag_diagnostics', None)
+
+    @property
+    def first_text_diagnostics(self) -> FirstTextDeadlineDiagnostics | None:
+        return getattr(self.raw, 'first_text_diagnostics', None)
 
     @property
     def capacity_subtype(self) -> str | None:
