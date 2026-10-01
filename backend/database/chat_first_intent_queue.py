@@ -17,12 +17,16 @@ def sort_ready_intents(
     *,
     priority_of: Callable[[Any], int],
 ) -> List[Any]:
+    if not isinstance(intents, (list, tuple)):
+        raise ValueError("intents must be a sequence")
+    if not callable(priority_of):
+        raise ValueError("priority_of must be callable")
     return sorted(
         intents,
         key=lambda intent: ready_sort_key(
             priority=priority_of(intent),
-            created_at=intent.created_at,
-            item_id=intent.intent_id,
+            created_at=getattr(intent, "created_at", None),
+            item_id=getattr(intent, "intent_id", ""),
             enable_priority=True,
         ),
     )
@@ -31,5 +35,17 @@ def sort_ready_intents(
 def drain_intent_batch(
     items: Iterable[T],
     process_one: Callable[[T], ProcessOutcome],
+    *,
+    max_items: int | None = None,
 ) -> None:
-    drain_isolated(items, process_one)
+    if items is None:
+        return
+    if not callable(process_one):
+        raise ValueError("process_one must be callable")
+    if max_items is not None:
+        if isinstance(max_items, bool) or not isinstance(max_items, int) or max_items < 0:
+            raise ValueError("max_items must be a non-negative integer")
+        to_drain: Iterable[T] = list(items)[:max_items]
+    else:
+        to_drain = items
+    drain_isolated(to_drain, process_one)
