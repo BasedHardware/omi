@@ -349,6 +349,32 @@ def test_store_deadline_includes_lazy_client_setup_and_never_retries(monkeypatch
     assert len(transaction.set.call_args_list) == 1
 
 
+def test_store_commit_race_bounds_a_stalled_sdk_commit(monkeypatch):
+    """The SDK's transactional commit uses its own default timeout, not the deadline.
+
+    ``@firestore.transactional`` calls ``transaction._commit()`` with no timeout
+    (google-cloud-firestore 2.20.0), so a stalled commit RPC must be raced by the
+    remaining budget: the caller sees ``TimeoutError`` inside its documented task
+    deadline instead of blocking a shadow worker for the SDK default (~60 s).
+    """
+    started = threading.Event()
+    release = threading.Event()
+
+    class _StalledCommit:
+        def __call__(self, transaction):
+            started.set()
+            release.wait(timeout=30)
+            return True
+
+    client, _ref, _marker, _ = _fenced_store_client(monkeypatch, deleting=False)
+    monkeypatch.setattr(store.time, 'monotonic', lambda: 12.0)
+    monkeypatch.setattr(store.firestore, 'transactional', lambda fn: _StalledCommit())
+    with pytest.raises(TimeoutError):
+        store.write_jev_shadow('user', 'hash-id', {'lane': 'owner'}, deadline=12.4, firestore_client=client)
+    assert started.wait(timeout=5), 'the stalled commit must have started before the deadline race fired'
+    release.set()
+
+
 def test_expired_store_budget_does_not_write(monkeypatch):
     client = MagicMock()
     monkeypatch.setattr(store.time, 'monotonic', lambda: 12.5)

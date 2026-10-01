@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from google.cloud import firestore
 
@@ -15,6 +17,25 @@ RETENTION_DAYS = 60
 # literally to keep this module's import chain stub-friendly, as
 # transcription_shadow does.
 _ACCOUNT_DELETION_COLLECTION = 'account_deletions'
+
+
+# The SDK's @firestore.transactional wrapper calls transaction._commit() with
+# the client default timeout (~60 s), not the caller's deadline. Racing the
+# transactional call on a dedicated pool bounds the worker by the remaining
+# budget; the abandoned attempt keeps its lane slot only for its own commit.
+_T = TypeVar('_T')
+_commit_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='jev-shadow-commit')
+
+
+def _bounded_call(fn: Callable[[], _T], *, timeout: float) -> _T:
+    future = _commit_pool.submit(fn)
+    try:
+        return future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        # Raised as builtin TimeoutError so the worker classifies an overran
+        # commit as 'timeout' rather than 'jev_failed'.
+        future.cancel()
+        raise TimeoutError from None
 
 
 def write_jev_shadow(
@@ -44,6 +65,8 @@ def write_jev_shadow(
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise TimeoutError
-    # max_attempts=1 disables the SDK's transaction-restart loop, so one slow
-    # marker read or commit cannot stretch a write past the task's 2.5s budget.
-    return write_if_not_deleting(client.transaction(max_attempts=1))
+    # max_attempts=1 disables the SDK's transaction-restart loop, and the
+    # pool race bounds the SDK-default commit timeout by the same deadline:
+    # one slow marker read or commit cannot stretch a write past the task's
+    # 2.5s budget.
+    return _bounded_call(lambda: write_if_not_deleting(client.transaction(max_attempts=1)), timeout=remaining)
