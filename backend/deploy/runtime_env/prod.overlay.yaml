@@ -771,10 +771,11 @@ overlay:
             category: rollout
     jobs:
       notifications-job:
-        secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
+        # Keyless (credential hygiene D4): run as the jobs runtime identity and drop the nik-164 key
+        # ref in the same deploy; backend-jobs-runtime@ cannot read SERVICE_ACCOUNT_JSON.
+        flags:
+          --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
+          --remove-secrets: SERVICE_ACCOUNT_JSON,GOOGLE_APPLICATION_CREDENTIALS
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -848,10 +849,11 @@ overlay:
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
             value: ''
       day3-reengagement-email-job:
-        secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
+        # Keyless (credential hygiene D4): run as the jobs runtime identity and drop the nik-164 key
+        # ref in the same deploy; backend-jobs-runtime@ cannot read SERVICE_ACCOUNT_JSON.
+        flags:
+          --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
+          --remove-secrets: SERVICE_ACCOUNT_JSON,GOOGLE_APPLICATION_CREDENTIALS
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
