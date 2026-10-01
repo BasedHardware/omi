@@ -97,7 +97,12 @@ and background processing.
   survivor keeps its id; the donor becomes the sync bridge's redirect tombstone
   (`deleted`/`discarded`/`sync_merged_into`, survivor `sync_merged_from`), so
   existing redirect readers and the deletion purge apply unchanged. The survivor
-  is reprocessed once per merge (`ProcessingTrigger.SMART_MERGE`); an absorb
+  is reprocessed once per merge (`ProcessingTrigger.SMART_MERGE`); a retry of a
+  donor whose cleanup or refresh failed resumes it before the fanout claim, and a
+  failed refresh releases its own invocation lease. Resume first checks the job
+  epoch/generation/binding; terminal or stale deliveries do no work. Active refresh
+  leases exclude even same-job callers, and a processing receipt prevents a vector
+  retry from rerunning the completed bundle. Deferred cleanup remains retryable. An absorb
   requires `refreshed_revision == revision`, so a refresh never persists over a
   newer append. The absorb also advances `sync_content_revision` to fence
   processors that read the old transcript, and refresh persistence checks the

@@ -557,6 +557,10 @@ class TranscriptProcessor:
             status = getattr(speaker, 'voice_identity_status', {}).get(segment.speaker_id)
             if status is None:
                 status = speaker.segment_identity_status.get(cast(str, segment.id))
+            # Pinned-speaker prior (flagged): what an unlabeled voice resembles, for the suggestion card.
+            candidates = getattr(speaker, 'voice_candidates', {}).get(segment.speaker_id)
+            if candidates is not None and not segment.is_user and not segment.person_id:
+                segment.voice_candidates = candidates
             if status is not None:
                 if status == SpeakerIdentityStatus.ambiguous:
                     # Clear an earlier automatic accept on *every* segment of

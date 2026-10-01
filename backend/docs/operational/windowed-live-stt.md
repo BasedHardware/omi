@@ -97,7 +97,10 @@ over sessions with VAD speech, and the `capacity_full` ratio from
 `omi_stt_window_admissions_total{outcome="overflow"}`. Require no sustained
 capacity overflow or no-text increase relative to the control SLI. First-text
 p50 and p95 come from `omi_stt_window_first_text_seconds_bucket`; p95 must
-remain below 30 seconds and p50 must not drift upward through the bake.
+remain below 30 seconds and p50 must not drift upward through the bake. This
+histogram measures from the session's first VAD speech, so sparse quiet gaps
+can push elapsed first-VAD-to-text beyond 12 seconds without indicating a
+stall; the p95 threshold remains the bake gate.
 Compare `omi_stt_window_sessions_active` with the summed process caps, TDT
 POST p50/p95 from `omi_stt_window_post_seconds_bucket`, and
 `DCGM_FI_DEV_GPU_UTIL`/free GPU memory on the Parakeet pool. The same GPUs
@@ -196,14 +199,19 @@ inference plus ingest AGC on 512-sample chunks, or ~5.8–6.2% of one core for e
 continuously active sessions. This excludes HTTP/serialization and other
 listen work and is a local CPU result, not a pod RSS or production p95 measure.
 
-The 60 s cushion absorbs a catch-up burst while one POST is in flight.
-Before its first emitted text, a window leg fails at 12 seconds from the first
-VAD speech mark or after four consecutive speech-containing empty POSTs, whichever
-comes first. The timer also fires during a slow POST. The existing listen death
-monitor selects the next vendor and replays the untranscribed capture from the
-90-second ring; the failed Parakeet leg is excluded for the rest of that session.
-Once text has been emitted, these startup bounds are disarmed. No sentence anchor
-or emitted text is changed. `omi_stt_window_session_outcome_total` retains
+The 60 s cushion absorbs a catch-up burst while one POST is in flight. Before
+its first emitted text, a window leg has a 12-second rescue deadline. The
+deadline is retired after an answered-empty short episode: less than 1 s of
+admitted provider audio followed by at least 5 s of silence. Retirements share
+a cumulative 3.0 s budget of answered-empty admitted audio; only emitted text
+resets it. Once that budget is exhausted, the deadline remains armed. The
+timer also fires during a slow POST or after four consecutive speech-containing
+empty POSTs, whichever comes first. The existing listen death monitor selects
+the next vendor and replays the untranscribed capture from the 90-second ring;
+failover happens at most once per session, and the failed Parakeet leg is
+excluded for the rest of that session. Once text has been emitted, these
+startup bounds are disarmed. No sentence anchor or emitted text is changed.
+`omi_stt_window_session_outcome_total` retains
 `outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
 the matching recovered failover uses the same reason on `omi_fallback_total`.
 The 90-second replay ring follows the window's last emitted sentence anchor.

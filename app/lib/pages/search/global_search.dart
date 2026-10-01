@@ -9,12 +9,10 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/search.dart';
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
-import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -25,9 +23,11 @@ import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/pages/settings/widgets/people_list.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -125,7 +125,6 @@ abstract class GlobalSearchSource {
   Future<ApiResult<List<DailySummary>>> recaps(String query);
   Future<ApiResult<List<ActionItemWithMetadata>>> tasks(String query);
   Future<ApiResult<List<MemorySearchHit>>> memories(String query);
-  Future<List<Person>> people();
 }
 
 class ApiGlobalSearchSource extends GlobalSearchSource {
@@ -150,9 +149,6 @@ class ApiGlobalSearchSource extends GlobalSearchSource {
 
   @override
   Future<ApiResult<List<MemorySearchHit>>> memories(String query) => searchMemories(query);
-
-  @override
-  Future<List<Person>> people() async => await getAllPeople(includeSpeechSamples: false) ?? const [];
 }
 
 class _Results {
@@ -175,15 +171,14 @@ class _Results {
   bool get isEmpty => conversations.isEmpty && recaps.isEmpty && tasks.isEmpty && memories.isEmpty;
 }
 
-/// A browsed list opened from a tile: a folder, Starred, the people, or one person.
+/// A browsed list opened from a tile: a folder, Starred, or the people.
 class _Scope {
-  const _Scope({required this.title, this.folderId, this.starred = false, this.people = false, this.person});
+  const _Scope({required this.title, this.folderId, this.starred = false, this.people = false});
 
   final String title;
   final String? folderId;
   final bool starred;
   final bool people;
-  final Person? person;
 }
 
 const String _recentSearchesKey = 'globalSearchRecentQueries';
@@ -214,7 +209,9 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   _Scope? _scope;
   bool _loadingScope = false;
   List<ServerConversation> _scopeConversations = const [];
-  List<Person> _people = const [];
+
+  /// In the People scope the search field filters the shared people list instead of searching.
+  String _peopleQuery = '';
 
   @override
   void initState() {
@@ -250,6 +247,10 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   }
 
   void _onChanged(String value) {
+    if (_scope?.people == true) {
+      setState(() => _peopleQuery = value);
+      return;
+    }
     _debounce?.cancel();
     final query = value.trim();
     if (query.isEmpty) {
@@ -325,17 +326,16 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     });
     final source = widget.source;
     if (scope.people) {
-      final people = await source.people().catchError((_) => <Person>[]);
-      if (!mounted || generation != _generation) return;
-      setState(() {
-        _people = people;
-        _loadingScope = false;
-      });
+      // The shared PeopleProvider owns the list; tapping a person pushes the same Person page.
+      _query.clear();
+      _peopleQuery = '';
+      final people = context.read<PeopleProvider>();
+      unawaited(people.people.isEmpty ? people.initialize() : people.refresh());
+      setState(() => _loadingScope = false);
       return;
     }
-    final conversations = await (scope.person != null
-            ? source.conversations('', speakerId: scope.person!.id).then((result) => result.items)
-            : source.conversationsIn(folderId: scope.folderId, starred: scope.starred))
+    final conversations = await source
+        .conversationsIn(folderId: scope.folderId, starred: scope.starred)
         .catchError((_) => <ServerConversation>[]);
     if (!mounted || generation != _generation) return;
     setState(() {
@@ -358,8 +358,11 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   void _closeScope() {
     _generation++;
     setState(() {
-      // From one person, step back to the people; otherwise back to the tiles.
-      _scope = _scope?.person != null ? _Scope(title: context.l10n.people, people: true) : null;
+      if (_scope?.people == true) {
+        _query.clear();
+        _peopleQuery = '';
+      }
+      _scope = null;
       _loadingScope = false;
     });
   }
@@ -398,7 +401,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
                       key: const ValueKey('global_search_field'),
                       controller: _query,
                       focusNode: _focus,
-                      placeholder: l10n.search,
+                      placeholder: _scope?.people == true ? l10n.peopleSearchPlaceholder : l10n.search,
                       onChanged: _onChanged,
                       onCleared: () => _onChanged(''),
                       onSubmitted: _remember,
@@ -615,25 +618,13 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     if (_loadingScope) {
       body = const Center(child: OmiSpinner());
     } else if (scope.people) {
-      body = _people.isEmpty
-          ? OmiEmptyState(icon: Icons.people_outline_rounded, title: context.l10n.people)
-          : ListView(
-              children: [
-                for (final person in _people)
-                  _Row(
-                    leading: CircleAvatar(
-                      radius: 14,
-                      backgroundColor: OmiColors.surface2,
-                      child: Text(
-                        person.name.isEmpty ? '?' : person.name.characters.first.toUpperCase(),
-                        style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    title: person.name,
-                    onTap: () => _openScope(_Scope(title: person.name, person: person)),
-                  ),
-              ],
-            );
+      // The shared list without management chrome: no Select, Add or Clean Up. Rows still swipe to
+      // pin or delete and long-press for the row menu.
+      body = PeopleList(
+        key: const ValueKey('search_people_list'),
+        query: _peopleQuery,
+        onClearQuery: () => _useRecent(''),
+      );
     } else {
       body = _scopeConversations.isEmpty
           ? OmiEmptyState(icon: Icons.forum_outlined, title: context.l10n.noConversationsYet)

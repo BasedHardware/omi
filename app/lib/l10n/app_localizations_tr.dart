@@ -11643,4 +11643,484 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Özet oluşturulamadı';
+
+  @override
+  String get reconnectionsRecent => 'Yeniden bağlantılar (son 7 gün)';
+
+  @override
+  String get failedConnections => 'Başarısız bağlantılar';
+
+  @override
+  String get failedConnectionsRecent => 'Başarısız bağlantılar (son 7 gün)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count eşleştirmeden beri';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Düşük güven';
+
+  @override
+  String get peopleFilterPinned => 'Sabitlenenler';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sabitli',
+      one: '1 sabitli',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Onaylandı';
+
+  @override
+  String get confidenceLikely => 'Muhtemel';
+
+  @override
+  String get confidenceUnverified => 'Doğrulanmadı';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Güven: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kez etiketlediniz',
+      one: 'Bir kez etiketlediniz',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count öneride seçildi',
+      one: '1 öneride seçildi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count eşleşmeyi onayladınız',
+      one: '1 eşleşmeyi onayladınız',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Yalnızca otomatik eşleşti, hiç onaylanmadı';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Hiç onaylanmadı';
+
+  @override
+  String get confidenceReasonCorrected => 'Eşleşmesini düzelttiniz';
+
+  @override
+  String get confidenceReasonVoiceReady => 'ses hazır';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'ses gerekli';
+
+  @override
+  String get confidenceReasonNotHeard => 'henüz duyulmadı';
+
+  @override
+  String get confidenceSheetTitle => 'Güven';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi, $name kişisinin sesini tanıyor ve siz bunu onayladınız.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi, $name kişisinin sesini çoğunlukla tanıyor ama bunu yalnızca birkaç kez onayladınız.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Henüz yaptığınız hiçbir şey $name kişisini desteklemiyor.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Kanıtlar';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşmada sizin tarafınızdan etiketlendi',
+      one: '1 konuşmada sizin tarafınızdan etiketlendi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count öneride Evet',
+      one: '1 öneride Evet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count öneride seçildi',
+      one: '1 öneride seçildi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count otomatik eşleşme onaylandı',
+      one: '1 otomatik eşleşme onaylandı',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count eşleşme başkasına taşındı',
+      one: '1 eşleşme başkasına taşındı',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kimsenin onaylamadığı $count otomatik eşleşme',
+      one: 'Kimsenin onaylamadığı 1 otomatik eşleşme',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Ses örneği hazır';
+
+  @override
+  String get evidenceNoVoice => 'Henüz ses örneği yok';
+
+  @override
+  String get evidenceNotHeard => 'Henüz bir konuşmada duyulmadı';
+
+  @override
+  String get evidenceNothing => 'Henüz etiketlemediniz veya onaylamadınız';
+
+  @override
+  String get effectCountsALot => 'Çok etkili';
+
+  @override
+  String get effectCounts => 'Etkili';
+
+  @override
+  String get effectCountsALittle => 'Az etkili';
+
+  @override
+  String get effectBarelyCounts => 'Neredeyse etkisiz';
+
+  @override
+  String get effectCountsAgainst => 'Aleyhine sayılır';
+
+  @override
+  String get effectNeeded => 'Onaylandı seviyesi için gerekli';
+
+  @override
+  String get confidenceToReachConfirmed => 'Onaylandı Seviyesine Ulaşmak İçin';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi için $name kişisinin ses örneği de gerekli. Sesleri hatırla açıkken etiketleyin.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name Onaylandı durumunda. Omi her etiketten öğrenmeye devam eder.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Güveni asıl yalnızca yanıtlarınız değiştirir. Otomatik eşleşmeler tek başına neredeyse hiç sayılmaz.';
+
+  @override
+  String get personWhyConfidence => 'Neden?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return '$name kişisini sabitle';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name kişisini tutun ve konuşmalarınızda görmeyi bekleyin';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi tahmin yürütmek yerine yakın eşleşmeleri onaylamanızı isteyecek.';
+
+  @override
+  String get pinAction => 'Sabitle';
+
+  @override
+  String get unpinAction => 'Sabitlemeyi kaldır';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name sabitlendi';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name sabitlemesi kaldırıldı';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Neden $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return '$name silinsin mi?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name sabitli. Ses örnekleri silinir, Omi onu artık tanımaz ve geçmiş transkriptlerde adsız bir konuşmacı olarak görünür. Bu işlem geri alınamaz.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return '$name kişisini sil';
+  }
+
+  @override
+  String get selectPeople => 'Kişileri seç';
+
+  @override
+  String get cleanUpEllipsis => 'Temizle…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omi için belirsiz $count kişi',
+      one: 'Omi için belirsiz 1 kişi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Çoğu yanlış duyulmuş isimler. Gözden geçirin ve gerçek olmayanları kaldırın.';
+
+  @override
+  String get reviewAction => 'Gözden geçir';
+
+  @override
+  String get cleanUpTitle => 'Temizle';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi bu $count kişiden emin değil. Çoğu transkriptlerden yanlış duyulmuş isimler. Tutmak istediklerinizin işaretini kaldırın.',
+      one: 'Omi bu kişiden emin değil. Tutmak için işaretini kaldırın.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Sabitli kişiler temizlemeye hiçbir zaman dahil edilmez.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Kişiyi Sil',
+      one: '1 Kişiyi Sil',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kişi silindi',
+      one: '1 kişi silindi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Temizlenecek Bir Şey Yok';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi şu anda hiç kimse konusunda kararsız değil.';
+
+  @override
+  String get selectAllSkipsPinned => 'Tümünü Seç, sabitli kişileri atlar. Onları kendi sayfalarından tek tek silin.';
+
+  @override
+  String get pinnedNotSelectable => 'Sabitli, seçilemez';
+
+  @override
+  String get ignoredVoicesTitle => 'Yok Sayılan Sesler';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcast ve “Kişi Değil” olarak işaretlediğiniz diğer sesler';
+
+  @override
+  String get ignoredVoicesEmpty => 'Yok sayılan ses yok';
+
+  @override
+  String get restoreAction => 'Geri yükle';
+
+  @override
+  String get voiceRestoredToast => 'Omi bu ses hakkında tekrar sorabilir';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Başka Biri…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Kişi Değil';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Emin Değilim';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Bu Benim';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'En yakın sesler';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Yakın zamanda konuştuğunuz kişiler';
+
+  @override
+  String get voiceMatchClose => 'Yakın eşleşme';
+
+  @override
+  String get voiceMatchPossible => 'Olası eşleşme';
+
+  @override
+  String get voiceMatchWeak => 'Zayıf eşleşme';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Ses eşleşmesi: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Her yanıt Omi\'ye bir ses öğretir ve o kişiye duyulan güveni artırır.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Evet, $name kişisine duyulan güveni artırır.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Kendi ses profilinizi keskin tutar; böylece Omi sizi asla başkası olarak adlandırmaz.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return '$name olarak kaydedildi';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Siz olarak kaydedildi';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi bu ses hakkında bir daha sormayacak';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return '$name olarak etiketlendi';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Siz olarak etiketlendi';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Kişi değil olarak işaretlendi';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Etiket kaldırıldı';
+
+  @override
+  String get whoIsItTitle => 'Bu Kim?';
+
+  @override
+  String get newPersonEllipsis => 'Yeni Kişi…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return '“$name” ekle';
+  }
+
+  @override
+  String get everyoneHeader => 'Herkes';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Bu konuşmacının tüm satırlarına uygulanır';
+
+  @override
+  String get collapseAction => 'Daralt';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Ben değilim';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Onları $count konuşmada daha etiketleyin.',
+      one: 'Onları 1 konuşmada daha etiketleyin.',
+    );
+    return '$_temp0';
+  }
 }

@@ -77,6 +77,7 @@ There are exactly two ways out, and they mean different things.
 | Settings list | `OmiSettingsGroup` of `OmiSettingsRow`s under an `OmiSectionHeader` | a hand-built row per page |
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
 | Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
+| A level (how sure Omi is, how close a voice is) | `OmiLevelMeter(level: 0–3, semanticsLabel:)` — three neutral steps; a newly filled step animates in (`OmiMotion.standard`) | a percentage, a coloured or traffic-light bar |
 | Loading indicator | `OmiSpinner` (small / regular / large) | `CircularProgressIndicator(` with a local colour and stroke (`raw-spinner`) |
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label
@@ -141,7 +142,7 @@ One policy, and never neither:
 | confirm | `OmiFeedback.confirm(context, msg)` | 1.5 s | the reader just did it ("Saved", "Copied") |
 | info | `OmiFeedback.info(context, msg)` | 4 s | something the reader did not directly cause |
 | error | `OmiFeedback.error(context, msg, actionLabel: l10n.tryAgain, onAction:)` | 8 s, with close | a failure; offer Try Again when retrying can help |
-| undo | `final undone = await OmiFeedback.undo(context, msg, onUndo:)` | 5 s, no close | deferred deletes (§4); commit when it resolves `false` |
+| undo | `final undone = await OmiFeedback.undo(context, msg, onUndo:, icon:)` | 5 s, no close | deferred deletes (§4) and other deferred commits (a voice-card answer, with its own `icon`); commit when it resolves `false` |
 | progress | `OmiFeedback.progress(context, msg)` | until replaced (≤ 1 min) | ongoing work, replaced by its result |
 
 - Neutral surface with a small coloured status icon; never a red or green slab (white on red fails

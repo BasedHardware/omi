@@ -24,6 +24,8 @@ from utils.conversations.transcript_hash import (
     transcript_sha256_for_binding,
 )
 from utils.observability.speaker_identification import record_speaker_review
+from models.person_confidence import SOURCE_MANUAL
+from utils.person_evidence import person_updates_for_assignment
 from utils.manual_speaker_assignments import (
     LiveTranscriptMerge,
     apply_manual_assignments,
@@ -2563,9 +2565,10 @@ def assign_conversation_speaker(
     speaker_id=None,
     segment_index=None,
     use_for_speech_training=True,
+    evidence_source=SOURCE_MANUAL,
     firestore_client=None,
 ):
-    """Commit the manual edit, provenance and invalidation in one transaction."""
+    """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
     collection = user_ref.collection(conversations_collection)
@@ -2638,27 +2641,21 @@ def assign_conversation_speaker(
             segment_index=selected_segment_index,
             use_for_speech_training=use_for_speech_training,
         )
-        # Read every person before any write; corrections fence in-flight profiles
-        # in the same transaction as the label, not in a later background task.
+        # Read every person before any write; corrections fence in-flight profiles and
+        # record label evidence in the same transaction as the label, not in a later task.
+        relabeled = [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
         people = {}
         for pid in previous | ({person_id} if person_id else set()):
             person_ref = user_ref.collection('people').document(pid)
             people[pid] = (person_ref, person_ref.get(transaction=transaction).to_dict())
         if person_id and not people[person_id][1]:
             raise LookupError('Person not found')
-        removed = []
-        for pid in previous:
-            person_ref, person = people[pid]
-            if not person:
-                continue
-            update = {'updated_at': datetime.now(timezone.utc)}
-            source = person.get('speech_sample_source') or {}
-            if source.get('conversation_id') == current_id and set(source.get('segment_ids', [])) & set(resolved):
-                removed.extend(person.get('speech_samples', []))
-                update.update(
-                    speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
-                )
-            transaction.update(person_ref, update)
+        docs, now = {pid: doc for pid, (_, doc) in people.items()}, datetime.now(timezone.utc)
+        updates, removed = person_updates_for_assignment(
+            docs, previous, person_id, relabeled, evidence_source, current_id, resolved, now, receipt, segments
+        )
+        for pid, update in updates.items():
+            transaction.update(people[pid][0], update)
         payload = _prepare_conversation_for_write(
             {'transcript_segments': segments, 'manual_speaker_assignments': receipt},
             uid,
@@ -2669,7 +2666,7 @@ def assign_conversation_speaker(
         current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
         for field in PROJECTION_FAMILY_FIELDS:
             current.pop(field, None)
-        return current, resolved, removed, [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
+        return current, resolved, removed, relabeled
 
     result = run_transactional(client, assign)
     current, _, _, before = result

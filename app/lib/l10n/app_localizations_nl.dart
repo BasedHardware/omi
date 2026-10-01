@@ -11667,4 +11667,487 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Samenvatting mislukt';
+
+  @override
+  String get reconnectionsRecent => 'Herverbindingen (laatste 7 dagen)';
+
+  @override
+  String get failedConnections => 'Mislukte verbindingen';
+
+  @override
+  String get failedConnectionsRecent => 'Mislukte verbindingen (laatste 7 dagen)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count sinds koppeling';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Lage zekerheid';
+
+  @override
+  String get peopleFilterPinned => 'Vastgezet';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vastgezet',
+      one: '1 vastgezet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Bevestigd';
+
+  @override
+  String get confidenceLikely => 'Waarschijnlijk';
+
+  @override
+  String get confidenceUnverified => 'Niet geverifieerd';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Zekerheid: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Je hebt $count keer gelabeld',
+      one: 'Je hebt één keer gelabeld',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Gekozen in $count suggesties',
+      one: 'Gekozen in 1 suggestie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Je hebt $count matches bevestigd',
+      one: 'Je hebt 1 match bevestigd',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Alleen automatisch gematcht, nooit bevestigd';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Nooit bevestigd';
+
+  @override
+  String get confidenceReasonCorrected => 'Je hebt de match gecorrigeerd';
+
+  @override
+  String get confidenceReasonVoiceReady => 'stem klaar';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'stem nodig';
+
+  @override
+  String get confidenceReasonNotHeard => 'nog niet gehoord';
+
+  @override
+  String get confidenceSheetTitle => 'Zekerheid';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi herkent de stem van $name, en je hebt dat bevestigd.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi herkent de stem van $name meestal, maar je hebt het maar een paar keer bevestigd.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Niets wat je hebt gedaan ondersteunt $name tot nu toe.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Bewijs';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Door jou gelabeld in $count gesprekken',
+      one: 'Door jou gelabeld in 1 gesprek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ja op $count suggesties',
+      one: 'Ja op 1 suggestie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Gekozen in $count suggesties',
+      one: 'Gekozen in 1 suggestie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automatische matches bevestigd',
+      one: '1 automatische match bevestigd',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count matches naar iemand anders verplaatst',
+      one: '1 match naar iemand anders verplaatst',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automatische matches die niemand heeft bevestigd',
+      one: '1 automatische match die niemand heeft bevestigd',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Stemvoorbeeld klaar';
+
+  @override
+  String get evidenceNoVoice => 'Nog geen stemvoorbeeld';
+
+  @override
+  String get evidenceNotHeard => 'Nog niet gehoord in een gesprek';
+
+  @override
+  String get evidenceNothing => 'Je hebt deze persoon nog niet gelabeld of bevestigd';
+
+  @override
+  String get effectCountsALot => 'Telt zwaar mee';
+
+  @override
+  String get effectCounts => 'Telt mee';
+
+  @override
+  String get effectCountsALittle => 'Telt een beetje mee';
+
+  @override
+  String get effectBarelyCounts => 'Telt nauwelijks mee';
+
+  @override
+  String get effectCountsAgainst => 'Telt tegen';
+
+  @override
+  String get effectNeeded => 'Nodig voor Bevestigd';
+
+  @override
+  String get confidenceToReachConfirmed => 'Om Bevestigd te bereiken';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi heeft ook een stemvoorbeeld van $name nodig. Label deze persoon met “Stemmen onthouden” aan.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name is bevestigd. Omi blijft leren van elk label.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Alleen je antwoorden veranderen de zekerheid veel. Automatische matches alleen tellen nauwelijks mee.';
+
+  @override
+  String get personWhyConfidence => 'Waarom?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return '$name vastzetten';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Bewaar $name en verwacht deze persoon in je gesprekken';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi vraagt je om bijna-matches te bevestigen in plaats van te gokken.';
+
+  @override
+  String get pinAction => 'Vastzetten';
+
+  @override
+  String get unpinAction => 'Losmaken';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name vastgezet';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name losgemaakt';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Waarom $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return '$name verwijderen?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name is vastgezet. De stemvoorbeelden worden verwijderd, Omi herkent deze persoon niet meer en in eerdere transcripties verschijnt die als een naamloze spreker. Dit kan niet ongedaan worden gemaakt.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return '$name verwijderen';
+  }
+
+  @override
+  String get selectPeople => 'Mensen selecteren';
+
+  @override
+  String get cleanUpEllipsis => 'Opruimen…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mensen waarvan Omi het niet zeker weet',
+      one: '1 persoon waarvan Omi het niet zeker weet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'Meestal verkeerd verstane namen. Bekijk ze en verwijder de namen die niet echt zijn.';
+
+  @override
+  String get reviewAction => 'Bekijken';
+
+  @override
+  String get cleanUpTitle => 'Opruimen';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi weet het niet zeker bij deze $count mensen. De meeste zijn namen die verkeerd zijn verstaan in transcripties. Vink uit wie je wilt behouden.',
+      one: 'Omi weet het niet zeker bij deze persoon. Vink uit om te behouden.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Vastgezette mensen worden nooit meegenomen bij Opruimen.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mensen verwijderen',
+      one: '1 persoon verwijderen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mensen verwijderd',
+      one: '1 persoon verwijderd',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Niets om op te ruimen';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi is op dit moment over niemand onzeker.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Alles selecteren slaat vastgezette mensen over. Verwijder ze één voor één vanaf hun pagina.';
+
+  @override
+  String get pinnedNotSelectable => 'Vastgezet, niet te selecteren';
+
+  @override
+  String get ignoredVoicesTitle => 'Genegeerde stemmen';
+
+  @override
+  String get ignoredVoicesSubtitle => 'Tv, podcasts en andere stemmen die je hebt gemarkeerd als “Geen persoon”';
+
+  @override
+  String get ignoredVoicesEmpty => 'Geen genegeerde stemmen';
+
+  @override
+  String get restoreAction => 'Herstellen';
+
+  @override
+  String get voiceRestoredToast => 'Omi kan opnieuw naar deze stem vragen';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Iemand anders…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Geen persoon';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Weet ik niet';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Dat ben ik';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Dichtstbijzijnde stemmen';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Mensen met wie je recent hebt gepraat';
+
+  @override
+  String get voiceMatchClose => 'Sterke match';
+
+  @override
+  String get voiceMatchPossible => 'Mogelijke match';
+
+  @override
+  String get voiceMatchWeak => 'Zwakke match';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Stemmatch: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify =>
+      'Elk antwoord leert Omi een stem en verhoogt de zekerheid over die persoon.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ja verhoogt de zekerheid over $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Houdt je eigen stemprofiel scherp, zodat Omi je nooit als iemand anders benoemt.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Opgeslagen als $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Opgeslagen als jij';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi vraagt niet meer naar deze stem';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Gelabeld als $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Gelabeld als jij';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Gemarkeerd als geen persoon';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Label verwijderd';
+
+  @override
+  String get whoIsItTitle => 'Wie is het?';
+
+  @override
+  String get newPersonEllipsis => 'Nieuwe persoon…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Voeg “$name” toe';
+  }
+
+  @override
+  String get everyoneHeader => 'Iedereen';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Geldt voor elke regel van deze spreker';
+
+  @override
+  String get collapseAction => 'Samenvouwen';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Niet ik';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Label ze in nog $count gesprekken.',
+      one: 'Label ze in nog 1 gesprek.',
+    );
+    return '$_temp0';
+  }
 }

@@ -720,11 +720,122 @@
     {
       "id": "deviceDisconnected",
       "wire_name": "Device Disconnected",
+      "status": "deprecated",
+      "replaced_by": "deviceDisconnectedDetailed",
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "deviceDisconnectedDetailed",
+      "wire_name": "Device Disconnected Detailed",
       "status": "active",
       "replaced_by": null,
       "phase": "point",
       "intent": null,
-      "properties": {},
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "clean_disconnect",
+            "connection_timeout",
+            "remote_device_terminated",
+            "connection_failed_instant_passed",
+            "paired_to_another_phone",
+            "link_key_mismatch",
+            "pairing_lost",
+            "app_closed",
+            "manual",
+            "gatt_error",
+            "unknown"
+          ]
+        },
+        "reasonCode": {
+          "type": "int",
+          "wire_name": "reason_code"
+        },
+        "appState": {
+          "type": "enum",
+          "wire_name": "app_state",
+          "values": [
+            "foreground",
+            "background",
+            "inactive",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "diagnosticsSent",
+      "wire_name": "Diagnostics Sent",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "bundleBytes": {
+          "type": "int",
+          "wire_name": "bundle_bytes"
+        },
+        "disconnectCount": {
+          "type": "int",
+          "wire_name": "disconnect_count"
+        },
+        "schemaVersion": {
+          "type": "int",
+          "wire_name": "schema_version"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "diagnosticsSendFailed",
+      "wire_name": "Diagnostics Send Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "bundleBytes": {
+          "type": "int",
+          "wire_name": "bundle_bytes"
+        },
+        "disconnectCount": {
+          "type": "int",
+          "wire_name": "disconnect_count"
+        },
+        "schemaVersion": {
+          "type": "int",
+          "wire_name": "schema_version"
+        },
+        "failureStage": {
+          "type": "enum",
+          "wire_name": "failure_stage",
+          "values": [
+            "build_bundle",
+            "dialog_cancelled",
+            "upload",
+            "ticket_parse"
+          ]
+        },
+        "statusCode": {
+          "type": "int",
+          "wire_name": "status_code"
+        }
+      },
       "consumers": [
         "mobile-instrumentation-presence"
       ],
@@ -2295,7 +2406,8 @@
             "new_person",
             "someone_else",
             "skip",
-            "unknown"
+            "unknown",
+            "not_a_person"
           ]
         },
         "clipPlayed": {

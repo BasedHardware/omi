@@ -397,6 +397,20 @@ Future<bool> updatePersonName(String personId, String newName) async {
   return response.statusCode == 200;
 }
 
+@visibleForTesting
+String personPinnedPath(String personId, bool pinned) => 'v1/users/people/$personId/pinned?value=$pinned';
+
+/// Pins or unpins a person. True when the server stored it.
+Future<bool> setPersonPinned(String personId, bool pinned) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}${personPinnedPath(personId, pinned)}',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  return response != null && response.statusCode == 200;
+}
+
 Future<bool> deletePerson(String personId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/people/$personId',

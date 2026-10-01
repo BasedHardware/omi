@@ -90,6 +90,9 @@ class TranscriptSegment(BaseModel):
     # V2 accepted-send run start in capture samples. Stops live text merging
     # from turning two valid windows across a VAD skip into one false window.
     audio_capture_run: SkipJsonSchema[Optional[int]] = Field(default=None, exclude=True)
+    # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
+    # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
+    voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
@@ -106,6 +109,8 @@ class TranscriptSegment(BaseModel):
             data['audio_alignment'] = self.audio_alignment
         if self.audio_capture_run is not None:
             data['audio_capture_run'] = self.audio_capture_run
+        if self.voice_candidates is not None:
+            data['voice_candidates'] = self.voice_candidates
         return data
 
     def __init__(self, **data: Any):
@@ -246,11 +251,15 @@ class TranscriptSegment(BaseModel):
             return (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
                 and a.speech_profile_processed == b.speech_profile_processed
-                and (b.start - a.end < 3)
+                and _is_chronological_continuation(a, b)
                 and (len(a.text) < 125 or a.text[-1] not in SENTENCE_ENDERS)
             )
 
         def _should_merge_lowercase_continuation(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
+            # No gap bound here by design: an incomplete lowercase sentence still belongs
+            # to its speaker's next word no matter how long the pause was. But it must
+            # still be b's predecessor, not a late arrival from an earlier batch -- that
+            # ordering check is the part shared with _is_chronological_continuation.
             return (
                 bool(a.text)
                 and bool(b.text)
@@ -258,6 +267,8 @@ class TranscriptSegment(BaseModel):
                 and a.text[-1] not in SENTENCE_ENDERS
                 and _starts_with_lowercase_cased(b.text)
                 and a.speech_profile_processed == b.speech_profile_processed
+                and b.start >= a.start
+                and b.end >= a.end
             )
 
         def _join_translations(a: 'TranscriptSegment', b: 'TranscriptSegment') -> List[Translation]:

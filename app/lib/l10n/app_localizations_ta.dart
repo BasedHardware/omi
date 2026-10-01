@@ -11709,4 +11709,488 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'சுருக்கம் தோல்வியடைந்தது';
+
+  @override
+  String get reconnectionsRecent => 'மீண்டும் இணைப்புகள் (கடந்த 7 நாட்கள்)';
+
+  @override
+  String get failedConnections => 'தோல்வியுற்ற இணைப்புகள்';
+
+  @override
+  String get failedConnectionsRecent => 'தோல்வியுற்ற இணைப்புகள் (கடந்த 7 நாட்கள்)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return 'இணைத்ததிலிருந்து $count';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'குறைந்த நம்பகத்தன்மை';
+
+  @override
+  String get peopleFilterPinned => 'பின் செய்தவை';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'பின் செய்தவை $count',
+      one: 'பின் செய்தது 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'உறுதிசெய்யப்பட்டது';
+
+  @override
+  String get confidenceLikely => 'வாய்ப்புள்ளது';
+
+  @override
+  String get confidenceUnverified => 'சரிபார்க்கப்படவில்லை';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'நம்பகத்தன்மை: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'நீங்கள் $count முறை லேபிள் செய்தீர்கள்',
+      one: 'நீங்கள் ஒருமுறை லேபிள் செய்தீர்கள்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பரிந்துரைகளில் தேர்ந்தெடுக்கப்பட்டது',
+      one: '1 பரிந்துரையில் தேர்ந்தெடுக்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பொருத்தங்களை உறுதிசெய்தீர்கள்',
+      one: '1 பொருத்தத்தை உறுதிசெய்தீர்கள்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'தானாகப் பொருத்தப்பட்டது மட்டும், உறுதிசெய்யப்படவில்லை';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'ஒருபோதும் உறுதிசெய்யப்படவில்லை';
+
+  @override
+  String get confidenceReasonCorrected => 'அதன் பொருத்தத்தை நீங்கள் திருத்தினீர்கள்';
+
+  @override
+  String get confidenceReasonVoiceReady => 'குரல் தயார்';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'குரல் தேவை';
+
+  @override
+  String get confidenceReasonNotHeard => 'இன்னும் கேட்கப்படவில்லை';
+
+  @override
+  String get confidenceSheetTitle => 'நம்பகத்தன்மை';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return '$name அவர்களின் குரலை Omi அடையாளம் காண்கிறது, நீங்களும் அதை உறுதிசெய்துள்ளீர்கள்.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return '$name அவர்களின் குரலை Omi பொதுவாக அடையாளம் காண்கிறது, ஆனால் நீங்கள் சில முறை மட்டுமே உறுதிசெய்துள்ளீர்கள்.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return '$name தொடர்பாக நீங்கள் செய்த எதுவும் இன்னும் ஆதரவாக இல்லை.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'ஆதாரம்';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உரையாடல்களில் நீங்கள் லேபிள் செய்தீர்கள்',
+      one: '1 உரையாடலில் நீங்கள் லேபிள் செய்தீர்கள்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பரிந்துரைகளில் ஆம்',
+      one: '1 பரிந்துரையில் ஆம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பரிந்துரைகளில் தேர்ந்தெடுக்கப்பட்டது',
+      one: '1 பரிந்துரையில் தேர்ந்தெடுக்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count தானியங்கி பொருத்தங்கள் உறுதிசெய்யப்பட்டன',
+      one: '1 தானியங்கி பொருத்தம் உறுதிசெய்யப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பொருத்தங்கள் வேறொருவருக்கு மாற்றப்பட்டன',
+      one: '1 பொருத்தம் வேறொருவருக்கு மாற்றப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'யாரும் உறுதிசெய்யாத $count தானியங்கி பொருத்தங்கள்',
+      one: 'யாரும் உறுதிசெய்யாத 1 தானியங்கி பொருத்தம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'குரல் மாதிரி தயார்';
+
+  @override
+  String get evidenceNoVoice => 'இன்னும் குரல் மாதிரி இல்லை';
+
+  @override
+  String get evidenceNotHeard => 'இன்னும் எந்த உரையாடலிலும் கேட்கப்படவில்லை';
+
+  @override
+  String get evidenceNothing => 'நீங்கள் இன்னும் லேபிள் செய்யவில்லை அல்லது உறுதிசெய்யவில்லை';
+
+  @override
+  String get effectCountsALot => 'மிகவும் முக்கியம்';
+
+  @override
+  String get effectCounts => 'முக்கியம்';
+
+  @override
+  String get effectCountsALittle => 'சிறிது முக்கியம்';
+
+  @override
+  String get effectBarelyCounts => 'கிட்டத்தட்ட முக்கியமில்லை';
+
+  @override
+  String get effectCountsAgainst => 'எதிராகக் கணக்கிடப்படும்';
+
+  @override
+  String get effectNeeded => 'உறுதிசெய்யப்பட்டது நிலைக்குத் தேவை';
+
+  @override
+  String get confidenceToReachConfirmed => 'உறுதிசெய்யப்பட்டது நிலையை அடைய';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return '$name அவர்களின் குரல் மாதிரியும் Omi-க்குத் தேவை. “குரல்களை நினைவில் வை” இயக்கத்தில் இருக்கும்போது அவரை லேபிள் செய்யுங்கள்.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name: உறுதிசெய்யப்பட்டது. ஒவ்வொரு லேபிளிலிருந்தும் Omi தொடர்ந்து கற்றுக்கொள்கிறது.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'உங்கள் பதில்கள் மட்டுமே நம்பகத்தன்மையை அதிகம் மாற்றும். தானியங்கி பொருத்தங்கள் தனியாக கிட்டத்தட்ட கணக்கில் வராது.';
+
+  @override
+  String get personWhyConfidence => 'ஏன்?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return '$name-ஐ பின் செய்';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name-ஐ வைத்திருங்கள், உங்கள் உரையாடல்களில் அவர்களை எதிர்பாருங்கள்';
+  }
+
+  @override
+  String get pinPersonHonestLine =>
+      'ஊகிப்பதற்குப் பதிலாக, நெருக்கமான பொருத்தங்களை உறுதிசெய்யுமாறு Omi உங்களிடம் கேட்கும்.';
+
+  @override
+  String get pinAction => 'பின் செய்';
+
+  @override
+  String get unpinAction => 'பின்னை நீக்கு';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name பின் செய்யப்பட்டார்';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name பின்னிலிருந்து நீக்கப்பட்டார்';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'ஏன் $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return '$name-ஐ நீக்கவா?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name பின் செய்யப்பட்டுள்ளார். அவர்களின் குரல் மாதிரிகள் அகற்றப்படும், Omi அவர்களை இனி அடையாளம் காணாது, பழைய டிரான்ஸ்கிரிப்ட்களில் பெயரில்லாத பேச்சாளராகக் காட்டப்படுவார்கள். இதை மீட்டெடுக்க முடியாது.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return '$name-ஐ நீக்கு';
+  }
+
+  @override
+  String get selectPeople => 'நபர்களைத் தேர்ந்தெடு';
+
+  @override
+  String get cleanUpEllipsis => 'சுத்தம் செய்…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omi-க்கு உறுதியில்லாத $count நபர்கள்',
+      one: 'Omi-க்கு உறுதியில்லாத 1 நபர்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'பெரும்பாலும் தவறாகக் கேட்ட பெயர்கள். அவற்றைப் பார்த்து, உண்மையில்லாதவற்றை நீக்குங்கள்.';
+
+  @override
+  String get reviewAction => 'பார்க்க';
+
+  @override
+  String get cleanUpTitle => 'சுத்தம் செய்';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'இந்த $count நபர்களைப் பற்றி Omi-க்கு உறுதியில்லை. பெரும்பாலானவை டிரான்ஸ்கிரிப்ட்களில் தவறாகக் கேட்ட பெயர்கள். வைத்திருக்க விரும்புபவர்களின் தேர்வை நீக்குங்கள்.',
+      one: 'இந்த நபரைப் பற்றி Omi-க்கு உறுதியில்லை. வைத்திருக்க விரும்பினால் தேர்வை நீக்குங்கள்.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'பின் செய்யப்பட்டவர்கள் சுத்தம் செய்தலில் சேர்க்கப்படமாட்டார்கள்.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்களை நீக்கு',
+      one: '1 நபரை நீக்கு',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்கள் நீக்கப்பட்டனர்',
+      one: '1 நபர் நீக்கப்பட்டார்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'சுத்தம் செய்ய எதுவுமில்லை';
+
+  @override
+  String get cleanUpNothingMessage => 'இப்போது யாரைப் பற்றியும் Omi-க்கு உறுதியின்மை இல்லை.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'அனைத்தையும் தேர்ந்தெடு பின் செய்யப்பட்டவர்களைத் தவிர்க்கும். அவர்களை அவர்களின் பக்கத்திலிருந்து ஒவ்வொருவராக நீக்குங்கள்.';
+
+  @override
+  String get pinnedNotSelectable => 'பின் செய்யப்பட்டது, தேர்ந்தெடுக்க முடியாது';
+
+  @override
+  String get ignoredVoicesTitle => 'புறக்கணித்த குரல்கள்';
+
+  @override
+  String get ignoredVoicesSubtitle => 'டிவி, பாட்காஸ்ட்கள் மற்றும் நீங்கள் நபர் இல்லை எனக் குறித்த பிற குரல்கள்';
+
+  @override
+  String get ignoredVoicesEmpty => 'புறக்கணித்த குரல்கள் இல்லை';
+
+  @override
+  String get restoreAction => 'மீட்டமை';
+
+  @override
+  String get voiceRestoredToast => 'இந்தக் குரலைப் பற்றி Omi மீண்டும் கேட்கலாம்';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'வேறொருவர்…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'நபர் இல்லை';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'தெரியவில்லை';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'நான்தான்';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'நெருக்கமான குரல்கள்';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'சமீபத்தில் நீங்கள் பேசியவர்கள்';
+
+  @override
+  String get voiceMatchClose => 'நெருங்கிய பொருத்தம்';
+
+  @override
+  String get voiceMatchPossible => 'சாத்தியமான பொருத்தம்';
+
+  @override
+  String get voiceMatchWeak => 'பலவீனமான பொருத்தம்';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'குரல் பொருத்தம்: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify =>
+      'ஒவ்வொரு பதிலும் Omi-க்கு ஒரு குரலைக் கற்றுத்தந்து, அந்த நபரின் நம்பகத்தன்மையை உயர்த்துகிறது.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'ஆம் என்றால் $name நம்பகத்தன்மை உயரும்.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'உங்கள் சொந்தக் குரல் சுயவிவரத்தைத் துல்லியமாக வைத்திருக்கும், அதனால் Omi உங்களை வேறொருவராகப் பெயரிடாது.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return '$name ஆகச் சேமிக்கப்பட்டது';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'நீங்களாகச் சேமிக்கப்பட்டது';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'இந்தக் குரலைப் பற்றி Omi மீண்டும் கேட்காது';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return '$name என லேபிள் செய்யப்பட்டது';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'நீங்கள் என லேபிள் செய்யப்பட்டது';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'நபர் இல்லை எனக் குறிக்கப்பட்டது';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'லேபிள் நீக்கப்பட்டது';
+
+  @override
+  String get whoIsItTitle => 'இது யார்?';
+
+  @override
+  String get newPersonEllipsis => 'புதிய நபர்…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return '“$name” ஐச் சேர்';
+  }
+
+  @override
+  String get everyoneHeader => 'அனைவரும்';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'இந்தப் பேச்சாளரின் எல்லா வரிகளுக்கும் பொருந்தும்';
+
+  @override
+  String get collapseAction => 'சுருக்கு';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'நான் இல்லை';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'இன்னும் $count உரையாடல்களில் அவர்களுக்கு லேபிள் இடுங்கள்.',
+      one: 'இன்னும் 1 உரையாடலில் அவர்களுக்கு லேபிள் இடுங்கள்.',
+    );
+    return '$_temp0';
+  }
 }

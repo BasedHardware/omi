@@ -8,7 +8,9 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/settings/person_name_dialog.dart';
+import 'package:omi/pages/settings/widgets/people_list.dart';
 import 'package:omi/pages/settings/widgets/person_avatar.dart';
+import 'package:omi/pages/settings/widgets/person_confidence.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -101,17 +103,9 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
     if (confirmed) await provider.deletePersonSample(personIdx, sampleIdx);
   }
 
+  /// A pinned person gets the name-bearing confirm; this is the only way to delete one.
   Future<void> _confirmDeletePerson(PeopleProvider provider, Person person) async {
-    final confirmed = await showOmiConfirm(
-      context,
-      title: context.l10n.deletePersonTitle,
-      message: context.l10n.deletePersonConfirmation(person.name),
-      confirmLabel: context.l10n.delete,
-      destructive: true,
-    );
-    if (!confirmed) return;
-    await provider.deletePeople([person.id]);
-    if (mounted) Navigator.of(context).pop();
+    if (await confirmAndDeletePeople(context, provider, [person]) && mounted) Navigator.of(context).pop();
   }
 
   /// Pull-to-refresh: the person's stats and the first page of conversations.
@@ -183,6 +177,19 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
               ],
             ),
             const SizedBox(height: OmiSpacing.xl),
+            OmiSettingsGroup(
+              footer: l10n.pinPersonHonestLine,
+              children: [
+                OmiSettingsRow.toggle(
+                  key: const Key('person_pin_switch'),
+                  title: l10n.pinPersonTitle(person.name),
+                  subtitle: l10n.pinPersonSubtitle(person.name),
+                  value: person.pinned,
+                  onChanged: (_) => togglePersonPinned(context, provider, person),
+                ),
+              ],
+            ),
+            const SizedBox(height: OmiSpacing.xl),
             OmiSectionHeader(l10n.speechProfile),
             _Card(children: [
               if (samples.isEmpty)
@@ -244,13 +251,54 @@ class _Header extends StatelessWidget {
           header: true,
           child: Text(person.name, style: OmiType.title2, textAlign: TextAlign.center),
         ),
-        const SizedBox(height: OmiSpacing.xxs),
-        Text(
-          context.l10n.voiceRecognitionStatus(person.voiceReadiness),
-          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-          textAlign: TextAlign.center,
-        ),
+        const SizedBox(height: OmiSpacing.xs),
+        _ConfidencePill(person: person),
       ],
+    );
+  }
+}
+
+/// The meter, its level and "Why?", as one button that opens the evidence sheet.
+class _ConfidencePill extends StatelessWidget {
+  const _ConfidencePill({required this.person});
+
+  final Person person;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = confidenceLabel(context, person.confidence);
+    final why = context.l10n.personWhyConfidence;
+    return Semantics(
+      button: true,
+      label: '${context.l10n.confidenceMeterLabel(label)}, $why',
+      excludeSemantics: true,
+      child: InkWell(
+        key: const Key('person_confidence_pill'),
+        borderRadius: OmiRadius.pillAll,
+        onTap: () => showPersonConfidenceSheet(context, person),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PersonConfidenceMeter(person: person, size: OmiLevelMeterSize.medium),
+                const SizedBox(width: OmiSpacing.xs),
+                Text(label, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
+                Container(
+                  width: 1,
+                  height: 16,
+                  margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+                  color: OmiColors.border,
+                ),
+                Text(why, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -11732,4 +11732,487 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Nabigo ang buod';
+
+  @override
+  String get reconnectionsRecent => 'Muling pagkonekta (nakaraang 7 araw)';
+
+  @override
+  String get failedConnections => 'Mga bigong koneksyon';
+
+  @override
+  String get failedConnectionsRecent => 'Mga bigong koneksyon (nakaraang 7 araw)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count mula nang ipares';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'Mababang kumpiyansa';
+
+  @override
+  String get peopleFilterPinned => 'Naka-pin';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count naka-pin',
+      one: '1 naka-pin',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Kumpirmado';
+
+  @override
+  String get confidenceLikely => 'Malamang';
+
+  @override
+  String get confidenceUnverified => 'Hindi pa kumpirmado';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Kumpiyansa: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nilagyan mo ng label nang $count beses',
+      one: 'Nilagyan mo ng label nang isang beses',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pinili sa $count mungkahi',
+      one: 'Pinili sa 1 mungkahi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kinumpirma mo ang $count tugma',
+      one: 'Kinumpirma mo ang 1 tugma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Awtomatikong itinugma lang, hindi pa nakumpirma';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Hindi pa nakumpirma';
+
+  @override
+  String get confidenceReasonCorrected => 'Itinama mo ang tugma nito';
+
+  @override
+  String get confidenceReasonVoiceReady => 'handa na ang boses';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'kailangan ng boses';
+
+  @override
+  String get confidenceReasonNotHeard => 'hindi pa naririnig';
+
+  @override
+  String get confidenceSheetTitle => 'Kumpiyansa';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Nakikilala ni Omi ang boses ni $name, at kinumpirma mo ito.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Karaniwang nakikilala ni Omi ang boses ni $name, pero ilang beses mo pa lang itong nakumpirma.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Wala ka pang ginawang nagpapatunay kay $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Ebidensya';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nilagyan mo ng label sa $count usapan',
+      one: 'Nilagyan mo ng label sa 1 usapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Oo sa $count mungkahi',
+      one: 'Oo sa 1 mungkahi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pinili sa $count mungkahi',
+      one: 'Pinili sa 1 mungkahi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nakumpirma ang $count awtomatikong tugma',
+      one: 'Nakumpirma ang 1 awtomatikong tugma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tugma ang inilipat sa iba',
+      one: '1 tugma ang inilipat sa iba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count awtomatikong tugma na walang nagkumpirma',
+      one: '1 awtomatikong tugma na walang nagkumpirma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Handa na ang sample ng boses';
+
+  @override
+  String get evidenceNoVoice => 'Wala pang sample ng boses';
+
+  @override
+  String get evidenceNotHeard => 'Hindi pa naririnig sa usapan';
+
+  @override
+  String get evidenceNothing => 'Hindi mo pa sila nilagyan ng label o kinumpirma';
+
+  @override
+  String get effectCountsALot => 'Malaki ang bigat';
+
+  @override
+  String get effectCounts => 'May bigat';
+
+  @override
+  String get effectCountsALittle => 'Kaunti ang bigat';
+
+  @override
+  String get effectBarelyCounts => 'Halos walang bigat';
+
+  @override
+  String get effectCountsAgainst => 'Nagpapababa';
+
+  @override
+  String get effectNeeded => 'Kailangan para maging Kumpirmado';
+
+  @override
+  String get confidenceToReachConfirmed => 'Para Maging Kumpirmado';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Kailangan din ni Omi ng sample ng boses ni $name. Lagyan sila ng label habang naka-on ang Tandaan ang mga boses.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return 'Kumpirmado na si $name. Patuloy na natututo si Omi sa bawat label.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Ang mga sagot mo lang ang malaki ang epekto sa kumpiyansa. Halos walang bigat ang mga awtomatikong tugma nang mag-isa.';
+
+  @override
+  String get personWhyConfidence => 'Bakit?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'I-pin si $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Panatilihin si $name at asahan sila sa mga usapan mo';
+  }
+
+  @override
+  String get pinPersonHonestLine =>
+      'Tatanungin ka ni Omi para kumpirmahin ang mga malapit na tugma sa halip na manghula.';
+
+  @override
+  String get pinAction => 'I-pin';
+
+  @override
+  String get unpinAction => 'I-unpin';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Na-pin si $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Na-unpin si $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Bakit $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'I-delete si $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Naka-pin si $name. Made-delete ang mga sample ng boses nila, hindi na sila makikilala ni Omi, at lalabas silang hindi pinangalanang speaker sa mga lumang transcript. Hindi na ito maibabalik.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'I-delete si $name';
+  }
+
+  @override
+  String get selectPeople => 'Pumili ng mga tao';
+
+  @override
+  String get cleanUpEllipsis => 'Linisin…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count taong hindi sigurado si Omi',
+      one: '1 taong hindi sigurado si Omi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Karamihan ay maling narinig na pangalan. Suriin at alisin ang mga hindi totoo.';
+
+  @override
+  String get reviewAction => 'Suriin';
+
+  @override
+  String get cleanUpTitle => 'Linisin';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Hindi sigurado si Omi sa $count taong ito. Karamihan ay mga pangalang maling narinig sa mga transcript. Alisin ang check ng sinumang gusto mong panatilihin.',
+      one: 'Hindi sigurado si Omi sa taong ito. Alisin ang check para panatilihin sila.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Hindi kailanman isinasama sa Paglilinis ang mga naka-pin na tao.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'I-delete ang $count tao',
+      one: 'I-delete ang 1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Na-delete ang $count tao',
+      one: 'Na-delete ang 1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Walang Lilinisin';
+
+  @override
+  String get cleanUpNothingMessage => 'Sa ngayon, sigurado si Omi sa lahat.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Nilalaktawan ng Piliin Lahat ang mga naka-pin na tao. I-delete sila nang isa-isa mula sa page nila.';
+
+  @override
+  String get pinnedNotSelectable => 'Naka-pin, hindi mapipili';
+
+  @override
+  String get ignoredVoicesTitle => 'Mga Binalewalang Boses';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcast, at iba pang boses na minarkahan mong Hindi Tao';
+
+  @override
+  String get ignoredVoicesEmpty => 'Walang binalewalang boses';
+
+  @override
+  String get restoreAction => 'Ibalik';
+
+  @override
+  String get voiceRestoredToast => 'Maaaring magtanong ulit si Omi tungkol sa boses na ito';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Iba Pa…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Hindi Tao';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Hindi Sigurado';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Ako Ito';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Pinakamalapit na boses';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Mga taong kausap mo kamakailan';
+
+  @override
+  String get voiceMatchClose => 'Malapit na tugma';
+
+  @override
+  String get voiceMatchPossible => 'Posibleng tugma';
+
+  @override
+  String get voiceMatchWeak => 'Mahinang tugma';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Tugma ng boses: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify =>
+      'Bawat sagot ay nagtuturo kay Omi ng boses at nagpapataas ng kumpiyansa sa taong iyon.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ang Oo ay nagpapataas ng kumpiyansa kay $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Pinapanatiling tumpak ang sarili mong voice profile, para hindi ka kailanman mapangalanan ni Omi bilang ibang tao.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Na-save bilang $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Na-save bilang ikaw';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Hindi na magtatanong si Omi tungkol sa boses na ito';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Nilagyan ng label bilang $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Nilagyan ng label bilang ikaw';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Minarkahang hindi tao';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Inalis ang label';
+
+  @override
+  String get whoIsItTitle => 'Sino Ito?';
+
+  @override
+  String get newPersonEllipsis => 'Bagong Tao…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Idagdag ang “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Lahat';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Nalalapat sa bawat linya mula sa speaker na ito';
+
+  @override
+  String get collapseAction => 'I-collapse';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Hindi ako';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'I-label sila sa $count pang usapan.',
+      one: 'I-label sila sa 1 pang usapan.',
+    );
+    return '$_temp0';
+  }
 }
