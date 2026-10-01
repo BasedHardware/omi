@@ -8,6 +8,9 @@ WINDOW_ADMISSION = Counter('omi_stt_window_admissions_total', 'Window admission 
 WINDOW_PRESSURE_REFRESH = Counter(
     'omi_stt_window_batch_pressure_refresh_total', 'Batch pressure fleet refresh outcomes', ['outcome']
 )
+WINDOW_PRESSURE_REPLICAS = Gauge(
+    'omi_stt_window_batch_pressure_replicas', 'Fresh and DNS-ready GPU replicas for window admission', ['state']
+)
 WINDOW_PRESSURE_REFUSAL = Counter(
     'omi_stt_window_batch_pressure_refusals_total', 'Window batch pressure refusals', ['reason']
 )
@@ -101,3 +104,16 @@ ROUTING_DECISION_LATENCY = Histogram(
     'Time spent choosing the eligible live STT order without network operations',
     buckets=(0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.05),
 )
+
+COST_DECISION = Counter(
+    'omi_stt_cost_routing_decisions_total', 'Cost routing selections and skips', ['target', 'reason']
+)
+COST_BENCH = Gauge('omi_stt_cost_routing_benched', 'Fleet target health bench', ['target'])
+COST_STAGE = Gauge('omi_stt_cost_routing_stage', 'Global fleet target recovery stage: 0, 5, 25, 100', ['target'])
+COST_EVENTS = Counter('omi_stt_cost_routing_events_total', 'Fleet health transitions', ['target', 'event'])
+COST_SHADOW = Counter(
+    'omi_stt_cost_routing_shadow_total',
+    'Proposed vs static primary',
+    ['agreement', 'static_primary', 'proposed_primary'],
+)
+COST_FAIL_OPEN = Counter('omi_stt_cost_routing_fail_open_total', 'Configured-order router recovery', ['reason'])

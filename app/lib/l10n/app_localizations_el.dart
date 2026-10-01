@@ -3998,9 +3998,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Νέα έκδοση διαθέσιμη';
-
-  @override
   String get no => 'Όχι';
 
   @override
@@ -5094,8 +5091,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Συνεχίζοντας, οι συνομιλίες, οι εγγραφές και τα προσωπικά σας στοιχεία θα αποθηκευτούν με ασφάλεια στους διακομιστές μας. Οι ηχογραφήσεις και τα μεταγραφές σας επεξεργάζονται από υπηρεσίες τεχνητής νοημοσύνης τρίτων (συμπεριλαμβανομένων των Deepgram για μεταγραφή και OpenAI για ανάλυση) για να σας παρέχουν γνώσεις βασισμένες σε AI και να ενεργοποιήσουν όλες τις λειτουργίες της εφαρμογής.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Οι εργασίες από τις συνομιλίες σας θα εμφανιστούν εδώ.\nΠατήστε + για χειροκίνητη δημιουργία.';
+  String get tasksEmptyStateMessage => 'Ξεκινήστε μια συνομιλία για να δημιουργήσετε μια εργασία.';
 
   @override
   String get clearChatAction => 'Διαγραφή συνομιλίας';
@@ -12192,6 +12188,56 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ομιλητές',
+      one: '1 ομιλητής',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Ενεργοποιήστε το Omi στις Συντομεύσεις → Siri. Πείτε «$askPhrase» ή «$questionPhrase» και μετά κάντε την ερώτησή σας.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Μπορείτε επίσης να πείτε «$searchPhrase for what I did today».';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Διαθέσιμη ενημέρωση';
+
+  @override
+  String get updateAvailableMessage => 'Μια νέα έκδοση του Omi είναι έτοιμη, με διορθώσεις και βελτιώσεις.';
+
+  @override
+  String get updateRequiredTitle => 'Απαιτείται ενημέρωση';
+
+  @override
+  String get updateRequiredMessage =>
+      'Αυτή η έκδοση του Omi δεν υποστηρίζεται πλέον. Κάντε ενημέρωση για να συνεχίσετε την εγγραφή και τον συγχρονισμό.';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Αυτόματη διαγραφή συγχρονισμένων αντιγράφων';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Τα συγχρονισμένα αντίγραφα διαγράφονται μετά από $days ημέρες';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Διαγράφει τα τοπικά αντίγραφα $days ημέρες μετά τον συγχρονισμό. Τα αντίγραφα στο cloud διατηρούνται.';
+  }
+
+  @override
+  String get localCopiesSection => 'Τοπικά αντίγραφα';
 
   @override
   String get showOnLockScreen => 'Εμφάνιση στην οθόνη κλειδώματος';

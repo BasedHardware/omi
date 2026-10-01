@@ -220,7 +220,7 @@ async def test_window_ring_limit_with_pending_speech_replays_before_current_chun
     assert listener._pending_live_failover.reason == 'capacity_full'
     assert replayed == [(0, b'A\x00' * 6)]
     assert new.sent == [(0, b'A\x00' * 6), (6, b'B\x00' * 2)]
-    assert ring.snapshot() == ()
+    assert ring.snapshot() == ((0, b'A\x00' * 6), (6, b'B\x00' * 2))
 
 
 @pytest.mark.parametrize('reason', ['timeout', 'provider_5xx', 'capacity_full'])
@@ -270,6 +270,8 @@ async def test_failed_window_replays_only_untranscribed_audio_once(monkeypatch, 
     epoch.stitch_replayed_timestamps(translated)
     assert [(s['_capture_start_sample'], s['_capture_end_sample']) for s in translated] == [(2, 4)]
     assert [(s['start'], s['end']) for s in translated] == [(1.0, 2.0)]
+    assert ring.snapshot() == ((2, b'B\x00' * 2),)
+    assert listener._filter_replayed_segments(translated, 'soniox') == translated
     assert ring.snapshot() == ()
     assert old.finished
     assert listener.host.stt_service == st.STTService.soniox
@@ -339,15 +341,15 @@ async def test_two_partial_replay_failures_preserve_tail_and_new_audio(monkeypat
         assert await listener._failover_stt_socket()
     assert [socket.sent for socket in sockets] == [
         [(2, b'B\x00' * 2)],
-        [(4, b'C\x00' * 2)],
-        [(6, b'D\x00' * 2), (8, b'E\x00' * 2)],
+        [(2, b'B\x00' * 2), (4, b'C\x00' * 2)],
+        [(2, b'B\x00' * 2), (4, b'C\x00' * 2), (6, b'D\x00' * 2), (8, b'E\x00' * 2)],
     ]
     assert sockets[0].finished and sockets[1].finished and old.finished
-    translated = epochs[-1].translate([{'text': 'D', 'start': 0.0, 'end': 1.0}])
+    translated = epochs[-1].translate([{'text': 'D', 'start': 2.0, 'end': 3.0}])
     epochs[-1].stitch_replayed_timestamps(translated)
     assert [(s['_capture_start_sample'], s['_capture_end_sample']) for s in translated] == [(6, 8)]
     assert [(s['start'], s['end']) for s in translated] == [(3.0, 4.0)]
-    assert ring.snapshot() == ()
+    assert ring.snapshot() == ((2, b'B\x00' * 2), (4, b'C\x00' * 2), (6, b'D\x00' * 2), (8, b'E\x00' * 2))
 
 
 def test_replay_epoch_maps_new_socket_time_to_original_capture_position():
@@ -476,3 +478,21 @@ def test_5xx_is_reconnectable_only_with_flag(monkeypatch):
     assert soniox_death_reason(503, 'server_error') == 'provider_5xx'
     monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'false')
     assert soniox_death_reason(503, 'server_error') == 'connection_lost'
+
+
+@pytest.mark.parametrize('sample_rate', [8000, 16000, 48000])
+def test_replacement_headroom_shrinks_only_after_progress_frees_base_horizon(sample_rate):
+    ring = ResilientAudio(sample_rate, ring_seconds=90, strict_replay=True)
+    ring.reserve_replacement_headroom()
+    capture = b'\x01\x00' * (105 * sample_rate)
+    ring.append(capture, 0)
+    assert ring.ring_seconds == 105
+    assert ring.finalize_through(29 * sample_rate) == 29 * sample_rate * 2
+    assert ring.ring_seconds == 105
+    assert ring.capture_bounds == (29 * sample_rate, 105 * sample_rate)
+    assert ring.finalize_through(30 * sample_rate) == sample_rate * 2
+    assert ring.ring_seconds == 90
+    assert ring.snapshot() == ((30 * sample_rate, capture[30 * sample_rate * 2 :]),)
+    # All fifteen seconds of headroom still fit after reclaiming the cap.
+    assert not ring.would_overflow(b'\x02\x00' * (15 * sample_rate), 105 * sample_rate)
+    assert ring.would_overflow(b'\x02\x00' * (15 * sample_rate + 1), 105 * sample_rate)

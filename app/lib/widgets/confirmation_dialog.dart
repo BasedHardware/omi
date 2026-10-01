@@ -66,25 +66,28 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
   @override
   Widget build(BuildContext context) {
     final checkboxText = widget.checkboxText;
-    return OmiAlertDialog(
+    final actions = [
+      OmiDialogAction(
+        label: widget.cancelText ?? context.l10n.cancel,
+        isDefault: widget.destructive,
+        onPressed: _cancel,
+      ),
+      OmiDialogAction(
+        label: widget.confirmText ?? context.l10n.confirm,
+        isDestructive: widget.destructive,
+        isDefault: !widget.destructive,
+        onPressed: widget.onConfirm,
+      ),
+    ];
+    if (checkboxText == null || checkboxText.isEmpty) {
+      return OmiAlertDialog(title: widget.title, message: widget.description, actions: actions);
+    }
+    // A "Don't ask again" row makes it a dialog with a control: Omi's card.
+    return OmiDialogCard(
       title: widget.title,
       message: widget.description,
-      content: checkboxText != null && checkboxText.isNotEmpty
-          ? OmiCheckboxRow(label: checkboxText, value: _checkboxValue, onChanged: _updateCheckboxValue)
-          : null,
-      actions: [
-        OmiDialogAction(
-          label: widget.cancelText ?? context.l10n.cancel,
-          isDefault: widget.destructive,
-          onPressed: _cancel,
-        ),
-        OmiDialogAction(
-          label: widget.confirmText ?? context.l10n.confirm,
-          isDestructive: widget.destructive,
-          isDefault: !widget.destructive,
-          onPressed: widget.onConfirm,
-        ),
-      ],
+      content: OmiCheckboxRow(label: checkboxText, value: _checkboxValue, onChanged: _updateCheckboxValue),
+      actions: actions,
     );
   }
 }

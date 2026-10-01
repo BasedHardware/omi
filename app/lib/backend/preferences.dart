@@ -871,6 +871,52 @@ class SharedPreferencesUtil {
 
   bool get unlimitedLocalStorageEnabled => getBool('unlimitedLocalStorageEnabled');
 
+  /// Auto-remove synced phone-local recording copies after [autoRemoveSyncedCopiesDays].
+  /// Default ON for new users (no stored value): cloud storage keeps the data, the
+  /// local file is only a safety copy. Existing installs are pinned OFF once by
+  /// [migrateAutoRemoveSyncedCopiesDefault] so upgrading users keep today's
+  /// keep-everything behaviour until they opt in.
+  bool get autoRemoveSyncedCopies => getBool('autoRemoveSyncedCopies', defaultValue: true);
+
+  set autoRemoveSyncedCopies(bool value) => saveBool('autoRemoveSyncedCopies', value);
+
+  /// One-time split of the auto-remove default, decided on the FIRST launch
+  /// that runs this build. `onboardingCompleted == true` can only mean "an
+  /// existing install upgraded" on that first launch — on any later launch it
+  /// equally describes a fresh install that onboarded since, which must keep
+  /// the getter's ON default. So:
+  /// - already onboarded → existing user: pin OFF once (key first, marker
+  ///   second, so a crash mid-migration re-runs instead of half-applying);
+  /// - not yet onboarded → mark the install immediately so later launches
+  ///   never mistake it for an upgrade; the ON default governs it until the
+  ///   user toggles.
+  Future<void> migrateAutoRemoveSyncedCopiesDefault() async {
+    const markerKey = 'autoRemoveSyncedCopiesDefaultMigrated';
+    final prefs = _preferences;
+    if (prefs == null) return;
+    if (prefs.getBool(markerKey) ?? false) return;
+    if (!(prefs.getBool('onboardingCompleted') ?? false)) {
+      await prefs.setBool(markerKey, true);
+      return;
+    }
+    final alreadySet = prefs.containsKey('autoRemoveSyncedCopies');
+    final pinned = await prefs.setBool(
+      'autoRemoveSyncedCopies',
+      alreadySet ? prefs.getBool('autoRemoveSyncedCopies') ?? true : false,
+    );
+    // Only commit the marker after the pin write succeeded, so a failed write
+    // retries on the next launch instead of leaving an existing install on the
+    // ON default with the migration reported complete.
+    if (pinned) {
+      await prefs.setBool(markerKey, true);
+    }
+  }
+
+  /// Retention window, in days, for synced phone-local copies.
+  int get autoRemoveSyncedCopiesDays => getInt('autoRemoveSyncedCopiesDays', defaultValue: 30);
+
+  set autoRemoveSyncedCopiesDays(int value) => saveInt('autoRemoveSyncedCopiesDays', value);
+
   set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
 
   // Whether connected device supports new multi-file storage sync (persisted so it works when disconnected)

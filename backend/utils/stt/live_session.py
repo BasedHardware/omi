@@ -6,13 +6,17 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from utils.observability.fallback import ReplayLagDiagnostics, record_fallback
+from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
-from utils.stt.live_health import health, mode as routing_mode
+from utils.stt.live_health import health, bounded_language
+from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
+from utils.stt.live_target_connect import connect_modulate
+from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
+from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
@@ -38,12 +42,15 @@ WINDOW_VAD_CONTINUE_THRESHOLD = 0.65
 class LiveChainSession:
     def __init__(self, receiver: Any) -> None:
         self.receiver = receiver
+        if not hasattr(receiver, '_stt_failed_targets'):
+            receiver._stt_failed_targets = set()
         self.audio_seconds = 0.0
         self.last_end = 0.0
         self.generation = 0
         self.speech_ms = 0
         self.total_speech_ms = 0
         self.vad_mode = 'off'
+        self._routing_target_entry: Target | None = None
 
     def consume_speech_ms_delta(self) -> int:
         delta, self.speech_ms = self.speech_ms, 0
@@ -81,6 +88,12 @@ class LiveChainSession:
         )
         window = parakeet_token == 'parakeet-window'
         parakeet_allowed = parakeet_token is not None
+        engine_models = {
+            'parakeet': parakeet_token,
+            'modulate': 'velma-2',
+            'soniox': 'soniox',
+            'deepgram': dg_model,
+        }
         if any(token in models for token in ('parakeet', 'parakeet-window')) and not parakeet_allowed:
             record_fallback(
                 component='stt_selection',
@@ -116,6 +129,20 @@ class LiveChainSession:
                 return gate
             override = getattr(getattr(host, 'request', None), 'vad_gate_override', None)
             if not should_initialize_vad_gate(override=override, global_gate_enabled=is_gate_enabled()):
+                replay_ring = getattr(self.receiver, '_window_ring', None)
+                if callable(replay_ring) and replay_ring() is not None:
+                    # Accounting only: downstream providers still receive
+                    # every byte and no new finalize signals. Otherwise an
+                    # idle replacement with VAD disabled treats all silence
+                    # as pending speech and fills the retained window ring.
+                    self.vad_mode = 'shadow'
+                    return VADStreamingGate(
+                        sample_rate=sample_rate,
+                        channels=1,
+                        mode='shadow',
+                        speech_threshold=WINDOW_VAD_SPEECH_THRESHOLD,
+                        continue_threshold=WINDOW_VAD_CONTINUE_THRESHOLD,
+                    )
                 self.vad_mode = 'off'
                 return None
             try:
@@ -135,6 +162,13 @@ class LiveChainSession:
 
         async def build(service: st.STTService) -> STTSocket:
             is_window = service == st.STTService.parakeet and window
+            target = connecting_target.get()
+            if target is not None and (
+                target.family != service.value
+                or not engine_matches(target, engine_models)
+                or (target.id == 'parakeet-window' and not os.getenv('HOSTED_PARAKEET_API_URL'))
+            ):
+                raise TargetEngineMismatch('Selected target differs from the session engine')
             try:
                 gate = build_gate(is_window)
             except Exception:
@@ -152,6 +186,8 @@ class LiveChainSession:
                 )
 
             def callback(segments: list[dict[str, Any]]) -> None:
+                if leg.retired_for_replay:
+                    return
                 if generation != self.generation and not (epoch is not None and epoch.project_times):
                     return
                 if epoch is not None:
@@ -166,6 +202,8 @@ class LiveChainSession:
                     # its SDK thread); the enqueue then follows the receiver's
                     # pinned persistence mode (v2 owner fencing vs clock-only).
                     def translate_on_loop(seg_list: list[dict[str, Any]]) -> None:
+                        if leg.retired_for_replay:
+                            return
                         translated = epoch.translate(seg_list)
                         if translated:
                             leg.note_selection_transcript(translated)
@@ -180,6 +218,8 @@ class LiveChainSession:
                     # pre-timeline managed chain did — flag-off emitted times
                     # stay monotonic across legs and byte-identical to main.
                     def attach_then_rebase(seg_list: list[dict[str, Any]]) -> None:
+                        if leg.retired_for_replay:
+                            return
                         translated = epoch.translate(seg_list)
                         if not translated:
                             return
@@ -223,7 +263,7 @@ class LiveChainSession:
                         callback, sample_rate, language, profile=host.language_profile, keywords=keywords
                     )
                 elif service == st.STTService.modulate:
-                    raw = await st.process_audio_modulate(callback, sample_rate, language)
+                    raw = await connect_modulate(callback, sample_rate, language)
                 else:
                     raw = await st.process_audio_dg(
                         callback,
@@ -241,6 +281,11 @@ class LiveChainSession:
                     # initial service. Set its clock policy before first send.
                     epoch.provider_label = service.value
                 leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
+                replay_ring = getattr(self.receiver, '_window_ring', None)
+                if not is_window and callable(replay_ring) and replay_ring() is not None:
+                    # An empty snapshot still carries the obligation to retain
+                    # future speech until this replacement emits text.
+                    leg.enable_window_replay_tracking()
                 return leg
             except BaseException:
                 if raw is not None:
@@ -270,7 +315,15 @@ class LiveChainSession:
         if same_provider:
             if primary_missing:
                 raise st.ParakeetConnectionError('config_incomplete')
-            socket, actual = await primary(), host.stt_service
+            try:
+                target = self._routing_target_entry if routing_on(uid) else None
+            except ValueError:
+                target = None
+            token = connecting_target.set(target)
+            try:
+                socket, actual = await primary(), host.stt_service
+            finally:
+                connecting_target.reset(token)
         else:
             socket, actual = await st.connect_stt_socket_with_fallback(
                 primary_service=host.stt_service,
@@ -283,10 +336,12 @@ class LiveChainSession:
                 use_config=True,
                 routing_uid=uid,
                 routing_language=host.language,
-                routing_pin_primary=host.stt_model == 'parakeet-window'
-                or getattr(host.language_profile, 'arm', None) == 'hintable',
+                routing_languages=tuple(getattr(host.language_profile, 'expected', ())),
+                routing_models=engine_models,
+                failed_targets=self.receiver._stt_failed_targets,
             )
         host.stt_service = actual
+        self._routing_target_entry = getattr(socket, '_routing_target_entry', None)
         host.stt_model = {
             st.STTService.parakeet: 'parakeet-window' if window else 'parakeet',
             st.STTService.soniox: 'soniox',
@@ -326,8 +381,43 @@ class LiveLegSocket(STTSocket):
         self._first_speech_at: float | None = None
         self._speech_ms_for_health = 0
         self._transcript_outcome: str | None = None
+        target = connecting_target.get()
+        self._routing_target_entry = target
+        self.routing_target = (
+            target.id
+            if target
+            else (
+                'parakeet'
+                if service.value == 'parakeet' and not window
+                else DEFAULT_IDS.get(service.value, service.value)
+            )
+        )
+        self.routing_model = (
+            'parakeet-window' if window else 'parakeet' if service.value == 'parakeet' else service.value
+        )
+        self.routing_endpoint = getattr(raw, 'routing_endpoint', None)
+        self._health_language = bounded_language(session.receiver.host.language)
+        self._cost_generations = health.cost_generations(self.routing_target, self._health_language)
+        self._cost_recorded = False
+        self._cost_censored_no_text = False
+        self._target_death_recorded = False
+        self._closing_for_health = False
+        try:
+            self._routing_active = target is not None and routing_on(
+                getattr(getattr(session.receiver.host, 'request', None), 'uid', None)
+            )
+        except ValueError:
+            self._routing_active = False
         self._health_success: Callable[[], None] = lambda: None
         self._health_close: Callable[[], None] = lambda: None
+        self.retired_for_replay = False
+        self._replay_failure_reason: str | None = None
+        self._replay_capacity_subtype: str | None = None
+        self._emitted_capture_sample = 0
+        self._pending_capture_sample: int | None = None
+        self._speech_capture_end = 0
+        self._tracks_window_replay = False
+        self._replay_passthrough = False
         record_live_stt_socket_open(service.value)
         if window:
             from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC, WindowedParakeetSocket
@@ -341,13 +431,15 @@ class LiveLegSocket(STTSocket):
         from utils.stt.parakeet_window import WindowedParakeetSocket
 
         if not isinstance(self.raw, WindowedParakeetSocket) or self._send_tracker is None:
-            return None
+            return self._emitted_capture_sample if not self.window else None
         provider_sample = self.raw.replay_anchor_sample()
         if provider_sample is None:
             return None
         return self._send_tracker.send_map.map_sample(provider_sample)
 
     def window_replay_pending_sample(self) -> int | None:
+        if not self.window:
+            return self._pending_capture_sample
         boundary = getattr(self.raw, 'replay_pending_sample', None)
         if not self.window or self._send_tracker is None or not callable(boundary):
             return None
@@ -384,8 +476,32 @@ class LiveLegSocket(STTSocket):
         return getattr(self.raw, 'replay_lag_diagnostics', None)
 
     @property
+    def first_text_diagnostics(self) -> FirstTextDeadlineDiagnostics | None:
+        return getattr(self.raw, 'first_text_diagnostics', None)
+
+    @property
     def capacity_subtype(self) -> str | None:
-        return getattr(self.raw, 'capacity_subtype', None)
+        return self._replay_capacity_subtype or getattr(self.raw, 'capacity_subtype', None)
+
+    def has_untranscribed_speech(self) -> bool:
+        if self.window:
+            return bool(getattr(self.raw, 'has_untranscribed_speech')())
+        return self._speech_capture_end > self._emitted_capture_sample
+
+    def fail(self, reason: str, *, capacity_subtype: str | None = None) -> None:
+        if self.window:
+            getattr(self.raw, 'fail')(reason, capacity_subtype=capacity_subtype)
+            return
+        if self._replay_failure_reason is None:
+            self._replay_failure_reason = reason
+            self._replay_capacity_subtype = capacity_subtype
+        self._dead = True
+        self.finish()
+
+    def retire_for_replay(self) -> None:
+        # A failed epoch's accepted audio is being replayed elsewhere. Fence
+        # callbacks already queued on the listen loop as well as future ones.
+        self.retired_for_replay = True
 
     def _trim_window_replay_to_anchor(self) -> None:
         trim_window_replay_to_anchor(self.session.receiver._window_ring(), self)
@@ -393,9 +509,31 @@ class LiveLegSocket(STTSocket):
     @property
     def is_connection_dead(self) -> bool:
         dead = self._dead or self.raw.is_connection_dead
+        if dead and not self._closing_for_health:
+            self._record_cost_outcome(True)
         if dead and self._pending_selection is not None:
             self._pending_selection.note_failure(self.typed_death_reason)
         return dead
+
+    def record_target_death(self, reason: str) -> bool:
+        target = self._routing_target_entry
+        if (
+            not self._routing_active
+            or target is None
+            or (target.id == DEFAULT_IDS.get(target.family) and target.endpoint is None)
+        ):
+            return False
+        if self._target_death_recorded:
+            return True
+        self._target_death_recorded = True
+        circuit = target_circuit(target)
+        if reason in ACCOUNT_REJECTION_REASONS:
+            circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+            health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
+            health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
+        else:
+            circuit.record_serve_failure()
+        return True
 
     def _release_open_gauge(self) -> None:
         if not self._open_gauge_released:
@@ -404,16 +542,25 @@ class LiveLegSocket(STTSocket):
 
     @property
     def death_reason(self) -> str | None:
-        return 'vad_failed' if self._dead else self.raw.death_reason
+        return self._replay_failure_reason or ('vad_failed' if self._dead else self.raw.death_reason)
 
     @property
     def typed_death_reason(self) -> str | None:
-        return getattr(self.raw, 'typed_death_reason', None)
+        return self._replay_failure_reason or getattr(self.raw, 'typed_death_reason', None)
 
     def set_selection_outcome(self, pending: PendingLiveFailover) -> None:
         self._pending_selection = pending
 
     def note_selection_transcript(self, segments: list[dict[str, Any]]) -> None:
+        if self._tracks_window_replay:
+            for segment in segments:
+                end = segment.get('_capture_end_sample')
+                if isinstance(end, int) and str(segment.get('text') or '').strip():
+                    self._emitted_capture_sample = max(self._emitted_capture_sample, end)
+            if not self.has_untranscribed_speech():
+                self._pending_capture_sample = None
+            elif self._pending_capture_sample is not None:
+                self._pending_capture_sample = max(self._pending_capture_sample, self._emitted_capture_sample)
         if any(str(segment.get('text') or '').strip() for segment in segments) and self._transcript_outcome is None:
             deadline = max(1.0, float(os.getenv('STT_NO_TEXT_SECONDS', '30')))
             if self._first_speech_at is not None and time.monotonic() - self._first_speech_at <= deadline:
@@ -427,15 +574,19 @@ class LiveLegSocket(STTSocket):
         if self._transcript_outcome is not None:
             return
         self._transcript_outcome = outcome
+        if outcome == 'no_text':
+            self._record_cost_outcome(False)
         health.record(self.service.value, self.session.receiver.host.language, outcome)
-        if routing_mode() == 'on':
+        if self._routing_active:
             if outcome == 'text':
                 self._health_success()
-            else:
+            elif not self._cost_censored_no_text:
                 self._health_close()
-                circuit = st._circuit_for_primary(self.service)  # type: ignore[reportPrivateUsage]
+                circuit = target_circuit(self._routing_target_entry, st._circuit_for_primary(self.service))  # type: ignore[reportPrivateUsage]
                 circuit.record_serve_failure()
                 health.quarantine(self.service.value, 'selection', circuit.serve_error_bench_seconds)
+            else:
+                self._health_close()
 
     def _check_no_text_deadline(self) -> None:
         if self._first_speech_at is None or self._transcript_outcome is not None:
@@ -445,17 +596,67 @@ class LiveLegSocket(STTSocket):
 
     @property
     def defers_selection_success(self) -> bool:
-        return self.window or routing_mode() == 'on'
+        return self.window or self._routing_active
 
     def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
         from utils.stt.parakeet_window import WindowedParakeetSocket
 
-        if routing_mode() == 'on':
+        if self._routing_active:
             self._health_success, self._health_close = on_success, on_close
         elif isinstance(self.raw, WindowedParakeetSocket):
             self.raw.set_health_callbacks(on_success, on_close)
 
+    def _note_replay_capture(self, data: bytes, start_sample: int | None) -> None:
+        if start_sample is None:
+            return
+        if self._pending_capture_sample is None:
+            self._pending_capture_sample = max(start_sample, self._emitted_capture_sample)
+        self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
+
+    def _send_unscored_replay_capture(self, data: bytes, start_sample: int | None = None) -> bool:
+        self._note_replay_capture(data, start_sample)
+        return LiveLegSocket.send(self, data, start_sample=start_sample)
+
+    def enable_window_replay_tracking(self) -> None:
+        """Retain future speech on a window-origin replacement, even without replay."""
+        if self._tracks_window_replay:
+            return
+        self._tracks_window_replay = True
+        gate = self.gate
+        if gate is None:
+            # Only a window-origin replacement without VAD uses this wrapper.
+            setattr(self, 'send', self._send_unscored_replay_capture)
+            return
+        process = gate.process_audio
+
+        def process_replay_capture(data, wall_time, score_pcm=None, *, start_sample=None):
+            try:
+                if self._replay_passthrough:
+                    mode = gate.mode
+                    gate.mode = 'shadow'
+                    try:
+                        output = process(data, wall_time, score_pcm, start_sample=start_sample)
+                    finally:
+                        gate.mode = mode
+                else:
+                    output = process(data, wall_time, score_pcm, start_sample=start_sample)
+            except Exception:
+                # send() keeps its existing VAD fail-open policy. Account this
+                # unscored packet and future direct packets conservatively.
+                self._note_replay_capture(data, start_sample)
+                setattr(self, 'send', self._send_unscored_replay_capture)
+                raise
+            if output.is_speech:
+                self._note_replay_capture(data, start_sample)
+            return output
+
+        # Install once, after failover. Never-failed sessions retain the original
+        # send path, with no additional per-send branches or progress writes.
+        setattr(gate, 'process_audio', process_replay_capture)
+
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
+        if self._closing_for_health:
+            return False
         if self.is_connection_dead:
             return False
         from utils.stt.parakeet_window import WindowedParakeetSocket
@@ -480,6 +681,7 @@ class LiveLegSocket(STTSocket):
                     try:
                         self.raw.finish()
                     finally:
+                        self._record_cost_outcome(True)
                         self._release_open_gauge()
                     record_fallback(
                         component='vad',
@@ -512,11 +714,15 @@ class LiveLegSocket(STTSocket):
                 sent_spans = tuple(output.send_spans) if output is not None else ()
         try:
             if audio and self.raw.send(audio) is not True:
+                self._record_cost_outcome(True)
                 self.finish()
                 self._dead = True
                 return False
-            if output is not None and output.should_finalize and not self.window:
-                self.raw.finalize()
+            if output is not None and output.should_finalize:
+                if self.window and isinstance(self.raw, WindowedParakeetSocket):
+                    self.raw.finalize(vad_pause=True)
+                else:
+                    self.raw.finalize()
         except Exception:
             self._dead = True
             self.finish()
@@ -542,16 +748,31 @@ class LiveLegSocket(STTSocket):
         return True
 
     def replay_send(self, data: bytes, start_sample: int) -> bool:
+        ring = getattr(self.session.receiver, '_window_ring', None)
+        # Source admission and capture retention already decided this replay
+        # span. A different VAD score must not discard or finalize its middle.
+        self._replay_passthrough = callable(ring) and ring() is not None
+        if self._replay_passthrough and not self.window:
+            self.enable_window_replay_tracking()
+            # The source epoch admitted this span. A different VAD decision
+            # during replay cannot erase its still-unfulfilled obligation.
+            if self._pending_capture_sample is None:
+                self._pending_capture_sample = start_sample
+            self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
         self._replaying = True
         try:
             return self.send(data, start_sample=start_sample)
         finally:
             self._replaying = False
+            self._replay_passthrough = False
 
     def finalize(self) -> None:
         self.raw.finalize()
 
     def finish(self) -> None:
+        dead = self.is_connection_dead
+        self._censor_early_teardown(dead)
+        self._closing_for_health = True
         try:
             if self.is_connection_dead and self._pending_selection is not None:
                 self._pending_selection.note_failure(self.typed_death_reason)
@@ -564,12 +785,50 @@ class LiveLegSocket(STTSocket):
                 and self._speech_ms_for_health >= 1000
             ):
                 self._record_transcript_outcome('no_text')
-            elif self._transcript_outcome is None and routing_mode() == 'on':
+            elif self._transcript_outcome is None and self._routing_active:
                 self._health_close()
+            self._record_cost_outcome(dead)
             self._release_open_gauge()
 
+    def _record_cost_outcome(self, dead: bool) -> None:
+        if not self._cost_recorded and self._first_speech_at is not None and self._speech_ms_for_health >= 1000:
+            self._cost_recorded = True
+            outcome = 'failover' if dead else self._transcript_outcome or 'no_text'
+            if self._cost_censored_no_text and self._transcript_outcome != 'text':
+                return
+            try:
+                health.record_session(
+                    self.routing_target,
+                    self._health_language,
+                    outcome,
+                    self._cost_generations,
+                    getattr(getattr(self.session.receiver.host, 'request', None), 'uid', None),
+                )
+            except Exception:
+                record_fallback(
+                    component='stt_selection',
+                    from_mode=self.service.value,
+                    to_mode=self.service.value,
+                    reason='config_incomplete',
+                    outcome='degraded',
+                )
+
+    def _censor_early_teardown(self, dead: bool) -> None:
+        if (
+            not self._closing_for_health
+            and not dead
+            and self._transcript_outcome is None
+            and self._first_speech_at is not None
+            and time.monotonic() - self._first_speech_at < max(1.0, float(os.getenv('STT_NO_TEXT_SECONDS', '30')))
+        ):
+            self._cost_censored_no_text = True
+
     async def drain_and_close(self) -> None:
+        dead = self.is_connection_dead
+        self._censor_early_teardown(dead)
+        self._closing_for_health = True
         try:
             await st.drain_stt_socket(self.raw)
         finally:
+            self._record_cost_outcome(dead)
             self.finish()

@@ -436,3 +436,22 @@ jobs:
           sync_backfill_alert_channels: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Provision Firestore missing-index alert
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_WORKFLOW_ROOT:-}" || {
+            echo "DEPLOY_WORKFLOW_ROOT is not set; cannot run the workflow-owned missing-index alert script." >&2
+            exit 1
+          }
+          test -f "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" || {
+            echo "Workflow-owned missing-index alert script not found under $DEPLOY_WORKFLOW_ROOT/.github/scripts." >&2
+            exit 1
+          }
+          python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" \
+            --project "$PROJECT_ID" \
+            --notification-channels "$ALERT_CHANNELS"

@@ -84,6 +84,7 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     client_mod = ModuleType('database._client')
     put(client_mod, 'db', MagicMock(name='db'))
     put(client_mod, 'get_firestore_client', lambda: getattr(client_mod, 'db'))
+    put(client_mod, 'get_data_plane_firestore_client', lambda: getattr(client_mod, 'db'))
     put(client_mod, 'document_id_from_seed', lambda seed: 'seed-id')
     add('database._client', client_mod)
 

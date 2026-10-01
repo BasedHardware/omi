@@ -134,6 +134,19 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>FlutterDeepLinkingEnabled</key>
 	<false/>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Omi AI</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>oh me A I</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Omi app</string>
+		</dict>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>

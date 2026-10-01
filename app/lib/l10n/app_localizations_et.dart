@@ -3969,9 +3969,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Uus versioon saadaval';
-
-  @override
   String get no => 'Ei';
 
   @override
@@ -5053,7 +5050,7 @@ class AppLocalizationsEt extends AppLocalizations {
       'Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.';
 
   @override
-  String get tasksEmptyStateMessage => 'Teie vestlustest pärit ülesanded ilmuvad siia.\nPuudutage + käsitsi loomiseks.';
+  String get tasksEmptyStateMessage => 'Ülesande loomiseks alusta vestlust.';
 
   @override
   String get clearChatAction => 'Tühjenda vestlus';
@@ -12108,6 +12105,56 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kõnelejat',
+      one: '1 kõneleja',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Lülitage Omi sisse jaotises Otseteed → Siri. Ütlege „$askPhrase“ või „$questionPhrase“ ja seejärel esitage oma küsimus.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Saate öelda ka „$searchPhrase for what I did today“.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Värskendus on saadaval';
+
+  @override
+  String get updateAvailableMessage => 'Omi uus versioon on valmis – parandused ja täiustused.';
+
+  @override
+  String get updateRequiredTitle => 'Värskendus on vajalik';
+
+  @override
+  String get updateRequiredMessage =>
+      'Seda Omi versiooni enam ei toetata. Värskenda, et jätkata salvestamist ja sünkroonimist.';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Sünkroonitud koopiate automaatne eemaldamine';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Sünkroonitud koopiad kustutatakse pärast $days päeva';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Kustutab kohalikud koopiad $days päeva pärast sünkroonimist. Pilvekoopiad jäävad alles.';
+  }
+
+  @override
+  String get localCopiesSection => 'Kohalikud koopiad';
 
   @override
   String get showOnLockScreen => 'Kuva lukustuskuval';

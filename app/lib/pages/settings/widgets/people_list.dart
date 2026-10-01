@@ -24,6 +24,14 @@ bool matchesPeopleFilter(Person p, PeopleFilter filter) => switch (filter) {
       PeopleFilter.notHeard => p.conversationCount != null && p.lastHeardAt == null,
     };
 
+/// The rows shown for a query and filter, shared by the list and its selection toolbar.
+List<Person> visiblePeople(Iterable<Person> people, String query, PeopleFilter filter) {
+  final q = query.trim().toLowerCase();
+  return people
+      .where((p) => (q.isEmpty || p.name.toLowerCase().contains(q)) && matchesPeopleFilter(p, filter))
+      .toList();
+}
+
 /// Clean Up is offered as a banner once this many unpinned people are Unverified.
 const int kCleanUpBannerMinimum = 3;
 
@@ -42,7 +50,7 @@ Future<bool> confirmAndDeletePeople(BuildContext context, PeopleProvider provide
             ? l10n.deletePersonNamedTitle(single.name)
             : l10n.deletePersonTitle,
     message: single == null
-        ? l10n.deletePeopleMessage
+        ? '${l10n.deletePeopleMessage}\n\n${targets.map((p) => p.name).join('\n')}'
         : single.pinned
             ? l10n.deletePinnedPersonMessage(single.name)
             : l10n.deletePersonConfirmation(single.name),
@@ -93,9 +101,13 @@ class PeopleList extends StatefulWidget {
     this.onCleanUp,
     this.onClearQuery,
     this.emptyAction,
+    this.filter,
+    this.onFilterChanged,
   });
 
   final String query;
+  final PeopleFilter? filter;
+  final ValueChanged<PeopleFilter>? onFilterChanged;
   final List<Widget> leading;
   final List<Widget> trailing;
 
@@ -114,7 +126,13 @@ class PeopleList extends StatefulWidget {
 }
 
 class _PeopleListState extends State<PeopleList> {
-  PeopleFilter _filter = PeopleFilter.all;
+  PeopleFilter _localFilter = PeopleFilter.all;
+  PeopleFilter get _filter => widget.filter ?? _localFilter;
+
+  void _setFilter(PeopleFilter filter) {
+    widget.onFilterChanged?.call(filter);
+    setState(() => _localFilter = filter);
+  }
 
   void _openPerson(Person person) => routeToPage(context, PersonDetailPage(personId: person.id));
 
@@ -154,12 +172,7 @@ class _PeopleListState extends State<PeopleList> {
     );
   }
 
-  List<Person> _visible(PeopleProvider provider) {
-    final q = widget.query.trim().toLowerCase();
-    return provider.people
-        .where((p) => (q.isEmpty || p.name.toLowerCase().contains(q)) && matchesPeopleFilter(p, _filter))
-        .toList();
-  }
+  List<Person> _visible(PeopleProvider provider) => visiblePeople(provider.people, widget.query, _filter);
 
   /// Heard people first (newest first), then those with no conversations, then by name.
   static int _byRecency(Person a, Person b) {
@@ -172,7 +185,7 @@ class _PeopleListState extends State<PeopleList> {
 
   void _clear() {
     widget.onClearQuery?.call();
-    setState(() => _filter = PeopleFilter.all);
+    _setFilter(PeopleFilter.all);
   }
 
   @override
@@ -268,7 +281,7 @@ class _PeopleListState extends State<PeopleList> {
                 count: counts[f],
                 semanticsLabel: '${labels[f]}, ${l10n.peopleCount(counts[f]!)}',
                 selected: _filter == f,
-                onSelected: () => setState(() => _filter = f),
+                onSelected: () => _setFilter(f),
               ),
             ),
         ],

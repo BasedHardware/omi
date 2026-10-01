@@ -3989,9 +3989,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Versiune nouă disponibilă';
-
-  @override
   String get no => 'Nu';
 
   @override
@@ -5078,8 +5075,7 @@ class AppLocalizationsRo extends AppLocalizations {
       'Continuând, conversațiile, înregistrările și informațiile dvs. personale vor fi stocate în siguranță pe serverele noastre. Înregistrările audio și transcrierile dvs. sunt procesate de servicii AI terțe (inclusiv Deepgram pentru transcriere și OpenAI pentru analiză) pentru a vă oferi informații bazate pe AI și a activa toate funcțiile aplicației.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Sarcinile din conversațiile tale vor apărea aici.\nAtinge + pentru a crea una manual.';
+  String get tasksEmptyStateMessage => 'Începe o conversație pentru a crea o sarcină.';
 
   @override
   String get clearChatAction => 'Șterge conversația';
@@ -12166,6 +12162,56 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vorbitori: $count',
+      one: '1 vorbitor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Activați Omi în Comenzi rapide → Siri. Spuneți „$askPhrase” sau „$questionPhrase”, apoi puneți-vă întrebarea.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Puteți spune și „$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Actualizare disponibilă';
+
+  @override
+  String get updateAvailableMessage => 'O versiune nouă de Omi este gata, cu remedieri și îmbunătățiri.';
+
+  @override
+  String get updateRequiredTitle => 'Actualizare necesară';
+
+  @override
+  String get updateRequiredMessage =>
+      'Această versiune de Omi nu mai este acceptată. Actualizați pentru a continua înregistrarea și sincronizarea.';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Eliminare automată a copiilor sincronizate';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Copiile sincronizate se șterg după $days zile';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Șterge copiile locale la $days zile după sincronizare. Copiile din cloud sunt păstrate.';
+  }
+
+  @override
+  String get localCopiesSection => 'Copii locale';
 
   @override
   String get showOnLockScreen => 'Afișează pe ecranul de blocare';

@@ -3954,9 +3954,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Nova versão disponível';
-
-  @override
   String get no => 'Não';
 
   @override
@@ -5047,8 +5044,7 @@ class AppLocalizationsPt extends AppLocalizations {
       'Ao continuar, suas conversas, gravações e informações pessoais serão armazenadas com segurança em nossos servidores. Suas gravações de áudio e transcrições são processadas por serviços de IA de terceiros (incluindo Deepgram para transcrição e OpenAI para análise) para fornecer insights baseados em IA e habilitar todos os recursos do aplicativo.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'As tarefas das suas conversas aparecerão aqui.\nToque em + para criar uma manualmente.';
+  String get tasksEmptyStateMessage => 'Inicie uma conversa para criar uma tarefa.';
 
   @override
   String get clearChatAction => 'Limpar conversa';
@@ -12129,6 +12125,56 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count participantes',
+      one: '1 participante',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Ative o Omi em Atalhos → Siri. Diga “$askPhrase” ou “$questionPhrase” e faça sua pergunta.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Também pode dizer “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Atualização disponível';
+
+  @override
+  String get updateAvailableMessage => 'Uma nova versão do Omi está pronta, com correções e melhorias.';
+
+  @override
+  String get updateRequiredTitle => 'Atualização necessária';
+
+  @override
+  String get updateRequiredMessage =>
+      'Esta versão do Omi não é mais suportada. Atualize para continuar gravando e sincronizando.';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Remover cópias sincronizadas automaticamente';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'As cópias sincronizadas são excluídas após $days dias';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Exclui cópias locais $days dias após a sincronização. As cópias na nuvem são mantidas.';
+  }
+
+  @override
+  String get localCopiesSection => 'Cópias locais';
 
   @override
   String get showOnLockScreen => 'Mostrar na tela de bloqueio';

@@ -56,9 +56,53 @@ class ReplayLagDiagnostics:
         )
 
 
+@dataclass(frozen=True)
+class FirstTextDeadlineDiagnostics:
+    """Immutable numeric startup state before cancellation clears the window."""
+
+    admitted_seconds: float
+    posts: int
+    empty_posts: int
+    answered_empty_stranded_flushes: int
+    seconds_since_first_speech: float
+    episode_admitted_seconds: float
+    seconds_since_deadline_speech: float
+    answered_empty_admitted_seconds: float
+
+    def log_fields(self) -> str:
+        def seconds(value: float) -> float:
+            return min(86400.0, max(0.0, value)) if math.isfinite(value) else -1.0
+
+        def count(value: int) -> int:
+            return min(1000000, max(0, value))
+
+        return (
+            f' vad_admitted_seconds={seconds(self.admitted_seconds):.3f}'
+            f' posts={count(self.posts)}'
+            f' empty_posts={count(self.empty_posts)}'
+            f' answered_empty_stranded_flushes={count(self.answered_empty_stranded_flushes)}'
+            f' seconds_since_first_speech={seconds(self.seconds_since_first_speech):.3f}'
+            f' episode_admitted_seconds={seconds(self.episode_admitted_seconds):.3f}'
+            f' seconds_since_deadline_speech={seconds(self.seconds_since_deadline_speech):.3f}'
+            f' answered_empty_admitted_seconds={seconds(self.answered_empty_admitted_seconds):.3f}'
+        )
+
+
+class FirstTextFallbackKwargs(TypedDict, total=False):
+    first_text_diagnostics: FirstTextDeadlineDiagnostics
+
+
+def first_text_fallback_kwargs(diagnostics: FirstTextDeadlineDiagnostics | None) -> FirstTextFallbackKwargs:
+    return {} if diagnostics is None else {'first_text_diagnostics': diagnostics}
+
+
 class CapacityFallbackKwargs(TypedDict, total=False):
     capacity_subtype: str
     replay_diagnostics: ReplayLagDiagnostics
+
+
+class FailureFallbackKwargs(TypedDict, total=False):
+    failure_subtype: str
 
 
 def capacity_fallback_kwargs(
@@ -115,6 +159,24 @@ ALLOWED_REASONS = frozenset(
 # Diagnostic detail in the log only. The shared metric's reason vocabulary and
 # label dimensions remain unchanged.
 ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap'})
+ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
+    {
+        'initialization_failed',
+        'connection_lost',
+        'send_failed',
+        'socket_unavailable',
+        'modulate_serve_error',
+        'provider_rate_limited',
+        'soniox_idle_timeout',
+        'soniox_rotation',
+        'provider_5xx',
+        'capacity_full',
+        'first_text_deadline',
+        'empty_streak',
+        'soniox_invalid_hint',
+        'untyped',
+    }
+)
 
 ALLOWED_COMPONENTS = frozenset(
     {
@@ -155,6 +217,8 @@ def record_fallback(
     log: logging.Logger | None = None,
     capacity_subtype: str | None = None,
     replay_diagnostics: ReplayLagDiagnostics | None = None,
+    first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None,
+    failure_subtype: str | None = None,
 ) -> None:
     """Increment ``omi_fallback_total`` and emit a matching warning log.
 
@@ -191,6 +255,15 @@ def record_fallback(
             emit_log.warning(
                 '%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s%s', *fields, subtype, detail
             )
+        elif reason_label == 'first_text_deadline' and first_text_diagnostics is not None:
+            emit_log.warning(
+                '%s component=%s from=%s to=%s reason=%s outcome=%s%s',
+                *fields,
+                first_text_diagnostics.log_fields(),
+            )
+        elif reason_label == 'other' and failure_subtype is not None:
+            subtype = failure_subtype if failure_subtype in ALLOWED_STT_FAILURE_SUBTYPES else 'unknown'
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
         else:
             emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s', *fields)
     except Exception:
