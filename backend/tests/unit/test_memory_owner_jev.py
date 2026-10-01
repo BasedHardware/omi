@@ -339,9 +339,79 @@ def test_extraction_hash_selects_entire_eligible_batch_before_submission(capture
     calls = []
     monkeypatch.setattr(pc, '_shadow_owner_candidate', lambda *args, **kwargs: calls.append((args, kwargs)))
     pc._extract_memories_canonical('uid-synthetic', _conversation(), db_client=MagicMock())
-    expected = jev_shadow.select_owner_shadow_indices(_conversation().id, [c.content for c in candidates])
+    identities = [
+        jev_shadow.owner_shadow_identity(
+            candidate_content=c.content,
+            state=pc._owner_shadow_state(_conversation(), c.content, c.evidence_quotes, 'Alex'),
+            user_name='Alex',
+            pipeline_subject_kind='speaker',
+            pipeline_subject_entity_id=pc._l1_candidate_subject(
+                source_id=_conversation().id,
+                about=c.about,
+                speaker_label=c.speaker_label,
+                evidence_quotes=c.evidence_quotes,
+                user_name='Alex',
+                segments=_conversation().transcript_segments,
+            )[0],
+        )
+        for c in candidates
+    ]
+    expected, eligible_count = jev_shadow.select_owner_shadow_indices(_conversation().id, identities)
+    assert eligible_count == 20
     assert len(calls) == jev_shadow.MAX_OWNER_SHADOWS_PER_CONVERSATION
     assert [kwargs['candidate_index'] for _, kwargs in calls] == expected
     assert all(kwargs['eligible_count'] == 20 for _, kwargs in calls)
     assert [args[2] for args, _ in calls] == [candidates[i].content for i in expected]
     assert set(expected) != set(range(8))
+
+
+def test_extraction_records_unique_population_before_cap_with_original_indices(capture, pc, monkeypatch):
+    from utils.conversations import jev_shadow
+
+    # Position 0 is not eligible; exact duplicates must not inflate the denominator.
+    candidates = (
+        [OWNER]
+        + [THIRD_PARTY] * 3
+        + [
+            _candidate(f'Synthetic unique {i}.', about='speaker_1', speaker_label='speaker_1', quote=OTHER_TEXT)
+            for i in range(12)
+        ]
+    )
+    monkeypatch.setattr(pc, 'memory_owner_jev_flip_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', lambda *_a, **_k: candidates)
+    monkeypatch.setattr(pc, '_shadow_owner_candidate', pc._real_owner_shadow_test_helper)
+    submitted = []
+    monkeypatch.setattr(pc, 'submit_owner_shadow', lambda **kwargs: submitted.append(kwargs))
+    pc._extract_memories_canonical('uid-synthetic', _conversation(), db_client=MagicMock())
+    assert len(submitted) == jev_shadow.MAX_OWNER_SHADOWS_PER_CONVERSATION
+    assert all(record['eligible_count'] == 13 for record in submitted)
+    indices = [record['candidate_index'] for record in submitted]
+    assert len(set(indices)) == 8 and not set(indices).intersection({0, 2, 3})
+    assert all(record['candidate_content'] == candidates[record['candidate_index']].content for record in submitted)
+
+
+def test_extraction_preserves_same_text_with_different_grounded_evidence(capture, pc, monkeypatch):
+    other_quote = 'I walk Pixel every morning.'
+    conversation = _conversation()
+    conversation.transcript_segments.append(
+        TranscriptSegment(text=other_quote, speaker='SPEAKER_01', speaker_id=1, is_user=False, start=2, end=3)
+    )
+    candidates = [
+        THIRD_PARTY,
+        _candidate(
+            THIRD_PARTY.content,
+            about='speaker_1',
+            speaker_label='speaker_1',
+            quote=other_quote,
+        ),
+    ]
+    monkeypatch.setattr(pc, 'memory_owner_jev_flip_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', lambda *_a, **_k: candidates)
+    monkeypatch.setattr(pc, '_shadow_owner_candidate', pc._real_owner_shadow_test_helper)
+    submitted = []
+    monkeypatch.setattr(pc, 'submit_owner_shadow', lambda **kwargs: submitted.append(kwargs))
+    pc._extract_memories_canonical('uid-synthetic', conversation, db_client=MagicMock())
+    assert len(submitted) == 2
+    assert {r['candidate_index'] for r in submitted} == {0, 1}
+    assert all(r['eligible_count'] == 2 for r in submitted)
+    assert submitted[0]['state'] != submitted[1]['state']

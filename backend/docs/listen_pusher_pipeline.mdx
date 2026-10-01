@@ -2007,15 +2007,19 @@ rules, restores, calendar retention and plan gates retain their precedence.
 
 Both processing hosts submit advisory relevance/owner questions through
 `utils/conversations/jev_shadow.py` after the relevant live decision. Percentages
-sample conversation IDs for relevance and conversation+candidate hashes for
-owner, defaults are off, and Redis atomically dedupes content hashes and caps
+sample conversation IDs for relevance and conversation+full-scoring hashes for
+owner (candidate, speaker-labelled evidence/context, question owner name and
+pipeline subject metadata). Same text with different evidence remains distinct.
+Defaults are off, and Redis atomically dedupes these identities and caps
 daily calls (60000 per lane). Owner hash selection sees the complete eligible
 batch before submission and selects at most eight unique candidates; eight owner
 slots and two relevance slots bound queued/active work on a ten-worker pool. IO stays in the worker; slow or unavailable services drop measurement without
 changing the conversation or memory. All durable `users/{uid}/jev_shadow` records
 are text-free and have a 60-day expiry. Owner records carry integer candidate
-position/population metadata. First-write-wins records preserve scores and expiry
-on retries; late commits after a worker timeout are valid and counted once by
+position/population metadata: original extraction index and unique eligible
+scoring identities before percentage filtering and the cap. First-write-wins records preserve scores and expiry
+on retries; aborted concurrent commit losers count as `deduped` while preserving
+the transactional deletion fence. Late commits after a worker timeout are valid and counted once by
 (uid, document ID), separately from attempt metrics. Drops are coverage losses.
 The protocol and TTL deployment prerequisite
 are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).
