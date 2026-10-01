@@ -18,22 +18,22 @@ omi --json goal list --limit 100 | python examples/goals_to_org.py - "" --active
 
 Note that `omi goal list` silently caps the export at its `--limit` (default
 10, maximum 100). Pass `--limit 100` so the export carries up to 100 goals;
-the CLI cap is hard, so a library of more than 100 goals must be split on
-the Omi side (for example by archiving some) and the exports merged.
+the CLI does not expose pagination, so this command is not a complete backup
+of libraries larger than 100 goals. Archiving goals does not remove this cap
+when `--include-inactive` is used.
 
 The script is self-contained: standard library only, no dependencies to install.
 
 ## What you get
 
-Each goal becomes an Org heading with its type as a tag:
+Each goal becomes an Org heading with its type as a tag. A completed goal:
 
 ```org
-* TODO Read books [50%] [5/10] :numeric:
-- Progress: [=========>          ] 50.0%
+* DONE Read books [100%] [10/10] :numeric:
 :PROPERTIES:
 :OMI_ID: g1
 :GOAL_TYPE: numeric
-:CURRENT_VALUE: 5
+:CURRENT_VALUE: 10
 :TARGET_VALUE: 10
 :MIN_VALUE: 0
 :MAX_VALUE: 10
@@ -42,10 +42,11 @@ Each goal becomes an Org heading with its type as a tag:
 :CREATED: [2026-09-01 Tue 09:00]
 :UPDATED: [2026-09-15 Tue 09:00]
 :END:
+- Progress: [===================>] 100.0%
 ```
 
 - **States.** `DONE` when the goal is inactive (`is_active: false`, i.e.
-  completed/archived) or when its progress fraction reaches `100%`;
+  completed/archived) or when a metric goal reaches its target (`100%`);
   `TODO` otherwise.
 - **Progress cookie.** `[50%]` for metric goals, plus `[current/target]` when
   both values are present. No cookie for qualitative goals without metrics.
@@ -53,13 +54,17 @@ Each goal becomes an Org heading with its type as a tag:
   (`=` fill, `>` head, trailing spaces) with a one-decimal percentage.
   `- Progress: n/a (no metrics)` when the goal carries no usable numbers.
 - **Progress fraction.** For `scale`/`numeric` goals the fraction is
-  `(current - min) / (max - min)` when the span is usable, otherwise
-  `current / target`; clamped to `0..1`. For `boolean` goals it is 1 when
-  `current_value >= 1`, else 0.
+  `(current - min) / (target - min)` when `target > min`, otherwise
+  `current / target` for a positive target; clamped to `0..1`. Without a
+  usable current/target pair there is no progress fraction. `max_value`
+  is preserved as metadata, not used as the completion threshold. For
+  `boolean` goals it is 1 when `current_value >= 1`, else 0.
 - **Drawer keys.** `:OMI_ID:`, `:GOAL_TYPE:`, `:CURRENT_VALUE:`, `:TARGET_VALUE:`,
   `:MIN_VALUE:`, `:MAX_VALUE:`, `:UNIT:`, `:IS_ACTIVE:` are written only when
-  present; `:CREATED:` / `:UPDATED:` use inactive Org timestamps in the chosen
+  available (`GOAL_TYPE` defaults to `scale`, `IS_ACTIVE` to `true`);
+  `:CREATED:` / `:UPDATED:` use inactive Org timestamps in the chosen
   zone. Integer-valued floats render without the trailing `.0`.
+  The drawer immediately follows its goal heading, before the progress body.
 
 ## Options
 
@@ -89,14 +94,17 @@ resolved deterministically.
 - Titles are escaped so Org does not misparse them: leading `[#A]` priority
   cookies, date-like `<2026-10-01>`/`[2026-10-01]` fragments, and trailing
   `:tags:` get the documented zero-width-space guard.
-- The UTF-8 BOM that Windows/Excel pipelines add is tolerated (`utf-8-sig`).
+- A leading UTF-8 BOM is tolerated for both file input and stdin pipelines.
 - The destination is created exclusively: an existing file is refused (no
-  overwrite) and a failed write never leaves a partial `.org` behind.
+  overwrite or deletion), including in `--output-dir` mode. A failed write
+  removes only its newly created partial file. Directory exports stop at the
+  first error; files successfully exported earlier in that run remain.
 
 ## Tests
 
 `tests/test_goals_to_org.py` — hermetic unit tests (JSON fixtures in, text
 out): cookie/bar rendering at 0/50/100%, DONE mapping (fraction at 100% and
-inactive), property drawer contents, Org-syntax escaping, grouping, filters,
-envelope unwrapping, BOM handling, overwrite refusal, and CLI failure exit
-codes.
+inactive), targets below the scale maximum, property drawer contents and
+placement, Org-syntax escaping, grouping, filters, envelope unwrapping,
+file/stdin BOM handling, existing-file preservation, creation/write failures,
+and CLI failure exit codes.

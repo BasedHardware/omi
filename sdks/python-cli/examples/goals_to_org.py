@@ -118,13 +118,12 @@ def goal_fraction(goal):
     current = _as_float(goal.get("current_value"))
     target = _as_float(goal.get("target_value"))
     minv = _as_float(goal.get("min_value"))
-    maxv = _as_float(goal.get("max_value"))
     if goal_type == "boolean":
         return 1.0 if (current or 0.0) >= 1.0 else 0.0
     if current is None or target is None:
         return None
-    if maxv is not None and minv is not None and maxv > minv:
-        fraction = (current - minv) / (maxv - minv)
+    if minv is not None and target > minv:
+        fraction = (current - minv) / (target - minv)
     elif target > 0:
         fraction = current / target
     else:
@@ -196,8 +195,6 @@ def render_goal(goal, zone, level):
     cookie = _cookie(goal, fraction)
     goal_type = one_line(goal.get("goal_type")) or "scale"
     lines = ["*" * (level + 1) + f" {'DONE' if done else 'TODO'} {title}{cookie} :{goal_type}:"]
-    bar = progress_bar(fraction)
-    lines.append(f"- Progress: {bar}" if bar else "- Progress: n/a (no metrics)")
     lines.append(":PROPERTIES:")
     for key, value in (
         ("OMI_ID", one_line(goal.get("id"))),
@@ -216,6 +213,8 @@ def render_goal(goal, zone, level):
         if stamp is not None:
             lines.append(f":{key}: " + org_stamp(stamp, active=False))
     lines.append(":END:")
+    bar = progress_bar(fraction)
+    lines.append(f"- Progress: {bar}" if bar else "- Progress: n/a (no metrics)")
     return lines
 
 
@@ -266,7 +265,21 @@ def build_document(goals, zone, group_by):
 
 def _read_source(source):
     text = Path(source).read_bytes().decode("utf-8-sig") if source != "-" else sys.stdin.read()
-    return json.loads(text)
+    return json.loads(text.removeprefix("\ufeff"))
+
+
+def _write_new_file(output_path, payload):
+    """Preserve existing files; clean up only a file created by this export."""
+    try:
+        output = output_path.open("xb")
+    except FileExistsError:
+        raise FileExistsError(f"Refusing to overwrite existing {output_path}") from None
+    try:
+        with output:
+            output.write(payload)
+    except OSError:
+        output_path.unlink(missing_ok=True)
+        raise
 
 
 def convert(source, destination, zone, group_by="none", active_only=False, goal_types="", output_dir=None):
@@ -284,30 +297,13 @@ def convert(source, destination, zone, group_by="none", active_only=False, goal_
         for goal in goals:
             name = goal_output_name(goal, used)
             payload = ("\n".join(build_document([goal], zone, "none")) + "\n").encode("utf-8")
-            # Exclusive creation per file; a failed write leaves no partial file.
-            try:
-                with (out_dir / name).open("xb") as handle:
-                    handle.write(payload)
-            except OSError:
-                (out_dir / name).unlink(missing_ok=True)
-                raise
+            _write_new_file(out_dir / name, payload)
             written += 1
         return written, 0
 
     lines = build_document(goals, zone, group_by)
     payload = ("\n".join(lines) + "\n").encode("utf-8")
-    output_path = Path(destination)
-    # Exclusive creation protects an existing file; a failed write leaves no partial file.
-    try:
-        output = output_path.open("xb")
-    except FileExistsError:
-        raise FileExistsError(f"Refusing to overwrite existing {output_path}") from None
-    try:
-        with output:
-            output.write(payload)
-    except OSError:
-        output_path.unlink(missing_ok=True)
-        raise
+    _write_new_file(Path(destination), payload)
     done_count = sum(1 for g in goals if is_done_goal(g))
     return len(goals), done_count
 
