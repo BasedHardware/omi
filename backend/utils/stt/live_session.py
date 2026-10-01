@@ -261,6 +261,11 @@ class LiveChainSession:
                     # initial service. Set its clock policy before first send.
                     epoch.provider_label = service.value
                 leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
+                replay_ring = getattr(self.receiver, '_window_ring', None)
+                if not is_window and callable(replay_ring) and replay_ring() is not None:
+                    # An empty snapshot still carries the obligation to retain
+                    # future speech until this replacement emits text.
+                    leg._enable_window_replay_tracking()
                 return leg
             except BaseException:
                 if raw is not None:

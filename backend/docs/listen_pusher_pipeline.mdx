@@ -678,8 +678,11 @@ Replacements with ordinary VAD disabled use a shadow gate
 for replay accounting only: every byte is still forwarded, and it introduces
 no finalize signals. Settled silence retains the same recent 15-second tail
 instead of filling the ring on an otherwise healthy idle replacement.
-Downstream capture-progress bookkeeping activates lazily on window-origin
-replay, so a session that never fails over does not track that extra progress.
+Downstream capture-progress bookkeeping activates when each window-origin
+replacement is created, even if the preceding epoch has fully settled the ring
+and its replay snapshot is empty. New speech still remains pending until that
+replacement emits text; silence trimming cannot discard it. A session that
+never fails over does not track that extra progress.
 `testing/bench_live_leg_send.py` compares real class implementations against a
 pinned pre-PR Git revision using identical synthetic PCM and deterministic
 dependencies; vendor I/O and ONNX inference are excluded. Its `--ring-memory`
@@ -699,6 +702,13 @@ Only an actual failure to find a serving replacement terminates live STT,
 emitting `stt_failed` and closing the client WebSocket with 1011; recovery then
 requires a client reconnect. Configured and circuit-open candidate skipping
 continues to be enforced by the connector.
+Late upgrade rejection recovery also applies to control sessions that started
+on Soniox or Modulate: an eligible next provider is attempted before terminal
+closure. These sessions do not have the window replay ring, so preserving their
+un-emitted cross-provider tail remains outside this change. A follow-up would
+need a replay ring and emitted capture accounting for all managed sessions;
+60 filled 90-second PCM16 rings at 16 kHz require about 165 MiB of payload
+(about 186 MiB including normal ring objects), before allocator and VAD costs.
 Before the first window transcript, 12 seconds after the active speech episode
 starts or four consecutive empty speech-containing POSTs ends the Parakeet leg.
 A fully answered-empty episode with less than one admitted second and at least

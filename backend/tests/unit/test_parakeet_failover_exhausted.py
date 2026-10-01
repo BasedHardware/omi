@@ -7,7 +7,7 @@ import pytest
 import routers.listen.receiver as receiver_module
 from tests.unit.test_parakeet_window_live import Client, _flush_capture, _receiver_for_anchor_replay, runtime, window
 from utils.stt import streaming as st
-from utils.stt import vad_gate
+from utils.stt import provider_resilience, vad_gate
 from utils.stt.live_session import LiveLegSocket
 
 
@@ -184,6 +184,75 @@ async def test_open_modulate_circuit_skips_to_soniox_with_exact_window_replay(mo
         assert actual.host.stt_service == st.STTService.soniox
         assert legs['modulate'] == []
         assert b''.join(legs['soniox'][0].sent) == capture
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('first_service', ['modulate', 'soniox'])
+@pytest.mark.parametrize('timeline_v2', [False, True])
+async def test_empty_snapshot_handoff_tracks_new_speech_and_replays_it_on_next_failure(
+    monkeypatch, first_service, timeline_v2
+):
+    monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if timeline_v2 else 'false')
+    actual, base, previous, legs, capture = await setup_chain(monkeypatch)
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
+    legs['deepgram'] = []
+
+    async def deepgram(callback, *args, **kwargs):
+        leg = Replacement(callback)
+        legs['deepgram'].append(leg)
+        return leg
+
+    monkeypatch.setattr(st, 'process_audio_dg', deepgram)
+    if first_service == 'soniox':
+        st._modulate_circuit.record_serve_failure()
+    second_service = 'soniox' if first_service == 'modulate' else 'modulate'
+    try:
+        assert await actual._failover_stt_socket()
+        assert actual.host.stt_service.value == first_service
+        first = legs[first_service][0]
+        assert b''.join(first.sent) == capture
+        first.callback([{'text': 'settled', 'start': 0.0, 'end': 0.12}])
+        ring = actual._window_ring()
+        assert ring.snapshot() == ()
+        assert ring.finalized_sample == 1920
+        if first_service == 'soniox':
+            # The previously open circuit is healthy again before this hop.
+            monkeypatch.setattr(
+                st,
+                '_modulate_circuit',
+                provider_resilience.ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=30),
+            )
+        first.is_connection_dead = True
+        first.typed_death_reason = 'connection_lost'
+        assert await actual._failover_stt_socket()
+        assert actual.host.stt_service.value == second_service
+        second = legs[second_service][0]
+        assert second.sent == []
+        assert ring.snapshot() == ()
+
+        # Exceed the settled-silence retention horizon with actual speech.
+        # The empty-snapshot replacement never answers any of these samples.
+        pcm = b'\x02\x00' * 16000
+        for n in range(32):
+            await _flush_capture(actual, pcm, 1920 + n * 16000)
+        assert ring.capture_bounds == (1920, 513920)
+        assert ring.buffered_bytes == 32 * len(pcm)
+        assert actual.stt_socket._tracks_window_replay
+        assert actual.stt_socket.has_untranscribed_speech()
+        assert actual.stt_socket.window_replay_pending_sample() == 1920
+        assert b''.join(second.sent) == pcm * 32
+        second.is_connection_dead = True
+        second.typed_death_reason = 'connection_lost'
+        assert await actual._failover_stt_socket()
+        assert actual.host.stt_service == st.STTService.deepgram
+        assert len(legs['modulate']) == len(legs['soniox']) == len(legs['deepgram']) == 1
+        assert b''.join(legs['deepgram'][0].sent) == pcm * 32
+        assert ring.capture_bounds == (1920, 513920)
+        assert [s['text'] for s in base.emitted] == ['settled']
+        assert not actual.host.state.stt_terminal_failure
     finally:
         await actual._drain_stt_sockets()
 
