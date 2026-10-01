@@ -526,7 +526,8 @@ class CaptureController extends ChangeNotifier
     }
     final outcome = await _capture.dispatch(event);
     outcome.throwIfFailed();
-    if (outcome.result is StaleSystemSurfaceTarget) throw StateError('Recording changed');
+    // Refused because capture shut down, or applied after the card's recording changed.
+    if (!outcome.admitted || outcome.result is StaleSystemSurfaceTarget) throw StateError('Recording changed');
   }
 
   @visibleForTesting

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -229,6 +230,17 @@ void main() {
     await world.settle();
     expect(sink.states.last['paused'], false);
     expect(sink.states.last['actionFailed'], false);
+  });
+
+  test('a card tap still queued when capture shuts down fails instead of succeeding', () async {
+    // The stop keeps the coordinator busy while the tap waits behind it.
+    unawaited(world.controller.stopStreamRecording().then((_) {}, onError: (_) {}));
+    final rejected = expectLater(
+      sink.action(request('finish')),
+      throwsA(isA<StateError>().having((e) => e.message, 'message', 'Recording changed')),
+    );
+    world.disposeController();
+    await rejected;
   });
 
   test('Finish processes phone conversation and stops its native capture', () async {
