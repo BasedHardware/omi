@@ -3,9 +3,9 @@
 See goals_org.md for the full recipe.
 
 Usage:
-    omi --json goal list --include-inactive > goals.json
+    omi --json goal list --include-inactive --limit 100 > goals.json
     python goals_to_org.py goals.json omi_goals.org --utc-offset +09:00
-    omi --json goal list | python goals_to_org.py - omi_goals.org
+    omi --json goal list --limit 100 | python goals_to_org.py - omi_goals.org
     python goals_to_org.py goals.json "" --output-dir org_goals/
 """
 
@@ -195,7 +195,7 @@ def render_goal(goal, zone, level):
     title = heading_text(goal.get("title"))
     cookie = _cookie(goal, fraction)
     goal_type = one_line(goal.get("goal_type")) or "scale"
-    lines = [" " * 2 * level + f"* {'DONE' if done else 'TODO'} {title}{cookie} :{goal_type}:"]
+    lines = ["*" * (level + 1) + f" {'DONE' if done else 'TODO'} {title}{cookie} :{goal_type}:"]
     bar = progress_bar(fraction)
     lines.append(f"- Progress: {bar}" if bar else "- Progress: n/a (no metrics)")
     lines.append(":PROPERTIES:")

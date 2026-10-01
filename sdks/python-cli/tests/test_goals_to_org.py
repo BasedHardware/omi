@@ -147,11 +147,11 @@ class TestGoalsToOrg(unittest.TestCase):
             ],
             group_by="status",
         )
-        self.assertIn("* Active\n  * TODO active one", org)
-        self.assertIn("* Completed & archived\n  * DONE inactive one", org)
+        self.assertIn("* Active\n** TODO active one", org)
+        self.assertIn("* Completed & archived\n** DONE inactive one", org)
         _, org2 = self.export([goal(), goal(id="s", title="s", goal_type="scale")], group_by="type")
-        self.assertIn("* numeric\n  * TODO", org2)
-        self.assertIn("* scale\n  * TODO", org2)
+        self.assertIn("* numeric\n** TODO", org2)
+        self.assertIn("* scale\n** TODO", org2)
 
     def test_filters(self):
         goals = [

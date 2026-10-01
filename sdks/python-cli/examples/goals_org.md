@@ -6,15 +6,20 @@ property drawer with Omi metadata, grouping sections, and filter options.
 
 ```sh
 # one master file
-omi --json goal list --include-inactive > goals.json
+omi --json goal list --include-inactive --limit 100 > goals.json
 python examples/goals_to_org.py goals.json omi_goals.org
 
 # with your local time zone and grouping
 python examples/goals_to_org.py goals.json omi_goals.org --utc-offset +09:00 --group-by status
 
 # straight from the pipe, active goals only, one file per goal
-omi --json goal list | python examples/goals_to_org.py - "" --active-only --output-dir org_goals/
+omi --json goal list --limit 100 | python examples/goals_to_org.py - "" --active-only --output-dir org_goals/
 ```
+
+Note that `omi goal list` silently caps the export at its `--limit` (default
+10, maximum 100). Pass `--limit 100` so the export carries up to 100 goals;
+the CLI cap is hard, so a library of more than 100 goals must be split on
+the Omi side (for example by archiving some) and the exports merged.
 
 The script is self-contained: standard library only, no dependencies to install.
 
@@ -39,8 +44,8 @@ Each goal becomes an Org heading with its type as a tag:
 :END:
 ```
 
-- **States.** `DONE` when the goal is inactive (`is_active: false`,
-  i.e. completed/archived) or when a metric goal has reached its target;
+- **States.** `DONE` when the goal is inactive (`is_active: false`, i.e.
+  completed/archived) or when its progress fraction reaches `100%`;
   `TODO` otherwise.
 - **Progress cookie.** `[50%]` for metric goals, plus `[current/target]` when
   both values are present. No cookie for qualitative goals without metrics.
@@ -91,7 +96,7 @@ resolved deterministically.
 ## Tests
 
 `tests/test_goals_to_org.py` — hermetic unit tests (JSON fixtures in, text
-out): cookie/bar rendering at 0/50/100%, DONE mapping (target reached and
+out): cookie/bar rendering at 0/50/100%, DONE mapping (fraction at 100% and
 inactive), property drawer contents, Org-syntax escaping, grouping, filters,
 envelope unwrapping, BOM handling, overwrite refusal, and CLI failure exit
 codes.
