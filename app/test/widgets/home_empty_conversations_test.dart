@@ -37,7 +37,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       final page = find.byType(ConversationsPage);
-      final l10n = AppLocalizations.of(tester.element(page))!;
+      final l10n = AppLocalizations.of(tester.element(page));
       final title = find.text(l10n.noConversationsYet);
       final hint = find.text(l10n.noConversationsHeroMessage);
       final icon = find.byIcon(Icons.forum_rounded);
