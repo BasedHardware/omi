@@ -14,7 +14,7 @@ import logging
 import math
 import random
 import time
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, Iterable, Optional, TypeVar, cast
 
 try:
     # The fallback class below rebinds this name in lightweight stub environments.
@@ -73,9 +73,9 @@ def is_transaction_contention(error: BaseException) -> bool:
             queue.append(current.__cause__)  # type: ignore[arg-type]
 
         # Handle ExceptionGroup / BaseExceptionGroup unrolling if present
-        nested_exceptions = getattr(current, "exceptions", None)
+        nested_exceptions: object = getattr(current, "exceptions", None)
         if isinstance(nested_exceptions, (list, tuple)):
-            for nested in nested_exceptions:
+            for nested in cast(Iterable[object], nested_exceptions):
                 if isinstance(nested, BaseException):
                     queue.append(nested)
 
@@ -117,7 +117,9 @@ def run_with_transaction_contention_retry(
         raise TypeError("on_retry must be callable")
 
     clean_op_name = (
-        operation_name.strip() if isinstance(operation_name, str) and operation_name.strip() else "unnamed_operation"
+        operation_name.strip()
+        if isinstance(cast(Any, operation_name), str) and operation_name.strip()
+        else "unnamed_operation"
     )
 
     for attempt in range(1, max_attempts + 1):

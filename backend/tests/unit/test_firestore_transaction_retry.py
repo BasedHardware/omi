@@ -13,7 +13,7 @@ from database.firestore_transaction_retry import (
     DEFAULT_MAX_ATTEMPTS,
     FirestoreAborted,
     FirestoreContentionExhausted,
-    _is_transaction_contention,
+    _is_transaction_contention,  # type: ignore[reportPrivateUsage]
     is_transaction_contention,
     run_with_transaction_contention_retry,
 )
