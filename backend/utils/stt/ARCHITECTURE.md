@@ -253,11 +253,11 @@ UID fingerprints in the last 32 sessions, with no one UID supplying more than
 half of those failures. A smaller language cohort can bench only its language
 with at least two affected UIDs, sixteen recent failures, and a score >=14.
 One caller cannot bench a healthy target or language. Recovery promotion uses
-session count plus passing rate, without a distinct-user floor. A failed
+session count plus passing user-vote rate, without a distinct-user floor. A failed
 30/60-session recovery boundary must satisfy the same four-failing-user,
 no-majority breadth rule before re-benching the fleet and spending a strike.
 Narrow failures hold the current trial share without a fleet strike; the
-existing stronger two-user test may bench only their language. Fingerprints are bounded salted
+healthy-stage stronger two-user test may bench only their language. Fingerprints are bounded salted
 SHA-256 prefixes, never raw UIDs, labels, logs or content.
 
 Calibration uses 200 independent seeded runs of 20,000 sessions per baseline
@@ -310,18 +310,34 @@ The language view is used after 30 samples or a decisive failure test.
 
 A bench waits 300 seconds initially. Failed trials double the wait up to
 four hours. A fleet lease starts a shared 5% trial when that target would be
-preferred over surviving targets. Thirty speech sessions with disruption <=
-the gate promote to 25%; sixty more promote to 100%, even in a single-user
-cohort. Trial rejection uses the sequential detector or empirical failure rate
-at those fixed boundaries, with the same breadth protection in both paths.
-When neither promotion nor broad rejection is possible, evaluation continues
-at the current share. At 120 sessions (5% stage) or 240 (25% stage), reset only
-the rate-window counts and keep the stage, strikes, generation, sequential
-scores and recent failure witnesses. Later healthy traffic can then promote
-after 30/60 new sessions rather than remaining trapped by old failures.
-A persistently narrow failing cohort is never force-promoted or fleet-benched
-by a timer or cap; its language can remain benched while other languages recover. These acceptance checks do not prove an 8% upper
-confidence bound. Strike history clears after 1,024 healthy observations.
+preferred over surviving targets. Trial promotion gives each observed user
+one vote: a user is failing when more than half of their speech sessions in
+the current window fail. Promote after at least 30 sessions at 5%, or 60 at
+25%, when the failing-user fraction is <= the configured gate (default 8%).
+A healthy single-user trial still promotes. Per-user sequential evidence is
+limited to its first three outcomes per window; repeated failures cannot
+accumulate a language alarm while contributing only one promotion vote.
+The user's majority vote nevertheless updates from **all** their window
+outcomes, so late widespread failures can reject at the 30/60 boundary.
+Trial rejection needs an above-gate user rate and four failing users for a
+fleet strike. The healthy-stage session CUSUM and its sparse-language rule
+are unchanged.
+
+At 120/240 sessions, a held trial starts a new user-vote/evidence window,
+retaining stage, strikes and generation. State stores at most 240 hashed UID
+fingerprints, bounded outcome counts, and no content. Here is a deterministic
+coverage bound: with no more than two always-failing users and at least 23
+always-passing users observed within each stage's 120/240-session window
+(>=92% healthy observed users), the global and language trials reach 100%
+within **360 completed trial speech sessions**, regardless of how many of
+those sessions the two callers supply. If each 30/60-session prefix already
+has that coverage, the bound is 90 sessions. Coverage concerns each sticky
+stage cohort; a target-wide healthy majority that never appears in the trial
+cannot establish recovery. There is no unconditional raw-session or wall-time
+bound under arbitrary user arrivals, nor a statistical guarantee from 23 votes.
+Broad outages still bench early from sequential evidence. Acceptance votes
+do not prove an 8% confidence bound. Strike history clears after 1,024 healthy
+observations.
 Expensive benches receive no primary probes while cheaper targets can serve;
 they remain available only at the failover tail. No pod privately restarts a
 trial during Redis faults. Trial evidence must belong to the sticky re-entry
@@ -342,13 +358,14 @@ Local breakers are omitted from the replay, so their additional protection
 is not credited. Other providers' failures are outside this trial budget.
 
 `live_cost_health.py` stores target/global and target/language state in the
-`omi:live-stt:cost-v2` Redis namespace. Compare-and-set updates preserve shared
+`omi:live-stt:cost-v3` Redis namespace. Compare-and-set updates preserve shared
 counts and transitions across pods; leases serialize trial starts. Fleet
 bench deadlines and trial admission use Redis `TIME`, not pod wall clocks.
 Redis-down local deadlines use the last known server offset and translate once
 on recovery before CAS reconciliation. Tests cover opposite +/-60-second pod
 skews and a ten-minute Redis outage with sixty successful connection decisions.
-The v2 namespace prevents old score/clock state from being read as this detector.
+The v3 namespace prevents old pods from decoding the new trial vote fields.
+It starts a new shadow evidence history; allow it to warm before raising on-percent.
 A background refresh uses the existing 75 ms deadline. Connect reads memory only. Redis
 faults use local evidence and retain known benches, then unknown health and
 configured cost order. A router exception restores today's configured chain. Local benches backed by failed Redis writes remain restrictive when Redis returns, and are reconciled
@@ -358,15 +375,21 @@ over an isolated pod's local rate; verified writes refresh the local fallback
 view so a later Redis blip cannot revive a stale pod-only bench.
 Account/billing refusals remain family-wide immediate protection. Connection
 and serve breakers remain fast local protection; a fleet bench demotes its
-target to the last-resort tail, with no forced account/capacity bypass.
+target to the last-resort tail, with no forced account bypass.
 Targets with an active capacity signal or local capacity cooldown are excluded
 from terminal legs and their configured-default aliases. A `capacity_full`
 refusal starts a five-second, monotonic process-local target cooldown, including
 on empty-proposal configured fallback. It releases any circuit probe without
 recording a circuit failure or fleet health disruption. Static off/shadow
 connections retain existing behavior; active capacity cooldowns cannot be
-bypassed by the static last-resort force path. Cooldown storage is capped at
-64 target IDs and expired entries are reclaimed.
+bypassed by the static last-resort force path. If **every** remaining candidate
+is capacity-signalled or cooled, permit one least-recently-refused candidate
+through its normal circuit/admission gate. This escape makes at most one dial
+per session and never bypasses account protection. A still-full sole candidate
+can therefore receive one attempt per session; a five-second process-wide
+attempt bound would strand sessions when it recovers earlier. With an
+alternative available, overflow cooldown protection remains unchanged. Retain
+refusal timestamps for ordering, bounded to 64 IDs; evict the oldest on churn.
 Legacy provider-score state is retained for static protection/telemetry but
 never ranks the active cost router. Registry fields and endpoint URL structure
 are validated before selection. Actual same-family initial overflow emits
@@ -413,16 +436,22 @@ local test results.
 New bounded metrics: `omi_stt_cost_routing_decisions_total{target,reason}` with
 `capability|cost_primary|benched_skip|ramp_skip|capacity_skip|failover`,
 `omi_stt_cost_routing_benched{target}`, `omi_stt_cost_routing_stage{target}`,
-`omi_stt_cost_routing_shadow_total{agreement,target}`, and
+`omi_stt_cost_routing_shadow_total{agreement,static_primary,proposed_primary}`, and
 `omi_stt_cost_routing_events_total{target,event}`, and
 `omi_stt_cost_routing_fail_open_total{reason}` with bounded
 `empty_proposal|engine_mismatch|cache_unavailable|router_error`. Primary and skip decisions count the proposed policy even in shadow;
 `failover` counts actual active backup attempts, and capacity admission refusals
-count actual overflow. Unused backup legs do not inflate failover counters. The event counter counts fleet transitions; local Redis-down transitions are
-logged with `scope=local` and do not increment it again. Transition logs contain
+count actual overflow. Unused backup legs do not inflate failover counters. The event counter counts global fleet transitions. Language transitions and Redis-down
+transitions (the latter logged with `scope=local`) do not increment it again. Transition logs contain
 target, bounded language, scope, stage, n,
 failures, rate, CUSUM score and cooldown, never UID/content/endpoint/credentials. Gauges
-reflect the last queried language per pod: use event logs for language diagnosis.
+reflect global per-target state, independent of the last queried language.
+Use event logs for language diagnosis. Log n/failures/rate remain raw speech
+session counts; trial promotion uses the user vote rate described above.
+Shadow labels are validated registry IDs (maximum 16), plus fixed
+`unregistered`/`unavailable` sentinels; RNNT static primaries use `unregistered`
+because they are not window targets. Changing the shadow metric labels is an
+intentional monitoring-schema change; update queries after old pods drain.
 Add dashboard panels for proposed target share, shadow disagreement, maximum
 bench state, minimum recovery stage, transition counts, and dropped writes.
 Use traffic floors/dwell for alerts and the existing headline transcript SLI;

@@ -109,7 +109,11 @@ COST_DECISION = Counter(
     'omi_stt_cost_routing_decisions_total', 'Cost routing selections and skips', ['target', 'reason']
 )
 COST_BENCH = Gauge('omi_stt_cost_routing_benched', 'Fleet target health bench', ['target'])
-COST_STAGE = Gauge('omi_stt_cost_routing_stage', 'Fleet target recovery percentage', ['target'])
+COST_STAGE = Gauge('omi_stt_cost_routing_stage', 'Global fleet target recovery stage: 0, 5, 25, 100', ['target'])
 COST_EVENTS = Counter('omi_stt_cost_routing_events_total', 'Fleet health transitions', ['target', 'event'])
-COST_SHADOW = Counter('omi_stt_cost_routing_shadow_total', 'Proposed vs static primary', ['agreement', 'target'])
+COST_SHADOW = Counter(
+    'omi_stt_cost_routing_shadow_total',
+    'Proposed vs static primary',
+    ['agreement', 'static_primary', 'proposed_primary'],
+)
 COST_FAIL_OPEN = Counter('omi_stt_cost_routing_fail_open_total', 'Configured-order router recovery', ['reason'])

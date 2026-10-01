@@ -114,9 +114,15 @@ restore configured order. No worst-provider probes or score ranking remain in
 the active router. Legacy first-text counters remain diagnostics rather than
 additional health samples. Failed recovery trials require the same failure-user
 breadth as fleet benches; narrow failing cohorts retain their trial share with
-bounded evaluation windows, while healthy small cohorts can promote. Terminal
+bounded per-user voting windows, while healthy small cohorts can promote.
+Each user has one majority-outcome vote and at most three sequential-evidence
+outcomes per trial window. Terminal
 legs honor capacity signals and a five-second process-local cooldown after
-`capacity_full`, without treating capacity as provider disruption. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
+`capacity_full`, without treating capacity as provider disruption. If every
+candidate is capacity-blocked, one least-recently-refused candidate may dial
+through its normal circuit/admission gate so a sole recovered target can serve.
+Global stage and transition metrics plus static/proposed shadow pairs are
+documented with exact PromQL in the runbook. See the [STT design](../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
 and [live STT routing runbook](runbooks/live-stt-routing.md).
 
 Soniox streams final token deltas whose network-frame boundaries can split a
