@@ -3277,18 +3277,20 @@ def test_jev_uid_allowlist_contract_survives_cyclic_yaml_aliases():
 
 
 def test_deploy_actions_remove_the_retired_jev_allowlist_env():
-    # gcloud deploy keeps variables it is not told to drop, so a service that once declared the
-    # retired allowlist keeps it (even empty) until every deploy path lists it for removal. The
-    # backfill clone renders from live backend-sync env, so its REMOVE_ENV_VARS must list it too.
-    for relative in (
-        '.github/actions/deploy-backend-stack/action.yml',
-        '.github/actions/sync-backfill-lifecycle/action.yml',
-    ):
-        text = (ROOT.parent / relative).read_text()
-        lines = [
-            line
-            for line in text.splitlines()
-            if ('--remove-env-vars=' in line or 'REMOVE_ENV_VARS:' in line) and 'MEMORY_ENABLED_USERS' in line
-        ]
-        assert lines, relative
-        assert all('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST' in line for line in lines), relative
+    # gcloud deploy keeps variables it is not told to drop, so a prod service that once declared
+    # the retired allowlist keeps it (even empty) until the deploy lists it for removal. The
+    # backfill worker is cloned from live backend-sync env BEFORE backend-sync is redeployed, so
+    # its clone must drop the variable in prod only: dev still declares the allowlist for
+    # dogfooding and the clone is where the dev backfill service gets it.
+    name = 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'
+    stack = (ROOT.parent / '.github/actions/deploy-backend-stack/action.yml').read_text().splitlines()
+    stack_lines = [line for line in stack if '--remove-env-vars=' in line and 'MEMORY_ENABLED_USERS' in line]
+    assert stack_lines and all(name in line for line in stack_lines)
+    lifecycle = (ROOT.parent / '.github/actions/sync-backfill-lifecycle/action.yml').read_text().splitlines()
+    deploy_removals = [line for line in lifecycle if '--remove-env-vars=' in line and 'MEMORY_ENABLED_USERS' in line]
+    assert deploy_removals and all(name in line for line in deploy_removals)
+    clone_removals = [line for line in lifecycle if line.lstrip().startswith('REMOVE_ENV_VARS:')]
+    assert clone_removals
+    for line in clone_removals:
+        assert f"inputs.project_id == 'based-hardware' && ',{name}'" in line
+        assert line.count(name) == 1
