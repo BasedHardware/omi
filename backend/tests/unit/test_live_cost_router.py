@@ -172,7 +172,7 @@ async def test_fleet_counts_recovery_lease_and_stale_generation(monkeypatch):
     for pod in pods:
         pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     for i in range(8):
-        await pods[i % 2]._write_cost_result('parakeet-window', 'en', True, None)
+        await pods[i % 2]._write_cost_result('parakeet-window', 'en', True, None, f'{i:016x}')
     await asyncio.gather(*(pod.refresh_cost_once() for pod in pods))
     assert all(pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0 for pod in pods)
     now[0] = 300
@@ -182,13 +182,13 @@ async def test_fleet_counts_recovery_lease_and_stale_generation(monkeypatch):
     await asyncio.gather(*(pod.refresh_cost_once() for pod in pods))
     assert all(pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 5 for pod in pods)
     assert len(redis.leases) == 2  # global and language coordinators, never one per pod
-    for _ in range(30):
-        await pods[0]._write_cost_result('parakeet-window', 'en', False, {'all': 1, 'en': 1})
+    for i in range(30):
+        await pods[0]._write_cost_result('parakeet-window', 'en', False, {'all': 1, 'en': 1}, f'{i:016x}')
     # generation 1 was bench; trial has generation 2. Old completions cannot promote.
     await pods[0].refresh_cost_once()
     assert pods[0].cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 5
-    for _ in range(30):
-        await pods[0]._write_cost_result('parakeet-window', 'en', False, {'all': 2, 'en': 2})
+    for i in range(30):
+        await pods[0]._write_cost_result('parakeet-window', 'en', False, {'all': 2, 'en': 2}, f'{i:016x}')
     await pods[0].refresh_cost_once()
     assert pods[0].cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 25
 
@@ -201,8 +201,8 @@ async def test_redis_down_local_health_and_no_independent_trials(monkeypatch):
 
     pod = live_health.FleetHealth(redis_client=DownRedis(), clock=lambda: 1000)
     monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
-    for _ in range(8):
-        pod.record_session('parakeet-window', 'en', 'failover')
+    for i in range(8):
+        pod.record_session('parakeet-window', 'en', 'failover', uid=str(i))
     states = pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
     assert select(DEFAULT_TARGETS, states, 'u', 'en')[0].id == 'modulate-velma-2'
@@ -230,6 +230,8 @@ async def test_modes_static_shadow_and_on_percent(monkeypatch, mode, percent, ex
         ),
     )
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    fallbacks = []
+    monkeypatch.setattr(live_chain, 'record_fallback', lambda **event: fallbacks.append(event))
     sock = SimpleNamespace(is_connection_dead=False)
     result, actual = await live_chain.connect_configured_chain(
         primary_service=st.STTService.soniox,
@@ -241,6 +243,7 @@ async def test_modes_static_shadow_and_on_percent(monkeypatch, mode, percent, ex
         routing_language='en',
     )
     assert actual.value == expected
+    assert fallbacks == []  # A policy-selected primary is not a failed connection.
 
 
 def test_synthetic_outage_and_brownout_replay():
@@ -366,6 +369,8 @@ async def test_two_modulate_targets_failover_and_independent_identity(monkeypatc
     )
     monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
     seen = []
+    fallbacks = []
+    monkeypatch.setattr(live_chain, 'record_fallback', lambda **event: fallbacks.append(event))
 
     async def connect():
         target = connecting_target.get()
@@ -388,6 +393,9 @@ async def test_two_modulate_targets_failover_and_independent_identity(monkeypatc
     assert seen == ['modulate-next', 'modulate-velma-2']
     assert failed == {'modulate-next'}
     assert connecting_target.get() is None
+    assert [(event['from_mode'], event['to_mode'], event['outcome']) for event in fallbacks] == [
+        ('modulate', 'modulate', 'recovered')
+    ]
 
 
 @pytest.mark.asyncio
@@ -480,12 +488,12 @@ async def test_language_only_outage_keeps_other_languages(monkeypatch):
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
     pod.cost_snapshot(DEFAULT_TARGETS, 'fr')
     pod.cost_snapshot(DEFAULT_TARGETS, 'en')
-    for _ in range(500):
-        await pod._write_cost_result('modulate-velma-2', 'en', False, None)
-    for _ in range(8):
-        for _ in range(99):
-            await pod._write_cost_result('modulate-velma-2', 'en', False, None)
-        await pod._write_cost_result('modulate-velma-2', 'fr', True, None)
+    for i in range(40):
+        await pod._write_cost_result('modulate-velma-2', 'en', False, None, f'{i:016x}')
+    for i in range(8):
+        for j in range(15):
+            await pod._write_cost_result('modulate-velma-2', 'en', False, None, f'{j:016x}')
+        await pod._write_cost_result('modulate-velma-2', 'fr', True, None, f'{i:016x}')
     await pod.refresh_cost_once()
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'fr')['modulate-velma-2'].stage == 0
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['modulate-velma-2'].stage == 100
@@ -560,3 +568,248 @@ def test_custom_endpoint_serve_failure_does_not_poison_default_endpoint(monkeypa
     assert live_failure.note_typed_provider_death(leg, 'modulate')
     assert st._modulate_circuit.state == 'closed'
     assert live_router.target_circuit(target, st._modulate_circuit).state == 'open'
+
+
+@pytest.mark.parametrize('mode', ['shadow', 'on'])
+def test_early_client_abort_cannot_poison_cost_health_or_serving_circuit(monkeypatch, mode):
+    from tests.unit.test_live_routing_health import _leg
+
+    monkeypatch.setenv('STT_ROUTING_MODE', mode)
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    seen = []
+    monkeypatch.setattr(live_session.health, 'record', lambda *_: None)
+    monkeypatch.setattr(live_session.health, 'record_session', lambda *args: seen.append(args))
+    for _ in range(12):
+        leg = _leg()
+        leg.send(b'\x01\x00' * 16000)
+        leg.finish()
+        leg.finish()
+    assert seen == []
+    assert st._modulate_circuit.state == 'closed'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('text_during_drain', [False, True])
+async def test_client_drain_censors_missing_text_but_counts_real_text(monkeypatch, text_during_drain):
+    from tests.unit.test_live_routing_health import _leg
+
+    seen = []
+    monkeypatch.setattr(live_session.health, 'record', lambda *_: None)
+    monkeypatch.setattr(live_session.health, 'record_session', lambda *args: seen.append(args))
+    leg = _leg()
+    leg.send(b'\x01\x00' * 16000)
+
+    async def drain(raw):
+        if text_during_drain:
+            leg.note_selection_transcript([{'text': 'synthetic'}])
+        raw.finish()
+
+    monkeypatch.setattr(st, 'drain_stt_socket', drain)
+    await leg.drain_and_close()
+    leg.finish()
+    assert [args[2] for args in seen] == (['text'] if text_during_drain else [])
+
+
+@pytest.mark.asyncio
+async def test_one_uid_cannot_bench_or_promote_the_shared_fleet_gate():
+    redis = MemoryRedis()
+    pods = [live_health.FleetHealth(redis_client=redis, clock=lambda: 1000) for _ in range(2)]
+    for pod in pods:
+        pod.cost_snapshot(DEFAULT_TARGETS, 'en')
+    for i in range(100):
+        await pods[i % 2]._write_cost_result('parakeet-window', 'en', True, None, '0' * 16)
+    await pods[0].refresh_cost_once()
+    assert pods[0].cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 100
+    for i in range(1, 4):
+        await pods[i % 2]._write_cost_result('parakeet-window', 'en', False, None, f'{i:016x}')
+    await pods[0].refresh_cost_once()
+    assert pods[0].cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 100
+    for i in range(1, 4):
+        await pods[i % 2]._write_cost_result('parakeet-window', 'en', True, None, f'{i:016x}')
+    await pods[0].refresh_cost_once()
+    state = pods[0].cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window']
+    assert state.stage == 0 and state.n == 106
+    state = begin_trial(state, state.until)
+    for _ in range(60):
+        state = transition(state, False, 0, witness='0' * 16)
+    assert state.stage == 5
+    for i in range(1, 4):
+        state = transition(state, False, 0, witness=f'{i:016x}')
+    assert state.stage == 25
+    warm = GateState()
+    for i in range(100):
+        warm = transition(warm, i % 32 == 0, 0, witness=f'{i:016x}')
+    for _ in range(100):
+        warm = transition(warm, True, 0, witness='f' * 16)
+        assert warm.stage == 100
+
+
+def test_fleet_writer_requires_an_authenticated_uid():
+    pod = live_health.FleetHealth(redis_client=MemoryRedis())
+    pod.record_session('parakeet-window', 'en', 'failover')
+    assert pod._cost_local == {}
+
+
+@pytest.mark.parametrize(
+    'field,value',
+    [
+        ('languages', 'en'),
+        ('languages', [1]),
+        ('features', 'streaming'),
+        ('features', [False]),
+        ('capacity_env', []),
+        ('capacity_env', 'not a variable'),
+        ('endpoint', 123),
+        ('endpoint', 'wss://'),
+        ('endpoint', 'wss://example.invalid/#'),
+        ('endpoint', 'wss://example.invalid/?'),
+        ('endpoint', 'wss://bad host/stream'),
+        ('endpoint', 'wss://user:secret@example.invalid/stream'),
+        ('ramp_percent', True),
+        ('cost_per_audio_hour', '0.05'),
+    ],
+)
+def test_malformed_registry_fields_fail_open_instead_of_selecting_bad_targets(monkeypatch, field, value):
+    entry = {'id': 'modulate-next', 'family': 'modulate', 'cost_per_audio_hour': 0.05, field: value}
+    monkeypatch.setenv('STT_ROUTING_TARGETS_JSON', json.dumps([entry]))
+    with pytest.raises(ValueError):
+        registry()
+
+
+@pytest.mark.asyncio
+async def test_local_bench_is_reconciled_before_redis_recovery_can_unbench(monkeypatch):
+    now = [1000]
+    redis = MemoryRedis()
+    pod = live_health.FleetHealth(redis_client=redis, clock=lambda: now[0])
+    monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
+    for i in range(8):
+        pod.record_session('parakeet-window', 'en', 'failover', uid=str(i))
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0
+    await pod.refresh_cost_once()
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0
+    stored = json.loads(redis.data['omi:live-stt:cost-v1:parakeet-window:all'])
+    assert stored['stage'] == 0 and stored['until'] == 1300
+    now[0] = 1300
+    pod.prefer_recovery('parakeet-window', 'en')
+    await pod.refresh_cost_once()
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 5
+
+
+def test_generation_capture_uses_the_same_backoff_view_as_selection():
+    pod = live_health.FleetHealth(redis_client=MemoryRedis(), clock=lambda: 1000)
+    pod._cost_fresh_at = 1000
+    pod._redis_retry_at = 1010
+    for lang in ('all', 'en'):
+        pod._cost_local[('parakeet-window', lang)] = GateState(generation=2)
+        pod._cost_cached[('parakeet-window', lang)] = GateState(generation=1)
+    assert pod.cost_generations('parakeet-window', 'en') == {'all': 2, 'en': 2}
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].generation == 2
+    for lang in ('all', 'en'):
+        pod._cost_cached[('parakeet-window', lang)] = GateState(stage=5, generation=3)
+    assert pod.cost_generations('parakeet-window', 'en') == {'all': 3, 'en': 3}
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].generation == 3
+
+
+def test_unregistered_targets_do_not_create_cost_health_state():
+    pod = live_health.FleetHealth(redis_client=MemoryRedis())
+    pod.record_session('deepgram', 'en', 'failover', uid='synthetic')
+    assert pod._cost_local == {}
+
+
+@pytest.mark.parametrize('accessor_raises', [False, True])
+def test_target_circuit_hook_errors_cannot_interrupt_failover(monkeypatch, accessor_raises):
+    from utils.stt import live_failure
+
+    class Broken:
+        typed_death_reason = st.MODULATE_DEATH_SERVE_ERROR
+
+        @property
+        def record_target_death(self):
+            if accessor_raises:
+                raise RuntimeError('synthetic accessor failure')
+
+            def fail(_reason):
+                raise RuntimeError('synthetic hook failure')
+
+            return fail
+
+    seen = []
+    monkeypatch.setattr(live_failure, '_open_serving_provider_circuit', lambda *args: seen.append(args) or True)
+    assert live_failure.note_typed_provider_death(Broken(), 'modulate')
+    assert seen == [(st.MODULATE_DEATH_SERVE_ERROR, 'modulate')]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stage,required', [(5, 30), (25, 60)])
+async def test_static_out_of_cohort_sessions_cannot_accelerate_reentry(stage, required):
+    redis = MemoryRedis()
+    state = GateState(stage=stage, generation=1)
+    for lang in ('all', 'en'):
+        redis.data[f'omi:live-stt:cost-v1:parakeet-window:{lang}'] = json.dumps(state.encode())
+    pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
+    pod.cost_snapshot(DEFAULT_TARGETS, 'en')
+    await pod.refresh_cost_once()
+    pending = []
+    pod.schedule = pending.append
+    inside = [str(i) for i in range(1000) if assigned(str(i), 'stt-reentry:parakeet-window', stage)][:4]
+    outside = next(str(i) for i in range(1000) if not assigned(str(i), 'stt-reentry:parakeet-window', stage))
+
+    async def record(uid):
+        pod.record_session('parakeet-window', 'en', 'text', {'all': 1, 'en': 1}, uid)
+        await pending.pop()
+
+    for _ in range(required):
+        await record(outside)
+    assert pod._cost_cached[('parakeet-window', 'all')].n == 0
+    for i in range(required):
+        await record(inside[i % 4])
+    assert pod._cost_cached[('parakeet-window', 'all')].stage == (25 if stage == 5 else 100)
+
+
+@pytest.mark.asyncio
+async def test_same_provider_reconnect_retains_target_identity_and_kill_switch(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic')
+    monkeypatch.setenv(
+        'STT_ROUTING_TARGETS_JSON',
+        json.dumps([{'id': 'soniox-canary', 'family': 'soniox', 'cost_per_audio_hour': 0.0754}]),
+    )
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox'])
+    monkeypatch.setattr(live_session, 'should_initialize_vad_gate', lambda **kwargs: False)
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    seen = []
+
+    async def connect(*args, **kwargs):
+        target = connecting_target.get()
+        seen.append(target.id if target else None)
+        return SimpleNamespace(is_connection_dead=False, finish=lambda: None)
+
+    monkeypatch.setattr(st, 'process_audio_soniox', connect)
+    recv = SimpleNamespace(
+        host=SimpleNamespace(
+            request=SimpleNamespace(uid='synthetic'),
+            language='en',
+            stt_language='en',
+            multi_lang_enabled=False,
+            language_profile=None,
+            stt_model='soniox',
+            stt_service=st.STTService.soniox,
+            vocabulary=[],
+        ),
+        _stt_failed_providers=set(),
+        vad_gate=None,
+    )
+    session = live_session.LiveChainSession(recv)
+    first = await session.connect(16000)
+    first.finish()
+    second = await session.connect(16000, same_provider=True)
+    assert second.routing_target == 'soniox-canary'
+    assert second._routing_active
+    second.finish()
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
+    third = await session.connect(16000, same_provider=True)
+    assert not third._routing_active
+    third.finish()
+    assert seen == ['soniox-canary', 'soniox-canary', None]
+    assert connecting_target.get() is None

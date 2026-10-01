@@ -18,13 +18,20 @@ class GateState:
     until: float = 0
     strikes: int = 0
     generation: int = 0
+    witnesses: tuple[str, ...] = ()
+    recent_failures: tuple[str, ...] = ()
 
     @classmethod
     def decode(cls, raw: dict[str, Any]) -> GateState:
         raw = dict(raw)
-        if not all(isinstance(raw.get(field, 0), int) for field in ('n', 'failures', 'generation', 'strikes')):
+        if not all(type(raw.get(field, 0)) is int for field in ('n', 'failures', 'generation', 'strikes', 'stage')):
             raise ValueError('invalid cost gate counts')
         raw['evidence'] = tuple(raw.get('evidence', cls().evidence))
+        for field in ('witnesses', 'recent_failures'):
+            values: list[Any] = list(raw.get(field, ()))
+            if any(not isinstance(value, str) or len(value) != 16 for value in values):
+                raise ValueError('invalid cost gate witnesses')
+            raw[field] = tuple(values)
         state = cls(**raw)
         if (
             not math.isfinite(state.threshold)
@@ -37,6 +44,9 @@ class GateState:
             or state.until < 0
             or state.generation < 0
             or not 0 <= state.strikes <= 10
+            or len(state.witnesses) > 4
+            or len(set(state.witnesses)) != len(state.witnesses)
+            or len(state.recent_failures) > 8
         ):
             raise ValueError('invalid cost gate state')
         return state
@@ -52,14 +62,30 @@ def gate_rate() -> float:
     return gate
 
 
-def transition(state: GateState, failed: bool, now: float) -> GateState:
+def transition(state: GateState, failed: bool, now: float, *, witness: str | None = None) -> GateState:
     gate = gate_rate()
     if state.threshold != gate:
         state = replace(
-            state, threshold=gate, n=0, failures=0, evidence=GateState().evidence, generation=state.generation + 1
+            state,
+            threshold=gate,
+            n=0,
+            failures=0,
+            evidence=GateState().evidence,
+            witnesses=(),
+            recent_failures=(),
+            generation=state.generation + 1,
         )
     if state.stage == 0:
         return state
+    if witness is not None and witness not in state.witnesses and len(state.witnesses) < 4:
+        state = replace(state, witnesses=(*state.witnesses, witness))
+    if witness is not None and failed:
+        state = replace(state, recent_failures=(*state.recent_failures, witness)[-8:])
+    # Fleet writers always supply a UID fingerprint. A single repeated caller
+    # must not turn its failures into a fleet outage, even after healthy history.
+    # Anonymous outcomes are used only by the mathematical simulation.
+    diverse = witness is None or len(state.witnesses) >= 4
+    broad_failure = witness is None or len(set(state.recent_failures)) >= 4
     # Invest 1/1024 of the evidence budget in a new change point each session.
     # Existing investments continue compounding; the uninvested reserve makes
     # the sum an anytime-valid martingale within each 1024-session block.
@@ -72,7 +98,8 @@ def transition(state: GateState, failed: bool, now: float) -> GateState:
     n, failures = state.n + 1, state.failures + int(failed)
     peak = max(evidence)
     log_e = peak + math.log(sum(math.exp(value - peak) for value in evidence) / len(evidence))
-    if n >= 8 and log_e >= math.log(1000):
+    required = {5: 30, 25: 60}.get(state.stage)
+    if broad_failure and n >= 8 and (log_e >= math.log(1000) or (required and n >= required and failures / n > gate)):
         strikes = min(state.strikes + 1, 10)
         return GateState(
             threshold=gate,
@@ -83,19 +110,7 @@ def transition(state: GateState, failed: bool, now: float) -> GateState:
             strikes=strikes,
             generation=state.generation + 1,
         )
-    required = {5: 30, 25: 60}.get(state.stage)
-    if required and n >= required:
-        if failures / n > gate:
-            strikes = min(state.strikes + 1, 10)
-            return GateState(
-                threshold=gate,
-                stage=0,
-                n=n,
-                failures=failures,
-                until=now + min(14400, 300 * 2 ** (strikes - 1)),
-                strikes=strikes,
-                generation=state.generation + 1,
-            )
+    if diverse and required and n >= required and failures / n <= gate:
         return GateState(
             threshold=gate,
             stage=25 if state.stage == 5 else 100,

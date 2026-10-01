@@ -331,9 +331,12 @@ def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
         return False
     if typed not in _CIRCUIT_OPENING_REASONS:
         return False
-    target_death = getattr(stt_socket, 'record_target_death', None)
-    if callable(target_death) and target_death(typed):
-        return True
+    try:
+        target_death = getattr(stt_socket, 'record_target_death', None)
+        if callable(target_death) and target_death(typed):
+            return True
+    except Exception as error:
+        logger.warning('Unable to record target circuit after provider death error_type=%s', type(error).__name__)
     return _open_serving_provider_circuit(typed, provider)
 
 

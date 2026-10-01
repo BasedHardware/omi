@@ -105,7 +105,6 @@ async def test_stale_scores_keep_known_fleet_account_bench(monkeypatch):
     assert state.bench == 'account'
     assert state.bench_until == bench_until
     assert state.excluded
-    assert state.excluded
     health._benches['soniox'] = ('selection', bench_until + 30)
     assert health.cached_snapshot(['soniox'], 'en')['soniox'].bench == 'account'
     health._client = DownRedis()
@@ -710,6 +709,7 @@ def test_on_mode_waits_for_text_and_no_text_opens_breaker(monkeypatch):
     leg.set_health_callbacks(lambda: success.append(True), lambda: closed.append(True))
     assert leg.send(b'\x01\x00' * 16000)
     assert success == []
+    leg._first_speech_at = time.monotonic() - 60
     leg.finish()
     assert closed == [True]
     assert quarantines == [('modulate', 'selection', 180.0)]

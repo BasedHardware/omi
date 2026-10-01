@@ -227,6 +227,14 @@ existing investments continue accumulating likelihood. This detects an abrupt
 outage after a long healthy history without treating minutes as samples. The
 mixture is an anytime-valid test within each 1024-session evidence block;
 bench at likelihood evidence >= 1000 with at least eight speech sessions.
+Fleet writes additionally require four distinct authenticated UID fingerprints
+among the last eight failure outcomes. This prevents one caller from supplying
+an entire outage, including after healthy traffic. Recovery promotion requires
+four distinct sampled UIDs; session counts remain the statistical denominator.
+The state retains at most four sample fingerprints and eight recent-failure
+fingerprints (salted SHA-256 prefixes), never raw UIDs or user content. These
+values are never metric labels or logs. Sparse cohorts may not meet the
+diversity floor; local breakers still protect their connections.
 Under independent Bernoulli outcomes with a rate at or below the gate, the
 sequential false-bench bound is 0.1% per block/test (0.2% for the target and one language
 test combined). Repeated blocks/languages increase that bound; it is not a
@@ -241,7 +249,10 @@ A leg contributes once after at least one second of VAD-confirmed speech:
 no text by the existing deadline, death/failover after text, or successful
 completion. A known no-text or dead leg contributes immediately; successful
 legs wait until close so later failure cannot be hidden by first text.
-Intentional teardown does not count as a death. Legacy first-text counters
+Intentional teardown does not count as a death. A healthy client close before
+the first-text deadline is censored if no text arrives during drain; legacy
+no-text diagnostics are preserved, but this is not provider failure evidence.
+Actual text during drain still counts as successful completion. Legacy first-text counters
 remain diagnostic and are not added to the session denominator. Target-global
 and bounded-language evidence run independently; a language bench can restrict
 that language, and sparse healthy languages inherit target-global health.
@@ -261,14 +272,17 @@ outcomes; repeated sessions from one UID can be correlated.
 A bench waits 300 seconds initially. A failed trial doubles the wait, capped
 at four hours. A fleet lease starts the shared 5% trial after cooldown when
 this target would be cheaper than a surviving primary for some eligible
-session. Thirty speech sessions with disruption <= the gate promote to 25%;
-sixty more promote to 100%. Trial failures trigger an early sequential bench,
+session. Thirty speech sessions spanning four sampled UIDs with disruption <= the gate promote to 25%;
+sixty more promote to 100%. Trial failures from enough distinct callers trigger an early sequential bench,
 or re-bench at the fixed sample boundary when the empirical rate exceeds the
 gate. These are fixed-sample acceptance checks, not a high-confidence proof of
 an 8% upper bound. Strike history clears after a full healthy evidence block.
 A more expensive bench receives no primary probes while a cheaper target
 serves it; it can remain unknown until needed. No pod starts a private trial
-when Redis is down. Outcomes carry a stage generation: completions from a
+when Redis is down. Trial evidence is accepted only for the sticky re-entry cohort intersected
+with the target ramp, including when existing static/shadow traffic supplies
+observations. Out-of-cohort completions cannot accelerate a stage.
+Outcomes carry a stage generation: completions from a
 previous stage cannot promote a newer one.
 
 `live_cost_health.py` stores target/global and target/language state in the
@@ -276,11 +290,22 @@ previous stage cannot promote a newer one.
 counts and transitions across pods; leases serialize trial starts. A background
 refresh uses the existing 75 ms deadline. Connect reads memory only. Redis
 faults use local evidence and retain known benches, then unknown health and
-configured cost order. A router exception restores today's configured chain.
+configured cost order. A router exception restores today's configured chain. Local benches created
+during Redis faults remain restrictive when Redis returns, and are reconciled
+through CAS before staged recovery; snapshot and generation capture use the
+same freshness/backoff predicate.
 Account/billing refusals remain immediate protection; local connection/serve
 breakers remain fast protection and cannot bypass an active fleet cost bench,
 including the old last-resort path. Legacy provider-score state is retained for
 static-path protection/telemetry, but never ranks the active cost router.
+Registry field types and endpoint URL structure are validated before selection.
+Initial same-family target overflow emits the shared fallback telemetry; a
+normal cost-selected primary is not reported as a fallback. Existing
+same-provider reconnects retain their selected target identity for health.
+The managed mid-session receiver still records failed provider families, so a
+serving death excludes all endpoints of that family for the remaining capture.
+Changing that receiver algorithm is outside this PR and belongs to the separate
+mid-session lane; initial connection attempts use target-scoped exclusions.
 
 ### Adding a second Modulate endpoint and rollout
 
@@ -322,7 +347,9 @@ New bounded metrics: `omi_stt_cost_routing_decisions_total{target,reason}` with
 `omi_stt_cost_routing_shadow_total{agreement,target}`, and
 `omi_stt_cost_routing_events_total{target,event}`. Decisions count the proposed
 policy even in shadow; capacity admission refusals also count actual overflow
-in active mode. Transition logs contain target, bounded language, stage, n,
+in active mode. The event counter counts fleet transitions; local Redis-down transitions are
+logged with `scope=local` and do not increment it again. Transition logs contain
+target, bounded language, scope, stage, n,
 failures, rate and cooldown, never UID/content/endpoint/credentials. Gauges
 reflect the last queried language per pod: use event logs for language diagnosis.
 Add dashboard panels for proposed target share, shadow disagreement, maximum

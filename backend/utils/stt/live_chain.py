@@ -21,6 +21,7 @@ from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISI
 from utils.stt.live_health import health, mode as routing_mode
 from utils.stt.live_router import connecting_target, propose, target_circuit
 from config.live_stt_registry import routing_on
+from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_metrics import COST_DECISION
 from utils.stt.provider_resilience import EXPECTED_REJECTIONS, close_rejected_socket, fallback_socket_is_serving
 from utils.stt.socket import STTSocket
@@ -103,8 +104,10 @@ async def connect_configured_chain(
     fleet_states = {}
     active = False
     routes = [(service, None) for service in candidates]
+    canary = False
     if mode != 'off' and routing_uid:
         try:
+            canary = routing_on(routing_uid)
             configured = [service.value for service in candidates if callbacks.get(service) is not None]
             fleet_states = health.cached_snapshot(configured, routing_language)
             proposed = propose(
@@ -116,9 +119,20 @@ async def connect_configured_chain(
                 fleet_states,
                 routing_languages,
             )
-            active = routing_on(routing_uid)
+            active = canary
             if active:
                 routes = [(STTService(target.family), target) for target in proposed]
+        except CostHealthUnavailable:
+            active = False
+            logger.debug('live_stt_cost_router cache unavailable; using configured order')
+            if canary:
+                record_fallback(
+                    component='stt_selection',
+                    from_mode=primary_service.value,
+                    to_mode=primary_service.value,
+                    reason='config_incomplete',
+                    outcome='degraded',
+                )
         except Exception:
             active = False
             routes = [(service, None) for service in configured_candidates]
@@ -167,7 +181,13 @@ async def connect_configured_chain(
                 waits.extend(max(0.0, fleet_states[service.value].bench_until - time.time()) for service in eligible)
             retry_after = max(5, int(max(waits, default=0) + 0.999))
             raise ProviderChainUnavailable(retry_after)
-    origin = primary_service.value
+    primary_target = routes[0][1] if active and routes else None
+    policy_primary = primary_target.id if primary_target is not None else None
+    origin = routes[0][0].value if active and routes else primary_service.value
+
+    def backup(service: STTService, target) -> bool:
+        return target.id != policy_primary if active and target is not None else service != primary_service
+
     prior_reason = 'circuit_open'
     prior_capacity_subtype: str | None = None
     attempted = False
@@ -234,7 +254,7 @@ async def connect_configured_chain(
             LEG_ATTEMPTS.labels(
                 to_mode=service.value, outcome='rejected' if reason in EXPECTED_REJECTIONS else 'error'
             ).inc()
-            if service != primary_service:
+            if backup(service, target):
                 record_fallback(
                     component='stt_selection',
                     from_mode=origin,
@@ -253,7 +273,7 @@ async def connect_configured_chain(
             attach_health(on_success, on_close)
         else:
             on_success()
-        if service != primary_service or primary_open:
+        if backup(service, target) or primary_open:
             pending = PendingLiveFailover(
                 component='stt_selection',
                 from_mode=origin,
@@ -281,8 +301,8 @@ async def connect_configured_chain(
             continue
         circuit = target_circuit(target, _circuit_for_primary(service))
         if not circuit.allow_request(max_probes=probes):
-            primary_open |= service == primary_service
-            if service != primary_service:
+            primary_open |= not backup(service, target)
+            if backup(service, target):
                 record_fallback(
                     component='stt_selection',
                     from_mode=origin,
