@@ -71,8 +71,6 @@ def is_transaction_contention(error: BaseException) -> bool:
 
         if getattr(current, "__cause__", None) is not None:
             queue.append(current.__cause__)  # type: ignore[arg-type]
-        if getattr(current, "__context__", None) is not None:
-            queue.append(current.__context__)  # type: ignore[arg-type]
 
         # Handle ExceptionGroup / BaseExceptionGroup unrolling if present
         nested_exceptions = getattr(current, "exceptions", None)
@@ -118,7 +116,9 @@ def run_with_transaction_contention_retry(
     if on_retry is not None and not callable(on_retry):
         raise TypeError("on_retry must be callable")
 
-    clean_op_name = operation_name.strip() if operation_name and operation_name.strip() else "unnamed_operation"
+    clean_op_name = (
+        operation_name.strip() if isinstance(operation_name, str) and operation_name.strip() else "unnamed_operation"
+    )
 
     for attempt in range(1, max_attempts + 1):
         try:

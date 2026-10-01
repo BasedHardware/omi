@@ -142,28 +142,35 @@ def test_chained_explicit_cause_contention() -> None:
     assert attempts[0] == 2
 
 
-def test_implicit_context_contention() -> None:
+def test_implicit_context_does_not_trigger_retry() -> None:
     attempts = [0]
 
     def op(tx: Any) -> str:
         attempts[0] += 1
-        if attempts[0] == 1:
-            try:
-                raise FirestoreAborted("Raw contention")
-            except FirestoreAborted:
-                # Implicit context: raised without 'from err'
-                raise RuntimeError("Unwrapped handler error")
-        return "context_resolved"
+        try:
+            raise FirestoreAborted("Raw contention")
+        except FirestoreAborted:
+            # Implicit context: raised without 'from err' must NOT be retried per repo contract
+            raise RuntimeError("Replacement error")
 
+    with pytest.raises(RuntimeError, match="Replacement error"):
+        run_with_transaction_contention_retry(
+            lambda: MockTransaction(1),
+            op,
+            operation_name="implicit_context_op",
+            sleep=lambda d: None,
+        )
+
+    assert attempts[0] == 1
+
+
+def test_operation_name_non_string_sanitization() -> None:
     result = run_with_transaction_contention_retry(
         lambda: MockTransaction(1),
-        op,
-        operation_name="context_chain_op",
-        sleep=lambda d: None,
+        lambda tx: "ok",
+        operation_name=None,  # type: ignore[arg-type]
     )
-
-    assert result == "context_resolved"
-    assert attempts[0] == 2
+    assert result == "ok"
 
 
 def test_grpc_status_code_callable_and_attribute() -> None:
@@ -196,9 +203,9 @@ def test_cyclic_exception_reference_protection() -> None:
 
     assert is_transaction_contention(e1) is False
 
-    # Now inject FirestoreAborted in cyclic chain
+    # Now inject FirestoreAborted in chain via __cause__
     e3 = FirestoreAborted("inner abort")
-    e2.__context__ = e3
+    e2.__cause__ = e3
     assert is_transaction_contention(e1) is True
 
 
