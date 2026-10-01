@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass, replace
 
 @dataclass(frozen=True)
 class GateState:
+    threshold: float = 0.08
     stage: int = 100
     n: int = 0
     failures: int = 0
@@ -23,7 +24,9 @@ class GateState:
         raw['evidence'] = tuple(raw.get('evidence', cls().evidence))
         state = cls(**raw)
         if (
-            state.stage not in (0, 5, 25, 100)
+            not math.isfinite(state.threshold)
+            or not 0 < state.threshold < 1
+            or state.stage not in (0, 5, 25, 100)
             or not isinstance(state.n, int)
             or not 0 <= state.failures <= state.n <= 1024
             or len(state.evidence) != 3
@@ -50,9 +53,13 @@ def gate_rate() -> float:
 
 
 def transition(state: GateState, failed: bool, now: float) -> GateState:
+    gate = gate_rate()
+    if state.threshold != gate:
+        state = replace(
+            state, threshold=gate, n=0, failures=0, evidence=GateState().evidence, generation=state.generation + 1
+        )
     if state.stage == 0:
         return state
-    gate = gate_rate()
     # Invest 1/1024 of the evidence budget in a new change point each session.
     # Existing investments continue compounding; the uninvested reserve makes
     # the sum an anytime-valid martingale within each 1024-session block.
@@ -68,6 +75,7 @@ def transition(state: GateState, failed: bool, now: float) -> GateState:
     if n >= 8 and log_e >= math.log(1000):
         strikes = min(state.strikes + 1, 10)
         return GateState(
+            threshold=gate,
             stage=0,
             n=n,
             failures=failures,
@@ -80,6 +88,7 @@ def transition(state: GateState, failed: bool, now: float) -> GateState:
         if failures / n > gate:
             strikes = min(state.strikes + 1, 10)
             return GateState(
+                threshold=gate,
                 stage=0,
                 n=n,
                 failures=failures,
@@ -87,13 +96,18 @@ def transition(state: GateState, failed: bool, now: float) -> GateState:
                 strikes=strikes,
                 generation=state.generation + 1,
             )
-        return GateState(stage=25 if state.stage == 5 else 100, strikes=state.strikes, generation=state.generation + 1)
+        return GateState(
+            threshold=gate,
+            stage=25 if state.stage == 5 else 100,
+            strikes=state.strikes,
+            generation=state.generation + 1,
+        )
     if n >= 1024:
-        return GateState(stage=state.stage, generation=state.generation + 1)
+        return GateState(threshold=gate, stage=state.stage, generation=state.generation + 1)
     return replace(state, n=n, failures=failures, evidence=evidence)
 
 
 def begin_trial(state: GateState, now: float) -> GateState:
     if state.stage == 0 and now >= state.until:
-        return GateState(stage=5, strikes=state.strikes, generation=state.generation + 1)
+        return GateState(threshold=state.threshold, stage=5, strikes=state.strikes, generation=state.generation + 1)
     return state

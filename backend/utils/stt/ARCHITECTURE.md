@@ -223,9 +223,11 @@ outage after a long healthy history without treating minutes as samples. The
 mixture is an anytime-valid test within each 1024-session evidence block;
 bench at likelihood evidence >= 1000 with at least eight speech sessions.
 Under independent Bernoulli outcomes with a rate at or below the gate, the
-false-bench bound is 0.1% per block/test (0.2% for the target and one language
+sequential false-bench bound is 0.1% per block/test (0.2% for the target and one language
 test combined). Repeated blocks/languages increase that bound; it is not a
-lifetime guarantee. Synthetic tests observe zero benches over 200 seeded runs
+lifetime guarantee; fixed-sample trial rejection has its own false-rejection
+probability. Changing the disruption gate resets the evidence generation
+without clearing an existing bench. Synthetic tests observe zero benches over 200 seeded runs
 of 5000 sessions at 3% (one million outcomes). The 95% upper bound for a
 5000-session run's false-bench probability from those zero observations is
 about 1.5%, rather than proof that false positives cannot occur.

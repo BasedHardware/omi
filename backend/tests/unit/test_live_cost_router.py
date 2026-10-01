@@ -493,3 +493,28 @@ async def test_language_only_outage_keeps_other_languages(monkeypatch):
     await pod.refresh_cost_once()
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'fr')['modulate-velma-2'].stage == 0
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['modulate-velma-2'].stage == 100
+
+
+def test_redis_fault_retains_language_specific_bench():
+    pod = live_health.FleetHealth(redis_client=MemoryRedis(), clock=lambda: 1000)
+    pod._cost_cached[('modulate-velma-2', 'fr')] = GateState(stage=0, until=2000)
+    pod._redis_retry_at = 1010
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'fr')['modulate-velma-2'].stage == 0
+    # The known French bench must not contaminate an unrelated healthy English view.
+    pod._cost_local[('modulate-velma-2', 'en')] = GateState(n=50)
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['modulate-velma-2'].stage == 100
+
+
+def test_gate_config_change_starts_fresh_evidence_generation(monkeypatch):
+    old = GateState(n=500, failures=15, generation=3)
+    monkeypatch.setenv('STT_ROUTING_DISRUPTION_GATE', '0.12')
+    new = transition(old, False, 0)
+    assert new.threshold == 0.12 and new.n == 1 and new.failures == 0 and new.generation == 4
+    benched = replace(old, stage=0, until=100)
+    new = transition(benched, False, 0)
+    assert new.stage == 0 and new.until == 100 and new.threshold == 0.12
+
+
+def test_invalid_shared_gate_state_is_rejected():
+    with pytest.raises(ValueError, match='invalid cost gate state'):
+        GateState.decode({'stage': 50})

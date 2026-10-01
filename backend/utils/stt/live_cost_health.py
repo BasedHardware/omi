@@ -58,6 +58,9 @@ class CostHealthMixin:
                 cached = self._cost_cached.get((target.id, 'all'), GateState())
                 if not fresh and cached.stage < global_state.stage:
                     global_state = cached
+                cached_lang = self._cost_cached.get((target.id, language), GateState())
+                if not fresh and cached_lang.stage < lang_state.stage:
+                    lang_state = cached_lang
                 if lang_state.n >= 30 or lang_state.stage < 100:
                     state = lang_state if lang_state.stage < global_state.stage else global_state
                 else:
