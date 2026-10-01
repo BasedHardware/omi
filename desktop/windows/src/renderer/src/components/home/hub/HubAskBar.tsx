@@ -217,7 +217,15 @@ export function HubAskBar(props: {
         ) : canSend ? (
           <button
             type="button"
-            onClick={onSubmit}
+            onClick={() => {
+              onSubmit()
+              // A mouse-clicked Send leaves focus on this button (Enter never blurs
+              // the input, so it needs no help). Deferred a frame: the first send
+              // re-docks this bar into the chat panel (see the autoFocus doc above),
+              // remounting the input — inputRef only points at the new node once
+              // React commits that render.
+              requestAnimationFrame(() => inputRef.current?.focus())
+            }}
             aria-label="Send"
             className="focus-ring flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-home-paper transition-opacity duration-150 hover:opacity-90"
           >

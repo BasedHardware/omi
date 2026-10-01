@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Clicking Send in chat now returns focus to the message box, so you can keep typing your next message right away instead of clicking back into it first."
+  ]
+}

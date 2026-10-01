@@ -300,6 +300,21 @@ describe('BarChatSurface', () => {
     expect(props.onBack).toHaveBeenCalledTimes(1)
   })
 
+  it('conversation: clicking Send returns focus to the input, across consecutive mouse sends (#20218)', async () => {
+    // Regression: a mouse-clicked Send left focus on the Send button, so the user
+    // had to click the composer again before typing a follow-up. Enter is
+    // unaffected (it never blurs the textarea) — only the mouse path needs the
+    // explicit refocus, and it must keep working on the second send too.
+    const input = renderLiveSurface(vi.fn(async () => null))
+    fireEvent.change(input, { target: { value: 'first question' } })
+    fireEvent.click(screen.getByText('Send'))
+    await vi.waitFor(() => expect(document.activeElement).toBe(input))
+
+    fireEvent.change(input, { target: { value: 'second question' } })
+    fireEvent.click(screen.getByText('Send'))
+    await vi.waitFor(() => expect(document.activeElement).toBe(input))
+  })
+
   it('conversation: typed input keeps the input and Enter sends a NON-voice turn', () => {
     const props = renderSurface({ view: 'conversation', draft: 'hello there' })
     const input = screen.getByPlaceholderText(/Ask Omi/i)

@@ -97,6 +97,23 @@ describe('HubAskBar — attachments', () => {
     expect(removeAttachment).toHaveBeenCalledWith('x1')
   })
 
+  it('clicking Send returns focus to the input, across consecutive mouse sends (#20218)', async () => {
+    // Regression: a mouse-clicked Send left focus on the button, so the user had to
+    // click the composer again before typing a follow-up. Enter is unaffected (it
+    // never blurs the input) — only the mouse path needs the explicit refocus.
+    const onSubmit = vi.fn()
+    renderBar({ value: 'hello there', onSubmit })
+    const input = screen.getByLabelText('Ask omi anything')
+    fireEvent.click(screen.getByLabelText('Send'))
+    await waitFor(() => expect(document.activeElement).toBe(input))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+
+    // A second consecutive mouse send must restore focus again, not just the first.
+    fireEvent.click(screen.getByLabelText('Send'))
+    await waitFor(() => expect(document.activeElement).toBe(input))
+    expect(onSubmit).toHaveBeenCalledTimes(2)
+  })
+
   it('enables Send with attachments even when the text is empty (attachment-only)', () => {
     mockPending = [att({ id: 'x1' })]
     const onSubmit = vi.fn()

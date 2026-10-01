@@ -355,6 +355,11 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
       if (!notice || seq !== submitSeq.current) return
       p.setDraft((current) => (current.trim() ? current : text))
     })
+    // A mouse-clicked Send leaves focus on the button (Enter never blurs the
+    // textarea, so it needs no help). Deferred a frame: a list→conversation send
+    // remounts the textarea via onOpenConversation above, and inputRef only points
+    // at the new node once React commits that render.
+    requestAnimationFrame(() => inputRef.current?.focus())
   }, [resumeFollow])
 
   // Textarea key handling, one stable handler per surface flavor. Both let PTT
