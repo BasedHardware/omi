@@ -8,7 +8,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from google.api_core.exceptions import GatewayTimeout, InternalServerError
+from google.api_core.exceptions import GatewayTimeout, InternalServerError, TooManyRequests
 from google.auth.credentials import AnonymousCredentials
 from requests.exceptions import ConnectionError as RequestsConnectionError, ReadTimeout
 
@@ -1021,12 +1021,15 @@ def test_dry_run_breakdown_source_rule_duration_shape(tmp_path, monkeypatch, kep
 class FakeStorage:
     """Version-fenced GCS boundary; no credentials, sockets or cloud clients."""
 
-    def __init__(self):
+    def __init__(self, *, enforce_rate_limit=True, clock=None):
         self.objects = {}
         self.uploads = []
         self.serial = 0
         self.lock = threading.RLock()
-        self.server_clock = ManualClock()
+        self.server_clock = clock or ManualClock()
+        self.enforce_rate_limit = enforce_rate_limit
+        self.mutation_times = {}
+        self.rate_rejections = 0
         self.metadata = {}
         self.versions = {}
 
@@ -1067,6 +1070,11 @@ class FakeBlob:
 
         with self.storage.lock:
             key = (self.bucket.name, self.name)
+            now = self.storage.server_clock()
+            times = self.storage.mutation_times.setdefault(key, [])
+            if self.storage.enforce_rate_limit and times and now - times[-1] < 1:
+                self.storage.rate_rejections += 1
+                raise TooManyRequests('object mutation rate exceeded')
             current = self.storage.objects.get(key, (0, None))[0]
             if current != if_generation_match:
                 raise PreconditionFailed('generation mismatch')
@@ -1078,6 +1086,7 @@ class FakeBlob:
             self.storage.metadata[key] = (self.updated, self.time_created)
             self.storage.versions[(key, self.generation)] = (self.storage.objects[key][1], self.storage.metadata[key])
             self.storage.uploads.append((self.name, if_generation_match))
+            times.append(now)
 
     def download_as_bytes(self, *, if_generation_match, **kwargs):
         from google.api_core.exceptions import PreconditionFailed
@@ -1092,8 +1101,14 @@ class FakeBlob:
         return data
 
 
-def artifact(storage, uri='gs://test-bucket/repair/run'):
-    return repair.ArtifactMirror(uri, storage, heartbeat=False)
+def artifact(storage, uri='gs://test-bucket/repair/run', *, heartbeat=False):
+    return repair.ArtifactMirror(
+        uri,
+        storage,
+        heartbeat=heartbeat,
+        monotonic=lambda: storage.server_clock(),
+        sleep=lambda delay: storage.server_clock.advance(delay),
+    )
 
 
 def remote_file(storage, name, prefix='repair/run/'):
@@ -1184,6 +1199,20 @@ def test_artifact_concurrent_writer_detected_preserves_complete_previous_snapsho
 
 
 def artifact_cli(monkeypatch, storage, client, args):
+    mirror_class = repair.ArtifactMirror
+    monkeypatch.setattr(
+        repair,
+        'ArtifactMirror',
+        lambda uri, client, **kwargs: mirror_class(
+            uri,
+            client,
+            **dict(
+                kwargs,
+                monotonic=lambda: storage.server_clock(),
+                sleep=lambda delay: storage.server_clock.advance(delay),
+            ),
+        ),
+    )
     monkeypatch.setattr(repair.storage, 'Client', lambda: storage)
     monkeypatch.setattr(repair.sys, 'argv', ['repair', *args])
     monkeypatch.setattr(
@@ -1287,7 +1316,7 @@ def test_artifact_failed_publication_keeps_previous_snapshot_and_can_resume(tmp_
         raise repair.ServiceUnavailable('offline')
 
     monkeypatch.setattr(mirror.manifest, 'upload_from_string', fail)
-    with pytest.raises(repair.ServiceUnavailable):
+    with pytest.raises(repair.ArtifactError):
         mirror.upload(source.path)
     # The uploaded audit is an orphan, never a partial published snapshot.
     _, data = storage.objects[('test-bucket', 'repair/run/manifest.json')]
@@ -1358,6 +1387,9 @@ class ManualClock:
 
     def __call__(self):
         return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
 
     def expire(self):
         self.now += repair.RunLease.TTL + repair.RunLease.TAKEOVER_GRACE + repair.RunLease.SKEW_ALLOWANCE + 1
@@ -1603,7 +1635,9 @@ def test_artifact_or_lease_failure_prevents_mutation(tmp_path, monkeypatch, stag
             if stage == 'lease_after_intent':
                 key = ('test-bucket', 'repair/run/lease.json')
                 generation, data = storage.objects[key]
+                data = json.dumps(dict(json.loads(data), owner='another-owner')).encode()
                 storage.objects[key] = (generation + 1000, data)
+                storage.versions[(key, generation + 1000)] = (data, storage.metadata[key])
             return result
         return original(blob, *args, **kwargs)
 
@@ -1670,12 +1704,17 @@ def test_lease_heartbeat_renews_periodically_and_stops_on_lost_generation(tmp_pa
     renew = mirror.lease.renew
 
     def observed(**kwargs):
+        clock.advance(61)
         try:
             renew(**kwargs)
         finally:
             called.set()
 
-    monkeypatch.setattr(mirror.lease, 'TTL', 0.03)
+    class FastWait(threading.Event):
+        def wait(self, timeout=None):
+            return super().wait(0.01)
+
+    mirror.lease.stop = FastWait()
     monkeypatch.setattr(mirror.lease, 'renew', observed)
     generation = mirror.lease.generation
     mirror.lease.start()
@@ -1685,7 +1724,9 @@ def test_lease_heartbeat_renews_periodically_and_stops_on_lost_generation(tmp_pa
     key = ('test-bucket', 'repair/run/lease.json')
     with storage.lock:
         generation, data = storage.objects[key]
+        data = json.dumps(dict(json.loads(data), owner='another-owner')).encode()
         storage.objects[key] = (generation + 1000, data)
+        storage.versions[(key, generation + 1000)] = (data, storage.metadata[key])
     assert called.wait(timeout=2)
     mirror.lease.close()
     storage.server_clock.expire()
@@ -1840,22 +1881,27 @@ def test_commit_held_past_takeover_cannot_report_successful_rollback(tmp_path, m
 
 
 @pytest.mark.parametrize('metadata', ['missing', 'creation_only'])
-def test_lease_probe_rewrite_requires_fresh_server_timestamp(tmp_path, monkeypatch, metadata):
-    _, _, log = setup(tmp_path)
-    storage, clock = FakeStorage(), ManualClock()
-    mirror = durable_run(log, storage, clock)
-    upload = mirror.lease.probe.upload_from_string
+def test_unique_lease_probes_require_server_assigned_timestamp(tmp_path, monkeypatch, metadata):
+    storage = FakeStorage()
+    mirror = artifact(storage)
+    mirror.create()
+    upload = FakeBlob.upload_from_string
 
-    def stale_metadata(*args, **kwargs):
-        upload(*args, **kwargs)
-        mirror.lease.probe.updated = None
-        if metadata == 'missing':
-            mirror.lease.probe.time_created = None
+    def incomplete_metadata(blob, *args, **kwargs):
+        upload(blob, *args, **kwargs)
+        if '/clock/' in blob.name:
+            blob.updated = None
+            if metadata == 'missing':
+                blob.time_created = None
 
-    monkeypatch.setattr(mirror.lease.probe, 'upload_from_string', stale_metadata)
-    with pytest.raises(repair.LeaseLost):
+    monkeypatch.setattr(FakeBlob, 'upload_from_string', incomplete_metadata)
+    if metadata == 'missing':
+        with pytest.raises(repair.ArtifactError):
+            mirror.lease.renew()
+        assert mirror.lease.failed and not mirror.lease.lost
+    else:
         mirror.lease.renew()
-    assert mirror.lease.lost
+        assert not mirror.lease.failed and not mirror.lease.lost
 
 
 @pytest.mark.parametrize('failure', ['read_transient', 'write_ack_lost'])
@@ -1931,6 +1977,7 @@ def test_sdk_transient_lease_io_recovers_without_reissuing_commits(
     storage.server_clock.now = 1790821367.063
     mirror = artifact(storage)
     mirror.create()
+    storage.server_clock.advance(61)
     old_generation = mirror.lease.generation
     reload, upload = FakeBlob.reload, FakeBlob.upload_from_string
     attempts, commits = [], []
@@ -1946,7 +1993,7 @@ def test_sdk_transient_lease_io_recovers_without_reissuing_commits(
         result = upload(blob, data, **kwargs)
         target = mirror.lease.blob.name if operation == 'lease_commit' else mirror.lease.probe.name
         if blob.name == target:
-            commits.append(kwargs)
+            commits.append((blob.name, kwargs))
             if len(commits) == 1:
                 raise error_type(UID + TEXT)
         return result
@@ -1972,7 +2019,7 @@ def test_sdk_transient_lease_io_recovers_without_reissuing_commits(
     else:
         # Renewal samples server time twice; neither committed PUT is reissued.
         assert len(commits) == (2 if operation == 'probe_commit' else 1)
-        assert len({call['if_generation_match'] for call in commits}) == len(commits)
+        assert len({(name, call['if_generation_match']) for name, call in commits}) == len(commits)
     logs = capsys.readouterr().err
     assert UID not in logs and TEXT not in logs
 
@@ -1989,9 +2036,9 @@ def test_sdk_transient_metadata_read_exhausts_bounded_budget(tmp_path, monkeypat
 
     monkeypatch.setattr(FakeBlob, 'reload', unavailable)
     monkeypatch.setattr(repair.time, 'sleep', lambda _: None)
-    with pytest.raises(repair.LeaseLost):
+    with pytest.raises(repair.ArtifactError):
         mirror.lease.renew()
-    assert len(attempts) == 3 and mirror.lease.lost
+    assert len(attempts) == 3 and mirror.lease.failed and not mirror.lease.lost
 
 
 def test_live_generation_read_detects_takeover_even_if_old_version_is_retained(tmp_path):
@@ -2015,7 +2062,7 @@ def test_live_generation_read_detects_takeover_even_if_old_version_is_retained(t
 def test_heartbeat_keeps_lease_during_three_minute_read_phase(tmp_path, monkeypatch, phase, apply):
     client, runtime, log = setup(tmp_path, apply=apply)
     storage = FakeStorage()
-    mirror = repair.ArtifactMirror('gs://test-bucket/repair/run', storage)
+    mirror = artifact(storage, heartbeat=True)
     log.artifacts = mirror
     elapsed = threading.Event()
     ticks = []
@@ -2067,7 +2114,7 @@ def test_heartbeat_keeps_lease_during_three_minute_read_phase(tmp_path, monkeypa
         summary = repair.run(runtime, log, workers=1, max_writes_per_second=100000)
         assert summary['exit_code'] == 0 and summary['processed'] == 1
         assert storage.server_clock.now - start >= 180
-        assert ticks == sorted(ticks) and len(set(ticks)) == len(ticks)
+        assert ticks == sorted(ticks) and len(set(ticks)) >= 2
         assert client.rows[ROW_PATH]['discarded'] is apply
     finally:
         mirror.lease.close()
@@ -2081,6 +2128,7 @@ def test_lease_ack_reconciliation_does_not_accept_unchanged_or_other_owner(tmp_p
     storage = FakeStorage()
     mirror = artifact(storage)
     mirror.create()
+    storage.server_clock.advance(61)
     generation = mirror.lease.generation
     upload = FakeBlob.upload_from_string
 
@@ -2094,10 +2142,12 @@ def test_lease_ack_reconciliation_does_not_accept_unchanged_or_other_owner(tmp_p
         return upload(blob, data, **kwargs)
 
     monkeypatch.setattr(FakeBlob, 'upload_from_string', fail_before_commit)
-    with pytest.raises(repair.LeaseLost):
+    with pytest.raises(repair.ArtifactError):
         mirror.lease.renew()
-    assert mirror.lease.lost and mirror.lease.generation == generation
-    with pytest.raises(repair.LeaseLost):
+    assert mirror.lease.lost is (state == 'other_owner')
+    assert mirror.lease.failed is (state == 'unchanged')
+    assert mirror.lease.generation == generation
+    with pytest.raises(repair.ArtifactError):
         mirror.lease.check_alive()
 
 
@@ -2165,7 +2215,9 @@ def test_heartbeat_loss_during_classification_stops_before_mutation(tmp_path, mo
             key = ('test-bucket', 'repair/run/lease.json')
             with storage.lock:
                 generation, data = storage.objects[key]
+                data = json.dumps(dict(json.loads(data), owner='another-owner')).encode()
                 storage.objects[key] = generation + 1000, data
+                storage.versions[(key, generation + 1000)] = (data, storage.metadata[key])
         try:
             return renew(**kwargs)
         finally:
@@ -2221,6 +2273,7 @@ def test_real_storage_sdk_latest_read_is_unbound_to_cached_generation(monkeypatc
     cached = client.bucket('hermetic-bucket').blob('repair/run/lease.json', generation=old)
     cached.reload()
     assert cached.generation == old and queries[-1]['generation'] == old
-    live = repair.RunLease(cached).latest(cached)
+    io = repair.ArtifactIO(monotonic=repair.time.monotonic, sleep=repair.time.sleep)
+    live = repair.RunLease(cached, io).latest(cached)
     assert live.generation == current and 'generation' not in queries[-1]
     assert repair.RunLease.server_timestamp(live) == pytest.approx(1790821367.063, abs=0.000001, rel=0)

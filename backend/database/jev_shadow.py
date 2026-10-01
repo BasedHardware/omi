@@ -6,8 +6,9 @@ import concurrent.futures
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Literal, TypeVar
 
+from google.api_core import exceptions as google_api_exceptions
 from google.cloud import firestore
 
 from database import _client
@@ -46,10 +47,11 @@ def _bounded_call(fn: Callable[[], _T], *, timeout: float) -> _T:
 
 def write_jev_shadow(
     uid: str, record_id: str, record: dict[str, Any], *, deadline: float, firestore_client: Any = None
-) -> bool:
+) -> bool | Literal['deduped']:
     """No prompts, transcript, quotes, candidate content or user names belong here.
 
-    Returns ``False`` when the account is being deleted: the deletion marker is
+    Returns ``deduped`` for an aborted concurrent transaction (no write),
+    ``True`` for a persisted/existing record, and ``False`` for account deletion: the deletion marker is
     read in the same transaction as the write, so a shadow record racing the
     deletion sweep cannot recreate ``users/{uid}/jev_shadow`` after the wipe.
     """
@@ -80,4 +82,18 @@ def write_jev_shadow(
     # pool race bounds the SDK-default commit timeout by the same deadline:
     # one slow marker read or commit cannot stretch the worker's wait past
     # 2.5s. Cancellation cannot stop an already-started transactional commit.
-    return _bounded_call(lambda: write_if_not_deleting(client.transaction(max_attempts=1)), timeout=remaining)
+    try:
+        return _bounded_call(lambda: write_if_not_deleting(client.transaction(max_attempts=1)), timeout=remaining)
+    except (google_api_exceptions.Aborted, ValueError) as exc:
+        # The SDK wraps exhausted commit contention in ValueError from Aborted.
+        # A losing transaction writes nothing. Report 'deduped' only when the
+        # winning writer's record for this deterministic ID exists; an abort
+        # during a marker read or unrelated contention is a lost measurement
+        # and must stay a failure so coverage is not overstated.
+        if isinstance(exc, google_api_exceptions.Aborted) or isinstance(exc.__cause__, google_api_exceptions.Aborted):
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError from None
+            if ref.get(retry=None, timeout=left).exists:
+                return 'deduped'
+        raise

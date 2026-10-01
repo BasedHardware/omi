@@ -88,7 +88,12 @@ from utils.conversations.relevance import (
 )
 from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_applies, relevance_transcript
 from utils.conversations.owner_jev import MAX_OWNER_CHECKS_PER_CONVERSATION, OwnerFlip, jev_owner_flip, owner_state
-from utils.conversations.jev_shadow import select_owner_shadow_indices, submit_owner_shadow, submit_relevance_shadow
+from utils.conversations.jev_shadow import (
+    owner_shadow_identity,
+    select_owner_shadow_indices,
+    submit_owner_shadow,
+    submit_relevance_shadow,
+)
 from config.jev_decisions import memory_owner_jev_flip_enabled, relevance_arm, relevance_experiment_active
 from utils.conversations.relevance_io import (
     adjacent_conversation,
@@ -211,7 +216,7 @@ from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
-from utils.conversations.action_item_identity import plan_replacement
+from utils.conversations.action_item_identity import plan_replacement, prior_read_kwargs
 from utils.conversations.calendar_linking import get_overlapping_calendar_event
 from utils.conversations.meeting_treatment import (
     MIN_MEETING_DURATION_SECONDS,
@@ -1579,6 +1584,24 @@ def _jev_owner_flip_for_candidate(
     return flip
 
 
+def _owner_shadow_state(
+    conversation: Conversation, candidate_content: str, evidence_quotes: List[str], user_name: str
+) -> str:
+    quotes = _owner_candidate_quotes(conversation, evidence_quotes)
+    structured = conversation.structured
+    # `Conversation.source` is optional; a source-less record is measured
+    # under the already-supported `unknown` source instead of crashing.
+    source = getattr(conversation.source, 'value', conversation.source) or 'unknown'
+    return owner_state(
+        candidate=candidate_content,
+        quotes=quotes,
+        title=structured.title,
+        overview=structured.overview,
+        source=source,
+        user_name=user_name,
+    )
+
+
 def _shadow_owner_candidate(
     uid: str,
     conversation: Conversation,
@@ -1590,21 +1613,12 @@ def _shadow_owner_candidate(
     *,
     candidate_index: int,
     eligible_count: int,
+    subject_entity_id: Optional[str],
 ) -> None:
     try:
         quotes = _owner_candidate_quotes(conversation, evidence_quotes)
-        structured = conversation.structured
-        # `Conversation.source` is optional; a source-less record is measured
-        # under the already-supported `unknown` source instead of crashing.
         source = getattr(conversation.source, 'value', conversation.source) or 'unknown'
-        state = owner_state(
-            candidate=candidate_content,
-            quotes=quotes,
-            title=structured.title,
-            overview=structured.overview,
-            source=source,
-            user_name=user_name,
-        )
+        state = _owner_shadow_state(conversation, candidate_content, evidence_quotes, user_name)
         submit_owner_shadow(
             uid=uid,
             conversation_id=conversation.id,
@@ -1612,6 +1626,7 @@ def _shadow_owner_candidate(
             state=state,
             user_name=user_name,
             pipeline_subject_kind=subject_kind,
+            pipeline_subject_entity_id=subject_entity_id,
             source=source,
             n_quotes=len(quotes),
             user_name_present=user_name_present,
@@ -1757,7 +1772,7 @@ def _extract_memories_canonical(
         ungrounded_candidates = 0
         seen_candidates = 0
         owner_checks = 0
-        owner_shadow_candidates: List[Tuple[int, str, List[str], str]] = []
+        owner_shadow_candidates: List[Tuple[int, str, List[str], str, Optional[str]]] = []
         owner_jev_enabled = memory_owner_jev_flip_enabled()
         for candidate in extracted_candidates:
             seen_candidates += 1
@@ -1800,7 +1815,9 @@ def _extract_memories_canonical(
                 if owner_flip is not None:
                     subject_entity_id, subject_attribution, subject_kind = "user", SubjectAttribution.user, "user"
             if subject_attribution == SubjectAttribution.third_party and not owner_live_scored:
-                owner_shadow_candidates.append((seen_candidates - 1, candidate.content, evidence_quotes, subject_kind))
+                owner_shadow_candidates.append(
+                    (seen_candidates - 1, candidate.content, evidence_quotes, subject_kind, subject_entity_id)
+                )
             memory = Memory(
                 content=candidate.content,
                 category=(
@@ -1884,9 +1901,19 @@ def _extract_memories_canonical(
         # Selection sees the whole eligible population before burst submission.
         # Measurement errors must never affect canonical capture.
         try:
-            selected = select_owner_shadow_indices(conversation.id, [item[1] for item in owner_shadow_candidates])
+            identities = [
+                owner_shadow_identity(
+                    candidate_content=content,
+                    state=_owner_shadow_state(conversation, content, quotes, user_name),
+                    user_name=user_name,
+                    pipeline_subject_kind=kind,
+                    pipeline_subject_entity_id=entity_id,
+                )
+                for _, content, quotes, kind, entity_id in owner_shadow_candidates
+            ]
+            selected, eligible_count = select_owner_shadow_indices(conversation.id, identities)
             for index in selected:
-                candidate_index, content, quotes, kind = owner_shadow_candidates[index]
+                candidate_index, content, quotes, kind, entity_id = owner_shadow_candidates[index]
                 _shadow_owner_candidate(
                     uid,
                     conversation,
@@ -1896,7 +1923,8 @@ def _extract_memories_canonical(
                     user_name.lower() != "the user",
                     kind,
                     candidate_index=candidate_index,
-                    eligible_count=len(owner_shadow_candidates),
+                    eligible_count=eligible_count,
+                    subject_entity_id=entity_id,
                 )
         except Exception:
             for _ in owner_shadow_candidates:
@@ -2133,7 +2161,7 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _write_action_items(uid: str, conversation: Conversation):
+def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[ProcessingTrigger] = None):
     """Write the extracted items as tasks, replacing whatever this conversation wrote before."""
     if not conversation.structured.action_items:
         return
@@ -2155,9 +2183,9 @@ def _write_action_items(uid: str, conversation: Conversation):
         for action_item in conversation.structured.action_items
     ]
 
-    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
+    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id, **prior_read_kwargs())
     # A task that survives re-extraction keeps its id and export marker (no re-send).
-    identity = plan_replacement(conversation.id, action_items_data, old_items)
+    identity = plan_replacement(conversation.id, action_items_data, old_items, trigger)
     old_ids = [item['id'] for item in old_items]
     if old_ids:
         delete_action_item_vectors_batch(uid, old_ids)
@@ -2218,7 +2246,9 @@ def _write_action_items(uid: str, conversation: Conversation):
         submit_with_context(postprocess_executor, _run_auto_sync)
 
 
-def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
+def _save_action_items(
+    uid: str, conversation: Conversation, people: Sequence[Person] = (), trigger: Optional[ProcessingTrigger] = None
+):
     """Persist a conversation's extracted action items.
 
     Desktop conversations propose Candidates for its Suggested surface. Everywhere
@@ -2230,7 +2260,7 @@ def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Pe
         return
 
     if not _proposes_task_candidates(conversation):
-        _write_action_items(uid, conversation)
+        _write_action_items(uid, conversation, trigger)
         return
 
     try:
@@ -3262,9 +3292,9 @@ def process_conversation(
                 # Same fail-closed idea as memory source replacement: a transient
                 # destructive-op fence must be observable on the sync reprocess
                 # path instead of disappearing into postprocess_executor.
-                _save_action_items(uid, conversation, people)
+                _save_action_items(uid, conversation, people, trigger)
             else:
-                submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
+                submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
             # Automatic goal updates are excluded from the JIT featureset
             # entirely (not deferred): a JIT-admitted conversation never
             # updates goals; users update goals through explicit actions.

@@ -129,8 +129,8 @@ def test_retry_replans_from_new_receipt_without_mutating_input(world, monkeypatc
     attempts = []
     original = db.merge_live_segments
 
-    def plan(persisted, incoming, receipt):
-        result = original(persisted, incoming, receipt)
+    def plan(persisted, incoming, receipt, absorbed_ids=None):
+        result = original(persisted, incoming, receipt, absorbed_ids=absorbed_ids)
         attempts.append(result)
         return result
 

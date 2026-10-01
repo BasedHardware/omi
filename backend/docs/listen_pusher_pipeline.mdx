@@ -137,7 +137,30 @@ Audio-timeline v2 retains at most the configured segment-buffer limit in each
 of its pending and unplaced fallback queues. If pending text fills the first
 queue, new text enters the legacy transaction as unplaced, retaining its ID
 and SEND conversation owner. A retry after an ambiguous commit filters IDs
-already stored inside that transaction. If both queues fill during a store
+already stored inside that transaction, plus the durable
+`live_transcript_replay_receipt`: segment IDs absorbed by an earlier committed
+merge no longer exist in the stored transcript, so the transaction also treats
+the receipt's commit buckets as seen before planning the fresh batch. The
+receipt is written in the same `transaction.update` as the merged transcript,
+holds the newest two absorbing commits of at most 128 absorbed IDs each (256
+total), is stored encrypted and zlib-compressed
+independent of the document's data-protection level, and never leaves the
+document — `prepare_conversation_for_read` drops it before any read response.
+A pure replay or a write that absorbs nothing leaves the receipt
+byte-identical; a replay that also carries fresh text keeps that text as its
+own segments without rotating the buckets. A batch larger than 128 unique
+incoming segments absorbs nothing so every supplied ID survives durably in the
+transcript instead of overflowing a bucket. While a same-owner retry sits in
+the unplaced fallback lane — whose wall-clock lag is unbounded — normal
+absorbing writes for that owner defer back to the pending queue so they cannot
+age a pending ambiguous ID out of the two-commit window; photos and other
+owners still drain. Two commits cover the serial per-owner drain: at most one
+ambiguous commit per owner can be unacknowledged behind the current batch, and
+the extra retained bucket is conservative margin. The normal retry budget is
+bounded (.5/1/2/4/8 s scheduled), while fallback lag is unbounded — the
+same-owner deferral above, not a TTL assumption, keeps the window valid. A
+document without the field has no historical absorbed-ID coverage; its first
+absorbing commit starts the receipt. If both queues fill during a store
 outage, admission raises an explicit capacity error and emits a metric; the
 callback cannot buffer transcript indefinitely.
 
@@ -854,7 +877,25 @@ queued only after the task vectors are written. An unexpected planner error
 falls back to the kill-switch plan (`outcome=planner_error`).
 `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` (unset = on, any unrecognized value =
 off) restores recreate-under-fresh-ids; `event=action_item_identity` logs the
-per-replace counts.
+per-replace counts and the processing `trigger`. A measurement-only anchor shadow
+on the same line counts how many prior rows the exact rule left unmatched pair
+strictly one-to-one with an unmatched new item by shared stored
+`provenance[].transcript_segment_ids` for this conversation (`anchor_pairs`;
+other overlaps are `anchor_ambiguous`). It only logs: the prior-row read gains the
+`provenance` field and nothing written, deleted or delivered changes. A shadow
+failure logs `shadow=error`; `ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENABLED`
+(unset = on, any unrecognized value = off) turns it and the extra field off.
+The measurement rejects oversized inputs rather than sampling: at most 512 rows
+per side, 65,536 candidate comparisons, 64 provenance entries per row, 512 cited
+segment ids per row, 65,536 distinct segment references in total and 256 characters
+per segment id. Exceeding a limit logs `shadow=error shadow_error=budget_exceeded`
+with zero shadow counts; exclude those lines from coverage ratios. Graph degree
+counts use linear space. Malformed evidence containers are unanchored; iterators
+are never consumed. Error labels are a fixed set (`RuntimeError`, `TypeError`,
+`ValueError`, `AssertionError`, `KeyError`, `Exception`, `budget_exceeded`, `none`).
+The projection can increase bytes materially for large provenance arrays even
+though query/document counts do not change. Legacy missing-completion harvests
+retain the lean projection and may understate anchor coverage.
 
 With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant
@@ -1790,6 +1831,18 @@ attributable: `store_owner_voice_sample` logs one
 `owner sample outcome=… conversation=<id>` line per outcome next to the
 existing counter.
 
+Provider segment IDs are normalized once at `TranscriptProcessor.enqueue`
+admission: a raw segment arriving with a missing or empty `id` is minted a
+uuid before the batch splits across the segment buffer, the capture-window
+map, and the raw speaker-detection queue — shared raw identity is
+established before the typed/raw fanout, so event construction can never
+see a null `segment_id` (the live merge may still relabel a merged turn
+with the absorbing segment's id, as described above). Matcher failures stay
+privacy-safe: a `ValidationError` raised while building the wire event logs
+only the model title plus the first structural error's `loc` and `type`
+(`validation_model`/`validation_loc`/`validation_type`) — never input
+values, field contents, or transcript text.
+
 ## 6. Event Wire Protocol
 
 ### Server → Client (JSON over WS text frames)
@@ -1890,7 +1943,14 @@ explicit follow-ups. See `utils/sync/ARCHITECTURE.md` for recovery and indexing 
 Live capture passes fresh, unmerged STT segments to `update_conversation_segments(live_segments=...)`.
 The transaction reads the current transcript and manual receipt, then merges only
 its tail and the fresh batch, after applying the receipt to both so compared
-provenance is post-decision. A segment covered by a selected-ID decision blocks all
+provenance is post-decision. Every attempt also rebuilds the
+`live_transcript_replay_receipt` commit buckets from the document — never from
+caller state — so a retry after a lost acknowledgement cannot merge the same
+words twice; a present-but-malformed receipt fails the transaction closed
+without writing. Each absorbing commit appends its absorbed IDs as one bucket
+of at most 128, retaining only the newest two buckets, and the receipt is
+rewritten only when a merge absorbs new
+IDs. A segment covered by a selected-ID decision blocks all
 concatenation and partial sentence transfer. A speaker-wide default is a boundary:
 that speaker's segments only append to each other in chronological order (no sentence
 repair, no late arrivals), and never exchange words with another speaker. Clears,
@@ -2000,15 +2060,19 @@ rules, restores, calendar retention and plan gates retain their precedence.
 
 Both processing hosts submit advisory relevance/owner questions through
 `utils/conversations/jev_shadow.py` after the relevant live decision. Percentages
-sample conversation IDs for relevance and conversation+candidate hashes for
-owner, defaults are off, and Redis atomically dedupes content hashes and caps
+sample conversation IDs for relevance and conversation+full-scoring hashes for
+owner (candidate, speaker-labelled evidence/context, question owner name and
+pipeline subject metadata). Same text with different evidence remains distinct.
+Defaults are off, and Redis atomically dedupes these identities and caps
 daily calls (60000 per lane). Owner hash selection sees the complete eligible
 batch before submission and selects at most eight unique candidates; eight owner
 slots and two relevance slots bound queued/active work on a ten-worker pool. IO stays in the worker; slow or unavailable services drop measurement without
 changing the conversation or memory. All durable `users/{uid}/jev_shadow` records
 are text-free and have a 60-day expiry. Owner records carry integer candidate
-position/population metadata. First-write-wins records preserve scores and expiry
-on retries; late commits after a worker timeout are valid and counted once by
+position/population metadata: original extraction index and unique eligible
+scoring identities before percentage filtering and the cap. First-write-wins records preserve scores and expiry
+on retries; aborted concurrent commit losers count as `deduped` while preserving
+the transactional deletion fence. Late commits after a worker timeout are valid and counted once by
 (uid, document ID), separately from attempt metrics. Drops are coverage losses.
 The protocol and TTL deployment prerequisite
 are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).

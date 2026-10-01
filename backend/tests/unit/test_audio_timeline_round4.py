@@ -357,9 +357,10 @@ def test_v2_persist_retry_is_bounded_and_backed_off():
     for attempt in range(1, 7):
         processor._queue_v2_retry([{'id': 'persistent-failure', 'text': 'kept until bounded exhaustion'}])
         if attempt <= 5:
-            assert len(processor.segment_buffer) == attempt
+            assert len(processor.segment_buffer) == 1
             assert processor._v2_retry_until > time.monotonic()
-    assert len(processor.segment_buffer) == 5
+            processor.segment_buffer.clear()
+    assert len(processor.segment_buffer) == 0
     assert exhausted._value.get() == before + 1
     assert 'persistent-failure' not in processor._v2_retry_counts
     assert [item['text'] for item in processor._v2_legacy_fallback] == ['kept until bounded exhaustion']

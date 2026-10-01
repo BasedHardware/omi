@@ -114,6 +114,24 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'conversations_source_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('source'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_starred_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('starred'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_folder_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('folder_id'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'conversations_status_finished',
         'conversations',
         'COLLECTION',
@@ -1955,6 +1973,7 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('sync_backfill_sequencer', 'active_payload'),
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
+    ('conversations', 'live_transcript_replay_receipt'),
 )
 
 

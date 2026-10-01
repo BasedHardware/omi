@@ -28,6 +28,7 @@ from tests.support.firestore_query_drivers import (
     ref_document,
     ref_transaction,
 )
+from tests.support.firestore_conversation_profiles import COUNT_PROFILES, PHOTO_PROFILES, WITHOUT_PHOTOS_PROFILES
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -55,6 +56,7 @@ _LIMIT_OPT = (None, 'optional page bound; absent does not change filters')
 _OFFSET = (0, 'row window; fixed, not filter-affecting')
 _PAGE = (25, 'scan/page bound; fixed small positive, not filter-affecting')
 _BUDGET = (None, 'request budget; RPC timeout/charge only, no filter effect')
+_EXTRA_FIELDS = (('provenance',), 'widens the select projection only; no filter or order effect')
 _DAYS = (30, 'window length; fixed, not filter-affecting')
 _NOW = (None, 'defaults to frozen clock; none/set produce identical filters')
 _NOOP = (noop, 'callback side-effect neutralized; does not affect filters')
@@ -241,12 +243,14 @@ _add(
             'due_start_date': [None, T0],
             'due_end_date': [None, T1],
         },
-        neutrals={'limit': _LIMIT_OPT, 'offset': _OFFSET, 'budget': _BUDGET},
+        neutrals={'limit': _LIMIT_OPT, 'offset': _OFFSET, 'budget': _BUDGET, 'extra_fields': _EXTRA_FIELDS},
     )
 )
 _add(
     DriverEntry(
-        'database.action_items.get_action_items_by_conversation', base={'uid': UID, 'conversation_id': 'conv-1'}
+        'database.action_items.get_action_items_by_conversation',
+        base={'uid': UID, 'conversation_id': 'conv-1'},
+        neutrals={'extra_fields': _EXTRA_FIELDS},
     )
 )
 _add(
@@ -738,16 +742,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations',
         base={'uid': UID},
-        domains={
-            'include_discarded': [False, True],
-            'statuses': [[], ['completed'], ['completed', 'in_progress']],
-            'start_date': [None, T0],
-            'end_date': [None, T1],
-            'categories': [None, ['one'], ['one', 'two']],
-            'folder_id': [None, 'folder-1'],
-            'starred': [None, False, True],
-            'date_field': ['created_at', 'started_at'],
-        },
+        profiles=PHOTO_PROFILES,
         neutrals={'limit': _LIMIT, 'offset': _OFFSET},
     )
 )
@@ -755,16 +750,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations_count',
         base={'uid': UID},
-        domains={
-            'include_discarded': [False, True],
-            'statuses': [None, ['completed'], ['completed', 'in_progress']],
-            'start_date': [None, T0],
-            'end_date': [None, T1],
-            'categories': [None, ['one'], ['one', 'two']],
-            'folder_id': [None, 'folder-1'],
-            'starred': [None, False, True],
-            'sources': [None, ['omi'], ['omi', 'desktop']],
-        },
+        profiles=COUNT_PROFILES,
     )
 )
 _add(
@@ -779,16 +765,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations_without_photos',
         base={'uid': UID},
-        domains={
-            'include_discarded': [False, True],
-            'statuses': [[], ['completed'], ['completed', 'in_progress']],
-            'sources': [None, ['omi'], ['omi', 'desktop']],
-            'start_date': [None, T0],
-            'end_date': [None, T1],
-            'categories': [None, ['one'], ['one', 'two']],
-            'folder_id': [None, 'folder-1'],
-            'starred': [None, False, True],
-        },
+        profiles=WITHOUT_PHOTOS_PROFILES,
         neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
     )
 )

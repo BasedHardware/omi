@@ -22,7 +22,7 @@ import socket
 import sys
 import unittest.mock
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -284,6 +284,12 @@ def noop_true(*args: Any, **kwargs: Any) -> bool:
     return True
 
 
+@dataclass(frozen=True)
+class CallerProfile:
+    name: str
+    domains: dict[str, list[Any]]
+
+
 @dataclass
 class DriverEntry:
     """A driven registry entry: every parameter is base, a domain member, or a named neutral."""
@@ -295,6 +301,7 @@ class DriverEntry:
     setup: Callable[[RecordingFirestore, dict[str, Any], int], None] | None = None
     patchers: tuple[Callable[[RecordingFirestore], Any], ...] = ()
     trials: int = 1
+    profiles: tuple[CallerProfile, ...] = ()
 
 
 @dataclass
@@ -386,6 +393,19 @@ def run_driver(entry: DriverEntry, client: RecordingFirestore | None = None) -> 
     and every argument is deep-copied so a function mutating inputs cannot
     corrupt later combos or the registry itself.
     """
+    if entry.profiles:
+        shapes: list[QueryShape] = []
+        errors: list[DriverError] = []
+        for profile in entry.profiles:
+            result = run_driver(replace(entry, domains={**entry.domains, **profile.domains}, profiles=()), client)
+            shapes.extend(
+                replace(shape, parameter_combo={**shape.parameter_combo, 'caller_profile': profile.name})
+                for shape in result.shapes
+            )
+            errors.extend(
+                replace(error, combo={**error.combo, 'caller_profile': profile.name}) for error in result.errors
+            )
+        return DriverResult(entry.function, shapes, errors)
     client = client or RecordingFirestore()
     initial_documents = copy.deepcopy(client.documents)
     errors: list[DriverError] = []
