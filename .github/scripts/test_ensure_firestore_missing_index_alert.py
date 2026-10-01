@@ -49,6 +49,57 @@ class EnsureFirestoreMissingIndexAlertTests(unittest.TestCase):
 
         self.assertEqual(ensure_alert(project=PROJECT, notification_channels=CHANNELS, runner=runner), POLICY)
 
+    def test_existing_policy_update_waits_for_a_newly_created_metric(self) -> None:
+        # Prod already has the policy; the GKE metric is created by this run. Monitoring rejects a policy
+        # naming a metric created seconds ago, so the update must retry like creation does.
+        import ensure_firestore_missing_index_alert as module
+
+        updates: list[list[str]] = []
+        sleeps: list[float] = []
+        original_sleep = module.time.sleep
+        module.time.sleep = sleeps.append
+        self.addCleanup(setattr, module.time, "sleep", original_sleep)
+
+        def runner(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            if args[1:3] == ["logging", "metrics"] and "describe" in args:
+                if GKE_METRIC in args:
+                    return subprocess.CompletedProcess(args, 1, "", "NOT_FOUND: metric not found")
+                return subprocess.CompletedProcess(args, 0, "{}", "")
+            if args[1:3] == ["logging", "metrics"] and ("create" in args or "update" in args):
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if args[1:3] == ["monitoring", "policies"] and "list" in args:
+                return subprocess.CompletedProcess(args, 0, POLICY + "\n", "")
+            if args[1:3] == ["monitoring", "policies"] and "update" in args:
+                updates.append(args)
+                if len(updates) == 1:
+                    error = (
+                        "Cannot find metric(s) that match type = "
+                        f'"logging.googleapis.com/user/{GKE_METRIC}". If a metric was created recently, '
+                        "it could take up to 10 minutes to become available."
+                    )
+                    return subprocess.CompletedProcess(args, 1, "", error)
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if args[1:3] == ["monitoring", "policies"] and "describe" in args:
+                return subprocess.CompletedProcess(args, 0, policy_documentation(), "")
+            raise AssertionError(f"unexpected command: {args}")
+
+        self.assertEqual(ensure_alert(project=PROJECT, notification_channels=CHANNELS, runner=runner), POLICY)
+        self.assertEqual(len(updates), 2)
+        self.assertEqual(sleeps, [30])
+
+    def test_existing_policy_update_does_not_retry_other_errors(self) -> None:
+        def runner(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            if args[1:3] == ["logging", "metrics"]:
+                return subprocess.CompletedProcess(args, 0, "{}", "")
+            if args[1:3] == ["monitoring", "policies"] and "list" in args:
+                return subprocess.CompletedProcess(args, 0, POLICY + "\n", "")
+            if args[1:3] == ["monitoring", "policies"] and "update" in args:
+                return subprocess.CompletedProcess(args, 1, "", "PERMISSION_DENIED: monitoring.alertPolicies.update")
+            raise AssertionError(f"unexpected command: {args}")
+
+        with self.assertRaisesRegex(RuntimeError, "PERMISSION_DENIED"):
+            ensure_alert(project=PROJECT, notification_channels=CHANNELS, runner=runner)
+
     def test_existing_metrics_and_policy_update_without_duplicate_creation(self) -> None:
         calls: list[list[str]] = []
 

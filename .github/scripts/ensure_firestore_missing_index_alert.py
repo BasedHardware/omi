@@ -164,6 +164,14 @@ def _verify_policy(policy: dict[str, object], channels: list[str]) -> None:
         raise RuntimeError("Monitoring policy drift: " + ", ".join(errors))
 
 
+def _is_metric_propagation_error(error: str) -> bool:
+    """A policy that names a log metric created moments ago is rejected until the metric is visible."""
+    return any(
+        "Cannot find metric(s) that match type" in error and metric_type in error and "created recently" in error
+        for metric_type in METRIC_TYPES
+    )
+
+
 def _ensure_policy(*, project: str, channels: list[str], runner: Runner) -> str:
     config = _policy_config(channels)
     config_json = json.dumps(config, separators=(",", ":"))
@@ -200,11 +208,7 @@ def _ensure_policy(*, project: str, channels: list[str], runner: Runner) -> str:
         if created.returncode == 0 and created.stdout.strip():
             return created.stdout.strip()
         error = (created.stderr or created.stdout).strip()
-        propagation_error = any(
-            "Cannot find metric(s) that match type" in error and metric_type in error and "created recently" in error
-            for metric_type in METRIC_TYPES
-        )
-        if not propagation_error or attempt == 20:
+        if not _is_metric_propagation_error(error) or attempt == 20:
             raise RuntimeError(error or "failed to create Monitoring policy")
         print(f"Waiting for Cloud Monitoring metric visibility (attempt {attempt + 1}/21)", file=sys.stderr)
         time.sleep(30)
@@ -219,20 +223,28 @@ def ensure_alert(*, project: str, notification_channels: str, runner: Runner = s
     for name, config in METRIC_CONFIGS.items():
         _ensure_metric(name=name, config=config, project=project, runner=runner)
     policy = _ensure_policy(project=project, channels=channels, runner=runner)
-    updated = _run(
-        runner,
-        [
-            "monitoring",
-            "policies",
-            "update",
-            policy,
-            f"--project={project}",
-            "--quiet",
-            f"--policy={json.dumps(_policy_config(channels), separators=(',', ':'))}",
-        ],
-    )
-    if updated.returncode:
-        raise RuntimeError((updated.stderr or updated.stdout).strip() or "failed to update Monitoring policy")
+    # The update path needs the same wait as creation: an existing policy gains a condition on a metric
+    # that this run may have created seconds ago.
+    for attempt in range(21):
+        updated = _run(
+            runner,
+            [
+                "monitoring",
+                "policies",
+                "update",
+                policy,
+                f"--project={project}",
+                "--quiet",
+                f"--policy={json.dumps(_policy_config(channels), separators=(',', ':'))}",
+            ],
+        )
+        if not updated.returncode:
+            break
+        error = (updated.stderr or updated.stdout).strip()
+        if not _is_metric_propagation_error(error) or attempt == 20:
+            raise RuntimeError(error or "failed to update Monitoring policy")
+        print(f"Waiting for Cloud Monitoring metric visibility (attempt {attempt + 1}/21)", file=sys.stderr)
+        time.sleep(30)
 
     described = _run(runner, ["monitoring", "policies", "describe", policy, f"--project={project}", "--format=json"])
     if described.returncode:
