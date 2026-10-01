@@ -42,6 +42,13 @@ def test_persist_rejects_none_db_client():
         persist_non_active_route_outcome(outcome, db_client=None)
 
 
+def test_persist_rejects_invalid_db_client():
+    """Verify persist_non_active_route_outcome raises TypeError when db_client lacks callable methods."""
+    outcome = NonActiveRouteOutcome(**_valid_outcome_dict())
+    with pytest.raises(TypeError, match="db_client must provide callable 'transaction' and 'document' methods"):
+        persist_non_active_route_outcome(outcome, db_client=object())
+
+
 def test_outcome_rejects_empty_or_whitespace_identifiers():
     """Verify empty or whitespace-only identifiers raise ValueError."""
     for field in ("uid", "idempotency_key", "reason", "run_id"):

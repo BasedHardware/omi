@@ -71,7 +71,7 @@ class _NonActiveRouteOutcomeBase(BaseModel):
     def validate_nonblank(cls, value: str) -> str:
         if not isinstance(value, str) or not value.strip():
             raise ValueError("required fields must not be blank")
-        return value.strip()
+        return value
 
     @field_validator("patch_id")
     @classmethod
@@ -132,6 +132,8 @@ def persist_non_active_route_outcome(
         raise TypeError("outcome must be an instance of NonActiveRouteOutcome")
     if db_client is None:
         raise ValueError("db_client must not be None")
+    if not callable(getattr(db_client, "transaction", None)) or not callable(getattr(db_client, "document", None)):
+        raise TypeError("db_client must provide callable 'transaction' and 'document' methods")
     transaction = db_client.transaction()
     return _persist_non_active_route_outcome_transaction(transaction, db_client, outcome)
 
@@ -170,7 +172,7 @@ def _stable_outcome_id(uid: str, idempotency_key: str) -> str:
         raise ValueError("uid must be a non-empty string")
     if not isinstance(idempotency_key, str) or not idempotency_key.strip():
         raise ValueError("idempotency_key must be a non-empty string")
-    digest = hashlib.sha256(f"{uid.strip()}:{idempotency_key.strip()}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{uid}:{idempotency_key}".encode("utf-8")).hexdigest()
     return f"nar_{digest[:32]}"
 
 
