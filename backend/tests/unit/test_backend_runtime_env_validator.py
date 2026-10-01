@@ -198,17 +198,31 @@ def with_capture_jev_shadow_env(payload: str) -> str:
 
     backend runs reprocess and merge inline. backend-sync writes Cloud Tasks
     finalization and fresh sync. backend-sync-backfill replays historical sync.
-    Percentage stays 0; only the allowlisted UID is shadowed.
+    Capture percentage stays 0; only the allowlisted UID is shadowed. The
+    EXP-004 population shadows stay 100 only on `backend`: the sync services
+    have no GMP sidecar/exporter entry, so their shadow metrics would be
+    invisible (EXP-004 doc, Admission and privacy).
     """
-    flags = (
-        r'\1\n        {"name": "CAPTURE_JEV_SHADOW_ENABLED", "value": "true"},'
-        r'\n        {"name": "CAPTURE_JEV_SHADOW_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},'
-        r'\n        {"name": "CAPTURE_JEV_SHADOW_PERCENT", "value": "0"},'
-    )
+
+    def service_flags(service: str) -> str:
+        shadow_percent = '100' if service == 'backend' else '0'
+        return (
+            r'\1\n        {"name": "CAPTURE_JEV_SHADOW_ENABLED", "value": "true"},'
+            r'\n        {"name": "CAPTURE_JEV_SHADOW_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},'
+            r'\n        {"name": "CAPTURE_JEV_SHADOW_PERCENT", "value": "0"},'
+            rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_PERCENT", "value": "0"}},'
+            rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
+            rf'\n        {{"name": "MEMORY_OWNER_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
+            r'\n        {"name": "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT", "value": "0"},'
+            r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP", "value": "60000"},'
+            r'\n        {"name": "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP", "value": "60000"},'
+            r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST", "value": ""},'
+        )
+
     for service in ('backend', 'backend-sync', 'backend-sync-backfill'):
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
-            flags,
+            service_flags(service),
             payload,
             count=1,
             flags=re.DOTALL,
@@ -3088,3 +3102,38 @@ def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
         assert rendered_env['OMI_LLM_GATEWAY_URL'] == 'http://jev-gateway-render.invalid:8080'
         for flag in jev_flags:
             assert rendered_env[flag] == 'true'
+
+
+def test_dev_jev_shadow_hosts_keep_a_nonempty_measurement_arm():
+    """A relevance shadow on a live-flag host needs a non-Jev population.
+
+    ``relevance_arm`` defaults an unset ``CONVERSATION_RELEVANCE_JEV_PERCENT`` to
+    100 when the live flag is on, and ``submit_relevance_shadow`` skips the Jev
+    arm — so a shadow-enabled host with an unset live percentage records nothing.
+    Hosts that run the relevance shadow with the live flag on must pin a live
+    percentage that leaves a nonempty nano arm (keep_all + jev < 100).
+    """
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    dev = validator._get_env_config(manifest, 'dev')
+
+    for scope, env_block in _manifest_env_blocks(dev):
+        live_flag = env_block.get(CONVERSATION_RELEVANCE_JEV_ENABLED_ENV)
+        shadow = env_block.get('CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT')
+        if scope not in _JEV_PROCESS_CONVERSATION_HOSTS:
+            assert shadow is None or shadow.get('value') == '0', f'{scope} must not run the EXP-004 relevance shadow'
+            continue
+        shadow_percent = float((shadow or {}).get('value', '0'))
+        if live_flag is None or shadow_percent <= 0:
+            continue
+        live = env_block.get('CONVERSATION_RELEVANCE_JEV_PERCENT')
+        keep_all = env_block.get('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT')
+        assert live is not None and 'value' in live, (
+            f'{scope} enables the relevance shadow with the live Jev flag on; '
+            'CONVERSATION_RELEVANCE_JEV_PERCENT must be pinned (unset defaults '
+            'to 100, which empties the shadow population)'
+        )
+        keep_all_percent = float((keep_all or {}).get('value', '0'))
+        assert (
+            keep_all_percent + float(live['value']) < 100
+        ), f'{scope} keep_all+jev must leave a nonempty nano arm for the shadow to measure'

@@ -298,12 +298,35 @@ async def execute_systemone(
     validated = resolved_route.validated_request
     request: dict[str, Any] = {'state': validated.state, 'questions': dict(validated.questions)}
     try:
-        response = await create_systemone(
-            request,
-            provider_ref=provider_ref,
-            credentials=credential_context,
-            timeout_ms=route.timeouts.request_ms,
+        # The provider timeout bounds per-phase httpx inactivity, not total
+        # elapsed time: a trickled response body can hold the lane's worker
+        # far past the route deadline. Enforce the wall-clock budget here so
+        # one slow decision-model request costs at most one route deadline.
+        response = await asyncio.wait_for(
+            create_systemone(
+                request,
+                provider_ref=provider_ref,
+                credentials=credential_context,
+                timeout_ms=route.timeouts.request_ms,
+            ),
+            timeout=route.timeouts.request_ms / 1000.0,
         )
+    except asyncio.TimeoutError as exc:
+        if attempt_trace is not None:
+            attempt_trace.record(
+                provider=provider_ref.provider,
+                configured_model=provider_ref.model,
+                route_artifact_id=route.route_artifact_id,
+                fallback_reason=None,
+                retry_ordinal=1,
+                outcome='error',
+                error_class=FailureClass.TIMEOUT_BEFORE_OUTPUT.value,
+                usage_status=UsageStatus.INDETERMINATE,
+            )
+        raise GatewayProviderFailureError(
+            'provider request exceeded the route deadline',
+            failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
+        ) from exc
     except ProviderFailure as exc:
         if attempt_trace is not None:
             attempt_trace.record(
