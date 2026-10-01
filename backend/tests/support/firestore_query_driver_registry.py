@@ -199,14 +199,28 @@ _add(
         reason='bounded stream wrapper observed inside both listed consumers',
     )
 )
+
+
+def _seed_action_items_control(client, combo, trial):
+    """Trial 0 leaves the control document absent (generation 0).
+
+    Trial 1 seeds ``task_intelligence_control/state`` with a nonzero
+    ``account_generation`` so the idempotency lookup adds its
+    ``account_generation ==`` predicate and the two-equality shape is
+    captured instead of only the single-field ``idempotency_key`` query.
+    """
+    if trial == 1:
+        client.documents[f'users/{UID}/task_intelligence_control/state'] = {'account_generation': 2}
+
+
 _add(
     DriverEntry(
         'database.action_items.create_action_item',
         base={'uid': UID, 'action_item_data': {'description': 'shape-task'}},
-        neutrals={
-            'idempotency_key': ('shape-key', 'dedupe key; fixed, not filter-affecting'),
-            'document_id': (None, 'optional doc id; absent does not change query'),
-        },
+        domains={'idempotency_key': [None, 'shape-key']},
+        neutrals={'document_id': (None, 'optional doc id; absent does not change query')},
+        setup=_seed_action_items_control,
+        trials=2,
     )
 )
 _add(
@@ -1297,10 +1311,26 @@ _add(
         neutrals={'limit': _LIMIT},
     )
 )
-_add(DriverEntry('database.mcp_oauth.delete_user_oauth_credentials', base={'uid': UID}))
 _add(DriverEntry('database.mcp_oauth.list_user_grants', base={'uid': UID}))
 _MCP_NOOP_CACHE = (_redis_noop('database.mcp_token_cache.invalidate_grant'),)
 _MCP_GRANT_DOC = {'uid': UID, 'client_id': 'client-1', 'resource': 'res-1', 'scopes': []}
+
+
+def _seed_delete_user_oauth_credentials(client, combo, trial):
+    """Trial 0 keeps the empty path; trial 1 exercises the per-grant deletes.
+
+    A queued grant makes ``delete_user_oauth_credentials`` walk every grant and
+    issue the per-grant ``mcp_oauth_access_tokens`` / ``mcp_oauth_refresh_tokens``
+    queries (inside ``revoke_grant`` and its own loop) plus the final grant
+    document delete; the token streams consume the remaining empty queues.
+    """
+    if trial == 0:
+        return
+    client.queue_results([client.snapshot('mcp_oauth_grants/grant-1', dict(_MCP_GRANT_DOC))])
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([])
 
 
 def _seed_mcp_refresh_replay(client, combo, trial):
@@ -1316,6 +1346,15 @@ def _seed_mcp_refresh_replay(client, combo, trial):
     }
 
 
+_add(
+    DriverEntry(
+        'database.mcp_oauth.delete_user_oauth_credentials',
+        base={'uid': UID},
+        setup=_seed_delete_user_oauth_credentials,
+        patchers=_MCP_NOOP_CACHE,
+        trials=2,
+    )
+)
 _add(
     DriverEntry(
         'database.mcp_oauth.revoke_grant',
@@ -1602,15 +1641,41 @@ _add(
         reason='timezone query helper observed inside both listed consumers',
     )
 )
+
+
+def _seed_daily_summary_recipient(client, combo, trial):
+    """Queue one recipient so the per-user ``fcm_tokens`` stream executes.
+
+    The consume-once queues feed the recipients query (one matched user, whose
+    ``fcm_token`` legacy field doubles as the non-subcollection token source)
+    and then the nested ``users/{uid}/fcm_tokens`` stream.
+    """
+    client.queue_results([client.snapshot(f'users/{UID}', {'fcm_token': 'legacy-1'})])
+    client.queue_results([])
+
+
 _add(DriverEntry('database.notifications.get_all_tokens', base={'uid': UID}))
 _add(
     DriverEntry(
         'database.notifications.get_users_for_daily_summary_indexed',
         base={'timezones': ['UTC'], 'target_local_hour': 7},
+        setup=_seed_daily_summary_recipient,
     )
 )
-_add(DriverEntry('database.notifications.get_users_id_in_timezones', base={'timezones': ['UTC']}))
-_add(DriverEntry('database.notifications.get_users_token_in_timezones', base={'timezones': ['UTC']}))
+_add(
+    DriverEntry(
+        'database.notifications.get_users_id_in_timezones',
+        base={'timezones': ['UTC']},
+        setup=_seed_daily_summary_recipient,
+    )
+)
+_add(
+    DriverEntry(
+        'database.notifications.get_users_token_in_timezones',
+        base={'timezones': ['UTC']},
+        setup=_seed_daily_summary_recipient,
+    )
+)
 _add(DriverEntry('database.notifications.remove_bulk_tokens', base={'tokens': ['token-1', 'token-2']}))
 _add(DriverEntry('database.notifications.remove_invalid_token', base={'token': 'token-1'}))
 _add(
@@ -1848,9 +1913,26 @@ _OPEN_LOOP_SNAPSHOT = OpenLoopSnapshot(
 
 
 def _seed_outcome_chain(client, combo, trial):
-    client.queue_results(
-        [client.snapshot(f'users/{UID}/task_interventions/iv-1', {'subject_kind': 'task', 'subject_id': 'task-1'})]
-    )
+    """Trial 0 serves the chain from ``task_interventions``.
+
+    Trial 1 empties the interventions lookup so ``create_outcome`` falls back
+    to ``task_feedback`` (``database/task_recommendations.py`` ``create_outcome``),
+    recording the fallback collection's distinct query shape.
+    """
+    if trial == 0:
+        client.queue_results(
+            [client.snapshot(f'users/{UID}/task_interventions/iv-1', {'subject_kind': 'task', 'subject_id': 'task-1'})]
+        )
+    else:
+        client.queue_results([])
+        client.queue_results(
+            [
+                client.snapshot(
+                    f'users/{UID}/task_feedback/fb-1',
+                    {'feedback_subject_kind': 'task', 'feedback_subject_id': 'task-1'},
+                )
+            ]
+        )
 
 
 def _seed_expired_context_snapshot(client, combo, trial):
@@ -1859,6 +1941,28 @@ def _seed_expired_context_snapshot(client, combo, trial):
     payload['account_generation'] = 0
     path = f'users/{UID}/{module.CONTEXT_SNAPSHOTS_COLLECTION}/{module._stable_id("context", 0, "dev-1")}'
     client.documents[path] = payload
+
+
+def _seed_canonical_product_state(client, combo, trial):
+    """Queue a generation-matched workstream row so nested per-workstream queries run.
+
+    ``account_generation`` is a domain: 0 records the unfiltered collection
+    queries (the production default), 1 records the ``account_generation ==``
+    filter; the seeded row always matches the driven generation so the
+    ``workstreams/{id}/artifact_refs`` and ``workstreams/{id}/events``
+    (``order_by sequence DESC``) queries execute in every combo. The
+    consume-once queues feed the four top-level collections and both nested
+    subcollections in call order.
+    """
+    payload: dict = {}
+    if combo['account_generation']:
+        payload['account_generation'] = combo['account_generation']
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([client.snapshot(f'users/{UID}/workstreams/ws-1', payload)])
+    client.queue_results([])
+    client.queue_results([])
 
 
 _add(
@@ -1879,6 +1983,7 @@ _add(
             'account_generation': (0, 'generation fence; fixed seeded scope, same filter set for any value'),
         },
         setup=_seed_outcome_chain,
+        trials=2,
     )
 )
 _add(
@@ -1910,9 +2015,10 @@ _add(
     DriverEntry(
         'database.task_recommendations.load_canonical_product_state',
         base={'uid': UID},
-        neutrals={
-            'account_generation': (1, 'generation fence; fixed seeded scope, same filter set for any value'),
+        domains={
+            'account_generation': [0, 1],
         },
+        setup=_seed_canonical_product_state,
     )
 )
 _add(
@@ -1958,7 +2064,19 @@ _add(
 )
 
 _add(DriverEntry('database.tasks.get_task_by_action_request', base={'action': 'act-1', 'request_id': 'req-1'}))
-_add(DriverEntry('database.trends.get_trends_data'))
+
+
+def _seed_trends_categories(client, combo, trial):
+    """Queue one valid category so the nested ``topics`` streams execute.
+
+    The consume-once queues feed the top-level ``trends`` stream (one
+    ``ceo`` category) and the per-category ``trends/{id}/topics`` stream.
+    """
+    client.queue_results([client.snapshot('trends/trend-ceo-1', {'id': 'trend-ceo-1', 'category': 'ceo'})])
+    client.queue_results([])
+
+
+_add(DriverEntry('database.trends.get_trends_data', setup=_seed_trends_categories))
 
 _add(
     CoveredByEntry(

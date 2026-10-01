@@ -227,6 +227,13 @@ def test_query_guard_paths_select_firestore_shape_guard_tests(selector_and_all_t
         assert guard_tests <= set(selected), source_path
         assert selected != all_tests, source_path
         assert reason == "selected backend unit tests from changed paths and workflow contracts"
+    # A manifest-only change must also run the shape guard: an index added to
+    # serve a ledgered gap has to prune the now-stale ledger row before merge,
+    # not fail on main after the change lands (Codex review r4144046082).
+    selected, reason = selector.tests_for_changed_paths(["firestore.indexes.json"], all_tests)
+    assert "tests/unit/test_firestore_query_shapes.py" in selected
+    assert selected != all_tests
+    assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
 def test_regular_conversations_path_remains_full_run(selector_and_all_tests):
