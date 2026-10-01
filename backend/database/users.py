@@ -21,7 +21,7 @@ from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.firestore_tier_context import invalidate_subscription, observe_subscription
 from database.person_aliases import rename_person_retaining_aliases
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
-from database.speaker_learning import voice_learning_fields
+from database.speaker_learning_fields import voice_learning_fields
 from database.redis_db import (
     delete_cached_user_geolocation,
     try_acquire_client_device_write_lock,
