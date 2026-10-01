@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import hashlib
 import os
 import re
 from pathlib import Path
@@ -32,20 +31,20 @@ def _profile(name: str, *, photo: bool = False, **domains) -> CallerProfile:
 _DATES = {'start_date': [None, FROZEN_NOW], 'end_date': [None, FROZEN_LATER]}
 _SELECTORS = {'include_discarded': [False, True], 'folder_id': [None, 'folder-1'], 'starred': [None, False, True]}
 _MULTI_STATUS = [['processing', 'completed']]
-_SOURCES = [None, ['omi'], ['friend', 'omi']]
+_ROUTE_SOURCES = [[], ['omi'], ['friend', 'omi']]
 
 COUNT_PROFILES = (
-    _profile('main-count-all-statuses', statuses=[None], sources=_SOURCES, **_DATES, **_SELECTORS),
-    _profile('main-count-single-status', statuses=[['completed']], sources=_SOURCES, **_DATES, **_SELECTORS),
-    _profile('main-count-multi-status', statuses=_MULTI_STATUS, sources=[None, ['omi']], **_DATES, **_SELECTORS),
+    _profile('main-count-all-statuses', statuses=[[]], sources=_ROUTE_SOURCES, **_DATES, **_SELECTORS),
+    _profile('main-count-single-status', statuses=[['completed']], sources=_ROUTE_SOURCES, **_DATES, **_SELECTORS),
+    _profile('main-count-multi-status', statuses=_MULTI_STATUS, sources=[[], ['omi']], **_DATES, **_SELECTORS),
     _profile('search-overview-starred', statuses=[None], starred=[True]),
     _profile('search-overview-folder', statuses=[None], folder_id=['folder-1']),
 )
 
 WITHOUT_PHOTOS_PROFILES = (
-    _profile('main-list-single-status', statuses=[['completed']], sources=_SOURCES, **_DATES, **_SELECTORS),
+    _profile('main-list-single-status', statuses=[['completed']], sources=_ROUTE_SOURCES, **_DATES, **_SELECTORS),
     _profile(
-        'main-list-default-or-multi-status', statuses=_MULTI_STATUS, sources=[None, ['omi']], **_DATES, **_SELECTORS
+        'main-list-default-or-multi-status', statuses=_MULTI_STATUS, sources=[[], ['omi']], **_DATES, **_SELECTORS
     ),
     _profile('people-stats'),
     _profile('speaker-search-fallback', include_discarded=[False, True], **_DATES),
@@ -58,7 +57,7 @@ PHOTO_PROFILES = (
         'developer-list',
         photo=True,
         statuses=[['completed']],
-        categories=[None, ['one'], ['one', 'two']],
+        categories=[[], ['personal'], ['personal', 'technology']],
         folder_id=[None, 'folder-1'],
         starred=[None, False, True],
         **_DATES,
@@ -132,7 +131,10 @@ PROFILES = {
 }
 
 
-def discover_conversation_callers(root: Path) -> dict[str, dict[str, Any]]:
+def discover_callers(root: Path, targets: frozenset[str]) -> dict[str, dict[str, Any]]:
+    """Statically find call sites of ``targets`` under ``root`` (detection only)."""
+    target_modules = {target.rsplit('.', 1)[0].replace('.', '/') + '.py' for target in targets}
+    attr_names = {target.rsplit('.', 1)[1] for target in targets}
     found = {}
     paths = []
     for directory, folders, files in os.walk(root):
@@ -145,13 +147,11 @@ def discover_conversation_callers(root: Path) -> dict[str, dict[str, Any]]:
     for path in sorted(paths):
         relative = path.relative_to(root)
         source = path.read_text()
-        if not re.search(r'\bget_conversations(?:_count|_without_photos)?\b', source):
+        if not re.search(r'\b(?:' + '|'.join(sorted(attr_names)) + r')\b', source):
             continue
         tree = ast.parse(source)
         imports = (
-            {target.rsplit('.', 1)[1]: target for target in TARGETS}
-            if relative.as_posix() == 'database/conversations.py'
-            else {}
+            {target.rsplit('.', 1)[1]: target for target in targets} if relative.as_posix() in target_modules else {}
         )
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -171,7 +171,7 @@ def discover_conversation_callers(root: Path) -> dict[str, dict[str, Any]]:
             return ''
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.Assign) and resolve(node.value) in TARGETS:
+            if isinstance(node, ast.Assign) and resolve(node.value) in targets:
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         imports[target.id] = resolve(node.value)
@@ -183,16 +183,18 @@ def discover_conversation_callers(root: Path) -> dict[str, dict[str, Any]]:
                 references = [node.func, *node.args, *(kw.value for kw in node.keywords)]
                 for reference in references:
                     target = resolve(reference)
-                    if target not in TARGETS:
+                    if target not in targets:
                         continue
-                    owner = owners[0] if owners else tree
                     owner_name = '.'.join(item.name for item in owners) or '<module>'
                     key = f'{relative.as_posix()}:{owner_name}:{target}'
-                    digest = hashlib.sha256(ast.dump(owner, include_attributes=False).encode()).hexdigest()
-                    record = found.setdefault(key, {'target': target, 'digest': digest, 'references': 0})
+                    record = found.setdefault(key, {'target': target, 'references': 0})
                     record['references'] += 1
             for child in ast.iter_child_nodes(node):
                 visit(child, owners)
 
         visit(tree)
     return found
+
+
+def discover_conversation_callers(root: Path) -> dict[str, dict[str, Any]]:
+    return discover_callers(root, TARGETS)

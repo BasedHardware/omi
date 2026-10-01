@@ -1220,7 +1220,6 @@
     "appsCount": "Apps ({count})",
     "privateAppsCount": "Privé-apps ({count})",
     "publicAppsCount": "Openbare apps ({count})",
-    "newVersionAvailable": "Nieuwe versie beschikbaar",
     "no": "Nee",
     "subscriptionCancelledSuccessfully": "Abonnement succesvol geannuleerd. Het blijft actief tot het einde van de huidige factureringsperiode.",
     "failedToCancelSubscription": "Annuleren van abonnement mislukt. Probeer het opnieuw.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Duur: {seconds} seconden",
     "additionalSpeechSampleRemoved": "Extra spraakvoorbeeld verwijderd",
     "consentDataMessage": "Door verder te gaan worden uw gesprekken, opnames en persoonlijke informatie veilig opgeslagen op onze servers. Uw audio-opnames en transcripties worden verwerkt door AI-diensten van derden (waaronder Deepgram voor transcriptie en OpenAI voor analyse) om u AI-gestuurde inzichten te bieden en alle app-functies mogelijk te maken.",
-    "tasksEmptyStateMessage": "Taken uit je gesprekken verschijnen hier.\nTik op + om er handmatig een te maken.",
+    "tasksEmptyStateMessage": "Begin een gesprek om een taak aan te maken.",
     "clearChatAction": "Chat wissen",
     "enableApps": "Apps inschakelen",
     "omiAppName": "Omi",
@@ -3766,5 +3765,11 @@
     "collapseAction": "Samenvouwen",
     "speakerTagPromptNotMeAction": "Niet ik",
     "confidenceNextLabels": "{count, plural, =1{Label ze in nog 1 gesprek.} other{Label ze in nog {count} gesprekken.}}",
+    "siriShortcutsSetupHint": "Zet Omi aan in Sneltoetsen → Siri. Zeg “{askPhrase}” of “{questionPhrase}” en stel daarna je vraag.",
+    "siriShortcutsSearchHint": " Je kunt ook “{searchPhrase} for what I did today” zeggen.",
+    "updateAvailableTitle": "Update beschikbaar",
+    "updateAvailableMessage": "Er staat een nieuwe versie van Omi klaar, met oplossingen en verbeteringen.",
+    "updateRequiredTitle": "Update vereist",
+    "updateRequiredMessage": "Deze versie van Omi wordt niet meer ondersteund. Update om te blijven opnemen en synchroniseren.",
     "exportingAllData": "Je gegevens worden geëxporteerd… Houd Omi open; grote accounts kunnen enkele minuten duren."
 }

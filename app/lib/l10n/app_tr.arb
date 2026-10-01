@@ -1220,7 +1220,6 @@
     "appsCount": "Uygulamalar ({count})",
     "privateAppsCount": "Özel Uygulamalar ({count})",
     "publicAppsCount": "Herkese Açık Uygulamalar ({count})",
-    "newVersionAvailable": "Yeni Sürüm Mevcut",
     "no": "Hayır",
     "subscriptionCancelledSuccessfully": "Abonelik başarıyla iptal edildi. Mevcut fatura döneminin sonuna kadar aktif kalacaktır.",
     "failedToCancelSubscription": "Abonelik iptal edilemedi. Lütfen tekrar deneyin.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Süre: {seconds} saniye",
     "additionalSpeechSampleRemoved": "Ek ses örneği kaldırıldı",
     "consentDataMessage": "Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz sunucularımızda güvenli bir şekilde saklanacaktır. Ses kayıtlarınız ve transkriptleriniz, size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için üçüncü taraf yapay zeka hizmetleri (transkripsiyon için Deepgram ve analiz için OpenAI dahil) tarafından işlenir.",
-    "tasksEmptyStateMessage": "Konuşmalarınızdaki görevler burada görünecek.\nManuel olarak oluşturmak için + simgesine dokunun.",
+    "tasksEmptyStateMessage": "Görev oluşturmak için bir konuşma başlatın.",
     "clearChatAction": "Sohbeti temizle",
     "enableApps": "Uygulamaları etkinleştir",
     "omiAppName": "Omi",
@@ -3801,5 +3800,11 @@
     "collapseAction": "Daralt",
     "speakerTagPromptNotMeAction": "Ben değilim",
     "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}",
+    "siriShortcutsSetupHint": "Kısayollar → Siri içinde Omi’yi etkinleştirin. “{askPhrase}” veya “{questionPhrase}” deyin, sonra sorunuzu sorun.",
+    "siriShortcutsSearchHint": " Ayrıca “{searchPhrase} for what I did today” diyebilirsiniz.",
+    "updateAvailableTitle": "Güncelleme mevcut",
+    "updateAvailableMessage": "Omi'nin yeni sürümü hazır; düzeltmeler ve iyileştirmeler içeriyor.",
+    "updateRequiredTitle": "Güncelleme gerekli",
+    "updateRequiredMessage": "Omi'nin bu sürümü artık desteklenmiyor. Kayda ve eşitlemeye devam etmek için güncelleyin.",
     "exportingAllData": "Verileriniz dışa aktarılıyor… Omi'yi açık tutun; büyük hesaplar birkaç dakika sürebilir."
 }

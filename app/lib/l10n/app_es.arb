@@ -1220,7 +1220,6 @@
     "appsCount": "Aplicaciones ({count})",
     "privateAppsCount": "Aplicaciones privadas ({count})",
     "publicAppsCount": "Aplicaciones públicas ({count})",
-    "newVersionAvailable": "Nueva versión disponible",
     "no": "No",
     "subscriptionCancelledSuccessfully": "Suscripción cancelada con éxito. Permanecerá activa hasta el final del período de facturación actual.",
     "failedToCancelSubscription": "Error al cancelar la suscripción. Por favor, inténtalo de nuevo.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Duración: {seconds} segundos",
     "additionalSpeechSampleRemoved": "Muestra de voz adicional eliminada",
     "consentDataMessage": "Al continuar, tus conversaciones, grabaciones e información personal se almacenarán de forma segura en nuestros servidores. Tus grabaciones de audio y transcripciones son procesadas por servicios de IA de terceros (incluyendo Deepgram para transcripción y OpenAI para análisis) para proporcionarte información impulsada por IA y habilitar todas las funciones de la aplicación.",
-    "tasksEmptyStateMessage": "Las tareas de tus conversaciones aparecerán aquí.\nToca + para crear una manualmente.",
+    "tasksEmptyStateMessage": "Inicia una conversación para crear una tarea.",
     "clearChatAction": "Borrar chat",
     "enableApps": "Habilitar apps",
     "omiAppName": "Omi",
@@ -3766,5 +3765,11 @@
     "collapseAction": "Contraer",
     "speakerTagPromptNotMeAction": "No soy yo",
     "confidenceNextLabels": "{count, plural, =1{Etiquétalos en 1 conversación más.} other{Etiquétalos en {count} conversaciones más.}}",
+    "siriShortcutsSetupHint": "Activa Omi en Atajos → Siri. Di “{askPhrase}” o “{questionPhrase}” y haz tu pregunta.",
+    "siriShortcutsSearchHint": " También puedes decir “{searchPhrase} for what I did today”.",
+    "updateAvailableTitle": "Actualización disponible",
+    "updateAvailableMessage": "Una nueva versión de Omi está lista, con correcciones y mejoras.",
+    "updateRequiredTitle": "Actualización necesaria",
+    "updateRequiredMessage": "Esta versión de Omi ya no es compatible. Actualiza para seguir grabando y sincronizando.",
     "exportingAllData": "Exportando tus datos… Mantén Omi abierto; las cuentas grandes pueden tardar varios minutos."
 }

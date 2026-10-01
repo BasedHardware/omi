@@ -3969,9 +3969,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'New Version Available';
-
-  @override
   String get no => 'No';
 
   @override
@@ -5052,7 +5049,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.';
 
   @override
-  String get tasksEmptyStateMessage => 'Tasks from your conversations will appear here.\nTap + to create one manually.';
+  String get tasksEmptyStateMessage => 'Start a conversation to create a task.';
 
   @override
   String get clearChatAction => 'Clear Chat';
@@ -12098,6 +12095,29 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Turn on Omi in Shortcuts → Siri. Say “$askPhrase” or “$questionPhrase,” then speak your question.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' You can also say “$searchPhrase for what I did today.”';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Update available';
+
+  @override
+  String get updateAvailableMessage => 'A new version of Omi is ready, with fixes and improvements.';
+
+  @override
+  String get updateRequiredTitle => 'Update required';
+
+  @override
+  String get updateRequiredMessage =>
+      'This version of Omi is no longer supported. Update to keep recording and syncing.';
 
   @override
   String get exportingAllData => 'Exporting your data… Keep Omi open; large accounts can take several minutes.';

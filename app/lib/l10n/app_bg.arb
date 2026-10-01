@@ -1220,7 +1220,6 @@
     "appsCount": "Приложения ({count})",
     "privateAppsCount": "Лични приложения ({count})",
     "publicAppsCount": "Публични приложения ({count})",
-    "newVersionAvailable": "Налична е нова версия",
     "no": "Не",
     "subscriptionCancelledSuccessfully": "Абонаментът е отменен успешно. Той ще остане активен до края на текущия период на фактуриране.",
     "failedToCancelSubscription": "Неуспешно отменяне на абонамента. Моля, опитайте отново.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Продължителност: {seconds} секунди",
     "additionalSpeechSampleRemoved": "Допълнителната гласова проба е премахната",
     "consentDataMessage": "С продължаването вашите разговори, записи и лична информация ще бъдат сигурно съхранени на нашите сървъри. Вашите аудиозаписи и транскрипции се обработват от AI услуги на трети страни (включително Deepgram за транскрипция и OpenAI за анализ), за да ви предоставят прозрения, базирани на AI, и да активират всички функции на приложението.",
-    "tasksEmptyStateMessage": "Задачите от вашите разговори ще се появят тук.\nДокоснете + за ръчно създаване.",
+    "tasksEmptyStateMessage": "Започнете разговор, за да създадете задача.",
     "clearChatAction": "Изчисти чата",
     "enableApps": "Активиране на приложения",
     "omiAppName": "Omi",
@@ -3766,5 +3765,11 @@
     "collapseAction": "Свий",
     "speakerTagPromptNotMeAction": "Не съм аз",
     "confidenceNextLabels": "{count, plural, =1{Етикетирайте човека в още 1 разговор.} other{Етикетирайте човека в още {count} разговора.}}",
+    "siriShortcutsSetupHint": "Включете Omi в Команди → Siri. Кажете „{askPhrase}“ или „{questionPhrase}“ и след това задайте въпроса си.",
+    "siriShortcutsSearchHint": " Може да кажете и „{searchPhrase} for what I did today“.",
+    "updateAvailableTitle": "Налична е актуализация",
+    "updateAvailableMessage": "Нова версия на Omi е готова, с поправки и подобрения.",
+    "updateRequiredTitle": "Нужна е актуализация",
+    "updateRequiredMessage": "Тази версия на Omi вече не се поддържа. Актуализирайте, за да продължите да записвате и синхронизирате.",
     "exportingAllData": "Експортиране на вашите данни… Не затваряйте Omi; при големи акаунти може да отнеме няколко минути."
 }

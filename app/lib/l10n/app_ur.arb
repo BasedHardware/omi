@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "نیا ورژن دستیاب ہے",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "نہیں",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "آپ کی گفتگو سے کام کی چیزیں یہاں ظاہر ہوں گی۔\n+ ٹیپ کریں دستی طور پر ایک بنانے کے لیے۔",
+    "tasksEmptyStateMessage": "ٹاسک بنانے کے لیے گفتگو شروع کریں۔",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11326,5 +11322,11 @@
     "collapseAction": "سمیٹیں",
     "speakerTagPromptNotMeAction": "میں نہیں",
     "confidenceNextLabels": "{count, plural, =1{انہیں مزید 1 گفتگو میں لیبل کریں۔} other{انہیں مزید {count} گفتگوؤں میں لیبل کریں۔}}",
+    "siriShortcutsSetupHint": "شارٹ کٹس ← Siri میں Omi آن کریں۔ “{askPhrase}” یا “{questionPhrase}” کہیں، پھر اپنا سوال پوچھیں۔",
+    "siriShortcutsSearchHint": " آپ “{searchPhrase} for what I did today” بھی کہہ سکتے ہیں۔",
+    "updateAvailableTitle": "اپ ڈیٹ دستیاب ہے",
+    "updateAvailableMessage": "Omi کا نیا ورژن تیار ہے، اصلاحات اور بہتریوں کے ساتھ۔",
+    "updateRequiredTitle": "اپ ڈیٹ ضروری ہے",
+    "updateRequiredMessage": "Omi کا یہ ورژن اب تعاون یافتہ نہیں ہے۔ ریکارڈنگ اور سنک جاری رکھنے کے لیے اپ ڈیٹ کریں۔",
     "exportingAllData": "آپ کا ڈیٹا ایکسپورٹ ہو رہا ہے… Omi کو کھلا رکھیں؛ بڑے اکاؤنٹس میں کئی منٹ لگ سکتے ہیں۔"
 }

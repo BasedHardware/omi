@@ -1220,7 +1220,6 @@
     "appsCount": "Aplikasi ({count})",
     "privateAppsCount": "Aplikasi Peribadi ({count})",
     "publicAppsCount": "Aplikasi Awam ({count})",
-    "newVersionAvailable": "Versi Baharu Tersedia",
     "no": "Tidak",
     "subscriptionCancelledSuccessfully": "Langganan berjaya dibatalkan. Ia akan kekal aktif sehingga akhir tempoh pengebilan semasa.",
     "failedToCancelSubscription": "Gagal membatalkan langganan. Sila cuba lagi.",
@@ -1545,7 +1544,7 @@
     "durationSeconds": "Tempoh: {seconds} saat",
     "additionalSpeechSampleRemoved": "Sampel suara tambahan dibuang",
     "consentDataMessage": "Dengan meneruskan, perbualan, rakaman dan maklumat peribadi anda akan disimpan dengan selamat di pelayan kami. Rakaman audio dan transkrip anda diproses oleh perkhidmatan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan anda pandangan dikuasakan AI dan membolehkan semua ciri aplikasi.",
-    "tasksEmptyStateMessage": "Tugasan daripada perbualan anda akan muncul di sini.\nKetik + untuk mencipta secara manual.",
+    "tasksEmptyStateMessage": "Mulakan perbualan untuk mencipta tugasan.",
     "clearChatAction": "Kosongkan sembang",
     "enableApps": "Dayakan aplikasi",
     "omiAppName": "Omi",
@@ -3766,5 +3765,11 @@
     "collapseAction": "Runtuhkan",
     "speakerTagPromptNotMeAction": "Bukan saya",
     "confidenceNextLabels": "{count, plural, =1{Labelkan mereka dalam 1 lagi perbualan.} other{Labelkan mereka dalam {count} lagi perbualan.}}",
+    "siriShortcutsSetupHint": "Hidupkan Omi dalam Pintasan → Siri. Katakan “{askPhrase}” atau “{questionPhrase}”, kemudian ajukan soalan anda.",
+    "siriShortcutsSearchHint": " Anda juga boleh katakan “{searchPhrase} for what I did today”.",
+    "updateAvailableTitle": "Kemas kini tersedia",
+    "updateAvailableMessage": "Versi baharu Omi sudah sedia, dengan pembetulan dan penambahbaikan.",
+    "updateRequiredTitle": "Kemas kini diperlukan",
+    "updateRequiredMessage": "Versi Omi ini tidak lagi disokong. Kemas kini untuk terus merakam dan menyegerakkan.",
     "exportingAllData": "Mengeksport data anda… Biarkan Omi terbuka; akaun besar mungkin mengambil masa beberapa minit."
 }

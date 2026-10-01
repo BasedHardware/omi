@@ -57,7 +57,15 @@ class SiriTelemetryRecord {
   String outcome;
   int latencyMs;
   int entityCounts;
-  SiriTelemetryRecord(this.kind, this.intent, this.outcome, this.latencyMs, this.entityCounts);
+  String entryPath;
+  SiriTelemetryRecord(this.kind, this.intent, this.outcome, this.latencyMs, this.entityCounts, this.entryPath);
+}
+
+class SiriPendingRoute {
+  String route;
+  String uid;
+  int generation;
+  SiriPendingRoute(this.route, this.uid, this.generation);
 }
 
 @HostApi()
@@ -101,9 +109,14 @@ abstract class SiriIndexApi {
   void setCurrentScreen(String route, String? entityId);
   @async
   void publishSessionConfig(SiriSessionConfig config);
-  String? takePendingRoute();
+  SiriPendingRoute? takePendingRoute();
+  void finishPendingRoute(String route, String uid, int generation, bool delivered);
   bool isEnabled();
   List<SiriTelemetryRecord> takeTelemetry();
+
+  /// True only when the Runner was compiled with the Siri toolchain, so Dart can
+  /// skip App Shortcuts UI (e.g. the Shortcuts button) in stable-compiler builds.
+  bool appShortcutsAvailable();
   @async
   void donateAction(String uid, String type, String id);
 }
@@ -113,7 +126,7 @@ abstract class SiriEventsApi {
   void memoryCreated(String id);
   void taskChanged(String id);
   @async
-  bool openRoute(String route);
+  bool openRoute(String route, String uid, int generation);
   @async
   void setListening(bool enabled);
 }

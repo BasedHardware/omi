@@ -3969,9 +3969,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Uusi versio saatavilla';
-
-  @override
   String get no => 'Ei';
 
   @override
@@ -5054,8 +5051,7 @@ class AppLocalizationsFi extends AppLocalizations {
       'Jatkamalla keskustelusi, tallenteet ja henkilötietosi tallennetaan turvallisesti palvelimillemme. Äänitallenteitasi ja transkriptioitasi käsittelevät kolmannen osapuolen tekoälypalvelut (mukaan lukien Deepgram transkriptiota ja OpenAI analyysiä varten) tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Keskusteluistasi saadut tehtävät näkyvät täällä.\nNapauta + luodaksesi manuaalisesti.';
+  String get tasksEmptyStateMessage => 'Aloita keskustelu luodaksesi tehtävän.';
 
   @override
   String get clearChatAction => 'Tyhjennä keskustelu';
@@ -12116,6 +12112,29 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Ota Omi käyttöön Pikakomennot → Siri -kohdasta. Sano “$askPhrase” tai “$questionPhrase” ja esitä sitten kysymyksesi.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Voit myös sanoa “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Päivitys saatavilla';
+
+  @override
+  String get updateAvailableMessage => 'Omin uusi versio on valmis, ja siinä on korjauksia ja parannuksia.';
+
+  @override
+  String get updateRequiredTitle => 'Päivitys vaaditaan';
+
+  @override
+  String get updateRequiredMessage =>
+      'Tätä Omin versiota ei enää tueta. Päivitä, jotta voit jatkaa tallentamista ja synkronointia.';
 
   @override
   String get exportingAllData => 'Tietojasi viedään… Pidä Omi auki; suuret tilit voivat viedä useita minuutteja.';

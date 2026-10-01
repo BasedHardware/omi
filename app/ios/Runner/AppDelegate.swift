@@ -146,6 +146,12 @@ final class QuickActionsIconPatcher: NSObject {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
     SiriBridge.shared.attach(messenger: messenger)
+    #if compiler(>=6.4)
+    if #available(iOS 16.0, *),
+       let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiShortcutsButton") {
+      registrar.register(OmiShortcutsButtonFactory(), withId: "omi/shortcuts_button")
+    }
+    #endif
 
     ttsMp3DecoderChannel = FlutterMethodChannel(
       name: "com.omi/tts_mp3_decoder",

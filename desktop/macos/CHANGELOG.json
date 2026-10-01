@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.429",
+      "date": "2026-10-01",
+      "changes": [
+        "Ask Omi with Siri using more phrases, and hear answers without opening chat"
+      ]
+    },
+    {
       "version": "0.12.428",
       "date": "2026-09-30",
       "changes": [

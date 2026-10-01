@@ -3982,9 +3982,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'ಹೊಸ ಆವೃತ್ತಿ ಲಭ್ಯವಿದೆ';
-
-  @override
   String get no => 'ಇಲ್ಲ';
 
   @override
@@ -5073,8 +5070,7 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಮುಂದುವರಿಯುವ ಮೂಲಕ, ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ವೈಯಕ್ತಿಕ ಮಾಹಿತಿಯನ್ನು ನಮ್ಮ ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ. ನಿಮ್ಮ ಆಡಿಯೋ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್‌ಗಳನ್ನು ಮೂರನೇ ವ್ಯಕ್ತಿಯ AI ಸೇವೆಗಳಿಂದ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ (ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್‌ಗಾಗಿ Deepgram ಮತ್ತು ವಿಶ್ಲೇಷಣೆಗಾಗಿ OpenAI ಸೇರಿದಂತೆ) AI-ಚಾಲಿತ ಒಳನೋಟಗಳನ್ನು ಒದಗಿಸಲು ಮತ್ತು ಎಲ್ಲಾ ಅಪ್ಲಿಕೇಶನ್ ವೈಶಿಷ್ಟ್ಯಗಳನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.';
+  String get tasksEmptyStateMessage => 'ಕಾರ್ಯವನ್ನು ರಚಿಸಲು ಸಂಭಾಷಣೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿ.';
 
   @override
   String get clearChatAction => 'ಚ್ಯಾಟ್ ತೀಕ್ಷ್ಣ ಮಾಡಿ';
@@ -12149,6 +12145,29 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'ಶಾರ್ಟ್‌ಕಟ್‌ಗಳು → Siri ನಲ್ಲಿ Omi ಆನ್ ಮಾಡಿ. “$askPhrase” ಅಥವಾ “$questionPhrase” ಎಂದು ಹೇಳಿ, ನಂತರ ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಕೇಳಿ.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' ನೀವು “$searchPhrase for what I did today” ಎಂದು ಸಹ ಹೇಳಬಹುದು.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'ಅಪ್‌ಡೇಟ್ ಲಭ್ಯವಿದೆ';
+
+  @override
+  String get updateAvailableMessage => 'Omi ನ ಹೊಸ ಆವೃತ್ತಿ ಸಿದ್ಧವಾಗಿದೆ, ಸರಿಪಡಿಸುವಿಕೆಗಳು ಮತ್ತು ಸುಧಾರಣೆಗಳೊಂದಿಗೆ.';
+
+  @override
+  String get updateRequiredTitle => 'ಅಪ್‌ಡೇಟ್ ಅಗತ್ಯವಿದೆ';
+
+  @override
+  String get updateRequiredMessage =>
+      'Omi ನ ಈ ಆವೃತ್ತಿಗೆ ಇನ್ನು ಬೆಂಬಲವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಸಿಂಕ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಡೇಟ್ ಮಾಡಿ.';
 
   @override
   String get exportingAllData =>
