@@ -3145,16 +3145,23 @@ def test_dev_owner_shadow_hosts_disable_live_owner_scoring():
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     dev = validator._get_env_config(manifest, 'dev')
     live_hosts = 0
+    shadow_hosts = {'gke/backend-listen', 'gke/pusher', 'cloud_run/backend'}
+    measured_hosts = set()
     for scope, env_block in _manifest_env_blocks(dev):
         live = env_block.get(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
         shadow = env_block.get('MEMORY_OWNER_JEV_SHADOW_PERCENT')
         if scope not in _JEV_PROCESS_CONVERSATION_HOSTS:
             assert shadow is None or shadow.get('value') == '0'
             continue
+        if scope in shadow_hosts:
+            measured_hosts.add(scope)
+            for name in ('MEMORY_OWNER_JEV_SHADOW_PERCENT', 'CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT'):
+                assert float(env_block.get(name, {}).get('value', '0')) > 0, (scope, name)
         if live is not None:
             live_hosts += 1
             assert env_block.get('MEMORY_OWNER_JEV_FLIP_PERCENT', {}).get('value') == '0', scope
     assert live_hosts == 4
+    assert measured_hosts == shadow_hosts
 
 
 def test_prod_jev_shadow_prepared_contract_keeps_live_treatment_off():

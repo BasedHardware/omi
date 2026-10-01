@@ -3,13 +3,14 @@
 import hashlib
 import threading
 import time
-from concurrent.futures import Future
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import MagicMock
 
 import fakeredis
 import pytest
+from google.api_core import exceptions as google_api_exceptions
 
 from database import jev_shadow as store
 from utils import executors, metrics
@@ -20,6 +21,7 @@ from utils.llm.jev_client import JevAnswers
 
 SENTINEL = 'PRIVATE_SENTINEL_NEVER_PERSIST_5831'
 GET_SHADOW_REDIS = shadow._get_shadow_redis
+FIRESTORE_TRANSACTIONAL = store.firestore.transactional
 MODEL = RelevanceDecision(
     'discard',
     'model',
@@ -92,6 +94,7 @@ def owner(**kwargs):
         state=f'Synthetic owner state {SENTINEL}',
         user_name=SENTINEL,
         pipeline_subject_kind='speaker',
+        pipeline_subject_entity_id='synthetic-speaker',
         source='desktop',
         n_quotes=2,
         user_name_present=True,
@@ -192,7 +195,7 @@ def test_no_text_in_records_logs_or_metric_labels(harness, monkeypatch, caplog):
     assert records[1][2]['pipeline_subject_kind'] == 'unknown'
     for _, rid, record in records:
         content = f'User: {SENTINEL}' if record['lane'] == 'relevance' else SENTINEL
-        content_sha = hashlib.sha256(content.encode()).hexdigest()
+        content_sha = record.get('scoring_sha') or hashlib.sha256(content.encode()).hexdigest()
         version = record['question_version']
         assert (
             rid == hashlib.sha256(f"{record['lane']}|synthetic-conv|{content_sha}|{version}".encode()).hexdigest()[:32]
@@ -600,9 +603,10 @@ def test_fenced_store_write_records_dropped_not_ok(harness, monkeypatch):
 def test_owner_selection_is_order_independent_and_hash_sampled(harness, monkeypatch, percent):
     monkeypatch.setenv('MEMORY_OWNER_JEV_SHADOW_PERCENT', percent)
     contents = [f'Synthetic candidate {i}' for i in range(30)]
-    selected = shadow.select_owner_shadow_indices('conv', contents)
+    identities = [shadow._sha(content) for content in contents]
+    selected, eligible_count = shadow.select_owner_shadow_indices('conv', identities)
     reversed_contents = list(reversed(contents))
-    reordered = shadow.select_owner_shadow_indices('conv', reversed_contents)
+    reordered, _ = shadow.select_owner_shadow_indices('conv', list(reversed(identities)))
     assert {contents[i] for i in selected} == {reversed_contents[i] for i in reordered}
     eligible = sorted(
         (shadow.uid_bucket(f'conv\0{shadow._sha(content)}', 'owner-shadow-v1'), i)
@@ -628,9 +632,14 @@ def test_selected_owner_burst_has_capacity_and_position_metadata(harness, monkey
 
     monkeypatch.setattr(shadow, 'submit_with_context', enqueue)
     contents = [f'Synthetic candidate {i}' for i in range(20)]
-    selected = shadow.select_owner_shadow_indices('synthetic-conv', contents)
+    selected, eligible_count = shadow.select_owner_shadow_indices('synthetic-conv', [shadow._sha(c) for c in contents])
     for i in selected:
-        owner(candidate_content=contents[i], candidate_index=i, eligible_count=len(contents))
+        owner(
+            candidate_content=contents[i],
+            state=f'Owner state {contents[i]}',
+            candidate_index=i,
+            eligible_count=eligible_count,
+        )
     assert len(pending) == 8
     assert harness[3].count(('owner', 'dropped')) == 12  # cap only, no submission loss
     for future, fn, args in pending:
@@ -723,8 +732,91 @@ def test_shadow_store_read_before_write_and_replay_preserve_first_payload(monkey
 
 def test_duplicate_owner_candidates_do_not_consume_selection_cap(harness):
     contents = [f'Synthetic {i}' for i in range(20)]
-    selected = shadow.select_owner_shadow_indices('conv', contents)
+    identities = [shadow._sha(content) for content in contents]
+    selected, eligible_count = shadow.select_owner_shadow_indices('conv', identities)
     duplicated = [content for content in contents for _ in range(3)]
-    duplicate_selected = shadow.select_owner_shadow_indices('conv', duplicated)
+    duplicate_selected, duplicate_count = shadow.select_owner_shadow_indices(
+        'conv', [shadow._sha(c) for c in duplicated]
+    )
+    assert eligible_count == duplicate_count == 20
     assert {contents[i] for i in selected} == {duplicated[i] for i in duplicate_selected}
     assert harness[3].count(('owner', 'deduped')) == 40
+
+
+@pytest.mark.parametrize(
+    'changed',
+    [
+        {'state': f'Different speaker-labelled evidence {SENTINEL}'},
+        {'pipeline_subject_kind': 'person'},
+        {'pipeline_subject_entity_id': 'other-speaker'},
+        {'user_name': 'Other synthetic owner'},
+    ],
+)
+def test_owner_dedupe_uses_the_full_scoring_identity(harness, changed):
+    owner()
+    owner(**changed)
+    owner(**changed)
+    _, asked, records, outcomes = harness
+    assert len(asked) == len(records) == 2
+    assert records[0][2]['candidate_sha'] == records[1][2]['candidate_sha']
+    assert records[0][2]['scoring_sha'] != records[1][2]['scoring_sha']
+    assert records[0][1] != records[1][1]
+    selected, eligible_count = shadow.select_owner_shadow_indices(
+        'synthetic-conv',
+        [r[2]['scoring_sha'] for r in records] * 2,
+    )
+    assert set(selected) == {0, 1} and eligible_count == 2
+    assert outcomes.count(('owner', 'ok')) == 2
+    assert outcomes.count(('owner', 'deduped')) == 3
+
+
+def test_concurrent_retry_commit_loser_is_deduped_not_failed(harness, monkeypatch):
+    """Both transactions read absent documents; exercise the real SDK Aborted wrapper."""
+    client, ref, marker, _ = _fenced_store_client(monkeypatch, deleting=False)
+    monkeypatch.setattr(store.firestore, 'transactional', FIRESTORE_TRANSACTIONAL)
+    monkeypatch.setattr(store, 'get_data_plane_firestore_client', lambda: client)
+    monkeypatch.setattr(shadow, 'write_jev_shadow', store.write_jev_shadow)
+    monkeypatch.setattr(shadow, '_admit', lambda *args: 'admitted')
+    reads = threading.Barrier(2)
+    lock = threading.Lock()
+    persisted = {}
+    transactions = []
+
+    def read(**kwargs):
+        snapshot = MagicMock(exists=bool(persisted))
+        reads.wait(timeout=5)
+        return snapshot
+
+    def transaction(*, max_attempts):
+        tx = MagicMock(_read_only=False, _max_attempts=max_attempts, _id=b'synthetic-transaction')
+        staged = {}
+        tx.set.side_effect = lambda _ref, payload: staged.update(payload)
+
+        def commit():
+            with lock:
+                if persisted:
+                    raise google_api_exceptions.Aborted('synthetic transaction contention')
+                persisted.update(staged)
+
+        tx._commit.side_effect = commit
+        transactions.append(tx)
+        return tx
+
+    ref.get.side_effect = read
+    client.transaction.side_effect = transaction
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        calls = [pool.submit(relevance) for _ in range(2)]
+        for call in calls:
+            call.result(timeout=5)
+    assert sorted(harness[3]) == [('relevance', 'deduped'), ('relevance', 'ok')]
+    assert persisted['lane'] == 'relevance' and persisted['p_discard'] == pytest.approx(0.98)
+    assert marker.get.call_count == ref.get.call_count == 2
+    assert [tx.set.call_count for tx in transactions] == [1, 1]
+    assert sum(tx._rollback.call_count for tx in transactions) == 1
+
+
+def test_noncontention_store_value_error_is_not_deduped(monkeypatch):
+    client, _, _, _ = _fenced_store_client(monkeypatch, deleting=False)
+    client.transaction.side_effect = ValueError('synthetic invalid transaction')
+    with pytest.raises(ValueError):
+        store.write_jev_shadow('user', 'id', {}, deadline=time.monotonic() + 1, firestore_client=client)
