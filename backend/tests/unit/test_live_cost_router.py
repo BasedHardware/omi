@@ -16,7 +16,7 @@ from utils.stt.live_gate import GateState, begin_trial, transition
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 from utils.stt.live_router import select, connecting_target
 from utils.stt.live_rollout import window_allocation
-from utils.stt.live_metrics import COST_SHADOW
+from utils.stt.live_metrics import COST_SHADOW, COST_DECISION
 
 
 @pytest.fixture(autouse=True)
@@ -49,8 +49,10 @@ def test_cost_capability_and_stable_ties():
 
 
 def test_all_traffic_cheapest_no_diversification():
+    before = COST_DECISION.labels(target='soniox', reason='failover')._value.get()
     for uid in map(str, range(3000)):
         assert select(DEFAULT_TARGETS, {}, uid, 'en')[0].id == 'parakeet-window'
+    assert COST_DECISION.labels(target='soniox', reason='failover')._value.get() == before
 
 
 @pytest.mark.parametrize('warmup', [0, 100, 700, 1020])
@@ -681,10 +683,12 @@ async def test_local_bench_is_reconciled_before_redis_recovery_can_unbench(monke
     now = [1000]
     redis = MemoryRedis()
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: now[0])
+    pod._redis_retry_at = 1010
     monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
     for i in range(8):
         pod.record_session('parakeet-window', 'en', 'failover', uid=str(i))
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0
+    now[0] = 1010
     await pod.refresh_cost_once()
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0
     stored = json.loads(redis.data['omi:live-stt:cost-v1:parakeet-window:all'])
@@ -693,6 +697,26 @@ async def test_local_bench_is_reconciled_before_redis_recovery_can_unbench(monke
     pod.prefer_recovery('parakeet-window', 'en')
     await pod.refresh_cost_once()
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 5
+
+
+@pytest.mark.asyncio
+async def test_healthy_fleet_is_not_benched_by_an_isolated_pod_local_rate():
+    redis = MemoryRedis()
+    pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
+    for lang in ('all', 'en'):
+        healthy = GateState(n=200)
+        redis.data[f'omi:live-stt:cost-v1:parakeet-window:{lang}'] = json.dumps(healthy.encode())
+        pod._cost_local[('parakeet-window', lang)] = GateState(stage=0, generation=1, until=1300)
+    pod.cost_snapshot(DEFAULT_TARGETS, 'en')
+    await pod.refresh_cost_once()
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 100
+    assert not pod._cost_unreconciled
+    pod._redis_retry_at = 1010
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0
+    pod._redis_retry_at = 0
+    await pod._write_cost_result('parakeet-window', 'en', False, {'all': 0, 'en': 0}, '0' * 16)
+    pod._redis_retry_at = 1010
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 100
 
 
 def test_generation_capture_uses_the_same_backoff_view_as_selection():

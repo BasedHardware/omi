@@ -46,7 +46,8 @@ def select(targets, states, uid, language, *, features=frozenset({'streaming'}),
         if reason:
             COST_DECISION.labels(target=target.id, reason=reason).inc()
         else:
-            COST_DECISION.labels(target=target.id, reason='cost_primary' if not result else 'failover').inc()
+            if not result:
+                COST_DECISION.labels(target=target.id, reason='cost_primary').inc()
             result.append(target)
     return result
 

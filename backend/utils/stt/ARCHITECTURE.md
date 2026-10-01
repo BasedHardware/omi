@@ -290,10 +290,11 @@ previous stage cannot promote a newer one.
 counts and transitions across pods; leases serialize trial starts. A background
 refresh uses the existing 75 ms deadline. Connect reads memory only. Redis
 faults use local evidence and retain known benches, then unknown health and
-configured cost order. A router exception restores today's configured chain. Local benches created
-during Redis faults remain restrictive when Redis returns, and are reconciled
+configured cost order. A router exception restores today's configured chain. Local benches backed by failed Redis writes remain restrictive when Redis returns, and are reconciled
 through CAS before staged recovery; snapshot and generation capture use the
-same freshness/backoff predicate.
+same freshness/backoff predicate. Fresh shared health remains authoritative
+over an isolated pod's local rate; verified writes refresh the local fallback
+view so a later Redis blip cannot revive a stale pod-only bench.
 Account/billing refusals remain immediate protection; local connection/serve
 breakers remain fast protection and cannot bypass an active fleet cost bench,
 including the old last-resort path. Legacy provider-score state is retained for
@@ -345,9 +346,9 @@ New bounded metrics: `omi_stt_cost_routing_decisions_total{target,reason}` with
 `capability|cost_primary|benched_skip|ramp_skip|capacity_skip|failover`,
 `omi_stt_cost_routing_benched{target}`, `omi_stt_cost_routing_stage{target}`,
 `omi_stt_cost_routing_shadow_total{agreement,target}`, and
-`omi_stt_cost_routing_events_total{target,event}`. Decisions count the proposed
-policy even in shadow; capacity admission refusals also count actual overflow
-in active mode. The event counter counts fleet transitions; local Redis-down transitions are
+`omi_stt_cost_routing_events_total{target,event}`. Primary and skip decisions count the proposed policy even in shadow;
+`failover` counts actual active backup attempts, and capacity admission refusals
+count actual overflow. Unused backup legs do not inflate failover counters. The event counter counts fleet transitions; local Redis-down transitions are
 logged with `scope=local` and do not increment it again. Transition logs contain
 target, bounded language, scope, stage, n,
 failures, rate and cooldown, never UID/content/endpoint/credentials. Gauges

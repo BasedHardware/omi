@@ -39,6 +39,7 @@ class CostHealthMixin(ABC):
     _cost_interests: dict[tuple[str, str], float]
     _cost_preferred: dict[tuple[str, str], float]
     _cost_fresh_at: float | None
+    _cost_unreconciled: set[tuple[str, str]]
 
     @abstractmethod
     def _redis(self) -> Any:
@@ -58,6 +59,7 @@ class CostHealthMixin(ABC):
         self._cost_interests = {}
         self._cost_preferred = {}
         self._cost_fresh_at = None
+        self._cost_unreconciled = set()
 
     def _target_id(self, provider: str) -> str:
         return DEFAULT_IDS.get(provider, provider)
@@ -71,7 +73,7 @@ class CostHealthMixin(ABC):
         state = cached if fresh else local
         if not fresh and cached.stage < state.stage:
             state = cached
-        if local.stage == 0 and local.generation >= state.generation:
+        if local.stage == 0 and local.generation >= state.generation and (not fresh or key in self._cost_unreconciled):
             state = local
         return state
 
@@ -147,9 +149,13 @@ class CostHealthMixin(ABC):
                     updated = transition(state, failed, now, witness=witness)
                     self._cost_local.pop(key, None)
                     self._cost_local[key] = updated
+                    if updated.stage == 0 and now < self._redis_retry_at:
+                        self._cost_unreconciled.add(key)
                     if len(self._cost_local) > 256:
-                        self._cost_local.pop(next(iter(self._cost_local)))
-                    if now < self._redis_retry_at:
+                        evicted = next(iter(self._cost_local))
+                        self._cost_local.pop(evicted)
+                        self._cost_unreconciled.discard(evicted)
+                    if not self._cost_is_fresh(now):
                         self._cost_event(target, lang, state, updated, failed, local=True)
         self.schedule(self._write_cost_result(target, language, failed, generations, witness, minimum_share))
 
@@ -161,6 +167,7 @@ class CostHealthMixin(ABC):
 
         with self._lock:
             self._cost_local[(target, 'all')] = update(self._cost_local.get((target, 'all'), GateState()))
+            self._cost_unreconciled.add((target, 'all'))
         self.schedule(self._write_cost_quarantine(target, update))
 
     async def _write_cost_quarantine(self, target: str, update: Callable[[GateState], GateState]) -> None:
@@ -245,13 +252,33 @@ class CostHealthMixin(ABC):
                         return state
                     return transition(state, failed, self._clock(), witness=witness)
 
-                await self._cost_update((target, lang), update, failed)
+                key = (target, lang)
+                written = await self._cost_update(key, update, failed)
+                with self._lock:
+                    local = self._cost_local.get(key, GateState())
+                    if key not in self._cost_unreconciled and (
+                        written.generation > local.generation or written.n >= local.n
+                    ):
+                        self._cost_local.pop(key, None)
+                        self._cost_local[key] = written
+                        if len(self._cost_local) > 256:
+                            evicted = next(iter(self._cost_local))
+                            self._cost_local.pop(evicted)
+                            self._cost_unreconciled.discard(evicted)
 
         try:
             if self._clock() < self._redis_retry_at:
                 raise RuntimeError('Redis backoff')
             await self._bounded(write())
         except Exception:
+            with self._lock:
+                for lang in ('all', language):
+                    key = (target, lang)
+                    local = self._cost_local.get(key, GateState())
+                    if local.stage == 0:
+                        if key not in self._cost_unreconciled:
+                            self._cost_event(target, lang, GateState(), local, local=True)
+                        self._cost_unreconciled.add(key)
             FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
             self._redis_retry_at = self._clock() + 10
 
@@ -271,7 +298,11 @@ class CostHealthMixin(ABC):
                 raise ValueError('invalid cost gate snapshot')
             states = {key: GateState.decode(json.loads(raw)) if raw else GateState() for key, raw in zip(keys, values)}
             with self._lock:
-                local_benches = {key: state for key, state in self._cost_local.items() if state.stage == 0}
+                local_benches = {
+                    key: state
+                    for key, state in self._cost_local.items()
+                    if state.stage == 0 and key in self._cost_unreconciled
+                }
             for key, local in local_benches.items():
                 if key not in states:
                     continue
@@ -282,6 +313,9 @@ class CostHealthMixin(ABC):
                     return remote
 
                 states[key] = await self._cost_update(key, reconcile)
+                with self._lock:
+                    if self._cost_local.get(key) == local:
+                        self._cost_unreconciled.discard(key)
             for key in preferred:
                 state = states.get(key, GateState())
                 if state.stage == 0 and state.until <= now:

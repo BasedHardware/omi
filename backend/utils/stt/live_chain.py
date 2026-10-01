@@ -197,6 +197,8 @@ async def connect_configured_chain(
     async def attempt(service: STTService, connect: Connect, target=None) -> tuple[STTSocket, STTService] | None:
         nonlocal origin, prior_reason, prior_capacity_subtype, attempted
         attempted = True
+        if active and target is not None and backup(service, target):
+            COST_DECISION.labels(target=target.id, reason='failover').inc()
         circuit = target_circuit(target, _circuit_for_primary(service))
         on_success, on_close = circuit.deferred_result_callbacks()
         socket = None
