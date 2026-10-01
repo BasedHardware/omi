@@ -34,6 +34,7 @@ class PeopleProvider extends BaseProvider {
   /// True when the last load failed; the list then shows what was cached, or an error state.
   bool loadFailed = false;
   bool _listening = false;
+  bool _confidenceLoaded = false;
 
   Future<void> initialize() {
     loading = true;
@@ -49,6 +50,7 @@ class PeopleProvider extends BaseProvider {
   Future<void> refresh() => setPeople();
 
   void clearUserData() {
+    _confidenceLoaded = false;
     people = [];
     selectedIds.clear();
     selecting = false;
@@ -61,10 +63,13 @@ class PeopleProvider extends BaseProvider {
   }
 
   Future<void> setPeople() async {
+    _confidenceLoaded = false;
+    notifyListeners();
     final value = await _loadPeople();
     loading = false;
     loadFailed = value == null;
     if (value != null) {
+      _confidenceLoaded = true;
       people = [
         ...value,
         ...people.where((person) => person.id.startsWith('optimistic-person:')),
@@ -217,8 +222,11 @@ class PeopleProvider extends BaseProvider {
   }
 
   /// Unverified, unpinned people: what Clean Up offers to delete. Pinned people are never included.
-  List<Person> get cleanUpCandidates =>
-      people.where((p) => !p.pinned && p.confidence == 'unverified' && !p.id.startsWith('optimistic-person:')).toList();
+  List<Person> get cleanUpCandidates => !_confidenceLoaded
+      ? []
+      : people
+          .where((p) => !p.pinned && p.confidence == 'unverified' && !p.id.startsWith('optimistic-person:'))
+          .toList();
 
   // ---- Multi-select ----
 
