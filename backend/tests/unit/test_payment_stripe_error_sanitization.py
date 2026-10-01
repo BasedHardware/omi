@@ -23,6 +23,15 @@ def test_stripe_client_error_detail_helper_is_defined():
     assert "def _stripe_client_error_detail(" in source
 
 
+def test_stripe_error_status_code_helper_maps_expected_statuses():
+    source = _source()
+    assert "def _stripe_error_status_code(" in source
+    assert "isinstance(e, stripe.error.RateLimitError)" in source
+    assert "429" in source
+    assert "isinstance(e, (stripe.error.APIConnectionError, stripe.error.APIError))" in source
+    assert "502" in source
+
+
 def test_no_raw_stripe_error_leaked_into_response_detail():
     source = _source()
     # `detail=str(e)` or an f-string interpolating `str(e)` or `else str(e)` puts the raw Stripe
@@ -65,6 +74,7 @@ def test_customer_portal_shields_stripe_errors():
     portal_block = source[start:end]
     assert "except stripe.error.StripeError as e:" in portal_block
     assert "_stripe_client_error_detail(e," in portal_block
+    assert "_stripe_error_status_code(e" in portal_block
 
 
 def test_checkout_and_upgrade_catch_base_stripe_error():
@@ -79,11 +89,12 @@ def test_checkout_and_upgrade_catch_base_stripe_error():
         block = source[start:end]
         assert "except stripe.error.StripeError as e:" in block
         assert "_stripe_client_error_detail(e," in block
+        assert "_stripe_error_status_code(e" in block
         assert "except stripe.error.InvalidRequestError" not in block
 
 
 def test_no_unsanitized_exception_logging():
     source = _source()
-    # Assert that all logger calls do not log raw `{e}` without sanitize()
-    unsanitized_matches = re.findall(r'logger\.\w+\(.*\{e\}.*\)', source)
+    # Assert that all logger calls do not log raw `{e}` without sanitize(), handling multi-line calls
+    unsanitized_matches = re.findall(r'logger\.\w+\([^)]*\{e\}[^)]*\)', source, re.DOTALL)
     assert not unsanitized_matches, f"Found unsanitized exception logs: {unsanitized_matches}"

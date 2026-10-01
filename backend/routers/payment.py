@@ -82,6 +82,25 @@ def _stripe_client_error_detail(e: stripe.error.StripeError, fallback: str) -> s
     return user_message if user_message else fallback
 
 
+def _stripe_error_status_code(e: stripe.error.StripeError, default: int = 400) -> int:
+    """Map Stripe errors to appropriate HTTP status codes.
+
+    Preserves 400 for client/request/card errors, while using 429 for rate-limits
+    and 502 for transient upstream transport or provider failures so clients can
+    backoff and retry appropriately.
+    """
+    if isinstance(e, stripe.error.RateLimitError):
+        return 429
+    if isinstance(e, (stripe.error.APIConnectionError, stripe.error.APIError)):
+        return 502
+    if isinstance(e, (stripe.error.AuthenticationError, stripe.error.PermissionError)):
+        return 500
+    http_status = getattr(e, 'http_status', None)
+    if http_status and 400 <= http_status < 600:
+        return http_status
+    return default
+
+
 class CreateCheckoutRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
@@ -647,7 +666,7 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe rejected checkout session: {sanitize(str(e))}")
         detail = _stripe_client_error_detail(e, "Could not create checkout session.")
-        raise HTTPException(status_code=400, detail=detail)
+        raise HTTPException(status_code=_stripe_error_status_code(e, 400), detail=detail)
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
     return {"url": session.url, "session_id": session.id}
@@ -826,7 +845,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
         detail = _stripe_client_error_detail(e, "Stripe rejected subscription change.")
-        raise HTTPException(status_code=400, detail=detail)
+        raise HTTPException(status_code=_stripe_error_status_code(e, 400), detail=detail)
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to process subscription change. Please try again.")
@@ -1523,7 +1542,7 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
             except stripe.error.StripeError as e:
                 logger.error(f"Failed to retrieve Stripe subscription for portal: {sanitize(str(e))}")
                 detail = _stripe_client_error_detail(e, "Could not retrieve subscription.")
-                raise HTTPException(status_code=400, detail=detail)
+                raise HTTPException(status_code=_stripe_error_status_code(e, 400), detail=detail)
 
     if not customer_id:
         raise HTTPException(status_code=400, detail="No Stripe customer found. Please create a subscription first.")
@@ -1538,7 +1557,7 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
     except stripe.error.StripeError as e:
         logger.error(f"Failed to create Stripe customer portal session: {sanitize(str(e))}")
         detail = _stripe_client_error_detail(e, "Could not create customer portal session.")
-        raise HTTPException(status_code=400, detail=detail)
+        raise HTTPException(status_code=_stripe_error_status_code(e, 400), detail=detail)
 
     return {"url": portal_session.url}
 
