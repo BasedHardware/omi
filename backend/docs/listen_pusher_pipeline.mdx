@@ -1215,13 +1215,13 @@ can give that number to another voice. A missing or user-deleted survivor
 remains a 404; missing selected segments fail instead of labeling another
 speaker. The returned conversation carries the survivor ID for client refresh.
 
-Enrollment remains **best-effort**. Pusher publishes `audio_files` during capture
-as well as at finalization. REST tries immediately; the acknowledged socket path
-queues a delayed attempt. A crash after the saved edit, missing/tail audio at the
-attempt, or a failed extraction can still lose that attempt: there is no durable
-job, lease, retry, or reconciliation worker. Reassigning the label can retry.
-Stored MANUAL decisions include concrete segment IDs and a generation; automatic
-matches and text suggestions do not create teaching receipts.
+Enrollment stays fire-and-forget, now receipt-driven: `extract_speaker_samples`
+pools clean same-scope speech (10 s min, 30 s / 12 clips / 10 s each), verifies
+one pooled WAV under the unchanged gates, and records one outcome on
+`voice_learning_*`. `audio_files` publish during capture and at finalization;
+REST tries immediately, sockets queue a delayed attempt, and fanout completion
+schedules a bounded retry for receipt-named people lacking a usable voiceprint
+(≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
 
 Owner display names share `database.auth.get_user_name`: Firebase display name,
 Firestore `name`, then an explicit identity bullet on the first line of

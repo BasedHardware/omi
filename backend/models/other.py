@@ -173,6 +173,16 @@ class Person(BaseModel):
                 data = {**data, 'voice_readiness': voice_readiness(data)}
             if 'label_evidence' in data or 'confidence' not in data:
                 data = {**data, **confidence_fields(data.get('label_evidence'), data['voice_readiness'])}
+            ready = VoiceReadiness(data['voice_readiness']) == VoiceReadiness.ready
+            learning_state = data.get('voice_learning_state')
+            if ready:
+                if learning_state != 'disabled':
+                    data = {**data, 'voice_learning_state': 'learned'}
+            elif learning_state in (None, 'learned'):
+                data = {
+                    **data,
+                    'voice_learning_state': 'pending' if data.get('voice_learning_outcome') else 'unknown',
+                }
         return data
 
     def refresh_confidence(self) -> None:
