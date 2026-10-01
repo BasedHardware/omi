@@ -6,7 +6,7 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
-from utils.observability.fallback import ReplayLagDiagnostics, record_fallback
+from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
@@ -384,6 +384,10 @@ class LiveLegSocket(STTSocket):
         return getattr(self.raw, 'replay_lag_diagnostics', None)
 
     @property
+    def first_text_diagnostics(self) -> FirstTextDeadlineDiagnostics | None:
+        return getattr(self.raw, 'first_text_diagnostics', None)
+
+    @property
     def capacity_subtype(self) -> str | None:
         return getattr(self.raw, 'capacity_subtype', None)
 
@@ -515,8 +519,11 @@ class LiveLegSocket(STTSocket):
                 self.finish()
                 self._dead = True
                 return False
-            if output is not None and output.should_finalize and not self.window:
-                self.raw.finalize()
+            if output is not None and output.should_finalize:
+                if self.window and isinstance(self.raw, WindowedParakeetSocket):
+                    self.raw.finalize(vad_pause=True)
+                else:
+                    self.raw.finalize()
         except Exception:
             self._dead = True
             self.finish()

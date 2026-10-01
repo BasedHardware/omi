@@ -1689,7 +1689,9 @@ enum SiriIntentPerformedInvokedVia {
   siri("siri"),
   shortcuts("shortcuts"),
   spotlight("spotlight"),
-  unknown("unknown");
+  unknown("unknown"),
+  appIntent("app_intent"),
+  userActivity("user_activity");
   const SiriIntentPerformedInvokedVia(this.wireName);
   final String wireName;
 }

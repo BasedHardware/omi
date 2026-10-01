@@ -197,9 +197,7 @@ class HomeFrame extends StatelessWidget {
                 semanticLabel: 'Sync',
                 onTap: () {},
                 badgeCount: pendingSync!,
-                quietBadge: true,
-                color: Colors.transparent,
-                icon: Icon(Icons.cloud_outlined, size: 18, color: OmiColors.textTertiary),
+                icon: Icon(Icons.cloud_rounded, size: 18, color: OmiColors.textSecondary),
               ),
             HeaderCircleButton(
               semanticLabel: 'Search',

@@ -216,6 +216,32 @@ void main() {
     expect(find.text('Who is this?'), findsOneWidget);
   });
 
+  testWidgets('closing the card keeps Undo available without saving the answer', (tester) async {
+    final h = await _pumpCard(tester, prompts: [_prompt('a', 'identify')]);
+    await _tapKey(tester, 'speaker_tag_prompt_answer_not_a_person');
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await h.provider.close();
+    await tester.pump();
+    expect(h.answers, isEmpty);
+    expect(find.text('Undo'), findsOneWidget);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(h.provider.pending, isNull);
+    expect(h.answers, isEmpty);
+  });
+
+  testWidgets('a closed card commits only after the Undo window expires', (tester) async {
+    final h = await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')]);
+    await _tapKey(tester, 'speaker_tag_prompt_answer_me');
+    await tester.pump();
+    await h.provider.close();
+    await tester.pump();
+    expect(h.answers, isEmpty);
+    await _waitOutUndo(tester);
+    expect(h.answers.single.answer, 'me');
+  });
+
   testWidgets('Not a Person commits the not_a_person answer', (tester) async {
     final h = await _pumpCard(tester, prompts: [_prompt('a', 'confirm_person')], people: [_person('p1', 'Sam')]);
     await _tapKey(tester, 'speaker_tag_prompt_answer_not_a_person');

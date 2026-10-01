@@ -3965,9 +3965,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Galima nauja versija';
-
-  @override
   String get no => 'Ne';
 
   @override
@@ -5052,8 +5049,7 @@ class AppLocalizationsLt extends AppLocalizations {
       'Tęsdami, jūsų pokalbiai, įrašai ir asmeninė informacija bus saugiai saugomi mūsų serveriuose. Jūsų garso įrašai ir transkripcijos apdorojami trečiųjų šalių AI paslaugų (įskaitant Deepgram transkripcijai ir OpenAI analizei), kad suteiktų jums AI paremtas įžvalgas ir įgalintų visas programėlės funkcijas.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Užduotys iš jūsų pokalbių bus rodomos čia.\nBakstelėkite + norėdami sukurti rankiniu būdu.';
+  String get tasksEmptyStateMessage => 'Pradėkite pokalbį, kad sukurtumėte užduotį.';
 
   @override
   String get clearChatAction => 'Išvalyti pokalbį';
@@ -12131,4 +12127,17 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get updateAvailableTitle => 'Yra naujinys';
+
+  @override
+  String get updateAvailableMessage => 'Nauja Omi versija paruošta – su pataisymais ir patobulinimais.';
+
+  @override
+  String get updateRequiredTitle => 'Būtina atnaujinti';
+
+  @override
+  String get updateRequiredMessage =>
+      'Ši Omi versija nebepalaikoma. Atnaujinkite, kad galėtumėte toliau įrašyti ir sinchronizuoti.';
 }
