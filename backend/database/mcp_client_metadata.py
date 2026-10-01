@@ -95,6 +95,10 @@ class _BoundedPool:
     an unbounded DNS work queue on a shared pool."""
 
     def __init__(self, workers: int, queue: int) -> None:
+        if not isinstance(workers, int) or workers <= 0:
+            raise ValueError("workers must be a positive integer")
+        if not isinstance(queue, int) or queue < 0:
+            raise ValueError("queue must be a non-negative integer")
         self._slots = threading.BoundedSemaphore(workers + queue)
         self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=workers, thread_name_prefix="cimd-dns")
 
@@ -121,7 +125,9 @@ def parse_metadata_url(client_id: str) -> Optional[Tuple[str, str]]:
     fetch/cache identities for one host (cache-busting).
     """
     if (
-        len(client_id) > CIMD_MAX_URL_CHARS
+        not isinstance(client_id, str)
+        or not client_id.strip()
+        or len(client_id) > CIMD_MAX_URL_CHARS
         or "\\" in client_id
         or "?" in client_id
         or "#" in client_id
@@ -129,6 +135,7 @@ def parse_metadata_url(client_id: str) -> Optional[Tuple[str, str]]:
         or any(ord(char) < 0x20 or ord(char) == 0x7F for char in client_id)
     ):
         return None
+
     try:
         parts = urlsplit(client_id)
         port = parts.port
@@ -260,6 +267,8 @@ def _dial_tls(address: str, hostname: str, deadline: float) -> ssl.SSLSocket:
 
 
 def _header_content_length(head: bytes) -> Optional[int]:
+    if not isinstance(head, (bytes, bytearray)):
+        return None
     for line in head.split(b"\r\n")[1:]:
         name, _, value = line.partition(b":")
         if name.strip().lower() == b"content-length":
@@ -268,6 +277,7 @@ def _header_content_length(head: bytes) -> Optional[int]:
             except ValueError:
                 return None
     return None
+
 
 
 def _read_response(tls: ssl.SSLSocket, hostname: str, target: str, deadline: float) -> Optional[bytes]:
@@ -402,6 +412,8 @@ def _cache_ttl_seconds(cache_control: Optional[str]) -> int:
     shared/server-side cache) all disable caching entirely."""
     if not cache_control:
         return CIMD_CACHE_TTL_MAX_SECONDS
+    if not isinstance(cache_control, str):
+        return 0
     directives = {item.strip().lower() for item in cache_control.split(",")}
     if {"no-store", "no-cache", "private"} & directives:
         return 0
@@ -409,7 +421,7 @@ def _cache_ttl_seconds(cache_control: Optional[str]) -> int:
         if directive.startswith("max-age="):
             try:
                 max_age = int(directive.split("=", 1)[1].strip().strip('"'))
-            except ValueError:
+            except (ValueError, TypeError):
                 return 0
             if max_age <= 0:
                 return 0
@@ -472,6 +484,8 @@ def _display_name_for(metadata: Dict[str, Any], hostname: str) -> str:
 def _validated_metadata(document: Dict[str, Any], client_id: str) -> Optional[Dict[str, Any]]:
     """Reduce a fetched (or cached) document to the whitelisted fields the
     authorization flow may trust, or ``None`` when anything fails."""
+    if not isinstance(document, dict) or not isinstance(client_id, str) or not client_id.strip():
+        return None
     if document.get("client_id") != client_id:
         return None
     redirect_uris = document.get("redirect_uris")
@@ -500,14 +514,20 @@ def _validated_metadata(document: Dict[str, Any], client_id: str) -> Optional[Di
 
 
 def _cache_key(client_id: str) -> str:
-    return f"{_CIMD_CACHE_KEY_PREFIX}{hashlib.sha256(client_id.encode('utf-8')).hexdigest()}"
+    if not isinstance(client_id, str) or not client_id.strip():
+        raise ValueError("client_id must be a non-empty string")
+    return f"{_CIMD_CACHE_KEY_PREFIX}{hashlib.sha256(client_id.strip().encode('utf-8')).hexdigest()}"
 
 
 def _neg_cache_key(canonical_url: str) -> str:
-    return f"{_CIMD_NEG_CACHE_KEY_PREFIX}{hashlib.sha256(canonical_url.encode('utf-8')).hexdigest()}"
+    if not isinstance(canonical_url, str) or not canonical_url.strip():
+        raise ValueError("canonical_url must be a non-empty string")
+    return f"{_CIMD_NEG_CACHE_KEY_PREFIX}{hashlib.sha256(canonical_url.strip().encode('utf-8')).hexdigest()}"
 
 
 def _read_cached(client_id: str) -> Optional[Dict[str, Any]]:
+    if not isinstance(client_id, str) or not client_id.strip():
+        return None
     if not mcp_cache_integrity.integrity_available():
         return None
     try:
@@ -527,18 +547,27 @@ def _read_cached(client_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _write_cache(client_id: str, metadata: Dict[str, Any], ttl_seconds: int) -> None:
-    if ttl_seconds <= 0 or not mcp_cache_integrity.integrity_available():
+    if (
+        not isinstance(client_id, str)
+        or not client_id.strip()
+        or not isinstance(metadata, dict)
+        or not isinstance(ttl_seconds, int)
+        or ttl_seconds <= 0
+        or not mcp_cache_integrity.integrity_available()
+    ):
         return
     blob = mcp_cache_integrity.dumps_signed(metadata, _CIMD_INTEGRITY_TAG)
     if blob is None:
         return
     try:
-        redis_db.r.set(_cache_key(client_id), blob, ex=ttl_seconds)
+        redis_db.r.set(_cache_key(client_id), blob, ex=min(ttl_seconds, CIMD_CACHE_TTL_MAX_SECONDS))
     except Exception as exc:
         logger.warning("MCP CIMD cache write failed: %s", type(exc).__name__)
 
 
 def _negative_cached(canonical_url: str) -> bool:
+    if not isinstance(canonical_url, str) or not canonical_url.strip():
+        return False
     try:
         return bool(redis_db.r.get(_neg_cache_key(canonical_url)))
     except Exception as exc:
@@ -550,10 +579,13 @@ def _negative_cache(canonical_url: str) -> None:
     """Suppress repeat fetches for a URL that just failed for
     ``CIMD_NEGATIVE_CACHE_TTL_SECONDS`` — a failing host must not get a fresh
     3-second fetch on every unauthenticated request."""
+    if not isinstance(canonical_url, str) or not canonical_url.strip():
+        return
     try:
         redis_db.r.set(_neg_cache_key(canonical_url), "1", ex=CIMD_NEGATIVE_CACHE_TTL_SECONDS)
     except Exception as exc:
         logger.warning("MCP CIMD negative-cache write failed: %s", type(exc).__name__)
+
 
 
 def get_url_client(client_id: str) -> Optional[Dict[str, Any]]:
@@ -564,8 +596,11 @@ def get_url_client(client_id: str) -> Optional[Dict[str, Any]]:
     any network access unless the URL itself passed the SSRF checks above.
     May raise ``McpCimdUnavailable`` when the bounded fetch path is saturated.
     """
-    parsed = parse_metadata_url(client_id)
+    if not isinstance(client_id, str) or not client_id.strip():
+        return None
+    parsed = parse_metadata_url(client_id.strip())
     if parsed is None:
+
         return None
     hostname, target = parsed
     canonical_url = f"https://{hostname}{target}"
