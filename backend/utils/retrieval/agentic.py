@@ -737,6 +737,9 @@ _CONTINUATION_REQUESTS = frozenset(
     {
         'carry on',
         'continue',
+        'continue from where you left off please',
+        'continue please',
+        'continue where you left off please',
         'continue from where you left off',
         'continue where you left off',
         'continue with the next part',
@@ -749,7 +752,10 @@ _CONTINUATION_REQUESTS = frozenset(
         'please resume',
         'resume',
         'resume from where you left off',
+        'resume from where you left off please',
+        'resume please',
         'resume where you left off',
+        'resume where you left off please',
     }
 )
 _CONTINUATION_CONTRACT = """<continuation_request>
@@ -762,7 +768,7 @@ Do not restart, summarize, restate, or repeat content already delivered.
 
 def _is_explicit_continuation_request(text: str) -> bool:
     """Match only short, unambiguous commands that refer to the prior answer."""
-    normalized = ' '.join(text.casefold().strip().strip('.!?…').split())
+    normalized = ' '.join(text.casefold().strip().strip(',.!?…').split())
     return normalized in _CONTINUATION_REQUESTS
 
 

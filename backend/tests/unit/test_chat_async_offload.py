@@ -254,7 +254,15 @@ def test_bare_continue_gets_resume_contract_without_mutating_stored_history():
 def test_continuation_contract_is_limited_to_unambiguous_followups_after_an_answer():
     prior_answer = {'role': 'assistant', 'content': 'Deployment has three stages.'}
 
-    for text in ('please continue', 'Resume where you left off!', 'go on', 'next part'):
+    for text in (
+        'please continue',
+        'continue please',
+        'Continue,',
+        'Resume where you left off!',
+        'resume please',
+        'go on',
+        'next part',
+    ):
         marked = agentic._with_continuation_contract([prior_answer, {'role': 'user', 'content': text}])
         assert '<continuation_request>' in marked[-1]['content']
 
