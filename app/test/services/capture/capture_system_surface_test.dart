@@ -4,11 +4,13 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/capture/capture_system_surface.dart';
 
 import '../../support/capture/capture_replay_world.dart';
+import '../../support/capture/scripted_device_connection.dart';
 
 class _Surface implements CaptureSystemSurfaceSink {
   late Future<Map<String, Object?>> Function(Map<String, Object?>) action;
@@ -162,6 +164,32 @@ void main() {
     expect(presentation.snapshot['canPause'], false);
     expect(presentation.snapshot['canFinish'], true);
     await expectLater(sink.action(request('resume')), throwsStateError);
+  });
+
+  final pendant = BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
+
+  Future<void> recordWithPendant() async {
+    await world.stopLiveCapture();
+    world.deviceConnection = ScriptedDeviceConnection();
+    await world.controller.streamDeviceRecording(device: pendant);
+    await world.settle();
+    expect(presentation.snapshot['source'], 'pendant');
+  }
+
+  test('a Stop queued behind a handoff does not pause the recording that takes over', () async {
+    await recordWithPendant();
+    final pendantRecording = presentation.snapshot['recordingId'];
+
+    // The card still shows the pendant when Stop is tapped while the phone takes over.
+    final start = world.controller.streamRecording();
+    final rejected = expectLater(sink.action(request('pause')), throwsStateError);
+    await start;
+    world.emitNativeState(PhoneMicCaptureState.running);
+    await world.settle();
+    expect(presentation.snapshot['source'], 'phone');
+    expect(presentation.snapshot['recordingId'], isNot(pendantRecording));
+    expect(world.controller.isPaused, false, reason: 'the tap was for the pendant recording');
+    await rejected;
   });
 
   test('Finish processes phone conversation and stops its native capture', () async {

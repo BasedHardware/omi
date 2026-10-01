@@ -501,7 +501,8 @@ class CaptureController extends ChangeNotifier
 
   /// A Live Activity button: one more caller of the live page's controls, so the
   /// coordinator decides what pause, resume and finish do for the source that
-  /// owns capture. A tap from a card for an older recording or conversation fails.
+  /// owns capture. A tap from a card for an older recording or conversation fails,
+  /// including one that queued behind the stop, handoff or finish that replaced it.
   Future<void> performSystemSurfaceAction(String action,
       {required String recordingId, required int conversationRevision}) async {
     if (lifetime.isClosed ||
@@ -509,16 +510,23 @@ class CaptureController extends ChangeNotifier
         _systemSurfaceConversationRevision != conversationRevision) {
       throw StateError('Recording changed');
     }
+    final target = SystemSurfaceTarget(recordingId: recordingId, conversationRevision: conversationRevision);
+    final CaptureEvent event;
     switch (action) {
       case 'pause':
-        if (!isPaused) await pauseCapture();
+        if (isPaused) return;
+        event = PauseCaptureRequested(target: target);
       case 'resume':
-        if (isPaused) await resumeCapture();
+        if (!isPaused) return;
+        event = ResumeCaptureRequested(target: target);
       case 'finish':
-        await finishCapture();
+        event = FinishRequested(target: target);
       default:
         throw ArgumentError.value(action, 'action');
     }
+    final outcome = await _capture.dispatch(event);
+    outcome.throwIfFailed();
+    if (outcome.result is StaleSystemSurfaceTarget) throw StateError('Recording changed');
   }
 
   @visibleForTesting
@@ -3742,6 +3750,8 @@ class CaptureController extends ChangeNotifier
         micCapturing: recordingState == RecordingState.record ||
             recordingState == RecordingState.interrupted ||
             recordingState == RecordingState.systemAudioRecord,
+        systemSurfaceRecordingId: activeRecordingId,
+        systemSurfaceConversationRevision: _systemSurfaceConversationRevision,
       );
 
   CaptureEffectPorts _buildCapturePorts() => CaptureEffectPorts(
