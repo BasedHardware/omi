@@ -3765,6 +3765,7 @@
     "collapseAction": "Replega",
     "speakerTagPromptNotMeAction": "No sóc jo",
     "confidenceNextLabels": "{count, plural, =1{Etiqueta'ls en 1 conversa més.} other{Etiqueta'ls en {count} converses més.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 participant} other{{count} participants}}",
     "siriShortcutsSetupHint": "Activa Omi a Dreceres → Siri. Digueu «{askPhrase}» o «{questionPhrase}» i feu la vostra pregunta.",
     "siriShortcutsSearchHint": " També podeu dir «{searchPhrase} for what I did today».",
     "updateAvailableTitle": "Actualització disponible",

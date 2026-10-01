@@ -3765,6 +3765,7 @@
     "collapseAction": "Thu gọn",
     "speakerTagPromptNotMeAction": "Không phải tôi",
     "confidenceNextLabels": "{count, plural, =1{Hãy gắn nhãn họ trong 1 cuộc trò chuyện nữa.} other{Hãy gắn nhãn họ trong {count} cuộc trò chuyện nữa.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 người nói} other{{count} người nói}}",
     "siriShortcutsSetupHint": "Bật Omi trong Lối tắt → Siri. Nói “{askPhrase}” hoặc “{questionPhrase}”, sau đó đặt câu hỏi của bạn.",
     "siriShortcutsSearchHint": " Bạn cũng có thể nói “{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "Có bản cập nhật",

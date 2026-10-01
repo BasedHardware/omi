@@ -3765,6 +3765,7 @@
     "collapseAction": "Tiivistä",
     "speakerTagPromptNotMeAction": "En ole minä",
     "confidenceNextLabels": "{count, plural, =1{Nimeä heidät vielä 1 keskustelussa.} other{Nimeä heidät vielä {count} keskustelussa.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 puhuja} other{{count} puhujaa}}",
     "siriShortcutsSetupHint": "Ota Omi käyttöön Pikakomennot → Siri -kohdasta. Sano “{askPhrase}” tai “{questionPhrase}” ja esitä sitten kysymyksesi.",
     "siriShortcutsSearchHint": " Voit myös sanoa “{searchPhrase} for what I did today”.",
     "updateAvailableTitle": "Päivitys saatavilla",

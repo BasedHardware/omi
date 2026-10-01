@@ -3800,6 +3800,7 @@
     "collapseAction": "Daralt",
     "speakerTagPromptNotMeAction": "Ben değilim",
     "confidenceNextLabels": "{count, plural, =1{Onları 1 konuşmada daha etiketleyin.} other{Onları {count} konuşmada daha etiketleyin.}}",
+    "transcriptSpeakerCount": "{count, plural, =1{1 konuşmacı} other{{count} konuşmacı}}",
     "siriShortcutsSetupHint": "Kısayollar → Siri içinde Omi’yi etkinleştirin. “{askPhrase}” veya “{questionPhrase}” deyin, sonra sorunuzu sorun.",
     "siriShortcutsSearchHint": " Ayrıca “{searchPhrase} for what I did today” diyebilirsiniz.",
     "updateAvailableTitle": "Güncelleme mevcut",
