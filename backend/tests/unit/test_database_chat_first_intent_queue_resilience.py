@@ -38,10 +38,44 @@ def test_sort_ready_intents_orders_correctly():
 
 
 def test_drain_intent_batch_none_items_noop():
-    """Verify drain_intent_batch gracefully handles None items."""
+    """Verify drain_intent_batch gracefully handles None items when args are valid."""
     processed = []
     drain_intent_batch(None, lambda x: processed.append(x) or ProcessOutcome.ack())  # type: ignore[arg-type]
     assert processed == []
+
+
+def test_drain_intent_batch_none_items_validates_callable_and_max_items():
+    """Verify drain_intent_batch fails fast on invalid process_one or max_items even when items is None."""
+    with pytest.raises(ValueError, match="process_one must be callable"):
+        drain_intent_batch(None, None)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="max_items must be a non-negative integer"):
+        drain_intent_batch(None, lambda x: ProcessOutcome.ack(), max_items=-1)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="max_items must be a non-negative integer"):
+        drain_intent_batch(None, lambda x: ProcessOutcome.ack(), max_items=True)  # type: ignore[arg-type]
+
+
+def test_drain_intent_batch_lazy_bounded_consumption():
+    """Verify max_items uses lazy bounded consumption and does not exhaust generators."""
+    consumed_count = 0
+
+    def infinite_counter():
+        nonlocal consumed_count
+        while True:
+            consumed_count += 1
+            yield consumed_count
+
+    processed = []
+
+    def handle(item):
+        processed.append(item)
+        return ProcessOutcome.ack()
+
+    drain_intent_batch(infinite_counter(), handle, max_items=3)
+    assert processed == [1, 2, 3]
+    # itertools.islice takes exactly 3 items without pulling further
+    assert consumed_count == 3
 
 
 def test_drain_intent_batch_rejects_non_callable():

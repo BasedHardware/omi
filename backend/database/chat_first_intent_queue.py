@@ -5,6 +5,7 @@ Kept out of ``chat_first_intents.py`` so that 1,500-line file does not grow.
 
 from __future__ import annotations
 
+import itertools
 from typing import Any, Callable, Iterable, List, Sequence, TypeVar
 
 from database.durable_queue import ProcessOutcome, drain_isolated, ready_sort_key
@@ -38,14 +39,15 @@ def drain_intent_batch(
     *,
     max_items: int | None = None,
 ) -> None:
-    if items is None:
-        return
     if not callable(process_one):
         raise ValueError("process_one must be callable")
     if max_items is not None:
         if isinstance(max_items, bool) or not isinstance(max_items, int) or max_items < 0:
             raise ValueError("max_items must be a non-negative integer")
-        to_drain: Iterable[T] = list(items)[:max_items]
+    if items is None:
+        return
+    if max_items is not None:
+        to_drain: Iterable[T] = itertools.islice(items, max_items)
     else:
         to_drain = items
     drain_isolated(to_drain, process_one)
