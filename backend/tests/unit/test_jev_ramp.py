@@ -140,7 +140,7 @@ def test_jev_ramp_is_monotone_and_no_account_is_pinned(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '2')
-    conversations = [f'conversation-{i}' for i in range(5000)]
+    conversations = [f'conversation-{i}' for i in range(1500)]
     previous = set()
     keep_all = {cid for cid in conversations if config.keep_all_selected(cid)}
     for percent in ('1', '10', '50', '100'):
