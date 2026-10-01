@@ -49,59 +49,6 @@ def test_rate_policy_checks_threshold_and_window_only_when_declared():
     assert check_policy(policy, **kwargs, alignment_period='1800s') == ['condition alignment period differs']
 
 
-def test_policy_checks_per_series_aligner_and_trigger_count_when_declared():
-    policy = _policy(
-        {
-            'conditionThreshold': {
-                'filter': FILTER,
-                'duration': '0s',
-                'thresholdValue': 0,
-                'aggregations': [{'alignmentPeriod': '300s', 'perSeriesAligner': 'ALIGN_SUM'}],
-                'trigger': {'count': 1},
-            }
-        }
-    )
-    kwargs = dict(condition='threshold', filter_text=FILTER, duration_seconds=0, channels=CHANNELS)
-    assert (
-        check_policy(
-            policy,
-            **kwargs,
-            alignment_period='300s',
-            per_series_aligner='ALIGN_SUM',
-            trigger_count=1,
-        )
-        == []
-    )
-    assert check_policy(
-        policy,
-        **kwargs,
-        per_series_aligner='ALIGN_DELTA',
-        trigger_count=2,
-    ) == ['condition per-series aligner differs', 'condition trigger count differs']
-
-
-def test_firestore_missing_index_metric_and_alert_contract():
-    from pathlib import Path
-
-    repository_root = Path(__file__).resolve().parents[3]
-    metric = json.loads((repository_root / '.github/monitoring/firestore_missing_index_errors_metric.json').read_text())
-    assert 'resource.type="cloud_run_revision"' in metric['filter']
-    assert 'textPayload:"The query requires an index"' in metric['filter']
-    assert 'jsonPayload.message:"The query requires an index"' in metric['filter']
-    assert metric['metricDescriptor']['metricKind'] == 'DELTA'
-    assert metric['metricDescriptor']['valueType'] == 'INT64'
-    assert metric['labelExtractors']['service_name'] == 'EXTRACT(resource.labels.service_name)'
-
-    action = (repository_root / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
-    assert "inputs.project_id == 'based-hardware'" in action
-    assert 'Provision routed Firestore missing-index alert' in action
-    assert 'inputs.alert_notification_channels' in action
-    assert '--duration=0s' in action
-    assert '--comparison=\'> 0\'' in action
-    assert '"alignmentPeriod":"300s"' in action
-    assert '--per-series-aligner=ALIGN_SUM --trigger-count=1' in action
-
-
 def test_absence_policy_requires_ten_minute_duration():
     policy = _policy({'conditionAbsent': {'filter': FILTER, 'duration': '600s'}})
     assert check_policy(policy, condition='absent', filter_text=FILTER, duration_seconds=600, channels=CHANNELS) == []

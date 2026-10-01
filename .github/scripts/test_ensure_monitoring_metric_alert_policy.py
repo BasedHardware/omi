@@ -5,7 +5,6 @@ import unittest
 
 from ensure_monitoring_metric_alert_policy import ensure_policy
 
-
 PROJECT = "based-hardware"
 DISPLAY_NAME = "Sync backfill UID sequencer Scheduler execution failed"
 METRIC_TYPE = "logging.googleapis.com/user/sync_backfill_uid_sequencer_scheduler_failure"

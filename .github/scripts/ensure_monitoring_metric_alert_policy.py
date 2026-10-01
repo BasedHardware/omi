@@ -15,7 +15,6 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 
-
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
@@ -97,15 +96,12 @@ def ensure_policy(
 
         error = created.stderr.strip() or created.stdout.strip()
         propagation_error = (
-            "Cannot find metric(s) that match type" in error
-            and metric_type in error
-            and "created recently" in error
+            "Cannot find metric(s) that match type" in error and metric_type in error and "created recently" in error
         )
         if not propagation_error or attempt == max_attempts:
             raise RuntimeError(error or "failed to create Monitoring policy")
         print(
-            f"Waiting for Cloud Monitoring to expose {metric_type} "
-            f"(attempt {attempt}/{max_attempts})",
+            f"Waiting for Cloud Monitoring to expose {metric_type} " f"(attempt {attempt}/{max_attempts})",
             file=sys.stderr,
         )
         sleep(retry_interval_seconds)
