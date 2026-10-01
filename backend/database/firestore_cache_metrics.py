@@ -31,6 +31,13 @@ FIRESTORE_CACHE_PAYLOAD_BYTES = Histogram(
     buckets=(128, 512, 1024, 4096, 16384, 65536, 262144, 1048576),
 )
 
+VALID_NAMESPACES = frozenset({
+    'live_stt_language_sessions',
+    'user_ai_profile',
+    'user_language',
+    'user_transcription_prefs',
+})
+
 VALID_RESULTS = frozenset({
     'disabled',
     'hit',
@@ -49,7 +56,8 @@ VALID_RESULTS = frozenset({
 def _sanitize_namespace(namespace: str) -> str:
     if not isinstance(namespace, str) or not namespace.strip():
         raise ValueError("namespace must be a non-empty string")
-    return namespace.strip().lower()
+    ns = namespace.strip().lower()
+    return ns if ns in VALID_NAMESPACES else 'unknown'
 
 
 def record_request(namespace: str, result: str) -> None:
@@ -63,7 +71,7 @@ def record_request(namespace: str, result: str) -> None:
             res = 'unknown'
         FIRESTORE_CACHE_REQUESTS.labels(namespace=ns, result=res).inc()
     except (ValueError, TypeError) as exc:
-        logger.debug("Invalid metric label for record_request: %s", exc)
+        logger.warning("Invalid metric label for record_request: %s", exc)
 
 
 def observe_fetch(namespace: str, seconds: float) -> None:
@@ -75,8 +83,8 @@ def observe_fetch(namespace: str, seconds: float) -> None:
         if math.isnan(sec) or math.isinf(sec) or sec < 0.0:
             raise ValueError("seconds must be a non-negative finite number")
         FIRESTORE_CACHE_FETCH_SECONDS.labels(namespace=ns).observe(sec)
-    except (ValueError, TypeError) as exc:
-        logger.debug("Invalid observation in observe_fetch: %s", exc)
+    except (ValueError, TypeError, OverflowError) as exc:
+        logger.warning("Invalid observation in observe_fetch: %s", exc)
 
 
 def observe_payload(namespace: str, payload_bytes: int) -> None:
@@ -85,5 +93,5 @@ def observe_payload(namespace: str, payload_bytes: int) -> None:
         if not isinstance(payload_bytes, int) or isinstance(payload_bytes, bool) or payload_bytes < 0:
             raise ValueError("payload_bytes must be a non-negative integer")
         FIRESTORE_CACHE_PAYLOAD_BYTES.labels(namespace=ns).observe(payload_bytes)
-    except (ValueError, TypeError) as exc:
-        logger.debug("Invalid observation in observe_payload: %s", exc)
+    except (ValueError, TypeError, OverflowError) as exc:
+        logger.warning("Invalid observation in observe_payload: %s", exc)
