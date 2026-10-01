@@ -406,9 +406,9 @@ private struct CaptureWaveform: View {
 
     var body: some View {
         let still = reduceMotion || luminanceReduced
-        // The card is archived once per environment, within a size limit. Only the plain, awake
-        // copy moves; redacted copies hold the current phase.
-        let flipbook = running && !still && redactionReasons.isEmpty ? CaptureFlipbook.shared : nil
+        // The card is archived once per environment, within a size limit. The locked Lock Screen
+        // shows the privacy copy, so it moves too; only the loading placeholder holds still.
+        let flipbook = running && !still && !redactionReasons.contains(.placeholder) ? CaptureFlipbook.shared : nil
         let time = captureTime
         GeometryReader { geometry in
             // Never derive layout from an unbounded proposal; it cannot be placed.
