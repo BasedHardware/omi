@@ -78,6 +78,12 @@ from utils.retrieval.safety import (
 )
 from utils.retrieval.web_search_gate import WEB_SEARCH_TOOL, request_tools_after_private_taint
 from utils.observability.fallback import record_fallback
+from utils.retrieval.continuation import (
+    CONTINUATION_SYSTEM_CONTRACT,
+    get_continuation_target,
+    inject_continuation_directive,
+    strip_continuation_overlap,
+)
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
@@ -1477,6 +1483,8 @@ async def execute_agentic_chat_stream(
         yield None
         return
 
+    continuation_target = get_continuation_target(messages)
+
     if callback_data is not None:
         callback_data.setdefault('route', 'agentic')
 
@@ -1515,6 +1523,8 @@ async def execute_agentic_chat_stream(
             system_prompt = append_jit_conversation_retrieval_prompt(
                 system_prompt, enabled=jit_conversation_retrieval_enabled
             )
+            if continuation_target:
+                system_prompt += f"\n\n{CONTINUATION_SYSTEM_CONTRACT}"
 
             # Get prompt metadata for tracing/versioning
             prompt_name, prompt_commit, prompt_source = None, None, None
@@ -1631,6 +1641,8 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     anthropic_messages = _inject_current_datetime(
         anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
     )
+    if continuation_target:
+        anthropic_messages = inject_continuation_directive(anthropic_messages, continuation_target.text)
 
     callback = AsyncStreamingCallback()
 
@@ -1708,6 +1720,8 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         streamed, _ = split_followup_tail(''.join(full_response))
         if not streamed:
             return False
+        if continuation_target:
+            streamed = strip_continuation_overlap(streamed, continuation_target.text)
         callback_data['answer'] = streamed
         # A turn that stopped early is a failed turn; it never invites a next question.
         callback_data.pop('followup', None)
@@ -1772,6 +1786,8 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         # Store results in callback_data
         if callback_data is not None:
             answer_text, followup_question = split_followup_tail(''.join(full_response))
+            if continuation_target:
+                answer_text = strip_continuation_overlap(answer_text, continuation_target.text)
             callback_data['answer'] = answer_text
             if followup_question and not producer_failure:
                 callback_data['followup'] = followup_question

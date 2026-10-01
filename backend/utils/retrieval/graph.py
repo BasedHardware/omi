@@ -38,6 +38,12 @@ from utils.retrieval.agentic import (
     get_mobile_city,
     next_stream_chunk,
 )
+from utils.retrieval.continuation import (
+    CONTINUATION_SYSTEM_CONTRACT,
+    format_continuation_user_prompt,
+    get_continuation_target,
+    strip_continuation_overlap,
+)
 from utils.observability.langsmith import get_chat_tracer_callbacks
 import logging
 
@@ -127,7 +133,10 @@ async def execute_persona_chat_stream(
     """Handle streaming chat responses for persona-type apps."""
     if callback_data is not None:
         callback_data.setdefault('route', 'persona')
-    system_prompt = app.persona_prompt
+    continuation_target = get_continuation_target(messages)
+    system_prompt = app.persona_prompt or ''
+    if continuation_target:
+        system_prompt = f"{system_prompt}\n\n{CONTINUATION_SYSTEM_CONTRACT}"
     formatted_messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
 
     for index, msg in enumerate(messages):
@@ -137,6 +146,8 @@ async def execute_persona_chat_stream(
             text = msg.text
             if current_datetime_block and index == len(messages) - 1:
                 text = _with_prompt_metadata(text, current_datetime_block)
+            if continuation_target and index == len(messages) - 1:
+                text = format_continuation_user_prompt(text, continuation_target.text)
             formatted_messages.append(HumanMessage(content=text))
 
     full_response: List[str] = []
@@ -198,7 +209,10 @@ async def execute_persona_chat_stream(
         await task
 
         if callback_data is not None:
-            callback_data['answer'] = ''.join(full_response)
+            ans = ''.join(full_response)
+            if continuation_target:
+                ans = strip_continuation_overlap(ans, continuation_target.text)
+            callback_data['answer'] = ans
             callback_data['memories_found'] = []
             callback_data['ask_for_nps'] = False
 
