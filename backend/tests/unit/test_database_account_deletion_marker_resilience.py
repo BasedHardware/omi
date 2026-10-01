@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 import pytest
 from google.api_core.exceptions import GoogleAPICallError, NotFound
 
@@ -10,7 +10,6 @@ from database.account_deletion_marker import (
     ACCOUNT_DELETION_COLLECTION,
     account_deletion_collection,
     account_deletion_document,
-    account_deletion_firestore_client,
     get_user_deletion_wipe_status,
     _validate_uid,
 )
@@ -30,18 +29,23 @@ def test_validate_uid_rejects_invalid_types_and_empty():
         _validate_uid(12345)
 
 
+def test_validate_uid_rejects_surrounding_whitespace():
+    """Verify _validate_uid rejects surrounding whitespace instead of stripping."""
+    with pytest.raises(ValueError, match="uid must be a non-empty string without whitespace"):
+        _validate_uid("  user-xyz  ")
+    with pytest.raises(ValueError, match="uid must be a non-empty string without whitespace"):
+        _validate_uid("user-xyz ")
+    with pytest.raises(ValueError, match="uid must be a non-empty string without whitespace"):
+        _validate_uid(" user-xyz")
+    assert _validate_uid("valid_user_1") == "valid_user_1"
+
+
 def test_validate_uid_rejects_path_delimiters():
     """Verify _validate_uid rejects path traversal / delimiter characters."""
     with pytest.raises(ValueError, match="uid cannot contain path delimiters"):
         _validate_uid("user/123")
     with pytest.raises(ValueError, match="uid cannot contain path delimiters"):
         _validate_uid("/root")
-
-
-def test_validate_uid_normalizes_valid_string():
-    """Verify _validate_uid strips surrounding whitespace on valid uids."""
-    assert _validate_uid("  user-xyz  ") == "user-xyz"
-    assert _validate_uid("valid_user_1") == "valid_user_1"
 
 
 def test_account_deletion_collection_requires_client(monkeypatch):
@@ -57,7 +61,7 @@ def test_account_deletion_document_delegates_to_collection():
     mock_client = MagicMock()
     mock_client.collection.return_value = mock_coll
 
-    account_deletion_document("  user-abc  ", firestore_client=mock_client)
+    account_deletion_document("user-abc", firestore_client=mock_client)
 
     mock_client.collection.assert_called_once_with(ACCOUNT_DELETION_COLLECTION)
     mock_coll.document.assert_called_once_with("user-abc")
@@ -70,27 +74,22 @@ def test_get_user_deletion_wipe_status_validates_uid_early():
     with pytest.raises(ValueError, match="uid must be a non-empty string without whitespace"):
         get_user_deletion_wipe_status("  ")
     with pytest.raises(ValueError, match="uid must be a non-empty string without whitespace"):
+        get_user_deletion_wipe_status(" user-spaced ")
+    with pytest.raises(ValueError, match="uid must be a non-empty string without whitespace"):
         get_user_deletion_wipe_status(None)  # type: ignore[arg-type]
 
 
-def test_get_user_deletion_wipe_status_handles_not_found(monkeypatch):
-    """Verify NotFound exception degrades cleanly to None and records MISS."""
+def test_get_user_deletion_wipe_status_reraises_not_found():
+    """Verify NotFound exception from infrastructure is not treated as a clean miss."""
     mock_doc = MagicMock()
-    mock_doc.get.side_effect = NotFound("Document not found")
+    mock_doc.get.side_effect = NotFound("Database not found")
     mock_coll = MagicMock()
     mock_coll.document.return_value = mock_doc
     mock_client = MagicMock()
     mock_client.collection.return_value = mock_coll
 
-    recorded = []
-    monkeypatch.setattr(
-        "database.account_deletion_marker.record_document_read",
-        lambda site, outcome: recorded.append((site, outcome)),
-    )
-
-    status = get_user_deletion_wipe_status("user-missing", firestore_client=mock_client)
-    assert status is None
-    assert recorded == [(FirestoreReadSite.USER_DELETION_WIPE_STATUS, FirestoreReadOutcome.MISS)]
+    with pytest.raises(NotFound, match="Database not found"):
+        get_user_deletion_wipe_status("user-missing", firestore_client=mock_client)
 
 
 def test_get_user_deletion_wipe_status_handles_missing_document(monkeypatch):

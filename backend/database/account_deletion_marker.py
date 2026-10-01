@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from google.api_core.exceptions import GoogleAPICallError, NotFound
-
 from database._client import get_data_plane_firestore_client
 from database.account_deletion_policy import normalize_account_deletion_status
 from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
@@ -21,12 +19,14 @@ ACCOUNT_DELETION_COLLECTION = "account_deletions"
 
 
 def _validate_uid(uid: object) -> str:
-    """Validate and return normalized non-empty uid string."""
-    if not isinstance(uid, str) or not uid.strip():
+    """Validate opaque uid string without trimming or mutating."""
+    if not isinstance(uid, str) or not uid:
+        raise ValueError("uid must be a non-empty string without whitespace")
+    if uid != uid.strip():
         raise ValueError("uid must be a non-empty string without whitespace")
     if "/" in uid:
         raise ValueError("uid cannot contain path delimiters")
-    return uid.strip()
+    return uid
 
 
 def account_deletion_firestore_client(*, firestore_client: Any | None = None) -> Any:
@@ -62,16 +62,7 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     """
     clean_uid = _validate_uid(uid)
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    try:
-        snapshot = account_deletion_document(clean_uid, firestore_client=client).get()
-    except NotFound:
-        record_document_read(
-            FirestoreReadSite.USER_DELETION_WIPE_STATUS,
-            FirestoreReadOutcome.MISS,
-        )
-        return None
-    except GoogleAPICallError:
-        raise
+    snapshot = account_deletion_document(clean_uid, firestore_client=client).get()
 
     exists = getattr(snapshot, "exists", False)
     record_document_read(
