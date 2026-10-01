@@ -141,7 +141,7 @@
       "target": "database.conversations.get_conversations"
     },
     "utils/other/notifications.py:_generate_and_store_daily_summary:database.conversations.get_conversations": {
-      "digest": "72b4bdfedfad4766ba465f56c414c2a8808cbd3b82a3438e6798ca6a75f26fe0",
+      "digest": "2a2143fb531e6732d4314b120951f9d5d8c6cb14670ad330df5f742d3e1d4c7c",
       "profiles": [
         "daily-summary-generation"
       ],
