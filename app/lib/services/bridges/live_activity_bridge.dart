@@ -37,6 +37,12 @@ class LiveActivityBridge implements CaptureSystemSurfaceSink {
     if (!identical(_current, this)) return;
     _current = null;
     channel.setMethodCallHandler(null);
-    await channel.invokeMethod<void>('detach', _ownerId);
+    try {
+      await channel.invokeMethod<void>('detach', _ownerId);
+    } on MissingPluginException {
+      // iOS before 16.1 registers no Live Activity channel; there is nothing to detach.
+    } on PlatformException {
+      // The card is already gone when the native side cannot detach.
+    }
   }
 }

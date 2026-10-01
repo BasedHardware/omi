@@ -60,4 +60,21 @@ void main() {
     expect(calls.last.method, 'detach');
     expect(calls.last.arguments, newOwner);
   });
+
+  test('closing without a native Live Activity channel completes', () async {
+    final bridge = LiveActivityBridge();
+    await bridge.start((_) async => {});
+    // iOS before 16.1 has no handler on this channel.
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+    await expectLater(bridge.close(), completes);
+  });
+
+  test('a native detach error does not escape close', () async {
+    final bridge = LiveActivityBridge();
+    await bridge.start((_) async => {});
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      throw PlatformException(code: 'unavailable');
+    });
+    await expectLater(bridge.close(), completes);
+  });
 }
