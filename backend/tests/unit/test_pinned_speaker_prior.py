@@ -206,3 +206,24 @@ def test_live_owner_and_named_auto_accepts_are_identical_with_prior_on_or_off(mo
             assert matcher.speaker_to_person[3][0] == expected
             observed.append((dict(matcher.speaker_to_person), dict(matcher.voice_identity_status), emitted))
         assert observed[0] == observed[1]
+
+
+def test_sync_candidates_survive_both_parent_serializations():
+    from datetime import datetime, timezone
+    from models.conversation import Conversation, CreateConversation, Structured
+
+    segment = TranscriptSegment(id='s1', text='hello', speaker_id=2, is_user=False, start=0, end=6)
+    segment.voice_candidates = [{'person_id': 'p1', 'level': 2, 'suggest': True}]
+    now = datetime.now(timezone.utc)
+    create = CreateConversation(started_at=now, finished_at=now, transcript_segments=[segment])
+    incoming = Conversation(
+        id='c1', created_at=now, structured=Structured(title='Test', overview=''), **create.model_dump()
+    )
+    assert incoming.model_dump()['transcript_segments'][0]['voice_candidates'] == segment.voice_candidates
+    assert incoming.model_dump(mode='json')['transcript_segments'][0]['voice_candidates'] == segment.voice_candidates
+    # Flag-off records and the public schema keep their prior shape.
+    segment.voice_candidates = None
+    assert 'voice_candidates' not in create.model_dump()['transcript_segments'][0]
+    for mode in ('validation', 'serialization'):
+        schema = TranscriptSegment.model_json_schema(mode=mode)
+        assert 'text' in schema['properties'] and 'voice_candidates' not in schema['properties']
