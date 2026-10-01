@@ -170,6 +170,14 @@ Runtime-selected providers must keep model-token parsing and required environmen
 
 **Firestore** (primary store): use `get_firestore_client()` from `database._client` at call time, and add optional keyword-only `firestore_client` parameters on converted database helpers so tests can inject fake clients. `db` remains a legacy lazy compatibility proxy only; do not use it in new code. Never construct Firestore clients at import time. Segments are encrypted at rest — direct Firestore reads return opaque blobs. Feature gating via user fields: e.g., translation requires `users/{uid}.language` non-empty — silently disabled if missing.
 
+### Firestore queries and indexes
+
+- Add or change a serving query with a real query driver and, for helper callers, a named caller witness. The runtime shape guard records database and non-database Python query paths and fails on unserved or uncertain shapes; its failure names the driver/profile and candidate index. Fix the query or add its requirement in the same PR, then run `tests/unit/test_firestore_query_shapes.py` and `tests/unit/test_firestore_outside_query_contract.py`.
+- Declare index requirements in [`database/firestore_index_registry.py`](database/firestore_index_registry.py), generate [`../firestore.indexes.json`](../firestore.indexes.json) with `backend/.venv/bin/python backend/scripts/generate_firestore_indexes.py --write`, and commit both together. Collection-group single-field requirements belong in generated `fieldOverrides`; use the declared field requirement helpers rather than hand-editing the manifest.
+- Merging a manifest PR starts [the index workflow](../.github/workflows/gcp_firestore_indexes.yml): dev applies automatically and prod requires approval. Backend deploy workflows block on the read-only readiness gate until declared indexes are `READY`, so schedule production approval and index build time before a backend release that needs a new index.
+- Run the real-Firestore [index oracle](scripts/firestore_index_oracle.py) via the `index-oracle` operation in the [JIT QA operator workflow](../.github/workflows/jit_qa_manual_operator.yml) when validating a query/index change against Firestore's actual planning response; it does not provision indexes.
+- Missing-index errors page through the [alert](../.github/scripts/ensure_firestore_missing_index_alert.py); follow [`docs/runbooks/firestore-missing-index.md`](docs/runbooks/firestore-missing-index.md) to diagnose and declare the requirement. Hand-created indexes are not allowed: declare every required index in the registry.
+
 **Redis** (cache/rate-limiting/locks): `from database import redis_db` — **fail-open** (all errors caught and logged, requests proceed). Rate limiting via Lua scripts. `try_acquire_listen_lock(uid)` prevents duplicate WS connections.
 
 ## Auth
