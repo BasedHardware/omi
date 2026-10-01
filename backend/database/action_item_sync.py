@@ -71,7 +71,6 @@ def get_action_items_sync_page(
             raise ValueError('action item sync timestamp is invalid')
         if not isinstance(after_id, str) or not after_id.strip() or '/' in after_id:
             raise ValueError('action item sync doc id is invalid')
-        after_id = after_id.strip()
         query = query.start_after({'updated_at': after_dt, '__name__': collection.document(after_id)})
     query = query.select(list(ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(clamped_limit + 1)
 

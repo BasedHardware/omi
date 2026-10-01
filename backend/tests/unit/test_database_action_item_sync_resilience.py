@@ -16,6 +16,7 @@ class _MockQuery:
     def __init__(self, items: list[dict[str, Any]] | None = None):
         self._items = items if items is not None else []
         self._limit = 100
+        self.cursor: dict[str, Any] | None = None
 
     def where(self, *args: Any, **kwargs: Any) -> _MockQuery:
         return self
@@ -24,6 +25,7 @@ class _MockQuery:
         return self
 
     def start_after(self, cursor: dict[str, Any]) -> _MockQuery:
+        self.cursor = cursor
         return self
 
     def select(self, fields: list[str]) -> _MockQuery:
@@ -45,15 +47,30 @@ class _MockQuery:
         return [_Doc(d) for d in self._items[:self._limit]]
 
 
-class _MockDocRef:
+class _MockCollection:
     def __init__(self, query: _MockQuery):
         self._query = query
 
-    def collection(self, name: str) -> Any:
-        return self._query
+    def where(self, *args: Any, **kwargs: Any) -> _MockQuery:
+        return self._query.where(*args, **kwargs)
+
+    def order_by(self, *args: Any, **kwargs: Any) -> _MockQuery:
+        return self._query.order_by(*args, **kwargs)
 
     def document(self, doc_id: str) -> Any:
-        return self
+        return _MockDocRef(self._query, doc_id=doc_id)
+
+
+class _MockDocRef:
+    def __init__(self, query: _MockQuery, doc_id: str = ""):
+        self._query = query
+        self.doc_id = doc_id
+
+    def collection(self, name: str) -> Any:
+        return _MockCollection(self._query)
+
+    def document(self, doc_id: str) -> Any:
+        return _MockDocRef(self._query, doc_id=doc_id)
 
 
 class _MockClient:
@@ -111,3 +128,19 @@ def test_get_action_items_sync_page_clamps_limit() -> None:
 
     get_action_items_sync_page("u1", limit=9999, firestore_client=mock_client)
     assert mock_query._limit == MAX_ACTION_ITEMS_SYNC_LIMIT + 1
+
+
+def test_get_action_items_sync_page_preserves_exact_after_id() -> None:
+    """Verify get_action_items_sync_page preserves the exact document id without stripping."""
+    mock_query = _MockQuery([])
+    mock_client = _MockClient(mock_query)
+    now = datetime.now(timezone.utc)
+    exact_doc_id = "doc 123"
+
+    get_action_items_sync_page("u1", after=(now, exact_doc_id), limit=10, firestore_client=mock_client)
+
+    assert mock_query.cursor is not None
+    assert mock_query.cursor["updated_at"] == now
+    doc_ref = mock_query.cursor["__name__"]
+    assert isinstance(doc_ref, _MockDocRef)
+    assert doc_ref.doc_id == exact_doc_id
