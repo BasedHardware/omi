@@ -285,11 +285,6 @@ def test_first_text_diagnostics_are_bounded_log_fields_not_labels(monkeypatch, c
         episode_admitted_seconds=float('inf'),
         seconds_since_deadline_speech=12,
         answered_empty_admitted_seconds=1e20,
-        answered_posts=1000001,
-        text_posts=-1,
-        post_in_flight=True,
-        pacing_wait=False,
-        seconds_since_first_post=-1,
     )
     fallback_mod.record_fallback(
         component='stt_live_session',
@@ -313,7 +308,6 @@ def test_first_text_diagnostics_are_bounded_log_fields_not_labels(monkeypatch, c
         ' answered_empty_stranded_flushes=2 seconds_since_first_speech=86400.000'
         ' episode_admitted_seconds=-1.000 seconds_since_deadline_speech=12.000'
         ' answered_empty_admitted_seconds=86400.000'
-        ' answered_posts=1000000 text_posts=0 post_in_flight=1 pacing_wait=0 seconds_since_first_post=-1.000'
     )
     fallback_mod.record_fallback(
         component='stt_live_session',

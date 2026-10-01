@@ -68,11 +68,6 @@ class FirstTextDeadlineDiagnostics:
     episode_admitted_seconds: float
     seconds_since_deadline_speech: float
     answered_empty_admitted_seconds: float
-    answered_posts: int
-    text_posts: int
-    post_in_flight: bool
-    pacing_wait: bool
-    seconds_since_first_post: float
 
     def log_fields(self) -> str:
         def seconds(value: float) -> float:
@@ -90,11 +85,6 @@ class FirstTextDeadlineDiagnostics:
             f' episode_admitted_seconds={seconds(self.episode_admitted_seconds):.3f}'
             f' seconds_since_deadline_speech={seconds(self.seconds_since_deadline_speech):.3f}'
             f' answered_empty_admitted_seconds={seconds(self.answered_empty_admitted_seconds):.3f}'
-            f' answered_posts={count(self.answered_posts)}'
-            f' text_posts={count(self.text_posts)}'
-            f' post_in_flight={int(bool(self.post_in_flight))}'
-            f' pacing_wait={int(bool(self.pacing_wait))}'
-            f' seconds_since_first_post={(-1.0 if self.seconds_since_first_post < 0 else seconds(self.seconds_since_first_post)):.3f}'
         )
 
 

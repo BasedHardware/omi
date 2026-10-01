@@ -41,7 +41,6 @@ from utils.stt.live_metrics import (
     WINDOW_REPLAY_CUT_PERFORMED,
     WINDOW_REPLAY_CUT_SKIPPED,
     WINDOW_STRANDED_FLUSHES,
-    WINDOW_PRE_DEADLINE_POSTS,
 )
 from utils.stt.streaming import ParakeetConnectionError, ParakeetStreamingSocket, _pcm16_to_wav_bytes  # type: ignore[reportPrivateUsage]  # shared WAV encoder
 from utils.stt.window_anchor import (
@@ -102,9 +101,6 @@ STRANDED_SILENCE_SECONDS = 5.0
 # Answered-empty context may leave TDT only after the 90s capture replay horizon.
 ANSWERED_CONTEXT_RETENTION_SECONDS = 90.0
 FIRST_TEXT_DEADLINE_SECONDS = 12.0
-# Leave five seconds for the measured ~1s POST p95 plus emission/scheduling margin.
-PRE_DEADLINE_POST_SECONDS = 7.0
-PRE_DEADLINE_MIN_SPEECH_SECONDS = 1.0
 # Three times the observed 280ms admission; never suppress unresolved audio.
 SHORT_SPEECH_EPISODE_SECONDS = 1.0
 # Several short utterances may return empty; only emitted text renews this allowance.
@@ -231,7 +227,6 @@ class _WindowJob:
     force: bool
     pause: bool
     stranded_flush: bool = False
-    pre_deadline_post: bool = False
 
 
 class WindowAdmission:
@@ -434,11 +429,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._max_empty_streak = _positive_int_env('PARAKEET_WINDOW_MAX_EMPTY_STREAK', MAX_EMPTY_STREAK)
         self._empty_streak = 0
         self._first_text_timer: asyncio.TimerHandle | None = None
-        self._first_text_deadline_at: float | None = None
-        self._pre_deadline_timer: asyncio.TimerHandle | None = None
-        self._pre_deadline_post_requested = False
-        self._pre_deadline_post_used = False
-        self._episode_first_post_at: float | None = None
         self._deadline_speech_at: float | None = None
         self._deadline_speech_bytes = 0
         self._admitted_speech_bytes = 0
@@ -487,8 +477,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._diagnostic_anchor_sample = 0
         self._posts_since_anchor = 0
         self._empty_posts_since_anchor = 0
-        self._answered_posts_since_anchor = 0
-        self._text_posts_since_anchor = 0
         self._on_replay_progress: Callable[[], None] = lambda: None
         # Anchor bytes of the one window whose beyond-window drops are being
         # re-posted (see `_run_job`): bounded to a single retry per anchor.
@@ -592,50 +580,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._first_text_timer is not None:
             self._first_text_timer.cancel()
             self._first_text_timer = None
-        if self._pre_deadline_timer is not None:
-            self._pre_deadline_timer.cancel()
-            self._pre_deadline_timer = None
-        self._pre_deadline_post_requested = False
-
-    def _arm_first_text_deadline(self, at: float) -> None:
-        if self._first_text_timer is not None:
-            self._first_text_timer.cancel()
-        self._first_text_deadline_at = at
-        self._first_text_timer = asyncio.get_running_loop().call_later(
-            max(0.0, at - time.monotonic()), self._expire_first_text
-        )
-
-    def _request_pre_deadline_post(self) -> None:
-        if self._pre_deadline_timer is not None:
-            self._pre_deadline_timer.cancel()
-            self._pre_deadline_timer = None
-        if (
-            self._closed
-            or self._dead
-            or self._first_text_recorded
-            or self._deadline_speech_at is None
-            or self._episode_first_post_at is not None
-            or self._pre_deadline_post_used
-            or self._deadline_speech_bytes < self._to_bytes(PRE_DEADLINE_MIN_SPEECH_SECONDS)
-        ):
-            return
-        self._pre_deadline_post_requested = True
-        self._wake.set()
-
-    def _note_startup_post(self, started: float) -> None:
-        if self._first_text_recorded or self._deadline_speech_at is None or self._episode_first_post_at is not None:
-            return
-        self._episode_first_post_at = started
-        if self._pre_deadline_timer is not None:
-            self._pre_deadline_timer.cancel()
-            self._pre_deadline_timer = None
-        self._pre_deadline_post_requested = False
-        # One provider response budget, including semaphore wait, not a fresh
-        # budget for every POST. A speech-based ceiling prevents scheduler lag
-        # or a late admission floor from extending startup indefinitely.
-        self._arm_first_text_deadline(
-            min(self._deadline_speech_at + 2 * self._first_text_deadline, started + self._first_text_deadline)
-        )
 
     def _expire_first_text(self) -> None:
         self._first_text_timer = None
@@ -655,13 +599,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 episode_admitted_seconds=self._to_seconds(self._deadline_speech_bytes),
                 seconds_since_deadline_speech=max(0.0, now - self._deadline_speech_at),
                 answered_empty_admitted_seconds=self._to_seconds(self._answered_empty_speech_bytes),
-                answered_posts=self._answered_posts_since_anchor,
-                text_posts=self._text_posts_since_anchor,
-                post_in_flight=self._post_in_flight,
-                pacing_wait=self._pacing_wait,
-                seconds_since_first_post=(
-                    -1.0 if self._episode_first_post_at is None else max(0.0, now - self._episode_first_post_at)
-                ),
             )
             self.fail('first_text_deadline')
 
@@ -759,11 +696,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self._first_speech_at = time.monotonic()
             if not self._first_text_recorded and self._deadline_speech_at is None:
                 self._deadline_speech_at = time.monotonic()
-                self._episode_first_post_at = None
-                self._pre_deadline_post_used = False
-                self._arm_first_text_deadline(self._deadline_speech_at + self._first_text_deadline)
-                self._pre_deadline_timer = asyncio.get_running_loop().call_later(
-                    min(PRE_DEADLINE_POST_SECONDS, self._first_text_deadline * 7 / 12), self._request_pre_deadline_post
+                self._first_text_timer = asyncio.get_running_loop().call_later(
+                    self._first_text_deadline, self._expire_first_text
                 )
             self._admitted_speech_bytes += len(data)
             if not self._first_text_recorded:
@@ -782,15 +716,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._observe_agc_peak(data)
             self._last_accepted_at = time.monotonic()
             self._idle_flushed = False
-        if (
-            accepted
-            and not self._first_text_recorded
-            and self._deadline_speech_at is not None
-            and time.monotonic() - self._deadline_speech_at
-            >= min(PRE_DEADLINE_POST_SECONDS, self._first_text_deadline * 7 / 12)
-        ):
-            # The one timer may have fired before the admission floor was met.
-            self._request_pre_deadline_post()
         self._wake.set()
         return accepted
 
@@ -944,12 +869,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     async def _run_job(self, job: _WindowJob) -> None:
         posted_pcm = job.pcm
-        if (job.stranded_flush or job.pre_deadline_post) and len(posted_pcm) < self._silence_bytes:
-            # Give a short clip a silence envelope, retaining
+        if job.stranded_flush and len(posted_pcm) < self._silence_bytes:
+            # Give a short completed fragment a silence envelope, retaining
             # the real duration for timestamps and the original PCM for replay.
             posted_pcm += bytes(self._silence_bytes - len(posted_pcm))
-        if job.pre_deadline_post:
-            WINDOW_PRE_DEADLINE_POSTS.inc()
         if job.stranded_flush:
             WINDOW_STRANDED_FLUSHES.labels(outcome='performed').inc()
         segments = await self._post_and_parse(posted_pcm, job.duration)
@@ -1153,7 +1076,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 stepped = self._anchor_bytes + self._pace_bytes
             closing = self._closed
             pause = False
-            pre_deadline_post = False
             if silence_flush or idle_flush or stranded_flush:
                 end = min(received, self._anchor_bytes + self._max_context_bytes)
                 force = True
@@ -1170,9 +1092,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 pause = True
             else:
                 if received < stepped:
-                    if not self._pre_deadline_post_requested:
-                        return None
-                    pre_deadline_post = True
+                    return None
                 end = min(received, self._anchor_bytes + self._max_context_bytes)
                 force = False
             if end <= self._anchor_bytes:
@@ -1180,9 +1100,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             if not force and self._anchor_bytes == self._last_post_anchor and end <= self._last_post_end:
                 self._pause_requested = False
                 return None
-            if pre_deadline_post:
-                self._pre_deadline_post_used = True
-                self._pre_deadline_post_requested = False
             if stranded_flush:
                 self._stranded_flush_used = True
                 self._capture_silence_flush = False
@@ -1203,7 +1120,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 force,
                 pause,
                 stranded_flush=stranded_flush,
-                pre_deadline_post=pre_deadline_post,
             )
 
     def _origin_bytes(self) -> int:
@@ -1276,8 +1192,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._diagnostic_anchor_sample = replay_anchor
             self._posts_since_anchor = 0
             self._empty_posts_since_anchor = 0
-            self._answered_posts_since_anchor = 0
-            self._text_posts_since_anchor = 0
         if self._anchor_bytes > previous:
             try:
                 self._on_replay_progress()
@@ -1326,7 +1240,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     async def _post_and_parse(self, pcm: bytes, dur: float) -> list[RawSegment]:
         started = time.monotonic()
         outcome = 'error'
-        self._note_startup_post(started)
         self._posts_since_anchor = min(1000000, self._posts_since_anchor + 1)
         self._post_in_flight = True
         try:
@@ -1348,9 +1261,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 raise ValueError('Invalid TDT response')
             segments = [self._without_loops(seg) for seg in parse_tdt_segments(cast(dict[str, Any], data), dur)]
             outcome = 'success' if segments else 'empty'
-            self._answered_posts_since_anchor = min(1000000, self._answered_posts_since_anchor + 1)
-            if segments:
-                self._text_posts_since_anchor = min(1000000, self._text_posts_since_anchor + 1)
             if not segments:
                 self._empty_posts_since_anchor = min(1000000, self._empty_posts_since_anchor + 1)
             self._health_success()
