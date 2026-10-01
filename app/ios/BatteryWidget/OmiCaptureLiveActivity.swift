@@ -80,6 +80,7 @@ struct OmiCaptureLiveActivity: Widget {
                 // to the Lock Screen card.
                 DynamicIslandExpandedRegion(.leading) {
                     CaptureIslandLeading(snapshot: snapshot)
+                        .modifier(CaptureEndTransition(ended: snapshot.state.status == "ended"))
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     CaptureClock(snapshot: snapshot, size: 30)
@@ -87,6 +88,7 @@ struct OmiCaptureLiveActivity: Widget {
                         // Clear of the island's ~44 pt top corner curve.
                         .padding(.top, 6)
                         .padding(.trailing, 4)
+                        .modifier(CaptureEndTransition(ended: snapshot.state.status == "ended"))
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     // Measured on a 402 pt iPhone: the bottom region starts ~78 pt
@@ -95,14 +97,18 @@ struct OmiCaptureLiveActivity: Widget {
                         CaptureWaveform(snapshot: snapshot, height: 22)
                         CaptureActions(snapshot: snapshot, height: 38, secondaryFill: 0.14)
                     }
+                    .modifier(CaptureEndTransition(ended: snapshot.state.status == "ended"))
                 }
             } compactLeading: {
                 // HomeScreen.json: 20 pt pendant, 10 pt from the island edge.
                 CapturePendant(active: snapshot.isReceivingAudio, size: 20)
+                    .modifier(CaptureEndTransition(ended: snapshot.state.status == "ended"))
             } compactTrailing: {
                 CaptureCompactClock(snapshot: snapshot)
+                    .modifier(CaptureEndTransition(ended: snapshot.state.status == "ended"))
             } minimal: {
                 CapturePendant(active: snapshot.isReceivingAudio, size: 20)
+                    .modifier(CaptureEndTransition(ended: snapshot.state.status == "ended"))
             }
             .widgetURL(captureURL(context.attributes.recordingId))
             .keylineTint(CapturePalette.led)
@@ -153,6 +159,24 @@ struct CaptureLockScreenView: View {
             .init(color: .clear, location: 0.5),
         ], startPoint: .top, endPoint: .bottom))
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
+        .modifier(CaptureEndTransition(ended: snapshot.state.status == "ended"))
+    }
+}
+
+/// End settles the content before the system dismisses the card. Recording has
+/// already finished; this transition never delays capture or processing.
+@available(iOS 16.1, *)
+private struct CaptureEndTransition: ViewModifier {
+    let ended: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isLuminanceReduced) private var luminanceReduced
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(ended ? 0 : 1)
+            .scaleEffect(ended && !reduceMotion && !luminanceReduced ? 0.98 : 1)
+            .animation(reduceMotion || luminanceReduced ? nil :
+                .timingCurve(0.42, 0, 0.58, 1, duration: 0.2), value: ended)
     }
 }
 
@@ -333,7 +357,7 @@ struct CapturePendant: View {
 
 /// omi-liquid-dock2.html: fixed 2 pt bars, 2.2 pt gaps, a 1.6 s breath and
 /// 0.13 s phase offsets repeating every 13 bars. Activity updates advance the
-/// phase; stopping leaves the same full-height pattern frozen, without dimming.
+/// phase regardless of speech; stopping holds that phase without dimming.
 @available(iOS 16.1, *)
 private struct CaptureWaveform: View {
     let snapshot: CaptureSnapshot
@@ -355,14 +379,14 @@ private struct CaptureWaveform: View {
     ]
 
     private var breathing: Bool {
-        snapshot.isReceivingAudio && snapshot.state.metered && snapshot.state.voice &&
+        !snapshot.isStale && !snapshot.state.paused && snapshot.state.status != "ended" &&
             !reduceMotion && !luminanceReduced
     }
 
     private func scale(for index: Int) -> CGFloat {
-        guard breathing else { return 1 }
+        guard !reduceMotion && !luminanceReduced else { return 1 }
         // CSS's negative delays start neighboring bars at different phases.
-        let seconds = Double(snapshot.state.levelsEnd) * 0.125
+        let seconds = snapshot.state.waveTime ?? Double(snapshot.state.elapsed)
         let phase = (seconds + Double(index % Self.ripple) * Self.phaseOffset)
             .truncatingRemainder(dividingBy: Self.period) / Self.period
         let breath = (1 - cos(phase * 2 * .pi)) / 2
@@ -381,10 +405,10 @@ private struct CaptureWaveform: View {
                         .frame(width: Self.barWidth,
                                height: max(3, height * Self.levels[index % Self.levels.count]))
                         .scaleEffect(x: 1, y: scale)
-                        // The producer sends a voice update each second; interpolate between
-                        // phase samples rather than adding delayed, overlapping bar animations.
+                        // Quarter-cycle updates keep the HTML's 1.6 s cadence in silence too.
+                        // Stop holds the last phase rather than resetting every bar's height.
                         .animation(reduceMotion || luminanceReduced ? nil :
-                            .timingCurve(0.42, 0, 0.58, 1, duration: breathing ? 1 : 0.25),
+                            .timingCurve(0.42, 0, 0.58, 1, duration: breathing ? 0.4 : 0.2),
                             value: scale)
                 }
             }

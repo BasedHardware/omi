@@ -82,7 +82,8 @@ final class LiveActivityManager {
             do {
                 let data = try SafeJSON.data(withJSONObject: values)
                 let state = try JSONDecoder().decode(OmiCaptureAttributes.ContentState.self, from: data)
-                guard state.startedAt.isFinite, state.elapsed >= 0 else { throw CaptureActionError.unavailable }
+                guard state.startedAt.isFinite, state.elapsed >= 0,
+                      state.waveTime.map({ $0.isFinite && $0 >= 0 }) ?? true else { throw CaptureActionError.unavailable }
                 enqueue { [weak self] in
                     guard let self else { result(nil); return }
                     guard self.ownerId == owner else { result(nil); return }
@@ -173,7 +174,9 @@ final class LiveActivityManager {
         final.busy = false
         final.canPause = false
         final.canFinish = false
-        let policy: ActivityUIDismissalPolicy = immediate ? .immediate : .after(Date().addingTimeInterval(5))
+        // Give the finished content a brief fade before the OS closes it. This
+        // happens after capture ends; disabling the feature still dismisses at once.
+        let policy: ActivityUIDismissalPolicy = immediate ? .immediate : .after(Date().addingTimeInterval(0.25))
         if #available(iOS 16.2, *) {
             await activity.end(ActivityContent(state: final, staleDate: nil), dismissalPolicy: policy)
         } else {
@@ -232,14 +235,14 @@ final class LiveActivityManager {
         if action == "finish" { closeCard(for: id) }
     }
 
-    /// End closes the card at once. A pendant keeps listening after its conversation ends, so the
+    /// End closes the card after its brief exit transition. A pendant keeps listening, so the
     /// card stays closed for the rest of this recording, as when it is swiped away.
     private func closeCard(for id: String) {
         enqueue { [weak self] in
             guard let self else { return }
             self.suppressedRecordingId = id
             if let current = self.activity, current.attributes.recordingId == id {
-                await self.end(current, immediate: true)
+                await self.end(current, immediate: false)
                 self.activity = nil
             }
         }

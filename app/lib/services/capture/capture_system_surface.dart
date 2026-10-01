@@ -22,7 +22,6 @@ class CaptureSystemSurface {
   final CaptureSystemSurfaceSink sink;
   final CaptureVoiceMeter? voiceMeter;
   final DateTime Function() _now;
-  bool _voiceShown = false;
   String? _recordingId;
   int? _conversationRevision;
   DateTime? _anchor;
@@ -33,7 +32,7 @@ class CaptureSystemSurface {
   bool _ready = false;
   CaptureOwned? _listener;
   Timer? _heartbeat;
-  Timer? _voiceTick;
+  Timer? _waveTick;
   Future<void> _delivery = Future.value();
 
   Future<void> start() async {
@@ -44,12 +43,15 @@ class CaptureSystemSurface {
     final meter = voiceMeter;
     if (meter != null) {
       capture.systemSurfaceAudioTap = meter.add;
-      // The OS cannot loop animations here; each update animates the strip
-      // forward. Updates run only while voice is heard, plus one to settle flat.
-      _voiceTick = capture.lifetime.periodic(const Duration(seconds: 1), (_) {
-        if (meter.voiceActive || _voiceShown) _changed(force: true);
-      });
     }
+    // The HTML wave breathes every 1.6 seconds, regardless of speech. Advance
+    // each quarter-cycle while capture runs, including silent and unmetered sources.
+    // ActivityKit animates these bounded updates; it cannot run an infinite loop.
+    _waveTick = capture.lifetime.periodic(const Duration(milliseconds: 400), (_) {
+      if (_closed || !_ready) return;
+      final value = snapshot;
+      if (value['active'] == true && value['paused'] == false) _changed(force: true);
+    });
     try {
       await sink.start(_act);
       if (_closed) return;
@@ -117,6 +119,9 @@ class CaptureSystemSurface {
       'batch': batch,
       'startedAt': _anchor == null ? 0.0 : _anchor!.millisecondsSinceEpoch / 1000,
       'elapsed': _anchor == null ? 0 : (_pausedAt ?? now).difference(_anchor!).inSeconds.clamp(0, 2147483647),
+      // Fractional capture time holds the decorative wave's phase across Stop / Start.
+      'waveTime':
+          _anchor == null ? 0.0 : (_pausedAt ?? now).difference(_anchor!).inMilliseconds.clamp(0, 2147483647000) / 1000,
       'paused': paused,
       'canPause': active && !capture.isCallActive,
       'canFinish': active &&
@@ -127,7 +132,7 @@ class CaptureSystemSurface {
     };
   }
 
-  /// Voice levels for the waveform; empty levels draw it flat.
+  /// Audio metadata is independent of the decorative wave's presentation clock.
   Map<String, Object?> _voice(bool capturing) {
     final meter = voiceMeter;
     final voice = capturing && meter != null && meter.voiceActive;
@@ -142,11 +147,13 @@ class CaptureSystemSurface {
   void _changed({bool force = false}) {
     if (_closed || !_ready) return;
     final value = snapshot;
-    _voiceShown = value['voice'] == true;
     // Elapsed time is drawn by the OS. Only a frozen value is significant.
-    // Levels change constantly; the voice tick alone paces their delivery.
+    // The wave tick paces animation; audio levels never start or stop the loop.
     final fingerprint = {...value}
       ..remove('elapsed')
+      ..remove('waveTime')
+      ..remove('metered')
+      ..remove('voice')
       ..remove('levels')
       ..remove('levelsEnd');
     if (value['paused'] == true) fingerprint['elapsed'] = value['elapsed'];
@@ -195,7 +202,7 @@ class CaptureSystemSurface {
     if (_closed) return;
     _closed = true;
     _heartbeat?.cancel();
-    _voiceTick?.cancel();
+    _waveTick?.cancel();
     final meter = voiceMeter;
     if (meter != null) {
       if (capture.systemSurfaceAudioTap == meter.add) capture.systemSurfaceAudioTap = null;

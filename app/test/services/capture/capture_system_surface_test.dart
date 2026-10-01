@@ -75,8 +75,13 @@ void main() {
     expect(world.socket!.sentBinary.length, before);
     expect(presentation.snapshot['paused'], true);
     final elapsed = presentation.snapshot['elapsed'];
+    final phase = presentation.snapshot['waveTime'];
+    await world.settle();
+    final pausedUpdates = sink.states.length;
     await world.elapse(const Duration(seconds: 12));
     expect(presentation.snapshot['elapsed'], elapsed);
+    expect(presentation.snapshot['waveTime'], phase);
+    expect(sink.states.length, pausedUpdates, reason: 'Stop halts decorative animation updates');
     final resumeIndex = sink.states.length;
     await sink.action(request('resume'));
     world.emitNativeState(PhoneMicCaptureState.running);
@@ -85,9 +90,11 @@ void main() {
     expect(presentation.snapshot['recordingId'], id);
     expect(world.socket!.sentBinary.length, greaterThan(before));
     expect(presentation.snapshot['paused'], false);
+    expect(presentation.snapshot['waveTime'], phase, reason: 'Start resumes the held phase');
     expect(sink.states.skip(resumeIndex).every((s) => s['active'] == true), true);
     await world.elapse(const Duration(seconds: 3));
     expect(presentation.snapshot['elapsed'], (elapsed as int) + 3);
+    expect(presentation.snapshot['waveTime'], (phase as double) + 3);
   });
 
   test('a repeated Pause does not issue a second mute intent', () async {
@@ -159,6 +166,9 @@ void main() {
     expect(world.hostApi.nativeRecording, false);
     expect(presentation.snapshot['active'], false);
     expect(world.processCalls, 1);
+    final finishedUpdates = sink.states.length;
+    await world.elapse(const Duration(seconds: 3));
+    expect(sink.states.length, finishedUpdates, reason: 'End cancels decorative animation updates');
     await expectLater(sink.action(finish), throwsStateError);
     expect(world.processCalls, 1);
   });
@@ -183,6 +193,10 @@ void main() {
     world.emitBatchProgress(2);
     await world.settle();
     expect(presentation.snapshot['batch'], true);
+    final beforeLoop = sink.states.length;
+    await world.elapse(const Duration(milliseconds: 1600));
+    expect(sink.states.length - beforeLoop, 4);
+    expect(sink.states.last['waveTime'], closeTo(1.6, 0.001));
     await sink.action(request('finish'));
     await world.settle();
     expect(world.hostApi.nativeRecording, false);
@@ -206,7 +220,7 @@ void main() {
     await expectLater(sink.action(oldAction), throwsStateError);
   });
 
-  test('voice moves the waveform about once a second and silence settles it flat', () async {
+  test('the decorative loop keeps its cadence through silence and speech', () async {
     await presentation.close();
     presentation = CaptureSystemSurface(world.controller, sink,
         now: world.clock.now, voiceMeter: CaptureVoiceMeter(now: world.clock.now));
@@ -223,23 +237,24 @@ void main() {
       }
     }
 
-    await audio(60, const Duration(seconds: 2));
+    await audio(60, const Duration(milliseconds: 1600));
     final quiet = sink.states.length;
-    await audio(60, const Duration(seconds: 3));
-    expect(sink.states.length, quiet, reason: 'a quiet room sends no waveform updates');
-
-    await audio(9000, const Duration(seconds: 3));
-    final voiced = sink.states.skip(quiet).where((s) => s['voice'] == true).toList();
-    expect(voiced.length, inInclusiveRange(2, 4));
-    expect(voiced.last['levels'], hasLength(CaptureVoiceMeter.history));
-    expect((voiced.last['levels'] as List).last, greaterThan(50));
-
-    await audio(60, const Duration(seconds: 3));
+    final quietPhase = sink.states.last['waveTime'] as double;
+    await audio(60, const Duration(milliseconds: 3200));
+    expect(sink.states.length - quiet, 8, reason: 'silence still runs two full HTML cycles');
+    expect(sink.states.last['waveTime'], closeTo(quietPhase + 3.2, 0.001));
     expect(sink.states.last['voice'], false);
-    expect(sink.states.last['levels'], isEmpty);
-    final settled = sink.states.length;
-    await audio(60, const Duration(seconds: 3));
-    expect(sink.states.length, settled);
+
+    final speaking = sink.states.length;
+    await audio(9000, const Duration(milliseconds: 3200));
+    expect(sink.states.length - speaking, 8, reason: 'speech does not change the animation cadence');
+    expect(sink.states.last['voice'], true);
+
+    final silentAgain = sink.states.length;
+    await audio(60, const Duration(milliseconds: 3200));
+    expect(sink.states.length - silentAgain, 8);
+    expect(sink.states.last['voice'], false);
+    expect(sink.states.last['waveTime'], closeTo(quietPhase + 9.6, 0.001));
   });
 
   test('a failing presentation tap never drops audio from capture', () async {
@@ -260,7 +275,7 @@ void main() {
     expect(world.controller.systemSurfaceAudioTap, isNull);
   });
 
-  test('OS updates do not tick every second and failures do not stop capture', () async {
+  test('unmetered capture loops, failures cannot stop capture, and closing cancels updates', () async {
     final before = sink.states.length;
     // Keep real audio arriving so the native liveness watchdog does not
     // intentionally transition capture into recovery during this timer test.
@@ -268,12 +283,18 @@ void main() {
       world.injectAudioFrames(20, sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: (second + 1) * 20);
       await world.elapse(const Duration(seconds: 1));
     }
-    expect(sink.states.length, before);
+    expect(sink.states.length - before, 12, reason: 'unmetered sources still animate every quarter-cycle');
+    expect(sink.states.last['metered'], false);
+    expect(sink.states.last['waveTime'], closeTo(4.8, 0.001));
     sink.fail = true;
     await sink.action(request('pause'));
     await world.elapse(const Duration(seconds: 30));
     expect(presentation.snapshot['active'], true);
     await presentation.close();
     expect(sink.closed, true);
+    sink.fail = false;
+    final closedUpdates = sink.states.length;
+    await world.elapse(const Duration(seconds: 3));
+    expect(sink.states.length, closedUpdates);
   });
 }
