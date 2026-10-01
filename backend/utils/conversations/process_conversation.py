@@ -88,7 +88,7 @@ from utils.conversations.relevance import (
 )
 from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_applies, relevance_transcript
 from utils.conversations.owner_jev import MAX_OWNER_CHECKS_PER_CONVERSATION, OwnerFlip, jev_owner_flip, owner_state
-from utils.conversations.jev_shadow import owner_shadow_in_cohort, submit_owner_shadow, submit_relevance_shadow
+from utils.conversations.jev_shadow import select_owner_shadow_indices, submit_owner_shadow, submit_relevance_shadow
 from config.jev_decisions import memory_owner_jev_flip_enabled, relevance_arm, relevance_experiment_active
 from utils.conversations.relevance_io import (
     adjacent_conversation,
@@ -1586,13 +1586,11 @@ def _shadow_owner_candidate(
     user_name: str,
     user_name_present: bool,
     subject_kind: str,
+    *,
+    candidate_index: int,
+    eligible_count: int,
 ) -> None:
     try:
-        if not owner_shadow_in_cohort(conversation.id):
-            # The unsampled denominator must be visible in the outcome metrics
-            # during a partial rollout, exactly as the relevance lane records it.
-            record_jev_shadow_outcome('owner', 'cohort')
-            return
         quotes = _owner_candidate_quotes(conversation, evidence_quotes)
         structured = conversation.structured
         # `Conversation.source` is optional; a source-less record is measured
@@ -1616,6 +1614,8 @@ def _shadow_owner_candidate(
             source=source,
             n_quotes=len(quotes),
             user_name_present=user_name_present,
+            candidate_index=candidate_index,
+            eligible_count=eligible_count,
         )
     except Exception:
         # Measurement cannot affect canonical capture, even before submission.
@@ -1756,6 +1756,7 @@ def _extract_memories_canonical(
         ungrounded_candidates = 0
         seen_candidates = 0
         owner_checks = 0
+        owner_shadow_candidates: List[Tuple[int, str, List[str], str]] = []
         owner_jev_enabled = memory_owner_jev_flip_enabled()
         for candidate in extracted_candidates:
             seen_candidates += 1
@@ -1798,15 +1799,7 @@ def _extract_memories_canonical(
                 if owner_flip is not None:
                     subject_entity_id, subject_attribution, subject_kind = "user", SubjectAttribution.user, "user"
             if subject_attribution == SubjectAttribution.third_party and not owner_live_scored:
-                _shadow_owner_candidate(
-                    uid,
-                    conversation,
-                    candidate.content,
-                    evidence_quotes,
-                    user_name,
-                    user_name.lower() != "the user",
-                    subject_kind,
-                )
+                owner_shadow_candidates.append((seen_candidates - 1, candidate.content, evidence_quotes, subject_kind))
             memory = Memory(
                 content=candidate.content,
                 category=(
@@ -1887,6 +1880,26 @@ def _extract_memories_canonical(
                     True,
                 )
             )
+        # Selection sees the whole eligible population before burst submission.
+        # Measurement errors must never affect canonical capture.
+        try:
+            selected = select_owner_shadow_indices(conversation.id, [item[1] for item in owner_shadow_candidates])
+            for index in selected:
+                candidate_index, content, quotes, kind = owner_shadow_candidates[index]
+                _shadow_owner_candidate(
+                    uid,
+                    conversation,
+                    content,
+                    quotes,
+                    user_name,
+                    user_name.lower() != "the user",
+                    kind,
+                    candidate_index=candidate_index,
+                    eligible_count=len(owner_shadow_candidates),
+                )
+        except Exception:
+            for _ in owner_shadow_candidates:
+                record_jev_shadow_outcome('owner', 'dropped')
         if seen_candidates and not capture_candidates:
             # Every candidate failed grounding: the run itself is untrustworthy,
             # so it must not submit the empty replacement that would retract the

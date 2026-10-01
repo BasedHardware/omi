@@ -95,6 +95,8 @@ def owner(**kwargs):
         source='desktop',
         n_quotes=2,
         user_name_present=True,
+        candidate_index=3,
+        eligible_count=9,
     )
     payload.update(kwargs)
     shadow.submit_owner_shadow(**payload)
@@ -308,6 +310,7 @@ def _fenced_store_client(monkeypatch, *, deleting: bool):
     client = MagicMock()
     users_root = MagicMock()
     ref = users_root.collection.return_value.document.return_value  # users/{uid}/jev_shadow/{record_id}
+    ref.get.return_value.exists = False
     marker = MagicMock()
     marker.get.return_value.exists = deleting
     client.collection.side_effect = lambda name: {
@@ -328,7 +331,7 @@ def test_store_adds_60_day_expiry_without_plaintext_or_client_reads(monkeypatch)
     client.collection.assert_any_call('users')
     client.collection.assert_any_call('account_deletions')
     marker.get.assert_called_once_with(transaction=transaction, retry=None, timeout=pytest.approx(0.4))
-    assert ref.get.call_count == 0
+    ref.get.assert_called_once_with(transaction=transaction, retry=None, timeout=pytest.approx(0.4))
     assert transaction.set.call_args.args[0] is ref
 
 
@@ -591,3 +594,137 @@ def test_fenced_store_write_records_dropped_not_ok(harness, monkeypatch):
     monkeypatch.setattr(shadow, 'write_jev_shadow', store.write_jev_shadow)
     relevance()
     assert harness[3] == [('relevance', 'dropped')] and not harness[2]
+
+
+@pytest.mark.parametrize('percent', ['0', '25', '100', 'broken'])
+def test_owner_selection_is_order_independent_and_hash_sampled(harness, monkeypatch, percent):
+    monkeypatch.setenv('MEMORY_OWNER_JEV_SHADOW_PERCENT', percent)
+    contents = [f'Synthetic candidate {i}' for i in range(30)]
+    selected = shadow.select_owner_shadow_indices('conv', contents)
+    reversed_contents = list(reversed(contents))
+    reordered = shadow.select_owner_shadow_indices('conv', reversed_contents)
+    assert {contents[i] for i in selected} == {reversed_contents[i] for i in reordered}
+    eligible = sorted(
+        (shadow.uid_bucket(f'conv\0{shadow._sha(content)}', 'owner-shadow-v1'), i)
+        for i, content in enumerate(contents)
+        if shadow._in_cohort('owner', 'conv', shadow._sha(content))
+    )
+    assert selected == [i for _, i in eligible[: shadow.MAX_OWNER_SHADOWS_PER_CONVERSATION]]
+    if percent == '100':
+        assert len(selected) == 8 and set(selected) != set(range(8))
+        assert harness[3].count(('owner', 'dropped')) == 44  # two batches, 22 capped each
+
+
+def test_selected_owner_burst_has_capacity_and_position_metadata(harness, monkeypatch):
+    monkeypatch.setattr(
+        shadow, '_slots', {'relevance': threading.BoundedSemaphore(2), 'owner': threading.BoundedSemaphore(8)}
+    )
+    pending = []
+
+    def enqueue(_executor, fn, *args):
+        future = Future()
+        pending.append((future, fn, args))
+        return future
+
+    monkeypatch.setattr(shadow, 'submit_with_context', enqueue)
+    contents = [f'Synthetic candidate {i}' for i in range(20)]
+    selected = shadow.select_owner_shadow_indices('synthetic-conv', contents)
+    for i in selected:
+        owner(candidate_content=contents[i], candidate_index=i, eligible_count=len(contents))
+    assert len(pending) == 8
+    assert harness[3].count(('owner', 'dropped')) == 12  # cap only, no submission loss
+    for future, fn, args in pending:
+        fn(*args)
+        future.set_result(None)
+    records = [record for _, _, record in harness[2]]
+    assert [record['candidate_index'] for record in records] == selected
+    assert all(type(record['eligible_count']) is int and record['eligible_count'] == 20 for record in records)
+    assert harness[3].count(('owner', 'ok')) == 8
+
+
+def test_late_commit_after_timeout_is_one_valid_idempotent_measurement(harness, monkeypatch):
+    client, ref, _marker, transaction = _fenced_store_client(monkeypatch, deleting=False)
+    persisted = {}
+    staged = {}
+    started, release, finished = threading.Event(), threading.Event(), threading.Event()
+    doc_ids = []
+    ref_parent = client.collection('users').document('synthetic-user').collection('jev_shadow')
+    ref_parent.document.side_effect = lambda rid: doc_ids.append(rid) or ref
+    ref.get.side_effect = lambda **_kwargs: MagicMock(exists=bool(persisted))
+    transaction.set.side_effect = lambda _ref, payload: staged.update(payload)
+
+    def transactional(fn):
+        def commit(txn):
+            result = fn(txn)
+            started.set()
+            release.wait(timeout=5)
+            if staged:
+                persisted.setdefault(doc_ids[-1], dict(staged))
+            finished.set()
+            return result
+
+        return commit
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    monkeypatch.setattr(store, 'get_data_plane_firestore_client', lambda: client)
+    monkeypatch.setattr(shadow, 'write_jev_shadow', store.write_jev_shadow)
+    monkeypatch.setattr(shadow, 'DEADLINE_SECONDS', 0.1)
+    try:
+        relevance()
+        assert started.is_set() and harness[3] == [('relevance', 'timeout')]
+        assert persisted == {}
+    finally:
+        release.set()
+        assert finished.wait(timeout=5)
+    assert len(persisted) == 1
+    record_id = doc_ids[0]
+    original = dict(persisted[record_id])
+    assert (
+        record_id
+        == hashlib.sha256(
+            f'relevance|synthetic-conv|{shadow._sha(f"User: {SENTINEL}")}|{shadow.relevance_jev.QUESTION_VERSION}'.encode()
+        ).hexdigest()[:32]
+    )
+    # Even a replay with changed scores cannot overwrite the first measurement
+    # or extend its expiry. Readout counts documents by (uid, id), not ok+timeout.
+    transaction.set.reset_mock()
+    assert (
+        store.write_jev_shadow('synthetic-user', record_id, {'p_discard': 0.1}, deadline=time.monotonic() + 1) is True
+    )
+    transaction.set.assert_not_called()
+    assert doc_ids == [record_id, record_id] and persisted[record_id] == original
+    assert len(persisted) == 1 and harness[3] == [('relevance', 'timeout')]
+
+
+def test_shadow_store_read_before_write_and_replay_preserve_first_payload(monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+
+    client = StrictFirestore()
+    original_get = StrictFirestoreDocument.get
+    original_transaction = client.transaction
+    monkeypatch.setattr(
+        StrictFirestoreDocument,
+        'get',
+        lambda ref, *, transaction, retry, timeout: original_get(ref, transaction=transaction),
+    )
+    monkeypatch.setattr(client, 'transaction', lambda *, max_attempts: original_transaction())
+    payload = {'lane': 'owner', 'p_user': 0.91}
+    assert store.write_jev_shadow('user', 'id', payload, deadline=time.monotonic() + 1, firestore_client=client)
+    first = dict(client.rows[('users', 'user', 'jev_shadow', 'id')])
+    assert store.write_jev_shadow('user', 'id', {'p_user': 0.1}, deadline=time.monotonic() + 1, firestore_client=client)
+    assert client.rows[('users', 'user', 'jev_shadow', 'id')] == first
+    assert [len(txn.sets) for txn in client.transactions] == [1, 0]
+    client.rows[('account_deletions', 'user')] = {'status': 'deleting'}
+    assert not store.write_jev_shadow(
+        'user', 'other-id', payload, deadline=time.monotonic() + 1, firestore_client=client
+    )
+    assert ('users', 'user', 'jev_shadow', 'other-id') not in client.rows
+
+
+def test_duplicate_owner_candidates_do_not_consume_selection_cap(harness):
+    contents = [f'Synthetic {i}' for i in range(20)]
+    selected = shadow.select_owner_shadow_indices('conv', contents)
+    duplicated = [content for content in contents for _ in range(3)]
+    duplicate_selected = shadow.select_owner_shadow_indices('conv', duplicated)
+    assert {contents[i] for i in selected} == {duplicated[i] for i in duplicate_selected}
+    assert harness[3].count(('owner', 'deduped')) == 40

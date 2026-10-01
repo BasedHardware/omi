@@ -57,11 +57,14 @@ def memory_owner_jev_flip_enabled() -> bool:
     """Capture may re-attribute a third-party memory candidate to the user on a confident Jev answer.
 
     Universal when on: INV-MEM-5 (product/invariants/universal-memory-task-authority.md)
-    forbids UID cohorts selecting live owner-attribution logic, so there is no
-    owner-flip percentage or allowlist. Owner measurement stays sampled via the
-    shadow lane.
+    forbids UID cohorts selecting live owner-attribution logic. The percentage
+    control accepts only 100 (on for everyone) or 0 (off); intermediate or invalid
+    values fail closed. Unset preserves the enabled flag. Measurement is sampled.
     """
-    return _flag(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
+    return (
+        _flag(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
+        and _percentage_or_none('MEMORY_OWNER_JEV_FLIP_PERCENT', default=100.0) == 100.0
+    )
 
 
 RelevanceArm = Literal['keep_all', 'jev', 'nano']
@@ -113,14 +116,13 @@ def relevance_arm(uid: str) -> RelevanceArm:
     """
     bucket = uid_bucket(uid, 'relevance-arm-v1')
     keep_all = _percentage_or_none('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', default=0.0)
-    if keep_all is not None and bucket < keep_all:
+    jev = _percentage_or_none('CONVERSATION_RELEVANCE_JEV_PERCENT', default=100.0)
+    if keep_all is None or jev is None:
+        return 'nano'
+    if bucket < keep_all:
         return 'keep_all'
     if conversation_relevance_jev_enabled():
-        jev = _percentage_or_none('CONVERSATION_RELEVANCE_JEV_PERCENT', default=100.0)
-        if jev is not None and (
-            bucket < min(100.0, (keep_all if keep_all is not None else 0.0) + jev)
-            or _allowlisted(uid, 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST')
-        ):
+        if bucket < min(100.0, keep_all + jev) or _allowlisted(uid, 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'):
             return 'jev'
     return 'nano'
 

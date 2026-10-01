@@ -21,6 +21,7 @@ def clean_env(monkeypatch):
         'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST',
         'CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT',
         'MEMORY_OWNER_JEV_FLIP_ENABLED',
+        'MEMORY_OWNER_JEV_FLIP_PERCENT',
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -68,23 +69,28 @@ def test_boundary_ranges_and_keep_all_window_shift(monkeypatch):
 
 
 @pytest.mark.parametrize('invalid', ['broken', '', '-1', '101', 'nan', 'inf'])
-def test_invalid_percentages_fail_closed(monkeypatch, invalid):
-    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
-    for name in (
-        'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT',
-        'CONVERSATION_RELEVANCE_JEV_PERCENT',
-    ):
-        monkeypatch.setenv(name, invalid)
-    assert config.relevance_arm('user') == 'nano'
-
-
-def test_invalid_percentage_blocks_the_allowlist_too(monkeypatch):
-    """An allowlist must never rescue a malformed percentage (fail closed)."""
-    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
+@pytest.mark.parametrize('invalid_controls', ['keep_all', 'jev', 'both'])
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+def test_invalid_percentages_fail_closed(monkeypatch, invalid, invalid_controls, enabled):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', enabled)
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'user')
-    for invalid in ('broken', '', '-1', '101', 'nan', 'inf'):
-        monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', invalid)
-        assert config.relevance_arm('user') == 'nano', invalid
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', invalid if invalid_controls != 'jev' else '100')
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', invalid if invalid_controls != 'keep_all' else '100')
+    assert all(config.relevance_arm(uid) == 'nano' for uid in ['user', *(str(i) for i in range(100))])
+
+
+@pytest.mark.parametrize('percent', ['0', '1', '50', '99.9', 'broken', '', '-1', '101', 'nan', 'inf'])
+def test_owner_flip_percentage_is_a_universal_fail_closed_control(monkeypatch, percent):
+    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_PERCENT', percent)
+    assert config.memory_owner_jev_flip_enabled() is False
+
+
+def test_owner_flip_100_still_requires_the_flag(monkeypatch):
+    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_PERCENT', '100')
+    assert config.memory_owner_jev_flip_enabled() is False
+    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_ENABLED', 'true')
+    assert config.memory_owner_jev_flip_enabled() is True
 
 
 def test_unset_percent_preserves_dev_and_allowlist_requires_flag(monkeypatch):
