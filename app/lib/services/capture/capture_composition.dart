@@ -3,13 +3,11 @@ import 'dart:io';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:opus_dart/opus_dart.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/capture_system_surface.dart';
-import 'package:omi/services/capture/capture_voice_meter.dart';
 import 'package:omi/services/bridges/live_activity_bridge.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
@@ -141,16 +139,7 @@ CaptureProvider composeProductionCaptureProvider({
   );
   if (Platform.isIOS) {
     // Presentation failure must never stop capture.
-    SimpleOpusDecoder? opus;
-    final voiceMeter = CaptureVoiceMeter(
-      now: DateTime.now,
-      opusDecoder: () {
-        final decoder = opus = SimpleOpusDecoder(sampleRate: 16000, channels: 1);
-        return (packet) => decoder.decode(input: packet);
-      },
-      onDispose: () => opus?.destroy(),
-    );
-    unawaited(CaptureSystemSurface(provider, LiveActivityBridge(), voiceMeter: voiceMeter).start());
+    unawaited(CaptureSystemSurface(provider, LiveActivityBridge()).start());
   }
   return provider;
 }

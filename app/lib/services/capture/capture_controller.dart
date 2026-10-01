@@ -368,7 +368,7 @@ class CaptureController extends ChangeNotifier
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision)) return;
     updateRecordingState(RecordingState.initialising);
-    _activeSource = PhoneMicSource(onAudio: _tapAudio);
+    _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
     await _phoneMic.start(
       onByteReceived: (bytes) {
@@ -498,13 +498,6 @@ class CaptureController extends ChangeNotifier
   // Committed coordinator ownership, as the live page reads it.
   bool get systemSurfacePhoneCapture => _capture.readModel.liveOwnerName == 'phone';
   bool get systemSurfaceBatchCapture => _capture.readModel.phoneBatchSession || _capture.readModel.pendantBatchSession;
-  // Presentation-only observer of captured audio; never affects capture.
-  AudioTap? systemSurfaceAudioTap;
-  void _tapAudio(List<int> audio, BleAudioCodec codec) {
-    try {
-      systemSurfaceAudioTap?.call(audio, codec);
-    } catch (_) {} // The tap runs before WAL/socket delivery; it must never drop audio.
-  }
 
   /// A Live Activity button: one more caller of the live page's controls, so the
   /// coordinator decides what pause, resume and finish do for the source that
@@ -773,6 +766,8 @@ class CaptureController extends ChangeNotifier
 
   /// Completes when the last Process Now request has an answer.
   Future<void>? _processInFlight;
+  // Force-processing requests share one optimistic row; only the newest may remove it.
+  int _processingPlaceholderOwner = 0;
 
   /// The source capturing now, as the Recordings sheet names sources: 'phone' for the phone
   /// microphone, the pendant's conversation source (e.g. 'omi') for a device, or null.
@@ -1995,7 +1990,7 @@ class CaptureController extends ChangeNotifier
     if (_deviceIdentityStale(deviceRevision)) return;
     final deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
     if (device.type == DeviceType.omi || device.type == DeviceType.openglass) {
-      _activeSource = BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: deviceModel, onAudio: _tapAudio);
+      _activeSource = BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: deviceModel);
     }
     _wal.getSyncs().phone.setDeviceInfo(deviceId, deviceModel);
 
@@ -2431,7 +2426,7 @@ class CaptureController extends ChangeNotifier
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
     // Initialize WAL for phone mic recording
-    _activeSource = PhoneMicSource(onAudio: _tapAudio);
+    _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
     await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
     _wal.getSyncs().phone.setDeviceInfo('phone-mic', 'Phone Microphone');
@@ -3310,6 +3305,7 @@ class CaptureController extends ChangeNotifier
     // Show the Conversations-tab skeleton before the WAL drain. Awaiting
     // finalizeCurrentSession first is the 30–60s dead window users hit today.
     // Add the placeholder before reset so a concurrent rebuild cannot drop it.
+    final placeholderOwner = ++_processingPlaceholderOwner;
     externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
 
     await phoneSync.finalizeCurrentSession();
@@ -3317,8 +3313,11 @@ class CaptureController extends ChangeNotifier
         recordingSessionId != activeRecordingId ||
         conversationRevision != _systemSurfaceConversationRevision) {
       // Another path finished this conversation during the drain; never reset
-      // the next one, and never leave the skeleton stranded.
-      externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+      // the next one, and never leave the skeleton stranded. A newer request that
+      // showed the same row since then still needs it.
+      if (placeholderOwner == _processingPlaceholderOwner) {
+        externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+      }
       return;
     }
     _clearSessionLocation();

@@ -7,7 +7,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/capture/capture_system_surface.dart';
-import 'package:omi/services/capture/capture_voice_meter.dart';
 
 import '../../support/capture/capture_replay_world.dart';
 
@@ -220,10 +219,6 @@ void main() {
   });
 
   test('silence and speech never send wave updates', () async {
-    await presentation.close();
-    presentation = CaptureSystemSurface(world.controller, sink,
-        now: world.clock.now, voiceMeter: CaptureVoiceMeter(now: world.clock.now));
-    await presentation.start();
     final session = world.hostApi.lastStartSessionId!;
     Future<void> audio(double amplitude, Duration duration) async {
       for (var t = Duration.zero; t < duration; t += const Duration(milliseconds: 100)) {
@@ -241,37 +236,17 @@ void main() {
     final quietPhase = presentation.snapshot['waveTime'] as double;
     await audio(60, const Duration(milliseconds: 3200));
     expect(sink.states.length, quiet, reason: 'the OS keeps the wave moving through silence');
-    expect(presentation.snapshot['voice'], false);
 
     await audio(9000, const Duration(milliseconds: 3200));
     expect(sink.states.length, quiet, reason: 'speech does not change the animation');
-    expect(presentation.snapshot['voice'], true);
 
     await audio(60, const Duration(milliseconds: 3200));
     expect(sink.states.length, quiet);
-    expect(presentation.snapshot['voice'], false);
     expect(presentation.snapshot['waveTime'], closeTo(quietPhase + 9.6, 0.001));
+    expect(presentation.snapshot.keys, isNot(contains('levels')), reason: 'the card draws the design wave, not audio');
   });
 
-  test('a failing presentation tap never drops audio from capture', () async {
-    world.controller.systemSurfaceAudioTap = (_, __) => throw StateError('meter failed');
-    final before = world.socket!.sentBinary.length;
-    world.injectAudioFrames(20, sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: 20);
-    await world.settle();
-    expect(world.socket!.sentBinary.length, greaterThan(before));
-  });
-
-  test('closing the surface detaches the audio tap', () async {
-    await presentation.close();
-    presentation = CaptureSystemSurface(world.controller, sink,
-        now: world.clock.now, voiceMeter: CaptureVoiceMeter(now: world.clock.now));
-    await presentation.start();
-    expect(world.controller.systemSurfaceAudioTap, isNotNull);
-    await presentation.close();
-    expect(world.controller.systemSurfaceAudioTap, isNull);
-  });
-
-  test('unmetered capture sends no wave updates, failures cannot stop capture, and closing cancels updates', () async {
+  test('capture sends no wave updates, failures cannot stop capture, and closing cancels updates', () async {
     final before = sink.states.length;
     // Keep real audio arriving so the native liveness watchdog does not
     // intentionally transition capture into recovery during this timer test.
@@ -279,8 +254,7 @@ void main() {
       world.injectAudioFrames(20, sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: (second + 1) * 20);
       await world.elapse(const Duration(seconds: 1));
     }
-    expect(sink.states.length, before, reason: 'the OS animates the wave for unmetered sources too');
-    expect(presentation.snapshot['metered'], false);
+    expect(sink.states.length, before, reason: 'the OS animates the wave on its own clock');
     sink.fail = true;
     await sink.action(request('pause'));
     await world.elapse(const Duration(seconds: 30));

@@ -19,13 +19,6 @@ struct OmiCaptureAttributes: ActivityAttributes {
         var canFinish: Bool
         var busy: Bool
         var actionFailed: Bool = false
-        /// Voice metering is available for this capture source.
-        var metered: Bool
-        /// Voice is currently heard; levels are empty otherwise.
-        var voice: Bool
-        /// Loudness 0–100 per 125 ms bin, oldest first, ending at bin `levelsEnd`.
-        var levels: [Int]
-        var levelsEnd: Int
     }
 }
 

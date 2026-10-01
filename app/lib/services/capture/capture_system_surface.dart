@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:omi/services/capture/capture_controller.dart';
 import 'package:omi/services/capture/capture_lifetime.dart';
-import 'package:omi/services/capture/capture_voice_meter.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -15,12 +14,10 @@ abstract interface class CaptureSystemSurfaceSink {
 /// Projects the existing capture owner into an OS presentation. Owns only the
 /// presentation clock and delivery, never audio, recovery, or mute authority.
 class CaptureSystemSurface {
-  CaptureSystemSurface(this.capture, this.sink, {DateTime Function()? now, this.voiceMeter})
-      : _now = now ?? DateTime.now;
+  CaptureSystemSurface(this.capture, this.sink, {DateTime Function()? now}) : _now = now ?? DateTime.now;
 
   final CaptureController capture;
   final CaptureSystemSurfaceSink sink;
-  final CaptureVoiceMeter? voiceMeter;
   final DateTime Function() _now;
   String? _recordingId;
   int? _conversationRevision;
@@ -39,10 +36,6 @@ class CaptureSystemSurface {
     capture.lifetime.own(close);
     // A bounded health refresh advances the stale deadline, not the timer.
     _heartbeat = capture.lifetime.periodic(const Duration(seconds: 30), (_) => _changed(force: true));
-    final meter = voiceMeter;
-    if (meter != null) {
-      capture.systemSurfaceAudioTap = meter.add;
-    }
     try {
       await sink.start(_act);
       if (_closed) return;
@@ -76,7 +69,6 @@ class CaptureSystemSurface {
       _conversationRevision = revision;
       _anchor = null;
       _pausedAt = null;
-      voiceMeter?.reset();
     }
     if (active) {
       _anchor ??= now;
@@ -119,34 +111,16 @@ class CaptureSystemSurface {
           (capture.systemSurfacePhoneCapture || batch || capture.segments.isNotEmpty || capture.photos.isNotEmpty),
       'busy': _busy,
       'actionFailed': false,
-      ..._voice(active && !paused),
-    };
-  }
-
-  /// Audio metadata is independent of the decorative wave's presentation clock.
-  Map<String, Object?> _voice(bool capturing) {
-    final meter = voiceMeter;
-    final voice = capturing && meter != null && meter.voiceActive;
-    return {
-      'metered': capturing && meter != null && meter.hasSignal,
-      'voice': voice,
-      'levels': voice ? meter.levels() : const <int>[],
-      'levelsEnd': meter?.latestBin ?? 0,
     };
   }
 
   void _changed({bool force = false}) {
     if (_closed || !_ready) return;
     final value = snapshot;
-    // Elapsed time and the wave are drawn by the OS. Only frozen values are significant,
-    // and audio levels never cause an update.
+    // Elapsed time and the wave are drawn by the OS; only frozen values are significant.
     final fingerprint = {...value}
       ..remove('elapsed')
-      ..remove('waveTime')
-      ..remove('metered')
-      ..remove('voice')
-      ..remove('levels')
-      ..remove('levelsEnd');
+      ..remove('waveTime');
     if (value['paused'] == true) fingerprint['elapsed'] = value['elapsed'];
     final key = fingerprint.toString();
     if (!force && key == _lastFingerprint) return;
@@ -193,11 +167,6 @@ class CaptureSystemSurface {
     if (_closed) return;
     _closed = true;
     _heartbeat?.cancel();
-    final meter = voiceMeter;
-    if (meter != null) {
-      if (capture.systemSurfaceAudioTap == meter.add) capture.systemSurfaceAudioTap = null;
-      meter.dispose();
-    }
     await _listener?.release();
     await _delivery;
     try {
