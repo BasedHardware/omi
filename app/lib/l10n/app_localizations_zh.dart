@@ -11927,6 +11927,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateRequiredMessage => '此版本的 Omi 已不再受支持。请更新以继续录音和同步。';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => '自动删除已同步副本';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '已同步副本将在 $days 天后删除';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return '在同步 $days 天后删除本地副本。云端副本会保留。';
+  }
+
+  @override
+  String get localCopiesSection => '本地副本';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return '已标记的行数：$count';
   }

@@ -12152,6 +12152,22 @@ class AppLocalizationsSv extends AppLocalizations {
       'Den här versionen av Omi stöds inte längre. Uppdatera för att fortsätta spela in och synkronisera.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Ta bort synkroniserade kopior automatiskt';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Synkroniserade kopior raderas efter $days dagar';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Raderar lokala kopior $days dagar efter synkronisering. Molnkopior behålls.';
+  }
+
+  @override
+  String get localCopiesSection => 'Lokala kopior';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Märkta rader: $count';
   }

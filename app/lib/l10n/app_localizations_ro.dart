@@ -12198,6 +12198,22 @@ class AppLocalizationsRo extends AppLocalizations {
       'Această versiune de Omi nu mai este acceptată. Actualizați pentru a continua înregistrarea și sincronizarea.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Eliminare automată a copiilor sincronizate';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Copiile sincronizate se șterg după $days zile';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Șterge copiile locale la $days zile după sincronizare. Copiile din cloud sunt păstrate.';
+  }
+
+  @override
+  String get localCopiesSection => 'Copii locale';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Rânduri etichetate: $count';
   }

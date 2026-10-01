@@ -12180,6 +12180,22 @@ class AppLocalizationsHr extends AppLocalizations {
       'Ova verzija Omija više nije podržana. Ažurirajte kako biste nastavili snimati i sinkronizirati.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Automatski ukloni sinkronizirane kopije';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Sinkronizirane kopije brišu se nakon $days dana';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Briše lokalne kopije $days dana nakon sinkronizacije. Oblačne kopije se zadržavaju.';
+  }
+
+  @override
+  String get localCopiesSection => 'Lokalne kopije';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Označeni retci: $count';
   }

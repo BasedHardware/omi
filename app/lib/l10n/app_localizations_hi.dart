@@ -12125,6 +12125,22 @@ class AppLocalizationsHi extends AppLocalizations {
       'Omi का यह संस्करण अब समर्थित नहीं है। रिकॉर्डिंग और सिंक जारी रखने के लिए अपडेट करें।';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'सिंक की गई कॉपियाँ स्वतः हटाएँ';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'सिंक की गई कॉपियाँ $days दिनों बाद हटा दी जाती हैं';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'सिंक के $days दिन बाद लोकल कॉपियाँ हटा देता है। क्लाउड कॉपियाँ रखी जाती हैं।';
+  }
+
+  @override
+  String get localCopiesSection => 'लोकल कॉपियाँ';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'लेबल लगी लाइनें: $count';
   }

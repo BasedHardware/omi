@@ -12224,6 +12224,22 @@ class AppLocalizationsEl extends AppLocalizations {
       'Αυτή η έκδοση του Omi δεν υποστηρίζεται πλέον. Κάντε ενημέρωση για να συνεχίσετε την εγγραφή και τον συγχρονισμό.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Αυτόματη διαγραφή συγχρονισμένων αντιγράφων';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Τα συγχρονισμένα αντίγραφα διαγράφονται μετά από $days ημέρες';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Διαγράφει τα τοπικά αντίγραφα $days ημέρες μετά τον συγχρονισμό. Τα αντίγραφα στο cloud διατηρούνται.';
+  }
+
+  @override
+  String get localCopiesSection => 'Τοπικά αντίγραφα';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Γραμμές που επισημάνθηκαν: $count';
   }

@@ -21819,6 +21819,30 @@ abstract class AppLocalizations {
   /// **'This version of Omi is no longer supported. Update to keep recording and syncing.'**
   String get updateRequiredMessage;
 
+  /// Settings row title: automatically remove synced phone-local recording copies
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-Remove Synced Copies'**
+  String get autoRemoveSyncedCopiesTitle;
+
+  /// Subtitle for the auto-remove toggle showing the retention window
+  ///
+  /// In en, this message translates to:
+  /// **'Synced copies deleted after {days} days'**
+  String autoRemoveSyncedCopiesDays(int days);
+
+  /// Footer description for the auto-remove synced copies setting
+  ///
+  /// In en, this message translates to:
+  /// **'Deletes local copies {days} days after sync. Cloud copies are kept.'**
+  String autoRemoveSyncedCopiesDescription(int days);
+
+  /// Section header above the auto-remove synced copies setting
+  ///
+  /// In en, this message translates to:
+  /// **'Local Copies'**
+  String get localCopiesSection;
+
   /// After tagging a speaker: how many transcript lines received the name
   ///
   /// In en, this message translates to:

@@ -12207,6 +12207,22 @@ class AppLocalizationsMk extends AppLocalizations {
       'Оваа верзија на Omi веќе не е поддржана. Ажурирајте за да продолжите со снимање и синхронизација.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Автоматски отстранувај синхронизирани копии';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Синхронизираните копии се бришат по $days дена';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Ги брише локалните копии $days дена по синхронизацијата. Облачните копии се задржуваат.';
+  }
+
+  @override
+  String get localCopiesSection => 'Локални копии';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Означени линии: $count';
   }

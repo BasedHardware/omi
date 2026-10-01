@@ -12181,6 +12181,22 @@ class AppLocalizationsKn extends AppLocalizations {
       'Omi ನ ಈ ಆವೃತ್ತಿಗೆ ಇನ್ನು ಬೆಂಬಲವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಸಿಂಕ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಡೇಟ್ ಮಾಡಿ.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'ಸಿಂಕ್ ಆದ ಪ್ರತಿಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ತೆಗೆದುಹಾಕಿ';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'ಸಿಂಕ್ ಆದ ಪ್ರತಿಗಳು $days ದಿನಗಳ ನಂತರ ಅಳಿಸಲ್ಪಡುತ್ತವೆ';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'ಸಿಂಕ್ ಆದ $days ದಿನಗಳ ನಂತರ ಸ್ಥಳೀಯ ಪ್ರತಿಗಳನ್ನು ಅಳಿಸುತ್ತದೆ. ಕ್ಲೌಡ್ ಪ್ರತಿಗಳನ್ನು ಇರಿಸಲಾಗುತ್ತದೆ.';
+  }
+
+  @override
+  String get localCopiesSection => 'ಸ್ಥಳೀಯ ಪ್ರತಿಗಳು';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'ಲೇಬಲ್ ಹಾಕಿದ ಸಾಲುಗಳು: $count';
   }

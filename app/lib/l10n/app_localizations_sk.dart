@@ -12136,6 +12136,22 @@ class AppLocalizationsSk extends AppLocalizations {
       'Táto verzia Omi už nie je podporovaná. Aktualizujte ju, aby ste mohli ďalej nahrávať a synchronizovať.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Automatické odstraňovanie synchronizovaných kópií';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Synchronizované kópie sa odstránia po $days dňoch';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Odstráni lokálne kópie $days dní po synchronizácii. Cloudové kópie zostávajú zachované.';
+  }
+
+  @override
+  String get localCopiesSection => 'Lokálne kópie';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Označené riadky: $count';
   }

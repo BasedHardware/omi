@@ -12155,6 +12155,22 @@ class AppLocalizationsId extends AppLocalizations {
       'Versi Omi ini tidak lagi didukung. Perbarui untuk terus merekam dan menyinkronkan.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Hapus Salinan Tersinkron Otomatis';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Salinan tersinkron dihapus setelah $days hari';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Menghapus salinan lokal $days hari setelah sinkron. Salinan cloud disimpan.';
+  }
+
+  @override
+  String get localCopiesSection => 'Salinan Lokal';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Baris diberi label: $count';
   }

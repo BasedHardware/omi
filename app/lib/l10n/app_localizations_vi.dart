@@ -12137,6 +12137,22 @@ class AppLocalizationsVi extends AppLocalizations {
       'Phiên bản Omi này không còn được hỗ trợ. Hãy cập nhật để tiếp tục ghi âm và đồng bộ.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Tự động xóa bản sao đã đồng bộ';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Bản sao đã đồng bộ bị xóa sau $days ngày';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Xóa bản sao cục bộ $days ngày sau khi đồng bộ. Bản sao trên đám mây được giữ lại.';
+  }
+
+  @override
+  String get localCopiesSection => 'Bản sao cục bộ';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Số dòng đã gắn nhãn: $count';
   }

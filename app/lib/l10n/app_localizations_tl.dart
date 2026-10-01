@@ -12247,6 +12247,22 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi na sinusuportahan ang bersyong ito ng Omi. Mag-update para patuloy na makapag-record at makapag-sync.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Awtomatikong Tanggalin ang mga Naka-sync na Kopya';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Binubura ang mga naka-sync na kopya pagkatapos ng $days araw';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Binubura ang mga lokal na kopya $days araw pagkatapos mag-sync. Pinapanatili ang mga kopya sa cloud.';
+  }
+
+  @override
+  String get localCopiesSection => 'Mga Lokal na Kopya';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Mga linyang may label: $count';
   }

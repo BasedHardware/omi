@@ -12142,6 +12142,22 @@ class AppLocalizationsFa extends AppLocalizations {
       'این نسخه از Omi دیگر پشتیبانی نمی‌شود. برای ادامهٔ ضبط و همگام‌سازی، به‌روزرسانی کنید.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'حذف خودکار نسخه‌های همگام‌شده';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'نسخه‌های همگام‌شده پس از $days روز حذف می‌شوند';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'نسخه‌های محلی را $days روز پس از همگام‌سازی حذف می‌کند. نسخه‌های ابری حفظ می‌شوند.';
+  }
+
+  @override
+  String get localCopiesSection => 'نسخه‌های محلی';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'خط‌های برچسب‌خورده: $count';
   }

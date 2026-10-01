@@ -12174,6 +12174,22 @@ class AppLocalizationsSl extends AppLocalizations {
       'Ta različica aplikacije Omi ni več podprta. Posodobite jo, da boste lahko še naprej snemali in sinhronizirali.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Samodejno odstrani sinhronizirane kopije';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Sinhronizirane kopije se izbrišejo po $days dneh';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Izbriše lokalne kopije $days dni po sinhronizaciji. Oblačne kopije ostanejo ohranjene.';
+  }
+
+  @override
+  String get localCopiesSection => 'Lokalne kopije';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Označene vrstice: $count';
   }

@@ -12049,6 +12049,22 @@ class AppLocalizationsHe extends AppLocalizations {
   String get updateRequiredMessage => 'הגרסה הזו של Omi כבר לא נתמכת. יש לעדכן כדי להמשיך להקליט ולסנכרן.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'הסרה אוטומטית של עותקים מסונכרנים';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'עותקים מסונכרנים נמחקים לאחר $days ימים';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'מוחק עותקים מקומיים $days ימים לאחר הסנכרון. עותקי הענן נשמרים.';
+  }
+
+  @override
+  String get localCopiesSection => 'עותקים מקומיים';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'שורות שסומנו: $count';
   }

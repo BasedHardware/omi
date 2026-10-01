@@ -12180,6 +12180,22 @@ class AppLocalizationsPl extends AppLocalizations {
       'Ta wersja Omi nie jest już obsługiwana. Zaktualizuj, aby dalej nagrywać i synchronizować.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Automatyczne usuwanie zsynchronizowanych kopii';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Zsynchronizowane kopie są usuwane po $days dniach';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Usuwa lokalne kopie $days dni po synchronizacji. Kopie w chmurze pozostają.';
+  }
+
+  @override
+  String get localCopiesSection => 'Kopie lokalne';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Oznaczone wiersze: $count';
   }

@@ -12154,6 +12154,22 @@ class AppLocalizationsUr extends AppLocalizations {
       'Omi کا یہ ورژن اب تعاون یافتہ نہیں ہے۔ ریکارڈنگ اور سنک جاری رکھنے کے لیے اپ ڈیٹ کریں۔';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'سنک کی گئی کاپیاں خودکار طور پر ہٹائیں';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'سنک کی گئی کاپیاں $days دن بعد حذف ہو جاتی ہیں';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'سنک کے $days دن بعد مقامی کاپیاں حذف کر دیتا ہے۔ کلاؤڈ کاپیاں محفوظ رہتی ہیں۔';
+  }
+
+  @override
+  String get localCopiesSection => 'مقامی کاپیاں';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'لیبل شدہ لائنیں: $count';
   }

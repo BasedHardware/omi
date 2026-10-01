@@ -12168,6 +12168,22 @@ class AppLocalizationsUk extends AppLocalizations {
       'Ця версія Omi більше не підтримується. Оновіть, щоб і далі записувати та синхронізувати.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Автоматичне видалення синхронізованих копій';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Синхронізовані копії видаляються через $days днів';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Видаляє локальні копії через $days днів після синхронізації. Хмарні копії зберігаються.';
+  }
+
+  @override
+  String get localCopiesSection => 'Локальні копії';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Позначено рядків: $count';
   }

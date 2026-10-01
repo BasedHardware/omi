@@ -12142,6 +12142,22 @@ class AppLocalizationsBn extends AppLocalizations {
   String get updateRequiredMessage => 'Omi-এর এই সংস্করণ আর সমর্থিত নয়। রেকর্ডিং ও সিঙ্ক চালিয়ে যেতে আপডেট করুন।';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'সিঙ্ক করা কপি স্বয়ংক্রিয়ভাবে সরান';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '$days দিন পরে সিঙ্ক করা কপি মুছে যায়';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'সিঙ্কের $days দিন পরে লোকাল কপি মুছে যায়। ক্লাউড কপি রাখা হয়।';
+  }
+
+  @override
+  String get localCopiesSection => 'লোকাল কপি';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'লেবেল করা লাইন: $count';
   }

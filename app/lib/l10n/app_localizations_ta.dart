@@ -12225,6 +12225,22 @@ class AppLocalizationsTa extends AppLocalizations {
       'Omi-இன் இந்தப் பதிப்பு இனி ஆதரிக்கப்படாது. பதிவுசெய்வதையும் ஒத்திசைப்பதையும் தொடர புதுப்பிக்கவும்.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'ஒத்திசைக்கப்பட்ட நகல்களை தானாக அகற்று';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'ஒத்திசைக்கப்பட்ட நகல்கள் $days நாட்களுக்குப் பிறகு நீக்கப்படும்';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'ஒத்திசைத்த $days நாட்களுக்குப் பிறகு உள்ளூர் நகல்களை நீக்கும். கிளவுட் நகல்கள் வைக்கப்படும்.';
+  }
+
+  @override
+  String get localCopiesSection => 'உள்ளூர் நகல்கள்';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'லேபிளிடப்பட்ட வரிகள்: $count';
   }

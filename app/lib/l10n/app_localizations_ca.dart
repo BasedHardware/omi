@@ -12212,6 +12212,22 @@ class AppLocalizationsCa extends AppLocalizations {
       'Aquesta versió d\'Omi ja no és compatible. Actualitza-la per continuar gravant i sincronitzant.';
 
   @override
+  String get autoRemoveSyncedCopiesTitle => 'Elimina automàticament les còpies sincronitzades';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Les còpies sincronitzades s\'eliminen després de $days dies';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Elimina les còpies locals $days dies després de la sincronització. Les còpies al núvol es conserven.';
+  }
+
+  @override
+  String get localCopiesSection => 'Còpies locals';
+
+  @override
   String speakerLabelLinesLabeled(int count) {
     return 'Línies etiquetades: $count';
   }
