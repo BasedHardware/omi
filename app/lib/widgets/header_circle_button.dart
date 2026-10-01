@@ -22,7 +22,7 @@ class HeaderCircleButton extends StatelessWidget {
     this.color,
     this.diameter = kHeaderCircleDiameter,
     this.badgeCount = 0,
-    this.badgeColor,
+    this.quietBadge = false,
   });
 
   final Widget icon;
@@ -37,8 +37,9 @@ class HeaderCircleButton extends StatelessWidget {
   /// put the count in [semanticLabel] too, since the pill is excluded from semantics.
   final int badgeCount;
 
-  /// Fill of the count pill. Defaults to the neutral [OmiColors.accent].
-  final Color? badgeColor;
+  /// Shows the count as a bare tertiary number by the glyph instead of an accent pill, for
+  /// controls that report a state and should not draw the eye.
+  final bool quietBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -55,11 +56,11 @@ class HeaderCircleButton extends StatelessWidget {
       children: [
         button,
         Positioned(
-          top: 0,
-          right: 0,
+          top: quietBadge ? 9 : 0,
+          right: quietBadge ? 7 : 0,
           child: IgnorePointer(
             child: ExcludeSemantics(
-              child: HeaderCountBadge(count: badgeCount, color: badgeColor),
+              child: HeaderCountBadge(count: badgeCount, quiet: quietBadge),
             ),
           ),
         ),
@@ -68,33 +69,49 @@ class HeaderCircleButton extends StatelessWidget {
   }
 }
 
-/// The count pill on a [HeaderCircleButton]: 16pt tall, capped at "9+", ringed in the page
+/// The count pill on a [HeaderCircleButton]: capped at "9+", ringed in the page
 /// surface so it reads as sitting on top of the circle.
 class HeaderCountBadge extends StatelessWidget {
-  const HeaderCountBadge({super.key, required this.count, this.color});
+  const HeaderCountBadge({super.key, required this.count, this.quiet = false});
 
   final int count;
-  final Color? color;
+
+  /// Muted look: just the number in [OmiColors.textTertiary], no pill.
+  final bool quiet;
 
   @override
   Widget build(BuildContext context) {
-    final fill = color ?? OmiColors.accent;
-    // A custom fill is a status colour (warning); the page surface reads on it in both themes.
-    final ink = color == null ? OmiColors.onAccent : OmiColors.surface0;
+    final label = count > 9 ? '9+' : '$count';
+    if (quiet) {
+      return Text(
+        label,
+        key: const ValueKey('header_count_badge'),
+        textScaler: TextScaler.noScaling,
+        style: OmiType.caption.copyWith(
+          color: OmiColors.textTertiary,
+          fontWeight: FontWeight.w600,
+          height: 1.0,
+        ),
+      );
+    }
     return Container(
       key: const ValueKey('header_count_badge'),
       constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
       padding: const EdgeInsets.symmetric(horizontal: 6),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: fill,
+        color: OmiColors.accent,
         borderRadius: const BorderRadius.all(Radius.circular(10)),
         border: Border.all(color: OmiColors.surface0, width: 2),
       ),
       child: Text(
-        count > 9 ? '9+' : '$count',
+        label,
         textScaler: TextScaler.noScaling,
-        style: OmiType.caption.copyWith(color: ink, fontWeight: FontWeight.w700, height: 1.0),
+        style: OmiType.caption.copyWith(
+          color: OmiColors.onAccent,
+          fontWeight: FontWeight.w700,
+          height: 1.0,
+        ),
       ),
     );
   }

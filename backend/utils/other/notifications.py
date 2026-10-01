@@ -16,7 +16,7 @@ import database.notifications as notification_db
 import database.redis_db as redis_db
 from database.redis_db import release_daily_summary_lock, try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
-from utils.conversations.factory import deserialize_conversation
+from utils.conversations.factory import deserialize_conversations
 from utils.conversations.summary_selection import select_primary_summary
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
@@ -180,9 +180,9 @@ def _generate_and_store_daily_summary(
         release_daily_summary_lock(uid, date_str)
         return None, False, _DECLINE_NO_CONVERSATIONS
 
-    conversations = [
-        deserialize_conversation(convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')
-    ]
+    conversations = deserialize_conversations(
+        [convo_data for convo_data in conversations_data if not convo_data.get('is_locked')]
+    )
     if not conversations:
         release_daily_summary_lock(uid, date_str)
         return None, False, _DECLINE_NOTHING_TO_SUMMARIZE

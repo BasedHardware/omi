@@ -5,11 +5,13 @@ from __future__ import annotations
 import time
 import os
 from collections import deque
-from typing import Any, Literal
+from typing import Any, Callable, Literal, cast
 
 from utils.stt.live_metrics import RECONNECT, REPLAY_SECONDS, WINDOW_REPLAY_SAFE_TRIMS
 
 RING_SECONDS = 15
+# Keep a full default replay horizon of recent VAD-negative capture, not just pre-roll.
+WINDOW_SILENCE_TAIL_SECONDS = 15
 MAX_RECONNECTS = 3
 MAX_RECONNECTS_PER_MINUTE = 2
 MAX_REPLAY_SECONDS = 30
@@ -35,11 +37,20 @@ class ResilientAudio:
     def buffered_bytes(self) -> int:
         return sum(len(data) for _, data in self._chunks)
 
-    def would_overflow(self, data: bytes, start_sample: int | None) -> bool:
+    @property
+    def capture_bounds(self) -> tuple[int, int]:
+        """Retained capture interval; an empty ring has equal boundaries."""
+        return (self._chunks[0][0] if self._chunks else self._end_sample, self._end_sample)
+
+    def projected_span_samples(self, data: bytes, start_sample: int | None) -> int:
+        """Capture-time span after a send, including VAD-gated gaps."""
         if start_sample is None or not data:
-            return False
+            return 0
         first = self._chunks[0][0] if self._chunks else start_sample
-        return start_sample + len(data) // 2 - first > self.ring_seconds * self.sample_rate
+        return max(0, start_sample + len(data) // 2 - first)
+
+    def would_overflow(self, data: bytes, start_sample: int | None) -> bool:
+        return self.projected_span_samples(data, start_sample) > self.ring_seconds * self.sample_rate
 
     def append(self, data: bytes, start_sample: int | None) -> None:
         if start_sample is None or not data:
@@ -109,13 +120,44 @@ def window_replay_action(
     if ring is None:
         return 'append'
     trim_window_replay_to_anchor(ring, socket)
-    if not ring.would_overflow(data, start_sample):
-        return 'append'
     raw = getattr(socket, 'raw', None)
     has_untranscribed_speech = getattr(raw, 'has_untranscribed_speech', None)
+    speech_pending = callable(has_untranscribed_speech) and has_untranscribed_speech()
+    _, capture_end = ring.capture_bounds
+    projected_end = max(capture_end, (start_sample or 0) + len(data) // 2)
+    age_floor = max(0, projected_end - ring.ring_seconds * ring.sample_rate)
+    pending_boundary = getattr(socket, 'window_replay_pending_sample', None)
+    pending_sample = pending_boundary() if callable(pending_boundary) else None
+    if callable(has_untranscribed_speech) and not speech_pending:
+        keep_from = max(0, capture_end - WINDOW_SILENCE_TAIL_SECONDS * ring.sample_rate)
+        accounted_boundary = getattr(socket, 'window_replay_accounted_span', None)
+        accounted = (
+            cast(Callable[[], tuple[int, int] | None], accounted_boundary)() if callable(accounted_boundary) else None
+        )
+        if accounted is not None and accounted[1] > age_floor:
+            # An empty answer settles capacity, not transcript completeness.
+            # Its capture audio only leaves replay at the natural ring age.
+            keep_from = min(keep_from, accounted[0])
+        if ring.finalize_through(max(age_floor, keep_from)):
+            WINDOW_REPLAY_SAFE_TRIMS.inc()
+    elif isinstance(pending_sample, int) and age_floor <= pending_sample:
+        # Answered history may age out while new speech is pending. Never
+        # evict an unresolved sample merely to make room for the next packet.
+        if ring.finalize_through(age_floor):
+            WINDOW_REPLAY_SAFE_TRIMS.inc()
+    request_cut = getattr(raw, 'request_replay_cut', None)
+    pending_samples = (
+        max(0, projected_end - pending_sample)
+        if isinstance(pending_sample, int)
+        else ring.projected_span_samples(data, start_sample)
+    )
+    if speech_pending and callable(request_cut) and pending_samples >= ring.ring_seconds * ring.sample_rate * 2 // 3:
+        request_cut()
+    if not ring.would_overflow(data, start_sample):
+        return 'append'
     if (
         callable(has_untranscribed_speech)
-        and not has_untranscribed_speech()
+        and not speech_pending
         and len(data) <= ring.ring_seconds * ring.sample_rate * 2
     ):
         assert start_sample is not None
@@ -124,6 +166,10 @@ def window_replay_action(
             WINDOW_REPLAY_SAFE_TRIMS.inc()
         return 'trim'
     if raw is not None:
+        snapshot = getattr(socket, 'window_replay_diagnostics', None)
+        if callable(snapshot):
+            first, end = ring.capture_bounds
+            raw.replay_lag_diagnostics = snapshot(first, end, ring.projected_span_samples(data, start_sample))
         raw.fail('capacity_full', capacity_subtype='replay_ring_cap')
     return 'failover'
 

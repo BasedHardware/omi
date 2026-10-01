@@ -10,9 +10,13 @@ from typing import Any, Deque, Dict, Optional, Tuple, cast
 
 import av
 import numpy as np
+from pydantic import ValidationError
 
+from config.speaker_prior import pinned_speaker_prior_enabled
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.audio import AudioRingBuffer
+from utils.live_speaker_suggestions import reconcile_pinned_suggestion
+from utils.log_sanitizer import sanitize
 from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
 from utils.speaker_sample import download_sample_audio
@@ -73,6 +77,10 @@ class SpeakerMatcher:
         self._voice_segments: Dict[int, str] = {}
         self._voice_centroids: Dict[int, Any] = {}
         self._voice_scopes: Dict[int, str] = {}
+        # Pinned-speaker prior (flagged): people an unmatched voice resembles, and the
+        # pinned near-miss already offered as a suggestion, per diarized speaker.
+        self.voice_candidates: Dict[int, list] = {}
+        self._suggested_person: Dict[int, str] = {}
         # Recent (embedding, clip seconds) per diarized speaker. A decision is made on
         # the centroid once enough audio has accumulated, instead of letting the first
         # clip that happens to land under the threshold stick for the whole session.
@@ -160,7 +168,11 @@ class SpeakerMatcher:
                     else:
                         vector = await self._recover_person_embedding(person)
                 if vector is not None:
-                    self.person_embeddings[person['id']] = {'embedding': vector, 'name': person['name']}
+                    self.person_embeddings[person['id']] = {
+                        'embedding': vector,
+                        'name': person['name'],
+                        'pinned': person.get('pinned') is True,
+                    }
         except Exception as error:
             logger.error('Speaker ID embeddings load failed type=%s', type(error).__name__)
             return
@@ -413,9 +425,14 @@ class SpeakerMatcher:
             # No awaits between arbitration and publishing the maps: another
             # speaker may finish embedding concurrently, but cannot publish a
             # decision based on a stale set of owner claims.
+            prior = pinned_speaker_prior_enabled()
+            pinned = {pid for pid, value in self.person_embeddings.items() if value.get('pinned')}
+            assigned = {result.person_id for result in decisions.values() if result.person_id is not None}
             for voice, result in decisions.items():
                 segment_id = self._voice_segments[voice]
                 if result.person_id is not None:
+                    self._suggested_person.pop(voice, None)
+                    self.voice_candidates.pop(voice, None)
                     best_id = result.person_id
                     best_name = self.person_embeddings[best_id]['name']
                     changed = self.speaker_to_person.get(voice) != (best_id, best_name)
@@ -437,17 +454,46 @@ class SpeakerMatcher:
                     status = (
                         SpeakerIdentityStatus.ambiguous if result.owner_contended else SpeakerIdentityStatus.no_match
                     )
+                    if prior:
+                        self._offer_pinned_suggestion(voice, result, pinned, segment_id, assigned)
                 self.voice_identity_status[voice] = status
                 self.segment_identity_status[segment_id] = status
             self.host.state.speaker_map_dirty = True
             self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
         except Exception as error:
-            logger.error(
-                'Speaker ID match failed speaker=%s type=%s session=%s',
-                speaker_id,
-                type(error).__name__,
-                self._session_log_id(),
-            )
+            if isinstance(error, ValidationError):
+                issues = error.errors(include_input=False, include_context=False, include_url=False)
+                first = issues[0] if issues else {}
+                loc = first.get('loc')
+                if isinstance(loc, tuple):
+                    loc = '.'.join(str(part) for part in loc)
+                logger.error(
+                    'Speaker ID match failed speaker=%s type=%s session=%s '
+                    'validation_model=%s validation_loc=%s validation_type=%s',
+                    speaker_id,
+                    type(error).__name__,
+                    self._session_log_id(),
+                    sanitize(error.title),
+                    sanitize(loc),
+                    sanitize(first.get('type')),
+                )
+            else:
+                logger.error(
+                    'Speaker ID match failed speaker=%s type=%s session=%s',
+                    speaker_id,
+                    type(error).__name__,
+                    self._session_log_id(),
+                )
+
+    def _offer_pinned_suggestion(
+        self, voice: int, result: SpeakerMatchDecision, pinned: set, segment_id: str, assigned: set
+    ) -> None:
+        """Pinned prior: record what this unmatched voice resembles; ask about a pinned near-miss.
+
+        Never labels: the event carries an empty person_id, which every client treats as a
+        suggestion only, plus ``suggested_person_id`` for clients that can show who.
+        """
+        reconcile_pinned_suggestion(self, voice, result, pinned, segment_id, assigned)
 
     def _provider_epoch_voice_groups(self) -> Dict[int, int]:
         """Reconcile a voice only across stamped provider epochs with close audio."""
@@ -489,3 +535,5 @@ class SpeakerMatcher:
         self._voice_segments.clear()
         self._voice_centroids.clear()
         self._voice_scopes.clear()
+        self.voice_candidates.clear()
+        self._suggested_person.clear()
