@@ -29,14 +29,24 @@ class OmiLockedPreview extends StatelessWidget {
           ExcludeSemantics(
             child: IgnorePointer(
               // Filter only this card's content, not the scrolling backdrop.
-              child: ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 6), child: child),
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                // This obscured content is decorative. The readable action below
+                // keeps the user's text scale and determines its own height.
+                child: MediaQuery.withNoTextScaling(child: child),
+              ),
             ),
           ),
-          Positioned.fill(child: ColoredBox(color: OmiColors.surface1.withValues(alpha: 0.35))),
+          Positioned.fill(
+            child: ColoredBox(
+              key: const Key('locked_preview_tint'),
+              color: OmiColors.surface1.withValues(alpha: 0.65),
+            ),
+          ),
           // Non-positioned so the action can also determine the card's height.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-            child: OmiButton(
+            child: OmiButton.tertiary(
               key: const Key('locked_preview_action'),
               label: label,
               icon: Icons.lock_outline,

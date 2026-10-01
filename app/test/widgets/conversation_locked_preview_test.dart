@@ -92,8 +92,6 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final textScale in [1.0, 2.0]) {
       testWidgets('locked preview is obscured with a legible action at $brightness / $textScale', (tester) async {
-        final semantics = tester.ensureSemantics();
-        addTearDown(semantics.dispose);
         await pumpRow(tester, brightness: brightness, textScale: textScale);
 
         // The reported bug left the title sharp beneath the upgrade text. The blur must
@@ -101,7 +99,7 @@ void main() {
         expect(find.descendant(of: find.byType(ImageFiltered), matching: find.text(_title)), findsOneWidget);
         expect(find.descendant(of: find.byType(ImageFiltered), matching: find.text(_upgrade)), findsNothing);
         expect(find.byType(BackdropFilter), findsNothing);
-        expect(find.bySemanticsLabel(_title), findsNothing);
+        expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);
         expect(find.bySemanticsLabel(_upgrade), findsOneWidget);
 
         final button = find.byKey(const Key('locked_preview_action'));
@@ -113,7 +111,13 @@ void main() {
         final text = tester.widget<Text>(find.text(_upgrade));
         final control = tester.widget<TextButton>(find.descendant(of: button, matching: find.byType(TextButton)));
         final foreground = text.style!.color!.computeLuminance();
-        final background = control.style!.backgroundColor!.resolve({})!.computeLuminance();
+        final buttonBackground = control.style!.backgroundColor!.resolve({})!;
+        expect(buttonBackground.a, 0, reason: 'The upgrade action stays subtle without an opaque fill.');
+        final tint = tester.widget<ColoredBox>(find.byKey(const Key('locked_preview_tint'))).color;
+        // Check the least favorable obscured content, not just the empty card surface.
+        final content = brightness == Brightness.light ? Colors.black : Colors.white;
+        final frostedBackground = Color.alphaBlend(tint, content);
+        final background = Color.alphaBlend(buttonBackground, frostedBackground).computeLuminance();
         final contrast = foreground > background
             ? (foreground + 0.05) / (background + 0.05)
             : (background + 0.05) / (foreground + 0.05);
@@ -124,12 +128,10 @@ void main() {
   }
 
   testWidgets('an unlocked row stays readable and has no upgrade treatment', (tester) async {
-    final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     await pumpRow(tester, locked: false);
     expect(find.byType(ImageFiltered), findsNothing);
     expect(find.byType(OmiLockedPreview), findsNothing);
-    expect(find.bySemanticsLabel(_title), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(_title)), findsOneWidget);
     expect(find.text(_upgrade), findsNothing);
   });
 
