@@ -22,6 +22,7 @@ from utils.stt.live_metrics import (
     WINDOW_REPLAY_SAFE_TRIMS,
     WINDOW_SESSION_OUTCOME,
     WINDOW_STRANDED_FLUSHES,
+    WINDOW_PRE_DEADLINE_POSTS,
 )
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt.live_session import (
@@ -1333,7 +1334,7 @@ def _fire_first_text_deadline_at_budget(raw, clock):
     """Deliver the scheduled callback at its exact wall budget without a 12s sleep."""
     timer = raw._first_text_timer
     if timer is not None:
-        clock[0] = raw._deadline_speech_at + raw._first_text_deadline
+        clock[0] = raw._first_text_deadline_at
         timer.cancel()  # Replace real-loop delivery with deterministic wall time.
         raw._expire_first_text()
 
@@ -1370,7 +1371,7 @@ async def test_answered_noise_blip_does_not_fail_at_first_text_deadline(monkeypa
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('speech_frames', [25, 50, 150])  # exactly 1, 2 and 6 admitted seconds
-async def test_real_empty_speech_keeps_original_twelve_second_rescue(monkeypatch, speech_frames, caplog):
+async def test_real_empty_speech_keeps_twelve_second_post_rescue(monkeypatch, speech_frames, caplog):
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
     scheduled = _observe_first_text_deadline_schedule(monkeypatch, previous.raw)
     for _ in range(speech_frames):
@@ -1388,14 +1389,17 @@ async def test_real_empty_speech_keeps_original_twelve_second_rescue(monkeypatch
     expected_posts = 1
     assert len(client.requests) == expected_posts
     assert previous.raw._deadline_speech_bytes == speech_frames * 640 * 2
-    assert previous.raw._first_text_timer is timer and not timer.cancelled()
+    assert timer.cancelled()
+    assert previous.raw._first_text_timer is not None and not previous.raw._first_text_timer.cancelled()
+    assert scheduled == [12, 12]
     assert previous.raw._empty_streak == expected_posts
     assert previous.raw._answered_empty_stranded_flushes == 1
-    clock[0] = started_at + 11.999
+    clock[0] = previous.raw._first_text_deadline_at - 0.001
     assert not previous.is_connection_dead
     snapshot = actual._window_ring().snapshot()
     _fire_first_text_deadline_at_budget(previous.raw, clock)
-    assert clock[0] == started_at + 12
+    assert clock[0] == previous.raw._episode_first_post_at + 12
+    assert clock[0] <= started_at + 24
     assert previous.raw.death_reason == 'first_text_deadline'
     assert await actual._failover_stt_socket()
     assert len(callbacks) == 1
@@ -1406,8 +1410,9 @@ async def test_real_empty_speech_keeps_original_twelve_second_rescue(monkeypatch
     assert diagnostic.answered_empty_admitted_seconds == speech_frames * 0.04
     assert diagnostic.posts == expected_posts and diagnostic.empty_posts == expected_posts
     assert diagnostic.answered_empty_stranded_flushes == 1
-    assert diagnostic.seconds_since_first_speech == 12
-    assert diagnostic.seconds_since_deadline_speech == 12
+    assert diagnostic.seconds_since_first_speech == pytest.approx(speech_frames * 0.04 + 16.96)
+    assert diagnostic.seconds_since_deadline_speech == pytest.approx(speech_frames * 0.04 + 16.96)
+    assert diagnostic.seconds_since_first_post == 12
     assert actual._pending_live_failover.first_text_diagnostics is diagnostic
     callbacks[0]([{'text': 'Recovered.', 'start': 0, 'end': 0.5}])
     line = next(
@@ -1415,10 +1420,10 @@ async def test_real_empty_speech_keeps_original_twelve_second_rescue(monkeypatch
     )
     assert f'vad_admitted_seconds={speech_frames * 0.04:.3f}' in line
     assert (
-        f'posts={expected_posts} empty_posts={expected_posts} answered_empty_stranded_flushes=1 seconds_since_first_speech=12.000'
+        f'posts={expected_posts} empty_posts={expected_posts} answered_empty_stranded_flushes=1 seconds_since_first_speech={speech_frames * 0.04 + 16.96:.3f}'
         in line
     )
-    assert 'seconds_since_deadline_speech=12.000' in line
+    assert 'seconds_since_first_post=12.000' in line
     assert await actual._failover_stt_socket()
     assert len(callbacks) == 1
     await actual._drain_stt_sockets()
@@ -1454,14 +1459,16 @@ async def test_repeated_short_empty_episodes_exhaust_cumulative_rescue_budget(mo
                 assert previous.raw._answered_empty_speech_bytes == (cycle + 1) * admitted_bytes
         else:
             assert (cycle + 1) * admitted_bytes >= 3 * 16000 * 2
-            assert previous.raw._first_text_timer is timer and not timer.cancelled()
+            assert timer.cancelled()
+            assert previous.raw._first_text_timer is not None and not previous.raw._first_text_timer.cancelled()
             assert previous.raw._deadline_speech_bytes == admitted_bytes
             assert previous.raw._empty_streak == 1
-    assert scheduled == [12] * episodes
+    assert scheduled == [12] * (2 * episodes)
     assert previous.raw._answered_empty_stranded_flushes == episodes
     snapshot = actual._window_ring().snapshot()
     _fire_first_text_deadline_at_budget(previous.raw, clock)
-    assert clock[0] == started_at + 12
+    assert clock[0] == previous.raw._episode_first_post_at + 12
+    assert clock[0] <= started_at + 24
     assert previous.raw.death_reason == 'first_text_deadline'
     assert previous.raw.first_text_diagnostics.answered_empty_admitted_seconds == episodes * admitted_bytes / 32000
     assert await actual._failover_stt_socket()
@@ -1532,7 +1539,7 @@ async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(mon
     for _ in range(150):
         sample = await _fragment_frame(actual, clock, sample, speech=True, yield_pump=False)
     new_started = previous.raw._deadline_speech_at
-    assert scheduled == [12, 12]
+    assert scheduled == [12, 12, 12]
     assert new_started > original_first + 12
     assert previous.raw._first_text_timer is not None
     assert previous.raw._deadline_speech_bytes == (150 + 6) * 640 * 2  # six pre-roll frames
@@ -1553,7 +1560,8 @@ async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(mon
         assert base.emitted == []
         _fire_first_text_deadline_at_budget(previous.raw, clock)
         assert previous.raw.death_reason == 'first_text_deadline'
-        assert previous.raw.first_text_diagnostics.seconds_since_deadline_speech == 12
+        assert previous.raw.first_text_diagnostics.seconds_since_deadline_speech == pytest.approx(17.96)
+        assert previous.raw.first_text_diagnostics.seconds_since_first_post == 12
         assert await actual._failover_stt_socket()
         assert len(callbacks) == 1
     await actual._drain_stt_sockets()
@@ -3890,5 +3898,253 @@ async def test_window_segments_have_decoder_loops_collapsed(monkeypatch):
     out = await sock._post_and_parse(b'\x01\x00' * 16000 * 6, 6.0)
     assert [s.text for s in out] == ['It went up a bit more than planned.']
     assert window.WINDOW_DECODER_LOOPS._value.get() == before + 1
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+async def _clocked_startup_socket(monkeypatch, client):
+    clock = [1000.0]
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=window.time.time))
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    emitted = []
+    sock = window.connect_window(emitted.extend, 16000)
+    scheduled = []
+    loop = asyncio.get_running_loop()
+    call_later = loop.call_later
+
+    def observed(delay, callback, *args, context=None):
+        if callback == sock._request_pre_deadline_post:
+            scheduled.append(delay)
+        return call_later(delay, callback, *args, context=context)
+
+    monkeypatch.setattr(loop, 'call_later', observed)
+    sock.test_startup_kick_delays = scheduled
+    # Managed VAD stops sending silence; capture still advances its silence clock.
+    sock.observe_capture(True, 0.0)
+    return sock, emitted, clock
+
+
+async def _startup_capture(sock, clock, at, *, speech_seconds=0.0, admitted_silence_seconds=0.0):
+    quiet = at - clock[0]
+    assert quiet >= 0
+    if quiet:
+        sock.observe_capture(False, quiet)
+    clock[0] = at
+    if speech_seconds:
+        sock.mark_speech()
+        assert sock.send(b'\x01\x00' * round(speech_seconds * 16000))
+        sock.observe_capture(True, speech_seconds)
+    if admitted_silence_seconds:
+        assert sock.send(bytes(round(admitted_silence_seconds * 16000) * 2))
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('admitted_seconds', [1.956, 2.212, 2.858])
+@pytest.mark.parametrize('returns_text', [False, True])
+async def test_sparse_speech_gets_one_early_post_and_fair_deadline(monkeypatch, admitted_seconds, returns_text):
+    client = Client(
+        data={'segments': [{'text': 'Sparse.', 'start': 0.0, 'end': 0.1}]} if returns_text else {'text': ''}
+    )
+    sock, emitted, clock = await _clocked_startup_socket(monkeypatch, client)
+    samples = round(admitted_seconds * 16000)
+    parts = [samples // 3, samples // 3, samples - 2 * (samples // 3)]
+    before = WINDOW_PRE_DEADLINE_POSTS._value.get()
+    await _startup_capture(sock, clock, 1000.0, speech_seconds=parts[0] / 16000)
+    await _startup_capture(sock, clock, 1004.0, speech_seconds=parts[1] / 16000)
+    assert client.requests == []
+    assert sock._pre_deadline_timer is not None
+    assert sock.test_startup_kick_delays == [7]
+    await _startup_capture(sock, clock, 1007.0)
+    sock._request_pre_deadline_post()  # deliver the real seven-second timer callback
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+    assert len(client.requests) == 1
+    assert WINDOW_PRE_DEADLINE_POSTS._value.get() == before + 1
+    assert _wav_duration(client.requests[0][1]) == max(1.5, (parts[0] + parts[1]) / 16000)
+    await _startup_capture(sock, clock, 1008.0, speech_seconds=parts[2] / 16000)
+    await _startup_capture(sock, clock, 1012.0)
+    assert sock._admitted_speech_bytes == samples * 2
+    assert len(client.requests) == 1  # later speech/wakes cannot re-arm the forced POST
+    assert not sock.is_connection_dead
+    if returns_text:
+        assert [item['text'] for item in emitted] == ['Sparse.']
+        assert sock._first_text_timer is None and sock._pre_deadline_timer is None
+        sock._expire_first_text()  # stale callback cannot fail an emitted session
+        assert not sock.is_connection_dead
+        await sock.drain_and_close()
+    else:
+        assert emitted == [] and sock._anchor_bytes == 0
+        assert sock._episode_first_post_at == 1007.0
+        assert sock._first_text_deadline_at == 1019.0
+        _fire_first_text_deadline_at_budget(sock, clock)
+        assert sock.death_reason == 'first_text_deadline'
+        diagnostic = sock.first_text_diagnostics
+        assert diagnostic.admitted_seconds == admitted_seconds
+        assert diagnostic.posts == diagnostic.answered_posts == diagnostic.empty_posts == 1
+        assert diagnostic.text_posts == 0 and not diagnostic.post_in_flight
+        assert diagnostic.seconds_since_first_speech == 19
+        assert diagnostic.seconds_since_first_post == 12
+        await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_nonempty_held_post_preserves_sentence_anchor_and_reports_answers(monkeypatch):
+    client = Client(data={'segments': [{'text': 'Unfinished words', 'start': 0.0, 'end': 5.0}]})
+    sock, emitted, clock = await _clocked_startup_socket(monkeypatch, client)
+    await _startup_capture(sock, clock, 1000.0, speech_seconds=5.152, admitted_silence_seconds=0.848)
+    assert len(client.requests) == 1
+    assert sock._admitted_speech_bytes == round(5.152 * 16000) * 2
+    assert sock._empty_posts_since_anchor == 0 and emitted == []
+    assert sock._anchor_bytes == 0
+    clock[0] = 1012.0
+    sock._expire_first_text()
+    assert sock.death_reason == 'first_text_deadline'
+    assert sock.first_text_diagnostics.posts == sock.first_text_diagnostics.answered_posts == 1
+    assert sock.first_text_diagnostics.text_posts == 1 and not sock.first_text_diagnostics.post_in_flight
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('hold_after', [1, 2])
+async def test_continuous_speech_slow_post_can_answer_after_twelve_speech_seconds(monkeypatch, hold_after):
+    client = RacingTextClient(data={'segments': [{'text': 'Unfinished words', 'start': 0.0, 'end': 5.5}]})
+    original_post = client.post
+
+    async def no_repeated_fake_text(url, **kwargs):
+        if len(client.requests) >= hold_after:
+            client.data = {'text': ''}
+        return await original_post(url, **kwargs)
+
+    monkeypatch.setattr(client, 'post', no_repeated_fake_text)
+    if hold_after == 2:
+        client.release.set()
+    _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
+    sock, emitted, clock = await _clocked_startup_socket(monkeypatch, client)
+    before = WINDOW_PRE_DEADLINE_POSTS._value.get()
+    await _startup_capture(sock, clock, 1000.0, speech_seconds=1.0)
+    await _startup_capture(sock, clock, 1005.0, speech_seconds=5.0)
+    assert len(client.requests) == 1
+    if hold_after == 2:
+        client.release.clear()
+    await _startup_capture(sock, clock, 1011.0, speech_seconds=5.28, admitted_silence_seconds=0.72)
+    assert len(client.requests) == hold_after
+    assert sock._admitted_speech_bytes == round(11.28 * 16000) * 2
+    assert sock._empty_posts_since_anchor == 0 and sock._post_in_flight
+    assert sock._answered_posts_since_anchor == sock._text_posts_since_anchor == hold_after - 1
+    clock[0] = 1012.0
+    assert not sock.is_connection_dead and sock._first_text_timer is not None
+    assert sock._first_text_deadline_at == 1017.0
+    assert WINDOW_PRE_DEADLINE_POSTS._value.get() == before  # normal POST already gave this episode a chance
+    clock[0] = 1012.5
+    client.data = {'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]}
+    client.release.set()
+    for _ in range(100):
+        if emitted:
+            break
+        await _REAL_SLEEP(0)
+    assert [item['text'] for item in emitted] == ['Done.']
+    assert sock._first_text_timer is None and sock._pre_deadline_timer is None
+    sock._expire_first_text()
+    assert not sock.is_connection_dead
+    await sock.drain_and_close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('answer', ['empty', 'held', 'in_flight'])
+async def test_early_post_respects_pacing_and_fails_with_exact_replay_once(monkeypatch, answer):
+    actual, base, previous, _client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    client = RacingTextClient(
+        data=(
+            {'text': ''}
+            if answer == 'empty'
+            else {'segments': [{'text': 'Unfinished words', 'start': 0.0, 'end': 2.0}]}
+        )
+    )
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    for _ in range(50):
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+    sample = await _settled_fragment_silence(actual, clock, sample, 25)
+    assert client.requests == []
+    started = previous.raw._deadline_speech_at
+    _mock_post_pacing(monkeypatch, _REAL_SLEEP)
+    previous.raw._next_post = asyncio.get_running_loop().time() + 0.05
+    clock[0] = started + 7
+    before = WINDOW_PRE_DEADLINE_POSTS._value.get()
+    previous.raw._request_pre_deadline_post()
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+    assert client.requests == [] and previous.raw._pacing_wait
+    await asyncio.wait_for(client.started.wait(), 1)
+    assert len(client.requests) == 1
+    assert WINDOW_PRE_DEADLINE_POSTS._value.get() == before + 1
+    assert previous.raw._first_text_deadline_at == started + 19
+    if answer != 'in_flight':
+        client.release.set()
+        for _ in range(20):
+            await _REAL_SLEEP(0)
+        assert previous.raw._answered_posts_since_anchor == 1
+        assert not previous.raw._post_in_flight
+    for at in [8, 10, 12]:
+        clock[0] = started + at
+        previous.raw._request_pre_deadline_post()
+        previous.raw._wake.set()
+        await _REAL_SLEEP(0)
+    assert len(client.requests) == 1 and base.emitted == []
+    assert previous.raw._anchor_bytes == 0
+    assert not previous.is_connection_dead
+    snapshot = actual._window_ring().snapshot()
+    _fire_first_text_deadline_at_budget(previous.raw, clock)
+    assert previous.raw.death_reason == 'first_text_deadline'
+    diagnostic = previous.raw.first_text_diagnostics
+    assert diagnostic.posts == 1 and diagnostic.seconds_since_first_post == 12
+    assert diagnostic.post_in_flight == (answer == 'in_flight')
+    assert diagnostic.answered_posts == int(answer != 'in_flight')
+    assert diagnostic.text_posts == int(answer == 'held')
+    assert diagnostic.empty_posts == int(answer == 'empty')
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == b''.join(data for _, data in snapshot)
+    client.data = {'segments': [{'text': 'Late.', 'start': 0.0, 'end': 1.0}]}
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert base.emitted == []
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert previous.raw._first_text_timer is None and previous.raw._pre_deadline_timer is None
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_early_post_waits_for_speech_floor_and_has_absolute_startup_ceiling(monkeypatch):
+    client = RacingTextClient()
+    sock, emitted, clock = await _clocked_startup_socket(monkeypatch, client)
+    await _startup_capture(sock, clock, 1000.0, speech_seconds=0.28)
+    clock[0] = 1007.0
+    sock._request_pre_deadline_post()
+    for _ in range(20):
+        await _REAL_SLEEP(0)
+    assert client.requests == []
+    assert not sock._pre_deadline_post_requested
+    # Late speech crosses the floor after the seven-second kick. The send
+    # itself requests the opportunity; no second timer/poll loop is needed.
+    await _startup_capture(sock, clock, 1008.0, speech_seconds=0.72)
+    assert len(client.requests) == 1
+    assert sock._episode_first_post_at == 1008.0
+    assert sock._first_text_deadline_at == 1020.0
+    clock[0] = 1020.0
+    sock._expire_first_text()
+    client.release.set()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+    assert emitted == []
+    # Even event-loop scheduling delayed past the initial timer may not
+    # turn the POST-relative allowance into unbounded wall time.
+    sock, emitted, clock = await _clocked_startup_socket(monkeypatch, Client(data={'text': ''}))
+    await _startup_capture(sock, clock, 1000.0, speech_seconds=1.0)
+    clock[0] = 1023.0
+    sock._note_startup_post(clock[0])
+    assert sock._first_text_deadline_at == 1024.0
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)

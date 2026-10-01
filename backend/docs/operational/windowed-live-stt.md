@@ -200,13 +200,20 @@ continuously active sessions. This excludes HTTP/serialization and other
 listen work and is a local CPU result, not a pod RSS or production p95 measure.
 
 The 60 s cushion absorbs a catch-up burst while one POST is in flight. Before
-its first emitted text, a window leg has a 12-second rescue deadline. The
-deadline is retired after an answered-empty short episode: less than 1 s of
+its first emitted text, a window leg arms a 12-second speech watchdog and a
+one-shot early POST at seven seconds when at least one admitted speech second
+has accumulated and no POST has begun. Early selection preserves sentence
+anchoring, wall pacing and single flight; it does not force emission. The first
+POST attempt, including semaphore wait, starts the 12-second rescue budget,
+capped at 24 seconds from episode speech with the shipped setting. Later POSTs
+never renew it. The existing eight-second queue/HTTP timeout remains active.
+`omi_stt_window_pre_deadline_posts_total` counts these early POSTs without labels.
+The deadline is retired after an answered-empty short episode: less than 1 s of
 admitted provider audio followed by at least 5 s of silence. Retirements share
 a cumulative 3.0 s budget of answered-empty admitted audio; only emitted text
 resets it. Once that budget is exhausted, the deadline remains armed. The
-timer also fires during a slow POST or after four consecutive speech-containing
-empty POSTs, whichever comes first. The existing listen death monitor selects
+timer also fires during a stalled POST; four consecutive speech-containing
+empty answers may trigger rescue earlier. The existing listen death monitor selects
 the next vendor and replays the untranscribed capture from the 90-second ring;
 failover happens at most once per session, and the failed Parakeet leg is
 excluded for the rest of that session. Once text has been emitted, these
