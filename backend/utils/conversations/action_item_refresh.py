@@ -17,7 +17,7 @@ from database import action_item_refresh as refresh_db
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import postprocess_executor, submit_with_context
 from utils.metrics import OMI_ACTION_ITEM_REFRESH_TOTAL
-from utils.notifications import send_action_item_data_message
+from utils.notification_dispatch import dispatch_action_item_reminder
 from utils.task_sync import auto_sync_action_items_batch
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ def _deliver(uid: str, conversation_id: str, rows: list[dict]) -> None:
     ]
     for row in rows:
         if row.get('due_at'):
-            send_action_item_data_message(
+            dispatch_action_item_reminder(
                 user_id=uid,
                 action_item_id=row['id'],
                 description=row['description'],

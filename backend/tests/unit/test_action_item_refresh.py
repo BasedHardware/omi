@@ -117,7 +117,7 @@ def world(monkeypatch):
     monkeypatch.setattr(pc.conversation_capture, 'canonical_conversation_fields', lambda *a: {})
     effects, queue, external = [], [], []
     monkeypatch.setattr(flow, 'submit_with_context', lambda executor, fn, *args: queue.append(lambda: fn(*args)))
-    monkeypatch.setattr(flow, 'send_action_item_data_message', lambda **kwargs: effects.append(('reminder', kwargs)))
+    monkeypatch.setattr(flow, 'dispatch_action_item_reminder', lambda **kwargs: effects.append(('reminder', kwargs)))
 
     async def sync(uid, rows):
         for row in rows:
