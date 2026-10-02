@@ -19,6 +19,13 @@ from prometheus_client import (
 # series for every Counter and Histogram child, including idle zero children.
 disable_created_metrics()
 
+SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
+    'omi_screen_task_gate_frames_total', 'Screen-task gate HTTP admissions by bounded terminal outcome', ['outcome']
+)
+SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
+    'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
+)
+
 OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
     'omi_listen_stt_unavailable_total',
     'Listen sessions rejected before STT setup because providers or reconnect budget are unavailable',
@@ -1194,6 +1201,12 @@ OMI_ACTION_ITEM_IDENTITY_TOTAL = Counter(
     'omi_action_item_identity_total',
     'Task identity on a conversation task replace. outcome is a closed set: '
     'reused_identity|new|skipped_already_exported|disabled',
+    ['outcome'],
+)
+
+OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
+    'omi_action_item_refresh_total',
+    'Automatic refresh task preservation: kept_existing|added_new|transferred_from_donor|skipped_duplicate|disabled',
     ['outcome'],
 )
 

@@ -55,6 +55,7 @@ from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.conversations.action_item_refresh import transfer_donor
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
 from utils.conversations.process_conversation import process_conversation, save_structured_vector
@@ -497,6 +498,8 @@ def _cleanup_donor(uid: str, donor_id: str, donor: Mapping[str, Any], survivor_i
     needs_copy = bool(audio_target) and (needs_cleanup or donor.get('sync_bridge_audio_target') != audio_target)
     deferred = False
     if needs_cleanup:
+        if live_survivor:
+            transfer_donor(uid, donor_id, survivor_id)
         try:
             retract_sync_bridge_source(uid, donor_id)
         except _DEFERRED_RETRACTION:

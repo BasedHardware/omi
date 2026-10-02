@@ -6,10 +6,10 @@ conversations only.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from itertools import islice
+from typing import Any, Dict, Iterable, List, Optional
 
 PEOPLE_STATS_SCAN_CAP = 1000
-PEOPLE_STATS_BATCH = 100
 
 
 def _as_utc(value: Any) -> Optional[datetime]:
@@ -29,9 +29,8 @@ def aggregate_people_stats(conversations: Iterable[Dict[str, Any]]) -> Dict[str,
         if conversation.get('is_locked'):
             continue
         if conversation.get('discarded'):
-            # Discarded rows never reached here before: the server-side query
-            # dropped them. The scan now reads them (otherwise the page cannot
-            # fill up and the pagination lies), so exclude them here instead.
+            # The scan reader filters discarded rows server-side by default, but
+            # include_discarded callers can still deliver them; stats never count them.
             continue
         segments = conversation.get('transcript_segments') or []
         if not isinstance(segments, list):
@@ -76,27 +75,21 @@ def apply_people_stats(people: List[Any], stats: Dict[str, Dict[str, Any]]) -> N
 
 
 def collect_people_stats(
-    fetch_page: Callable[[int, int], List[Dict[str, Any]]],
+    conversations: Iterable[Dict[str, Any]],
     scan_cap: int = PEOPLE_STATS_SCAN_CAP,
-    batch: int = PEOPLE_STATS_BATCH,
 ) -> Dict[str, Dict[str, Any]]:
-    """Aggregate stats over up to ``scan_cap`` newest conversations; ``fetch_page(limit, offset)``.
+    """Aggregate stats over up to ``scan_cap`` rows of one newest-first conversation iterator.
 
-    ``fetch_page`` must be a **scan-and-fill** reader (Firestore's
-    ``include_discarded=True`` branch): it keeps scanning until it has filled
-    the requested page, so a short page really is the end of the data. A
-    server-side ``limit().offset()`` reader drops invisible rows in Python
-    without padding, and there a short page only means "some rows in this
-    window were filtered out" — treating it as exhaustion truncates the scan
-    (#19908). Rows the reader returns but stats must not count (discarded,
-    locked) are kept in ``rows`` so the offset stays aligned, and dropped
-    during aggregation.
+    The reader owns paging: ``database.conversation_scan.iter_conversations``
+    issues bounded cursor pages (never ``offset``), advances past invisible
+    rows so a tombstone inside the window cannot end the scan early (#19908),
+    and stops at its ``ListReadBudget`` — in which case the prefix it already
+    yielded is the honest partial result.
     """
-    rows: List[Dict[str, Any]] = []
-    while len(rows) < scan_cap:
-        request_size = min(batch, scan_cap - len(rows))
-        page = fetch_page(request_size, len(rows))
-        rows.extend(page)
-        if len(page) < request_size:
-            break
-    return aggregate_people_stats(rows)
+    iterator = iter(conversations)
+    try:
+        return aggregate_people_stats(islice(iterator, scan_cap))
+    finally:
+        close = getattr(iterator, 'close', None)
+        if callable(close):
+            close()

@@ -2,150 +2,145 @@ import Foundation
 
 extension TaskAssistant {
   func processFrame(_ frame: CapturedFrame) async {
-    let screenTaskEnabled = await ScreenTaskFeature.isEnabled
-    await DesktopLogPrivacy.$suppressContent.withValue(screenTaskEnabled) {
-      await processFrame(frame, screenTaskEnabled: screenTaskEnabled)
-    }
-  }
-
-  private func processFrame(_ frame: CapturedFrame, screenTaskEnabled: Bool) async {
-    let enabled = await isEnabled
-    guard enabled else {
-      log("Task: Skipping analysis (disabled)")
-      return
-    }
-
-    log("Task: Analyzing frame from \(frame.appName)...")
-    do {
-      let authorization = screenTaskEnabled ? screenTaskFrameOwners.authorization(for: frame) : nil
-      let extraction: ScreenTaskExtraction
-      if screenTaskEnabled {
-        extraction = try await extractScreenTasks(frame: frame, authorization: authorization)
-      } else {
-        let (results, searchCount) = try await extractTaskSingleStage(from: frame.jpegData, appName: frame.appName)
-        extraction = ScreenTaskExtraction(results: results, searchCount: searchCount)
-      }
-      let results = extraction.results
-      let searchCount = extraction.searchCount
-      if screenTaskEnabled {
-        guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
-      }
-      guard !results.isEmpty else {
-        log("Task: Analysis returned no results")
-        return
-      }
-
-      let extractedCount = results.filter { $0.hasNewTask }.count
-      if screenTaskEnabled {
-        ScreenTaskLogging.completed(results: results.count, extracted: extractedCount, searches: searchCount)
-      } else {
-        log(
-          "Task: Analysis complete - results: \(results.count) (extracted: \(extractedCount)), context: \(results.first?.contextSummary ?? ""), searches: \(searchCount)"
-        )
-
-      }
-
-      await ScreenTaskDelivery.deliver(extraction) { result in
-        if screenTaskEnabled {
-          guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return false }
+    let enabled = await ScreenTaskFeature.isEnabled
+    let lease = enabled ? ScreenTaskFeature.lease() : nil
+    let metrics = ScreenTaskFrameMetrics()
+    metrics.featureEnabledAtStart = lease != nil
+    if lease == nil { metrics.pipeline = "legacy" }
+    await DesktopLogPrivacy.$suppressContent.withValue(await ScreenTaskFeature.isConfigured) {
+      do {
+        guard await isEnabled else {
+          metrics.outcome = "disabled"
+          return
         }
-        return await handleResultWithScreenshot(
-          result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle,
-          recordExtractionEvent: extraction.admission?.auditSample != true
-        ) { type, data in
-          let boxed = TaskAssistantEventPayloadBox(data)
-          Task { @MainActor in
-            if screenTaskEnabled {
-              guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+        guard let binding = frame.taskBinding else { throw ScreenTaskFailure.ownerRevoked }
+        let validateFrame: @Sendable () throws -> Void = {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(binding.authorization) else {
+            throw ScreenTaskFailure.ownerRevoked
+          }
+          guard binding.exclusion.appName == frame.appName,
+            RewindCaptureExclusionGeneration.isCurrent(binding.exclusion),
+            !ScreenTaskPrivacy.isPrivateWindow(app: frame.appName, title: frame.windowTitle)
+          else { throw ScreenTaskFailure.privacyRevoked }
+          try Task.checkCancellation()
+        }
+        try validateFrame()
+        metrics.eligibleFrames = 1
+        let extraction: ScreenTaskExtraction
+        if let lease {
+          extraction = try await extractScreenTasks(frame: frame, binding: binding, lease: lease, metrics: metrics)
+        } else {
+          let extractionStart = ProcessInfo.processInfo.systemUptime
+          metrics.legacyAttempts = 1
+          extraction = try await ScreenTaskWorkAuthority.$validate.withValue(validateFrame) {
+            let (results, searches) = try await extractTaskSingleStage(
+              from: frame.jpegData, appName: frame.appName, authorization: binding.authorization)
+            return ScreenTaskExtraction(results: results, searchCount: searches, extractor: "legacy")
+          }
+          metrics.extractionMS = (ProcessInfo.processInfo.systemUptime - extractionStart) * 1000
+          metrics.extractor = "legacy"
+        }
+        try validateFrame()
+        let validateDelivery: @Sendable () throws -> Void = {
+          try validateFrame()
+          if extraction.extractor == "gemini_3_8", let lease, !lease.isCurrent() { throw ScreenTaskFailure.stopped }
+        }
+        let deliveryStart = ProcessInfo.processInfo.systemUptime
+        metrics.counts = try await ScreenTaskWorkAuthority.$validate.withValue(validateDelivery) {
+          try validateDelivery()
+          return await ScreenTaskDelivery.deliver(extraction) { result in
+            guard (try? validateDelivery()) != nil else { return .failure }
+            return await handleResultWithScreenshot(
+              result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle,
+              recordExtractionEvent: extraction.admission?.auditSample != true,
+              authorization: binding.authorization,
+              provenance: ScreenTaskDeliveryProvenance(extraction: extraction)
+            ) { type, data in
+              let boxed = TaskAssistantEventPayloadBox(data)
+              Task { @MainActor in
+                guard (try? validateDelivery()) != nil else { return }
+                AssistantCoordinator.shared.sendEvent(type: type, data: boxed.value)
+              }
             }
-            AssistantCoordinator.shared.sendEvent(type: type, data: boxed.value)
+          } recordAudit: { event in
+            guard (try? validateDelivery()) != nil else { return }
+            PostHogManager.shared.taskExtracted(
+              taskCount: event.taskCount, gateOutcome: event.gateOutcome, auditSample: event.auditSample,
+              candidateCount: event.candidateCount, extractor: event.extractor)
           }
         }
-      } recordAudit: { event in
-        guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
-        PostHogManager.shared.taskExtracted(
-          taskCount: event.taskCount, gateOutcome: event.gateOutcome, auditSample: event.auditSample,
-          candidateCount: event.candidateCount)
+        metrics.deliveryMS = (ProcessInfo.processInfo.systemUptime - deliveryStart) * 1000
+        if metrics.counts.failed > 0 {
+          metrics.outcome = "failed"
+          metrics.errorClass = "delivery_failure"
+        }
+      } catch {
+        metrics.finish(error: error)
+        if metrics.outcome != "refused" {
+          if enabled {
+            ScreenTaskLogging.failed()
+          } else if ![
+            "auth", "plan_or_quota", "backpressure", "http_terminal", "owner_revoked", "privacy_revoked", "cancelled",
+          ].contains(metrics.errorClass) {
+            logError("Task extraction error", error: error)
+          }
+        }
       }
-    } catch {
-      if screenTaskEnabled { ScreenTaskLogging.failed() } else { logError("Task extraction error", error: error) }
+    }
+    // Exactly one content-free terminal event, including rejects, skips and cancelled/revoked work.
+    let properties = metrics.properties(
+      captureToTerminalMS: (ProcessInfo.processInfo.systemUptime - frame.capturedUptime) * 1000)
+    await MainActor.run {
+      PostHogManager.shared.screenTaskFrameTerminal(
+        ownerID: frame.taskBinding?.authorization.ownerID, properties: properties)
     }
   }
 
-  func extractScreenTasks(frame: CapturedFrame, authorization: RuntimeOwnerAuthorizationSnapshot?) async throws
-    -> ScreenTaskExtraction
-  {
-    guard let authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
-      throw CancellationError()
+  func extractScreenTasks(
+    frame: CapturedFrame, binding: ScreenTaskFrameBinding, lease: ScreenTaskLease,
+    metrics: ScreenTaskFrameMetrics
+  ) async throws -> ScreenTaskExtraction {
+    let authorization = binding.authorization
+    let validateFrame: @Sendable () throws -> Void = {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
+      guard binding.exclusion.appName == frame.appName, binding.isCurrent(),
+        !ScreenTaskPrivacy.isPrivateWindow(app: frame.appName, title: frame.windowTitle)
+      else { throw ScreenTaskFailure.privacyRevoked }
+      try Task.checkCancellation()
     }
-    var admission: ScreenTaskAdmission?
-    do {
-      let ocr = try await RewindOCRService.shared.extractTextWithBounds(from: frame.jpegData)
-      let lines = ScreenTaskDedupe.lines(ocr: ocr, app: frame.appName)
-      let key = "\(authorization.ownerID):\(authorization.authorizationGeneration):\(frame.appName)"
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw CancellationError() }
-      if screenTaskDedupe.shouldSkip(key: key, lines: lines, now: frame.captureTime) {
-        return ScreenTaskExtraction(results: [], searchCount: 0)
-      }
-      try await ScreenTaskFeature.enforceQuota()
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw CancellationError() }
-      let text = String(ocr.fullText.prefix(12000))
-      let keywords = await executeKeywordSearch(query: String(text.prefix(3000)))
-      let context = ScreenTaskContext.select(keywords: keywords, query: text)
-      let profile = await AIUserProfileService.shared.getLatestProfile()?.profileText ?? ""
-      let gate: ScreenTaskAdmission
-      do {
-        if ocr.fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ocr.fullText.count > 12000 {
-          DesktopDiagnosticsManager.shared.recordFallback(
-            area: "screen_task_gate", from: "other", to: "none", reason: "other", outcome: .recovered)
-          // Truncation could hide a new request. Missing/oversized OCR never rejects a frame.
-          gate = ScreenTaskAdmission(shouldExtract: true, gateOutcome: "fail_open", auditSample: false)
-        } else {
-          gate = try await APIClient.shared.screenTaskGate(
-            ocrText: text, app: frame.appName,
-            profile: String(profile.prefix(1024)),
-            tasks: Array(context.prefix(4)).map { "[\($0.status)] \($0.description.prefix(512))" },
-            authorization: authorization)
-        }
-      } catch {
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization), !Task.isCancelled else {
-          throw CancellationError()
-        }
+    let services = ScreenTaskPipelineServices(
+      validateFrame: validateFrame,
+      validateFeature: { guard lease.isCurrent() else { throw ScreenTaskFailure.stopped } },
+      quota: {
+        try await ScreenTaskFeature.enforceQuota()
+        if let failure = ScreenTaskBackpressure.shared.blockedFailure(authorization) { throw failure }
+      },
+      ocr: { try await RewindOCRService.shared.extractTextWithBounds(from: $0) },
+      retrieve: { await self.executeKeywordSearch(query: $0) },
+      profile: { await AIUserProfileService.shared.getLatestProfile()?.profileText ?? "" },
+      gate: { text, profile, tasks in
+        try await APIClient.shared.screenTaskGate(
+          ocrText: text, app: frame.appName, profile: profile, tasks: tasks,
+          authorization: authorization)
+      },
+      extract: { body, gate in
+        try await APIClient.shared.extractScreenTask(
+          body: body, authorization: authorization,
+          gateOutcome: gate.gateOutcome, auditSample: gate.auditSample, clientBypass: gate.clientBypass)
+      },
+      legacy: {
+        let (results, searches) = try await self.extractTaskSingleStage(
+          from: frame.jpegData, appName: frame.appName, authorization: authorization)
+        return ScreenTaskExtraction(results: results, searchCount: searches, extractor: "legacy")
+      },
+      fallback: { area, reason in
         DesktopDiagnosticsManager.shared.recordFallback(
-          area: "screen_task_gate", from: "other", to: "none", reason: "other", outcome: .recovered)
-        gate = ScreenTaskAdmission(shouldExtract: true, gateOutcome: "fail_open", auditSample: false)
-      }
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization), !Task.isCancelled else {
-        throw CancellationError()
-      }
-      admission = gate
-      guard gate.shouldExtract else {
-        screenTaskDedupe.record(key: key, lines: lines, now: frame.captureTime)
-        return ScreenTaskExtraction(results: [], searchCount: 1)
-      }
-      let formatter = DateFormatter()
-      formatter.locale = Locale(identifier: "en_US_POSIX")
-      formatter.dateFormat = "yyyy-MM-dd"  // omi-ux-allow: date-format-string -- Fixed extractor wire date, never user-facing UI.
-      let today = formatter.string(from: Date())
-      let body = try ScreenTaskPrompt.request(
-        jpeg: frame.jpegData, app: frame.appName, profile: profile, tasks: context, today: today)
-      let response = try await APIClient.shared.extractScreenTask(
-        body: body, authorization: authorization,
-        gateOutcome: gate.gateOutcome, auditSample: gate.auditSample)
-      let results = try JSONDecoder().decode(ScreenTaskResponse.self, from: Data(response.utf8)).results(
-        app: frame.appName, context: context, today: today)
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw CancellationError() }
-      screenTaskDedupe.record(key: key, lines: lines, now: frame.captureTime)
-      return ScreenTaskExtraction(results: results, searchCount: 1, admission: gate)
-    } catch {
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization), !Task.isCancelled else {
-        throw CancellationError()
-      }
-      DesktopDiagnosticsManager.shared.recordFallback(
-        area: "screen_task_extraction", from: "other", to: "other", reason: "other", outcome: .degraded)
-      let (results, searchCount) = try await extractTaskSingleStage(
-        from: frame.jpegData, appName: frame.appName, authorization: authorization)
-      return ScreenTaskExtraction(results: results, searchCount: searchCount, admission: admission)
-    }
+          area: area,
+          from: area == "screen_task_gate" ? "jev" : "gemini_3_8",
+          to: area == "screen_task_gate" ? "gemini_3_8" : "legacy",
+          reason: reason, outcome: .degraded)
+      })
+    let key = "\(authorization.ownerID):\(authorization.authorizationGeneration):\(Self.analyzedKey(for: frame))"
+    return try await screenTaskPipeline.run(frame: frame, key: key, services: services, metrics: metrics)
   }
 }

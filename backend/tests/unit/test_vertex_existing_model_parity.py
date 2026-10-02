@@ -17,6 +17,8 @@ from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.providers import ProviderFailure, VertexGeminiProvider
 from llm_gateway.gateway.schemas import FailureClass, ProviderRef
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm.desktop_gemini_gateway import gemini_body_to_openai_chat
+from llm_gateway.gateway.vertex_wire import _vertex_request
 
 
 @pytest.mark.asyncio
@@ -282,3 +284,13 @@ def held_discovery_leases_for_request_matrix(monkeypatch):
     from utils.llm import vertex_reservation_state
 
     monkeypatch.setattr(vertex_reservation_state, 'discovery_models', lambda _: frozenset())
+
+
+@pytest.mark.parametrize('thinking', [{'thinkingBudget': 0}, {'thinkingLevel': 'high'}])
+def test_bff_to_vertex_wire_accepts_explicit_zero_budget_and_flash_lite_level(thinking):
+    body = {
+        'contents': [{'role': 'user', 'parts': [{'text': 'synthetic'}]}],
+        'generationConfig': {'thinkingConfig': thinking},
+    }
+    translated = gemini_body_to_openai_chat(body, lane_id='omi:auto:desktop-vertex-flash-lite', stream=False)
+    assert _vertex_request(translated)['generationConfig']['thinkingConfig'] == thinking

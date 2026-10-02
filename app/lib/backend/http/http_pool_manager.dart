@@ -56,7 +56,7 @@ class HttpPoolManager {
 
     if (isGet) {
       _pendingGets[url] = future;
-      future.whenComplete(() => _pendingGets.remove(url));
+      future.whenComplete(() => _pendingGets.remove(url)).ignore();
     }
     return future;
   }

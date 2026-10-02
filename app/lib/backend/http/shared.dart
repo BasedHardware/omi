@@ -82,9 +82,7 @@ Future<String> getAuthHeader({
         return 'Bearer $token';
       case AuthTokenMissingToken():
         if (expireTerminalSession) {
-          await service.expireSession(
-            const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
-          );
+          await service.expireSession(const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken));
         }
         throw AuthTokenUnavailableException(refreshResult);
       case AuthTokenTerminalFailure(:final code):
@@ -118,9 +116,10 @@ Future<String> getAuthHeader({
       jwtExpiry(storedToken) ?? DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = storedToken.isNotEmpty;
 
-  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
-      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid =
+      !(expiry.isBefore(DateTime.now()) ||
+          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshResult = await AuthService.instance.refreshIdToken();
@@ -377,9 +376,9 @@ Future<void> _handleAuthUnavailable(
     AuthTokenMissingUser() => null,
     AuthTokenMissingToken() => const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
     AuthTokenTerminalFailure(:final code) => AuthSessionExpiredEvent(
-        reason: AuthSessionExpirationReason.terminalTokenFailure,
-        code: code,
-      ),
+      reason: AuthSessionExpirationReason.terminalTokenFailure,
+      code: code,
+    ),
     _ => null,
   };
   if (event != null) await AuthService.instance.expireSession(event);
@@ -640,7 +639,7 @@ Future<http.StreamedResponse> _sendMultipartWithProgress(
   );
 
   final future = HttpPoolManager.instance.sendStreaming(streamedRequest);
-  future.whenComplete(subscription.cancel);
+  future.whenComplete(subscription.cancel).ignore();
   return future;
 }
 

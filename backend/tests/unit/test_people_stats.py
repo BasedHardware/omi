@@ -4,7 +4,11 @@ from models.other import Person
 from types import SimpleNamespace
 
 from models.transcript_segment import TranscriptSegment
-from utils.sync.speaker_identity import SpeakerIdentityDependencies, identify_speakers_for_segments
+from utils.sync.speaker_identity import (
+    PersonEmbeddingsCache,
+    SpeakerIdentityDependencies,
+    identify_speakers_for_segments,
+)
 from utils.people_stats import aggregate_people_stats, apply_people_stats, collect_people_stats
 
 
@@ -41,17 +45,22 @@ def test_ignores_locked_and_malformed_rows():
     assert set(stats) == {"p3"} and stats["p3"]["talk_seconds"] == 0.0
 
 
-def test_collect_stops_at_cap_and_short_page():
+def test_collect_stops_at_cap_and_iterator_end():
     rows = [_conv(None, {"person_id": "p1", "start": 0, "end": 1}) for _ in range(30)]
-    calls = []
+    assert collect_people_stats(iter(rows), scan_cap=25)["p1"]["conversation_count"] == 25
+    assert collect_people_stats(iter(rows), scan_cap=100)["p1"]["conversation_count"] == 30
 
-    def fetch(limit, offset):
-        calls.append((limit, offset))
-        return rows[offset : offset + limit]
 
-    assert collect_people_stats(fetch, scan_cap=25, batch=10)["p1"]["conversation_count"] == 25
-    assert calls == [(10, 0), (10, 10), (5, 20)]
-    assert collect_people_stats(fetch, scan_cap=100, batch=10)["p1"]["conversation_count"] == 30
+def test_collect_pulls_no_rows_past_the_cap():
+    pulled = []
+
+    def rows():
+        for index in range(30):
+            pulled.append(index)
+            yield _conv(None, {"person_id": "p1", "start": 0, "end": 1})
+
+    assert collect_people_stats(rows(), scan_cap=25)["p1"]["conversation_count"] == 25
+    assert len(pulled) == 25
 
 
 def test_auto_conversation_count_needs_every_label_automatic():
@@ -98,7 +107,7 @@ def test_sync_text_matches_are_automatic_without_changing_manual_labels():
                 id='manual', text='hello', speaker_id=speaker_id, is_user=False, person_id='p2', start=6, end=9
             ),
         ]
-        identify_speakers_for_segments(segments, None, {}, 'u', dependencies=deps)
+        identify_speakers_for_segments(segments, None, PersonEmbeddingsCache(True), 'u', dependencies=deps)
         assert segments[0].person_id == 'p1'
         assert segments[0].speaker_match_source == 'sync_text'
         assert segments[1].person_id == ('p1' if speaker_id > 0 else None)
@@ -111,84 +120,37 @@ def test_sync_text_matches_are_automatic_without_changing_manual_labels():
 
 # --- #19908: a dropped invisible row must not end the scan -------------------
 #
-# A server-side limit/offset reader drops invisible rows in Python without
-# padding, so a short page there only means "some rows in this window were
-# filtered". The scan is therefore driven through the scan-and-fill reader
-# (`include_discarded=True`), which keeps reading until the page is full;
-# rows that the scan reads only to keep the offset aligned are excluded
-# during aggregation.
+# collect_people_stats consumes one iterator owned by
+# ``database.conversation_scan.iter_conversations``: paging is by snapshot
+# cursor (never offset), invisible rows advance the cursor, and budget
+# exhaustion returns the honest prefix. The skip-without-truncating
+# regressions for that contract live in tests/unit/test_conversation_scan.py;
+# these pin what the aggregator owes any iterable it is given.
 
 
-class _ScanAndFillReader:
-    """Mirrors ``_collect_visible_conversation_page``'s ``include_discarded=True`` branch.
+def test_collect_consumes_a_single_iterator_once():
+    consumed = []
 
-    The detail that matters: ``offset`` counts **visible** rows already returned,
-    and rows that fail visibility are skipped *without* counting toward it —
-    exactly what the real branch does with ``skipped_visible``. A fake that
-    applied ``offset`` to raw rows instead would re-deliver an already-seen
-    row on the second page and let a double-count pass as correct.
-    """
+    def rows():
+        for index in range(25):
+            consumed.append(index)
+            yield _conv(None, {"person_id": "p1", "start": 0, "end": 1})
 
-    def __init__(self, rows, invisible_keys=()):
-        self.rows = rows
-        self.invisible = set(invisible_keys)
-        self.calls = []
-
-    def __call__(self, limit, offset):
-        self.calls.append((limit, offset))
-        out = []
-        skipped_visible = 0
-        for index, row in enumerate(self.rows):
-            if index in self.invisible:
-                continue
-            if skipped_visible < offset:
-                skipped_visible += 1
-                continue
-            out.append(row)
-            if len(out) >= limit:
-                break
-        return out
-
-
-def test_scan_survives_a_tombstone_inside_the_window():
-    # Ten stored rows, one of them a tombstone the reader must skip.
-    rows = [_conv(None, {"person_id": "p1", "start": 0, "end": 1}) for _ in range(10)]
-    reader = _ScanAndFillReader(rows, invisible_keys={1})
-
-    stats = collect_people_stats(reader, scan_cap=10, batch=4)
-
-    # Nine visible conversations: the tombstone is skipped without truncating
-    # the page and without being counted as a visible row.
-    assert stats["p1"]["conversation_count"] == 9
-    assert reader.calls == [(4, 0), (4, 4), (2, 8)]
-
-
-def test_scan_walks_several_full_pages():
-    rows = [_conv(None, {"person_id": "p1", "start": 0, "end": 1}) for _ in range(25)]
-    reader = _ScanAndFillReader(rows)
-
-    stats = collect_people_stats(reader, scan_cap=100, batch=10)
-
+    stats = collect_people_stats(rows(), scan_cap=100)
     assert stats["p1"]["conversation_count"] == 25
-    # Two full pages, then a short one: the offsets advance by what was
-    # actually returned, which is only true because the reader fills pages.
-    assert reader.calls == [(10, 0), (10, 10), (10, 20)]
+    assert len(consumed) == 25
 
 
-def test_short_page_from_a_scan_and_fill_reader_still_ends_the_scan():
-    rows = [_conv(None, {"person_id": "p1", "start": 0, "end": 1}) for _ in range(6)]
-    reader = _ScanAndFillReader(rows)
-
-    stats = collect_people_stats(reader, scan_cap=100, batch=10)
-
-    assert stats["p1"]["conversation_count"] == 6
-    # Six rows cannot fill a page of ten, so that short page is real
-    # exhaustion and the scan stops after one read.
-    assert reader.calls == [(10, 0)]
+def test_collect_counts_every_row_a_thin_iterator_yields():
+    # A window thinned by tombstones reaches the aggregator as exactly the
+    # visible rows; all of them count.
+    rows = [_conv(None, {"person_id": "p1", "start": 0, "end": 1}) for _ in range(9)]
+    stats = collect_people_stats(iter(rows), scan_cap=10)
+    assert stats["p1"]["conversation_count"] == 9
 
 
-def test_aggregate_skips_discarded_rows_scanned_to_keep_the_offset_aligned():
-    """Discarded rows reach the scanner only to keep pages full; stats ignore them."""
+def test_aggregate_skips_discarded_rows():
+    """An include_discarded reader still delivers them; stats ignore them."""
     t = datetime(2026, 9, 5, tzinfo=timezone.utc)
     stats = aggregate_people_stats(
         [

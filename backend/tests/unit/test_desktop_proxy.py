@@ -2401,3 +2401,16 @@ def test_gateway_hop_gates_by_action_and_model(monkeypatch):
     # batch embeddings stay on AI Studio: Vertex's batch wire shape differs.
     assert desktop_proxy._company_paid_via_gateway("gemini-embedding-001", "batchEmbedContents") is False
     assert desktop_proxy._company_paid_via_gateway("gemini-2.5-pro", "generateContent") is True
+
+
+@pytest.mark.asyncio
+async def test_screen_task_stop_refuses_flagged_screenshot_before_provider(monkeypatch):
+    monkeypatch.setenv('SCREEN_TASK_STOP', 'true')
+    request = make_request()
+    request.scope['headers'].append((b'x-omi-screen-task-gate', b'passed'))
+    monkeypatch.setattr(desktop_proxy, '_proxy', lambda *a: pytest.fail('stopped frame called provider'))
+    with pytest.raises(HTTPException) as caught:
+        await desktop_proxy.gemini_proxy(request, 'models/gemini-3.8-flash:generateContent', 'synthetic-user')
+    assert caught.value.status_code == 409
+    assert caught.value.detail == {'error': 'screen_task_stopped'}
+    assert caught.value.headers['X-Omi-Retryable'] == 'false'

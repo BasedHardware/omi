@@ -15,7 +15,7 @@ from config import conversation_smart_merge as config
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
-from database import sync_bridges
+from database import sync_bridges, action_item_refresh as refresh_db
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY, INDEX_ONLY_REQUIREMENTS
 from database.legal_holds import DestructiveOperationInProgress
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
@@ -67,8 +67,9 @@ class World:
         self.process_persisted = True
         self.retract_error = None
         self.on_ask = None
-        for module in (smart_merge_db, sync_bridges, conversations_db):
+        for module in (smart_merge_db, sync_bridges, conversations_db, refresh_db):
             monkeypatch.setattr(module, 'get_firestore_client', lambda: self.store)
+        monkeypatch.setattr(refresh_db, 'bump_action_items_list_version', lambda uid: None)
         monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda uid, cid: None)
         monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda uid, cid: None)
         monkeypatch.setattr(conversations_db, 'get_conversation', self.get)
