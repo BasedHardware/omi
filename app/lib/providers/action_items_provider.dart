@@ -1267,15 +1267,24 @@ class ActionItemsProvider extends ChangeNotifier {
 
     final ids = _selectedItems.toList(growable: false);
     final selected = _actionItems.where((i) => ids.contains(i.id)).toList(growable: false);
-    // Exported items can now be selected (Delete shares the bar), but Export
-    // itself silently no-ops on them so the user doesn't double-create on the
-    // integration side.
-    final items = selected.where((i) => !i.exported).toList(growable: false);
+    await exportItems(context, selected, platform, onSettled: endSelection);
+  }
+
+  /// Exports [candidates] to [platform] and posts one snackbar for the outcome. Already-exported
+  /// items are skipped so the integration never gets a duplicate. [onSettled] runs once the work
+  /// is done and before the outcome is shown.
+  Future<void> exportItems(
+    BuildContext context,
+    List<ActionItemWithMetadata> candidates,
+    TaskIntegrationApp platform, {
+    VoidCallback? onSettled,
+  }) async {
+    final items = candidates.where((i) => !i.exported).toList(growable: false);
     final total = items.length;
 
     if (total == 0) {
       OmiFeedback.info(context, context.l10n.bulkExportAlreadyExported);
-      endSelection();
+      onSettled?.call();
       return;
     }
 
@@ -1286,7 +1295,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
     // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.
     await fetchActionItems();
-    endSelection();
+    onSettled?.call();
 
     if (!context.mounted) {
       return;

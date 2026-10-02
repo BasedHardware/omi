@@ -1,6 +1,7 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
@@ -8,12 +9,14 @@ import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 
 import 'task_categorization.dart';
@@ -557,7 +560,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ] else ...[
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
 
-          // Build each category section (skip empty ones, skip overdue — rendered separately below)
+          // Overdue first, expanded by default: what slipped is the first thing on the page.
+          if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
+            SliverToBoxAdapter(
+              child: _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
+            ),
+
+          // Then each dated section in order (empty ones skipped; overdue is above).
           for (final category in TaskCategory.values)
             if (category != TaskCategory.overdue && (categorizedItems[category] ?? []).isNotEmpty)
               SliverToBoxAdapter(
@@ -567,12 +576,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   provider: provider,
                 ),
               ),
-
-          // Overdue section — expanded by default
-          if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
-            SliverToBoxAdapter(
-              child: _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
-            ),
         ],
 
         // Bottom padding so the last row scrolls clear of the nav bar
@@ -623,24 +626,30 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                _noDeadlineExpanded ? Icons.expand_less : Icons.expand_more,
-                                color: OmiColors.textTertiary,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(title.toUpperCase(), style: _sectionLabelStyle),
+                              Text(title, style: _sectionLabelStyle),
                               if (orderedItems.isNotEmpty) ...[
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 6),
                                 _SectionCount(orderedItems.length),
                               ],
+                              const SizedBox(width: 4),
+                              _SectionChevron(expanded: _noDeadlineExpanded),
                             ],
                           ),
                         )
                       else
                         Padding(
                           padding: _sectionHeaderLinePadding,
-                          child: Text(title.toUpperCase(), style: _sectionLabelStyle),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(title, style: _sectionLabelStyle),
+                              // In the completed view the count sits on the right, as "clear these N".
+                              if (!provider.showCompletedView && orderedItems.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                _SectionCount(orderedItems.length),
+                              ],
+                            ],
+                          ),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
@@ -659,8 +668,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               ],
                             ),
                           )
-                        else if (orderedItems.isNotEmpty)
-                          Padding(padding: _sectionHeaderLinePadding, child: _SectionCount(orderedItems.length)),
                       ] else if (provider.showCompletedView && orderedItems.isNotEmpty && _noDeadlineExpanded)
                         _SectionHeaderTapTarget(
                           semanticLabel: context.l10n.tasksClearCompleted,
@@ -676,8 +683,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 if (orderedItems.isNotEmpty && (category != TaskCategory.noDeadline || _noDeadlineExpanded))
                   _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
 
-                // Task items. Row padding alone carries the rhythm — no
-                // dividers between rows; matches Things 3 / Apple Reminders.
+                // Task items, with a hairline between rows (see _buildTaskItemContent).
                 if (category != TaskCategory.noDeadline || _noDeadlineExpanded)
                   ...orderedItems.map(
                     (item) => _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
@@ -714,15 +720,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        _overdueExpanded ? Icons.expand_less : Icons.expand_more,
-                        color: OmiColors.textTertiary,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(context.l10n.tasksOverdue.toUpperCase(), style: _sectionLabelStyle),
-                      const SizedBox(width: 8),
+                      Text(context.l10n.tasksOverdue, style: _sectionLabelStyle),
+                      const SizedBox(width: 6),
                       _SectionCount(orderedItems.length),
+                      const SizedBox(width: 4),
+                      _SectionChevron(expanded: _overdueExpanded),
                     ],
                   ),
                 ),
@@ -1082,6 +1084,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           label: item.completed ? l10n.markIncomplete : l10n.markComplete,
           onSelected: () => _toggleCompleted(provider, item),
         ),
+        if (!item.exported)
+          OmiMenuAction(icon: Icons.ios_share_rounded, label: l10n.exportButton, onSelected: () => _exportTask(item)),
         if (item.indentLevel < maxIndent)
           OmiMenuAction(
             icon: Icons.format_indent_increase_rounded,
@@ -1112,6 +1116,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  /// One task to the connected task app, the way the selection bar exports several.
+  Future<void> _exportTask(ActionItemWithMetadata item) async {
+    OmiHaptics.light();
+    final integrations = Provider.of<TaskIntegrationProvider>(context, listen: false);
+    final connected = TaskIntegrationApp.values.where(integrations.isAppConnected).toList(growable: false);
+    if (connected.isEmpty) {
+      OmiFeedback.error(
+        context,
+        context.l10n.connectTaskAppToExport,
+        actionLabel: context.l10n.connectAction,
+        onAction: () => routeToPage(context, const TaskIntegrationsPage()),
+      );
+      return;
+    }
+    await Provider.of<ActionItemsProvider>(context, listen: false).exportItems(context, [item], connected.first);
+  }
+
   TaskCategory _getCategoryForItem(ActionItemWithMetadata item) =>
       categoryForItem(item, Provider.of<ActionItemsProvider>(context, listen: false).showCompletedView);
 
@@ -1124,6 +1145,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final indentLevel = _getIndentLevel(item);
     final goalTitle = _getGoalTitleForTask(item);
     final isSelected = provider.isSelectionMode && provider.isItemSelected(item.id);
+    final category = _getCategoryForItem(item);
+    final dueLabel = _dueDayLabel(item, category);
+    // Hairline under every row but a section's last, starting where the title starts.
+    final showDivider = categoryItems.isNotEmpty && categoryItems.last.id != item.id;
+    final titleInset = 4 + indentWidth + (indentLevel > 0 ? 11.5 : 0) + 44;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1142,89 +1168,127 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           color: isSelected ? OmiColors.surface2 : Colors.transparent,
           borderRadius: OmiRadius.smAll,
         ),
-        child: Padding(
-          padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 0, bottom: 0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Indent line
-              if (indentLevel > 0)
-                Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: Container(
-                    width: 1.5,
-                    height: 20,
-                    decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
-                  ),
-                ),
-              // Completion circle — always shown. Read-only in selection mode
-              // (the row tap drives selection there); tappable otherwise.
-              Semantics(
-                button: !provider.isSelectionMode,
-                checked: item.completed,
-                label: item.completed ? context.l10n.markIncomplete : context.l10n.markComplete,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: provider.isSelectionMode ? null : () => _toggleCompleted(provider, item),
-                  child: SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: Center(child: TaskCompletionMark(completed: item.completed)),
-                  ),
-                ),
-              ),
-              // Task text
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        item.description,
-                        style: OmiType.callout.copyWith(
-                          color: item.completed ? OmiColors.textTertiary : OmiColors.textPrimary,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: -0.2,
-                          decoration: item.completed ? TextDecoration.lineThrough : null,
-                          decorationColor: OmiColors.textTertiary,
-                        ),
+        child: Stack(
+          children: [
+            Padding(
+              padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 0, bottom: 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Indent line
+                  if (indentLevel > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: Container(
+                        width: 1.5,
+                        height: 20,
+                        decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
                       ),
-                      if (goalTitle != null) ...[
-                        const SizedBox(height: 4),
-                        Text(goalTitle, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-                      ],
-                      if (item.exported && item.exportPlatform != null) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(Icons.check_circle_outline, size: 12, color: OmiColors.textTertiary),
-                            const SizedBox(width: 4),
-                            Text(
-                              context.l10n.exportedToPlatform(_exportPlatformLabel(item.exportPlatform!)),
-                              style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                    ),
+                  // Completion circle — always shown. Read-only in selection mode
+                  // (the row tap drives selection there); tappable otherwise.
+                  Semantics(
+                    button: !provider.isSelectionMode,
+                    checked: item.completed,
+                    label: item.completed ? context.l10n.markIncomplete : context.l10n.markComplete,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: provider.isSelectionMode ? null : () => _toggleCompleted(provider, item),
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Center(child: TaskCompletionMark(completed: item.completed)),
+                      ),
+                    ),
+                  ),
+                  // Task text
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            item.description,
+                            style: OmiType.body.copyWith(
+                              color: item.completed ? OmiColors.textTertiary : OmiColors.textPrimary,
+                              letterSpacing: -0.35,
+                              decoration: item.completed ? TextDecoration.lineThrough : null,
+                              decorationColor: OmiColors.textTertiary,
+                            ),
+                          ),
+                          if (goalTitle != null) ...[
+                            const SizedBox(height: 4),
+                            Text(goalTitle, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                          ],
+                          if (item.exported && item.exportPlatform != null) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(Icons.check_circle_outline, size: 12, color: OmiColors.textTertiary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  context.l10n.exportedToPlatform(_exportPlatformLabel(item.exportPlatform!)),
+                                  style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                                ),
+                              ],
                             ),
                           ],
-                        ),
-                      ],
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  // The due day where the section name doesn't already say it: red while overdue.
+                  if (dueLabel != null)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, right: 8),
+                      child: Text(
+                        dueLabel,
+                        style: OmiType.subhead.copyWith(
+                          color: category == TaskCategory.overdue && !item.completed
+                              ? OmiColors.danger
+                              : OmiColors.textTertiary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                  // Trailing square selection box — only in selection mode.
+                  // Different shape + position from the leading completion circle
+                  // so completion vs. selection cannot be confused.
+                  if (provider.isSelectionMode)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, right: 8),
+                      child: TaskSelectionSquare(selected: isSelected),
+                    ),
+                ],
               ),
-              // Trailing square selection box — only in selection mode.
-              // Different shape + position from the leading completion circle
-              // so completion vs. selection cannot be confused.
-              if (provider.isSelectionMode)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 8),
-                  child: TaskSelectionSquare(selected: isSelected),
-                ),
-            ],
-          ),
+            ),
+            if (showDivider)
+              Positioned(
+                left: titleInset,
+                right: 4,
+                bottom: 0,
+                child: Container(height: 0.5, color: OmiColors.border),
+              ),
+          ],
         ),
       ),
     );
+  }
+
+  /// "Wed", "Sun" within a week, "Oct 14" beyond it — only where the section name leaves the day
+  /// open (Overdue and Later). Today, Tomorrow and No Deadline already say it.
+  String? _dueDayLabel(ActionItemWithMetadata item, TaskCategory category) {
+    final due = item.dueAt;
+    if (due == null || (category != TaskCategory.overdue && category != TaskCategory.later)) return null;
+    final now = DateTime.now();
+    final local = due.toLocal();
+    final days =
+        (DateTime(local.year, local.month, local.day).difference(DateTime(now.year, now.month, now.day)).inHours / 24)
+            .round();
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    return days.abs() < 7 ? DateFormat.E(locale).format(local) : DateFormat.MMMd(locale).format(local);
   }
 
   String _exportPlatformLabel(String platform) {
@@ -1253,12 +1317,25 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 /// and the sliver of space between it and the first task row.
 const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
-/// A section header's label ("TODAY", "OVERDUE").
-final TextStyle _sectionLabelStyle = OmiType.footnote.copyWith(
-  color: OmiColors.textTertiary,
-  fontWeight: FontWeight.w600,
-  letterSpacing: 0.8,
-);
+/// A section header's label ("Today", "Overdue"): sentence case, quieter than the rows.
+TextStyle get _sectionLabelStyle =>
+    OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600);
+
+/// The fold mark after a collapsible section's count: down when open, right when folded.
+class _SectionChevron extends StatelessWidget {
+  const _SectionChevron({required this.expanded});
+
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      expanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded,
+      color: OmiColors.textTertiary,
+      size: 16,
+    );
+  }
+}
 
 /// The count beside a section header, read out as "3 tasks" rather than a bare number.
 class _SectionCount extends StatelessWidget {
