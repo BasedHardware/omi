@@ -1150,6 +1150,8 @@
     "selectAudioInput": "เลือกอินพุตเสียง",
     "loadingDevices": "กำลังโหลดอุปกรณ์…",
     "settingsHeader": "การตั้งค่า",
+    "settingsSectionRecording": "การบันทึก",
+    "settingsSectionSupport": "ฝ่ายสนับสนุน",
     "plansAndBilling": "แผนและการเรียกเก็บเงิน",
     "calendarIntegration": "การรวมปฏิทิน",
     "dailySummary": "สรุปรายวัน",
@@ -3782,7 +3784,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi จะจำเสียงของ {name} ได้ในครั้งหน้า} pending{ใช้เวลาไม่กี่วินาที} disabled{เปิดการบันทึกเสียงในการตั้งค่าเพื่อให้ Omi จำเสียงของ {name} ได้} other{Omi ต้องการเสียงพูดที่ชัดเจนจาก {name} มากขึ้น และจะพยายามต่อไป}}",
     "speakerLabelEarlierMatches": "การสนทนาก่อนหน้าที่มีเสียงนี้: {count}",
     "speakerLabelText": "{part, select, likely{น่าจะเป็น} soundsLike{เสียงคล้าย {name}} notPerson{ไม่ใช่ {name}} carried{ยังคงเป็น {name} ต่อจากการสนทนาครั้งล่าสุดของคุณ} change{เปลี่ยน} alsoTitle{นี่คือ {name} ด้วยหรือไม่} alsoBody{Omi พบเสียงเดียวกันในการสนทนาก่อนหน้า} confirmed{คุณยืนยันป้ายชื่อนี้แล้ว} other{ตรวจสอบ}}",
-    "speakerLabelTalkTime": "{duration} ของเสียงนี้",
-    "settingsSectionRecording": "การบันทึก",
-    "settingsSectionSupport": "ฝ่ายสนับสนุน"
+    "speakerLabelTalkTime": "{duration} ของเสียงนี้"
 }

@@ -3780,6 +3780,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsHeader => 'НАСТРОЙКИ';
 
   @override
+  String get settingsSectionRecording => 'Запись';
+
+  @override
+  String get settingsSectionSupport => 'Поддержка';
+
+  @override
   String get plansAndBilling => 'Планы и Оплата';
 
   @override
@@ -4382,7 +4388,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get saveKeyWarning => 'Сохраните этот ключ сейчас! Вы больше не сможете его увидеть.';
 
   @override
-  String get yourApiKey => 'Ваш API ключ';
+  String get yourApiKey => 'Ваш API-ключ';
 
   @override
   String get tapToCopy => 'Нажмите, чтобы скопировать';
@@ -12263,10 +12269,4 @@ class AppLocalizationsRu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration этого голоса';
   }
-
-  @override
-  String get settingsSectionRecording => 'Запись';
-
-  @override
-  String get settingsSectionSupport => 'Поддержка';
 }

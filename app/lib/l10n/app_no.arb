@@ -1150,6 +1150,8 @@
     "selectAudioInput": "Velg lydinngang",
     "loadingDevices": "Laster inn enheter…",
     "settingsHeader": "INNSTILLINGER",
+    "settingsSectionRecording": "Opptak",
+    "settingsSectionSupport": "Støtte",
     "plansAndBilling": "Planer og Fakturering",
     "calendarIntegration": "Kalenderintegrasjon",
     "dailySummary": "Daglig sammendrag",
@@ -3782,7 +3784,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi gjenkjenner {name} neste gang.} pending{Dette tar noen sekunder.} disabled{Slå på lagring av stemmer i Innstillinger, så Omi kan gjenkjenne {name}.} other{Omi trenger mer tydelig tale fra {name} og fortsetter å prøve.}}",
     "speakerLabelEarlierMatches": "Tidligere samtaler med denne stemmen: {count}",
     "speakerLabelText": "{part, select, likely{Sannsynlig} soundsLike{Høres ut som {name}} notPerson{Ikke {name}} carried{Fortsatt {name}. Videreført fra den siste samtalen din.} change{Endre} alsoTitle{Er dette også {name}?} alsoBody{Omi fant den samme stemmen i tidligere samtaler.} confirmed{Du har bekreftet denne etiketten} other{Gjennomgå}}",
-    "speakerLabelTalkTime": "{duration} av denne stemmen",
-    "settingsSectionRecording": "Opptak",
-    "settingsSectionSupport": "Støtte"
+    "speakerLabelTalkTime": "{duration} av denne stemmen"
 }

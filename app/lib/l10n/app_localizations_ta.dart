@@ -3798,6 +3798,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get settingsHeader => 'அமைப்புகள்';
 
   @override
+  String get settingsSectionRecording => 'பதிவு';
+
+  @override
+  String get settingsSectionSupport => 'ஆதரவு';
+
+  @override
   String get plansAndBilling => 'திட்டங்கள் மற்றும் பில்லிங்';
 
   @override
@@ -12305,10 +12311,4 @@ class AppLocalizationsTa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'இந்தக் குரலின் $duration';
   }
-
-  @override
-  String get settingsSectionRecording => 'பதிவு';
-
-  @override
-  String get settingsSectionSupport => 'ஆதரவு';
 }

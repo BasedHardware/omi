@@ -3710,6 +3710,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsHeader => '設定';
 
   @override
+  String get settingsSectionRecording => '録音';
+
+  @override
+  String get settingsSectionSupport => 'サポート';
+
+  @override
   String get plansAndBilling => 'プランと請求';
 
   @override
@@ -12027,10 +12033,4 @@ class AppLocalizationsJa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
-
-  @override
-  String get settingsSectionRecording => '録音';
-
-  @override
-  String get settingsSectionSupport => 'サポート';
 }

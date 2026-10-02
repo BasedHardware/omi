@@ -371,15 +371,25 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                              child: Text(context.l10n.estimatedTimeRemaining(estimatedTime), style: captionStyle)),
-                          const SizedBox(width: OmiSpacing.sm),
-                          Text('${number.format(job.processedFiles ?? 0)}/${number.format(job.totalFiles)}',
-                              style: captionStyle),
-                        ],
+                      LayoutBuilder(
+                        builder: (context, constraints) => Row(
+                          children: [
+                            Expanded(
+                                child: Text(context.l10n.estimatedTimeRemaining(estimatedTime), style: captionStyle)),
+                            const SizedBox(width: OmiSpacing.sm),
+                            // Capped at 40% of the row and scaled down past it, so a large count at a
+                            // large text scale still reads in full instead of overflowing.
+                            ConstrainedBox(
+                              constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                    '${number.format(job.processedFiles ?? 0)}/${number.format(job.totalFiles)}',
+                                    style: captionStyle),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: OmiSpacing.sm),
                       ClipRRect(

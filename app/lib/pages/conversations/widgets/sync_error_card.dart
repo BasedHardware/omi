@@ -36,7 +36,13 @@ class SyncErrorCard extends StatelessWidget {
                   // (Retry sits under it, not beside it).
                   Text(message, style: OmiType.footnote.copyWith(color: OmiColors.danger)),
                   const SizedBox(height: OmiSpacing.sm),
-                  OmiButton.secondary(label: context.l10n.retry, size: OmiButtonSize.compact, onPressed: onRetry),
+                  // Wraps rather than ellipsizes: a long localized Retry still reads in full.
+                  OmiButton.secondary(
+                    label: context.l10n.retry,
+                    size: OmiButtonSize.compact,
+                    wrapLabel: true,
+                    onPressed: onRetry,
+                  ),
                 ],
               ),
             ),

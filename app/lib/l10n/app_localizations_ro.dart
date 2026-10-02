@@ -3793,6 +3793,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get settingsHeader => 'SETĂRI';
 
   @override
+  String get settingsSectionRecording => 'Înregistrare';
+
+  @override
+  String get settingsSectionSupport => 'Asistență';
+
+  @override
   String get plansAndBilling => 'Planuri și Facturare';
 
   @override
@@ -12277,10 +12283,4 @@ class AppLocalizationsRo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }
-
-  @override
-  String get settingsSectionRecording => 'Înregistrare';
-
-  @override
-  String get settingsSectionSupport => 'Asistență';
 }

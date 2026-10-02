@@ -335,5 +335,21 @@ void main() {
     expect(glyphOf(en.deleteAccountTitle), OmiLineGlyph.person);
     expect(glyphOf(en.language), OmiLineGlyph.microphone);
     expect(glyphOf(en.dataProtection), OmiLineGlyph.shield);
+
+    // Every result, not only the three above, shows its destination's glyph.
+    for (final row in results) {
+      final tile = tester.widget<OmiSettingsIconTile>(
+          find.descendant(of: find.byWidget(row), matching: find.byType(OmiSettingsIconTile)));
+      // A custom tile (Sign out, in red) draws the same glyph itself.
+      final glyph = tile.glyph ??
+          tester
+              .widget<OmiLineIcon>(find.descendant(of: find.byWidget(tile), matching: find.byType(OmiLineIcon)))
+              .glyph;
+      final expected = {
+        for (final entry in settingsSearchEntries)
+          if (entry.title(en) == row.title) settingsGlyph(entry.destination),
+      };
+      expect(expected, contains(glyph), reason: row.title);
+    }
   });
 }

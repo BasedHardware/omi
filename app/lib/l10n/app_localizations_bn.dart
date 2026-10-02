@@ -3775,6 +3775,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get settingsHeader => 'সেটিংস';
 
   @override
+  String get settingsSectionRecording => 'রেকর্ডিং';
+
+  @override
+  String get settingsSectionSupport => 'সহায়তা';
+
+  @override
   String get plansAndBilling => 'পরিকল্পনা ও বিলিং';
 
   @override
@@ -12222,10 +12228,4 @@ class AppLocalizationsBn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'এই ভয়েসের $duration';
   }
-
-  @override
-  String get settingsSectionRecording => 'রেকর্ডিং';
-
-  @override
-  String get settingsSectionSupport => 'সহায়তা';
 }

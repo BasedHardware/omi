@@ -3785,6 +3785,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get settingsHeader => 'TETAPAN';
 
   @override
+  String get settingsSectionRecording => 'Rakaman';
+
+  @override
+  String get settingsSectionSupport => 'Sokongan';
+
+  @override
   String get plansAndBilling => 'Pelan & Pengebilan';
 
   @override
@@ -12256,10 +12262,4 @@ class AppLocalizationsMs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration daripada suara ini';
   }
-
-  @override
-  String get settingsSectionRecording => 'Rakaman';
-
-  @override
-  String get settingsSectionSupport => 'Sokongan';
 }

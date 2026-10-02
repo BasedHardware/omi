@@ -97,7 +97,11 @@ class _SyncData extends InertSyncProvider {
   final List<SyncedConversationPointer> pointers;
   WalStatusFilter _statusFilter = WalStatusFilter.pending;
 
-  bool _pending(Wal w) => w.status == WalStatus.miss || w.status == WalStatus.inProgress;
+  // Mirrors SyncProvider._isPending: uploaded still counts as pending, terminal failures never do.
+  bool _pending(Wal w) =>
+      w.status != WalStatus.corrupted &&
+      w.status != WalStatus.uploadRejected &&
+      (w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.isSyncing);
 
   @override
   SyncState get syncState => state;
@@ -108,8 +112,16 @@ class _SyncData extends InertSyncProvider {
   @override
   List<Wal> walsForDisplayFilter(WalDisplayFilter filter) => switch (filter) {
         WalDisplayFilter.all => wals,
-        WalDisplayFilter.synced => wals.where((w) => w.status == WalStatus.synced).toList(),
-        WalDisplayFilter.pending => wals.where((w) => w.status != WalStatus.synced).toList(),
+        // Mirrors SyncProvider.walsForDisplayFilter.
+        WalDisplayFilter.synced => wals.where((w) => w.syncDisplayState == WalSyncDisplayState.synced).toList(),
+        WalDisplayFilter.pending => wals
+            .where((w) =>
+                w.status != WalStatus.corrupted &&
+                w.status != WalStatus.outsideRecoveryWindow &&
+                w.status != WalStatus.unsupportedAudio &&
+                w.status != WalStatus.uploadRejected &&
+                w.syncDisplayState != WalSyncDisplayState.synced)
+            .toList(),
       };
   @override
   int get clearableWalsCount => wals.length;
@@ -123,13 +135,13 @@ class _SyncData extends InertSyncProvider {
   @override
   List<SyncedConversationPointer> get syncedConversationsPointers => pointers;
   @override
-  List<Wal> get uploadedWals => const [];
+  List<Wal> get uploadedWals => wals.where((w) => w.status == WalStatus.uploaded).toList();
   @override
   ({int processed, int total}) get offlineServerProcessingCounts => (processed: 2, total: 5);
   @override
   List<Wal> get syncedWals => wals.where((w) => w.status == WalStatus.synced).toList();
   @override
-  List<Wal> get pendingDeletableWals => wals.where(_pending).toList();
+  List<Wal> get pendingDeletableWals => wals.where((w) => !w.isSyncing && w.status == WalStatus.miss).toList();
   // The legacy page.
   @override
   Future<void> refreshWals() async {}

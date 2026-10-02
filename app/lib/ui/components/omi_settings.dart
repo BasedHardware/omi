@@ -175,7 +175,10 @@ Widget _groupedHeader(String title, {String? subtitle, Widget? trailing}) {
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 2),
-          Text(subtitle, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+          Builder(
+            builder: (context) =>
+                Text(subtitle, style: _scaled(context, OmiType.footnote.copyWith(color: OmiColors.textTertiary), 13)),
+          ),
         ],
       ],
     ),
@@ -487,6 +490,7 @@ class OmiSettingsRow extends StatelessWidget {
     this.isDestructive = false,
     this.titleStyle,
     this.subtitleColor,
+    this.subtitleStyle,
     this.titleMaxLines,
     this.subtitleMaxLines,
   })  : toggleValue = null,
@@ -509,6 +513,7 @@ class OmiSettingsRow extends StatelessWidget {
         isDestructive = false,
         titleStyle = null,
         subtitleColor = null,
+        subtitleStyle = null,
         titleMaxLines = null,
         subtitleMaxLines = null;
 
@@ -540,6 +545,9 @@ class OmiSettingsRow extends StatelessWidget {
 
   /// Overrides the tertiary subtitle colour, for a status line that is a warning or an error.
   final Color? subtitleColor;
+
+  /// Merged over the subtitle's footnote style: a key prefix set in monospace, for one.
+  final TextStyle? subtitleStyle;
 
   /// Ellipsize the title or subtitle after this many lines (a name or an email the person typed);
   /// null wraps in full, the default for the app's own words.
@@ -607,7 +615,11 @@ class OmiSettingsRow extends StatelessWidget {
                           maxLines: subtitleMaxLines,
                           overflow: subtitleMaxLines == null ? null : TextOverflow.ellipsis,
                           style: _scaled(
-                              context, OmiType.footnote.copyWith(color: subtitleColor ?? OmiColors.textTertiary), 13),
+                              context,
+                              OmiType.footnote
+                                  .copyWith(color: subtitleColor ?? OmiColors.textTertiary)
+                                  .merge(subtitleStyle),
+                              13),
                         ),
                       ],
                     ],

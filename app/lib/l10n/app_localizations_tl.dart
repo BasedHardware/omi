@@ -3804,6 +3804,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get settingsHeader => 'SETTINGS';
 
   @override
+  String get settingsSectionRecording => 'Pagre-record';
+
+  @override
+  String get settingsSectionSupport => 'Suporta';
+
+  @override
   String get plansAndBilling => 'Mga Plano & Pagbabayad';
 
   @override
@@ -12327,10 +12333,4 @@ class AppLocalizationsTl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
-
-  @override
-  String get settingsSectionRecording => 'Pagre-record';
-
-  @override
-  String get settingsSectionSupport => 'Suporta';
 }

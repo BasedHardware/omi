@@ -3777,6 +3777,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get settingsHeader => 'USTAWIENIA';
 
   @override
+  String get settingsSectionRecording => 'Nagrywanie';
+
+  @override
+  String get settingsSectionSupport => 'Pomoc';
+
+  @override
   String get plansAndBilling => 'Plany i Rozliczenia';
 
   @override
@@ -12260,10 +12266,4 @@ class AppLocalizationsPl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tego głosu';
   }
-
-  @override
-  String get settingsSectionRecording => 'Nagrywanie';
-
-  @override
-  String get settingsSectionSupport => 'Pomoc';
 }

@@ -3778,6 +3778,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get settingsHeader => 'IESTATĪJUMI';
 
   @override
+  String get settingsSectionRecording => 'Ierakstīšana';
+
+  @override
+  String get settingsSectionSupport => 'Atbalsts';
+
+  @override
   String get plansAndBilling => 'Plāni un Norēķini';
 
   @override
@@ -12249,10 +12255,4 @@ class AppLocalizationsLv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration no šīs balss';
   }
-
-  @override
-  String get settingsSectionRecording => 'Ierakstīšana';
-
-  @override
-  String get settingsSectionSupport => 'Atbalsts';
 }

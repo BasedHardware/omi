@@ -146,7 +146,6 @@ class _PaymentsPageState extends State<PaymentsPage> {
       icon: config.icon,
       title: config.title,
       subtitle: config.subtitle,
-      backgroundColor: config.backgroundColor,
       onManageTap: config.onManageTap,
       onSetActiveTap: config.onSetActiveTap,
       isActive: config.isActive,

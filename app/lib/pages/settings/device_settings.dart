@@ -127,19 +127,30 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       _hasMicGainFeature = hasMicGain;
     });
 
-    final ratio = hasDimming ? await connection.getLedDimRatio() : null;
+    final ratio = hasDimming ? await _readOptional(connection.getLedDimRatio) : null;
     if (!mounted) return;
     setState(() {
       if (ratio != null) _dimRatio = ratio.toDouble();
       _isDimRatioLoaded = true; // Loaded; without a value the default stays.
     });
 
-    final gain = hasMicGain ? await connection.getMicGain() : null;
+    final gain = hasMicGain ? await _readOptional(connection.getMicGain) : null;
     if (!mounted) return;
     setState(() {
       if (gain != null) _micGain = gain.toDouble();
       _isMicGainLoaded = true;
     });
+  }
+
+  // A failed optional read leaves its row at the default instead of throwing from a
+  // fire-and-forget call.
+  Future<int?> _readOptional(Future<int?> Function() read) async {
+    try {
+      return await read();
+    } catch (e) {
+      Logger.debug('Device feature read failed: $e');
+      return null;
+    }
   }
 
   Future<void> _updateDimRatio(double value) async {

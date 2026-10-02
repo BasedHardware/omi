@@ -3779,6 +3779,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get settingsHeader => 'ПОСТАВКЕ';
 
   @override
+  String get settingsSectionRecording => 'Снимање';
+
+  @override
+  String get settingsSectionSupport => 'Подршка';
+
+  @override
   String get plansAndBilling => 'Планови и наплате';
 
   @override
@@ -12238,10 +12244,4 @@ class AppLocalizationsSr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration овог гласа';
   }
-
-  @override
-  String get settingsSectionRecording => 'Снимање';
-
-  @override
-  String get settingsSectionSupport => 'Подршка';
 }

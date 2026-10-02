@@ -49,6 +49,8 @@ enum OmiLineGlyph {
   refresh,
   edit,
   search,
+  location,
+  translate,
 }
 
 // Solid ink, no outline.
@@ -163,6 +165,11 @@ const _paths = <OmiLineGlyph, String>{
       '<path $_fine d="M13.8 7.1l3.1 3.1"/><path d="M13 20h6.5"/>',
   OmiLineGlyph.search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3l4.7 4.7"/>',
   OmiLineGlyph.refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4.5H15"/>',
+  // Location: the navigation arrow, with its fold.
+  OmiLineGlyph.location: '<path d="M19.6 4.4L4.4 11l6.9 1.7 1.7 6.9z"/><path $_fine d="M11.3 12.7l4.4-4.4"/>',
+  // Translation: a script character beside a Latin A.
+  OmiLineGlyph.translate: '<path d="M12.6 20.5l3.9-9.5 3.9 9.5M14 17.3h5"/>'
+      '<path $_fine d="M3.5 5.8h9M8 3.5v2.3M10.6 5.8c-.9 3.4-3.3 6.3-6.8 8M6 8.6c1.2 2.2 3 4 5.2 5.1"/>',
 };
 
 /// One [OmiLineGlyph], drawn in [color] or the ambient [IconTheme] colour at [size] (default the
@@ -205,12 +212,14 @@ class OmiBatteryIcon extends StatelessWidget {
     final theme = IconTheme.of(context);
     final side = size ?? theme.size ?? 24;
     final fill = (12.6 * level.clamp(0, 100) / 100).toStringAsFixed(1);
+    // Charging keeps the level, faded, so the solid bolt reads on top of it at any charge.
+    final levelOpacity = charging ? ' fill-opacity=".35"' : '';
     final bolt = charging ? '<path $_ink d="M11.6 8.4l-3 4.1h2.6l-.8 3.1 3-4.1h-2.6z"/>' : '';
     return ExcludeSemantics(
       child: SvgPicture.string(
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
         'stroke-linejoin="round"><rect x="2.5" y="7" width="17" height="10" rx="2.6"/><path d="M21.5 10.3v3.4"/>'
-        '${charging ? '' : '<rect $_ink x="4.7" y="9.2" width="$fill" height="5.6" rx="1.1"/>'}$bolt</svg>',
+        '<rect $_ink$levelOpacity x="4.7" y="9.2" width="$fill" height="5.6" rx="1.1"/>$bolt</svg>',
         width: side,
         height: side,
         theme: SvgTheme(currentColor: color ?? theme.color ?? OmiColors.textPrimary),

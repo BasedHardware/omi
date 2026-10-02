@@ -3746,6 +3746,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get settingsHeader => 'הגדרות';
 
   @override
+  String get settingsSectionRecording => 'הקלטה';
+
+  @override
+  String get settingsSectionSupport => 'תמיכה';
+
+  @override
   String get plansAndBilling => 'תוכניות וחיוב';
 
   @override
@@ -12128,10 +12134,4 @@ class AppLocalizationsHe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration מהקול הזה';
   }
-
-  @override
-  String get settingsSectionRecording => 'הקלטה';
-
-  @override
-  String get settingsSectionSupport => 'תמיכה';
 }

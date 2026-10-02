@@ -3774,6 +3774,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get settingsHeader => 'SEADED';
 
   @override
+  String get settingsSectionRecording => 'Salvestamine';
+
+  @override
+  String get settingsSectionSupport => 'Tugi';
+
+  @override
   String get plansAndBilling => 'Plaanid ja Arveldus';
 
   @override
@@ -12221,10 +12227,4 @@ class AppLocalizationsEt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration sellest häälest';
   }
-
-  @override
-  String get settingsSectionRecording => 'Salvestamine';
-
-  @override
-  String get settingsSectionSupport => 'Tugi';
 }

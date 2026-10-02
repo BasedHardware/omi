@@ -3747,6 +3747,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get settingsHeader => 'การตั้งค่า';
 
   @override
+  String get settingsSectionRecording => 'การบันทึก';
+
+  @override
+  String get settingsSectionSupport => 'ฝ่ายสนับสนุน';
+
+  @override
   String get plansAndBilling => 'แผนและการเรียกเก็บเงิน';
 
   @override
@@ -12155,10 +12161,4 @@ class AppLocalizationsTh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ของเสียงนี้';
   }
-
-  @override
-  String get settingsSectionRecording => 'การบันทึก';
-
-  @override
-  String get settingsSectionSupport => 'ฝ่ายสนับสนุน';
 }

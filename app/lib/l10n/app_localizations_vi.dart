@@ -3777,6 +3777,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get settingsHeader => 'CÀI ĐẶT';
 
   @override
+  String get settingsSectionRecording => 'Ghi âm';
+
+  @override
+  String get settingsSectionSupport => 'Hỗ trợ';
+
+  @override
   String get plansAndBilling => 'Gói và Thanh toán';
 
   @override
@@ -12216,10 +12222,4 @@ class AppLocalizationsVi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration từ giọng nói này';
   }
-
-  @override
-  String get settingsSectionRecording => 'Ghi âm';
-
-  @override
-  String get settingsSectionSupport => 'Hỗ trợ';
 }

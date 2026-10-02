@@ -3781,6 +3781,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get settingsHeader => 'POSTAVKE';
 
   @override
+  String get settingsSectionRecording => 'Snimanje';
+
+  @override
+  String get settingsSectionSupport => 'Podrška';
+
+  @override
   String get plansAndBilling => 'Planovi i naplatа';
 
   @override
@@ -12254,10 +12260,4 @@ class AppLocalizationsBs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
   }
-
-  @override
-  String get settingsSectionRecording => 'Snimanje';
-
-  @override
-  String get settingsSectionSupport => 'Podrška';
 }

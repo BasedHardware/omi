@@ -1150,6 +1150,8 @@
     "selectAudioInput": "Selecionar entrada de áudio",
     "loadingDevices": "Carregando dispositivos…",
     "settingsHeader": "CONFIGURAÇÕES",
+    "settingsSectionRecording": "Gravação",
+    "settingsSectionSupport": "Suporte",
     "plansAndBilling": "Planos e Faturamento",
     "calendarIntegration": "Integração de Calendário",
     "dailySummary": "Resumo diário",
@@ -3817,7 +3819,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{O Omi vai reconhecer {name} na próxima vez.} pending{Isso leva alguns segundos.} disabled{Ative o salvamento de vozes em Configurações para o Omi poder reconhecer {name}.} other{O Omi precisa de mais fala clara de {name} e vai continuar tentando.}}",
     "speakerLabelEarlierMatches": "Conversas anteriores com esta voz: {count}",
     "speakerLabelText": "{part, select, likely{Provável} soundsLike{Soa como {name}} notPerson{Não é {name}} carried{Continua sendo {name}. Mantido da sua última conversa.} change{Alterar} alsoTitle{Esta voz também é {name}?} alsoBody{O Omi encontrou a mesma voz em conversas anteriores.} confirmed{Você confirmou este rótulo} other{Revisar}}",
-    "speakerLabelTalkTime": "{duration} desta voz",
-    "settingsSectionRecording": "Gravação",
-    "settingsSectionSupport": "Suporte"
+    "speakerLabelTalkTime": "{duration} desta voz"
 }

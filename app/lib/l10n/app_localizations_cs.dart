@@ -3770,6 +3770,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get settingsHeader => 'NASTAVENÍ';
 
   @override
+  String get settingsSectionRecording => 'Nahrávání';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
+
+  @override
   String get plansAndBilling => 'Plány a Fakturace';
 
   @override
@@ -12222,10 +12228,4 @@ class AppLocalizationsCs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohoto hlasu';
   }
-
-  @override
-  String get settingsSectionRecording => 'Nahrávání';
-
-  @override
-  String get settingsSectionSupport => 'Podpora';
 }

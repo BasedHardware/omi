@@ -3794,6 +3794,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get settingsHeader => 'CONFIGURACIÓ';
 
   @override
+  String get settingsSectionRecording => 'Enregistrament';
+
+  @override
+  String get settingsSectionSupport => 'Assistència';
+
+  @override
   String get plansAndBilling => 'Plans i Facturació';
 
   @override
@@ -12292,10 +12298,4 @@ class AppLocalizationsCa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration d’aquesta veu';
   }
-
-  @override
-  String get settingsSectionRecording => 'Enregistrament';
-
-  @override
-  String get settingsSectionSupport => 'Assistència';
 }

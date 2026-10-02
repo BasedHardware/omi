@@ -311,7 +311,7 @@ class TranscriptionJsonCard extends StatelessWidget {
       color: OmiColors.groupedCard,
       shape: RoundedRectangleBorder(
         borderRadius: OmiRadius.mdAll,
-        side: BorderSide(color: isCustomized ? OmiColors.accent : OmiColors.border),
+        side: BorderSide(color: isCustomized ? OmiColors.accent : OmiColors.groupedBorder),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -370,8 +370,9 @@ class TranscriptionSaveBar extends StatelessWidget {
       // twice the inset of dead space under the content on inset devices.
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.md),
       decoration: BoxDecoration(
-        color: OmiColors.surface0,
-        border: Border(top: BorderSide(color: OmiColors.border)),
+        // Pinned under a grouped page, so it shares the page's colour and hairline.
+        color: OmiColors.groupedPage,
+        border: Border(top: BorderSide(color: OmiColors.groupedBorder)),
       ),
       child: SafeArea(
         top: false,

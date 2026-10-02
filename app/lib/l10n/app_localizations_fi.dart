@@ -3773,6 +3773,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get settingsHeader => 'ASETUKSET';
 
   @override
+  String get settingsSectionRecording => 'Tallennus';
+
+  @override
+  String get settingsSectionSupport => 'Tuki';
+
+  @override
   String get plansAndBilling => 'Suunnitelmat ja Laskutus';
 
   @override
@@ -12227,10 +12233,4 @@ class AppLocalizationsFi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tästä äänestä';
   }
-
-  @override
-  String get settingsSectionRecording => 'Tallennus';
-
-  @override
-  String get settingsSectionSupport => 'Tuki';
 }

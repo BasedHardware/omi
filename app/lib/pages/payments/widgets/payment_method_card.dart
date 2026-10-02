@@ -10,7 +10,6 @@ class PaymentMethodCard extends StatelessWidget {
   final Widget icon;
   final String title;
   final String subtitle;
-  final Color backgroundColor;
   final VoidCallback? onManageTap;
   final VoidCallback? onSetActiveTap;
   final bool isActive;
@@ -21,7 +20,6 @@ class PaymentMethodCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.backgroundColor,
     this.onManageTap,
     this.onSetActiveTap,
     this.isActive = false,
@@ -33,7 +31,6 @@ class PaymentMethodCard extends StatelessWidget {
       icon: config.icon,
       title: config.title,
       subtitle: config.subtitle,
-      backgroundColor: config.backgroundColor,
       onManageTap: config.onManageTap,
       onSetActiveTap: config.onSetActiveTap,
       isActive: config.isActive,

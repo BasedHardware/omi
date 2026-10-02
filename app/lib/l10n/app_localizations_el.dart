@@ -3801,6 +3801,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get settingsHeader => 'ΡΥΘΜΙΣΕΙΣ';
 
   @override
+  String get settingsSectionRecording => 'Εγγραφή';
+
+  @override
+  String get settingsSectionSupport => 'Υποστήριξη';
+
+  @override
   String get plansAndBilling => 'Πλάνα & Χρέωση';
 
   @override
@@ -12304,10 +12310,4 @@ class AppLocalizationsEl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration αυτής της φωνής';
   }
-
-  @override
-  String get settingsSectionRecording => 'Εγγραφή';
-
-  @override
-  String get settingsSectionSupport => 'Υποστήριξη';
 }

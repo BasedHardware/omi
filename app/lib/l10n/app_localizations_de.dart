@@ -3803,6 +3803,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get settingsHeader => 'EINSTELLUNGEN';
 
   @override
+  String get settingsSectionRecording => 'Aufnahme';
+
+  @override
+  String get settingsSectionSupport => 'Support';
+
+  @override
   String get plansAndBilling => 'Pläne & Abrechnung';
 
   @override
@@ -12320,10 +12326,4 @@ class AppLocalizationsDe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dieser Stimme';
   }
-
-  @override
-  String get settingsSectionRecording => 'Aufnahme';
-
-  @override
-  String get settingsSectionSupport => 'Support';
 }

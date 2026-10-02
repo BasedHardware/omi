@@ -3785,6 +3785,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get settingsHeader => 'INSTELLINGEN';
 
   @override
+  String get settingsSectionRecording => 'Opname';
+
+  @override
+  String get settingsSectionSupport => 'Ondersteuning';
+
+  @override
   String get plansAndBilling => 'Plannen & Facturering';
 
   @override
@@ -12262,10 +12268,4 @@ class AppLocalizationsNl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
-
-  @override
-  String get settingsSectionRecording => 'Opnemen';
-
-  @override
-  String get settingsSectionSupport => 'Ondersteuning';
 }

@@ -1150,6 +1150,8 @@
     "selectAudioInput": "ऑडियो इनपुट चुनें",
     "loadingDevices": "डिवाइस लोड हो रहे हैं…",
     "settingsHeader": "सेटिंग्स",
+    "settingsSectionRecording": "रिकॉर्डिंग",
+    "settingsSectionSupport": "सहायता",
     "plansAndBilling": "योजनाएं और बिलिंग",
     "calendarIntegration": "कैलेंडर एकीकरण",
     "dailySummary": "दैनिक सारांश",
@@ -3782,7 +3784,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi अगली बार {name} को पहचान लेगा।} pending{इसमें कुछ सेकंड लगते हैं।} disabled{Omi {name} को पहचान सके, इसके लिए सेटिंग्स में आवाज़ें सेव करना चालू करें।} other{Omi को {name} की और साफ़ आवाज़ चाहिए और वह कोशिश करता रहेगा।}}",
     "speakerLabelEarlierMatches": "इस आवाज़ वाली पिछली बातचीत: {count}",
     "speakerLabelText": "{part, select, likely{संभावित} soundsLike{{name} जैसी लग रही है} notPerson{{name} नहीं} carried{अब भी {name}। आपकी पिछली बातचीत से जारी।} change{बदलें} alsoTitle{क्या यह भी {name} है?} alsoBody{Omi को यही आवाज़ पिछली बातचीतों में मिली।} confirmed{आपने इस लेबल की पुष्टि की} other{समीक्षा करें}}",
-    "speakerLabelTalkTime": "इस आवाज़ का {duration}",
-    "settingsSectionRecording": "रिकॉर्डिंग",
-    "settingsSectionSupport": "सहायता"
+    "speakerLabelTalkTime": "इस आवाज़ का {duration}"
 }

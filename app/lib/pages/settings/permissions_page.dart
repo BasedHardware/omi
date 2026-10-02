@@ -154,28 +154,33 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
                   children: [
                     _buildPermissionRow(
                       title: context.l10n.notifications,
+                      glyph: OmiLineGlyph.bell,
                       isGranted: _notificationsGranted,
                       onTap: () =>
                           _handlePermissionTap(Permission.notification, _notificationsGranted, 'notifications'),
                     ),
                     _buildPermissionRow(
                       title: context.l10n.location,
+                      glyph: OmiLineGlyph.location,
                       isGranted: _locationGranted,
                       onTap: _handleLocationTap,
                     ),
                     _buildPermissionRow(
                       title: context.l10n.bluetooth,
+                      glyph: OmiLineGlyph.bluetooth,
                       isGranted: _bluetoothGranted,
                       onTap: _handleBluetoothTap,
                     ),
                     _buildPermissionRow(
                       title: context.l10n.microphone,
+                      glyph: OmiLineGlyph.microphone,
                       isGranted: _microphoneGranted,
                       onTap: () => _handlePermissionTap(Permission.microphone, _microphoneGranted, 'microphone'),
                     ),
                     if (Platform.isAndroid)
                       _buildPermissionRow(
                         title: context.l10n.backgroundActivity,
+                        glyph: OmiLineGlyph.broadcast,
                         isGranted: _backgroundGranted,
                         onTap: _handleBackgroundTap,
                       ),
@@ -188,10 +193,12 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
 
   Widget _buildPermissionRow({
     required String title,
+    required OmiLineGlyph glyph,
     required bool isGranted,
     required VoidCallback onTap,
   }) {
     return OmiSettingsRow(
+      leading: OmiSettingsIconTile(glyph),
       title: title,
       onTap: onTap,
       showChevron: true,

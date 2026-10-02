@@ -71,7 +71,7 @@ class OmiGroupedPage extends StatelessWidget {
             automaticallyImplyLeading: false,
             leadingWidth: 44 + OmiSpacing.xxs,
             leading: Padding(
-              padding: const EdgeInsets.only(left: OmiSpacing.xxs),
+              padding: const EdgeInsetsDirectional.only(start: OmiSpacing.xxs),
               child: leading ?? OmiBackButton.circled(fillColor: OmiColors.iconTile, onPressed: onBack),
             ),
             centerTitle: true,

@@ -3792,6 +3792,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get settingsHeader => 'సెట్టింగ్‌లు';
 
   @override
+  String get settingsSectionRecording => 'రికార్డింగ్';
+
+  @override
+  String get settingsSectionSupport => 'మద్దతు';
+
+  @override
   String get plansAndBilling => 'ప్లాన్‌లు & బిలింగ్';
 
   @override
@@ -12274,10 +12280,4 @@ class AppLocalizationsTe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ఈ వాయిస్ యొక్క $duration';
   }
-
-  @override
-  String get settingsSectionRecording => 'రికార్డింగ్';
-
-  @override
-  String get settingsSectionSupport => 'మద్దతు';
 }

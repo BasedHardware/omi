@@ -3780,6 +3780,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get settingsHeader => 'PENGATURAN';
 
   @override
+  String get settingsSectionRecording => 'Perekaman';
+
+  @override
+  String get settingsSectionSupport => 'Dukungan';
+
+  @override
   String get plansAndBilling => 'Paket & Penagihan';
 
   @override
@@ -12235,10 +12241,4 @@ class AppLocalizationsId extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration dari suara ini';
   }
-
-  @override
-  String get settingsSectionRecording => 'Perekaman';
-
-  @override
-  String get settingsSectionSupport => 'Dukungan';
 }

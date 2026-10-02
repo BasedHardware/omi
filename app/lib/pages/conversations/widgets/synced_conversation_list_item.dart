@@ -64,6 +64,9 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
     final title = raw.trim().isEmpty ? context.l10n.untitledConversation : raw;
     final time = OmiDateFormat.of(context).time(conversation.startedAt ?? conversation.createdAt);
     final duration = _getConversationDuration(context);
+    // The category a processed conversation was filed under, ahead of its time.
+    final tag = !conversation.discarded && conversation.structured.category.isNotEmpty ? conversation.getTag() : '';
+    final subtitle = [tag, time, duration].where((part) => part.isNotEmpty).join(' \u00b7 ');
 
     return OmiSettingsGroup(
       children: [
@@ -74,7 +77,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                 : Text(conversation.structured.getEmoji(), style: OmiType.title3),
           ),
           title: title,
-          subtitle: duration.isEmpty ? time : '$time \u00b7 $duration',
+          subtitle: subtitle,
           trailing: widget.showReprocess || conversation.discarded
               ? (isReprocessing
                   ? const Padding(padding: EdgeInsets.all(OmiSpacing.sm), child: OmiSpinner(size: OmiSpinnerSize.small))

@@ -200,13 +200,22 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     return OmiSettingsGroup(
       style: OmiSettingsGroupStyle.outlined,
       children: [
-        for (final entry in results)
-          OmiSettingsRow(
-            leading: OmiSettingsIconTile(settingsGlyph(entry.destination)),
-            title: entry.title(context.l10n),
-            onTap: () => _open(entry.destination),
-          ),
+        for (final entry in results) _searchResultRow(context, entry),
       ],
+    );
+  }
+
+  Widget _searchResultRow(BuildContext context, SettingsSearchEntry entry) {
+    // Sign out reads red here too, as it does on Account: title and glyph.
+    final destructive = entry.destination == SettingsDestination.signOut;
+    final glyph = settingsGlyph(entry.destination);
+    return OmiSettingsRow(
+      leading: destructive
+          ? OmiSettingsIconTile.custom(child: OmiLineIcon(glyph, color: OmiColors.danger))
+          : OmiSettingsIconTile(glyph),
+      title: entry.title(context.l10n),
+      isDestructive: destructive,
+      onTap: () => _open(entry.destination),
     );
   }
 

@@ -72,6 +72,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.wrapLabel = false,
     this.colors,
     this.width,
     this.height,
@@ -87,6 +88,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.wrapLabel = false,
   })  : variant = OmiButtonVariant.secondary,
         colors = null,
         width = null,
@@ -102,6 +104,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.wrapLabel = false,
   })  : variant = OmiButtonVariant.destructive,
         colors = null,
         width = null,
@@ -117,6 +120,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.wrapLabel = false,
   })  : variant = OmiButtonVariant.tertiary,
         colors = null,
         width = null,
@@ -133,6 +137,7 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
+    this.wrapLabel = false,
   })  : variant = OmiButtonVariant.toolbar,
         colors = null,
         width = null,
@@ -160,6 +165,10 @@ class OmiButton extends StatefulWidget {
 
   /// Fill the available width.
   final bool expand;
+
+  /// Wrap a label that does not fit instead of ellipsizing it; the button grows taller. For an
+  /// action whose localized label must read in full at large text scales.
+  final bool wrapLabel;
 
   /// Legacy colour override; see [OmiButtonColors]. Wins over [variant].
   final OmiButtonColors? colors;
@@ -248,7 +257,9 @@ class _OmiButtonState extends State<OmiButton> {
       color: colors.foreground,
     );
 
-    Widget label = Text(widget.label, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+    Widget label = widget.wrapLabel
+        ? Text(widget.label, style: textStyle, textAlign: TextAlign.center)
+        : Text(widget.label, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
     if (widget.leading != null || widget.icon != null) {
       final iconSize = compact ? 16.0 : 18.0;
       label = Row(
@@ -283,7 +294,9 @@ class _OmiButtonState extends State<OmiButton> {
         foregroundColor: WidgetStatePropertyAll(colors.foreground),
         overlayColor: WidgetStatePropertyAll(colors.foreground.withValues(alpha: 0.12)),
         elevation: const WidgetStatePropertyAll(0),
-        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: horizontalPadding)),
+        // A wrapped label keeps a little air above and below; one line still sits in the minimum height.
+        padding: WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: widget.wrapLabel ? OmiSpacing.xs : 0)),
         minimumSize: WidgetStatePropertyAll(Size(widget.width ?? visualHeight, visualHeight)),
         fixedSize: widget.width != null ? WidgetStatePropertyAll(Size(widget.width!, visualHeight)) : null,
         // A toolbar button in a Settings page's bar is a capsule beside the round icon buttons.

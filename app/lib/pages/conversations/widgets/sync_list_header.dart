@@ -13,10 +13,14 @@ class SyncListHeader extends StatelessWidget {
   /// The first header sits right under the filter; later ones leave a section gap.
   final bool first;
 
+  // The list's gutter plus a label's own inset: the same line as the Storage and Recordings
+  // labels above, and the row content below.
+  static const _inset = OmiSpacing.md + OmiSpacing.md;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(OmiSpacing.xl, first ? 0 : OmiSpacing.xl, OmiSpacing.xl, OmiSpacing.xs),
+      padding: EdgeInsets.fromLTRB(_inset, first ? 0 : OmiSpacing.xl, _inset, OmiSpacing.xs),
       child: Row(
         children: [
           Flexible(

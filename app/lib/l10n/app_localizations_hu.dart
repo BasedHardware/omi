@@ -2242,7 +2242,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get appLanguage => 'Alkalmazás nyelve';
 
   @override
-  String get appInterfaceSectionTitle => 'Alkalmazás felület';
+  String get appInterfaceSectionTitle => 'Az alkalmazás felülete';
 
   @override
   String get speechTranscriptionSectionTitle => 'Beszéd és átírás';
@@ -3792,6 +3792,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get settingsHeader => 'BEÁLLÍTÁSOK';
 
   @override
+  String get settingsSectionRecording => 'Felvétel';
+
+  @override
+  String get settingsSectionSupport => 'Támogatás';
+
+  @override
   String get plansAndBilling => 'Csomagok és Számlázás';
 
   @override
@@ -4393,7 +4399,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get saveKeyWarning => 'Mentse el ezt a kulcsot most! Nem fogja tudni újra megtekinteni.';
 
   @override
-  String get yourApiKey => 'Az Ön API kulcsa';
+  String get yourApiKey => 'Az Ön API-kulcsa';
 
   @override
   String get tapToCopy => 'Másoláshoz érintse meg';
@@ -12269,10 +12275,4 @@ class AppLocalizationsHu extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ebből a hangból';
   }
-
-  @override
-  String get settingsSectionRecording => 'Felvétel';
-
-  @override
-  String get settingsSectionSupport => 'Támogatás';
 }

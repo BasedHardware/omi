@@ -76,7 +76,7 @@ void main() {
   });
 
   Future<void> pumpSettings(WidgetTester tester,
-      {required Size size, double textScale = 1, String locale = 'en'}) async {
+      {required Size size, double textScale = 1, String locale = 'en', Widget home = const SettingsDrawer()}) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -96,7 +96,7 @@ void main() {
             data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
             child: child!,
           ),
-          home: const SettingsDrawer(),
+          home: home,
         ),
       ),
     );
@@ -159,5 +159,33 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('settings_group_recording')));
     await tester.pumpAndSettle();
     expect(familyOf(find.text(en.language)), OmiSettingsTypeface.family);
+  });
+
+  testWidgets('Instrument Sans stays inside Settings', (tester) async {
+    const probe = 'Outside Settings';
+    await pumpSettings(
+      tester,
+      size: _iPhoneSE,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () =>
+                  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsDrawer())),
+              child: const Text(probe),
+            ),
+          ),
+        ),
+      ),
+    );
+    String? familyOf(Finder text) => tester.renderObject<RenderParagraph>(text).text.style?.fontFamily;
+    expect(familyOf(find.text(probe)), isNot(OmiSettingsTypeface.family));
+
+    await tester.tap(find.text(probe));
+    await tester.pumpAndSettle();
+    final en = lookupAppLocalizations(const Locale('en'));
+    expect(familyOf(find.text(en.settings)), OmiSettingsTypeface.family);
+    // The page under Settings keeps the app font.
+    expect(familyOf(find.text(probe, skipOffstage: false)), isNot(OmiSettingsTypeface.family));
   });
 }

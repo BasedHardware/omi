@@ -380,7 +380,9 @@ class _DeveloperTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const border = OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none);
+    // A hairline keeps the field's edge visible on the card it sits in.
+    final border =
+        OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide(color: OmiColors.groupedBorder));
     return TextField(
       controller: controller,
       keyboardType: keyboardType ?? TextInputType.url,

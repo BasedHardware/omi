@@ -18,6 +18,8 @@ class McpApiKeyListItem extends StatelessWidget {
       leading: const OmiSettingsIconTile(OmiLineGlyph.key),
       title: apiKey.name,
       subtitle: apiKey.keyPrefix,
+      // An identifier, so its characters line up and stay distinct (0/O, 1/l).
+      subtitleStyle: const TextStyle(fontFamily: 'monospace'),
       trailing: OmiIconButton(
         icon: const OmiLineIcon(OmiLineGlyph.trash),
         label: context.l10n.revoke,

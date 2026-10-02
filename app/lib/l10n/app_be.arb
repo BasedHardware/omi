@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Запіс",
+    "settingsSectionSupport": "Падтрымка",
     "@account": {
         "description": "Account section label"
     },
@@ -11339,7 +11341,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi пазнае {name} наступным разам.} pending{Гэта зойме некалькі секунд.} disabled{Уключыце захаванне галасоў у Наладах, каб Omi мог пазнаваць {name}.} other{Omi патрэбна больш выразнай мовы ад {name}, і ён будзе працягваць спробы.}}",
     "speakerLabelEarlierMatches": "Ранейшыя размовы з гэтым голасам: {count}",
     "speakerLabelText": "{part, select, likely{Магчыма} soundsLike{Падобна на {name}} notPerson{Не {name}} carried{Усё яшчэ {name}. Перанесена з вашай апошняй размовы.} change{Змяніць} alsoTitle{Гэта таксама {name}?} alsoBody{Omi знайшоў такі ж голас у ранейшых размовах.} confirmed{Вы пацвердзілі гэту пазнаку} other{Праглядзець}}",
-    "speakerLabelTalkTime": "{duration} гэтага голасу",
-    "settingsSectionRecording": "Запіс",
-    "settingsSectionSupport": "Падтрымка"
+    "speakerLabelTalkTime": "{duration} гэтага голасу"
 }

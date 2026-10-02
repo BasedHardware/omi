@@ -3760,6 +3760,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get settingsHeader => 'INDSTILLINGER';
 
   @override
+  String get settingsSectionRecording => 'Optagelse';
+
+  @override
+  String get settingsSectionSupport => 'Support';
+
+  @override
   String get plansAndBilling => 'Planer og Fakturering';
 
   @override
@@ -12209,10 +12215,4 @@ class AppLocalizationsDa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration af denne stemme';
   }
-
-  @override
-  String get settingsSectionRecording => 'Optagelse';
-
-  @override
-  String get settingsSectionSupport => 'Support';
 }

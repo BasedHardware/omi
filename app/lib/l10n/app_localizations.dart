@@ -7269,6 +7269,18 @@ abstract class AppLocalizations {
   /// **'SETTINGS'**
   String get settingsHeader;
 
+  /// Settings section header above the Device and Recording & Transcription rows (a noun, not the live 'recording' status).
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get settingsSectionRecording;
+
+  /// Settings section header above the Help & About and Feedback / Bug rows.
+  ///
+  /// In en, this message translates to:
+  /// **'Support'**
+  String get settingsSectionSupport;
+
   /// Plans and billing section
   ///
   /// In en, this message translates to:
@@ -21884,18 +21896,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} of this voice'**
   String speakerLabelTalkTime(String duration);
-
-  /// Settings section header above the Device and Recording & Transcription rows (a noun, not the live 'recording' status).
-  ///
-  /// In en, this message translates to:
-  /// **'Recording'**
-  String get settingsSectionRecording;
-
-  /// Settings section header above the Help & About and Feedback / Bug rows.
-  ///
-  /// In en, this message translates to:
-  /// **'Support'**
-  String get settingsSectionSupport;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

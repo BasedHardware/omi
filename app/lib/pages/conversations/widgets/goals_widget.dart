@@ -287,10 +287,6 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     return unit == null || unit.isEmpty ? values : '$values $unit';
   }
 
-  /// Progress is ink however far along (black and white, like Settings); the bar's length and the
-  /// "6/12" beside it carry the state.
-  Color _getColor(double progress) => OmiColors.textPrimary;
-
   @override
   Widget build(BuildContext context) {
     return Consumer<GoalsProvider>(
@@ -301,9 +297,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
         final goals = goalsProvider.goals;
 
-        // If no goals, hide the widget (the Add Goal entry points live in
-        // ActionItemsPage._buildGoalsRow and this widget's own header, shown
-        // once at least one goal exists).
+        // If no goals, hide the widget (the Add Goal entry points live in GoalsPage: its bar's add
+        // button and its empty state).
         if (goals.isEmpty) {
           return const SizedBox.shrink();
         }
@@ -329,8 +324,9 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   }
 
   Widget _buildGoalItem(Goal goal, bool isLast) {
-    final progress = goal.progressPercentage;
-    final color = _getColor(progress);
+    // Progress is ink however far along (black and white, like Settings); the bar's length and the
+    // "6/12" beside it carry the state.
+    final color = OmiColors.textPrimary;
     final emoji = _getGoalEmoji(goal.id);
 
     return Dismissible(
@@ -388,47 +384,57 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     ),
                     const SizedBox(height: 4),
                     // Progress bar with completion text
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Transform.translate(
-                            offset: const Offset(-12, 0),
-                            child: SliderTheme(
-                              data: SliderThemeData(
-                                trackHeight: 6,
-                                activeTrackColor: color,
-                                inactiveTrackColor: OmiColors.surface3,
-                                thumbColor: color,
-                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
-                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                                trackShape: const RoundedRectSliderTrackShape(),
-                                tickMarkShape: SliderTickMarkShape.noTickMark,
-                              ),
-                              child: Slider(
-                                value: goal.currentValue.clamp(0.0, goal.targetValue),
-                                min: 0,
-                                max: goal.targetValue,
-                                divisions: goalSliderDivisions(goal.targetValue),
-                                onChanged: (value) => _updateGoalProgressUI(goal, value),
-                                onChangeEnd: (value) {
-                                  PlatformManager.instance.analytics.goalProgressChanged(
-                                    goalId: goal.id,
-                                    oldValue: goal.currentValue,
-                                    newValue: value,
-                                    targetValue: goal.targetValue,
-                                  );
-                                  _saveGoalProgress(goal, value);
-                                },
+                    LayoutBuilder(
+                      builder: (context, constraints) => Row(
+                        children: [
+                          Expanded(
+                            child: Transform.translate(
+                              offset: const Offset(-12, 0),
+                              child: SliderTheme(
+                                data: SliderThemeData(
+                                  trackHeight: 6,
+                                  activeTrackColor: color,
+                                  inactiveTrackColor: OmiColors.surface3,
+                                  thumbColor: color,
+                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
+                                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                                  trackShape: const RoundedRectSliderTrackShape(),
+                                  tickMarkShape: SliderTickMarkShape.noTickMark,
+                                ),
+                                child: Slider(
+                                  value: goal.currentValue.clamp(0.0, goal.targetValue),
+                                  min: 0,
+                                  max: goal.targetValue,
+                                  divisions: goalSliderDivisions(goal.targetValue),
+                                  onChanged: (value) => _updateGoalProgressUI(goal, value),
+                                  onChangeEnd: (value) {
+                                    PlatformManager.instance.analytics.goalProgressChanged(
+                                      goalId: goal.id,
+                                      oldValue: goal.currentValue,
+                                      newValue: value,
+                                      targetValue: goal.targetValue,
+                                    );
+                                    _saveGoalProgress(goal, value);
+                                  },
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _progressLabel(goal),
-                          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          // A long unit (up to 64 characters) ellipsizes instead of pushing the row past
+                          // the card; the slider keeps at least 60% of the width.
+                          ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
+                            child: Text(
+                              _progressLabel(goal),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: OmiType.footnote
+                                  .copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

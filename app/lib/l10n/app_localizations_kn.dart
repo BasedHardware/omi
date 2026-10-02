@@ -3786,6 +3786,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get settingsHeader => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override
+  String get settingsSectionRecording => 'ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get settingsSectionSupport => 'ಬೆಂಬಲ';
+
+  @override
   String get plansAndBilling => 'ಯೋಜನೆಗಳು ಮತ್ತು ಬಿಲ್ಲಿಂಗ್';
 
   @override
@@ -12261,10 +12267,4 @@ class AppLocalizationsKn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ಈ ಧ್ವನಿಯ $duration';
   }
-
-  @override
-  String get settingsSectionRecording => 'ರೆಕಾರ್ಡಿಂಗ್';
-
-  @override
-  String get settingsSectionSupport => 'ಬೆಂಬಲ';
 }

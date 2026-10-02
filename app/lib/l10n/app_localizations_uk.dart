@@ -3775,6 +3775,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get settingsHeader => 'НАЛАШТУВАННЯ';
 
   @override
+  String get settingsSectionRecording => 'Запис';
+
+  @override
+  String get settingsSectionSupport => 'Підтримка';
+
+  @override
   String get plansAndBilling => 'Плани та Оплата';
 
   @override
@@ -12248,10 +12254,4 @@ class AppLocalizationsUk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration цього голосу';
   }
-
-  @override
-  String get settingsSectionRecording => 'Запис';
-
-  @override
-  String get settingsSectionSupport => 'Підтримка';
 }

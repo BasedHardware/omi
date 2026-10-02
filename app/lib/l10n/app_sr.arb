@@ -4207,6 +4207,8 @@
     "@settingsHeader": {
         "description": "Settings navigation header"
     },
+    "settingsSectionRecording": "Снимање",
+    "settingsSectionSupport": "Подршка",
     "@account": {
         "description": "Account section label"
     },
@@ -11339,7 +11341,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ће препознати особу {name} следећи пут.} pending{Ово траје неколико секунди.} disabled{Укључите чување гласова у подешавањима да би Omi могао да препозна особу {name}.} other{Omi треба више јасног говора особе {name} и наставиће да покушава.}}",
     "speakerLabelEarlierMatches": "Ранији разговори са овим гласом: {count}",
     "speakerLabelText": "{part, select, likely{Вероватно} soundsLike{Звучи као {name}} notPerson{Није {name}} carried{И даље {name}. Пренето из вашег последњег разговора.} change{Промени} alsoTitle{Да ли је ово такође {name}?} alsoBody{Omi је пронашао исти глас у ранијим разговорима.} confirmed{Потврдили сте ову ознаку} other{Прегледај}}",
-    "speakerLabelTalkTime": "{duration} овог гласа",
-    "settingsSectionRecording": "Снимање",
-    "settingsSectionSupport": "Подршка"
+    "speakerLabelTalkTime": "{duration} овог гласа"
 }

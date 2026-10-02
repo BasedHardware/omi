@@ -209,7 +209,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             },
           ),
           OmiSettingsRow(
-            leading: const OmiSettingsIconTile(OmiLineGlyph.trash),
+            // The custom tile carries the red: a glyph tile keeps its own ink.
+            leading: OmiSettingsIconTile.custom(child: OmiLineIcon(OmiLineGlyph.trash, color: OmiColors.danger)),
             title: context.l10n.deleteRecap,
             isDestructive: true,
             showChevron: false,

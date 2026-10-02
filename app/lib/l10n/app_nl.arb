@@ -1150,6 +1150,8 @@
     "selectAudioInput": "Selecteer audio-ingang",
     "loadingDevices": "Apparaten laden…",
     "settingsHeader": "INSTELLINGEN",
+    "settingsSectionRecording": "Opname",
+    "settingsSectionSupport": "Ondersteuning",
     "plansAndBilling": "Plannen & Facturering",
     "calendarIntegration": "Agenda-integratie",
     "dailySummary": "Dagelijkse samenvatting",
@@ -3782,7 +3784,5 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi herkent {name} de volgende keer.} pending{Dit duurt een paar seconden.} disabled{Zet stemmen opslaan aan in Instellingen zodat Omi {name} kan herkennen.} other{Omi heeft meer duidelijke spraak van {name} nodig en blijft het proberen.}}",
     "speakerLabelEarlierMatches": "Eerdere gesprekken met deze stem: {count}",
     "speakerLabelText": "{part, select, likely{Waarschijnlijk} soundsLike{Klinkt als {name}} notPerson{Niet {name}} carried{Nog steeds {name}. Overgenomen uit je laatste gesprek.} change{Wijzigen} alsoTitle{Is dit ook {name}?} alsoBody{Omi heeft dezelfde stem in eerdere gesprekken gevonden.} confirmed{Je hebt dit label bevestigd} other{Bekijken}}",
-    "speakerLabelTalkTime": "{duration} van deze stem",
-    "settingsSectionRecording": "Opnemen",
-    "settingsSectionSupport": "Ondersteuning"
+    "speakerLabelTalkTime": "{duration} van deze stem"
 }

@@ -3769,6 +3769,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get settingsHeader => 'NUSTATYMAI';
 
   @override
+  String get settingsSectionRecording => 'Įrašymas';
+
+  @override
+  String get settingsSectionSupport => 'Pagalba';
+
+  @override
   String get plansAndBilling => 'Planai ir Atsiskaitymas';
 
   @override
@@ -12243,10 +12249,4 @@ class AppLocalizationsLt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
-
-  @override
-  String get settingsSectionRecording => 'Įrašymas';
-
-  @override
-  String get settingsSectionSupport => 'Pagalba';
 }
