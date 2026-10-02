@@ -146,6 +146,12 @@ class TestTagsAndTimestamps(unittest.TestCase):
         self.assertEqual(rows[1][5], "soon")
         self.assertEqual(rows[1][6], "")
 
+    def test_boundary_overflow_timestamp_is_kept_raw(self):
+        # Structurally valid but out-of-range-for-UTC timestamps must not abort
+        # the export; the raw value is preserved instead.
+        rows = convert_rows([make_memory(created_at="0001-01-01T00:00:00+01:00")])
+        self.assertEqual(rows[1][5], "0001-01-01T00:00:00+01:00")
+
     def test_datetime_objects_are_accepted(self):
         from datetime import datetime, timezone
 
@@ -195,9 +201,21 @@ class TestFilters(unittest.TestCase):
         self.assertEqual(len(rows), 3)
 
     def test_convert_filtered_category(self):
-        raw = json.dumps([make_memory(category="work"), make_memory(category="other")])
+        raw = json.dumps([make_memory(id="mem-work", category="work"), make_memory(id="mem-other", category="other")])
         rows = rows_from(m2csv.convert_filtered(raw, category="work").decode("utf-8-sig"))
-        self.assertEqual([r[0] for r in rows[1:]], ["mem-1"])
+        self.assertEqual([r[0] for r in rows[1:]], ["mem-work"])
+        self.assertEqual([r[2] for r in rows[1:]], ["work"])
+
+    def test_convert_filtered_multi_category(self):
+        raw = json.dumps(
+            [
+                make_memory(id="mem-work", category="work"),
+                make_memory(id="mem-learn", category="learnings"),
+                make_memory(id="mem-other", category="other"),
+            ]
+        )
+        rows = rows_from(m2csv.convert_filtered(raw, category="work,learnings").decode("utf-8-sig"))
+        self.assertEqual([r[0] for r in rows[1:]], ["mem-work", "mem-learn"])
 
     def test_convert_filtered_category_is_case_insensitive(self):
         raw = json.dumps([make_memory(category="Work"), make_memory(category="other")])
@@ -243,7 +261,11 @@ class TestOutputBytes(unittest.TestCase):
         raw = json.dumps([make_memory()])
         self.assertEqual(m2csv.convert(raw), m2csv.convert(raw))
 
-    def test_empty_selection_renders_header_only(self):
+    def test_convert_delegates_to_convert_filtered(self):
+        raw = json.dumps([make_memory(category="work")])
+        # The no-filter path and the explicit all-rows filter must agree byte
+        # for byte, so future fixes cannot diverge between the two entry points.
+        self.assertEqual(m2csv.convert(raw), m2csv.convert_filtered(raw))
         rows = convert_rows([])
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][0], "id")
@@ -286,6 +308,19 @@ class TestCliExitCodes(unittest.TestCase):
             self.assertIn(b"already exists", result.stderr)
             self.assertEqual(out.read_bytes(), b"keep me")
 
+    def test_write_failure_cleans_partial_file_and_exits_one(self):
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "in.json"
+            src.write_text(json.dumps([make_memory()]), encoding="utf-8")
+            # Writing into a directory-as-file path forces an OSError mid-open.
+            blocker = Path(td) / "blocker"
+            blocker.write_bytes(b"not a directory")
+            target = blocker / "m.csv"
+            result = self.run_cli(str(src), "-o", str(target))
+            self.assertEqual(result.returncode == 1, True, result.stderr.decode("utf-8", "replace"))
+            self.assertIn(b"failed to write", result.stderr)
+            self.assertNotIn(b"Traceback", result.stderr)
+
     def test_missing_input_file_exits_one(self):
         with tempfile.TemporaryDirectory() as td:
             result = self.run_cli(str(Path(td) / "nope.json"), "-o", str(Path(td) / "m.csv"))
@@ -314,31 +349,50 @@ class TestCliExitCodes(unittest.TestCase):
             result = self.run_cli(str(src), "-o", str(Path(td) / "m.csv"))
             self.assertEqual(result.returncode, 1)
 
-    def test_category_filter_flag_exits_zero(self):
+    def test_category_filter_flag_exits_zero_and_excludes_non_matching(self):
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "in.json"
-            src.write_text(json.dumps([make_memory(category="work")]), encoding="utf-8")
+            src.write_text(
+                json.dumps(
+                    [make_memory(id="mem-work", category="work"), make_memory(id="mem-other", category="other")]
+                ),
+                encoding="utf-8",
+            )
             out = Path(td) / "m.csv"
             result = self.run_cli(str(src), "--category", "work", "-o", str(out))
             self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
-            self.assertIn(b"work", out.read_bytes())
+            exported = out.read_bytes()
+            self.assertIn(b"mem-work", exported)
+            self.assertNotIn(b"mem-other", exported)
 
-    def test_visibility_filter_flag_exits_zero(self):
+    def test_visibility_filter_flag_exits_zero_and_excludes_non_matching(self):
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "in.json"
-            src.write_text(json.dumps([make_memory(visibility="public")]), encoding="utf-8")
+            src.write_text(
+                json.dumps(
+                    [
+                        make_memory(id="mem-public", visibility="public"),
+                        make_memory(id="mem-private", visibility="private"),
+                    ]
+                ),
+                encoding="utf-8",
+            )
             out = Path(td) / "m.csv"
             result = self.run_cli(str(src), "--visibility", "public", "-o", str(out))
             self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
-            self.assertIn(b"public", out.read_bytes())
+            exported = out.read_bytes()
+            self.assertIn(b"mem-public", exported)
+            self.assertNotIn(b"mem-private", exported)
 
-    def test_no_output_flag_prints_csv_to_stdout(self):
+    def test_no_output_flag_prints_utf8_csv_without_bom(self):
+        # Stdout feeds text tools: plain UTF-8, no BOM. Only -o files get the BOM.
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "in.json"
-            src.write_text(json.dumps([make_memory()]), encoding="utf-8")
+            src.write_text(json.dumps([make_memory(content="hà tiếng Việt ☕")]), encoding="utf-8")
             result = self.run_cli(str(src))
             self.assertEqual(result.returncode, 0)
-            self.assertTrue(result.stdout.startswith(b"\xef\xbb\xbf"))
+            self.assertFalse(result.stdout.startswith(b"\xef\xbb\xbf"))
+            self.assertIn("hà tiếng Việt ☕".encode("utf-8"), result.stdout)
 
     def test_bom_prefixed_input_is_tolerated(self):
         with tempfile.TemporaryDirectory() as td:

@@ -2,14 +2,17 @@
 Convert Omi memories JSON exports to CSV for spreadsheets, pandas, and imports.
 
 Usage:
-    # Pipe directly from omi CLI
-    omi --json memory list | python memories_to_csv.py - -o memories.csv
+    # Pipe directly from omi CLI (memory list defaults to 25 records — pass
+    # --limit 200 and page with --offset for larger accounts)
+    omi --json memory list --limit 200 | python memories_to_csv.py - -o memories.csv
+    omi --json memory list --limit 200 --offset 200 | python memories_to_csv.py - -o memories_2.csv
 
     # From a saved JSON export
     python memories_to_csv.py memories.json -o memories.csv
 
-    # Filter categories, print to stdout instead of a file
-    omi --json memory list | python memories_to_csv.py - --category work,learnings
+    # Filter categories, print to stdout instead of a file (stdout CSV has no
+    # BOM; the BOM is only written for -o files so Excel opens them directly)
+    omi --json memory list --limit 200 | python memories_to_csv.py - --category work,learnings
 
 The converter is stdlib-only and makes no network requests. Rows are coerced
 loosely (one odd record cannot crash the export), cell values are guarded
@@ -18,6 +21,7 @@ UTF-8 with a BOM so Excel opens it correctly.
 """
 
 import argparse
+import codecs
 import csv
 import io
 import json
@@ -40,9 +44,14 @@ def parse_datetime_utc(value: Any) -> Optional[str]:
             return None
     else:
         return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).isoformat()
+    try:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()
+    except (OverflowError, OSError, ValueError):
+        # Extreme but structurally valid timestamps (year 1 with an offset)
+        # overflow the UTC conversion; keep the raw value instead of aborting.
+        return None
 
 
 def spreadsheet_text(value: Any) -> str:
@@ -145,13 +154,8 @@ def csv_bytes(rows: List[List[str]]) -> bytes:
 
 
 def convert(raw_json: str) -> bytes:
-    """Parse raw JSON text and return the CSV export bytes."""
-    data = json.loads(raw_json)
-    if not isinstance(data, (list, dict)):
-        raise ValueError("Expected a JSON array of memories or an object containing 'memories'")
-    items = extract_memories(data)
-    rows = [row for row in (memory_row(item) for item in items) if row is not None]
-    return csv_bytes(rows)
+    """Parse raw JSON text and return the CSV export bytes (no filtering)."""
+    return convert_filtered(raw_json)
 
 
 def convert_filtered(raw_json: str, category: Optional[str] = None, visibility: Optional[str] = None) -> bytes:
@@ -232,15 +236,28 @@ def main() -> int:
     if args.output:
         # Format the whole export before touching the filesystem, so a
         # conversion failure cannot leave a truncated CSV behind; exclusive
-        # creation protects an existing export from being clobbered.
+        # creation protects an existing export from being clobbered. A failed
+        # write removes the partial file and reports a clean error instead of
+        # a traceback.
         try:
             with open(args.output, "xb") as fh:
                 fh.write(payload_bytes)
         except FileExistsError:
             sys.stderr.write(f"Error: {args.output} already exists (move it aside and retry)\n")
             return 1
+        except OSError as exc:
+            try:
+                args.output.unlink()
+            except OSError:
+                pass
+            sys.stderr.write(f"Error: failed to write {args.output} ({exc})\n")
+            return 1
         sys.stderr.write(f"Successfully exported memories to {args.output}\n")
     else:
+        # Stdout is for piping into other tools: plain UTF-8 without the BOM.
+        # Only -o files carry the BOM so spreadsheet apps open them directly.
+        if payload_bytes.startswith(codecs.BOM_UTF8):
+            payload_bytes = payload_bytes[len(codecs.BOM_UTF8) :]
         sys.stdout.buffer.write(payload_bytes)
         sys.stdout.buffer.flush()
 
