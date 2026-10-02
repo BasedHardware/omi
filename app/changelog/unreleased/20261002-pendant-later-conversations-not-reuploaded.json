@@ -1,0 +1,3 @@
+{
+  "change": "During long pendant sessions, each conversation's audio is no longer uploaded a second time, which could make the same conversation show up twice"
+}

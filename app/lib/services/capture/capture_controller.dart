@@ -877,6 +877,15 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  /// The socket outlives a conversation the server closes, and the session start is set only when a
+  /// socket opens. Restart the window now, so the next conversation's audio is stamped and confirmed
+  /// like the first one's instead of staying unstamped and being uploaded again later.
+  void _startNextConversationWindow() {
+    if (_socket == null) return;
+    if (recordingState != RecordingState.deviceRecord && recordingState != RecordingState.record) return;
+    _sessionStartSeconds = _now().millisecondsSinceEpoch ~/ 1000;
+  }
+
   void _endOfflineSession() {
     _offlineSessionStartSeconds = 0;
     _offlineMuteStartedAt = null;
@@ -3148,6 +3157,7 @@ class CaptureController extends ChangeNotifier
       _pendingFinalizeAndStamp = _finalizeAndStampSession(_sessionStartSeconds, event.memory.id);
 
       _resetStateVariables();
+      _startNextConversationWindow();
 
       // Start 30s fallback timer in case ConversationEvent never arrives (WS disconnect)
       _autoSyncFallbackTimer?.cancel();
