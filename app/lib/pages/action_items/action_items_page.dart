@@ -528,8 +528,22 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 ),
               ),
 
-          // Done tasks last, folded: the list stays short, nothing is hidden on another screen.
-          if (completedItems.isNotEmpty) SliverToBoxAdapter(child: _buildCompletedSection(completedItems, provider)),
+          // Done tasks last, folded: the list stays short, nothing is hidden on another screen. The
+          // rows are a lazy sliver, so a long history only builds what is on screen.
+          if (completedItems.isNotEmpty) ...[
+            SliverToBoxAdapter(child: _buildCompletedHeader(completedItems, provider)),
+            if (_completedExpanded)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _buildCompletedRow(completedItems[index], completedItems, provider),
+                    childCount: completedItems.length,
+                  ),
+                ),
+              ),
+            const SliverPadding(padding: EdgeInsets.only(top: 16)),
+          ],
         ],
 
         // Bottom padding so the last row scrolls clear of the nav bar
@@ -674,9 +688,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   /// "Completed n ›" under the open sections, folded by default. Open, it lists the done tasks
   /// (ring filled, text struck) with Clear on the right; a ring tap brings a task back.
-  Widget _buildCompletedSection(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
+  Widget _buildCompletedHeader(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -709,14 +723,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               ],
             ),
           ),
-          if (_completedExpanded) ...items.map((item) => _buildCompletedRow(item, items, provider)),
-          const SizedBox(height: 12),
         ],
       ),
     );
   }
 
-  /// A done row: no drag or swipe, the same tap and long-press as an open row.
+  /// A done row: no drag or swipe, the same tap and long-press as an open row. A paywalled one
+  /// gets no menu, like its open counterpart, and selecting a done row never cascades: this list
+  /// is newest-first, not the hierarchy order the cascade reads.
   Widget _buildCompletedRow(
     ActionItemWithMetadata item,
     List<ActionItemWithMetadata> items,
@@ -724,7 +738,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   ) {
     BuildContext? rowContext;
     return GestureDetector(
-      onLongPress: provider.isSelectionMode
+      onLongPress: provider.isSelectionMode || item.isLocked
           ? null
           : () {
               OmiHaptics.medium();
@@ -733,7 +747,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       child: Builder(
         builder: (ctx) {
           rowContext = ctx;
-          return _buildTaskItemContent(item, provider, item.indentLevel * 28.0, items);
+          return _buildTaskItemContent(item, provider, item.indentLevel * 28.0, items, cascadeSelection: false);
         },
       ),
     );
@@ -1142,8 +1156,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     ActionItemWithMetadata item,
     ActionItemsProvider provider,
     double indentWidth,
-    List<ActionItemWithMetadata> categoryItems,
-  ) {
+    List<ActionItemWithMetadata> categoryItems, {
+    bool cascadeSelection = true,
+  }) {
     final indentLevel = _getIndentLevel(item);
     final goalTitle = _getGoalTitleForTask(item);
     final isSelected = provider.isSelectionMode && provider.isItemSelected(item.id);
@@ -1160,7 +1175,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           _openUpgrade();
         } else if (provider.isSelectionMode) {
           OmiHaptics.selection();
-          provider.toggleItemSelection(item.id, cascadeIds: _visibleDescendantIds(item, categoryItems));
+          provider.toggleItemSelection(
+            item.id,
+            cascadeIds: cascadeSelection ? _visibleDescendantIds(item, categoryItems) : const [],
+          );
         } else {
           _showEditSheet(item);
         }
@@ -1282,9 +1300,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               ),
             ),
             if (showDivider)
-              Positioned(
-                left: titleInset,
-                right: 4,
+              PositionedDirectional(
+                start: titleInset,
+                end: 4,
                 bottom: 0,
                 child: Container(height: 0.5, color: OmiColors.border),
               ),

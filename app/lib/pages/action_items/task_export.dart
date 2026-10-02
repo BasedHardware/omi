@@ -16,6 +16,9 @@ import 'package:omi/utils/other/temp.dart';
 Future<void> exportTaskToConnectedApp(BuildContext context, ActionItemWithMetadata item) async {
   OmiHaptics.light();
   final integrations = context.read<TaskIntegrationProvider>();
+  // Opened straight onto a task, the first integrations load may still be in flight.
+  await integrations.ensureLoaded();
+  if (!context.mounted) return;
   // The app chosen in Task Integrations wins; any other connected app is only a fallback.
   final connected = [
     if (integrations.isAppConnected(integrations.selectedApp)) integrations.selectedApp,

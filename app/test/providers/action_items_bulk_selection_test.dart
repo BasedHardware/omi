@@ -158,6 +158,13 @@ void main() {
     expect(provider.completedItems, isEmpty);
   });
 
+  test('an export platform is named the way Task Integrations names the app', () {
+    expect(taskExportPlatformLabel('google_tasks'), 'Google Tasks');
+    expect(taskExportPlatformLabel('apple_reminders'), TaskIntegrationApp.appleReminders.displayName);
+    expect(taskExportPlatformLabel('trello'), 'Trello');
+    expect(taskExportPlatformLabel('something_new'), 'something_new');
+  });
+
   testWidgets('exporting a stale copy of an already-exported task is skipped, with the app named', (tester) async {
     final provider = ActionItemsProvider(getActionItems: _onePage);
     addTearDown(provider.dispose);

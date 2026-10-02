@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -50,6 +49,7 @@ class _TaskPageState extends State<TaskPage> {
   bool _saving = false;
   bool _saveFailed = false;
   bool _asking = false;
+  bool _toggling = false;
 
   @override
   void dispose() {
@@ -113,13 +113,21 @@ class _TaskPageState extends State<TaskPage> {
 
   /// Completion is instant everywhere (the list, Home, here): no Save needed.
   Future<void> _toggleCompleted() async {
+    if (_toggling) return;
     final next = !_completed;
     OmiHaptics.light();
-    setState(() => _completed = next);
+    // The row is disabled until the server answers, so two taps cannot race each other.
+    setState(() {
+      _completed = next;
+      _toggling = true;
+    });
     final ok = await context.read<ActionItemsProvider>().updateActionItemState(widget.item, next);
     if (!mounted) return;
+    setState(() {
+      _toggling = false;
+      if (!ok) _completed = !next;
+    });
     if (!ok) {
-      setState(() => _completed = !next);
       OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
     } else if (next) {
       PlatformManager.instance.analytics.actionItemCompleted(fromTab: 'Task Page');
@@ -135,7 +143,7 @@ class _TaskPageState extends State<TaskPage> {
   }
 
   Future<void> _pickDueDate() async {
-    final result = await showCupertinoModalPopup<DateTime>(
+    final result = await showOmiSurfaceSheet<DateTime>(
       context: context,
       builder: (context) => DateTimePickerSheet(initialDateTime: _dueDate, minimumDate: widget.item.createdAt),
     );
@@ -270,7 +278,7 @@ class _TaskPageState extends State<TaskPage> {
                           key: const Key('task_completed_toggle'),
                           leading: TaskCompletionMark(completed: _completed),
                           title: _completed ? l10n.completed : l10n.markComplete,
-                          onTap: _toggleCompleted,
+                          onTap: _toggling ? null : _toggleCompleted,
                           showChevron: false,
                           semanticsChecked: _completed,
                         ),

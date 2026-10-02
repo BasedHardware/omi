@@ -30,8 +30,28 @@ class TaskIntegrationProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get hasLoaded => _hasLoaded;
 
+  Future<void>? _inFlightLoad;
+
+  /// Resolves once the default app and connection details have been loaded at least once, joining
+  /// a load already in flight instead of starting another. For callers that act on the answer
+  /// right away (a single export), where reading [isAppConnected] before the first load lands
+  /// would say nothing is connected.
+  Future<void> ensureLoaded() {
+    if (_hasLoaded) return Future<void>.value();
+    return _inFlightLoad ?? loadFromBackend();
+  }
+
   /// Load default app and connection details from backend
-  Future<void> loadFromBackend() async {
+  Future<void> loadFromBackend() {
+    final load = _loadFromBackend();
+    _inFlightLoad = load;
+    load.whenComplete(() {
+      if (identical(_inFlightLoad, load)) _inFlightLoad = null;
+    });
+    return load;
+  }
+
+  Future<void> _loadFromBackend() async {
     final generation = _sessionGeneration;
     _isLoading = true;
     // Don't notify listeners immediately to avoid setState during build

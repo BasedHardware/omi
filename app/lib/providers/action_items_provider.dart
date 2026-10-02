@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as api;
@@ -1422,20 +1423,7 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 }
 
-/// The name a task's `exportPlatform` wire value shows as ("google_tasks" → "Google Tasks").
-String taskExportPlatformLabel(String platform) {
-  switch (platform) {
-    case 'todoist':
-      return 'Todoist';
-    case 'asana':
-      return 'Asana';
-    case 'google_tasks':
-      return 'Google Tasks';
-    case 'clickup':
-      return 'ClickUp';
-    case 'apple_reminders':
-      return 'Reminders';
-    default:
-      return platform;
-  }
-}
+/// The name a task's `exportPlatform` wire value shows as ("google_tasks" → "Google Tasks"), the
+/// same name Task Integrations uses for that app; an unknown value shows as it came.
+String taskExportPlatformLabel(String platform) =>
+    TaskIntegrationApp.values.firstWhereOrNull((app) => app.key == platform)?.displayName ?? platform;
