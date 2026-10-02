@@ -1190,7 +1190,9 @@ class ListenReceiver(ReplayFilterMixin):
             return False
 
         dead_provider = provider_for_service(self.host.stt_service)
-        service, language, model = select_live_replacement(self, dead_provider, get_stt_service_for_language)
+        service, language, model = select_live_replacement(
+            self, dead_provider, get_stt_service_for_language, managed=managed_chain_enabled(self.host)
+        )
         if service is None:
             return False
         # A failed hop is degraded while the chain continues; exhausted means no replacement path.

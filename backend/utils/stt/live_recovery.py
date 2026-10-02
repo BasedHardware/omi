@@ -4,15 +4,15 @@ from typing import Any, Callable
 
 from config.stt_provider_policy import provider_for_service
 from utils.stt import streaming as st
-from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.live_rollout import window_selection_kwargs
 from utils.stt.live_failure import MAX_STT_FAILOVERS, live_stt_terminal_reason, note_typed_provider_death
 from utils.stt.live_router import note_failed_route
 
 
-def allow_healthy_soniox_rescue(receiver: Any) -> None:
+def allow_healthy_soniox_rescue(receiver: Any, *, managed: bool) -> None:
     """One extra transport recovery on a currently healthy last rescue leg."""
     if (
-        not managed_chain_enabled(receiver.host)
+        not managed
         or receiver.host.stt_service == st.STTService.soniox
         or 'soniox' not in receiver._stt_failed_providers
         or 'soniox' in receiver._stt_rescue_retries
@@ -29,19 +29,19 @@ def select_live_replacement(
     receiver: Any,
     dead_provider: str | None,
     select: Callable[..., tuple[Any, Any, Any]],
+    *,
+    managed: bool,
 ) -> tuple[Any, Any, Any]:
     """Bound rebuild attempts separately from provider exclusions before selecting."""
     failures = note_failed_route(receiver, dead_provider)
     receiver._stt_rebuild_attempts += 1
     if dead_provider:
         receiver._stt_failed_reasons[dead_provider] = live_stt_terminal_reason(receiver.stt_socket, 'connection_lost')
-    if max(failures, receiver._stt_rebuild_attempts) > (
-        3 if managed_chain_enabled(receiver.host) else MAX_STT_FAILOVERS
-    ):
+    if max(failures, receiver._stt_rebuild_attempts) > (3 if managed else MAX_STT_FAILOVERS):
         receiver._settle_pending_live_failover_failure()
         return None, None, None
     note_typed_provider_death(receiver.stt_socket, dead_provider)
-    allow_healthy_soniox_rescue(receiver)
+    allow_healthy_soniox_rescue(receiver, managed=managed)
     service, language, model = select(
         receiver.host.language,
         multi_lang_enabled=receiver.host.multi_lang_enabled,
