@@ -66,6 +66,7 @@ def world(monkeypatch):
     )
     pcm = np.full(16000 * 10, 1000, dtype=np.int16).tobytes()
     monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', lambda *a, **k: iter([(1700000000.0, pcm)]))
+    monkeypatch.setattr(speaker_audio.storage, 'list_audio_chunks', lambda *a, **kwargs: [])
     vector = np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
     monkeypatch.setattr(teaching, 'extract_embedding_from_bytes', lambda *a: vector)
     uploads = []

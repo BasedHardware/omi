@@ -94,6 +94,10 @@ def get_private_cloud_sync_bucket() -> Any:
     return _get_storage_client().bucket(private_cloud_sync_bucket)
 
 
+def get_storage_chunk_semaphore() -> threading.BoundedSemaphore:
+    return _STORAGE_CHUNK_SEM
+
+
 _did_warn_missing_speech_profiles_bucket = False
 
 
@@ -931,7 +935,7 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
                 deleted_batch_paths.add(blob.name)
 
 
-def list_audio_chunks(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
+def list_audio_chunks(uid: str, conversation_id: str, *, timeout: Optional[float] = None) -> List[Dict[str, Any]]:
     """
     List all audio chunks for a conversation.
 
@@ -940,7 +944,11 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
     """
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     prefix = f'chunks/{uid}/{conversation_id}/'
-    blobs = bucket.list_blobs(prefix=prefix)
+    blobs = (
+        bucket.list_blobs(prefix=prefix)
+        if timeout is None
+        else bucket.list_blobs(prefix=prefix, timeout=timeout, retry=None)
+    )
 
     chunks: List[Dict[str, Any]] = []
     for blob in blobs:
@@ -1022,15 +1030,25 @@ def _align_pcm16_frames(pcm_data: bytes, source: str) -> bytes:
     return pcm_data[:-remainder]
 
 
-def download_and_decode_chunk_blob(bucket: Any, path: str, uid: str, sample_rate: int) -> bytes | None:
+def download_and_decode_chunk_blob(
+    bucket: Any,
+    path: str,
+    uid: str,
+    sample_rate: int,
+    *,
+    download_kwargs: Optional[Dict[str, Any]] = None,
+    on_failure: Optional[Callable[[str], None]] = None,
+) -> bytes | None:
     """Download one stored chunk blob (single or batch) and decode/decrypt it by extension to PCM16."""
     ext = _get_extension_for_path(path)
     encrypted = ext in ('opus.enc', 'enc', 'batch.enc')
     is_opus = ext in ('opus.enc', 'opus')
 
     try:
-        chunk_data = bucket.blob(path).download_as_bytes()
+        chunk_data = bucket.blob(path).download_as_bytes(**(download_kwargs or {}))
     except NotFound:
+        if on_failure:
+            on_failure('missing_blob')
         return None
 
     try:
@@ -1047,6 +1065,8 @@ def download_and_decode_chunk_blob(bucket: Any, path: str, uid: str, sample_rate
 
         return _align_pcm16_frames(pcm_data, path)
     except Exception as e:
+        if on_failure:
+            on_failure('decode_failed')
         logger.warning(f"Failed to decode/decrypt {path}: {e}")
         return None
 
@@ -1057,6 +1077,9 @@ def download_audio_chunks_and_merge(
     timestamps: List[float],
     fill_gaps: bool = True,
     sample_rate: int = 16000,
+    *,
+    listed_chunks: Optional[List[Dict[str, Any]]] = None,
+    chunk_loader: Optional[Callable[[str], bytes | None]] = None,
 ) -> bytes:
     """
     Download and merge audio chunks on-demand, handling mixed encryption states.
@@ -1080,7 +1103,7 @@ def download_audio_chunks_and_merge(
 
     # Resolve actual GCS paths — needed to find batch blobs whose filenames
     # contain timestamp ranges instead of single timestamps
-    actual_chunks = list_audio_chunks(uid, conversation_id)
+    actual_chunks = list_audio_chunks(uid, conversation_id) if listed_chunks is None else listed_chunks
     ts_set = {round(ts, 3) for ts in timestamps}
 
     # Build batch blob map: for batch blobs, track which timestamps they cover
@@ -1111,6 +1134,8 @@ def download_audio_chunks_and_merge(
             single_chunk_timestamps.append(chunk['timestamp'])
 
     def _download_and_decode_blob(path: str) -> bytes | None:
+        if chunk_loader is not None:
+            return chunk_loader(path)
         return download_and_decode_chunk_blob(bucket, path, uid, sample_rate)
 
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
@@ -1126,6 +1151,11 @@ def download_audio_chunks_and_merge(
 
         for ext, encrypted, opus in extensions_to_try:
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
+            if chunk_loader is not None:
+                pcm_data = chunk_loader(chunk_path)
+                if pcm_data is not None:
+                    return timestamp, pcm_data
+                continue
             try:
                 chunk_data = bucket.blob(chunk_path).download_as_bytes()
             except NotFound:
@@ -1164,16 +1194,21 @@ def download_audio_chunks_and_merge(
 
     def _submit_job(job: Tuple[str, Any]) -> Tuple[Any, str, Any]:
         kind, key = job
-        _STORAGE_CHUNK_SEM.acquire()
+        # A supplied loader owns its shared download semaphore and invocation
+        # budget. Do not acquire the same semaphore twice around its leaf I/O.
+        if chunk_loader is None:
+            _STORAGE_CHUNK_SEM.acquire()
         try:
             if kind == 'individual':
                 f = storage_executor.submit(download_single_chunk, key)
             else:
                 f = storage_executor.submit(_download_and_decode_blob, key)
-            f.add_done_callback(lambda _: _STORAGE_CHUNK_SEM.release())
+            if chunk_loader is None:
+                f.add_done_callback(lambda _: _STORAGE_CHUNK_SEM.release())
             return (f, kind, key)
         except Exception:
-            _STORAGE_CHUNK_SEM.release()
+            if chunk_loader is None:
+                _STORAGE_CHUNK_SEM.release()
             raise
 
     # Sliding window: at most _CHUNK_WINDOW_SIZE in-flight per call

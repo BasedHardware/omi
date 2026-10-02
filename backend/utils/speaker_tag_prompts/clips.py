@@ -8,8 +8,8 @@ same frame as transcript segments.
 For audio-timeline v2 conversations the clip window must be *covered*: the
 union of validated ``chunk_spans`` must contain it (1 ms tolerance). A known
 uncovered window returns None — never a clip of the wrong audio. Legacy
-conversations use blob timestamps and require complete decoded sample coverage;
-text verification still guards against drift in the original capture clock.
+conversations use blob timestamps with rounding tolerance. Unverified batches
+retain main timing behavior; text verification still guards original clock drift.
 """
 
 from datetime import datetime, timezone
@@ -71,7 +71,13 @@ def v2_relevant_timestamps(conversation: Mapping[str, Any], abs_start: float, ab
 
 
 def conversation_clip_pcm(
-    uid: str, conversation: Mapping[str, Any], start: float, end: float, sample_rate: int = CLIP_SAMPLE_RATE
+    uid: str,
+    conversation: Mapping[str, Any],
+    start: float,
+    end: float,
+    sample_rate: int = CLIP_SAMPLE_RATE,
+    *,
+    caller: str = 'preview',
 ) -> Optional[bytes]:
     """PCM16 mono for ``[start, end)``, or None when no stored audio covers it."""
     if end <= start or end - start > MAX_CLIP_REQUEST_SECONDS:
@@ -119,7 +125,9 @@ def conversation_clip_pcm(
     abs_start = started_at + start
     abs_end = started_at + end
 
-    return legacy_speaker_clip_pcm(uid, conversation['id'], abs_start, abs_end, sample_rate)
+    return legacy_speaker_clip_pcm(
+        uid, conversation['id'], abs_start, abs_end, sample_rate, timestamps=timestamps, caller=caller
+    )
 
 
 def trim_pcm16(pcm: bytes, sample_rate: int, start: float, end: float) -> bytes:
