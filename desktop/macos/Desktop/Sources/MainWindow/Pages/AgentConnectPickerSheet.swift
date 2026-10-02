@@ -109,6 +109,7 @@ private struct ConnectOptionCard: View {
   @Binding var statuses: [MemoryExportDestination: MemoryExportStatus]
 
   @State private var isRunning = false
+  @State private var isLoadingMCPKey = false
   @State private var resultMessage: ConnectOptionResultMessage?
   @State private var mcpKey: String?
   @State private var showManual = false
@@ -173,7 +174,7 @@ private struct ConnectOptionCard: View {
             )
           }
           .buttonStyle(.plain)
-          .disabled(isRunning || isConnected)
+          .disabled(isRunning || isLoadingMCPKey || isConnected)
         }
 
         // Secondary — full manual instructions in a quiet dropdown.
@@ -192,6 +193,11 @@ private struct ConnectOptionCard: View {
                   .frame(maxWidth: .infinity, alignment: .leading)
                 manualBlock(chatGPTDeveloperModeText)
               } else {
+                if destination.requiresHostedMCPKeyForSetup && mcpKey == nil {
+                  Button(isLoadingMCPKey ? "Generating…" : "Generate connection key", action: generateMCPKey)
+                    .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+                    .disabled(isLoadingMCPKey || isRunning)
+                }
                 ForEach(Array(setup.steps.enumerated()), id: \.offset) { idx, step in
                   Text("\(idx + 1). \(step)")
                     .scaledFont(size: OmiType.caption)
@@ -200,11 +206,13 @@ private struct ConnectOptionCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let copyText = setup.copyText {
-                  manualBlock(copyText)
+                  manualBlock(
+                    copyText, enabled: !destination.requiresHostedMCPKeyForSetup || mcpKey != nil)
                 } else {
                   manualBlock("Server URL: \(setup.serverURL)", copy: setup.serverURL)
                   if destination.requiresHostedMCPKeyForSetup {
-                    manualBlock("Key: \(mcpKey ?? "YOUR_OMI_KEY")", copy: mcpKey ?? "YOUR_OMI_KEY")
+                    manualBlock(
+                      "Key: \(mcpKey ?? "YOUR_OMI_KEY")", copy: mcpKey ?? "YOUR_OMI_KEY", enabled: mcpKey != nil)
                   }
                 }
               }
@@ -228,7 +236,7 @@ private struct ConnectOptionCard: View {
     )
     .task {
       statuses[destination] = await MemoryExportService.shared.refreshCloudGrantConnectionStatus(for: destination)
-      await prepareMCPKeyIfNeeded()
+      mcpKey = await MemoryExportService.shared.storedMCPKey()
     }
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()
@@ -255,16 +263,16 @@ private struct ConnectOptionCard: View {
     destination.hasLocallyVerifiableLiveSetup && statuses[destination]?.hasConnection == true
   }
 
-  private func prepareMCPKeyIfNeeded() async {
-    guard destination.requiresHostedMCPKeyForSetup else { return }
-    if let stored = await MemoryExportService.shared.storedMCPKey() {
-      mcpKey = stored
-      return
-    }
-    do {
-      mcpKey = try await MemoryExportService.shared.ensureMCPKey()
-    } catch {
-      resultMessage = .failure("Couldn't prepare your Omi key. Try again.")
+  private func generateMCPKey() {
+    guard !isLoadingMCPKey else { return }
+    isLoadingMCPKey = true
+    Task { @MainActor in
+      defer { isLoadingMCPKey = false }
+      do {
+        mcpKey = try await MemoryExportService.shared.mcpKeyForLocalConnectorSetup()
+      } catch {
+        resultMessage = .failure("Couldn't prepare your Omi key. Try again.")
+      }
     }
   }
 
@@ -273,6 +281,7 @@ private struct ConnectOptionCard: View {
     Task { @MainActor in
       do {
         let outcome = try await MemoryExportExecutor.run(destination)
+        mcpKey = await MemoryExportService.shared.storedMCPKey()
         switch outcome.mode {
         case .autonomous:
           resultMessage = .success("Omi is setting this up — follow along in the floating bar.")
@@ -391,7 +400,7 @@ private struct ConnectOptionCard: View {
 
   /// `copy` overrides what the Copy button writes — used by label:value rows so
   /// the clipboard gets the paste-able value, never the display label.
-  private func manualBlock(_ text: String, copy: String? = nil) -> some View {
+  private func manualBlock(_ text: String, copy: String? = nil, enabled: Bool = true) -> some View {
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(text)
         .font(.system(size: 11, design: .monospaced))
@@ -413,6 +422,7 @@ private struct ConnectOptionCard: View {
             RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous).fill(Ink.primary))
       }
       .buttonStyle(.plain)
+      .disabled(!enabled)
     }
     .padding(OmiSpacing.sm)
     .frame(maxWidth: .infinity, alignment: .leading)
