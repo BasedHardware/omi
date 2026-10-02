@@ -2101,6 +2101,36 @@ stubs use ordinary temporal assignment; stubs remain untouched. Explicit targets
 with real live transcript or photo content retain live attachment and identity.
 Source, device and lock state isolate components; unknown device is its own partition.
 
+Compatibility is equality of all three fields: two locked captures are compatible,
+so locked chunks merge, append to a locked explicit target and deduplicate on retry
+exactly as unlocked ones do. A mismatch means a field differs.
+
+`SYNC_ASSIGNMENT_RECOVERY_ENABLED` defaults on (unknown/blank values disable it).
+An explicit target whose source, device or lock state differs from the upload falls
+back to compatible temporal assignment, and the target remains untouched. This
+can retain speech already present in an incompatible live row as a second conversation:
+dedupe is scoped to compatible selected rows, not cross-device transcript similarity.
+With the flag off the mismatch is rejected (`SyncAssignmentConflict`,
+`provenance_mismatch`). In both modes a stored retry anchor whose source, device or
+lock state changed after it was written is rejected rather than replaced; an
+unchanged anchor is an ordinary retry. The flag is pinned on in both runtime
+overlays for every main.py service.
+
+Classified persistence failures (`provenance_mismatch` and `redirect_cycle`
+conflicts, the recognized Firestore document-size marker, and the data-shape
+exception classes) count as strikes in the repeat-failure cap: three matching
+failures of the same content within 24 hours pause it for 24 hours, after which it
+is admitted again automatically. Nothing pauses on the first occurrence and nothing
+pauses permanently. A batch with at least one classified failure earns the strike
+even when sibling segments succeeded; differing fingerprints in one batch share the
+`persistence:mixed` token. Sibling checkpoints and partial results are kept, the
+failed-job response retains local WAL audio, and completion is never reported.
+Unknown Firestore 400s, expired transactions, contention and transport failures are
+never strikes. `sync_assignment_target` reports bounded `mismatch` tokens (`lock`
+only when lock state differs); `sync_persistence_exception` reports `firestore_error`.
+Persistence failures use provider/model `unknown` and `sync_persistence_failed`,
+preserving STT provider attribution for STT failures only.
+
 `utils/conversation_continuity.py` owns the shared predicate. The remaining policy
 input difference is that realtime can configure its timeout per session, while WALs
 do not carry this setting and sync uses the default. Job leases, persistence fences,
@@ -2255,3 +2285,23 @@ the transactional deletion fence. Late commits after a worker timeout are valid 
 (uid, document ID), separately from attempt metrics. Drops are coverage losses.
 The protocol and TTL deployment prerequisite
 are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).
+
+### Empty-title presentation and diagnosis
+
+Flutter's presentation-only fallback uses the shared transcript parity fixtures and,
+without text, the localized Recording label plus `OmiDateFormat` in local time.
+It never changes `structured.title` or the title editor's value. The existing
+`Conversation Untitled Rendered` event measures use of this clock fallback;
+compare within a build. It fires at most once per conversation and surface per
+app session (subject to the session budget), **not once per newly created
+empty-title conversation**. Old recording dates and repeated sessions prevent
+using it as a daily creation count.
+
+`recovery_structure_unavailable` means no rich structure survived, not a provider
+timeout. Provider exceptions leave `_get_structured` through the existing typed
+processing-failure retry path. The `selfheal_guard` refusal log now includes a
+bounded `structure_reason`: `transcript_decode_failed` or `no_enriched_structure`.
+Neither field contains transcript content. Do not retry unreadable blobs as
+provider outages. The existing `omi-journey-capture-fail` alert
+uses the durable terminal projection; inspect the current alert manifest for
+its 30-minute denominator and dwell rather than adding a raw-count page.

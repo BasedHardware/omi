@@ -106,6 +106,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ROUTING_TARGETS_JSON",
             "STT_ROUTING_DISRUPTION_GATE",
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
+            # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
+            "SYNC_ASSIGNMENT_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
@@ -210,6 +212,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ROUTING_TARGETS_JSON",
             "STT_ROUTING_DISRUPTION_GATE",
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
+            # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
+            "SYNC_ASSIGNMENT_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",

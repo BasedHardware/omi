@@ -46,9 +46,9 @@ WITHOUT_PHOTOS_PROFILES = (
     _profile(
         'main-list-default-or-multi-status', statuses=_MULTI_STATUS, sources=[[], ['omi']], **_DATES, **_SELECTORS
     ),
-    # The stats scan reads through the scan-and-fill branch so that a short
-    # page really means the data ended (#19908).
-    _profile('people-stats', include_discarded=[True]),
+    # The stats scan must not use the scan-and-fill branch (include_discarded=True):
+    # it re-reads from the newest row on every page and timed the People list out.
+    _profile('people-stats'),
     _profile('speaker-search-fallback', include_discarded=[False, True], **_DATES),
     _profile('prior-meeting-context', start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),
     _profile('wrapped-2025', statuses=[['completed']], start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),

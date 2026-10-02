@@ -30,7 +30,7 @@ import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 /// The row title for a conversation (hub audit #21): its title, else its transcript text (legacy
-/// rows the server left untitled), "Untitled Conversation" only when neither exists, and
+/// rows the server left untitled), a recording date/time when neither exists, and
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
@@ -43,6 +43,7 @@ String conversationRowTitle(BuildContext context, ServerConversation conversatio
     conversation,
     l10n,
     surface: ConversationUntitledRenderedSurface.list,
+    dates: OmiDateFormat.of(context),
     title: conversation.structured.title.decodeString,
   );
 }
