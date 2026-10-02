@@ -8,7 +8,8 @@ same frame as transcript segments.
 For audio-timeline v2 conversations the clip window must be *covered*: the
 union of validated ``chunk_spans`` must contain it (1 ms tolerance). A known
 uncovered window returns None — never a clip of the wrong audio. Legacy
-conversations keep the timestamp-based best-effort behavior.
+conversations use strict authoritative spans or main timing behavior for
+uncertain chunks/batches; text verification still guards original clock drift.
 """
 
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ from utils.audio_timeline import coverage_outcome, segment_wall_window
 from utils.speaker_tag_prompts.coverage import prompt_window_covered
 from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL
 from utils.other.storage import download_audio_chunks_and_merge
+from utils.speaker_audio import legacy_speaker_clip_pcm
 
 CLIP_SAMPLE_RATE = 16000
 MAX_CLIP_REQUEST_SECONDS = 12.0
@@ -69,7 +71,13 @@ def v2_relevant_timestamps(conversation: Mapping[str, Any], abs_start: float, ab
 
 
 def conversation_clip_pcm(
-    uid: str, conversation: Mapping[str, Any], start: float, end: float, sample_rate: int = CLIP_SAMPLE_RATE
+    uid: str,
+    conversation: Mapping[str, Any],
+    start: float,
+    end: float,
+    sample_rate: int = CLIP_SAMPLE_RATE,
+    *,
+    caller: str = 'preview',
 ) -> Optional[bytes]:
     """PCM16 mono for ``[start, end)``, or None when no stored audio covers it."""
     if end <= start or end - start > MAX_CLIP_REQUEST_SECONDS:
@@ -117,20 +125,9 @@ def conversation_clip_pcm(
     abs_start = started_at + start
     abs_end = started_at + end
 
-    first = max((i for i, ts in enumerate(timestamps) if ts <= abs_start), default=0)
-    relevant = [timestamp for timestamp in timestamps[first:] if timestamp <= abs_end]
-    if not relevant:
-        return None
-
-    try:
-        merged = download_audio_chunks_and_merge(
-            uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate
-        )
-    except FileNotFoundError:
-        return None
-    buffer_start = min(relevant)
-    pcm = trim_pcm16(merged, sample_rate, abs_start - buffer_start, abs_end - buffer_start)
-    return pcm or None
+    return legacy_speaker_clip_pcm(
+        uid, conversation['id'], abs_start, abs_end, sample_rate, timestamps=timestamps, caller=caller
+    )
 
 
 def trim_pcm16(pcm: bytes, sample_rate: int, start: float, end: float) -> bytes:

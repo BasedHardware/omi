@@ -131,8 +131,10 @@ provider-attributable reason set; later failures after a no-text diagnostic
 remain observable. Failed recovery trials require the same failure-user
 breadth as fleet benches; narrow failing cohorts retain their trial share with
 bounded per-user voting windows, while healthy small cohorts can promote.
-The cost-v6 evidence seam is `LiveLegOutcome.settle`: the serving decision
-settles both source-leg fallback and router observation exactly once. Liveness
+The cost-v7 evidence seam is `LiveLegOutcome.settle`: the serving decision
+settles both source-leg fallback and router observation exactly once. A first
+claim after client disconnect/inactive/shutdown excludes the death and preserves
+prior text success; already claimed connected-client evidence remains valid. Liveness
 reads and transport closes do not infer provider blame. Accepted provider deaths
 and actual text have no VAD minimum. Receiver teardown is marked before tail
 sends; idle/request timeouts, rotation, local capacity and audio/client causes
@@ -766,6 +768,24 @@ Only an actual failure to find a serving replacement terminates live STT,
 emitting `stt_failed` and closing the client WebSocket with 1011; recovery then
 requires a client reconnect. Configured and circuit-open candidate skipping
 continues to be enforced by the connector.
+A process-local full window and its five-second capacity cooldown are skipped
+in static/shadow serving as well. A refused or circuit-open Parakeet primary
+cannot block the remaining non-account rescue leg. Terminal rebuild failure
+is latched under the receiver lock; replay-ring pressure uses the same
+idempotent client-close path as an ordinary send failure. Queued audio and
+monitor observations therefore cannot repeat an exhausted chain.
+A managed session may make one additional Soniox connection after that leg's
+previous transport loss (`connection_lost` or `send_failed`), only when its
+local circuit is closed and no untried configured Deepgram rescue is available.
+The failed window never re-arms. Rebuilds now have an actual three-attempt
+session budget (two on the legacy path), rather than counting distinct providers.
+Concurrent last-resort handshakes retain the configured circuit probe limit.
+A session waits at most 12 seconds for an occupied non-account probe slot;
+account benches and window shedding are never forced. At the 300ms default
+liveness grace, 35 otherwise healthy serialized handshakes take about 10.5s,
+excluding provider connection latency. Actual completed text still determines
+recovery. Exhausted STT fallback children are exposed at zero on process start,
+so a first burst after the first scrape is visible to Prometheus `increase()`.
 Late upgrade rejection recovery also applies to control sessions that started
 on Soniox or Modulate: an eligible next provider is attempted before terminal
 closure. These sessions do not have the window replay ring, so preserving their
@@ -1393,6 +1413,41 @@ one pooled WAV under the unchanged gates, and records one outcome on
 REST tries immediately, sockets queue a delayed attempt, and fanout completion
 schedules a bounded retry for receipt-named people lacking a usable voiceprint
 (≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
+
+Legacy person teaching, owner confirmations and speaker-tag preview clips use
+`utils/speaker_audio.py`. Main's manifest timestamp selection is retained.
+Authoritative spans use strict sample placement: newest selected blobs fill
+positions first, earlier overlaps fill holes, and gaps/truncation always reject.
+No padding or rounding tolerance is permitted in this policy. Filename-only
+chunks and unverified legacy/live batches use main's exact merger and trim for
+the selected window, preserving its samples and format priority. These clips
+are labelled `compatibility/uncertain_timing`, never proven `covered`.
+Pooled teaching skips unavailable windows and includes only their contributors.
+The 10 s floor, text-containment (0.9), dominant-speaker (0.7), embedding and
+voiceprint publication gates are unchanged. Existing voiceprints survive
+rejected attempts. No producer, entitlement or feature-flag change is included.
+
+One session shares listing and decoded cache across all legacy pooled windows.
+Both policies have identical limits: 32 actual download attempts including SDK
+transient retries, 64 MiB reserved transfer bytes including failed attempts,
+and a 30 s admission deadline. There is no budget escape. Exhaustion returns
+no clip with `download_limit`. The SDK default transient predicate/backoff
+retries each leaf with the remaining timeout; transient errors are never
+negative-cached. Only missing objects and decode failures are negative-cached.
+Downloads use the existing 32-slot semaphore and bounded byte ranges; unknown
+sizes that reach the byte allowance reject rather than decode a partial object.
+Listing is capped at 10,000 objects, 1,000 per page; each page has a 1 s request
+and retry timeout. The deadline is checked while iterating and after decoding.
+The 30 s value bounds admission, not preemption of a running SDK request or
+native decode. A final listing request/retry can overrun it by up to 2 s;
+CPU decode and transport scheduling cannot be assigned a strict wall-time
+upper bound by this synchronous API. No elapsed-time latency was measured.
+Person teaching retains 30 s / 12 windows, one verification and one embedding.
+
+`omi_speaker_clip_coverage_total` uses bounded `outcome`, `reason` and `caller`
+labels: `complete`, `gap`, `uncertain_timing`, `download_limit`, `decode_failed`,
+`download_failed`, `missing_blob`, `invalid_window`; callers are `teaching`,
+`owner_confirmation`, `preview`, `unknown`. No user content enters labels.
 
 Owner display names share `database.auth.get_user_name`: Firebase display name,
 Firestore `name`, then an explicit identity bullet on the first line of
