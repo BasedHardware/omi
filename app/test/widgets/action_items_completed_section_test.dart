@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/action_items/task_page.dart';
+import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
@@ -56,8 +57,11 @@ Future<ActionItemsResponse?> _items({
     );
 
 /// One list: done tasks fold under the open sections, and a row opens its own page.
+final deletes = <String>[];
+
 void main() {
   setUp(() {
+    deletes.clear();
     PlatformManager.initializeForLocalHarness();
     Env.overrideApiBaseUrl('http://127.0.0.1:9/');
   });
@@ -85,6 +89,10 @@ void main() {
     final completions = <bool>[];
     final provider = ActionItemsProvider(
       getActionItems: _items,
+      deleteActionItemRequest: (id) async {
+        deletes.add(id);
+        return true;
+      },
       updateActionItemRequest: (id, {description, completed, dueAt}) async {
         await Future<void>.delayed(updateDelay);
         if (completed != null) completions.add(completed);
@@ -199,6 +207,25 @@ void main() {
     expect(provider.selectedCount, 1);
   });
 
+  testWidgets('a paywalled task shows no selection box, and Clear leaves paywalled done tasks', (tester) async {
+    final (provider, _) = await pumpApp(tester);
+    provider.startSelection();
+    await tester.pumpAndSettle();
+    // Two open rows on screen, one of them locked: one selection box.
+    expect(find.byType(TaskSelectionSquare), findsOneWidget);
+    provider.clearSelection();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Completed'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Clear'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+    // The locked done task is not sent for deletion.
+    expect(deletes.toSet(), {'done1', 'done2'});
+  });
+
   testWidgets('holding a done task offers Mark Incomplete and Delete Task', (tester) async {
     await pumpPage(tester);
     await tester.tap(find.text('Completed'));
@@ -239,6 +266,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(completions, [true]);
     expect(find.text('Completed'), findsOneWidget);
+  });
+
+  testWidgets('the page shows the provider\'s state when another surface toggles the task meanwhile', (tester) async {
+    final (provider, completions) = await pumpApp(tester, updateDelay: const Duration(milliseconds: 300));
+    await tester.tap(find.text('Draft the update'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('task_completed_toggle')));
+    await tester.pump();
+    // The list (or Home) restores the same task while the page's request is still in flight.
+    final open = provider.actionItems.firstWhere((i) => i.id == 'open');
+    final restore = provider.updateActionItemState(open, false);
+    await tester.pump(const Duration(seconds: 1));
+    await restore;
+    await tester.pumpAndSettle();
+
+    expect(completions, [true, false]);
+    expect(find.text('Mark Complete'), findsOneWidget);
+    expect(find.text('Completed'), findsNothing);
   });
 
   testWidgets('tapping a task opens its page with the conversation line, and Save wakes up on an edit', (tester) async {

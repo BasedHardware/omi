@@ -44,6 +44,7 @@ typedef UpdateDueDateRequest = Future<ActionItemWithMetadata?> Function(String i
 
 typedef UpdateActionItemRequest = Future<ActionItemWithMetadata?> Function(String id,
     {String? description, bool? completed, DateTime? dueAt});
+typedef ExportItemRequest = Future<ExportResult> Function(ActionItemWithMetadata item, TaskIntegrationApp platform);
 
 class ActionItemsProvider extends ChangeNotifier {
   ActionItemsProvider({
@@ -53,8 +54,10 @@ class ActionItemsProvider extends ChangeNotifier {
     BulkDeleteActionItemsRequest? bulkDeleteActionItemsRequest,
     CreateActionItemRequest? createActionItemRequest,
     UpdateDueDateRequest? updateDueDateRequest,
+    ExportItemRequest? exportItemRequest,
     api.ActionItemsApi? actionItemsApi,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
+        _exportItemRequest = exportItemRequest ?? ActionItemExportService.export,
         _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
         _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
         _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
@@ -70,7 +73,11 @@ class ActionItemsProvider extends ChangeNotifier {
   final BulkDeleteActionItemsRequest _bulkDeleteActionItemsRequest;
   final CreateActionItemRequest _createActionItemRequest;
   final UpdateDueDateRequest _updateDueDateRequest;
+  final ExportItemRequest _exportItemRequest;
   final api.ActionItemsApi? _actionItemsApi;
+
+  /// Tasks with an export in flight; a second request for one of them is skipped until it settles.
+  final Set<String> _exportingIds = {};
   ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
@@ -1378,9 +1385,16 @@ class ActionItemsProvider extends ChangeNotifier {
   }) async {
     final current =
         candidates.map((c) => _actionItems.firstWhere((i) => i.id == c.id, orElse: () => c)).toList(growable: false);
-    final items = current.where((i) => !i.exported).toList(growable: false);
+    final pending = current.where((i) => !i.exported).toList(growable: false);
+    // An export already running for a task (a double tap, the row menu and the page at once) is
+    // left to finish; this call only takes what nothing else is exporting.
+    final items = pending.where((i) => !_exportingIds.contains(i.id)).toList(growable: false);
     final total = items.length;
 
+    if (total == 0 && pending.isNotEmpty) {
+      onSettled?.call();
+      return;
+    }
     if (total == 0) {
       final only = current.length == 1 ? current.single : null;
       OmiFeedback.info(
@@ -1395,11 +1409,16 @@ class ActionItemsProvider extends ChangeNotifier {
 
     OmiFeedback.progress(context, context.l10n.bulkExportInProgress);
 
-    final results = await Future.wait(items.map((i) => ActionItemExportService.export(i, platform)));
+    _exportingIds.addAll(items.map((i) => i.id));
+    final List<ExportResult> results;
+    try {
+      results = await Future.wait(items.map((i) => _exportItemRequest(i, platform)));
+      // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.
+      await fetchActionItems();
+    } finally {
+      _exportingIds.removeAll(items.map((i) => i.id));
+    }
     final successCount = results.where((r) => r == ExportResult.success).length;
-
-    // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.
-    await fetchActionItems();
     onSettled?.call();
 
     if (!context.mounted) {

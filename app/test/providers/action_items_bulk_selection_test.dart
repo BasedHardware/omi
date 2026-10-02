@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/pages/action_items/services/action_item_export_service.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 
@@ -46,9 +47,12 @@ Future<ActionItemsResponse?> _onePage({
 
 /// Bulk selection skips what the backend would refuse, reaches past the loaded page, and an export
 /// trusts the provider's record over the caller's copy.
+final exportedIds = <String>[];
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    exportedIds.clear();
   });
 
   test('Select All leaves paywalled tasks out and reports "all selected" from the same set', () async {
@@ -105,7 +109,10 @@ void main() {
         ActionItemsResponse(actionItems: [
           _open,
           ActionItemWithMetadata(
-              id: 'old-done', description: 'Pay the invoice', completed: true, completedAt: DateTime(2026, 9, 1)),
+              id: 'old-done',
+              description: 'Pay the invoice',
+              completed: true,
+              completedAt: DateTime.now().subtract(const Duration(days: 1))),
         ]);
     final provider = ActionItemsProvider(
       getActionItems: items,
@@ -156,6 +163,44 @@ void main() {
     // The late "completed" answer is stale and must not win over the restore.
     expect(item.completed, isFalse);
     expect(provider.completedItems, isEmpty);
+  });
+
+  testWidgets('two exports of the same task at once send it once', (tester) async {
+    final provider = ActionItemsProvider(
+        getActionItems: _onePage,
+        exportItemRequest: (item, platform) async {
+          exportedIds.add(item.id);
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+          return ExportResult.success;
+        });
+    addTearDown(provider.dispose);
+    await provider.ensureLoaded();
+
+    late BuildContext pageContext;
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ActionItemsProvider>.value(value: provider),
+        ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => TaskIntegrationProvider()),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: Builder(builder: (context) {
+          pageContext = context;
+          return const SizedBox.shrink();
+        })),
+      ),
+    ));
+
+    // The row menu and the task page both fire before the first export settles.
+    final first = provider.exportItems(pageContext, [_open], TaskIntegrationApp.googleTasks);
+    final second = provider.exportItems(pageContext, [_open], TaskIntegrationApp.googleTasks);
+    await tester.pump(const Duration(seconds: 1));
+    await Future.wait([first, second]);
+    await tester.pump(const Duration(seconds: 8));
+    await tester.pumpAndSettle();
+
+    expect(exportedIds, ['open']);
   });
 
   test('an export platform is named the way Task Integrations names the app', () {

@@ -208,6 +208,9 @@ class TaskIntegrationProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
+    // The old session's load exits on the generation check without setting hasLoaded; a caller
+    // of ensureLoaded must start a fresh one rather than join it.
+    _inFlightLoad = null;
     _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
     _connectionDetails = {};
     _isLoading = false;
