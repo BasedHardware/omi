@@ -179,7 +179,9 @@ class _McpKeysList extends StatelessWidget {
         }
         if (provider.keys.isEmpty) {
           return OmiEmptyState(
-              glyph: const OmiLineIcon(OmiLineGlyph.key), title: l10n.noApiKeysYet, message: l10n.createKeyToGetStarted);
+              glyph: const OmiLineIcon(OmiLineGlyph.key),
+              title: l10n.noApiKeysYet,
+              message: l10n.createKeyToGetStarted);
         }
         return OmiSettingsGroup(children: [for (final key in provider.keys) McpApiKeyListItem(apiKey: key)]);
       },
