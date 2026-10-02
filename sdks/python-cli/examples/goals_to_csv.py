@@ -182,14 +182,14 @@ def build_rows(
         is_active = bool(item.get("is_active", True))
         goal_type = str(item.get("goal_type") or "qualitative").strip().lower()
         progress = calculate_progress(item)
-        is_achieved = (progress is not None and progress >= 100.0) or (not is_active)
+        is_achieved = progress is not None and progress >= 100.0
 
-        if is_achieved:
-            status = "completed"
-        elif is_active:
-            status = "active"
-        else:
+        if not is_active:
             status = "inactive"
+        elif is_achieved:
+            status = "completed"
+        else:
+            status = "active"
 
         if norm_status == "active" and status != "active":
             continue
@@ -270,6 +270,7 @@ def convert(
                 f"Refusing to overwrite existing {output_path} (use --overwrite to replace)"
             ) from None
         try:
+            os.chmod(output_path, 0o644)
             with output:
                 output.write(payload)
         except OSError:
@@ -280,9 +281,11 @@ def convert(
         tmp_path = parent_dir / tmp_name
         try:
             with tmp_path.open("xb") as tmp_file:
+                os.chmod(tmp_path, 0o644)
                 tmp_file.write(payload)
                 tmp_file.flush()
                 os.fsync(tmp_file.fileno())
+            os.chmod(tmp_path, 0o644)
             tmp_path.replace(output_path)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
@@ -333,6 +336,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     except BrokenPipeError:
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
+        os.close(devnull)
         return 1
     except (OSError, ValueError) as exc:
         sys.exit(f"Goals CSV export failed: {exc}")
