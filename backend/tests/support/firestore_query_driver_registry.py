@@ -1365,7 +1365,7 @@ _add(
     DriverEntry(
         'database.mcp_api_key._get_api_key_auth_result',
         base={'hashed_key': 'a' * 64},
-        neutrals={'cache_available': (True, 'positive-cache gate; not a query filter')},
+        domains={'cache_available': [True, False]},
         patchers=(_stub('database.redis_db.read_cached_mcp_api_key_auth_context', _CACHE_MISS),),
     )
 )

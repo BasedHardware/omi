@@ -219,12 +219,23 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
 
 
 def _get_api_key_auth_result(hashed_key: str, *, cache_available: bool = True) -> ApiKeyAuthLookupResult:
-    """Use Firestore only after an unreadable marker; never reuse a prior read."""
+    """Use Firestore only after an unreadable marker; never reuse a prior read.
+
+    The deny side of the revocation fence runs at every checkpoint — entry,
+    after the cache read, after the Firestore read, and after the fill — even
+    on paths where a malformed cache payload already disabled the positive
+    cache, so a concurrent revoke cannot slip through a cache-error path. An
+    unreadable marker (None) reloads the lookup once without the positive
+    cache; on that reloaded pass the marker read is not retried, and the
+    authoritative Firestore record decides.
+    """
     repairs: set[ApiKeyAuthRepair] = set()
+    revoked = api_key_cache.is_revoked("dev", hashed_key)
+    if revoked is True:
+        return ApiKeyAuthLookupResult(context=None, repairs=frozenset(repairs))
     if cache_available:
-        revoked = api_key_cache.is_revoked("dev", hashed_key)
-        if revoked is True:
-            return ApiKeyAuthLookupResult(context=None, repairs=frozenset(repairs))
+        if revoked is None:
+            return _get_api_key_auth_result(hashed_key, cache_available=False)
         cache_available = revoked is False
     if not cache_available:
         repairs.add(ApiKeyAuthRepair.CACHE_READ)
@@ -232,6 +243,8 @@ def _get_api_key_auth_result(hashed_key: str, *, cache_available: bool = True) -
     # Check cache first
     cache_read = redis_db.read_cached_dev_api_key_data(hashed_key) if cache_available else None
     if cache_read is not None and cache_read.mode == ApiKeyCacheReadMode.ERROR:
+        # A malformed payload only disables the positive cache for this
+        # authentication; the deny-side fence checks below still run.
         cache_available = False
         repairs.add(ApiKeyAuthRepair.CACHE_READ)
     cached_data = cache_read.data if cache_read is not None and cache_read.mode == ApiKeyCacheReadMode.HIT else None
@@ -258,12 +271,13 @@ def _get_api_key_auth_result(hashed_key: str, *, cache_available: bool = True) -
     if not docs:
         return ApiKeyAuthLookupResult(context=None, repairs=frozenset(repairs))
 
-    if cache_available:
-        revoked = api_key_cache.is_revoked("dev", hashed_key)
-        if revoked is True:
-            return ApiKeyAuthLookupResult(context=None, repairs=frozenset(repairs))
-        if revoked is None:
-            return _get_api_key_auth_result(hashed_key, cache_available=False)
+    # Deny-side fence runs unconditionally — including after a cache-read
+    # ERROR — because the fallback below trusts this authoritative record.
+    revoked = api_key_cache.is_revoked("dev", hashed_key)
+    if revoked is True:
+        return ApiKeyAuthLookupResult(context=None, repairs=frozenset(repairs))
+    if revoked is None and cache_available:
+        return _get_api_key_auth_result(hashed_key, cache_available=False)
     key_doc = docs[0]
     raw: object = key_doc.to_dict()
     key_data: dict[str, Any] = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
@@ -285,12 +299,6 @@ def _get_api_key_auth_result(hashed_key: str, *, cache_available: bool = True) -
     ):
         repairs.add(ApiKeyAuthRepair.SCOPES)
 
-    if cache_available:
-        revoked = api_key_cache.is_revoked("dev", hashed_key)
-        if revoked is True:
-            return ApiKeyAuthLookupResult(context=None, repairs=frozenset(repairs))
-        if revoked is None:
-            return _get_api_key_auth_result(hashed_key, cache_available=False)
     if cache_available:
         cache_written = redis_db.cache_dev_api_key(
             hashed_key,
@@ -315,12 +323,13 @@ def _get_api_key_auth_result(hashed_key: str, *, cache_available: bool = True) -
     except NotFound:
         return ApiKeyAuthLookupResult(context=None, repairs=frozenset(repairs))
 
-    if cache_available:
-        revoked = api_key_cache.is_revoked("dev", hashed_key)
-        if revoked is True:
-            return ApiKeyAuthLookupResult(context=None, repairs=frozenset(repairs))
-        if revoked is None:
-            return _get_api_key_auth_result(hashed_key, cache_available=False)
+    # Final deny-side fence after the durable write: a revoke that landed
+    # while this authentication was in flight still denies.
+    revoked = api_key_cache.is_revoked("dev", hashed_key)
+    if revoked is True:
+        return ApiKeyAuthLookupResult(context=None, repairs=frozenset(repairs))
+    if revoked is None and cache_available:
+        return _get_api_key_auth_result(hashed_key, cache_available=False)
     return ApiKeyAuthLookupResult(
         context={"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id},
         repairs=frozenset(repairs),

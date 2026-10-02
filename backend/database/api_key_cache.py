@@ -17,6 +17,7 @@ import json
 import logging
 from typing import Any, Optional, Sequence
 
+from database import redis_db
 from database.api_key_metadata import ApiKeyCacheReadMode, ApiKeyCacheReadResult, ApiKeyRevocationUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -31,8 +32,7 @@ return 1
 
 
 def _redis() -> Any:
-    from database import redis_db
-
+    """Lazy client accessor — the sanctioned monkeypatch seam for hermetic tests."""
     return redis_db.r
 
 
@@ -79,26 +79,37 @@ def fill_if_active(client: Any, kind: str, hashed_key: str, entries: Sequence[tu
 
 
 def read_context(client: Any, kind: str, hashed_key: str) -> ApiKeyCacheReadResult:
-    """Read current/legacy positive entries, checking the fence after the read."""
+    """Read current/legacy positive entries, checking the fence before use."""
     try:
         cache_key = f"mcp_api_key_auth:{hashed_key}" if kind == "mcp" else f"dev_api_key:{hashed_key}"
+        # Check the fence first: a present deny marker explains (and overrides)
+        # any positive entry, including malformed legacy payloads.
+        revoked = _read_marker(client, kind, hashed_key)
+        if revoked is None:
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
         raw = client.get(cache_key)
         data = None
+        malformed = False
         if raw:
             data = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
             if not isinstance(data, dict):
-                return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+                data = None
+                malformed = True
         elif kind == "mcp":
             legacy = client.get(f"mcp_api_key:{hashed_key}")
             if legacy:
                 uid = legacy.decode() if isinstance(legacy, bytes) else legacy
                 if not isinstance(uid, str):
-                    return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
-                data = {"user_id": uid, "scopes": None, "key_id": None, "app_id": None}
-        revoked = _read_marker(client, kind, hashed_key)
-        if revoked is None:
-            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+                    uid = None
+                    malformed = True
+                else:
+                    data = {"user_id": uid, "scopes": None, "key_id": None, "app_id": None}
         if revoked or data is None:
+            if malformed:
+                # Surface the unhealthy cache entry so callers bypass the
+                # positive cache (and record a repair) instead of treating
+                # this as a clean miss.
+                return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
             return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
         return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.HIT, data=data)
     except Exception as exc:

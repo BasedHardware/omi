@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import redis
 import logging
 
+from database import api_key_cache
 from database.api_key_metadata import (
     DEV_API_KEY_AUTH_CONTEXT_VERSION,
     MCP_API_KEY_AUTH_CONTEXT_VERSION,
@@ -818,9 +819,7 @@ def get_user_data_protection_level(uid: str) -> Optional[str]:
 
 @try_catch_decorator
 def cache_mcp_api_key(hashed_key: str, user_id: str, ttl: int = 3600) -> None:
-    from database.api_key_cache import fill_if_active
-
-    fill_if_active(r, "mcp", hashed_key, [(f'mcp_api_key:{hashed_key}', user_id)], ttl)
+    api_key_cache.fill_if_active(r, "mcp", hashed_key, [(f'mcp_api_key:{hashed_key}', user_id)], ttl)
 
 
 @try_catch_decorator
@@ -843,9 +842,7 @@ def cache_mcp_api_key_auth_context(
         "memory_grant_seeded": memory_grant_seeded,
         "auth_context_version": auth_context_version,
     }
-    from database.api_key_cache import fill_if_active
-
-    return fill_if_active(
+    return api_key_cache.fill_if_active(
         r,
         "mcp",
         hashed_key,
@@ -863,9 +860,7 @@ def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
 
 def read_cached_mcp_api_key_auth_context(hashed_key: str) -> ApiKeyCacheReadResult:
     """Read auth context while distinguishing cache absence from failure."""
-    from database.api_key_cache import read_context
-
-    return read_context(r, "mcp", hashed_key)
+    return api_key_cache.read_context(r, "mcp", hashed_key)
 
 
 def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[Dict[str, Any]]:
@@ -876,9 +871,7 @@ def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[Dict[str, A
 
 def delete_cached_mcp_api_key_strict(hashed_key: str) -> bool:
     """Confirm the revocation fence, then purge both MCP positive cache keys."""
-    from database.api_key_cache import mark_revoked
-
-    mark_revoked(r, "mcp", hashed_key)
+    api_key_cache.mark_revoked(r, "mcp", hashed_key)
     r.delete(f'mcp_api_key:{hashed_key}', f'mcp_api_key_auth:{hashed_key}')
     return True
 
@@ -906,16 +899,14 @@ def cache_dev_api_key(
         "app_id": app_id,
         "auth_context_version": auth_context_version,
     }
-    from database.api_key_cache import fill_if_active
-
-    return fill_if_active(r, "dev", hashed_key, [(f'dev_api_key:{hashed_key}', json.dumps(cache_data))], ttl)
+    return api_key_cache.fill_if_active(
+        r, "dev", hashed_key, [(f'dev_api_key:{hashed_key}', json.dumps(cache_data))], ttl
+    )
 
 
 def read_cached_dev_api_key_data(hashed_key: str) -> ApiKeyCacheReadResult:
     """Read auth context while distinguishing cache absence from failure."""
-    from database.api_key_cache import read_context
-
-    return read_context(r, "dev", hashed_key)
+    return api_key_cache.read_context(r, "dev", hashed_key)
 
 
 def get_cached_dev_api_key_data(hashed_key: str) -> Optional[Dict[str, Any]]:
@@ -926,9 +917,7 @@ def get_cached_dev_api_key_data(hashed_key: str) -> Optional[Dict[str, Any]]:
 
 def delete_cached_dev_api_key_strict(hashed_key: str) -> bool:
     """Confirm the revocation fence, then purge the Developer positive cache."""
-    from database.api_key_cache import mark_revoked
-
-    mark_revoked(r, "dev", hashed_key)
+    api_key_cache.mark_revoked(r, "dev", hashed_key)
     r.delete(f'dev_api_key:{hashed_key}')
     return True
 

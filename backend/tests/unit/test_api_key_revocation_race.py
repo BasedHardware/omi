@@ -321,3 +321,50 @@ def test_firestore_sdk_batch_update_requires_existing_key():
     batch = WriteBatch(MagicMock())
     batch.update(key_ref, {"last_used_at": None})
     assert batch._write_pbs[0].current_document.exists is True
+
+
+@pytest.mark.parametrize(
+    "revoke_at_call",
+    [2, 3],  # 1 = entry fence, 2..n = later checkpoints
+)
+def test_revoke_after_cache_error_still_denies(key, monkeypatch, revoke_at_call):
+    """A malformed positive-cache payload must not disable the marker fence.
+
+    The cache-read ERROR path must only stop use of the positive cache. When a
+    concurrent revoke sets the marker after that error — before the Firestore
+    fallback finishes — the key must still authenticate as revoked.
+    """
+    kind, module, raw, hashed, _db, store, revoke = key
+    assert module.get_user_id_by_api_key(raw) == "user-1"
+    cache_key = f"{kind}_api_key:{hashed}" if kind == "dev" else f"mcp_api_key_auth:{hashed}"
+    store.values[cache_key] = "{not-json"  # malformed payload, marker absent
+
+    real_is_revoked = fences.is_revoked
+    calls = {"n": 0}
+
+    def revoking_is_revoked(check_kind, check_hashed):
+        calls["n"] += 1
+        result = real_is_revoked(check_kind, check_hashed)
+        if calls["n"] == revoke_at_call:
+            revoke()
+            result = real_is_revoked(check_kind, check_hashed)
+        return result
+
+    monkeypatch.setattr(fences, "is_revoked", revoking_is_revoked)
+    # Both modules call api_key_cache.is_revoked through their own import.
+    monkeypatch.setattr(module.api_key_cache, "is_revoked", revoking_is_revoked)
+    assert module.get_api_key_auth_result(raw).context is None
+    assert calls["n"] >= revoke_at_call
+    assert fences.is_revoked(kind, hashed)
+
+
+def test_cache_error_without_revocation_falls_back_to_firestore(key):
+    """A malformed cache payload alone must not deny an otherwise valid key."""
+    kind, module, raw, hashed, _db, store, _revoke = key
+    assert module.get_user_id_by_api_key(raw) == "user-1"
+    cache_key = f"{kind}_api_key:{hashed}" if kind == "dev" else f"mcp_api_key_auth:{hashed}"
+    store.values[cache_key] = "{not-json"
+    result = module.get_api_key_auth_result(raw)
+    assert result.context is not None
+    assert result.context["user_id"] == "user-1"
+    assert ApiKeyAuthRepair.CACHE_READ in result.repairs
