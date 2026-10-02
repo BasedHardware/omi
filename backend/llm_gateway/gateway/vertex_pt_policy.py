@@ -28,7 +28,7 @@ VERTEX_API_VERSION = 'v1'
 
 
 class VertexPTPolicyMixin:
-    """Apply the shared state snapshot; keep only reachability and probe timing local."""
+    """Apply the shared state snapshot; keep only reachability local."""
 
     _pt_model_override_env: str
     _overflow_model_override_env: str
@@ -39,7 +39,6 @@ class VertexPTPolicyMixin:
     _project_env: str
     _location_env: str
     _reservation_state_context: ContextVar[dict[str, State]]
-    _pt_probed_at: dict[str, float]
     _model_unavailable_at: dict[str, float]
 
     @property
@@ -58,23 +57,7 @@ class VertexPTPolicyMixin:
             effective_states(self._reservation_states, os.environ).get(serving, State.UNKNOWN).value,
             self._capacity_for(serving),
         )
-        if (
-            ptr.should_probe_capacity(serving, effective_states(self._reservation_states, os.environ))
-            and self._capacity_for(serving) == 'shared'
-            and self._pt_probe_due(serving)
-        ):
-            self._pt_probed_at[serving] = self._now()
-            return [(serving, ptr.REQUEST_TYPE_DEDICATED), (serving, ptr.REQUEST_TYPE_SHARED)]
         return [(serving, self._capacity_for(serving))]
-
-    def _is_capacity_probe(self, model: str, capacity: str) -> bool:
-        return model in RESERVATIONS and capacity == 'dedicated' and self._capacity_for(model) != 'dedicated'
-
-    @staticmethod
-    def _pt_probe_timeout_ms(remaining_ms: int) -> int:
-        # At most one second and one quarter of the original remaining budget.
-        # The shared attempt keeps the same request deadline, without a reset.
-        return max(1, min(1000, remaining_ms // 4))
 
     def _serving_model(self, anchor: str, *, origin_model: str = '') -> str:
         intended = self._validated_pin(
@@ -113,21 +96,22 @@ class VertexPTPolicyMixin:
         self, served_model: str, status_code: int, preview: bytes, *, origin_model: str = '', capacity: str = ''
     ) -> list[tuple[str, str]]:
         message = _bounded_error_text(preview)
-        if (
-            served_model in RESERVATIONS
-            and RESERVATIONS[served_model].overflow == 'shared'
-            and capacity == ptr.REQUEST_TYPE_DEDICATED
-        ):
-            if self._is_capacity_probe(served_model, capacity) or status_code == 429:
-                # Preserve the target lane's precision on absent/full dedicated capacity.
-                return [(served_model, ptr.REQUEST_TYPE_SHARED)]
-        if ptr.is_model_unavailable(status_code, message):
+        action = ptr.recovery_action(
+            served_model,
+            capacity or self._capacity_for(served_model),
+            status_code,
+            message,
+            overflow_enabled=self._overflow_enabled(),
+        )
+        if action == 'shared':
+            return [(served_model, ptr.REQUEST_TYPE_SHARED)]
+        if action == 'unavailable':
             self._record_model_unavailable(served_model)
             return [
                 (rung, ptr.REQUEST_TYPE_SHARED)
                 for rung in self._fallback_chain(served_model, origin_model=origin_model)
             ]
-        if self._overflow_triggered(status_code, message):
+        if action == 'overflow':
             return self._overflow_plan(served_model, origin_model=origin_model)
         return []
 
@@ -145,7 +129,6 @@ class VertexPTPolicyMixin:
             return
         if 200 <= status_code < 300 and traffic_type == 'PROVISIONED_THROUGHPUT':
             self._reservation_states = {**self._reservation_states, model: State.ACTIVE}
-        self._pt_probed_at[model] = self._now()
 
     def _overflow_triggered(self, status_code: int, message: str) -> bool:
         return ptr.is_provisioned_capacity_exhausted(status_code, message) or ptr.is_provisioned_capacity_absent(
@@ -212,10 +195,6 @@ class VertexPTPolicyMixin:
 
     def _record_model_available(self, model: str) -> None:
         self._model_unavailable_at.pop(model, None)
-
-    def _pt_probe_due(self, model: str) -> bool:
-        observed = self._pt_probed_at.get(model)
-        return observed is None or self._now() - observed >= self._probe_ttl_seconds
 
     def _overflow_enabled(self) -> bool:
         return self._env(self._overflow_enabled_env, 'true').strip().lower() not in {'0', 'false', 'no', 'off'}

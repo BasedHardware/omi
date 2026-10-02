@@ -137,10 +137,7 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
 @pytest.mark.asyncio
 @pytest.mark.parametrize('stream', [False, True])
 @pytest.mark.parametrize('ready', [False, True])
-@pytest.mark.parametrize('probed_at', [None, 17.0])
-async def test_non_target_traffic_leaves_cross_request_target_promotion_state_untouched(
-    monkeypatch, stream, ready, probed_at
-):
+async def test_non_target_traffic_leaves_cross_request_target_promotion_state_untouched(monkeypatch, stream, ready):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
     seen = []
@@ -165,7 +162,6 @@ async def test_non_target_traffic_leaves_cross_request_target_promotion_state_un
         provider = VertexGeminiProvider(http_client=client, access_token_supplier=token, now=lambda: 100.0)
         provider._reservation_states = {ptr.PT_MODEL_TARGET: State.ACTIVE} if ready else {}
         provider._reservations._positive = {m: time.monotonic() for m in provider._reservation_states}
-        provider._pt_probed_at = {ptr.PT_MODEL_TARGET: probed_at} if probed_at is not None else {}
         for anchor, status in [
             ('gemini-2.5-flash', 200),
             ('gemini-2.5-flash', 401),
@@ -192,7 +188,6 @@ async def test_non_target_traffic_leaves_cross_request_target_promotion_state_un
             else:
                 await call()
             assert provider._reservation_active(ptr.PT_MODEL_TARGET) is ready
-            assert provider._pt_probed_at.get(ptr.PT_MODEL_TARGET) == probed_at
         assert len(seen) == 6
         assert all(ptr.PT_MODEL_TARGET not in str(request.url) for request in seen)
         assert [request.headers[ptr.REQUEST_TYPE_HEADER] for request in seen[:4]] == [
@@ -258,7 +253,6 @@ async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missi
             }
             assert response.accounting.usage is None
         assert provider._reservation_active(ptr.PT_MODEL_TARGET) is False
-        assert provider._pt_probed_at.get(ptr.PT_MODEL_TARGET) is None
     assert len(seen) == 1
     outgoing = seen[0]
     assert str(outgoing.url) == (

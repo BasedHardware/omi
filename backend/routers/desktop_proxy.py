@@ -26,7 +26,7 @@ from utils.http_client import (
     get_desktop_gemini_stream_client,
 )
 from utils.llm import vertex_pt_routing as ptr
-from config.vertex_reservations import State, RESERVATIONS
+from config.vertex_reservations import State
 from utils.llm.vertex_reservation_state import reservation_state, effective_states
 from utils.llm.vertex_reservation_probe import probe_reservation
 from utils.llm.vertex_reservation_response import ReservationResponseEvidence
@@ -414,7 +414,6 @@ _reservation_snapshot: ContextVar[dict[str, State]] = ContextVar('vertex_reserva
 # the TTL, so seeding an observation with 0.0 would mark a model dead for the
 # first _PT_PROBE_TTL_SECONDS of every new instance's life.
 _model_unavailable_at: dict[str, float] = {}
-_pt_probed_at: dict[str, float] = {}
 
 
 def _model_believed_available(model: str) -> bool:
@@ -455,11 +454,6 @@ def _record_model_available(model: str) -> None:
     if not _learns_reachability():
         return
     _model_unavailable_at.pop(model, None)
-
-
-def _pt_probe_due(model: str) -> bool:
-    observed = _pt_probed_at.get(model)
-    return observed is None or time.monotonic() - observed >= _PT_PROBE_TTL_SECONDS
 
 
 def _reservation_states() -> dict[str, State]:
@@ -661,14 +655,6 @@ async def _upstream(
         capacity = request_type or ptr.reservation_capacity(
             model, _reservation_states(), override=os.getenv(_PT_MODEL_OVERRIDE_ENV, '')
         )
-        if (
-            request_type is None
-            and ptr.should_probe_capacity(model, _reservation_states())
-            and capacity == 'shared'
-            and _pt_probe_due(model)
-        ):
-            _pt_probed_at[model] = time.monotonic()
-            capacity = ptr.REQUEST_TYPE_DEDICATED
         url = direct_attempt.target_url(model, action, capacity, url)
         return UpstreamRoute(
             url,
@@ -745,19 +731,16 @@ def _recovery_plan(
     """
     if get_byok_key('gemini'):
         return []
-    if (
-        served_model in RESERVATIONS
-        and RESERVATIONS[served_model].overflow == 'shared'
-        and capacity == ptr.REQUEST_TYPE_DEDICATED
-    ):
-        if _overflow_triggered(status, message) or ptr.is_model_unavailable(status, message):
-            return [(served_model, ptr.REQUEST_TYPE_SHARED)] + [
-                (rung, ptr.REQUEST_TYPE_SHARED) for rung in _fallback_chain(served_model, origin_model=origin_model)
-            ]
-    if ptr.is_model_unavailable(status, message):
+    capacity = capacity or ptr.reservation_capacity(
+        served_model, _reservation_states(), override=os.getenv(_PT_MODEL_OVERRIDE_ENV, '')
+    )
+    action = ptr.recovery_action(served_model, capacity, status, message, overflow_enabled=_overflow_enabled())
+    if action == 'shared':
+        return [(served_model, ptr.REQUEST_TYPE_SHARED)]
+    if action == 'unavailable':
         _record_model_unavailable(served_model)
         return [(rung, ptr.REQUEST_TYPE_SHARED) for rung in _fallback_chain(served_model, origin_model=origin_model)]
-    if _overflow_triggered(status, message):
+    if action == 'overflow':
         return _overflow_plan(served_model, origin_model=origin_model)
     return []
 
@@ -1124,7 +1107,8 @@ async def _stream_provider(
             await upstream.aread()
             # This dispatch is over; record it before recovery routing can fail.
             telemetry.record_attempt('error', _attempt_error_class(upstream.status_code, upstream.text))
-            if not pending and query is not None:
+            pending = []
+            if query is not None:
                 for overflow_model, overflow_capacity in _recovery_plan(
                     attempt_model,
                     upstream.status_code,
@@ -1508,7 +1492,8 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             )
             if recovery:
                 query = dict(request.query_params)
-                for overflow_model, capacity in recovery:
+                while recovery:
+                    overflow_model, capacity = recovery.pop(0)
                     # The attempt that just came back full or unavailable is
                     # its own ledger row before anything else can fail.
                     telemetry.record_attempt('error', _attempt_error_class(response.status_code, response.text))
@@ -1520,14 +1505,18 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
                     telemetry.model = overflow_model
                     response = await _cancel_on_disconnect(request, post(overflow_route, body))
                     unavailable = ptr.is_model_unavailable(response.status_code, response.text)
-                    exhausted = _overflow_triggered(response.status_code, response.text)
                     if unavailable:
                         _record_model_unavailable(overflow_model)
                     elif response.status_code < 400:
                         _record_model_available(overflow_model)
                     await _observe_dedicated_response(overflow_model, capacity, response)
-                    if not exhausted and not unavailable:
-                        break
+                    recovery = _recovery_plan(
+                        overflow_model,
+                        response.status_code,
+                        response.text,
+                        origin_model=ptr.lane_overflow_origin(model),
+                        capacity=capacity,
+                    )
             telemetry.phase = 'body'
     except HTTPException as exc:
         phase = telemetry.phase if telemetry.phase in {'routing', 'credential'} else 'validation'

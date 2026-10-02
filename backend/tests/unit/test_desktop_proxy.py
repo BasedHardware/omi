@@ -1328,12 +1328,10 @@ def _reset_pt_promotion_state():
     target field is no longer enough."""
     desktop_proxy._reservation_snapshot.set({})
     desktop_proxy.reservation_state._positive.clear()
-    desktop_proxy._pt_probed_at.clear()
     desktop_proxy._model_unavailable_at.clear()
     yield
     desktop_proxy._reservation_snapshot.set({})
     desktop_proxy.reservation_state._positive.clear()
-    desktop_proxy._pt_probed_at.clear()
     desktop_proxy._model_unavailable_at.clear()
 
 
@@ -1641,9 +1639,9 @@ async def test_saturated_old_reservation_overflows_directly_to_a_cheaper_model(m
 @pytest.mark.parametrize("status,ready", [(200, True), (302, False)])
 async def test_only_successful_target_dedicated_requests_promote_the_reservation(monkeypatch, status, ready):
     def reply(url):
-        response = _ok_response(url)
-        response.status_code = status
-        return response
+        payload = _ok_response(url).json()
+        payload['candidates'] = [{'content': {'parts': [{'text': 'OK'}]}, 'finishReason': 'STOP'}]
+        return httpx.Response(status, json=payload, request=httpx.Request('POST', url))
 
     client = _ScriptedClient([reply])
     routed = _install_proxy_doubles(monkeypatch, client)
@@ -1803,19 +1801,6 @@ def test_migration_contract_is_documented():
         assert model in text, f"{model} has a declared fallback chain but is undocumented"
         for rung in chain:
             assert rung in text
-
-
-def test_a_new_instance_probes_immediately_regardless_of_uptime(monkeypatch):
-    """time.monotonic() has an arbitrary origin: on a freshly started container
-    it can be smaller than the probe TTL. Seeding the last-probe time with 0.0
-    would suppress the first probe for the first 10 minutes of every new
-    instance's life, which is most of a Cloud Run instance's life."""
-    monkeypatch.setattr(desktop_proxy.time, "monotonic", lambda: 1.0)
-    desktop_proxy._pt_probed_at.clear()
-    assert desktop_proxy._pt_probe_due(desktop_proxy.VERTEX_PT_TARGET_MODEL) is True
-
-    desktop_proxy._pt_probed_at[desktop_proxy.VERTEX_PT_TARGET_MODEL] = desktop_proxy.time.monotonic()
-    assert desktop_proxy._pt_probe_due(desktop_proxy.VERTEX_PT_TARGET_MODEL) is False
 
 
 def _model_not_found_response(url: str) -> httpx.Response:

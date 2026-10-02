@@ -119,9 +119,13 @@ async def test_shared_success_visible_to_new_instances_and_one_global_probe_leas
         calls.append((model, location))
         return 'dedicated_success'
 
-    states = await a.refresh(probe)
+    await a.refresh(probe)
+    await asyncio.gather(*a._probe_tasks)
+    states = await a.refresh()
     assert states[OLD] == vr.State.ACTIVE
-    states = await b.refresh(probe)
+    await b.refresh(probe)
+    await asyncio.gather(*b._probe_tasks)
+    states = await b.refresh()
     assert states[OLD] == states[NEW] == vr.State.ACTIVE
     await a.refresh(probe)
     assert calls == [(OLD, 'us-central1'), (NEW, 'us')]
@@ -386,3 +390,111 @@ def test_nonreservation_pin_changes_capacity_but_cannot_fabricate_admission_evid
     assert effective_states({OLD: vr.State.INACTIVE}, env, admission=True)[OLD] == vr.State.INACTIVE
     env[vr.STATE_OVERRIDE_ENV] = json.dumps({OLD: 'inactive'})
     assert effective_states({}, env, admission=True)[OLD] == vr.State.INACTIVE
+
+
+@pytest.mark.asyncio
+async def test_synthetic_discovery_outlives_one_second_without_delaying_requests(monkeypatch):
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    a, b = ReservationState(client), ReservationState(client)
+    calls = []
+
+    async def probe(model, location):
+        calls.append(model)
+        if model == NEW:
+            await asyncio.sleep(1.6)  # The real tiny-prompt latency that broke one-second discovery.
+            return 'dedicated_success'
+        return 'capacity_error'
+
+    await asyncio.wait_for(a.refresh(probe), 0.5)
+    await asyncio.gather(*a._probe_tasks)
+    states = await asyncio.wait_for(b.refresh(probe), 0.5)
+    assert states[NEW] == vr.State.UNKNOWN
+    await asyncio.wait_for(asyncio.gather(*b._probe_tasks), 3)
+    a._snapshot = {}
+    assert (await a.refresh())[NEW] == vr.State.ACTIVE
+    assert calls == [OLD, NEW]
+    await a.aclose()
+    await b.aclose()
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('pin', [OLD, NEW, 'gemini-2.5-flash-lite', 'invalid'])
+async def test_every_operator_pin_suppresses_synthetic_discovery(monkeypatch, pin):
+    monkeypatch.setenv('OMI_VERTEX_PT_MODEL', pin)
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = ReservationState(client)
+
+    async def forbidden(*args):
+        pytest.fail('operator pin must suppress discovery')
+
+    await store.refresh(forbidden)
+    assert not store._probe_tasks
+    assert json.loads(await client.get(store.key()))['leases'] == {}
+    await store.aclose()
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_probe_shutdown_cancels_owned_background_work(monkeypatch):
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = ReservationState(client)
+    entered = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def blocked(*args):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    await store.refresh(blocked)
+    await asyncio.wait_for(entered.wait(), 1)
+    await asyncio.wait_for(store.aclose(), 1)
+    assert cancelled.is_set()
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'override,expected',
+    [
+        ('{"gemini-2.5-flash":"inactive"}', NEW),
+        ('{"gemini-2.5-flash":"unknown"}', NEW),
+        ('{"gemini-2.5-flash":"auto","gemini-3.8-flash":"active"}', OLD),
+        ('invalid', None),
+    ],
+)
+async def test_per_model_override_suppresses_only_its_discovery(monkeypatch, override, expected):
+    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
+    monkeypatch.setenv(vr.STATE_OVERRIDE_ENV, override)
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = ReservationState(client)
+    calls = []
+
+    async def probe(model, _):
+        calls.append(model)
+        return 'inconclusive'
+
+    await store.refresh(probe)
+    await asyncio.gather(*store._probe_tasks)
+    assert calls == ([expected] if expected else [])
+    await store.aclose()
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_pin_during_probe_prevents_stale_publication(monkeypatch):
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = ReservationState(client)
+
+    async def probe(*args):
+        monkeypatch.setenv('OMI_VERTEX_PT_MODEL', OLD)
+        return 'dedicated_success'
+
+    await store.refresh(probe)
+    await asyncio.gather(*store._probe_tasks)
+    assert json.loads(await client.get(store.key()))['evidence'][OLD]['success_at'] == 0
+    await store.aclose()
+    await client.aclose()

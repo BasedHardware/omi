@@ -30,7 +30,7 @@ class ReservationResponseEvidence:
             return
         if 'trafficType' in usage:
             traffic = usage['trafficType']
-            self._traffic.add(traffic if isinstance(traffic, str) else 'invalid')
+            self._traffic.add('PROVISIONED_THROUGHPUT' if traffic == 'PROVISIONED_THROUGHPUT' else 'invalid')
         candidates = payload.get('candidates', [])
         if not isinstance(candidates, list) or len(candidates) > 16:
             self._invalid = True
@@ -57,7 +57,8 @@ class ReservationResponseEvidence:
                 for part in parts
             ):
                 self._content.add(index)
-            if candidate.get('finishReason') in {'STOP', 'MAX_TOKENS', 'SAFETY', 'RECITATION', 'OTHER'}:
+            finish = candidate.get('finishReason')
+            if isinstance(finish, str) and finish in {'STOP', 'MAX_TOKENS', 'SAFETY', 'RECITATION', 'OTHER'}:
                 self._finished.add(index)
 
     def feed(self, chunk: bytes) -> None:

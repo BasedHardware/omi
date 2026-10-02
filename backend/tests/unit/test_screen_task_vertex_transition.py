@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -41,6 +42,9 @@ async def test_target_probes_declared_order_location_then_promotes_without_a_dep
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
+        monkeypatch.setattr(
+            provider._reservations, 'refresh', AsyncMock(return_value={ptr.PT_MODEL_TARGET: State.ACTIVE})
+        )
         credentials = build_omi_managed_credential_context(ServiceCaller(name='backend'))
         await provider.create_chat_completion(
             {'messages': [{'role': 'user', 'content': 'test'}]},
@@ -61,31 +65,6 @@ async def test_target_probes_declared_order_location_then_promotes_without_a_dep
     assert json.loads(seen[0].content)['generationConfig']['thinkingConfig'] == {'thinkingLevel': 'low'}
     assert ptr.PT_MODEL_CURRENT in str(seen[1].url) and '/locations/us-central1/' in str(seen[1].url)
     assert seen[1].headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'  # target success alone cannot revoke old capacity
-
-
-@pytest.mark.asyncio
-async def test_absent_order_retries_same_target_on_us_paygo_without_touching_current_order(monkeypatch):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    seen = []
-
-    def handler(request):
-        seen.append(request)
-        if len(seen) == 1:
-            return httpx.Response(429, json={'error': {'message': 'No provisioned throughput order configured'}})
-        return httpx.Response(200, json=_response())
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
-        await provider.create_chat_completion(
-            {'messages': [{'role': 'user', 'content': 'test'}]},
-            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
-            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-            timeout_ms=1000,
-        )
-        assert not provider._reservation_active(ptr.PT_MODEL_TARGET)
-        assert provider._attempt_plan(ptr.PT_MODEL_CURRENT) == [(ptr.PT_MODEL_CURRENT, 'dedicated')]
-    assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
-    assert all('/locations/us/' in str(r.url) for r in seen)
 
 
 def test_old_client_list_price_is_never_promoted_and_overflow_is_capped():
@@ -134,149 +113,13 @@ def test_bounded_gate_metadata_and_direct_model_adaptation():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('stream', [False, True])
-@pytest.mark.parametrize('failure', [401, 403, 404, 429, 500, 'timeout', 'connection', 'malformed'])
-async def test_any_dedicated_probe_failure_retries_shared_and_never_promotes(monkeypatch, failure, stream):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    seen = []
-
-    def handler(request):
-        seen.append(request)
-        if request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated':
-            if failure == 'timeout':
-                raise httpx.ReadTimeout('probe timed out', request=request)
-            if failure == 'connection':
-                raise httpx.ConnectError('probe disconnected', request=request)
-            if failure == 'malformed':
-                return httpx.Response(200, text='data: {invalid\n\n' if stream else '{invalid')
-            return httpx.Response(failure, json={'error': {'message': 'unclassified failure'}})
-        return (
-            httpx.Response(200, text='data: ' + json.dumps(_response()) + '\n\n')
-            if stream
-            else httpx.Response(200, json=_response())
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
-        kwargs = dict(
-            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
-            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-            timeout_ms=1000,
-        )
-        request = {'messages': [{'role': 'user', 'content': 'test'}]}
-        if stream:
-            assert [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
-        else:
-            assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
-                'content'
-            ] == 'ok'
-        assert not provider._reservation_active(ptr.PT_MODEL_TARGET)
-        assert provider._protected_models() == {ptr.PT_MODEL_CURRENT}
-        assert ptr.PT_MODEL_TARGET not in provider._model_unavailable_at
-    assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('stream', [False, True])
-async def test_probe_deadline_cancels_stalled_body_and_leaves_shared_request_budget(monkeypatch, stream):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    seen = []
-    cancelled = []
-
-    class StalledProbe(httpx.AsyncByteStream):
-        async def __aiter__(self):
-            try:
-                if stream:
-                    response = {'candidates': [{'content': {'parts': [{'text': 'dedicated-partial'}]}}]}
-                    yield ('data: ' + json.dumps(response) + '\n\n').encode()
-                await asyncio.Future()  # Deliberately unresponsive upstream; production timeout must cancel it.
-            except asyncio.CancelledError:
-                cancelled.append(True)
-                raise
-
-    def handler(request):
-        seen.append(request)
-        if request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated':
-            return httpx.Response(200, stream=StalledProbe())
-        return (
-            httpx.Response(200, text='data: ' + json.dumps(_response()) + '\n\n')
-            if stream
-            else httpx.Response(200, json=_response())
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
-        kwargs = dict(
-            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
-            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-            timeout_ms=200,
-        )
-        request = {'messages': [{'role': 'user', 'content': 'test'}]}
-        # This outer assertion bounds the whole user request, not only httpx's declared timeout.
-        async with asyncio.timeout(0.2):
-            if stream:
-                chunks = [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
-                assert b'dedicated-partial' not in b''.join(chunks)
-            else:
-                assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
-                    'content'
-                ] == 'ok'
-        assert cancelled == [True] and not provider._reservation_active(ptr.PT_MODEL_TARGET)
-    assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
-    assert 0 < seen[0].extensions['timeout']['read'] <= 0.05
-    assert 0 < seen[1].extensions['timeout']['read'] <= 0.16
-    assert VertexGeminiProvider._pt_probe_timeout_ms(75000) == 1000
-
-
-@pytest.mark.asyncio
-async def test_streaming_absent_regional_order_retries_us_shared_then_next_probe_promotes(monkeypatch):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    monkeypatch.setenv(ptr.PT_TARGET_LOCATION_ENV, 'us-central1')
-    seen = []
-
-    def handler(request):
-        seen.append(request)
-        if len(seen) == 1:
-            return httpx.Response(404, json={'error': {'message': 'Publisher Model was not found'}})
-        return httpx.Response(
-            200, text='data: ' + json.dumps(_response()) + '\n\n', headers={'content-type': 'text/event-stream'}
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
-        credentials = build_omi_managed_credential_context(ServiceCaller(name='backend'))
-        request = {'messages': [{'role': 'user', 'content': 'test'}]}
-        ref = ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET)
-        chunks = [
-            chunk
-            async for chunk in provider.stream_chat_completion(
-                request, provider_ref=ref, credentials=credentials, timeout_ms=1000
-            )
-        ]
-        assert chunks and not provider._reservation_active(ptr.PT_MODEL_TARGET)
-        assert ptr.PT_MODEL_TARGET not in provider._model_unavailable_at
-        provider._pt_probed_at.clear()
-        chunks = [
-            chunk
-            async for chunk in provider.stream_chat_completion(
-                request, provider_ref=ref, credentials=credentials, timeout_ms=1000
-            )
-        ]
-        assert chunks and provider._reservation_active(ptr.PT_MODEL_TARGET)
-    assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared', 'dedicated']
-    assert '/locations/us-central1/' in str(seen[0].url)
-    assert '/locations/us/' in str(seen[1].url)
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize('location', ['us', 'us-central1', 'global'])
 async def test_direct_kill_switch_uses_same_declared_location_and_old_client_capacity(monkeypatch, location):
 
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv(ptr.PT_TARGET_LOCATION_ENV, location)
     monkeypatch.setattr(proxy._vertex_tokens, 'get_access_token', _token)
-    proxy._reservation_snapshot.set({})
-    proxy._pt_probed_at.clear()
+    proxy._reservation_snapshot.set({ptr.PT_MODEL_TARGET: State.ACTIVE})
     monkeypatch.setattr(proxy, 'get_byok_key', lambda name: None)
     route = await proxy._upstream(
         f'models/{ptr.PT_MODEL_TARGET}:generateContent', ptr.PT_MODEL_TARGET, 'generateContent', {}
@@ -314,62 +157,6 @@ ABSENT_TARGET_ORDER_RESPONSE = {
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('stream', [False, True])
-@pytest.mark.parametrize('failure', ['observed_absent', 'legacy_absent', 429, 500, 'timeout'])
-async def test_any_failed_target_probe_retries_same_model_without_promotion_and_keeps_ttl(monkeypatch, stream, failure):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    seen = []
-    now = [100.0]
-
-    def handler(request):
-        seen.append(request)
-        now[0] += 0.125
-        if len(seen) == 1:
-            if failure == 'timeout':
-                raise httpx.ReadTimeout('synthetic timeout', request=request)
-            if failure == 'observed_absent':
-                return httpx.Response(429, json=ABSENT_TARGET_ORDER_RESPONSE)
-            if failure == 'legacy_absent':
-                return httpx.Response(429, json={'error': {'message': 'NO PROVISIONED THROUGHPUT ORDER CONFIGURED'}})
-            return httpx.Response(failure, json={'error': {'message': 'synthetic unclassified failure'}})
-        return (
-            httpx.Response(200, text='data: ' + json.dumps(_response()) + '\n\n')
-            if stream
-            else httpx.Response(200, json=_response())
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token, now=lambda: now[0])
-        kwargs = dict(
-            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
-            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-            timeout_ms=1000,
-        )
-        request = {'messages': [{'role': 'user', 'content': 'test'}]}
-        if stream:
-            assert [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
-        else:
-            assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
-                'content'
-            ] == 'ok'
-        assert not provider._reservation_active(ptr.PT_MODEL_TARGET)
-        assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
-        assert all(f'/models/{ptr.PT_MODEL_TARGET}:' in str(r.url) for r in seen)
-        assert seen[0].extensions['timeout']['read'] == 0.25
-        assert seen[1].extensions['timeout']['read'] == 0.875
-        assert provider._attempt_plan(ptr.PT_MODEL_CURRENT) == [(ptr.PT_MODEL_CURRENT, 'dedicated')]
-        probe_at = provider._pt_probed_at.get(ptr.PT_MODEL_TARGET)
-        assert probe_at is not None
-        now[0] = probe_at + 599
-        assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [(ptr.PT_MODEL_TARGET, 'shared')]
-        now[0] = probe_at + 600
-        assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [
-            (ptr.PT_MODEL_TARGET, 'dedicated'),
-            (ptr.PT_MODEL_TARGET, 'shared'),
-        ]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('stream', [False, True])
 @pytest.mark.parametrize('status', [200, 201])
 @pytest.mark.parametrize('traffic', ['missing', 'PROVISIONED_THROUGHPUT', 'ON_DEMAND', None])
 async def test_only_successful_dedicated_target_response_with_valid_traffic_promotes(
@@ -394,6 +181,7 @@ async def test_only_successful_dedicated_target_response_with_valid_traffic_prom
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
+        monkeypatch.setattr(provider, '_attempt_plan', lambda *a, **k: [(ptr.PT_MODEL_TARGET, 'dedicated')])
         kwargs = dict(
             provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
             credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
@@ -411,86 +199,12 @@ async def test_only_successful_dedicated_target_response_with_valid_traffic_prom
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('stream', [False, True])
-@pytest.mark.parametrize('error', [ABSENT_TARGET_ORDER_RESPONSE, {'error': {'message': 'generic quota exceeded'}}])
-async def test_after_successful_promotion_any_target_429_spills_same_model_and_stays_promoted(
-    monkeypatch, stream, error
-):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    seen = []
-
-    def handler(request):
-        seen.append(request)
-        if len(seen) == 2:
-            return httpx.Response(429, json=error)
-        result = _response()
-        result['usageMetadata'] = {'trafficType': 'PROVISIONED_THROUGHPUT' if len(seen) == 1 else 'ON_DEMAND'}
-        return (
-            httpx.Response(200, text='data: ' + json.dumps(result) + '\n\n')
-            if stream
-            else httpx.Response(200, json=result)
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
-        kwargs = dict(
-            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
-            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-            timeout_ms=1000,
-        )
-        for _ in range(2):
-            request = {'messages': [{'role': 'user', 'content': 'test'}]}
-            if stream:
-                assert [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
-            else:
-                await provider.create_chat_completion(request, **kwargs)
-            assert provider._reservation_active(ptr.PT_MODEL_TARGET)
-        assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [(ptr.PT_MODEL_TARGET, 'dedicated')]
-        assert provider._attempt_plan(ptr.PT_MODEL_CURRENT) == [(ptr.PT_MODEL_CURRENT, 'dedicated')]
-    assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'dedicated', 'shared']
-    assert all(f'/models/{ptr.PT_MODEL_TARGET}:' in str(r.url) for r in seen)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('stream', [False, True])
-async def test_only_target_probe_rejects_3xx_while_shared_target_accepts_its_body(monkeypatch, stream):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
-    seen = []
-
-    def handler(request):
-        seen.append(request)
-        return (
-            httpx.Response(302, text='data: ' + json.dumps(_response()) + '\n\n')
-            if stream
-            else httpx.Response(302, json=_response())
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
-        kwargs = dict(
-            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
-            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
-            timeout_ms=1000,
-        )
-        request = {'messages': [{'role': 'user', 'content': 'test'}]}
-        if stream:
-            assert [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
-        else:
-            assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
-                'content'
-            ] == 'ok'
-        assert not provider._reservation_active(ptr.PT_MODEL_TARGET)
-    assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
-
-
-@pytest.mark.asyncio
 async def test_inactive_override_never_probes_with_customer_content_in_either_path(monkeypatch):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', json.dumps({ptr.PT_MODEL_TARGET: 'inactive'}))
     monkeypatch.setattr(proxy._vertex_tokens, 'get_access_token', _token)
     monkeypatch.setattr(proxy, 'get_byok_key', lambda name: None)
     proxy._reservation_snapshot.set({})
-    proxy._pt_probed_at.clear()
     route = await proxy._upstream(
         f'models/{ptr.PT_MODEL_TARGET}:generateContent', ptr.PT_MODEL_TARGET, 'generateContent', {}
     )

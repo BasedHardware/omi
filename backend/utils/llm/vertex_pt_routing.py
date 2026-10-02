@@ -557,10 +557,19 @@ def reservation_endpoint(model: str, env: Mapping[str, str]) -> tuple[str, str]:
     )
 
 
-def should_probe_capacity(model: str, states: Mapping[str, State]) -> bool:
-    """Customer-request discovery is only for unknown, initially shared models."""
-    return (
-        model in RESERVATIONS
-        and RESERVATIONS[model].unknown_capacity == 'shared'
-        and states.get(model, State.UNKNOWN) == State.UNKNOWN
+def recovery_action(model: str, capacity: str, status: int, message: str, *, overflow_enabled: bool) -> str:
+    """One transport-independent policy; generic backpressure never buys a retry."""
+    spec = RESERVATIONS.get(model)
+    capacity_error = is_provisioned_capacity_exhausted(status, message) or is_provisioned_capacity_absent(
+        status, message
     )
+    unavailable = is_model_unavailable(status, message)
+    if spec and spec.overflow == 'shared' and capacity == REQUEST_TYPE_DEDICATED:
+        if overflow_enabled and (capacity_error or unavailable):
+            return 'shared'
+        return 'none'
+    if unavailable:
+        return 'unavailable'
+    if overflow_enabled and capacity == REQUEST_TYPE_DEDICATED and capacity_error:
+        return 'overflow'
+    return 'none'

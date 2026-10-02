@@ -31,7 +31,7 @@ async def probe_reservation(
             },
             model,
         ),
-        timeout=1,
+        timeout=30,
     )
     try:
         payload = response.json()

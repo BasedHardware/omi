@@ -30,6 +30,7 @@ from config.vertex_reservations import (
     observed_state,
 )
 from utils.observability.fallback import record_fallback
+from utils.executors import start_background_task
 from utils.llm.vertex_reservation_response import completed_provisioned_traffic
 from utils.llm.vertex_pt_routing import COMPANY_PAID_VERTEX_TEXT_MODELS
 
@@ -45,6 +46,7 @@ class ReservationState:
         self._snapshot_at = 0.0
         self._snapshot_key = ""
         self._positive: dict[str, float] = {}
+        self._probe_tasks: set[asyncio.Task[Any]] = set()
 
     def client(self) -> Any:
         if self._client is None:
@@ -96,7 +98,7 @@ class ReservationState:
                             selected = None
                             if claim:
                                 for m in RESERVATIONS:
-                                    if now >= leases.get(m, 0):
+                                    if m in discovery_models(os.environ) and now >= leases.get(m, 0):
                                         selected = m
                                         leases[m] = now + PROBE_SECONDS
                                         break
@@ -151,14 +153,11 @@ class ReservationState:
                 async with asyncio.timeout(max(0, timeout_seconds)):
                     states, selected = await self.transact(claim=probe is not None)
                     if selected and probe:
-                        spec = RESERVATIONS[selected]
-                        location = os.getenv(spec.location_env, spec.location) if spec.location_env else spec.location
-                        try:
-                            async with asyncio.timeout(1):
-                                outcome = await probe(selected, location)
-                        except Exception:
-                            outcome = 'inconclusive'
-                        states, _ = await self.transact(selected, outcome)
+                        task = start_background_task(
+                            self._run_probe(selected, probe, key), name='vertex-reservation-probe'
+                        )
+                        self._probe_tasks.add(task)
+                        task.add_done_callback(self._probe_tasks.discard)
             except TimeoutError:
                 states = {}
                 record_fallback(
@@ -180,7 +179,26 @@ class ReservationState:
         raw = {m: (states or local).get(m, State.UNKNOWN) for m in RESERVATIONS}
         return effective_states(raw, os.environ) if apply_overrides else raw
 
+    async def _run_probe(self, model: str, probe: Probe, key: str) -> None:
+        if model not in discovery_models(os.environ) or key != self.key():
+            return
+        spec = RESERVATIONS[model]
+        location = os.getenv(spec.location_env, spec.location) if spec.location_env else spec.location
+        try:
+            async with asyncio.timeout(30):
+                outcome = await probe(model, location)
+        except Exception:
+            outcome = 'inconclusive'
+        # An endpoint change or emergency pin during the call invalidates its evidence.
+        if model in discovery_models(os.environ) and key == self.key():
+            await self.transact(model, outcome)
+            self._snapshot = {}
+
     async def aclose(self) -> None:
+        for task in self._probe_tasks:
+            task.cancel()
+        if self._probe_tasks:
+            await asyncio.gather(*self._probe_tasks, return_exceptions=True)
         if self._client is not None and self._owns_client:
             await self._client.aclose()
         self._client = None
@@ -223,6 +241,22 @@ class ReservationState:
             return False
         await self.record(model, capacity, response.status_code, traffic)
         return 200 <= response.status_code < 300 and traffic == 'PROVISIONED_THROUGHPUT'
+
+
+def discovery_models(env: Mapping[str, str]) -> frozenset[str]:
+    """Operator pins suppress automatic discovery; per-model auto is explicit."""
+    if env.get('OMI_VERTEX_PT_MODEL', '').strip():
+        return frozenset()
+    try:
+        overrides = json.loads(env.get(STATE_OVERRIDE_ENV, '').strip() or '{}')
+        if not isinstance(overrides, dict) or any(
+            m not in RESERVATIONS or value not in {'active', 'inactive', 'unknown', 'auto'}
+            for m, value in overrides.items()
+        ):
+            return frozenset()
+        return frozenset(m for m in RESERVATIONS if overrides.get(m, 'auto') == 'auto')
+    except (ValueError, TypeError):
+        return frozenset()
 
 
 def effective_states(

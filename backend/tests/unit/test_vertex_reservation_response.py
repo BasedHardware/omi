@@ -34,6 +34,8 @@ def wire(case, stream):
         payload = {}
     elif case == 'metadata_only':
         payload.pop('candidates')
+    elif case == 'invalid_finish':
+        payload['candidates'][0]['finishReason'] = ['STOP']
     elif case == 'partial':
         payload['candidates'][0].pop('finishReason')
     elif case == 'missing':
@@ -72,7 +74,18 @@ def request():
 @pytest.mark.parametrize('stream', [False, True])
 @pytest.mark.parametrize(
     'case',
-    ['empty', 'object', 'metadata_only', 'partial', 'missing', 'on_demand', 'valid', 'unterminated', 'contradictory'],
+    [
+        'empty',
+        'object',
+        'metadata_only',
+        'partial',
+        'missing',
+        'on_demand',
+        'valid',
+        'unterminated',
+        'contradictory',
+        'invalid_finish',
+    ],
 )
 async def test_completed_explicit_pt_evidence_matrix(monkeypatch, transport, stream, case):
     if not stream and case in {'unterminated', 'contradictory'}:
@@ -143,3 +156,155 @@ async def test_completed_explicit_pt_evidence_matrix(monkeypatch, transport, str
             if stream:
                 _ = [c async for c in response.body_iterator]
         assert (TARGET in store._positive) == (case == 'valid')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('transport', ['gateway', 'direct'])
+@pytest.mark.parametrize('stream', [False, True])
+@pytest.mark.parametrize('active', [False, True])
+@pytest.mark.parametrize(
+    'case',
+    [
+        'capacity',
+        'generic429',
+        'absent',
+        '403',
+        '500',
+        'malformed',
+        'empty',
+        'on_demand',
+        'valid',
+        'overflow_off',
+        'timeout',
+        'connection',
+        'unavailable',
+        'shared_unavailable',
+        'shared_backpressure',
+    ],
+)
+async def test_shared_recovery_policy_matrix_through_both_transports(monkeypatch, transport, stream, active, case):
+    from llm_gateway.gateway.provider_types import ProviderFailure
+    from utils.llm import vertex_pt_routing as ptr
+
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    monkeypatch.setenv(ptr.OVERFLOW_ENABLED_ENV, 'false' if case == 'overflow_off' else 'true')
+    monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.delenv('OMI_VERTEX_RESERVATION_STATES', raising=False)
+    seen = []
+    statuses = {
+        'capacity': 429,
+        'generic429': 429,
+        'absent': 404,
+        '403': 403,
+        '500': 500,
+        'overflow_off': 429,
+        'unavailable': 404,
+        'shared_unavailable': 429,
+        'shared_backpressure': 429,
+    }
+    messages = {
+        'capacity': 'Exceeded the provisioned throughput.',
+        'overflow_off': 'Exceeded the provisioned throughput.',
+        'generic429': 'Quota exceeded for requests per minute',
+        'absent': 'No provisioned throughput order configured',
+        'unavailable': 'Publisher Model was not found',
+        'shared_unavailable': 'Exceeded the provisioned throughput.',
+        'shared_backpressure': 'Exceeded the provisioned throughput.',
+    }
+
+    def handler(req):
+        seen.append(req)
+        if case in {'timeout', 'connection'}:
+            raise (httpx.ReadTimeout if case == 'timeout' else httpx.ConnectError)('synthetic failure', request=req)
+        if len(seen) == 2 and case in {'shared_unavailable', 'shared_backpressure'}:
+            return httpx.Response(
+                404 if case == 'shared_unavailable' else 429,
+                json={
+                    'error': {
+                        'message': (
+                            'Publisher Model was not found'
+                            if case == 'shared_unavailable'
+                            else 'Quota exceeded for requests per minute'
+                        )
+                    }
+                },
+            )
+        if len(seen) == 1 and case in statuses:
+            return httpx.Response(statuses[case], json={'error': {'message': messages.get(case, 'synthetic failure')}})
+        if len(seen) == 1 and case in {'malformed', 'empty'}:
+            return httpx.Response(
+                200, content=(b'data: {bad\n\n' if stream else b'{bad') if case == 'malformed' else b''
+            )
+        payload = complete('ON_DEMAND' if case == 'on_demand' or len(seen) > 1 else 'PROVISIONED_THROUGHPUT')
+        return httpx.Response(
+            200, content=b'data: ' + json.dumps(payload).encode() + b'\n\n' if stream else json.dumps(payload).encode()
+        )
+
+    states = {TARGET: State.ACTIVE} if active else {}
+    store = ReservationState()
+    monkeypatch.setattr(store, 'refresh', AsyncMock(return_value=states))
+    monkeypatch.setattr(store, 'transact', AsyncMock(return_value=(states, None)))
+    token = AsyncMock(return_value='synthetic-token')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        if transport == 'gateway':
+            provider = VertexGeminiProvider(http_client=client, access_token_supplier=token)
+            provider._reservations = store
+            kwargs = dict(
+                provider_ref=ProviderRef(provider='gemini', model=TARGET),
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                timeout_ms=10000,
+            )
+            try:
+                if stream:
+                    _ = [
+                        chunk
+                        async for chunk in provider.stream_chat_completion(
+                            {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
+                        )
+                    ]
+                else:
+                    await provider.create_chat_completion(
+                        {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
+                    )
+            except ProviderFailure:
+                assert case in statuses or case in {'empty', 'malformed', 'timeout', 'connection'}
+        else:
+
+            async def connected(_):
+                await asyncio.Event().wait()
+
+            async def refresh():
+                proxy._reservation_snapshot.set(states)
+                return states
+
+            monkeypatch.setattr(proxy, '_wait_for_disconnect', connected)
+            monkeypatch.setattr(proxy, 'schedule_managed_attempt', lambda _: False)
+            monkeypatch.setattr(proxy, 'reservation_state', store)
+            proxy._reservation_snapshot.set({})
+            monkeypatch.setattr(proxy, '_model_unavailable_at', {})
+            monkeypatch.setattr(proxy, 'get_byok_key', lambda _: None)
+            monkeypatch.setattr(proxy, 'llm_stub_enabled', lambda: False)
+            monkeypatch.setattr(proxy, '_company_paid_via_gateway', lambda *a: False)
+            monkeypatch.setattr(proxy, '_refresh_reservations', refresh)
+            monkeypatch.setattr(proxy, '_meter_server_request', AsyncMock(side_effect=lambda uid, path, *a: path))
+            monkeypatch.setattr(proxy._vertex_tokens, 'get_access_token', token)
+            monkeypatch.setattr(proxy, 'get_desktop_gemini_client', lambda: client)
+            monkeypatch.setattr(proxy, 'get_desktop_gemini_stream_client', lambda: client)
+            monkeypatch.setattr(proxy, 'get_desktop_gemini_semaphore', lambda: asyncio.Semaphore(1))
+            action = 'streamGenerateContent' if stream else 'generateContent'
+            response = await asyncio.wait_for(
+                proxy._proxy(request(), f'models/{TARGET}:{action}', stream, 'synthetic'), 2
+            )
+            if stream:
+                _ = [chunk async for chunk in response.body_iterator]
+        expected = ['dedicated' if active else 'shared']
+        if active and case in {'capacity', 'absent', 'unavailable', 'shared_unavailable', 'shared_backpressure'}:
+            expected.append('shared')
+        fallback = (case == 'unavailable' and not active) or (case == 'shared_unavailable' and active)
+        if fallback:
+            expected.append('shared')
+        assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == expected
+        assert all(f'/models/{TARGET}:' in str(r.url) for r in (seen[:-1] if fallback else seen))
+        if fallback:
+            assert '/models/gemini-3.1-flash-lite:' in str(seen[-1].url)
+        assert (TARGET in store._positive) == (active and case == 'valid')

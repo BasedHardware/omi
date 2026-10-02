@@ -209,6 +209,17 @@ A generic 429 (`Quota exceeded for requests per minute`) is backpressure and
 never triggers a fallback. Only a PT-exhaustion 429 or a model-unavailable 404
 does.
 
+Both transports call the pure `recovery_action()` policy. For a declared
+`overflow=shared` reservation (3.8), a dedicated capacity-signature error or
+unavailable dedicated endpoint retries **the same model shared** when overflow
+is enabled, including after activation. Generic 429, 401/403, 5xx, transport
+errors and malformed responses do not buy a same-model retry. `overflow=false`
+suppresses that recovery. A shared model-unavailable response may still use its
+existing cheaper fallback chain. Unknown/inactive target traffic starts shared;
+there is no separate customer-probe failure policy. The common status/body and
+traffic-metadata matrix runs through gateway/direct JSON and SSE paths.
+
+
 ## Thinking contract, measured
 
 Run 2026-08-18 via `backend/scripts/probe_gemini_thinking_contract.py`:
@@ -279,16 +290,28 @@ capacity during an outage, but no local negative evidence can refuse a client.
 State is `active`, `inactive`, or `unknown`, with its reason and observation
 timestamps. No order-list/control-plane API is called. An authenticated paid
 request can lease **one** synthetic `Reply OK.` dedicated probe for one declared
-model; each model has a fleet-wide 600-second lease. One-second probe deadline,
-16 output tokens, declared model-specific thinking (zero budget on 2.5, low
-level on 3.8), and no automatic shared recovery for these synthetic probes.
-Customer-content discovery attempts run only while state is unknown; an inactive
-model receives shared customer traffic while the independent synthetic lease
-continues checking for recovery.
-Normal requests also publish strict dedicated successes immediately. No startup
-poller or orphan background worker; no demand means no inference. Demand in
-*any* declared model probes all entries, including an inactive/refused old lane,
-so the detector can recover after refusal without forwarding user content.
+model; each model has a fleet-wide 600-second lease. The tracked background task
+has its own **30-second whole-attempt deadline**, 16 output tokens, and declared
+model-specific thinking (zero budget on 2.5, low level on 3.8). It never retries
+shared. It closes/cancels with its owning service. Customer requests are never
+used as discovery probes: unknown 3.8 traffic goes directly shared. This removes
+the one-second screenshot-completion requirement and duplicated customer work.
+A 1.6-second synthetic response is covered by a cross-instance discovery test;
+actual successful dedicated latency remains a live release gate.
+
+Discovery is demand-triggered, with no idle polling. Gateway pods can finish
+leased work independently of the triggering request. Request-based Cloud Run CPU
+may pause background work while idle; use the always-running gateway plus shared
+Redis for fleet discovery, and verify lease completion during rollout. No claim
+is made about discovery during a total traffic/service outage. Demand in any
+managed lane can check all declarations, including an inactive/refused old lane.
+
+Any nonempty `OMI_VERTEX_PT_MODEL` pin suppresses all synthetic discovery. A
+per-model state override suppresses that model unless its value is `auto` (an
+existing global pin still suppresses discovery). Malformed overrides suppress
+discovery and fail admission open. A pin/location change during a probe prevents
+publishing its result. Normal completed dedicated responses still publish
+positive evidence immediately.
 
 Automatic inactivity requires **all** of:
 
@@ -307,8 +330,10 @@ This detector's additional evidence is the positive exclusive-order move, not
 an error-message heuristic. Safety is conditional on the single-order declaration
 being true; duplicate/concurrent orders mislabeled as one invalidate that proof.
 The policy makes no impossible claim that inference errors alone prove absence.
-Any strict 2xx + PT trafficType response resets all failures and restores active
-immediately. Missing traffic metadata and 3xx responses never teach state, even
+Only a completed candidate response with explicit PT trafficType on a dedicated
+2xx resets failures and restores active immediately. Empty bodies/objects,
+metadata-only responses, unfinished candidates/SSE and contradictory traffic
+metadata never promote. Missing traffic metadata and 3xx never teach state, even
 where legacy wire handling still accepts the body. Active positive evidence
 expires to unknown after 24 hours; expired negative evidence also stops refusal.
 Typical detection under steady traffic takes 30–40 minutes, not the exact instant
@@ -327,7 +352,7 @@ excluded from overflow/fallback ladders, including during ambiguous transitions.
 | --- | --- | --- | --- |
 | Identified macOS legacy 2.5 task loop | Dedicated | Refuse | Dedicated |
 | Windows tasks/focus, macOS dictation/suggestions, unknown desktop, explicit backend 2.5 | Dedicated | Same model shared | Dedicated |
-| 3.8 new extraction | Dedicated | Same model shared | Same model shared, bounded discovery |
+| 3.8 new extraction | Dedicated | Same model shared | Same model shared; leased synthetic discovery |
 | Client-pinned Lite, Pro remap, BYOK | Existing policy | Existing policy | Existing policy |
 
 Refusal is the shipped tool loop's normal zero-task terminator, with bounded
