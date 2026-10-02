@@ -634,6 +634,9 @@ final class QuickActionsIconPatcher: NSObject {
   override func applicationWillTerminate(_ application: UIApplication) {
     QuickActionsIconPatcher.shared.stopObserving()
     OmiBleManager.shared.disconnectAllPeripherals()
+    if #available(iOS 16.1, *) {
+      LiveActivityManager.endAllBeforeTermination()
+    }
 
     // If title and body are nil, then we don't need to show notification.
     guard let title = notificationTitleOnKill, let body = notificationBodyOnKill else { return }

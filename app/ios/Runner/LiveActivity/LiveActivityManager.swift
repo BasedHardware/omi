@@ -28,6 +28,26 @@ final class LiveActivityManager {
                 self?.enqueue { [weak self] in await self?.reconcile() }
             }
         }
+        // A card alive at launch was left by a process that was killed or crashed. Its
+        // recording died with it (ids are never reused), so it closes before anything else.
+        enqueue { [weak self] in await self?.endAll(immediate: true) }
+    }
+
+    /// The app is terminating, so nothing will update the card again: close it and the
+    /// island now instead of leaving them to go stale. Termination waits briefly for it.
+    nonisolated static func endAllBeforeTermination() {
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            for activity in Activity<OmiCaptureAttributes>.activities {
+                if #available(iOS 16.2, *) {
+                    await activity.end(nil, dismissalPolicy: .immediate)
+                } else {
+                    await activity.end(using: nil, dismissalPolicy: .immediate)
+                }
+            }
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + 2)
     }
 
     private func enqueue(_ operation: @escaping @MainActor () async -> Void) {
@@ -111,7 +131,7 @@ final class LiveActivityManager {
     }
 
     private func reconcile() async {
-        // A launch is not proof that capture ended. Wait for the owner snapshot.
+        // Whether this process records is known only from the owner's snapshot; wait for it.
         guard ready, let (id, state, active) = latest else { return }
         if let current = activity, current.activityState == .dismissed {
             suppressedRecordingId = current.attributes.recordingId
