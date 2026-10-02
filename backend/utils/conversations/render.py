@@ -13,7 +13,6 @@ from models.other import Person
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
 from utils.conversations.summary_selection import select_primary_summary
-from utils.conversations.display_title import apply_display_title
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +130,7 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
 def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
     if not conv.get('is_locked', False):
-        return apply_display_title(conv)
+        return conv
     if 'structured' in conv:
         conv['structured'] = (
             dict(conv['structured']) if not isinstance(conv['structured'], dict) else conv['structured']

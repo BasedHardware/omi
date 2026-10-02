@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -12,7 +14,22 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/ui/ui.dart';
 
+class _TitlePersistenceSpy extends ConversationDetailProvider {
+  final savedTitles = <String>[];
+
+  @override
+  Future<bool> persistTitleEdit(String conversationId, String title) async {
+    savedTitles.add(title);
+    return true;
+  }
+}
+
 void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+  });
+
   for (final initialTitle in ['Short title', '']) {
     testWidgets('detail title layout and recording fallback: $initialTitle', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
@@ -24,7 +41,7 @@ void main() {
         createdAt: DateTime(2026, 9, 28, 12),
         structured: Structured(initialTitle, '', emoji: '🧠'),
       );
-      final detail = ConversationDetailProvider()
+      final detail = _TitlePersistenceSpy()
         ..selectedDate = conversationLocalDayKey(conversation.createdAt)
         ..setCachedConversation(conversation)
         ..titleController = TextEditingController(text: conversation.structured.title)
@@ -63,6 +80,16 @@ void main() {
         expect(detail.titleController!.text, isEmpty);
         expect(conversation.structured.title, isEmpty);
       }
+
+      // Rename without an edit must never persist the displayed date placeholder.
+      await tester.tap(titleField);
+      await tester.pump();
+      expect(detail.titleFocusNode!.hasFocus, isTrue);
+      detail.titleFocusNode!.unfocus();
+      await tester.pump();
+      expect(detail.savedTitles, isEmpty);
+      expect(detail.titleController!.text, initialTitle);
+      expect(conversation.structured.title, initialTitle);
 
       detail.titleController!.text = 'First line\nSecond line';
       await tester.pump();

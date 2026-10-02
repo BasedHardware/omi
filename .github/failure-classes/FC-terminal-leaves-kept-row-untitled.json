@@ -5,8 +5,7 @@
   "canonical_prevention": "Every terminal that keeps a processing row replaces an empty generated title with the model-free deterministic_minimum_title computed from the transactional snapshot, and the server alone decides retryability with an explicit additive marker (summary_retryable) written only for transient failure codes and cleared by the next processing persist. Clients render the marker instead of inferring it, fall back to transcript text for legacy rows, and report any remaining bare untitled render as a bounded event.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_dead_letter_visible_row_title.py",
-    "app/test/widgets/conversation_summary_retry_row_test.dart",
-    "backend/tests/unit/test_conversation_display_title.py"
+    "app/test/widgets/conversation_summary_retry_row_test.dart"
   ],
   "evidence_prs": [],
   "scope_hints": [
