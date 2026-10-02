@@ -93,7 +93,7 @@ extension TaskAssistant {
       }
       let formatter = DateFormatter()
       formatter.locale = Locale(identifier: "en_US_POSIX")
-      formatter.dateFormat = "yyyy-MM-dd"
+      formatter.dateFormat = "yyyy-MM-dd"  // omi-ux-allow: date-format-string -- Fixed extractor wire date, never user-facing UI.
       let today = formatter.string(from: Date())
       let body = try ScreenTaskPrompt.request(
         jpeg: frame.jpegData, app: frame.appName, profile: profile, tasks: context, today: today)

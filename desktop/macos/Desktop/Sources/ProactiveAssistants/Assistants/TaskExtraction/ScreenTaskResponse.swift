@@ -71,7 +71,7 @@ struct ScreenTaskResponse: Decodable {
     guard !value.isEmpty, value >= today else { return nil }
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.dateFormat = "yyyy-MM-dd"
+    formatter.dateFormat = "yyyy-MM-dd"  // omi-ux-allow: date-format-string -- Fixed extractor wire date, never user-facing UI.
     formatter.isLenient = false
     guard let date = formatter.date(from: value), formatter.string(from: date) == value else { return nil }
     return value
