@@ -28,6 +28,12 @@ Future<ActionItemsResponse?> _items({
             id: 'done1', description: 'Reply to the review', completed: true, completedAt: DateTime(2026, 10, 1)),
         ActionItemWithMetadata(
             id: 'done2', description: 'Pay the invoice', completed: true, completedAt: DateTime(2026, 10, 2)),
+        ActionItemWithMetadata(
+            id: 'locked',
+            description: 'An older task behind the…',
+            completed: false,
+            isLocked: true,
+            dueAt: DateTime.now()),
       ],
     );
 
@@ -75,6 +81,14 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Mark Incomplete').first);
     await tester.pumpAndSettle();
     expect(completions, [false]);
+  });
+
+  testWidgets('a paywalled task shows a lock instead of a ring and offers no completion', (tester) async {
+    await pumpPage(tester);
+    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+    expect(find.text('An older task behind the…'), findsOneWidget);
+    // Two open rows: only the unlocked one can be completed.
+    expect(find.bySemanticsLabel('Mark Complete'), findsOneWidget);
   });
 
   testWidgets('holding a done task offers Mark Incomplete and Delete Task', (tester) async {

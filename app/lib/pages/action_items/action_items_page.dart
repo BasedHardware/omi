@@ -10,6 +10,7 @@ import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
@@ -979,6 +980,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     if (provider.isSelectionMode) {
       return taskContent;
     }
+    // A paywalled task: no drag, swipe or menu either; its tap goes to the plan page.
+    if (item.isLocked) return taskContent;
 
     // The row's own context, so the long-press menu can anchor under it.
     BuildContext? rowContext;
@@ -1179,7 +1182,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        if (provider.isSelectionMode) {
+        if (item.isLocked) {
+          _openUpgrade();
+        } else if (provider.isSelectionMode) {
           OmiHaptics.selection();
           provider.toggleItemSelection(item.id, cascadeIds: _visibleDescendantIds(item, categoryItems));
         } else {
@@ -1212,20 +1217,33 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     ),
                   // Completion circle — always shown. Read-only in selection mode
                   // (the row tap drives selection there); tappable otherwise.
-                  Semantics(
-                    button: !provider.isSelectionMode,
-                    checked: item.completed,
-                    label: item.completed ? context.l10n.markIncomplete : context.l10n.markComplete,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: provider.isSelectionMode ? null : () => _toggleCompleted(provider, item),
+                  if (item.isLocked)
+                    // Paywalled: the backend cuts the text short and refuses edits (402), so a lock
+                    // stands where the ring would be and the row leads to the plan page.
+                    Semantics(
+                      button: true,
+                      label: context.l10n.upgradeToUnlimited,
                       child: SizedBox(
                         width: 44,
                         height: 44,
-                        child: Center(child: TaskCompletionMark(completed: item.completed)),
+                        child: Center(child: Icon(Icons.lock_outline, size: 20, color: OmiColors.textTertiary)),
+                      ),
+                    )
+                  else
+                    Semantics(
+                      button: !provider.isSelectionMode,
+                      checked: item.completed,
+                      label: item.completed ? context.l10n.markIncomplete : context.l10n.markComplete,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: provider.isSelectionMode ? null : () => _toggleCompleted(provider, item),
+                        child: SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: Center(child: TaskCompletionMark(completed: item.completed)),
+                        ),
                       ),
                     ),
-                  ),
                   // Task text
                   Expanded(
                     child: Padding(
@@ -1237,7 +1255,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           Text(
                             item.description,
                             style: OmiType.body.copyWith(
-                              color: item.completed ? OmiColors.textTertiary : OmiColors.textPrimary,
+                              color: item.completed || item.isLocked ? OmiColors.textTertiary : OmiColors.textPrimary,
                               letterSpacing: -0.35,
                               decoration: item.completed ? TextDecoration.lineThrough : null,
                               decorationColor: OmiColors.textTertiary,
@@ -1337,6 +1355,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   void _showEditSheet(ActionItemWithMetadata item) {
     openTaskPage(context, item);
+  }
+
+  /// Where a paywalled task's tap goes, the same as a locked conversation's.
+  void _openUpgrade() {
+    OmiHaptics.selection();
+    routeToPage(context, const UsagePage(showUpgradeDialog: true));
   }
 }
 

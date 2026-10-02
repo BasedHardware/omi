@@ -14,6 +14,7 @@ import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart' show
 import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/conversation_link_blocks.dart' show openChatBlockConversation;
 import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -25,8 +26,13 @@ import 'package:omi/utils/share_sheet.dart';
 
 /// Opens [item] on its own page (the task's text as the title, then due date, completion and the
 /// actions). New tasks still use the sheet: [showActionItemFormSheet].
-Future<void> openTaskPage(BuildContext context, ActionItemWithMetadata item) =>
-    routeToPage(context, TaskPage(item: item));
+///
+/// A paywalled task can't be read in full or changed (the backend answers 402 to every edit), so
+/// it goes to the plan page instead, like a locked conversation.
+Future<void> openTaskPage(BuildContext context, ActionItemWithMetadata item) {
+  if (item.isLocked) return routeToPage(context, const UsagePage(showUpgradeDialog: true));
+  return routeToPage(context, TaskPage(item: item));
+}
 
 /// One task, full screen: the conversation page's chrome (X, a Save pill that wakes up when
 /// something changed), the text as a large editable title, a line back to the conversation it was
