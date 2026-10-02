@@ -6,11 +6,13 @@ Collection: users/{uid}/advice
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional
 
+from database.read_boundary import parse_snapshot_or_none, parse_snapshots
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+from models.advice import Advice
 
 from ._client import db
 
@@ -47,7 +49,7 @@ def create_advice(uid: str, content: str, category: str = 'other', **kwargs: Any
 
 def get_advice(
     uid: str, category: Optional[str] = None, limit: int = 50, offset: int = 0, include_dismissed: bool = False
-) -> List[Dict[str, Any]]:
+) -> List[Advice]:
     col = _user_col(uid, 'advice')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
     if category:
@@ -58,18 +60,16 @@ def get_advice(
         query = query.offset(offset)
     query = query.limit(limit)
 
-    items: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        raw: object = doc.to_dict()
-        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-        data['id'] = doc.id
-        items.append(data)
-    return items
+    # One malformed/legacy stored advice row must not 500 the whole advice feed:
+    # Advice requires content/category/created_at/updated_at, so raw dicts straight
+    # from Firestore made FastAPI raise ResponseValidationError (HTTP 500) for the
+    # entire list. Parse through the shared read boundary and drop malformed rows.
+    return parse_snapshots(Advice, query.stream(), document_id_field='id')
 
 
 def update_advice(
     uid: str, advice_id: str, is_read: Optional[bool] = None, is_dismissed: Optional[bool] = None
-) -> Optional[Dict[str, Any]]:
+) -> Optional[Advice]:
     ref = _user_col(uid, 'advice').document(advice_id)
     snap = ref.get()
     if not getattr(snap, "exists", False):
@@ -84,13 +84,13 @@ def update_advice(
     except NotFound:
         # The advice was deleted between the existence check and the update.
         return None
-    raw: object = ref.get().to_dict()
-    if raw is None:
+    snapshot = ref.get()
+    if not getattr(snapshot, "exists", False):
         # The advice was deleted between the update and the re-read.
         return None
-    result: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-    result['id'] = advice_id
-    return result
+    # Same read-boundary contract as get_advice: a poisoned row surfaces as
+    # "not found" instead of a 500 from the PATCH response serializer.
+    return parse_snapshot_or_none(Advice, snapshot, document_id_field='id')
 
 
 def delete_advice(uid: str, advice_id: str) -> bool:
