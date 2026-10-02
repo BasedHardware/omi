@@ -10,6 +10,7 @@ Verifies:
 
 import json
 import os
+import socket
 from types import ModuleType
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -18,6 +19,7 @@ import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
 from utils.apps import validate_app_endpoints_for_reenable
+from utils import webhooks as webhooks_module
 
 _BACKEND = os.path.join(os.path.dirname(__file__), '..', '..')
 
@@ -261,6 +263,8 @@ class TestDevWebhookAutoDisable:
     def _stub_webhook_db_lookups(self, monkeypatch):
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+        monkeypatch.setattr(socket, "getaddrinfo", lambda *_: [(2, 1, 6, "", ("8.8.8.8", 0))])
+        monkeypatch.setattr(webhooks_module, "enqueue_dev_webhook_dlq", MagicMock())
 
     def test_append_query_params_preserves_existing_query(self):
         from utils.webhooks import _append_query_params
@@ -318,12 +322,7 @@ class TestDevWebhookAutoDisable:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("status_code", [400, 401, 404, 410, 422])
     async def test_post_dev_webhook_does_not_retry_deterministic_4xx(self, status_code):
-        # A deterministic rejection cannot converge: retrying a 400 can only
-        # reproduce it (2026-09-05: one dead endpoint returning 400 produced
-        # 3,282 attempts in 30 minutes walking the full schedule per event).
-        # The delivery still fails through the normal terminal path — DLQ
-        # enqueued with the final response — it just stops wasting the
-        # schedule, semaphore slots, and circuit-breaker trips on the way.
+        # Deterministic 4xx retains the final-response DLQ path without retries.
         from utils.webhooks import _post_dev_webhook, db_executor, enqueue_dev_webhook_dlq
 
         mock_client = AsyncMock()
@@ -341,7 +340,7 @@ class TestDevWebhookAutoDisable:
             patch("utils.webhooks.get_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
-            patch("utils.webhooks.run_blocking", new_callable=AsyncMock) as mock_run_blocking,
+            patch.object(webhooks_module, "run_blocking", wraps=webhooks_module.run_blocking) as mock_run_blocking,
         ):
             response = await _post_dev_webhook(
                 "test_webhook",
@@ -356,7 +355,7 @@ class TestDevWebhookAutoDisable:
         assert mock_client.post.await_count == 1, "deterministic 4xx must not be retried"
         assert sleep_calls == []
         # The exhausted-delivery terminal path is intact: DLQ gets the final response.
-        mock_run_blocking.assert_awaited_once()
+        assert mock_run_blocking.await_count == 2
         assert mock_run_blocking.await_args.args[1] is enqueue_dev_webhook_dlq
         assert mock_run_blocking.await_args.kwargs["status_code"] == status_code
         idempotency_keys = [call.kwargs["headers"]["Idempotency-Key"] for call in mock_client.post.await_args_list]
@@ -365,8 +364,6 @@ class TestDevWebhookAutoDisable:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("transient_status", [408, 429])
     async def test_post_dev_webhook_still_retries_transient_4xx(self, transient_status):
-        # 408/429 are the transient 4xx members: they keep the retry
-        # schedule. Pins the carve-out against accidental over-narrowing.
         from utils.webhooks import _post_dev_webhook
 
         responses = [MagicMock(status_code=transient_status), MagicMock(status_code=200)]
@@ -410,7 +407,7 @@ class TestDevWebhookAutoDisable:
         with (
             patch("utils.webhooks.get_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
-            patch("utils.webhooks.run_blocking", new_callable=AsyncMock) as mock_run_blocking,
+            patch.object(webhooks_module, "run_blocking", wraps=webhooks_module.run_blocking) as mock_run_blocking,
         ):
             response = await _post_dev_webhook(
                 "test_webhook",
@@ -422,7 +419,8 @@ class TestDevWebhookAutoDisable:
             )
 
         assert response.status_code == 503
-        mock_run_blocking.assert_awaited_once_with(
+        assert mock_run_blocking.await_count == 2
+        mock_run_blocking.assert_awaited_with(
             db_executor,
             enqueue_dev_webhook_dlq,
             webhook_name="test_webhook",
@@ -2110,6 +2108,8 @@ class TestDevWebhookIntegrationPaths:
     def _stub_webhook_db_lookups(self, monkeypatch):
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+        monkeypatch.setattr(socket, "getaddrinfo", lambda *_: [(2, 1, 6, "", ("8.8.8.8", 0))])
+        monkeypatch.setattr(webhooks_module, "enqueue_dev_webhook_dlq", MagicMock())
 
     @pytest.mark.asyncio
     async def test_conversation_created_records_success(self):

@@ -100,11 +100,15 @@ def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
     """
     parsed = urlparse(url)
     hostname = parsed.hostname
+    host_header = f'[{hostname}]' if ':' in hostname else hostname
     netloc = f'[{resolved_ip}]' if ':' in resolved_ip else resolved_ip
     if parsed.port:
         netloc += f':{parsed.port}'
+        host_header += f':{parsed.port}'
+    if '@' in parsed.netloc:
+        netloc = parsed.netloc.rsplit('@', 1)[0] + '@' + netloc
     pinned_url = parsed._replace(netloc=netloc).geturl()
-    extra = {'headers': {'Host': hostname}, 'extensions': {'sni_hostname': hostname}}
+    extra = {'headers': {'Host': host_header}, 'extensions': {'sni_hostname': hostname}}
     return pinned_url, extra
 
 
@@ -414,7 +418,10 @@ def get_webhook_client() -> httpx.AsyncClient:
         'webhook',
         lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=2.0),
-            limits=httpx.Limits(max_connections=64, max_keepalive_connections=16),
+            # Pinned URLs share an IP origin across hostnames. Reusing their
+            # TLS connections would skip verification of the next hostname.
+            limits=httpx.Limits(max_connections=64, max_keepalive_connections=0),
+            trust_env=False,
         ),
     )
 

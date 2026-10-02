@@ -8,6 +8,7 @@ import ast
 import asyncio
 import os
 import re
+import socket
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
@@ -24,6 +25,8 @@ def _stub_webhook_db_helpers(monkeypatch):
     Replaces the former module-scope ``sys.modules`` stubs of ``database.redis_db``
     etc. Individual tests override specific names via ``with patch(...)`` as needed.
     """
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))])
+    monkeypatch.setattr(webhooks_module, "enqueue_dev_webhook_dlq", MagicMock())
     monkeypatch.setattr(webhooks_module, "user_webhook_status_db", MagicMock(return_value=True))
     monkeypatch.setattr(webhooks_module, "get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
     monkeypatch.setattr(webhooks_module, "disable_user_webhook_db", MagicMock())
@@ -161,7 +164,8 @@ class TestSendAudioBytesDeveloperWebhook:
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
 
         call_url = mock_client.post.call_args[0][0]
-        assert "https://example.com/audio" in call_url
+        assert call_url.startswith("https://8.8.8.8/audio")
+        assert mock_client.post.call_args.kwargs["headers"]["Host"] == "example.com"
         assert ",10" not in call_url
 
     @pytest.mark.asyncio
