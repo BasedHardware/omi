@@ -162,8 +162,15 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   BtDevice? get pairedDevice => paired ? _pendant : null;
   @override
   bool get isConnecting => !connected;
+  @override
+  bool get isConnected => connected;
   void drop() {
     connected = false;
+    notifyListeners();
+  }
+
+  void reconnect() {
+    connected = true;
     notifyListeners();
   }
 
@@ -363,6 +370,15 @@ void main() {
       expect(find.text(en.pendantRecordingSafe), findsOneWidget);
       expect(find.text(en.pendantReconnectsOnItsOwn), findsOneWidget);
       expect(find.text(en.deviceSettings), findsOneWidget);
+
+      // The pendant comes back while the sheet is open: it says Connected, and the spinner stops.
+      device.reconnect();
+      await tester.pump();
+      expect(find.byType(OmiSpinner), findsNothing);
+      expect(
+          find.descendant(
+              of: find.byKey(const ValueKey('pendant_dropped_status')), matching: find.textContaining(en.connected)),
+          findsOneWidget);
       await tester.tap(find.text(en.gotIt));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
@@ -405,7 +421,7 @@ void main() {
   group('record-with-this-phone button', () {
     /// Idle, a tap asks how to record; Phone mic starts it.
     Future<void> startPhoneMic(WidgetTester tester) async {
-      await tester.tap(find.bySemanticsLabel(en.startRecording));
+      await tester.tap(find.bySemanticsLabel(en.recordWith));
       await tester.pumpAndSettle();
       await tester.tap(find.text(en.captureSourcePhoneMic));
       await tester.pump();
@@ -414,12 +430,14 @@ void main() {
     testWidgets('idle: one glass button; a tap asks how to record before anything starts', (tester) async {
       final capture = _Capture(_Live.idle);
       await pump(tester, const HomeRecordButton(), capture: capture);
-      expect(find.bySemanticsLabel(en.startRecording), findsOneWidget);
+      // Idle, a screen reader hears the chooser the tap opens, not "Start recording".
+      expect(find.bySemanticsLabel(en.recordWith), findsOneWidget);
+      expect(find.bySemanticsLabel(en.startRecording), findsNothing);
       expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing, reason: 'no badge: one control');
       expect(find.descendant(of: find.byType(HomeRecordButton), matching: find.byType(BackdropFilter)), findsOneWidget,
           reason: 'glass that blurs the list scrolling under it');
 
-      await tester.tap(find.bySemanticsLabel(en.startRecording));
+      await tester.tap(find.bySemanticsLabel(en.recordWith));
       await tester.pumpAndSettle();
       expect(find.text(en.recordWith), findsOneWidget);
       expect(find.text(en.captureSourcePhoneMic), findsOneWidget);

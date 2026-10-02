@@ -11,8 +11,9 @@ import 'omi_tokens.dart';
 class OmiCanvas extends InheritedWidget {
   const OmiCanvas({super.key, required super.child});
 
-  /// Whether [context] is on a canvas screen.
-  static bool isOn(BuildContext context) => context.dependOnInheritedWidgetOfExactType<OmiCanvas>() != null;
+  /// Whether [context] is on a canvas screen. A plain lookup: the marker never changes, so callers
+  /// need no rebuild dependency on it.
+  static bool isOn(BuildContext context) => context.getInheritedWidgetOfExactType<OmiCanvas>() != null;
 
   /// The page colour under [context].
   static Color pageOf(BuildContext context) => isOn(context) ? OmiColors.canvas : OmiColors.surface0;

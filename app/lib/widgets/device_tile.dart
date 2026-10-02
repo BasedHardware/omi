@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:omi/ui/ui.dart';
-import 'package:omi/widgets/capture_sources.dart';
 
 /// The device a Home row came from, as a soft line glyph in a small warm tile at the start of the
-/// row. Pendants, phones, watches and glasses have drawn glyphs; any other source shows its
-/// [CaptureSources.icon]. A recap's tile holds its day [emoji]. Decorative: the row names what it is.
+/// row. Pendants, phones, watches, glasses, desktops and integrations have drawn glyphs; a source
+/// with no device of its own (an older row, an unknown source) shows a conversation bubble. A caller
+/// can pass an [icon] instead, and a recap's tile holds its day [emoji]. Decorative: the row names
+/// what it is.
 class DeviceTile extends StatelessWidget {
   const DeviceTile(
       {super.key, this.source, this.icon, this.emoji, this.status, this.faded = false, this.missing = false});
@@ -50,7 +51,7 @@ class DeviceTile extends StatelessWidget {
           ? Text(emoji!, style: OmiType.title3)
           : glyph != null
               ? SvgPicture.string(glyph, width: 24, height: 24, colorFilter: ColorFilter.mode(ink, BlendMode.srcIn))
-              : Icon(icon ?? CaptureSources.icon(source), size: 20, color: ink),
+              : Icon(icon, size: 20, color: ink),
     );
     if (missing) tile = CustomPaint(painter: _DashedOutlinePainter(OmiColors.textTertiary), child: tile);
     if (faded) tile = Opacity(opacity: 0.45, child: tile);
@@ -76,13 +77,15 @@ class DeviceTile extends StatelessWidget {
     return ExcludeSemantics(child: tile);
   }
 
-  /// The drawn glyph for [source], or null when it has none.
-  static String? glyphFor(String? source) => switch (source) {
+  /// The drawn glyph for [source]. Every source has one, so a row never falls back to a bare mic.
+  static String glyphFor(String? source) => switch (source) {
         'omi' || 'friend' || 'friend_com' || 'sdcard' || 'limitless' || 'bee' || 'fieldy' || 'plaud' => _pendant,
         'phone' => _phone,
         'apple_watch' => _watch,
         'openglass' || 'rayban_meta' || 'frame' => _glasses,
-        _ => null,
+        'desktop' || 'screenpipe' => _desktop,
+        'workflow' => _workflow,
+        _ => _conversation,
       };
 
   static String _svg(String body) =>
@@ -97,6 +100,12 @@ class DeviceTile extends StatelessWidget {
       '<rect x="6.5" y="6.5" width="11" height="11" rx="3"/><path d="M9 6.5l.6-3h4.8l.6 3M9 17.5l.6 3h4.8l.6-3"/>');
   static final String _glasses = _svg('<circle cx="7" cy="14" r="3.5"/><circle cx="17" cy="14" r="3.5"/>'
       '<path d="M10.5 14h3M3.5 14l1-5M20.5 14l-1-5"/>');
+  static final String _desktop =
+      _svg('<rect x="3" y="4.5" width="18" height="12" rx="2.2"/><path d="M12 16.5v3.5M8.5 20h7"/>');
+  // An integration (a workflow): the puzzle piece Settings uses for integrations.
+  static final String _workflow = _svg('<path d="M4 7h4.4a2.3 2.3 0 1 1 4.4 0H17v4.4a2.3 2.3 0 1 1 0 4.4V20H4z"/>');
+  static final String _conversation = _svg(
+      '<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H11.5L7.5 20.3V17h-1A2.5 2.5 0 0 1 4 14.5z"/>');
 }
 
 /// A dashed rounded outline: a tile for something that is not there.

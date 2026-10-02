@@ -11337,7 +11337,7 @@
     "speakerLabelEarlierMatches": "Претходни разговори со овој глас: {count}",
     "speakerLabelText": "{part, select, likely{Веројатно} soundsLike{Звучи како {name}} notPerson{Не е {name}} carried{Сѐ уште е {name}. Пренесено од вашиот последен разговор.} change{Промени} alsoTitle{Дали и ова е {name}?} alsoBody{Omi го најде истиот глас во претходни разговори.} confirmed{Ја потврдивте оваа ознака} other{Прегледај}}",
     "speakerLabelTalkTime": "{duration} од овој глас",
-    "askAnythingButton": "Праши било што",
+    "askAnythingButton": "Прашај било што",
     "pendantLostConnection": "Приврзокот ја изгуби врската со овој телефон.",
     "pendantReconnectsOnItsOwn": "Omi ќе се поврзе повторно сам кога приврзокот е вклучен и во близина.",
     "pendantRecordingSafe": "Сè што е снимено досега е безбедно."

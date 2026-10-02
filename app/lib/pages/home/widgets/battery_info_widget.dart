@@ -263,10 +263,10 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     );
   }
 
-  static bool _callInProgress(BuildContext context) {
-    final state = context.read<PhoneCallProvider>().callState;
-    return state == PhoneCallState.connecting || state == PhoneCallState.ringing || state == PhoneCallState.active;
-  }
+  static bool _callInProgress(BuildContext context) => _isCallLive(context.read<PhoneCallProvider>().callState);
+
+  static bool _isCallLive(PhoneCallState state) =>
+      state == PhoneCallState.connecting || state == PhoneCallState.ringing || state == PhoneCallState.active;
 
   /// The pendant is recording (or paused) in realtime mode: explain, and let the user choose.
   /// A Transcribe Later pendant is excluded — its capture can't be taken over at all, so it
@@ -360,9 +360,17 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
         final isRecording = captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused;
         final isInitialising = captureProvider.recordingState == RecordingState.initialising;
         final l10n = context.l10n;
+        // Idle with nothing to take over, a tap opens the Record with chooser rather than recording,
+        // so a screen reader hears what it opens.
+        final callInProgress = context.select<PhoneCallProvider, bool>((p) => _isCallLive(p.callState));
+        final opensChooser = !isRecording &&
+            !isInitialising &&
+            !callInProgress &&
+            !_pendantHasCapture(captureProvider) &&
+            !captureProvider.isPendantBatchRecording;
         return Semantics(
           button: true,
-          label: isRecording ? l10n.stopRecording : l10n.startRecording,
+          label: isRecording ? l10n.stopRecording : (opensChooser ? l10n.recordWith : l10n.startRecording),
           enabled: !isInitialising,
           onTap: isInitialising ? null : () => _onTap(context),
           excludeSemantics: true,

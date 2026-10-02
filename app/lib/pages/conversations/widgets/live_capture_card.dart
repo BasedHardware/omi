@@ -9,7 +9,7 @@ import 'package:omi/widgets/device_tile.dart';
 /// The one capture status and control surface on Home: what is recording now.
 ///
 /// Leading: the source's [DeviceTile] (pendant, phone or call) with a dot, green while live and grey
-/// when paused, named for screen readers but not in text; a problem marks the words, not the tile.
+/// when paused or not capturing yet ([live]), named for screen readers but not in text; a problem marks the words, not the tile.
 /// Then two lines: the short [status] ("Listening", "Paused", "Not
 /// transcribing"), and in a muted colour the elapsed time and the [detail] ("0:14 · Audio saved,
 /// transcribes later"). A problem ([explanation] set) carries an amber warning glyph instead of a
@@ -24,6 +24,7 @@ class LiveCaptureCard extends StatelessWidget {
     this.detail,
     this.explanation,
     this.paused = false,
+    this.live = true,
     this.elapsed,
     this.lastLine,
     this.note,
@@ -45,6 +46,10 @@ class LiveCaptureCard extends StatelessWidget {
 
   /// The reader (or the pendant) paused capture: the trailing control resumes.
   final bool paused;
+
+  /// Audio is actually being captured. False while a call connects or rings, or the microphone is
+  /// still opening: the dot stays grey until capture runs.
+  final bool live;
   final Duration? elapsed;
   final String? lastLine;
   final String? note;
@@ -108,7 +113,7 @@ class LiveCaptureCard extends StatelessWidget {
       child: DeviceTile(
         source: isCall ? null : source,
         icon: isCall ? Icons.call_rounded : null,
-        status: problem ? null : (paused ? OmiColors.textTertiary : OmiColors.success),
+        status: problem ? null : (paused || !live ? OmiColors.textTertiary : OmiColors.success),
       ),
     );
 

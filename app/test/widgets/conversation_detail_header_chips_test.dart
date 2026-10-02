@@ -97,7 +97,8 @@ void main() {
     );
     await pumpHeader(tester, width: 375, folder: folder);
     expectOneLine(tester, 375);
-    expect(
-        tester.getSize(find.byKey(const Key('conversation_folder'))).width, lessThanOrEqualTo((375 - 32) * 0.45 + 0.5));
+    // The header's gutters, then the folder's share of what is left.
+    expect(tester.getSize(find.byKey(const Key('conversation_folder'))).width,
+        lessThanOrEqualTo((375 - 2 * OmiSpacing.md) * ConversationDetailHeader.folderShare + 0.5));
   });
 }

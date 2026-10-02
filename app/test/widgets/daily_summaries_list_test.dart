@@ -27,6 +27,8 @@ DailySummary _summary() => DailySummary(
       headline: 'A quiet day',
       overview: 'Nothing much happened',
       stats: DayStats(),
+      // Not the model's default, so the row has to render this summary's emoji.
+      dayEmoji: '🌙',
     );
 
 void main() {
@@ -58,10 +60,11 @@ void main() {
   });
 
   testWidgets('recaps that loaded are listed', (tester) async {
+    final summary = _summary();
     await tester.pumpWidget(
       _wrap(
         DailySummariesList(
-          fetchSummaries: ({int limit = 30, int offset = 0}) async => (items: [_summary()], ok: true),
+          fetchSummaries: ({int limit = 30, int offset = 0}) async => (items: [summary], ok: true),
         ),
       ),
     );
@@ -70,7 +73,6 @@ void main() {
     expect(find.text('No daily recaps yet'), findsNothing);
     expect(find.text('Something went wrong! Please try again later.'), findsNothing);
     // A flat row like Home's: the day's emoji in a tile and a chevron, no card around it.
-    final summary = _summary();
     expect(tester.widget<DeviceTile>(find.byType(DeviceTile)).emoji, summary.dayEmoji);
     expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
   });

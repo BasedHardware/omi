@@ -113,6 +113,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 PhoneCallState.ringing => l10n.callStateRinging,
                 _ => captureStateLabel(l10n, CaptureDisplayState.listening),
               },
+              live: phoneCallState == PhoneCallState.active,
               elapsed: phoneCallState == PhoneCallState.active ? call.callDuration : null,
               lastLine: call.transcriptSegments.lastOrNull?.text,
             ),
@@ -318,6 +319,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         // Resume only when the status says Paused and the reader paused it; a degraded transcription
         // is still live, so its control is Pause.
         paused: isPaused,
+        live: !starting,
         elapsed: startedAt == null ? null : DateTime.now().difference(startedAt),
         lastLine: provider.segments.lastOrNull?.text,
         note:

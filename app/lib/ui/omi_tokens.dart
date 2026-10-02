@@ -171,8 +171,8 @@ class OmiPalette {
     canvasCard: Color(0xFFF2F2F7),
     // #C9B89A at 10%: over the white page, #FAF8F4.
     canvasBlend: Color(0x1AC9B89A),
-    // Omi v8 in light: circles are frosted white with a 9% hairline and no shadow; the Ask bar and
-    // record button are frosted white with a white edge, a faint outline and a soft shadow.
+    // Omi v8 in light: circles are frosted white (55%) with a 9% hairline and a faint 6% shadow; the
+    // Ask bar and record button are frosted white with a white edge, a faint outline and a soft shadow.
     glass: Color(0x8CFFFFFF),
     glassEdge: Color(0x17000000),
     glassRim: Color(0x17000000),

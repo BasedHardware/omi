@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/device_tile.dart';
 import 'package:omi/widgets/header_circle_button.dart';
@@ -142,7 +143,7 @@ void main() {
   });
 
   group('DeviceTile', () {
-    test('pendants, phones, watches and glasses have drawn glyphs; other sources use their icon', () {
+    test('every source has a drawn glyph; one with no device of its own gets the conversation bubble', () {
       for (final source in ['omi', 'friend', 'limitless', 'bee', 'plaud']) {
         expect(DeviceTile.glyphFor(source), DeviceTile.glyphFor('omi'), reason: source);
       }
@@ -151,8 +152,13 @@ void main() {
       expect(DeviceTile.glyphFor('openglass'), DeviceTile.glyphFor('rayban_meta'));
       expect(
           {DeviceTile.glyphFor('omi'), DeviceTile.glyphFor('phone'), DeviceTile.glyphFor('apple_watch')}, hasLength(3));
-      expect(DeviceTile.glyphFor('screenpipe'), isNull);
-      expect(DeviceTile.glyphFor(null), isNull);
+      expect(DeviceTile.glyphFor('screenpipe'), DeviceTile.glyphFor('desktop'));
+      expect(DeviceTile.glyphFor('workflow'), isNot(DeviceTile.glyphFor(null)));
+      // An older row (no source) and an unknown one share the bubble, never a bare mic icon.
+      expect(DeviceTile.glyphFor('xor'), DeviceTile.glyphFor(null));
+      for (final source in ConversationSource.values) {
+        expect(DeviceTile.glyphFor(source.name), isNotEmpty, reason: source.name);
+      }
     });
 
     testWidgets('a 40pt warm tile with the glyph; decorative', (tester) async {
@@ -165,7 +171,10 @@ void main() {
       expect((tile.decoration! as BoxDecoration).border, isNull, reason: 'no outline: a mark, not a button');
       expect(find.descendant(of: find.byType(DeviceTile), matching: find.byType(ExcludeSemantics)), findsOneWidget);
 
+      // Every source draws its glyph; only a caller's own icon shows an Icon.
       await pumpIn(tester, const DeviceTile(source: 'screenpipe'));
+      expect(find.byType(SvgPicture), findsOneWidget);
+      await pumpIn(tester, const DeviceTile(icon: Icons.call_rounded));
       expect(find.byType(SvgPicture), findsNothing);
       expect(find.byType(Icon), findsOneWidget);
     });

@@ -12224,7 +12224,7 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get askAnythingButton => 'कुछ भी पूछें';
+  String get askAnythingButton => 'काहीही विचारा';
 
   @override
   String get pendantLostConnection => 'तुमच्या पेंडंटचा या फोनशी संपर्क तुटला.';

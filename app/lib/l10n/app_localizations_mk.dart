@@ -12279,7 +12279,7 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get askAnythingButton => 'Праши било што';
+  String get askAnythingButton => 'Прашај било што';
 
   @override
   String get pendantLostConnection => 'Приврзокот ја изгуби врската со овој телефон.';

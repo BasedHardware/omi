@@ -997,7 +997,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           }
         });
       }
-      return const Scaffold();
+      // The canvas colour from the first frame, so the push does not flash the grey theme page.
+      return Scaffold(backgroundColor: OmiColors.canvas);
     }
 
     // The bottom bar (and its backdrop) shows once there is something to play or ask about.

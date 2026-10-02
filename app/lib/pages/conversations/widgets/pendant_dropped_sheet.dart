@@ -42,13 +42,14 @@ class PendantDroppedSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    // Follows the pendant while the sheet is open: Reconnecting… with a spinner while a reconnect runs.
-    final (name, reconnecting) = context.select<DeviceProvider, (String?, bool)>(
-      (d) => (d.pairedDevice?.name, d.isConnecting),
+    // Follows the pendant while the sheet is open: Reconnecting… with a spinner while a reconnect
+    // runs, then Connected once it is back.
+    final (name, reconnecting, connected) = context.select<DeviceProvider, (String?, bool, bool)>(
+      (d) => (d.pairedDevice?.name, d.isConnecting, d.isConnected),
     );
     final status = [
       if (elapsed != null) LiveCaptureCard.formatElapsed(elapsed!),
-      reconnecting ? l10n.reconnecting : l10n.disconnected,
+      connected ? l10n.connected : (reconnecting ? l10n.reconnecting : l10n.disconnected),
     ].join('  ·  ');
     final secondary = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
     return Padding(
@@ -76,7 +77,7 @@ class PendantDroppedSheet extends StatelessWidget {
                   Text(status, style: secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                 ]),
               ),
-              if (reconnecting) const OmiSpinner(size: OmiSpinnerSize.small),
+              if (reconnecting && !connected) const OmiSpinner(size: OmiSpinnerSize.small),
             ]),
           ),
           const SizedBox(height: OmiSpacing.xs),

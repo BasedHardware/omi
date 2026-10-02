@@ -36,6 +36,9 @@ class ConversationDetailHeader extends StatelessWidget {
   /// Opens the recordings sheet for an event several devices recorded.
   final void Function(List<CaptureRecording> recordings) onOpenRecordings;
 
+  /// The most of the when/folder row a folder name may take before it is cut short.
+  static const double folderShare = 0.45;
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ConversationDetailProvider>();
@@ -199,9 +202,6 @@ class _OneLineChips extends StatelessWidget {
   final Widget when;
   final Widget folder;
 
-  /// The most of the row a folder name may take before it is cut short.
-  static const double folderShare = 0.45;
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -216,7 +216,8 @@ class _OneLineChips extends StatelessWidget {
             children: [
               ConstrainedBox(constraints: BoxConstraints(maxWidth: width), child: when),
               const SizedBox(width: 8),
-              ConstrainedBox(constraints: BoxConstraints(maxWidth: width * folderShare), child: folder),
+              ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: width * ConversationDetailHeader.folderShare), child: folder),
             ],
           ),
         );
