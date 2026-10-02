@@ -160,7 +160,7 @@ def absorb_conversation(
     donor_ref = collection.document(donor_id)
 
     @firestore.transactional
-    def absorb(transaction) -> AbsorbResult:
+    def absorb(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
@@ -180,7 +180,7 @@ def absorb_conversation(
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
         # Last read, only on the absorbing path: the gate fence for the audit sibling.
-        audit = audit_db.gate_skip(transaction, client, uid)
+        audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         # The survivor transcript changed: a stored client projection described the old one.
@@ -199,7 +199,13 @@ def absorb_conversation(
         )
         return AbsorbResult('absorbed', 'absorbed', audit)
 
-    result = run_transactional(client, absorb)
+    try:
+        result = run_transactional(client, absorb)
+    except audit_db.AuditUnavailable:
+        # No commit was attempted. Never continue writing on a transaction whose
+        # optional read/staging failed; re-read and re-plan on a fresh transaction.
+        logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
+        result = run_transactional(client, absorb, audit_unavailable=True)
     if result.outcome == 'absorbed':
         # The same fail-open search-index hooks the conversation adapter runs after its writes.
         conversations_db._sync_conversation_search_index(uid, survivor_id)  # pyright: ignore[reportPrivateUsage]

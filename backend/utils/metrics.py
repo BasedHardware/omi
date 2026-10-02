@@ -677,7 +677,7 @@ def record_conversation_smart_merge_refresh(outcome: str) -> None:
 
 # False-merge measurement (database/smart_merge_audit.py, utils/conversations/smart_merge_audit.py).
 CONVERSATION_SMART_MERGE_AUDIT_OUTCOMES = frozenset(
-    {'written', 'disabled', 'skipped_gate', 'skipped_invalid', 'unknown'}
+    {'written', 'disabled', 'skipped_gate', 'skipped_invalid', 'skipped_error', 'unknown'}
 )
 CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS = frozenset({'lt_1h', 'lt_24h', 'lt_7d', 'gte_7d', 'unknown'})
 CONVERSATION_SMART_MERGE_AUDIT_TOTAL = Counter(

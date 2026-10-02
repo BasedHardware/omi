@@ -547,13 +547,22 @@ The same absorb transaction writes a content-free audit sibling,
 `users/{uid}/smart_merge_audit/{donor_id}` (ids, decision numbers, model and
 question version, ledger position; `expire_at` 60 days out with no TTL policy
 active), outside every conversation cascade so the record of a merge survives
-the survivor's deletion. It costs one extra read (the account destructive-operation
-gate, read only on the absorbing path) and one extra write. A live or malformed
-gate, or an invalid projection, commits the merge without the sibling; it never
-changes a merge decision. `CONVERSATION_SMART_MERGE_AUDIT_ENABLED` (unset = on;
-any other value than an on-value = off) removes both. Outcomes are counted in
+the survivor's deletion. Identifiers are bounded slash-free tokens; source, model,
+question version and mode match server-known values. It costs two extra reads
+(durable account-deletion marker and destructive-operation gate, only on the
+absorbing path) and one extra write. Blocking/malformed authority or an invalid
+projection commits the merge without the sibling. An authority RPC or audit
+staging error rolls back and restarts the absorb without audit I/O; it never
+continues on a transaction with a failed read. Merge policy stays unchanged.
+`CONVERSATION_SMART_MERGE_AUDIT_ENABLED` (unset or blank = on; only
+true/on/1/yes enable it, everything else = off) removes the extra I/O.
+Apply the kill switch to GKE pusher and Cloud Run backend-sync, which host the
+finalizer. Outcomes are logged as `event=smart_merge_audit outcome=...` and counted in
 `omi_conversation_smart_merge_audit_total`; purged survivors are counted by age
 since their last merge in `omi_conversation_smart_merge_survivor_deleted_total`.
+This counts purges, including manual-merge source deletion, not user-confirmed
+false merges. Account wipes/raw database deletes bypass this counter. The
+`last_merged_at` stamp and deletion counter remain active when audit I/O is off.
 
 ## Conversation start location
 

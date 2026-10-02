@@ -414,6 +414,15 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
     )
     if outcome == 'absorbed' and audit != 'none':
         record_conversation_smart_merge_audit(audit)
+        logger.info('event=smart_merge_audit outcome=%s uid=%s', audit, uid)
+        if audit == 'skipped_error':
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='audit',
+                to_mode='none',
+                reason='local_heal',
+                outcome='degraded',
+            )
     logger.info(
         'event=smart_merge mode=%s decision=merged p_same=%s uid=%s conversation=%s survivor=%s',
         mode.value,

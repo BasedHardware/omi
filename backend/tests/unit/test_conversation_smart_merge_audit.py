@@ -44,6 +44,7 @@ AUDIT_KEYS = {
     'mode',
 }
 GATE = ('legal_hold_deletion_gates', UID)
+MARKER = ('account_deletions', UID)
 
 
 def _audit_path(donor_id):
@@ -137,10 +138,11 @@ def test_audit_is_written_once_inside_the_absorb_transaction(world, recorded, re
     absorb = _absorb_transaction(world.store)
     assert [path for path, _ in absorb.sets] == [_audit_path('n')]
     assert len(absorb.updates) == 2
-    # Exactly one extra read on the absorbing path: the destructive-operation gate.
+    # Durable deletion marker plus the destructive-operation gate.
     assert [path for txn, path in reads if txn is absorb] == [
         ('users', UID, 'conversations', 'p'),
         ('users', UID, 'conversations', 'n'),
+        MARKER,
         GATE,
     ]
     assert recorded.audit == ['written']
@@ -311,7 +313,23 @@ def test_unreadable_gate_skips_the_audit_but_not_the_merge(world, recorded, monk
 
     monkeypatch.setattr(audit_db, 'assert_no_destructive_operation_transaction', unreadable)
     assert _merge(world) is True
+    assert _audit_path('n') not in world.store.rows and recorded.audit == ['skipped_error']
+    assert len(world.jev_calls) == 1
+
+
+@pytest.mark.parametrize('status', ['pending', 'running', 'failed', 'completed', None, 'bogus'])
+def test_durable_deletion_marker_blocks_audit_after_gate_expires(world, recorded, status):
+    world.store.rows[MARKER] = {'wipe_status': status}
+    world.store.rows[GATE] = _gate(started_at=datetime.now(timezone.utc) - timedelta(hours=7))
+    assert _merge(world) is True
     assert _audit_path('n') not in world.store.rows and recorded.audit == ['skipped_gate']
+
+
+@pytest.mark.parametrize('status', ['cancelled', 'billing_failed'])
+def test_cancelled_deletion_allows_audit(world, status):
+    world.store.rows[MARKER] = {'wipe_status': status}
+    assert _merge(world) is True
+    assert _audit_path('n') in world.store.rows
 
 
 # --------------------------------------------------------------------------- kill switch
@@ -369,20 +387,31 @@ def _strip_times(rows):
     return {key: clean(value) for key, value in rows.items()}
 
 
-def test_flag_does_not_change_any_conversation_write(monkeypatch):
+def test_audit_outcome_does_not_change_any_conversation_write(monkeypatch):
     results = {}
-    for raw in ('on', 'off'):
+    for scenario in ('on', 'off', 'gate', 'deletion', 'invalid', 'read_error'):
         with monkeypatch.context() as patch:
             patch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
             patch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
-            patch.setenv(config.SMART_MERGE_AUDIT_ENV, raw)
+            patch.setenv(config.SMART_MERGE_AUDIT_ENV, 'off' if scenario == 'off' else 'on')
             world = World(patch)
+            if scenario == 'gate':
+                world.store.rows[GATE] = _gate()
+            elif scenario == 'deletion':
+                world.store.rows[MARKER] = {'wipe_status': 'running'}
+            elif scenario == 'invalid':
+                patch.setattr(audit_db, 'audit_record', lambda **kw: (_ for _ in ()).throw(ValueError('invalid')))
+            elif scenario == 'read_error':
+                patch.setattr(
+                    audit_db,
+                    'assert_no_destructive_operation_transaction',
+                    lambda *a, **kw: (_ for _ in ()).throw(ConnectionError('unavailable')),
+                )
             assert _merge(world) is True
             # Decoded: encrypted transcript blobs carry a random nonce per write.
-            results[raw] = _strip_times({key: world.get(UID, key[-1]) for key in _conversation_rows(world.store)})
-    for key, row in results['on'].items():
-        assert {k: v for k, v in row.items() if results['off'][key].get(k) != v} == {}, key
-    assert results['on'] == results['off']
+            results[scenario] = _strip_times({key: world.get(UID, key[-1]) for key in _conversation_rows(world.store)})
+            assert len(world.jev_calls) == 1
+    assert all(rows == results['off'] for rows in results.values())
 
 
 # --------------------------------------------------------------------------- content-free
@@ -416,7 +445,7 @@ def test_audit_document_and_labels_are_content_free(world, monkeypatch):
         assert len(path) == 1, f'nested value at {path}'
         assert value is None or isinstance(value, (int, float, str, datetime)), path
         if isinstance(value, str):
-            assert audit_db._TOKEN.match(value), path
+            assert value in audit_db._DECISION_ENUMS.values() or audit_db._TOKEN.fullmatch(value), path
             assert not any(marker in value for marker in MARKERS), path
     # Arbitrary or uid-shaped values never become a label.
     metrics.record_conversation_smart_merge_audit(UID)
@@ -440,8 +469,8 @@ def test_projection_rejects_prose_and_non_numbers(field, value):
         'threshold': 0.35,
         'gap_seconds': 900.0,
         'speech_gap_seconds': 900.0,
-        'model': 'm',
-        'question_version': 'q',
+        'model': JEV_MODEL,
+        'question_version': config.QUESTION_VERSION,
         'mode': 'merge',
         'stretch_count': 0,
     }
