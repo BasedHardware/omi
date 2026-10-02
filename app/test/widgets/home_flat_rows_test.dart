@@ -172,4 +172,38 @@ void main() {
     await pump();
     expect(find.byKey(const ValueKey('home_warm_blend')), findsNothing);
   });
+
+  testWidgets('turning the app dark takes the warm blend away from a Home already on screen', (tester) async {
+    // As in main.dart: the palette is set above MaterialApp, and the navigator keeps its global key,
+    // so Home stays mounted through the switch.
+    final navigator = GlobalKey<NavigatorState>();
+    Widget app(Brightness brightness) {
+      OmiColors.active = OmiColors.forBrightness(brightness);
+      return MaterialApp(
+        navigatorKey: navigator,
+        theme: buildOmiTheme(brightness: Brightness.light),
+        darkTheme: buildOmiTheme(brightness: Brightness.dark),
+        themeMode: brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+        builder: (context, child) => KeyedSubtree(key: ValueKey(brightness), child: child!),
+        home: const Scaffold(body: OmiCanvas(child: Stack(children: [HomeChatBarBackdrop(), HomeWarmBlend()]))),
+      );
+    }
+
+    addTearDown(() => OmiColors.active = OmiPalette.light);
+    await tester.pumpWidget(app(Brightness.light));
+    expect(find.byKey(const ValueKey('home_warm_blend')), findsOneWidget);
+
+    await tester.pumpWidget(app(Brightness.dark));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('home_warm_blend')), findsNothing, reason: 'no warm tint in dark');
+    // The fade under the floating row turns to the dark page too.
+    final fade = tester.widget<DecoratedBox>(
+        find.descendant(of: find.byType(HomeChatBarBackdrop), matching: find.byType(DecoratedBox)));
+    final colors = ((fade.decoration as BoxDecoration).gradient! as LinearGradient).colors;
+    expect(colors.last, isSameColorAs(OmiPalette.dark.canvas));
+
+    await tester.pumpWidget(app(Brightness.light));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('home_warm_blend')), findsOneWidget, reason: 'back in light, it returns');
+  });
 }
