@@ -232,6 +232,11 @@ class WindowAdmission:
         self.active = 0
         self._lock = threading.Lock()
 
+    def available(self) -> bool:
+        cap = max(0, int(os.getenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')))
+        with self._lock:
+            return self.active < cap
+
     def acquire(self) -> Callable[[], None]:
         cap = max(0, int(os.getenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')))
         with self._lock:

@@ -106,6 +106,9 @@ conversation from per-segment embeddings so each id is one voice again, and
 
 - `pre_recorded.py` normalizes batch-provider output and uses the shared
   clustering policy when Parakeet has no server-side labels.
+- `live_recovery.py` permits one healthy Soniox re-entry after transient transport
+  loss; receiver attempt counting and a terminal latch bound retries independently
+  of the distinct-provider exclusion set.
 - `provider_resilience.py`, `safe_socket.py`, `socket.py`, and
   `live_failure.py` own provider health and terminal socket contracts.
 - `routers/speech_profile.py` owns owner enrollment. `utils/speaker_identification.py`

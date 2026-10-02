@@ -3,7 +3,7 @@ import io
 import re
 import wave
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, cast
+from typing import Any, Dict, List, Optional, cast
 
 import av
 import numpy as np
@@ -34,6 +34,8 @@ from utils.other.storage import (
     upload_person_speech_sample_from_bytes,
 )
 from utils.speaker_sample import verify_and_transcribe_sample, delete_sample_from_storage
+from utils.speaker_audio import legacy_speaker_clip_pcm
+from utils.other.audio_chunks import AudioChunkReadSession
 from utils.speaker_tag_prompts.clips import v2_relevant_timestamps
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
@@ -849,9 +851,6 @@ async def extract_speaker_samples(
             outcome = 'no_chunks'
             return outcome
 
-        # Build chunks list in expected format
-        chunks: List[Dict[str, Any]] = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
-
         requested_ids = {sid for sid in (segment_ids or []) if sid}
         receipt = conversation.get('manual_speaker_assignments') or {}
         if receipt.get('segments') or receipt.get('speakers'):
@@ -900,62 +899,52 @@ async def extract_speaker_samples(
             outcome = 'contaminated' if plan.contaminated else 'insufficient_speech'
             return outcome
 
-        contributing: Dict[Any, Mapping] = {}
-        for contributors in plan.contributors:
-            for seg in contributors:
-                if seg.get('id'):
-                    contributing[seg['id']] = seg
-        ordered_contributors = sorted(
-            contributing.values(), key=lambda seg: (float(seg.get('start') or 0.0), str(seg.get('id')))
-        )
-        expected_text = ' '.join(
-            str(seg.get('text') or '').strip() for seg in ordered_contributors if str(seg.get('text') or '').strip()
-        )
-        contributing_ids = [seg['id'] for seg in ordered_contributors if seg['id'] in authorized_ids]
-
-        sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
         timeline_v2 = is_audio_timeline_v2(conversation)
+        read_session = AudioChunkReadSession(uid, conversation_id, sample_rate)
         clips: List[bytes] = []
+        kept_contributors = []
+        unavailable_window = False
         decoded_seconds = 0.0
         covered_end: Optional[float] = None
-        for start, end in plan.intervals:
+        for (start, end), contributors in zip(plan.intervals, plan.contributors):
             clip_start = start if covered_end is None else max(start, covered_end)
             if clip_start >= end:
                 continue
             covered_end = end
-            if timeline_v2:
-                window = segment_wall_window(conversation, clip_start, end)
-                if window is None:
+            if not timeline_v2:
+                clip = await run_blocking(
+                    sync_executor,
+                    legacy_speaker_clip_pcm,
+                    uid,
+                    conversation_id,
+                    started_at_ts + clip_start,
+                    started_at_ts + end,
+                    sample_rate,
+                    session=read_session,
+                    timestamps=all_timestamps,
+                    caller='teaching',
+                )
+                if clip is None:
+                    unavailable_window = True
                     continue
-                abs_start, abs_end = window
-                relevant_timestamps = v2_relevant_timestamps(conversation, abs_start, abs_end)
-                span_starts = [
-                    bounds[0]
-                    for audio_file in audio_files
-                    for span in audio_file.get('chunk_spans') or []
-                    if (bounds := chunk_span_bounds(span)) is not None and bounds[0] < abs_end and bounds[1] > abs_start
-                ]
-                if not relevant_timestamps or not span_starts:
-                    continue
-                buffer_start = min(span_starts)
-            else:
-                abs_start = started_at_ts + clip_start
-                abs_end = started_at_ts + end
-                # Find relevant chunks
-                # Find first chunk that starts at or before abs_start
-                first_idx = 0
-                for i, chunk in enumerate(sorted_chunks):
-                    if chunk['timestamp'] <= abs_start:
-                        first_idx = i
-                    else:
-                        break
-                # Collect from first_idx up to abs_end
-                relevant_timestamps = [
-                    chunk['timestamp'] for chunk in sorted_chunks[first_idx:] if chunk['timestamp'] <= abs_end
-                ]
-                if not relevant_timestamps:
-                    continue
-                buffer_start = min(relevant_timestamps)
+                clips.append(clip)
+                kept_contributors.extend(contributors)
+                decoded_seconds += len(clip) / (sample_rate * 2)
+                continue
+            window = segment_wall_window(conversation, clip_start, end)
+            if window is None:
+                continue
+            abs_start, abs_end = window
+            relevant_timestamps = v2_relevant_timestamps(conversation, abs_start, abs_end)
+            span_starts = [
+                bounds[0]
+                for audio_file in audio_files
+                for span in audio_file.get('chunk_spans') or []
+                if (bounds := chunk_span_bounds(span)) is not None and bounds[0] < abs_end and bounds[1] > abs_start
+            ]
+            if not relevant_timestamps or not span_starts:
+                continue
+            buffer_start = min(span_starts)
             # Download, merge, and extract (sync_executor avoids parent-child deadlock on storage_executor, #7387)
             try:
                 merged = await run_blocking(
@@ -974,16 +963,27 @@ async def extract_speaker_samples(
             clip = clip[: int(round((end - clip_start) * sample_rate)) * 2]
             if clip:
                 clips.append(clip)
+                kept_contributors.extend(contributors)
                 decoded_seconds += len(clip) / (sample_rate * 2)
 
         if not clips:
-            outcome = 'no_chunks'
+            clean_seconds = 0.0
+            outcome = 'uncovered_audio' if unavailable_window else 'no_chunks'
             return outcome
         sample_audio = b''.join(clips)
         clean_seconds = min(plan.total_seconds, decoded_seconds)
         if decoded_seconds < TEACHING_MIN_TOTAL_SECONDS:
-            outcome = 'insufficient_speech'
+            outcome = 'uncovered_audio' if unavailable_window else 'insufficient_speech'
             return outcome
+
+        # Missing intervals must not abort later usable speech or contribute
+        # transcript text to the verification of audio we did not include.
+        contributing = {seg['id']: seg for seg in kept_contributors if seg.get('id')}
+        ordered_contributors = sorted(
+            contributing.values(), key=lambda seg: (float(seg.get('start') or 0.0), str(seg.get('id')))
+        )
+        expected_text = ' '.join(str(seg.get('text') or '').strip() for seg in ordered_contributors)
+        contributing_ids = [seg['id'] for seg in ordered_contributors if seg['id'] in authorized_ids]
 
         wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
 

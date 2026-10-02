@@ -108,6 +108,7 @@ def test_sync_text_matches_are_automatic_without_changing_manual_labels():
         assert stats['p1']['auto_conversation_count'] == 1
         assert stats['p2']['auto_conversation_count'] == 0
 
+
 # --- #19908: a dropped invisible row must not end the scan -------------------
 #
 # A server-side limit/offset reader drops invisible rows in Python without

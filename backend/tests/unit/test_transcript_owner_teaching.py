@@ -271,7 +271,9 @@ def test_decoded_pcm_below_floor_fails_before_embedding(monkeypatch):
         'transcript_segments': [_segment('a', 0.0, 8.0, is_user=True, text='hello there friend')],
     }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * int(service.CLIP_SAMPLE_RATE * 4.8))
+    monkeypatch.setattr(
+        service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * int(service.CLIP_SAMPLE_RATE * 4.8)
+    )
     monkeypatch.setattr(
         service, 'extract_embedding_from_bytes', lambda *a: pytest.fail('embedding must not run on short audio')
     )
@@ -290,7 +292,9 @@ def test_oversized_pcm_is_capped_to_the_window(monkeypatch):
         'transcript_segments': [_segment('a', 0.0, 8.0, is_user=True, text='hello there friend')],
     }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * int(service.CLIP_SAMPLE_RATE * 20))
+    monkeypatch.setattr(
+        service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * int(service.CLIP_SAMPLE_RATE * 20)
+    )
     captured = {}
 
     async def verify(wav, rate, text, language=None):
@@ -317,7 +321,9 @@ def test_success_path_pools_owner_confirmation_into_voiceprint(monkeypatch):
     conversation = {'id': CONV, 'language': 'en', 'transcript_segments': segments}
     store.rows[('users', UID, 'conversations', CONV)] = conversation
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * service.CLIP_SAMPLE_RATE * 8)
+    monkeypatch.setattr(
+        service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * service.CLIP_SAMPLE_RATE * 8
+    )
     monkeypatch.setattr(service.voice_profiles_db, 'get_firestore_client', lambda *a, **k: store)
 
     async def verify(wav, rate, text, language=None):
@@ -352,7 +358,9 @@ def test_owner_teaching_drops_receipt_changed_during_verification(monkeypatch, c
     store = StrictFirestore({('users', UID): {'speaker_embedding': [1.0, 0.0]}, conv_path: conversation})
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda *a: deepcopy(conversation))
     monkeypatch.setattr(service.voice_profiles_db, 'get_firestore_client', lambda: store)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * service.CLIP_SAMPLE_RATE * 8)
+    monkeypatch.setattr(
+        service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * service.CLIP_SAMPLE_RATE * 8
+    )
 
     async def verify(wav, rate, text, language=None):
         if change == 'reject':
