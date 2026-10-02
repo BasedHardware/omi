@@ -342,6 +342,36 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('support bundle recent counters exclude expired retained events', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    const dayMs = 24 * 3600 * 1000;
+    final since = now - 14 * dayMs;
+    mockBleHostApi(
+      'getExtendedDeviceDiagnostics',
+      jsonEncode({
+        'counters_since': since,
+        'disconnect_history_v2': [
+          for (final daysAgo in [8, 1]) ...[
+            {'timestamp': now - daysAgo * dayMs, 'eventType': 'disconnect', 'timeToReconnectMs': 5000},
+            {'timestamp': now - daysAgo * dayMs, 'eventType': 'fail_to_connect', 'timeToReconnectMs': 0},
+          ],
+        ],
+      }),
+    );
+    await pumpPage(tester);
+    await openSupportDialog(tester);
+
+    final json = tester.widget<SelectableText>(find.byType(SelectableText)).data!;
+    final bundle = jsonDecode(json) as Map<String, dynamic>;
+    expect(bundle['reconnection_count_window'], 1);
+    expect(bundle['fail_to_connect_count_window'], 1);
+    expect(bundle['reconnection_count'], 3);
+    expect(bundle['counters_since'], {'reconnection_count': since, 'fail_to_connect_count': since});
+    expect(_CannedUpload.requests, 0);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('cancelling the review dialog tracks dialog_cancelled', (tester) async {
     await pumpPage(tester);
     await openSupportDialog(tester);
