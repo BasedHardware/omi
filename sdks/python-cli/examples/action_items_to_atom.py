@@ -106,7 +106,9 @@ def load(sources: Sequence[str]) -> Dict[str, Dict[str, Any]]:
             content = Path(source).read_bytes()
 
         if not content.strip():
-            continue
+            # An empty export almost always means the upstream `omi` command failed;
+            # publishing an empty feed would silently wipe subscribers' task lists.
+            raise ValueError(f"{source_label}: input is empty (did the omi export fail?)")
 
         raw = json.loads(content.decode("utf-8-sig"))
         items = unwrap_items(raw, source_label)
