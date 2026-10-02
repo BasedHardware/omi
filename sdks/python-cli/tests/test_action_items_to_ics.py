@@ -144,8 +144,9 @@ class TestActionItemsToICS(unittest.TestCase):
         self.assertIn("BEGIN:VCALENDAR", ics_text)
         self.assertIn("END:VCALENDAR", ics_text)
         self.assertIn("UID:omi-action-act_01_done@omi-cli", ics_text)
-        self.assertIn("STATUS:COMPLETED", ics_text)
         self.assertIn("STATUS:CONFIRMED", ics_text)
+        self.assertIn("SUMMARY:[Completed] Submit quarterly", ics_text)
+        self.assertIn("Needs Action", ics_text)
         self.assertIn("DTSTART:20260930T170000Z", ics_text)
         self.assertIn("DTEND:20260930T173000Z", ics_text)
 
@@ -257,6 +258,33 @@ class TestActionItemsToICS(unittest.TestCase):
         with patch("sys.stdin.buffer.read", return_value=payload):
             loaded = ai2ics.load(["-"])
             self.assertEqual(len(loaded), 3)
+
+    def test_idless_items_generate_unique_uids(self):
+        idless_items = [
+            {"description": "Task A without ID", "due_at": "2026-10-01T10:00:00Z"},
+            {"description": "Task B without ID", "due_at": "2026-10-01T11:00:00Z"},
+        ]
+        src = self.tmp / "idless.json"
+        src.write_text(json.dumps(idless_items), encoding="utf-8")
+        loaded = ai2ics.load([str(src)])
+        self.assertEqual(len(loaded), 2)
+        ics_text, written, _ = ai2ics.build_ics(loaded)
+        self.assertEqual(written, 2)
+        uids = [line for line in ics_text.splitlines() if line.startswith("UID:")]
+        self.assertEqual(len(uids), 2)
+        self.assertNotEqual(uids[0], uids[1])
+        self.assertNotIn("UID:omi-action-unknown@omi-cli", ics_text)
+
+    def test_main_skipped_items_to_stderr_on_stdout(self):
+        src = self.tmp / "items_skipped.json"
+        src.write_text(json.dumps(self.sample_items), encoding="utf-8")
+
+        with patch("sys.stderr.write") as mock_err:
+            ret = ai2ics.main([str(src), "-o", "-"])
+            self.assertEqual(ret, 0)
+            mock_err.assert_called()
+            call_args = "".join(str(call[0][0]) for call in mock_err.call_args_list)
+            self.assertIn("skipped 1 item(s) without due date", call_args)
 
 
 if __name__ == "__main__":

@@ -137,12 +137,14 @@ def load(sources: Sequence[str]) -> Dict[str, Dict[str, Any]]:
             if not isinstance(item, dict):
                 raise ValueError(f"{source_label} item {idx}: each action item must be an object")
             item_id = item.get("id")
-            if item_id is not None and str(item_id).strip():
-                clean_id = str(item_id).strip()
+            sanitized_id = ics_text(item_id).strip()
+            if sanitized_id:
+                clean_id = sanitized_id
             else:
                 clean_id = f"auto_{uuid.uuid4().hex}"
                 while clean_id in items_by_id:
                     clean_id = f"auto_{uuid.uuid4().hex}"
+            item["id"] = clean_id
             items_by_id[clean_id] = item
     return items_by_id
 
@@ -195,13 +197,20 @@ def build_ics(
 
         item_id = ics_text(item.get("id")) or "unknown"
         desc = ics_text(item.get("description")) or "(no description)"
+        if completed:
+            desc = f"[Completed] {desc}"
+
         notes = [f"Omi action item: {item_id}"]
         conv_id = item.get("conversation_id")
         if conv_id and str(conv_id).strip():
             notes.append(f"Conversation: {ics_text(str(conv_id).strip())}")
+        if completed:
+            notes.append("Status: Completed")
+        else:
+            notes.append("Status: Needs Action")
 
         created = parse_time(item.get("created_at"))
-        status_val = "COMPLETED" if completed else "CONFIRMED"
+        desc_notes = "\\n".join(notes)
 
         lines.extend([
             "BEGIN:VEVENT",
@@ -210,8 +219,8 @@ def build_ics(
             f"DTSTART:{stamp(due)}",
             f"DTEND:{stamp(due + event_length)}",
             f"SUMMARY:{desc}",
-            f"DESCRIPTION:{'\\n'.join(notes)}",
-            f"STATUS:{status_val}",
+            f"DESCRIPTION:{desc_notes}",
+            "STATUS:CONFIRMED",
             "CATEGORIES:Omi",
         ])
         if created is not None:
@@ -329,6 +338,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         if args.output and args.output != "-":
             print(f"iCalendar written to {args.output} ({written} events written, {skipped} items without due date)")
+        elif skipped > 0:
+            print(f"Note: skipped {skipped} item(s) without due date", file=sys.stderr)
         return 0
     except BrokenPipeError:
         devnull = os.open(os.devnull, os.O_WRONLY)
