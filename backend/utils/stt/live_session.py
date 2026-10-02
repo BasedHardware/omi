@@ -11,6 +11,7 @@ from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.live_cost_health import CostObservation
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, bounded_language
@@ -413,6 +414,7 @@ class LiveLegSocket(STTSocket):
         self._health_language = bounded_language(session.receiver.host.language)
         self._cost_generations = health.cost_generations(self.routing_target, self._health_language)
         self._cost_recorded = False
+        self._cost_observation: CostObservation | None = None
         self._cost_text_seen = False
         self._cost_censored_no_text = False
         self._target_death_recorded = False
@@ -575,7 +577,11 @@ class LiveLegSocket(STTSocket):
 
     @property
     def cost_observation_recorded(self) -> bool:
-        return self._cost_recorded
+        return self._cost_observation is not None and self._cost_observation.recorded
+
+    @property
+    def cost_observation(self) -> CostObservation | None:
+        return self._cost_observation
 
     def set_selection_outcome(self, pending: PendingLiveFailover) -> None:
         self._pending_selection = pending
@@ -854,7 +860,7 @@ class LiveLegSocket(STTSocket):
             if not dead and self._cost_censored_no_text and not self._cost_text_seen:
                 return
             try:
-                health.record_session(
+                self._cost_observation = health.record_session(
                     self.routing_target,
                     self._health_language,
                     outcome,

@@ -7,13 +7,16 @@ from unittest.mock import AsyncMock
 import pytest
 
 from routers.listen import receiver as receiver_module
-from tests.unit.test_live_cost_router import controls
+from tests.unit.test_live_cost_router import controls, MemoryRedis
 from tests.unit.test_live_health_reason_reconciliation import ServingSocket, observed
 from tests.unit.test_live_routing_health import SpeechGate
 from tests.unit.test_stt_session_failover import FakeSocket, _receiver_with_dead_socket
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt import live_chain, live_session, streaming as st
 from utils.stt.soniox import SafeSonioxSocket
+from config.live_stt_registry import assigned
+from utils.stt.live_gate import GateState
+from utils.stt.live_cost_health import PREFIX
 
 
 class ProviderWebSocket:
@@ -254,3 +257,97 @@ def test_early_transcript_or_deadline_does_not_consume_the_death_observation(mon
     leg.finish()
     assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
     assert leg.cost_observation_recorded
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('changed', [('all',), ('en',), ('all', 'en')])
+@pytest.mark.parametrize('in_trial', [True, False])
+async def test_connect_death_counts_once_and_reaches_new_gate_generation(monkeypatch, changed, in_trial):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
+    raw = ServingSocket()
+    leg = managed_leg(receiver, raw)
+    uid = next(str(i) for i in range(1000) if assigned(str(i), 'stt-reentry:modulate-velma-2', 5) == in_trial)
+    receiver.host.request.uid = uid
+    for language in changed:
+        live_chain.health._cost_cached[('modulate-velma-2', language)] = GateState(stage=5, generation=1)
+    raw.die('modulate_serve_error', 'synthetic serve error')
+    before = observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error')
+    monkeypatch.setattr(
+        live_chain, 'fallback_socket_is_serving', AsyncMock(side_effect=lambda socket: not socket.is_connection_dead)
+    )
+    _, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=AsyncMock(return_value=leg),
+        callbacks={st.STTService.soniox: AsyncMock(return_value=FakeSocket())},
+        failed=set(),
+        models=['modulate-velma-2', 'soniox'],
+        routing_uid=uid,
+        routing_language='en',
+    )
+    assert service == st.STTService.soniox
+    assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
+    for language in ('all', 'en'):
+        state = live_chain.health._cost_local.get(('modulate-velma-2', language), GateState())
+        expected = int(language not in changed or in_trial)
+        assert state.n == state.failures == expected
+    assert leg.cost_observation.generations == {'all': 0, 'en': 0}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('remote_generation', [0, 1])
+@pytest.mark.parametrize('write_order', ['forward', 'reverse', 'concurrent'])
+@pytest.mark.parametrize('promote', [False, True])
+async def test_session_and_supplementary_connect_writes_count_once_in_redis(
+    monkeypatch, remote_generation, write_order, promote
+):
+    class YieldingRedis(MemoryRedis):
+        async def get(self, key):
+            await asyncio.sleep(0)
+            return await super().get(key)
+
+        async def eval(self, *args):
+            await asyncio.sleep(0)
+            return await super().eval(*args)
+
+    redis = YieldingRedis()
+    pod = live_chain.health
+    monkeypatch.setattr(pod, '_client', redis)
+    # Use the real bounded Redis writer with a controlled session/connect task
+    # order: the newer epoch may be visible only remotely, not yet in this pod.
+    tasks = []
+    monkeypatch.setattr(pod, 'schedule', tasks.append)
+    uid = next(str(i) for i in range(1000) if assigned(str(i), 'stt-reentry:modulate-velma-2', 5))
+    for language in ('all', 'en'):
+        state = GateState(
+            stage=5 if promote else 100,
+            n=29 if promote else 0,
+            generation=remote_generation,
+            trial_users=tuple((f'{i:016x}', 1, 0) for i in range(29)) if promote else (),
+        )
+        redis.data[f'{PREFIX}:modulate-velma-2:{language}'] = json.dumps(state.encode())
+        if promote:
+            pod._cost_local[('modulate-velma-2', language)] = state
+    before = observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error')
+    receipt = pod.record_session('modulate-velma-2', 'en', 'failover', {'all': 0, 'en': 0}, uid, 'modulate_serve_error')
+    pod.record_connect_failure('modulate-velma-2', 'en', uid, 'modulate_serve_error', observed=receipt)
+    assert len(tasks) == 2
+    if promote:
+        assert all(state.stage == 25 and state.n == 0 for state in pod._cost_local.values())
+    assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
+    if write_order == 'reverse':
+        tasks.reverse()
+    try:
+        if write_order == 'concurrent':
+            await asyncio.gather(*tasks)
+        else:
+            for task in tasks:
+                await task
+    finally:
+        for task in tasks:
+            task.close()
+    for language in ('all', 'en'):
+        state = GateState.decode(json.loads(redis.data[f'{PREFIX}:modulate-velma-2:{language}']))
+        if promote:
+            assert state.stage == 25 and state.n == 0
+        else:
+            assert state.n == state.failures == 1

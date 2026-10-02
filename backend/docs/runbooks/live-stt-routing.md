@@ -182,7 +182,11 @@ Allow for settlement delay and first-scrape counter boundaries. Connect failures
 without an accepted managed socket are additional health observations. An
 accepted socket death counts once, including before any audio, below one second
 of speech, with VAD disabled, or on VAD-negative audio; connect-time serving
-rejection does not count that same leg twice. Text is success evidence even
+rejection does not count that same leg twice. If a gate generation changes
+during connect, the fresh rejection may update the new gate; a shared receipt
+keeps the observation counter and each local/Redis scope counted once, including
+when the first update itself promotes a trial. Trial cohort admission still
+applies. Text is success evidence even
 without a VAD sample. Only plain no-text requires at least one second of VAD
 speech and remains censored. Explain these differences rather than demanding
 instantaneous equality. Compare only provider-attributable reasons for the
@@ -195,7 +199,8 @@ reason after all hops settle. Speech duration is no longer an exclusion. The
 same bounded latched cause feeds both paths; a serve error cannot become
 connection loss in only one of them. Aggregate target health can legitimately
 exceed the live-session fallback count: a provider may die with no replacement
-candidate, or a connect can fail before there is a managed leg. A terminal
+candidate, a connect can fail before there is a managed leg, or an accepted
+leg can die during connect-time serving validation before a source hop. A terminal
 Soniox death therefore has health evidence without a new Soniox hop. Intentional
 owner close is outside serving evidence; a later teardown transport symptom
 must not create a failure. Soniox finished/idle/rotation remain non-failures.

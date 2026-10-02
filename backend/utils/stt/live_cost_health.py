@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import hashlib
 import logging
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from abc import ABC, abstractmethod
 from typing import Any, Callable, ContextManager
 import os
@@ -30,6 +31,22 @@ logger = logging.getLogger(__name__)
 
 class CostHealthUnavailable(RuntimeError):
     """Expected missing cache during a Redis outage; selection uses static order."""
+
+
+@dataclass(frozen=True)
+class CostObservation:
+    """One socket outcome, shared by its session and connect-accounting writes.
+
+    Local/remote application are independent: generation fences can reject a
+    session completion while a fresh connect rejection is still valid. Mark
+    each scope only after application, including a CAS that changes generation.
+    """
+
+    recorded: bool
+    generations: dict[str, int]
+    local_applied: set[str] = field(default_factory=set)
+    remote_applied: set[str] = field(default_factory=set)
+    write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 PREFIX = 'omi:live-stt:cost-v5'
@@ -167,11 +184,13 @@ class CostHealthMixin(ABC):
             self._cost_preferred[(target, 'all')] = self._clock()
             self._cost_preferred[(target, language)] = self._clock()
 
-    def record_connect_failure(self, target: str, language: str, uid: str | None, reason: str) -> None:
+    def record_connect_failure(
+        self, target: str, language: str, uid: str | None, reason: str, *, observed: CostObservation | None = None
+    ) -> None:
         # Connect precedes audio; account/config/capacity errors are censored by
         # the same classifier as serving outcomes. Evidence cannot break failover.
         try:
-            self.record_session(target, language, 'connect_failure', uid=uid, reason=reason)
+            self.record_session(target, language, 'connect_failure', uid=uid, reason=reason, observed=observed)
         except Exception:
             logger.debug('Cost connect evidence unavailable; retaining configured failover', exc_info=True)
 
@@ -183,7 +202,9 @@ class CostHealthMixin(ABC):
         generations: dict[str, int] | None = None,
         uid: str | None = None,
         reason: str | None = None,
-    ) -> None:
+        *,
+        observed: CostObservation | None = None,
+    ) -> CostObservation | None:
         if not uid or os.getenv('STT_ROUTING_MODE', 'off') == 'off':
             return
         witness = hashlib.sha256(('stt-evidence:' + uid).encode()).hexdigest()[:16]
@@ -198,13 +219,15 @@ class CostHealthMixin(ABC):
             ),
         )
         failed = provider_observation(outcome, reason)
-        COST_OBSERVATIONS.labels(
-            target=target,
-            outcome='censored' if failed is None else 'provider_failure' if failed else 'success',
-            reason=reason,
-        ).inc()
+        if observed is None or not observed.recorded:
+            COST_OBSERVATIONS.labels(
+                target=target,
+                outcome='censored' if failed is None else 'provider_failure' if failed else 'success',
+                reason=reason,
+            ).inc()
+        receipt = observed or CostObservation(True, dict(generations or {}))
         if failed is None:
-            return
+            return receipt
         minimum_share = (
             5
             if assigned(uid, 'stt-reentry:' + target, 5)
@@ -222,8 +245,11 @@ class CostHealthMixin(ABC):
                     state = cached
                 if 0 < state.stage < minimum_share:
                     continue
+                if lang in receipt.local_applied:
+                    continue
                 if generations is None or state.generation == generations.get(lang, state.generation):
                     updated = transition(state, failed, self._fleet_now(), witness=witness, language_only=lang != 'all')
+                    receipt.local_applied.add(lang)
                     self._cost_local.pop(key, None)
                     self._cost_local[key] = updated
                     if updated.stage == 0 and now < self._redis_retry_at:
@@ -234,7 +260,8 @@ class CostHealthMixin(ABC):
                         self._cost_unreconciled.discard(evicted)
                     if not self._cost_is_fresh(now):
                         self._cost_event(target, lang, state, updated, failed, local=True)
-        self.schedule(self._write_cost_result(target, language, failed, generations, witness, minimum_share))
+        self.schedule(self._write_cost_result(target, language, failed, generations, witness, minimum_share, receipt))
+        return receipt
 
     def quarantine_target(self, target: str, seconds: float) -> None:
         def update(state: GateState) -> GateState:
@@ -325,20 +352,31 @@ class CostHealthMixin(ABC):
         generations: dict[str, int] | None,
         witness: str,
         minimum_share: int = 5,
+        receipt: CostObservation | None = None,
     ) -> None:
         async def write():
+            if receipt is not None and {'all', language} <= receipt.remote_applied:
+                return
             now = await self._server_now()
             for lang in ('all', language):
+                applied = False
 
                 def update(state: GateState, lang: str = lang) -> GateState:
+                    nonlocal applied
+                    applied = False
+                    if receipt is not None and lang in receipt.remote_applied:
+                        return state
                     if 0 < state.stage < minimum_share:
                         return state
                     if generations is not None and state.generation != generations.get(lang, state.generation):
                         return state
+                    applied = True
                     return transition(state, failed, now, witness=witness, language_only=lang != 'all')
 
                 key = (target, lang)
                 written = await self._cost_update(key, update, failed)
+                if applied and receipt is not None:
+                    receipt.remote_applied.add(lang)
                 with self._lock:
                     local = self._cost_local.get(key, GateState())
                     if key not in self._cost_unreconciled and (
@@ -354,7 +392,15 @@ class CostHealthMixin(ABC):
         try:
             if self._clock() < self._redis_retry_at:
                 raise RuntimeError('Redis backoff')
-            await self._bounded(write())
+
+            async def serialized_write():
+                if receipt is None:
+                    await write()
+                else:
+                    async with receipt.write_lock:
+                        await write()
+
+            await self._bounded(serialized_write())
         except Exception:
             with self._lock:
                 for lang in ('all', language):

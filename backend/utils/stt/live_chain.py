@@ -307,23 +307,24 @@ async def connect_configured_chain(
                     routing_models=routing_models,
                 )
             reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
-            # An accepted managed socket may already have recorded its death
-            # during the serving check or close; this is the same target attempt.
-            if not getattr(socket, 'cost_observation_recorded', False):
-                health.record_connect_failure(
-                    (
-                        target.id
-                        if target is not None
-                        else (
-                            (routing_models or {}).get('parakeet') or 'parakeet'
-                            if service.value == 'parakeet'
-                            else DEFAULT_IDS.get(service.value, service.value)
-                        )
-                    ),
-                    bounded_language(routing_language),
-                    routing_uid,
-                    reason,
-                )
+            # Count the accepted socket once, but retain fresh connect evidence
+            # if its session-generation fence excluded a newer gate epoch.
+            observed = getattr(socket, 'cost_observation', None)
+            health.record_connect_failure(
+                (
+                    target.id
+                    if target is not None
+                    else (
+                        (routing_models or {}).get('parakeet') or 'parakeet'
+                        if service.value == 'parakeet'
+                        else DEFAULT_IDS.get(service.value, service.value)
+                    )
+                ),
+                bounded_language(routing_language),
+                routing_uid,
+                getattr(socket, 'normalized_death_reason', reason) if observed is not None else reason,
+                observed=observed,
+            )
             if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
                 _note_connect_result(failed_provider=service.value)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS

@@ -338,6 +338,10 @@ Provider and window sockets publish cause metadata before their death latch.
 A failed hop keeps its source reason even when its successor rejects the
 connection; that rejection determines settlement outcome, not source attribution.
 Observation labels are target/outcome/reason, never raw diagnostic messages.
+Accepted deaths rejected by connect-time validation share an accounting receipt
+with session completion: one counter and one sample per local/Redis scope. A
+fresh connect rejection can cross a stale session generation fence, but cannot
+repeat an already-applied sample or bypass trial cohort admission.
 
 No-text deadlines no longer seal health evidence early. Completed text waits
 until close; later attributable death therefore wins, once. Intentional client
