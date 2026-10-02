@@ -187,4 +187,22 @@ void main() {
     expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
     expect(world.uploads.attempts, isEmpty);
   });
+
+  test('pendant: a chunk backdated before the session start is judged by the transcript too', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    // The pendant flushes 30 s of buffered audio the moment it connects, so the first chunk's start is
+    // backdated before the session window.
+    for (var i = 0; i < 3000; i++) {
+      link.emitAudio();
+    }
+    await streamPendant(link, 140);
+
+    await serverCloses(conversation('c1', origin, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)]));
+    await recoveryPass();
+
+    printOnFailure(await describeWals(origin));
+    expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
+    expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
+  });
 }

@@ -1015,7 +1015,10 @@ class LocalWalSyncImpl implements LocalWalSync {
     final stamped = _wals
         .where(
           (wal) =>
-              wal.timerStart >= sessionStartSeconds && wal.timerStart <= now && wal.conversationId == conversationId,
+              wal.conversationId == conversationId &&
+              // A WAL stamped by its recording id can start before the session window, because its
+              // timerStart is backdated from its frame count. The saved transcript judges it instead.
+              (transcriptSpans != null || (wal.timerStart >= sessionStartSeconds && wal.timerStart <= now)),
         )
         .toList();
     var released = 0;
