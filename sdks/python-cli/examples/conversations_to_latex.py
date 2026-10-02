@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Union
@@ -78,6 +80,8 @@ def format_timestamp(seconds: float | int | None) -> str | None:
         except ValueError:
             return None
     if not isinstance(seconds, (int, float)):
+        return None
+    if not math.isfinite(seconds) or seconds < 0:
         return None
     total_seconds = int(seconds)
     hours = total_seconds // 3600
@@ -256,8 +260,13 @@ def build_document(items: List[Dict[str, Any]]) -> str:
     """Build the full standalone LaTeX source for a conversation export."""
     head = [
         r"\documentclass[11pt]{article}",
+        r"\usepackage{iftex}",
+        r"\ifPDFTeX",
         r"\usepackage[utf8]{inputenc}",
         r"\usepackage[T1]{fontenc}",
+        r"\else",
+        r"\usepackage{fontspec}",
+        r"\fi",
         r"\usepackage[margin=1in]{geometry}",
         r"\usepackage{amsmath,amssymb}",
         r"\usepackage{hyperref}",
@@ -350,9 +359,22 @@ def convert(
     output_path = Path(destination)
     _check_destination(output_path)
     if overwrite:
-        tmp = output_path.with_suffix(output_path.suffix + ".tmp")
-        tmp.write_bytes(payload)
-        tmp.replace(output_path)
+        tmp: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=output_path.parent,
+                prefix=f".{output_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                tmp = Path(handle.name)
+                handle.write(payload)
+            tmp.replace(output_path)
+        except OSError:
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
+            raise
         return len(items)
     # Exclusive creation protects an existing file; a failed write leaves no partial file.
     try:

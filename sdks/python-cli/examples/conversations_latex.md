@@ -3,8 +3,9 @@
 Use this recipe to turn your Omi conversation exports into a clean, self-contained
 **LaTeX report** (`.tex`). One `\section` per conversation carries its metadata,
 summary, action-item checklist, and a timestamped transcript, and the whole thing
-compiles out-of-the-box with `pdflatex`, `xelatex`, or `lualatex` into a
-print-ready PDF. Every field is special-character escaped, so titles like
+compiles into a print-ready PDF. Use `xelatex` or `lualatex` for broad Unicode
+input; `pdflatex` remains suitable for Latin-script exports. Every field is
+special-character escaped, so titles like
 `C++ & Rust: 100%` can never break the build.
 
 ## Requirements
@@ -45,9 +46,11 @@ Each file is a complete, independently compilable `.tex` named
 ## Compile to PDF
 
 ```bash
-pdflatex omi_conversations.tex
-# or, for best Unicode support:
 xelatex omi_conversations.tex
+# or:
+lualatex omi_conversations.tex
+# Latin-script exports can also use:
+pdflatex omi_conversations.tex
 ```
 
 ## Output Structure
@@ -83,8 +86,8 @@ Discussion on reducing latency for real-time audio transcript streaming.
 ## Features
 
 - **Compiles out of the box:** emits a full `\documentclass`/`\begin{document}`
-  skeleton with a UTF-8 preamble, so `pdflatex`/`xelatex`/`lualatex` need no
-  boilerplate from you.
+  skeleton with an engine-aware UTF-8 preamble. Use `xelatex` or `lualatex` for
+  broad Unicode input, or `pdflatex` for Latin-script exports.
 - **Bulletproof escaping:** all ten LaTeX special characters (`\ & % $ # _ { } ~
   ^`) are escaped in a single pass over the source text, so an escape can never
   feed back into another — titles, summaries, and transcripts with `&`, `%`,

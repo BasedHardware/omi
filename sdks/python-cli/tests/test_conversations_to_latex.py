@@ -210,6 +210,11 @@ class TestHelpers(unittest.TestCase):
         self.assertIsNone(c2tex.format_timestamp("abc"))
         self.assertIsNone(c2tex.format_timestamp("1.5s"))
 
+    def test_format_timestamp_rejects_non_finite_and_negative_values(self):
+        for value in (float("nan"), float("inf"), float("-inf"), -1, "NaN", "Infinity", "-1"):
+            with self.subTest(value=value):
+                self.assertIsNone(c2tex.format_timestamp(value))
+
     # is_completed
     def test_is_completed_native(self):
         self.assertTrue(c2tex.is_completed(True))
@@ -351,7 +356,10 @@ class TestDocumentStructure(unittest.TestCase):
         self.assertEqual(written, 2)
         text = read_doc(dest)
         self.assertIn(r"\documentclass[11pt]{article}", text)
+        self.assertIn(r"\usepackage{iftex}", text)
+        self.assertIn(r"\ifPDFTeX", text)
         self.assertIn(r"\usepackage[utf8]{inputenc}", text)
+        self.assertIn(r"\usepackage{fontspec}", text)
         self.assertIn(r"\usepackage{amsmath,amssymb}", text)
         self.assertIn(r"\begin{document}", text)
         self.assertIn(r"\maketitle", text)
@@ -758,6 +766,21 @@ class TestGuards(unittest.TestCase):
             dest.write_bytes(b"stale-bytes")
             c2tex.convert(str(src), str(dest), overwrite=True)
             self.assertEqual(dest.read_bytes(), c2tex.latex_payload([conv()]))
+
+    def test_overwrite_preserves_preexisting_fixed_tmp_sibling(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            src = tmp / "in.json"
+            src.write_text(json.dumps([conv()]), encoding="utf-8")
+            dest = tmp / "report.tex"
+            dest.write_bytes(b"stale")
+            sibling = tmp / "report.tex.tmp"
+            sibling.write_bytes(b"user data")
+
+            c2tex.convert(str(src), str(dest), overwrite=True)
+
+            self.assertEqual(dest.read_bytes(), c2tex.latex_payload([conv()]))
+            self.assertEqual(sibling.read_bytes(), b"user data")
 
     def test_traversal_triple_dot_rejected(self):
         with tempfile.TemporaryDirectory() as td:
