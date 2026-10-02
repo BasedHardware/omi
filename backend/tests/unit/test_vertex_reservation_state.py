@@ -212,7 +212,8 @@ def test_refusal_is_terminal_tool_shape_for_shipped_client_decoders(streaming):
     assert 'error' not in payload and 'usageMetadata' not in payload
 
 
-def test_observe_and_enforce(caplog):
+def test_observe_and_enforce(caplog, monkeypatch):
+    monkeypatch.setenv('OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD', '12435')
     with caplog.at_level(logging.INFO):
         assert admission(OLD, vr.State.INACTIVE, 'macos_legacy_tasks', 'observe') == 'would_refuse'
         assert admission(OLD, vr.State.INACTIVE, 'macos_legacy_tasks', 'enforce') == 'refuse'

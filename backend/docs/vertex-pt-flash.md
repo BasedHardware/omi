@@ -280,7 +280,7 @@ Two supported topologies:
   wiring):** the BFF independently schedules both synthetic dedicated probes through
   Vertex using its own credentials, records old-model capacity failures and strict
   successor successes in its existing Redis, and can confirm inactivity/refuse
-  audited old clients without any gateway observations. The gateway independently
+  the configured old-build range without any gateway observations once armed. The gateway independently
   probes and routes using its local strict evidence. Its state/leases reset on pod
   restart and are not fleet-wide; routing may lag BFF cutoff. No wire/state exchange
   or gateway Redis connection is required. An integration test advances the BFF
@@ -415,12 +415,27 @@ and probe completion before changing overrides. Alert provisioning is an operato
 follow-up; this PR emits the signal and does not change monitoring resources.
 
 [Client audit, lane costs, release tags, rollout dependency and smoke limits](vertex-reservation-lane-audit.md).
-Default enforcement requires a positive macOS identity and one of the audited
-pre-capability builds (12425, 12432, 12433, 12434), plus the extraction tag and
-five-task-tool signature. Unidentified, unaudited and current/capable builds
-remain served, including flag-off and legacy fallback requests. They use shared
-2.5 after inactivity; the ramp reduces spend without becoming a cutoff safety
-dependency. This PR does not override client consent/cohort flags.
+Refusal requires a positive macOS identity, the extraction tag and complete
+five-task-tool signature, plus **7000 ≤ build < configured first-capable build**.
+`OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` is read per request and deliberately
+has no default. **When the first macOS release containing #20374 is cut, set this
+control on desktop-backend to that release's build number.** Do not derive it
+from #20265: builds 12433/12434 already contain that flag-off pipeline but not the
+required sibling refusal fix. Leave it unset until that capable release exists.
+
+Unset, empty or invalid control means **nothing is refused**, even in enforce
+mode. Eligible inactive task loops still produce `would_refuse` counts. Valid
+controls are positive decimal integers ≤ 2147483647; a value at/below 7000 selects
+no eligible build. Observe mode always serves. Unidentified/conflicting identities,
+Windows, builds below the audited 7000 safety floor, and builds at/above the
+configured capability build remain served. The exact JSON/SSE refusal is unchanged.
+
+The existing policy counter/log carries one of eight bounded `build_bucket`
+values (listed in the audit). For inactive candidate volume before arming, use
+`sum by (build_bucket) (rate(omi_vertex_reservation_policy_total{action="would_refuse"}[5m]))`.
+No raw User-Agent/version/build labels are emitted. Remove the minimum-capable
+control to restore service while retaining observation, or select observe mode.
+This PR does not override client consent/cohort flags.
 
 ### Next year's move: 3.8 Flash to model X
 
@@ -440,8 +455,8 @@ gateway process-local topology. Verify the BFF's two model probes complete and
 its Redis records the evidence. Gateway Redis wiring is optional; if added,
 verify the desktop pool binding and cross-service connectivity before relying on
 fleet-wide leases. Confirm the order's location and approve global residency
-separately if required. Audit the eligible old-client identities, or hold observe
-mode. Watch old dedicated success and target capacity errors until fulfilled.
+separately if required. Keep the minimum-capable build unset until the first #20374 release is cut;
+then set its build number as described above, or hold observe mode. Watch old dedicated success and target capacity errors until fulfilled.
 Missing target positive evidence means no automatic cutoff.
 
 On the day: target PT successes make it active independently. Old dedicated errors
@@ -520,7 +535,8 @@ shipping code.
 | Env | Effect |
 | --- | --- |
 | `OMI_VERTEX_RESERVATION_STATES` | JSON model → `active`/`inactive`/`unknown`/`auto`; highest priority, read per request; invalid configuration becomes unknown. |
-| `OMI_VERTEX_LEGACY_TASK_MODE` | `enforce` default; `observe` counts would-refuse but serves normally. |
+| `OMI_VERTEX_LEGACY_TASK_MODE` | `enforce` default, armed only by a valid minimum-capable build; `observe` counts would-refuse but serves normally. |
+| `OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` | First release build containing #20374; per-request positive integer, no default. Unset/invalid serves everyone and retains bounded would-refuse counts; configured N selects identified task-loop builds 7000 ≤ build < N after confirmed inactivity. |
 | `OMI_VERTEX_PT_MODEL` | Pins the reservation model, beating auto-detection in both directions. Must name a declared company-paid anchor (`gemini-2.5-flash`, `gemini-3.8-flash`, `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`); anything else — in particular a Pro or image-output model — fails the request closed instead of serving it (SCA-481). |
 | `OMI_GEMINI_OVERFLOW_MODEL` | Pins the overflow model. Rejected at resolution time if it equals the reservation or names anything outside the declared company-paid anchors (SCA-481); the request then keeps its own error instead of overflowing. |
 | `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables cheaper overflow ladders; existing-model full reservations return 429. Target dedicated attempts also respect this switch; synthetic discovery never retries shared. |

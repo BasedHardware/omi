@@ -153,6 +153,7 @@ async def test_desktop_redis_confirms_cutoff_without_gateway_shared_state(monkey
     for key in ['OMI_VERTEX_PT_MODEL', 'OMI_VERTEX_RESERVATION_STATES']:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv('OMI_VERTEX_LEGACY_TASK_MODE', 'enforce')
+    monkeypatch.setenv('OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD', '12435')
     db = fakeredis.aioredis.FakeRedis(decode_responses=True)
     clock = [1000]
     real_pipeline = db.pipeline
