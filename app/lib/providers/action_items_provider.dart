@@ -535,6 +535,7 @@ class ActionItemsProvider extends ChangeNotifier {
         return false;
       }
       SiriIntegration.current.queueUpsertTasks([success]);
+      _adoptServerRecord(success);
       // Cancel notification if the action item is marked as completed
       if (newState == true) {
         await ActionItemNotificationHandler.cancelNotification(item.id);
@@ -1005,16 +1006,44 @@ class ActionItemsProvider extends ChangeNotifier {
   ActionItemWithMetadata? _findAndUpdateItemState(String itemId, bool newState) {
     ActionItemWithMetadata? updated;
     final mainIndex = _actionItems.indexWhere((item) => item.id == itemId);
+    // Completing stamps the moment locally so the Completed section sorts it newest-first at
+    // once; the server's own timestamp replaces it when the write comes back.
+    final completedAt = newState ? DateTime.now() : null;
     if (mainIndex != -1) {
-      _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(completed: newState);
+      _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(completed: newState, completedAt: completedAt);
       updated = _actionItems[mainIndex];
     }
     final homeIndex = _homeDayItems.indexWhere((item) => item.id == itemId);
     if (homeIndex != -1) {
-      _homeDayItems[homeIndex] = _homeDayItems[homeIndex].copyWith(completed: newState);
+      _homeDayItems[homeIndex] = _homeDayItems[homeIndex].copyWith(completed: newState, completedAt: completedAt);
       updated ??= _homeDayItems[homeIndex];
     }
     return updated;
+  }
+
+  /// Replaces the local copies of [record] with the server's version (timestamps included).
+  /// After a state update is confirmed, take the server's completion stamps over the local
+  /// provisional ones, so the Completed order matches what the next refresh will show. Only the
+  /// fields a state update owns are adopted: the response may be partial, and sort order, indent
+  /// and lock state keep whatever the list already holds.
+  void _adoptServerRecord(ActionItemWithMetadata record) {
+    ActionItemWithMetadata merge(ActionItemWithMetadata local) => local.copyWith(
+          completed: record.completed,
+          completedAt: record.completedAt ?? local.completedAt,
+          updatedAt: record.updatedAt ?? local.updatedAt,
+        );
+    var changed = false;
+    final mainIndex = _actionItems.indexWhere((item) => item.id == record.id);
+    if (mainIndex != -1) {
+      _actionItems[mainIndex] = merge(_actionItems[mainIndex]);
+      changed = true;
+    }
+    final homeIndex = _homeDayItems.indexWhere((item) => item.id == record.id);
+    if (homeIndex != -1) {
+      _homeDayItems[homeIndex] = merge(_homeDayItems[homeIndex]);
+      changed = true;
+    }
+    if (changed) notifyListeners();
   }
 
   ActionItemWithMetadata? _findAndUpdateItemDescription(String itemId, String newDescription) {
@@ -1117,11 +1146,66 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
+  /// Selects every loaded task that can be acted on. Paywalled tasks are left out: the backend
+  /// refuses every write on them, so a bulk export or delete that included one would fail on it.
   void selectAllItems() {
     _selectedItems
       ..clear()
-      ..addAll(_actionItems.map((i) => i.id));
+      ..addAll(selectableItems.map((i) => i.id));
     notifyListeners();
+  }
+
+  // Bumped on every notification so derived lists can be cached per change rather than per build.
+  int _changeVersion = 0;
+  int _completedSortedVersion = -1;
+  List<ActionItemWithMetadata> _completedSorted = const [];
+
+  @override
+  void notifyListeners() {
+    _changeVersion++;
+    super.notifyListeners();
+  }
+
+  /// Done tasks, newest first (by completion, else last update, else creation). Sorted once per
+  /// change of the list, so a rebuild of the page does not re-sort a long done history.
+  List<ActionItemWithMetadata> get completedItemsNewestFirst {
+    if (_completedSortedVersion != _changeVersion) {
+      DateTime? when(ActionItemWithMetadata i) => i.completedAt ?? i.updatedAt ?? i.createdAt;
+      final items = completedItems;
+      items.sort((a, b) {
+        final x = when(a), y = when(b);
+        if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+        return y.compareTo(x);
+      });
+      _completedSorted = List.unmodifiable(items);
+      _completedSortedVersion = _changeVersion;
+    }
+    return _completedSorted;
+  }
+
+  /// The loaded tasks a bulk action may include (not paywalled).
+  List<ActionItemWithMetadata> get selectableItems => _actionItems.where((i) => !i.isLocked).toList(growable: false);
+
+  /// Whether every selectable task is selected and nothing is left to load.
+  bool get allSelectableSelected =>
+      !_hasMore && selectableItems.isNotEmpty && selectableItems.every((i) => _selectedItems.contains(i.id));
+
+  /// "Select All" for the whole task set, not just the loaded page: pulls the remaining pages
+  /// first (bounded, so a runaway server can't spin this forever), then selects what can be acted on.
+  Future<void> selectAllTasks({int maxPages = 40}) async {
+    if (!_isSelectionMode) startSelection();
+    var pages = 0;
+    while (_hasMore && pages < maxPages) {
+      if (_isFetching) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        continue;
+      }
+      final before = _actionItems.length;
+      await loadMoreActionItems();
+      pages++;
+      if (_actionItems.length == before && !_hasMore) break;
+    }
+    selectAllItems();
   }
 
   void selectAllItemsFromTab(int tabIndex) {
@@ -1267,15 +1351,34 @@ class ActionItemsProvider extends ChangeNotifier {
 
     final ids = _selectedItems.toList(growable: false);
     final selected = _actionItems.where((i) => ids.contains(i.id)).toList(growable: false);
-    // Exported items can now be selected (Delete shares the bar), but Export
-    // itself silently no-ops on them so the user doesn't double-create on the
-    // integration side.
-    final items = selected.where((i) => !i.exported).toList(growable: false);
+    await exportItems(context, selected, platform, onSettled: endSelection);
+  }
+
+  /// Exports [candidates] to [platform] and posts one snackbar for the outcome. Already-exported
+  /// items are skipped so the integration never gets a duplicate; each candidate is checked against
+  /// the provider's current record, not the copy the caller holds, because a page that stays open
+  /// after an export still holds the pre-export task. [onSettled] runs once the work is done and
+  /// before the outcome is shown.
+  Future<void> exportItems(
+    BuildContext context,
+    List<ActionItemWithMetadata> candidates,
+    TaskIntegrationApp platform, {
+    VoidCallback? onSettled,
+  }) async {
+    final current =
+        candidates.map((c) => _actionItems.firstWhere((i) => i.id == c.id, orElse: () => c)).toList(growable: false);
+    final items = current.where((i) => !i.exported).toList(growable: false);
     final total = items.length;
 
     if (total == 0) {
-      OmiFeedback.info(context, context.l10n.bulkExportAlreadyExported);
-      endSelection();
+      final only = current.length == 1 ? current.single : null;
+      OmiFeedback.info(
+        context,
+        only?.exportPlatform != null
+            ? context.l10n.alreadyExportedTo(taskExportPlatformLabel(only!.exportPlatform!))
+            : context.l10n.bulkExportAlreadyExported,
+      );
+      onSettled?.call();
       return;
     }
 
@@ -1286,7 +1389,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
     // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.
     await fetchActionItems();
-    endSelection();
+    onSettled?.call();
 
     if (!context.mounted) {
       return;
@@ -1306,5 +1409,23 @@ class ActionItemsProvider extends ChangeNotifier {
     _flushSortUpdates();
     _flushIndentUpdates();
     super.dispose();
+  }
+}
+
+/// The name a task's `exportPlatform` wire value shows as ("google_tasks" → "Google Tasks").
+String taskExportPlatformLabel(String platform) {
+  switch (platform) {
+    case 'todoist':
+      return 'Todoist';
+    case 'asana':
+      return 'Asana';
+    case 'google_tasks':
+      return 'Google Tasks';
+    case 'clickup':
+      return 'ClickUp';
+    case 'apple_reminders':
+      return 'Reminders';
+    default:
+      return platform;
   }
 }
