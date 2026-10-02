@@ -78,13 +78,11 @@ void main() {
     expect(world.socket!.sentBinary.length, before);
     expect(presentation.snapshot['paused'], true);
     final elapsed = presentation.snapshot['elapsed'];
-    final phase = presentation.snapshot['waveTime'];
     await world.settle();
     final pausedUpdates = sink.states.length;
     await world.elapse(const Duration(seconds: 12));
     expect(presentation.snapshot['elapsed'], elapsed);
-    expect(presentation.snapshot['waveTime'], phase);
-    expect(sink.states.length, pausedUpdates, reason: 'Stop halts decorative animation updates');
+    expect(sink.states.length, pausedUpdates, reason: 'Stop sends no updates while it lasts');
     final resumeIndex = sink.states.length;
     await sink.action(request('resume'));
     world.emitNativeState(PhoneMicCaptureState.running);
@@ -93,11 +91,9 @@ void main() {
     expect(presentation.snapshot['recordingId'], id);
     expect(world.socket!.sentBinary.length, greaterThan(before));
     expect(presentation.snapshot['paused'], false);
-    expect(presentation.snapshot['waveTime'], phase, reason: 'Start resumes the held phase');
     expect(sink.states.skip(resumeIndex).every((s) => s['active'] == true), true);
     await world.elapse(const Duration(seconds: 3));
     expect(presentation.snapshot['elapsed'], (elapsed as int) + 3);
-    expect(presentation.snapshot['waveTime'], closeTo((phase as double) + 3, 0.001));
   });
 
   test('a repeated Pause does not issue a second mute intent', () async {
@@ -330,7 +326,7 @@ void main() {
 
     await audio(60, const Duration(milliseconds: 1600));
     final quiet = sink.states.length;
-    final quietPhase = presentation.snapshot['waveTime'] as double;
+    final startedAt = presentation.snapshot['startedAt'];
     await audio(60, const Duration(milliseconds: 3200));
     expect(sink.states.length, quiet, reason: 'the OS keeps the wave moving through silence');
 
@@ -339,7 +335,7 @@ void main() {
 
     await audio(60, const Duration(milliseconds: 3200));
     expect(sink.states.length, quiet);
-    expect(presentation.snapshot['waveTime'], closeTo(quietPhase + 9.6, 0.001));
+    expect(presentation.snapshot['startedAt'], startedAt, reason: 'the OS draws the wave from the same start');
     expect(presentation.snapshot.keys, isNot(contains('levels')), reason: 'the card draws the design wave, not audio');
   });
 

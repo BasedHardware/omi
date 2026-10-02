@@ -108,9 +108,6 @@ class CaptureSystemSurface {
       'source': capture.systemSurfacePhoneCapture ? 'phone' : 'pendant',
       'startedAt': _anchor == null ? 0.0 : _anchor!.millisecondsSinceEpoch / 1000,
       'elapsed': _anchor == null ? 0 : (_pausedAt ?? now).difference(_anchor!).inSeconds.clamp(0, 2147483647),
-      // The OS animates the wave from startedAt; this fractional time holds its phase on Stop.
-      'waveTime':
-          _anchor == null ? 0.0 : (_pausedAt ?? now).difference(_anchor!).inMilliseconds.clamp(0, 2147483647000) / 1000,
       'paused': paused,
       'canPause': active && !capture.isCallActive && !heldForCall,
       'canFinish': active &&
@@ -120,12 +117,11 @@ class CaptureSystemSurface {
     };
   }
 
-  /// What the card shows, apart from the busy and failure marks. Elapsed time and
-  /// the wave are drawn by the OS; only frozen values are significant.
+  /// What the card shows, apart from the busy and failure marks. The OS draws the
+  /// running time and wave; only a frozen elapsed time is significant.
   static String _stateKey(Map<String, Object?> value) {
     final key = {...value}
       ..remove('elapsed')
-      ..remove('waveTime')
       ..remove('busy')
       ..remove('actionFailed');
     if (value['paused'] == true) key['elapsed'] = value['elapsed'];

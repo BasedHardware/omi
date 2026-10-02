@@ -82,8 +82,7 @@ final class LiveActivityManager {
             do {
                 let data = try SafeJSON.data(withJSONObject: values)
                 let state = try JSONDecoder().decode(OmiCaptureAttributes.ContentState.self, from: data)
-                guard state.startedAt.isFinite, state.elapsed >= 0,
-                      state.waveTime.map({ $0.isFinite && $0 >= 0 }) ?? true else { throw CaptureActionError.unavailable }
+                guard state.startedAt.isFinite, state.elapsed >= 0 else { throw CaptureActionError.unavailable }
                 enqueue { [weak self] in
                     guard let self else { result(nil); return }
                     guard self.ownerId == owner else { result(nil); return }

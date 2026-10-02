@@ -11,8 +11,6 @@ struct OmiCaptureAttributes: ActivityAttributes {
         var source: String
         var startedAt: Double
         var elapsed: Int
-        /// Decorative animation time, frozen on pause. Optional for existing activities.
-        var waveTime: Double? = nil
         var paused: Bool
         var canPause: Bool
         var canFinish: Bool

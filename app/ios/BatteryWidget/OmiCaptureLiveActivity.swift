@@ -360,7 +360,7 @@ struct CapturePendant: View {
 /// omi-liquid-dock2.html: fixed 2 pt bars, 2.2 pt gaps, a 1.6 s breath and
 /// 0.13 s phase offsets repeating every 13 bars. While capture runs, the system
 /// animates the breath on its own clock regardless of speech, with no activity
-/// updates; stopping holds the phase it reached.
+/// updates. Stopped, paused or finished, the bars lie flat in a line.
 @available(iOS 16.1, *)
 private struct CaptureWaveform: View {
     let snapshot: CaptureSnapshot
@@ -375,6 +375,8 @@ private struct CaptureWaveform: View {
     private static let ripple = 13
     static let period = 1.6
     private static let phaseOffset = 0.13
+    /// Every bar's height while capture is not running: the wave's shortest bar.
+    private static let flat: CGFloat = 3
     /// The design's `lv` list: bar heights as a share of the strip.
     private static let levels: [CGFloat] = [
         0.22, 0.35, 0.5, 0.3, 0.62, 0.8, 0.45, 0.28, 0.55, 0.9, 0.7, 0.38, 0.25, 0.42, 0.66, 0.52, 0.3,
@@ -387,10 +389,9 @@ private struct CaptureWaveform: View {
     }
 
     /// Seconds of capture, the breath's clock. Start shifts `startedAt` by the
-    /// stopped time, so the phase resumes where Stop held it.
+    /// stopped time.
     private var captureTime: Double {
-        running ? Date().timeIntervalSince1970 - snapshot.state.startedAt
-            : snapshot.state.waveTime ?? Double(snapshot.state.elapsed)
+        Date().timeIntervalSince1970 - snapshot.state.startedAt
     }
 
     /// Bar heights at `seconds` of capture. CSS's negative delays start neighboring
@@ -425,9 +426,12 @@ private struct CaptureWaveform: View {
                                 .mask { flipbook.window(for: frame, startedAt: snapshot.state.startedAt) }
                         }
                     }
-                } else {
-                    // Stop holds the reached phase; Reduce Motion and Always-On rest at full height.
+                } else if running {
+                    // Reduce Motion and Always-On rest at full height; without the flipbook the
+                    // wave shows the phase it had when the card was drawn.
                     CaptureBars(heights: heights(count: count, at: still ? nil : time), width: Self.barWidth, gap: Self.gap)
+                } else {
+                    CaptureBars(heights: Array(repeating: Self.flat, count: count), width: Self.barWidth, gap: Self.gap)
                 }
             }
             .frame(width: width, height: height)
