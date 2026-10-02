@@ -147,8 +147,8 @@ class OmiPalette {
     canvasCard: Color(0xFFF2F2F7),
     glass: Color(0xE6FAFAFC),
     glassEdge: Color(0xF2FFFFFF),
-    glassRim: Color(0x14000000),
-    glassShadow: Color(0x14000000),
+    glassRim: Color(0x0C000000),
+    glassShadow: Color(0x08000000),
     deviceTile: Color(0xFFFAF8F4),
     deviceTileInk: Color(0xFF8C877F),
   );

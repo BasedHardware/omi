@@ -38,7 +38,7 @@ class OmiGlass extends StatelessWidget {
     if (color.a == 0) return const [];
     return [
       BoxShadow(color: color, spreadRadius: 0.5),
-      BoxShadow(color: color.withValues(alpha: color.a * 0.6), blurRadius: 12, offset: const Offset(0, 2)),
+      BoxShadow(color: color.withValues(alpha: color.a * 0.5), blurRadius: 12, offset: const Offset(0, 2)),
     ];
   }
 
