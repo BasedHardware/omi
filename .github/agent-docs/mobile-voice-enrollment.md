@@ -57,8 +57,10 @@ for the first prompt, using the production page and layout with inert voice I/O.
 It captures the former floating-header layout and the reserved-header layout
 without signing in or resetting app data. Images are written to
 `omi-layout-evidence` under iOS Documents or Android external app storage.
-Use it only for layout evidence, then restore the normal app entry point; it
-does not verify recording, enrollment, or saving.
+Use it only for layout evidence; it does not verify recording, enrollment, or
+saving. Selecting the fixture with `-t` leaves `app/lib/main.dart` unchanged. If the
+fixture is installed over the regular phone app, reinstall a normal app build
+afterward; no source entry-point edits are needed.
 
 ## Guided introduction follow-up
 
