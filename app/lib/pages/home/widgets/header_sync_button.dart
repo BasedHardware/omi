@@ -36,7 +36,8 @@ class HeaderSyncButton extends StatelessWidget {
       onTap: onTap,
       badgeCount: pending,
       color: isSyncing ? OmiColors.surface3 : null,
-      icon: Icon(Icons.cloud_rounded, size: 18, color: isSyncing ? OmiColors.textPrimary : OmiColors.textSecondary),
+      icon:
+          OmiLineIcon(OmiLineGlyph.cloud, size: 20, color: isSyncing ? OmiColors.textPrimary : OmiColors.textSecondary),
     );
   }
 }

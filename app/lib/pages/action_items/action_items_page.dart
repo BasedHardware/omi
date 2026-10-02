@@ -190,7 +190,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               },
               backgroundColor: OmiColors.accent,
               foregroundColor: OmiColors.onAccent,
-              child: const Icon(Icons.add),
+              child: const OmiLineIcon(OmiLineGlyph.plus),
             ),
           ),
         );

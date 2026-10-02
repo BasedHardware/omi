@@ -168,144 +168,147 @@ class _TaskPageState extends State<TaskPage> {
     final l10n = context.l10n;
     final item = widget.item;
     final canSave = _isDirty && !_saving && _text.text.trim().isNotEmpty;
-    return PopScope<Object?>(
-      canPop: !_isDirty,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _close();
-      },
-      child: Scaffold(
-        backgroundColor: OmiColors.surface0,
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 6, 16, 0),
-                child: Row(
-                  children: [
-                    OmiBackButton.circled(onPressed: _close),
-                    const Spacer(),
-                    OmiButton(
-                      key: const Key('task_save_button'),
-                      label: _saveFailed ? l10n.tryAgain : l10n.save,
-                      size: OmiButtonSize.compact,
-                      isLoading: _saving,
-                      onPressed: canSave ? _save : null,
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                  children: [
-                    TextField(
-                      key: const Key('task_description'),
-                      controller: _text,
-                      enabled: !_saving,
-                      onChanged: (_) => setState(() {}),
-                      maxLines: null,
-                      minLines: 1,
-                      maxLength: 4096,
-                      textInputAction: TextInputAction.done,
-                      style: OmiType.title1.copyWith(
-                        letterSpacing: -0.6,
-                        height: 1.2,
-                        color: _completed ? OmiColors.textTertiary : OmiColors.textPrimary,
-                        decoration: _completed ? TextDecoration.lineThrough : null,
-                        decorationColor: OmiColors.border,
+    // The same typeface as Home and Settings.
+    return OmiTypeface(
+      child: PopScope<Object?>(
+        canPop: !_isDirty,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _close();
+        },
+        child: Scaffold(
+          backgroundColor: OmiColors.surface0,
+          body: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 6, 16, 0),
+                  child: Row(
+                    children: [
+                      OmiBackButton.circled(onPressed: _close),
+                      const Spacer(),
+                      OmiButton(
+                        key: const Key('task_save_button'),
+                        label: _saveFailed ? l10n.tryAgain : l10n.save,
+                        size: OmiButtonSize.compact,
+                        isLoading: _saving,
+                        onPressed: canSave ? _save : null,
                       ),
-                      cursorColor: OmiColors.accent,
-                      decoration: const InputDecoration(
-                        counterText: '',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        isDense: true,
-                      ),
-                      onSubmitted: (_) => FocusScope.of(context).unfocus(),
-                    ),
-                    if (item.conversationId != null) ...[
-                      const SizedBox(height: 10),
-                      _SourceLine(onTap: _openConversation),
                     ],
-                    const SizedBox(height: 24),
-                    _Card(
-                      children: [
-                        // The date is the row's text ("Tomorrow · 9:00 AM"), or "Add Due Date" when there is none.
-                        _CardRow(
-                          leading: const Icon(Icons.schedule_outlined, size: 22),
-                          title: _dueDate != null ? _formatDueDate(_dueDate!) : l10n.addDueDate,
-                          onTap: _saving ? null : _pickDueDate,
-                          trailing: _dueDate == null
-                              ? null
-                              : OmiIconButton(
-                                  icon: const Icon(Icons.close, size: 18),
-                                  label: l10n.clearDueDate,
-                                  color: OmiColors.textSecondary,
-                                  onPressed: _saving ? null : () => setState(() => _dueDate = null),
-                                ),
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                    children: [
+                      TextField(
+                        key: const Key('task_description'),
+                        controller: _text,
+                        enabled: !_saving,
+                        onChanged: (_) => setState(() {}),
+                        maxLines: null,
+                        minLines: 1,
+                        maxLength: 4096,
+                        textInputAction: TextInputAction.done,
+                        style: OmiType.title1.copyWith(
+                          letterSpacing: -0.6,
+                          height: 1.2,
+                          color: _completed ? OmiColors.textTertiary : OmiColors.textPrimary,
+                          decoration: _completed ? TextDecoration.lineThrough : null,
+                          decorationColor: OmiColors.border,
                         ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(54, 0, 16, 12),
-                          child: Wrap(
-                            spacing: OmiSpacing.xs,
-                            children: [
-                              for (final days in [0, 1, 7])
-                                ActionChip(
-                                  key: ValueKey('task_quick_date_$days'),
-                                  label: Text(days == 0
-                                      ? l10n.today
-                                      : days == 1
-                                          ? l10n.tomorrow
-                                          : l10n.nextWeek),
-                                  onPressed: _saving ? null : () => _selectQuickDate(days),
-                                  backgroundColor: OmiColors.surface2,
-                                  labelStyle: OmiType.footnote,
-                                  side: BorderSide(color: OmiColors.surface2),
-                                ),
-                            ],
+                        cursorColor: OmiColors.accent,
+                        decoration: const InputDecoration(
+                          counterText: '',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          isDense: true,
+                        ),
+                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                      ),
+                      if (item.conversationId != null) ...[
+                        const SizedBox(height: 10),
+                        _SourceLine(onTap: _openConversation),
+                      ],
+                      const SizedBox(height: 24),
+                      _Card(
+                        children: [
+                          // The date is the row's text ("Tomorrow · 9:00 AM"), or "Add Due Date" when there is none.
+                          _CardRow(
+                            leading: const Icon(Icons.schedule_outlined, size: 22),
+                            title: _dueDate != null ? _formatDueDate(_dueDate!) : l10n.addDueDate,
+                            onTap: _saving ? null : _pickDueDate,
+                            trailing: _dueDate == null
+                                ? null
+                                : OmiIconButton(
+                                    icon: const Icon(Icons.close, size: 18),
+                                    label: l10n.clearDueDate,
+                                    color: OmiColors.textSecondary,
+                                    onPressed: _saving ? null : () => setState(() => _dueDate = null),
+                                  ),
                           ),
-                        ),
-                        _CardRow(
-                          key: const Key('task_completed_toggle'),
-                          leading: TaskCompletionMark(completed: _completed),
-                          title: _completed ? l10n.completed : l10n.markComplete,
-                          onTap: _toggleCompleted,
-                          showChevron: false,
-                          semanticsChecked: _completed,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _Card(
-                      children: [
-                        _CardRow(
-                          leading: const Icon(Icons.ios_share_rounded, size: 22),
-                          title: l10n.exportButton,
-                          onTap: _saving ? null : () => exportTaskToConnectedApp(context, widget.item),
-                          showChevron: false,
-                        ),
-                        _CardRow(
-                          leading: const Icon(Icons.delete_outline, size: 22),
-                          title: l10n.deleteActionItem,
-                          onTap: _saving ? null : _delete,
-                          showChevron: false,
-                          isDestructive: true,
-                        ),
-                      ],
-                    ),
-                    if (_saveFailed) ...[
-                      const SizedBox(height: 16),
-                      Semantics(
-                        liveRegion: true,
-                        child: Text(l10n.failedToUpdateActionItem,
-                            style: OmiType.footnote.copyWith(color: OmiColors.danger)),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(54, 0, 16, 12),
+                            child: Wrap(
+                              spacing: OmiSpacing.xs,
+                              children: [
+                                for (final days in [0, 1, 7])
+                                  ActionChip(
+                                    key: ValueKey('task_quick_date_$days'),
+                                    label: Text(days == 0
+                                        ? l10n.today
+                                        : days == 1
+                                            ? l10n.tomorrow
+                                            : l10n.nextWeek),
+                                    onPressed: _saving ? null : () => _selectQuickDate(days),
+                                    backgroundColor: OmiColors.surface2,
+                                    labelStyle: OmiType.footnote,
+                                    side: BorderSide(color: OmiColors.surface2),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          _CardRow(
+                            key: const Key('task_completed_toggle'),
+                            leading: TaskCompletionMark(completed: _completed),
+                            title: _completed ? l10n.completed : l10n.markComplete,
+                            onTap: _toggleCompleted,
+                            showChevron: false,
+                            semanticsChecked: _completed,
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 16),
+                      _Card(
+                        children: [
+                          _CardRow(
+                            leading: const Icon(Icons.ios_share_rounded, size: 22),
+                            title: l10n.exportButton,
+                            onTap: _saving ? null : () => exportTaskToConnectedApp(context, widget.item),
+                            showChevron: false,
+                          ),
+                          _CardRow(
+                            leading: const Icon(Icons.delete_outline, size: 22),
+                            title: l10n.deleteActionItem,
+                            onTap: _saving ? null : _delete,
+                            showChevron: false,
+                            isDestructive: true,
+                          ),
+                        ],
+                      ),
+                      if (_saveFailed) ...[
+                        const SizedBox(height: 16),
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(l10n.failedToUpdateActionItem,
+                              style: OmiType.footnote.copyWith(color: OmiColors.danger)),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -244,24 +244,25 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         ),
       );
     }
-    // A pushed page: back on the leading edge, search trailing, both on the warm tile colour.
+    // A pushed page: back on the leading edge, search trailing, both glass circles like Home's.
     return Padding(
       key: const ValueKey('normal-header'),
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
       child: Row(
         children: [
-          OmiBackButton.circled(fillColor: OmiColors.iconTile),
+          const OmiCanvas(child: OmiBackButton.circled()),
           Expanded(
             child: Semantics(
               header: true,
               child: Text(l10n.settings, textAlign: TextAlign.center, style: OmiType.headline),
             ),
           ),
-          OmiIconButton.filled(
-            icon: const OmiLineIcon(OmiLineGlyph.search),
-            label: l10n.search,
-            onPressed: _startSearch,
-            fillColor: OmiColors.iconTile,
+          OmiCanvas(
+            child: OmiIconButton.filled(
+              icon: const OmiLineIcon(OmiLineGlyph.search),
+              label: l10n.search,
+              onPressed: _startSearch,
+            ),
           ),
         ],
       ),

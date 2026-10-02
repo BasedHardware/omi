@@ -78,8 +78,10 @@ class OmiIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    // On a page in the Settings look ([OmiGroupedScope]) the circle defaults to the icon-tile colour.
-    final fillColor = this.fillColor ?? (OmiGroupedScope.of(context) ? OmiColors.iconTile : null);
+    // On a page in the Settings look ([OmiGroupedScope]) the circle defaults to the icon-tile colour,
+    // unless it is glass on a canvas header, which keeps the glass's own fill.
+    final fillColor =
+        this.fillColor ?? (OmiGroupedScope.of(context) && !OmiCanvas.isOn(context) ? OmiColors.iconTile : null);
     var glyphColor = color ?? (isDestructive ? OmiColors.danger : OmiColors.textPrimary);
     if (!enabled) glyphColor = glyphColor.withValues(alpha: 0.38);
 

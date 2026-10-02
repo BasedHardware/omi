@@ -90,7 +90,7 @@ class DeviceTile extends StatelessWidget {
 
   static String _svg(String body) =>
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-      'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">$body</svg>';
+      'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">$body</svg>';
 
   static final String _pendant = _svg('<path d="M6.5 2.5C8 5 9.6 6.4 12 6.6 14.4 6.4 16 5 17.5 2.5"/>'
       '<circle cx="12" cy="14.4" r="7.2"/><circle cx="12" cy="14.4" r="4.2" stroke-width="1.2" opacity=".55"/>'

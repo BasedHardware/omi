@@ -87,23 +87,14 @@ class OmiGroupedScope extends InheritedWidget {
   bool updateShouldNotify(OmiGroupedScope oldWidget) => false;
 }
 
-/// Sets Settings in Instrument Sans; the rest of the app keeps the system font. It goes around a
-/// whole page (above its Scaffold) so the Material and Cupertino text themes, the page's own text
-/// and the sheets and dialogs the page opens all pick it up. Scripts it does not cover fall back
-/// to the system font glyph by glyph.
-class OmiSettingsTypeface extends StatelessWidget {
-  const OmiSettingsTypeface({super.key, required this.child});
+/// Sets a screen in Instrument Sans: Settings, Home and Tasks share it; the rest of the app keeps
+/// the system font. It goes around a whole page (above its Scaffold) so the Material and Cupertino
+/// text themes, the page's own text and the sheets and dialogs the page opens all pick it up.
+/// Scripts it does not cover fall back to the system font glyph by glyph.
+class OmiTypeface extends StatelessWidget {
+  const OmiTypeface({super.key, required this.child});
 
   static const String family = FontFamily.instrumentSans;
-
-  /// Settings lists run 10% smaller than the app's rows elsewhere: row text, section labels and
-  /// icon tiles.
-  static const double listScale = 0.9;
-
-  /// [listScale] on a Settings page (and the sheets it opens), 1 elsewhere, so a row in a
-  /// conversation sheet keeps its size.
-  static double scaleOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_SettingsListScale>() == null ? 1 : listScale;
 
   final Widget child;
 
@@ -121,11 +112,30 @@ class OmiSettingsTypeface extends StatelessWidget {
               ),
         ),
       ),
-      child: _SettingsListScale(
-        child: DefaultTextStyle.merge(style: const TextStyle(fontFamily: family), child: child),
-      ),
+      child: DefaultTextStyle.merge(style: const TextStyle(fontFamily: family), child: child),
     );
   }
+}
+
+/// A Settings page: [OmiTypeface], with its lists 10% smaller than rows elsewhere.
+class OmiSettingsTypeface extends StatelessWidget {
+  const OmiSettingsTypeface({super.key, required this.child});
+
+  static const String family = OmiTypeface.family;
+
+  /// Settings lists run 10% smaller than the app's rows elsewhere: row text, section labels and
+  /// icon tiles.
+  static const double listScale = 0.9;
+
+  /// [listScale] on a Settings page (and the sheets it opens), 1 elsewhere, so a row in a
+  /// conversation sheet keeps its size.
+  static double scaleOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_SettingsListScale>() == null ? 1 : listScale;
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => OmiTypeface(child: _SettingsListScale(child: child));
 }
 
 /// Marks a Settings page for [OmiSettingsTypeface.scaleOf]; an [InheritedTheme] so a sheet or

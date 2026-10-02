@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/ui/components/omi_nav_buttons.dart';
 import 'package:omi/ui/components/omi_settings.dart';
+import 'package:omi/ui/omi_canvas.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 /// A page inside Settings, drawn like Settings itself: [OmiColors.groupedPage] under a circled
@@ -72,7 +73,8 @@ class OmiGroupedPage extends StatelessWidget {
             leadingWidth: 44 + OmiSpacing.xxs,
             leading: Padding(
               padding: const EdgeInsetsDirectional.only(start: OmiSpacing.xxs),
-              child: leading ?? OmiBackButton.circled(fillColor: OmiColors.iconTile, onPressed: onBack),
+              // Glass circles, the same header controls as Home and Tasks.
+              child: OmiCanvas(child: leading ?? OmiBackButton.circled(onPressed: onBack)),
             ),
             centerTitle: true,
             title: titleWidget ??
@@ -80,7 +82,10 @@ class OmiGroupedPage extends StatelessWidget {
                     ? null
                     : Text(title!, style: OmiType.headline, maxLines: 1, overflow: TextOverflow.ellipsis)),
             // Centred, so a text action keeps its own height instead of stretching to the bar's.
-            actions: [for (final action in actions) Center(child: action), const SizedBox(width: OmiSpacing.xxs)],
+            actions: [
+              for (final action in actions) Center(child: OmiCanvas(child: action)),
+              const SizedBox(width: OmiSpacing.xxs)
+            ],
             bottom: bottom,
           ),
           body: body,

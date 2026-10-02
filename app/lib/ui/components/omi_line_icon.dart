@@ -51,6 +51,7 @@ enum OmiLineGlyph {
   search,
   location,
   translate,
+  settings,
 }
 
 // Solid ink, no outline.
@@ -164,6 +165,10 @@ const _paths = <OmiLineGlyph, String>{
   OmiLineGlyph.edit: '<path d="M4.5 19.5l.8-3.9L15.6 5.3a1.8 1.8 0 0 1 2.6 0l.5.5a1.8 1.8 0 0 1 0 2.6L8.4 18.7z"/>'
       '<path $_fine d="M13.8 7.1l3.1 3.1"/><path d="M13 20h6.5"/>',
   OmiLineGlyph.search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3l4.7 4.7"/>',
+  // Settings: a cog, its teeth drawn heavier than the ring.
+  OmiLineGlyph.settings: '<circle cx="12" cy="12" r="6.4"/><circle cx="12" cy="12" r="2.6"/>'
+      '<path stroke-width="2.6" d="M18.4 12h2.2M16.53 16.53l1.55 1.55M12 18.4v2.2M7.47 16.53l-1.55 1.55M5.6 12H3.4'
+      'M7.47 7.47L5.92 5.92M12 5.6V3.4M16.53 7.47l1.55-1.55"/>',
   OmiLineGlyph.refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4.5H15"/>',
   // Location: the navigation arrow, with its fold.
   OmiLineGlyph.location: '<path d="M19.6 4.4L4.4 11l6.9 1.7 1.7 6.9z"/><path $_fine d="M11.3 12.7l4.4-4.4"/>',

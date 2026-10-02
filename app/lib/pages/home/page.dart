@@ -741,8 +741,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               });
             }
           }
-          // Home and Tasks paint the canvas: a white page in light mode.
-          return OmiCanvas(child: child!);
+          // Home and Tasks paint the canvas: a white page in light mode, set in Instrument Sans like
+          // Settings.
+          return OmiCanvas(child: OmiTypeface(child: child!));
         },
         child: Selector<HomeProvider, int>(
           selector: (_, homeProvider) => homeProvider.selectedIndex,
@@ -884,7 +885,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ],
           buttonBuilder: (context, showMenu) => HeaderCircleButton(
             semanticLabel: context.l10n.moreOptions,
-            icon: Icon(Icons.more_horiz_rounded, size: 20, color: OmiColors.textSecondary),
+            icon: OmiLineIcon(OmiLineGlyph.more, size: 20, color: OmiColors.textSecondary),
             onTap: () {
               OmiHaptics.selection();
               showMenu();
@@ -928,13 +929,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               HeaderCircleButton(
                 key: const ValueKey('home_search_button'),
                 semanticLabel: context.l10n.search,
-                icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
+                icon: OmiLineIcon(OmiLineGlyph.search, size: 20, color: OmiColors.textSecondary),
                 onTap: () => unawaited(_openSearch()),
               ),
               // Settings button - always visible
               HeaderCircleButton(
                 semanticLabel: context.l10n.settings,
-                icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+                icon: OmiLineIcon(OmiLineGlyph.settings, size: 20, color: OmiColors.textSecondary),
                 onTap: () {
                   OmiHaptics.selection();
                   PlatformManager.instance.analytics.pageOpened('Settings');

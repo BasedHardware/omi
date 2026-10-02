@@ -4,7 +4,6 @@
 // HomeAskOmiButton.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -180,11 +179,14 @@ class HomeFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: OmiColors.surface0,
+    // HomePage's canvas and Instrument Sans.
+    return OmiCanvas(
+        child: OmiTypeface(
+            child: Scaffold(
+      backgroundColor: OmiColors.canvas,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: OmiColors.canvas,
         titleSpacing: NavigationToolbar.kMiddleSpacing - (kMinTapTarget - kHeaderCircleDiameter) / 2,
         title: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           const Padding(
@@ -197,17 +199,17 @@ class HomeFrame extends StatelessWidget {
                 semanticLabel: 'Sync',
                 onTap: () {},
                 badgeCount: pendingSync!,
-                icon: Icon(Icons.cloud_rounded, size: 18, color: OmiColors.textSecondary),
+                icon: OmiLineIcon(OmiLineGlyph.cloud, size: 20, color: OmiColors.textSecondary),
               ),
             HeaderCircleButton(
               semanticLabel: 'Search',
               onTap: () {},
-              icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
+              icon: OmiLineIcon(OmiLineGlyph.search, size: 20, color: OmiColors.textSecondary),
             ),
             HeaderCircleButton(
               semanticLabel: 'Settings',
               onTap: () {},
-              icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+              icon: OmiLineIcon(OmiLineGlyph.settings, size: 20, color: OmiColors.textSecondary),
             ),
           ]),
         ]),
@@ -230,7 +232,7 @@ class HomeFrame extends StatelessWidget {
             ]),
           ),
       ]),
-    );
+    )));
   }
 }
 
