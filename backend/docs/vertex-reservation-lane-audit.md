@@ -7,7 +7,8 @@ classification: `utils/llm/desktop_reservation_policy.py`.
 
 | Request lane | Active / unknown | Confirmed inactive | Cost and visible effect |
 | --- | --- | --- | --- |
-| macOS legacy task loop, premium; also fallback from max/Pro and failure fallback from the new extractor | 2.5 dedicated, existing cheaper overflow | Refuse identified loop with terminal `no_task_found` | No inference spend; no tasks from this loop. It still sends subsequent normal capture requests. Roll out the new pipeline first. |
+| Audited pre-capability macOS task loop (builds 12425, 12432, 12433, 12434), including its max/Pro fallback | 2.5 dedicated, existing cheaper overflow | Refuse identified loop with terminal `no_task_found` | No inference spend; no tasks from this loop. It still sends subsequent normal capture requests. Other builds remain served. |
+| Current/capable macOS old loop, flag-off/out-of-cohort, or new-extractor legacy fallback | 2.5 dedicated, existing cheaper overflow | 2.5 shared (`desktop_other`) | Preserve service; no automatic path selection or consent/cohort override. |
 | macOS new gated one-call extractor | 3.8 dedicated when active; shared otherwise | 3.8 shared | No quality/model change; list $1.50/$7.50 per million input/output when shared. |
 | macOS voice-typing cleanup (`PushToTalkManager`, `ModelQoS.Gemini.dictation`) | 2.5 dedicated | 2.5 shared (`desktop_other`, future `macos_dictation` tag) | Preserve text quality; $0.30/$2.50 per million. Per-lane volume unavailable. |
 | macOS max-tier notch suggestions, and their Flash fallback (`SuggestionAssistant`) | 2.5 dedicated | 2.5 shared (`desktop_other`, future `macos_suggestions` tag) | Preserve suggestions; same 2.5 price. Per-lane volume unavailable. |
@@ -62,27 +63,39 @@ there is no error, retry, model fallback, or update prompt. The server records a
 but no provider is billed. This is suppression of inference, not remotely
 stopping the old executable.
 
-Classification requires the full five-tool signature plus the shipped macOS
-extraction workload tag. Windows platform/UA declarations override that tag.
-An untagged signature is preserved as Windows/unknown. The broad workload tag,
-a screenshot, version number, or raw prompt alone never authorizes refusal.
-Optional `X-Omi-Lane` can refine classification, but is not required and is not
-logged raw. Refusal still requires the tool signature to avoid synthesizing a
-tool a caller cannot decode. These are routing hints, not a security boundary.
+Classification requires all three: the five-tool signature, an extraction workload
+or task-extraction lane tag, and **positive identification of an audited macOS
+build predating the new pipeline**. Only builds 12425, 12432, 12433 and 12434 are
+currently declared. Every other build (including older but unaudited builds),
+missing/contradictory identity, generic Darwin user agent, and Windows caller is
+served. This intentionally sacrifices cutoff coverage rather than guessing.
+
+The audited `GeminiClient` bypasses `OmiHTTPTransport.buildHeaders`: its proxy
+requests do **not** explicitly carry `X-App-Platform`, `X-App-Version` or
+`X-App-Build`. They use Foundation's ephemeral URLSession default User-Agent.
+Codemagic sets `CFBundleName=Omi` and `CFBundleVersion=<release build>`; the Beta
+variant sets `CFBundleName=Omi Beta`. A local Foundation canary using those bundle
+fields captured `Omi/12434 CFNetwork/3896.100.1.1.1 Darwin/27.0.0` and
+`Omi%20Beta/12434 CFNetwork/3896.100.1.1.1 Darwin/27.0.0`. This is a local transport
+check, not a signed historical binary or production-header capture. The parser
+requires that full name/build/CFNetwork/Darwin structure and an audited build;
+other wire variants fail open. Explicit macOS platform + matching audited
+version/build headers are also accepted, with conflicting hints rejected.
+
+The false-match surface is a client or intermediary deliberately copying an
+old Omi macOS identity together with its extraction tag and complete tool set.
+These unauthenticated routing hints are not an attested client identity. A future
+client's own identity or the absence of identity cannot trigger refusal. Raw
+User-Agent and app versions are never logged or used as metric labels.
 
 ## Current flag-off builds and rollout order
 
-A server hint cannot retrofit new-path selection into already shipped builds.
-Silently forcing it would also bypass the current consent/cohort flag and its
-rollback semantics. **Before enforcement becomes effective, deploy the gate,
-ship the capable macOS version, and complete the eligible/consenting macOS ramp.**
-David has authorized privacy; this PR does not create or change any flags.
-If migration wins that race, use `OMI_VERTEX_LEGACY_TASK_MODE=observe` until the
-ramp is ready, accepting the visible old-lane PayGo cost. Default remains enforce,
-as requested. Flag-off/out-of-cohort clients otherwise receive zero-task refusals;
-that is an explicit rollout dependency and a decision for David, not a hidden
-claim that all current clients can be served. A failed new extractor's old-loop
-fallback is likewise refused; retry the new path on the next capture.
+Current/capable builds are **served**, including flag-off/out-of-cohort legacy
+loops and the new extractor's legacy failure fallback. They use shared 2.5 after
+confirmed inactivity. There is no server path-selection hint and no consent/cohort
+override. The ramp still reduces spend, but is no longer a correctness dependency
+for keeping capable clients functional. Default enforcement applies only to the
+explicitly audited pre-capability builds. Observe mode remains available.
 
 ## Live smoke, 2026-10-02
 

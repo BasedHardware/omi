@@ -194,11 +194,11 @@ def test_classification_does_not_use_screenshot_or_broad_workload_alone():
             }
         ]
     }
-    assert desktop_lane({'x-omi-workload': 'extraction'}, body) == 'macos_legacy_tasks'
-    assert desktop_lane({}, body) == 'windows_tasks'
+    assert desktop_lane({'x-omi-workload': 'extraction'}, body) == 'desktop_other'
+    assert desktop_lane({}, body) == 'desktop_other'
     assert desktop_lane({'x-omi-workload': 'extraction', 'x-app-platform': 'windows'}, body) == 'windows_tasks'
     assert desktop_lane({'x-omi-workload': 'extraction'}, {'contents': []}) == 'desktop_other'
-    assert desktop_lane({'x-omi-lane': 'task_extraction'}, body) == 'macos_legacy_tasks'
+    assert desktop_lane({'x-omi-lane': 'task_extraction'}, body) == 'desktop_other'
 
 
 @pytest.mark.parametrize('streaming', [False, True])

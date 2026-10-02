@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 from collections.abc import Mapping, Callable, Awaitable
 
 from fastapi import Response
@@ -18,6 +19,31 @@ POLICY_ACTIONS = Counter(
     'omi_vertex_reservation_policy_total', 'Reservation policy decisions', ['model', 'state', 'lane', 'action']
 )
 TASK_TOOLS = frozenset({'search_similar', 'search_keywords', 'no_task_found', 'extract_task', 'reject_task'})
+
+# Source-audited release tags before screen_task_jev_gate. Unknown/unaudited
+# builds, including every capable current build, are deliberately served.
+LEGACY_MACOS_BUILDS = {'12425': '0.12.425', '12432': '0.12.432', '12433': '0.12.433', '12434': '0.12.434'}
+_MACOS_AGENT = re.compile(r'(?:Omi|Omi%20Beta)/(\d+) CFNetwork/[\d.]+ Darwin/[\d.]+')
+
+
+def identified_legacy_macos(headers: Mapping[str, str]) -> bool:
+    platform = headers.get('x-app-platform', '').lower()
+    if platform and platform != 'macos':
+        return False
+    agent = headers.get('user-agent', '')
+    match = _MACOS_AGENT.fullmatch(agent) if len(agent) <= 256 else None
+    agent_build = match.group(1) if match else ''
+    build = headers.get('x-app-build', '')
+    version = headers.get('x-app-version', '')
+    if build:
+        # Explicit version headers must identify the platform and agree with
+        # the UA when both are present. Never let a stale hint mask a new build.
+        if platform != 'macos' or LEGACY_MACOS_BUILDS.get(build) != version:
+            return False
+        if agent_build and agent_build != build:
+            return False
+        return True
+    return agent_build in LEGACY_MACOS_BUILDS and (not version or version == LEGACY_MACOS_BUILDS[agent_build])
 
 
 def desktop_lane(headers: Mapping[str, str], payload: object) -> str:
@@ -40,9 +66,11 @@ def desktop_lane(headers: Mapping[str, str], payload: object) -> str:
     if TASK_TOOLS <= names:
         if platform == 'windows' or headers.get('user-agent', '').lower().startswith('omi-windows/'):
             return 'windows_tasks'
-        if headers.get('x-omi-workload', '') == 'extraction' or tagged == 'task_extraction':
+        if identified_legacy_macos(headers) and (
+            headers.get('x-omi-workload', '') == 'extraction' or tagged == 'task_extraction'
+        ):
             return 'macos_legacy_tasks'
-        return 'windows_tasks'  # includes unidentified legacy tool clients: preserve service
+        return 'desktop_other'
     tags = {'focus': 'windows_focus', 'dictation': 'macos_dictation', 'suggestions': 'macos_suggestions'}
     return tags.get(tagged, 'desktop_other')
 

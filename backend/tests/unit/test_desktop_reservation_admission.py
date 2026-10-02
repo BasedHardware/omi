@@ -44,7 +44,9 @@ async def test_refusal_stops_before_metering_or_dispatch_and_is_quiet(app, monke
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://synthetic') as client:
         action = 'streamGenerateContent' if stream else 'generateContent'
         response = await client.post(
-            f'/proxy/gemini-2.5-flash/{action}', json=body, headers={'X-Omi-Workload': 'extraction'}
+            f'/proxy/gemini-2.5-flash/{action}',
+            json=body,
+            headers={'X-Omi-Workload': 'extraction', 'User-Agent': 'Omi/12434 CFNetwork/1.0 Darwin/1.0'},
         )
     assert response.status_code == 200
     assert response.headers['x-omi-retryable'] == 'false'
@@ -56,7 +58,21 @@ async def test_refusal_stops_before_metering_or_dispatch_and_is_quiet(app, monke
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'case', ['windows', 'untagged', 'dictation', 'lite', 'pro', 'byok', 'observe', 'unknown', 'lite_pin']
+    'case',
+    [
+        'windows',
+        'untagged',
+        'dictation',
+        'lite',
+        'pro',
+        'byok',
+        'observe',
+        'unknown',
+        'lite_pin',
+        'unidentified',
+        'current_macos',
+        'platform_only',
+    ],
 )
 async def test_other_lanes_and_rollback_reach_existing_dispatch(app, monkeypatch, case):
     # Meter sentinel proves admission was allowed without touching a provider.
@@ -68,13 +84,20 @@ async def test_other_lanes_and_rollback_reach_existing_dispatch(app, monkeypatch
 
     monkeypatch.setattr(proxy, '_meter_server_request', meter)
     model = 'gemini-2.5-flash'
-    headers = {'X-Omi-Workload': 'extraction'}
+    headers = {'X-Omi-Workload': 'extraction', 'User-Agent': 'Omi/12434 CFNetwork/1.0 Darwin/1.0'}
     body = {
         'contents': [{'parts': [{'text': 'synthetic'}]}],
         'tools': [{'function_declarations': [{'name': n, 'parameters': {'type': 'object'}} for n in TASK_TOOLS]}],
     }
     if case == 'windows':
         headers['X-App-Platform'] = 'windows'
+    elif case == 'unidentified':
+        headers.pop('User-Agent')
+    elif case == 'current_macos':
+        headers['User-Agent'] = 'Omi/12435 CFNetwork/1.0 Darwin/1.0'
+    elif case == 'platform_only':
+        headers.pop('User-Agent')
+        headers['X-App-Platform'] = 'macos'
     elif case == 'untagged':
         headers = {}
     elif case == 'lite_pin':
@@ -107,3 +130,38 @@ async def test_other_lanes_and_rollback_reach_existing_dispatch(app, monkeypatch
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://synthetic') as client:
         response = await client.post(f'/proxy/{model}/generateContent', json=body, headers=headers)
     assert response.status_code == 418 and reached == [True]
+
+
+@pytest.mark.parametrize(
+    'headers,expected',
+    [
+        ({'user-agent': 'Omi/12434 CFNetwork/3896.100.1.1.1 Darwin/27.0.0'}, True),
+        ({'user-agent': 'Omi%20Beta/12425 CFNetwork/1.0 Darwin/1.0'}, True),
+        ({'user-agent': 'Omi/12435 CFNetwork/1.0 Darwin/1.0'}, False),
+        ({'user-agent': 'Omi/99999 CFNetwork/1.0 Darwin/1.0'}, False),
+        ({'user-agent': 'Omi/12400 CFNetwork/1.0 Darwin/1.0'}, False),
+        ({'user-agent': 'SomethingElse/12434 CFNetwork/1.0 Darwin/1.0'}, False),
+        ({'user-agent': 'Omi/12434 CFNetwork/1.0'}, False),
+        ({'x-app-platform': 'macos'}, False),
+        ({'x-app-platform': 'macos', 'x-app-build': '12434', 'x-app-version': '0.12.434'}, True),
+        ({'x-app-build': '12434', 'x-app-version': '0.12.434'}, False),
+        ({'x-app-platform': 'macos', 'x-app-build': '12435', 'x-app-version': '0.12.435'}, False),
+        ({'user-agent': 'Omi/12434 CFNetwork/1.0 Darwin/1.0', 'x-app-platform': 'windows'}, False),
+        ({'user-agent': 'Omi/12434 CFNetwork/1.0 Darwin/1.0', 'x-app-version': '0.12.435'}, False),
+        (
+            {
+                'user-agent': 'Omi/12435 CFNetwork/1.0 Darwin/1.0',
+                'x-app-platform': 'macos',
+                'x-app-build': '12434',
+                'x-app-version': '0.12.434',
+            },
+            False,
+        ),
+    ],
+)
+def test_refusal_requires_positive_audited_legacy_macos_identity(headers, expected):
+    from utils.llm.desktop_reservation_policy import desktop_lane
+
+    body = {'tools': [{'functionDeclarations': [{'name': name} for name in TASK_TOOLS]}]}
+    headers = {**headers, 'x-omi-workload': 'extraction'}
+    assert (desktop_lane(headers, body) == 'macos_legacy_tasks') == expected

@@ -366,9 +366,12 @@ and synthetic usage without content or raw User-Agent. Gateway decisions also lo
 which capacity the state selected. Storage fail-open uses standard fallback telemetry.
 
 [Client audit, lane costs, release tags, rollout dependency and smoke limits](vertex-reservation-lane-audit.md).
-Default enforcement will suppress a capable current build's **flag-off** old loop
-too. Complete the eligible macOS flag ramp before effective cutoff, or explicitly
-hold observe mode. This PR does not override client consent/cohort flags.
+Default enforcement requires a positive macOS identity and one of the audited
+pre-capability builds (12425, 12432, 12433, 12434), plus the extraction tag and
+five-task-tool signature. Unidentified, unaudited and current/capable builds
+remain served, including flag-off and legacy fallback requests. They use shared
+2.5 after inactivity; the ramp reduces spend without becoming a cutoff safety
+dependency. This PR does not override client consent/cohort flags.
 
 ### Next year's move: 3.8 Flash to model X
 
