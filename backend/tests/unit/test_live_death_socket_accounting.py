@@ -360,3 +360,17 @@ def test_owner_fence_preserves_preexisting_connected_death_but_excludes_later_de
     assert raw2 is not raw
     assert observed(leg.routing_target, 'provider_failure', reason) == before + 1
     assert ignored_count(leg.routing_target, reason) == ignored_before
+
+
+@pytest.mark.parametrize('mode', ['off', 'OFF', ' off '])
+def test_disabled_routing_does_not_emit_ignored_death_diagnostic(monkeypatch, mode):
+    receiver, raw = listener(monkeypatch)
+    leg = receiver.stt_socket
+    before = ignored_count(leg.routing_target, 'modulate_serve_error')
+    monkeypatch.setenv('STT_ROUTING_MODE', mode)
+    receiver.host.request.websocket.client_state = WebSocketState.DISCONNECTED
+    raw.die('modulate_serve_error', 'synthetic late error')
+    leg.finish()
+    leg.finish()
+    assert leg.leg_outcome.excluded_death and leg.leg_outcome.settled
+    assert ignored_count(leg.routing_target, 'modulate_serve_error') == before

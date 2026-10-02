@@ -61,7 +61,7 @@ class LiveLegOutcome:
             self.reason = 'normal_close' if self.excluded_death else bounded_reason
             if self.excluded_death:
                 try:
-                    if os.getenv('STT_ROUTING_MODE', 'off') != 'off' and any(
+                    if os.getenv('STT_ROUTING_MODE', 'off').strip().lower() != 'off' and any(
                         entry.id == self.target for entry in registry()
                     ):
                         COST_IGNORED_DEATHS.labels(
