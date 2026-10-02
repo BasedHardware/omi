@@ -475,8 +475,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         self._reject_byok(credentials)
         origin_model = ptr.overflow_origin_from_request(request)
         payload = _vertex_request(request)
+        # State I/O has its own bounded allowance; preserve the inference budget.
+        await self._refresh_reservations(max(timeout_ms, 0) / 4000.0)
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
-        await self._refresh_reservations(max(0, (deadline - self._now()) / 4))
         attempts = self._attempt_plan(provider_ref.model, origin_model=origin_model)
         while attempts:
             model, capacity = attempts.pop(0)
@@ -626,8 +627,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         origin_model: str = '',
     ) -> Mapping[str, Any]:
         """Run generateContent through the PT ladder: pin, overflow, fallback."""
+        # State I/O has its own bounded allowance; preserve the inference budget.
+        await self._refresh_reservations(max(timeout_ms, 0) / 4000.0)
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
-        await self._refresh_reservations(max(0, (deadline - self._now()) / 4))
         attempts = self._attempt_plan(anchor, origin_model=origin_model)
         last_error: _VertexHttpError | None = None
         parsed: Mapping[str, Any] | None = None

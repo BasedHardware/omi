@@ -1,6 +1,7 @@
 """Wire/error expectations captured from origin/main (afa78002), without live calls.
 
-Each request uses a deterministic clock to pin the full deadline and retry budget,
+Each request advances a deterministic clock by 300ms during the state read,
+then pins the full inference deadline and retry budget,
 including origin/main's acceptance of a valid body on a 3xx response.
 """
 
@@ -85,6 +86,12 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
         failure = None
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         provider = VertexGeminiProvider(http_client=client, access_token_supplier=token, now=lambda: now[0])
+
+        async def slow_state_read(*args, **kwargs):
+            now[0] += 0.3
+            return {ptr.PT_MODEL_CURRENT: State.ACTIVE}
+
+        monkeypatch.setattr(provider._reservations, 'refresh', slow_state_read)
         provider._model_unavailable_at[served] = -1000.0  # Expired observation; model is eligible again.
         kwargs = dict(
             provider_ref=ProviderRef(provider='gemini', model=anchor),
