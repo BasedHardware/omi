@@ -420,8 +420,8 @@ health transitions and outcomes first; then set `on` with percentages 5 â†’ 25 â
 100. The router cohort is `sha256("stt-routing-on:" + uid)` and never changes
 Parakeet's allocation cohort. In active routing the old language-arm/primary
 pin does not supersede capability and cost. `STT_ROUTING_ON_PERCENT=0`,
-`STT_ROUTING_MODE=shadow`, or `off` restore static selection immediately through
-runtime config. `PARAKEET_WINDOW_ALLOCATION_PERCENT=0` independently withdraws
+`STT_ROUTING_MODE=shadow`, or `off` restore static selection after the runtime
+configuration deployment. `PARAKEET_WINDOW_ALLOCATION_PERCENT=0` independently withdraws
 windowed Parakeet. No deployment or production qualification is part of these
 local test results.
 
@@ -436,7 +436,14 @@ New bounded metrics: `omi_stt_cost_routing_decisions_total{target,reason}` with
 count actual overflow. Unused backup legs do not inflate failover counters.
 `omi_stt_cost_routing_all_degraded_total{target}` marks the emergency health
 selection, and `omi_stt_cost_routing_observations_total{target,outcome,reason}` separates
-`success|provider_failure|censored`. No UID/content labels are added.
+`success|provider_failure|censored`. The paired
+`omi_stt_cost_routing_settlements_total{target,outcome,reason,path}` records the
+serving seam's expected evidence; `omi_stt_cost_routing_reconciliation_errors_total`
+counts missing acknowledgements or exceptions, and
+`omi_stt_cost_routing_votes_total{target,scope,result}` explains gate admission.
+`omi_stt_cost_routing_canary_outcome_total{arm,outcome}` captures the actual router
+allocation before initialization, including failed/fail-open sessions. No
+UID/content labels are added.
 Transition counters count successful CAS writers, separately for
 `scope=global|language`; Redis-down local transitions remain logs only.
 All target/event/scope counter series are initialised at zero before traffic,

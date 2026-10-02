@@ -138,7 +138,9 @@ def transition(
     if state.stage == 0:
         return state
     if state.stage == 100 and witness is not None:
-        window = int(now // 300)
+        # An older async writer can win CAS after a newer window was opened.
+        # Charge it to the current budget; never rewind and replenish a window.
+        window = max(state.healthy_window, int(now // 300))
         users = dict(state.healthy_users) if window == state.healthy_window else {}
         count = users.get(witness, 0)
         # Drop evidence symmetrically: reconnects cannot supply either failures

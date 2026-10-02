@@ -317,3 +317,12 @@ def test_missing_observation_ack_is_a_reconciliation_error(monkeypatch):
     leg.finish()
     leg.finish()
     assert COST_RECONCILIATION_ERRORS._value.get() == before + 1
+
+
+def test_out_of_order_writer_cannot_rewind_the_healthy_user_budget():
+    state = GateState()
+    for _ in range(3):
+        state = transition(state, True, 1300, witness='a' * 16)
+    for now in (1000, 1300) * 23:
+        assert transition(state, True, now, witness='a' * 16) == state
+    assert state.n == 3 and state.healthy_window == 4
