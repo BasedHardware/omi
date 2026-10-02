@@ -2,7 +2,8 @@
 
 from datetime import datetime, timedelta, timezone
 
-from google.api_core.exceptions import Aborted, ServiceUnavailable
+from google.api_core.exceptions import Aborted, ServiceUnavailable, InvalidArgument
+import pytest
 from google.cloud import firestore
 
 from database import sync_ledger, sync_jobs
@@ -82,16 +83,29 @@ def test_retry_strikes_are_owner_fenced_and_transient_releases_do_not_increment(
     assert ref.data['repeat_failure_count'] == 1
 
 
-def test_repeated_identical_persistence_fingerprint_pauses_only_its_content():
-    failing = _Ref()
-    healthy = _Ref()
+@pytest.mark.parametrize(
+    'fingerprint',
+    [
+        'persistence:ValueError',
+        'persistence:provenance_mismatch',
+        'persistence:redirect_cycle',
+        'persistence:document_size_limit',
+        'persistence:deterministic',
+    ],
+)
+def test_deterministic_failure_quarantines_only_its_content_without_ttl(fingerprint):
+    failing, healthy = _Ref(), _Ref()
     start = datetime(2026, 9, 27, tzinfo=timezone.utc)
-    for index in range(3):
-        now = start + timedelta(minutes=index)
-        assert _claim(failing, f'bad-{index}', now)['outcome'] == 'owned'
-        assert _fail(failing, f'bad-{index}', now, 'persistent_persistence', 'persistence:ValueError')
-    assert _claim(failing, 'bad-3', start + timedelta(minutes=3))['outcome'] == 'capped'
-    assert _claim(healthy, 'good-0', start + timedelta(minutes=3))['outcome'] == 'owned'
+    assert _claim(failing, 'bad', start)['outcome'] == 'owned'
+    failing.data['partial_result'] = {'new_memories': ['retained']}
+    assert _fail(failing, 'bad', start, 'persistent_persistence', fingerprint)
+    assert failing.data['status'] == 'retryable'
+    assert 'expires_at' not in failing.data
+    assert failing.data['partial_result'] == {'new_memories': ['retained']}
+    for days in (0, 1, 46, 365):
+        capped = _claim(failing, 'retry', start + timedelta(days=days))
+        assert capped['outcome'] == 'capped' and capped['quarantined']
+    assert _claim(healthy, 'good', start)['outcome'] == 'owned'
 
 
 def test_polling_release_records_strike_once_for_the_terminal_owner():
@@ -132,30 +146,45 @@ def test_only_known_data_shape_persistence_errors_receive_fingerprints():
     assert _persistence_failure_fingerprint(TimeoutError('timeout'), 'persistence') is None
 
 
-def test_whole_job_requires_the_same_persistence_fingerprint_on_every_failed_segment():
+def test_partial_and_mixed_failures_cannot_rearm_deterministic_work():
     fingerprint = 'persistence:ValueError'
     assert _whole_job_persistence_fingerprint(2, 2, [fingerprint, fingerprint]) == fingerprint
-    assert _whole_job_persistence_fingerprint(2, 2, [fingerprint, 'persistence:TypeError']) is None
-    assert _whole_job_persistence_fingerprint(2, 3, [fingerprint, fingerprint]) is None
-    assert _whole_job_persistence_fingerprint(2, 2, [fingerprint]) is None
+    assert (
+        _whole_job_persistence_fingerprint(2, 2, [fingerprint, 'persistence:TypeError']) == 'persistence:deterministic'
+    )
+    assert _whole_job_persistence_fingerprint(2, 3, [fingerprint, fingerprint]) == fingerprint
+    assert _whole_job_persistence_fingerprint(2, 2, [fingerprint]) == fingerprint
+    assert _whole_job_persistence_fingerprint(2, 2, []) is None
+    result = {'repeat_failure_key': 'persistent_persistence', 'repeat_failure_fingerprint': fingerprint}
+    assert _terminal_repeat_failure_kwargs({'status': 'partial_failure', 'result': result}) == {
+        'failure_key': 'persistent_persistence',
+        'failure_fingerprint': fingerprint,
+    }
 
 
-def test_different_or_unclassified_persistence_failures_reset_the_streak():
+def test_unknown_persistence_error_does_not_quarantine():
     ref = _Ref()
     start = datetime(2026, 9, 27, tzinfo=timezone.utc)
-    fingerprints = ['persistence:ValueError', 'persistence:TypeError', 'persistence:ValueError']
-    for index, fingerprint in enumerate(fingerprints):
-        now = start + timedelta(minutes=index)
-        assert _claim(ref, f'job-{index}', now)['outcome'] == 'owned'
-        assert _fail(ref, f'job-{index}', now, 'persistent_persistence', fingerprint)
-    assert ref.data['repeat_failure_count'] == 1
-    assert ref.data['repeat_failure_fingerprint'] == 'persistence:ValueError'
-    assert _claim(ref, 'unknown', start + timedelta(minutes=3))['outcome'] == 'owned'
-    assert _fail(ref, 'unknown', start + timedelta(minutes=3), 'persistent_persistence', 'persistence:OtherException')
-    assert 'repeat_failure_count' not in ref.data
-    assert _claim(ref, 'conflict', start + timedelta(minutes=4))['outcome'] == 'owned'
-    assert _fail(ref, 'conflict', start + timedelta(minutes=4), None)
-    assert 'repeat_failure_count' not in ref.data
+    assert _claim(ref, 'job', start)['outcome'] == 'owned'
+    assert _fail(ref, 'job', start, 'persistent_persistence', 'persistence:OtherException')
+    assert 'persistence_quarantined' not in ref.data
+    assert _claim(ref, 'retry', start)['outcome'] == 'owned'
+
+
+@pytest.mark.parametrize('subtype', ['provenance_mismatch', 'redirect_cycle'])
+def test_structural_assignment_conflicts_are_quarantined_by_subtype(subtype):
+    assert (
+        _persistence_failure_fingerprint(SyncAssignmentConflict('private detail', subtype=subtype), 'persistence')
+        == f'persistence:{subtype}'
+    )
+
+
+def test_only_recognized_document_size_invalid_argument_is_quarantined():
+    size = InvalidArgument('Document private-id exceeds the maximum allowed size')
+    assert _persistence_failure_fingerprint(size, 'persistence') == 'persistence:document_size_limit'
+    for error in (InvalidArgument('transaction has expired'), InvalidArgument('unknown private detail')):
+        assert _persistence_failure_fingerprint(error, 'persistence') is None
+    assert _persistence_failure_fingerprint(size, 'provider_call') is None
 
 
 def test_whole_job_provider_invalid_input_reaches_existing_app_terminal_reason():

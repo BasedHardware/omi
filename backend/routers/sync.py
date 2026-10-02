@@ -1133,10 +1133,11 @@ async def sync_local_files_v2(
                 backfill_slot_acquired = False
             failure_key = claim.get('failure_key')
             logger.warning(
-                'event=sync_repeat_failure_cap outcome=paused lane=%s failure_key=%s device_hash=%s',
+                'event=sync_repeat_failure_cap outcome=paused lane=%s failure_key=%s device_hash=%s quarantined=%s',
                 lane_decision.lane.value,
                 failure_key if failure_key in {'invalid_audio', 'persistent_persistence'} else 'unknown',
                 client_device_context.client_device_id[-8:] if client_device_context.client_device_id else 'none',
+                str(claim.get('quarantined') is True).lower(),
             )
             return JSONResponse(
                 status_code=202,
@@ -1557,9 +1558,9 @@ def _sync_finalization_retrying() -> HTTPException:
 
 def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
     """Carry a terminal job's strike through racing poll/task claim cleanup."""
-    if job.get('status') != 'failed':
+    if job.get('status') not in {'failed', 'partial_failure'}:
         return {}
-    if job.get('reason_code') == 'sync_invalid_audio':
+    if job.get('status') == 'failed' and job.get('reason_code') == 'sync_invalid_audio':
         return {'failure_key': 'invalid_audio'}
     result = job.get('result')
     if isinstance(result, dict) and result.get('repeat_failure_key') == 'persistent_persistence':

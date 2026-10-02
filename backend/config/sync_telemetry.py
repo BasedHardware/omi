@@ -97,8 +97,9 @@ SYNC_EXCEPTION_CLASSES = frozenset(
 )
 
 # Only these bounded, data-shape exception types can identify a repeatable
-# persistence failure. Transport, contention, assignment conflicts, and
-# catch-all exception classes must never count against content.
+# persistence failure. Transport, contention, and catch-all exception classes
+# must never count against content. Assignment conflicts are classified by
+# subtype separately, never by the exception class alone.
 SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS = frozenset(
     {
         'AssertionError',
@@ -111,6 +112,17 @@ SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS = frozenset(
         'ValueError',
     }
 )
+
+# These are structural, not retryable transport failures. Keep the generic
+# mixed-batch token bounded too; per-segment diagnostics retain the cause.
+SYNC_STRUCTURAL_PERSISTENCE_FINGERPRINTS = frozenset(
+    {
+        'persistence:provenance_mismatch',
+        'persistence:redirect_cycle',
+        'persistence:document_size_limit',
+        'persistence:deterministic',
+    }
+) | frozenset(f'persistence:{name}' for name in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS)
 
 
 def bounded_sync_phase(phase: object) -> str:

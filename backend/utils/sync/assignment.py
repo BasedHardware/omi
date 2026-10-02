@@ -6,9 +6,12 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 """
 
 from copy import deepcopy
+import logging
 from typing import TYPE_CHECKING, Callable, Optional
 
 from config.sync_lineage import sync_lineage_resolve_active_for
+from config.sync_assignment_recovery import sync_assignment_recovery_enabled
+from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
@@ -24,6 +27,18 @@ from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 if TYPE_CHECKING:
     from google.cloud.firestore_v1 import transaction as firestore_transaction
     from google.cloud.firestore_v1.document import DocumentReference
+
+logger = logging.getLogger(__name__)
+
+
+def capture_mismatch(left: dict, right: dict) -> str:
+    """One of eight fixed tokens; never expose source or device values."""
+    fields = [
+        name for key, name in (('source', 'source'), ('client_device_id', 'device')) if left.get(key) != right.get(key)
+    ]
+    if bool(left.get('is_locked')) != bool(right.get('is_locked')) or left.get('is_locked'):
+        fields.append('lock')
+    return '_'.join(fields) or 'none'
 
 
 def needs_fragment_review(segments: list[dict]) -> bool:
@@ -71,7 +86,8 @@ def auto_mergeable(row: dict) -> bool:
     remain intact rather than exposing private donors or orphaning user edits.
     """
     return bool(row.get('sync_content_revision')) and not (
-        (row.get('smart_merge') or {}).get('role') == 'survivor'
+        row.get('is_locked')
+        or (row.get('smart_merge') or {}).get('role') == 'survivor'
         or row.get('sync_live_target')
         or row.get('has_photos')
         or row.get('user_title')
@@ -141,12 +157,37 @@ def assign_in_transaction(
     if target and not target.get('deleted'):
         # Explicit capture proof is authoritative even before live STT produced
         # words. Only timestamp hints must exclude live-owned rows.
-        if not compatible_capture(target, incoming):
-            raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
+        mismatch = capture_mismatch(target, incoming)
+        if mismatch != 'none':
+            recover = sync_assignment_recovery_enabled()
+            logger.warning(
+                'event=sync_assignment_target outcome=%s mismatch=%s',
+                'temporal_recovery' if recover else 'rejected',
+                mismatch,
+            )
+            if not recover:
+                raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
+            record_fallback(
+                component='sync_dispatch',
+                from_mode='explicit_target',
+                to_mode='temporal_assignment',
+                reason='policy',
+                outcome='degraded',
+                log=logger,
+            )
+            target_id, target = None, None
     else:
         # Missing/tombstoned explicit targets fall back to temporal assignment.
         # The independent retry-lineage check above still fences user deletion.
         target_id, target = None, None
+    if own_anchor and capture_mismatch(own_anchor, incoming) != 'none':
+        logger.warning(
+            'event=sync_assignment_target outcome=anchor_rejected mismatch=%s',
+            capture_mismatch(own_anchor, incoming),
+        )
+        # A retry key can itself have become locked or changed provenance. Do
+        # not overwrite it with a new row or silently acknowledge new speech.
+        raise SyncAssignmentConflict('sync anchor provenance mismatch', subtype='provenance_mismatch')
     if own_anchor and not auto_mergeable(own_anchor) and own_id != target_id:
         raise SyncAssignmentSuperseded('sync anchor is user managed')
 

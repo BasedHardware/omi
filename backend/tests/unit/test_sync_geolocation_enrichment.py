@@ -213,3 +213,77 @@ async def test_coordinator_without_geolocation_never_attempts_a_geocode(pipeline
     assert resolver_calls == [None]  # called exactly once, with None
     assert geocode_attempts == []  # zero geocode attempts
     assert captured == [None]  # segments still receive no geolocation
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cached', [False, True])
+@pytest.mark.parametrize('fenced', [False, True])
+async def test_deterministic_segment_guard_skips_stt_across_batches_and_retains_siblings(pipeline, cached, fenced):
+    _prepare(pipeline, ['/tmp/a.wav', '/tmp/b.wav'])
+    pipeline.get_sync_content_partial_result = MagicMock(return_value={})
+    pipeline.get_processed_sync_segment_ids = MagicMock(return_value=set())
+    pipeline.compute_sync_segment_id = lambda uid, path: Path(path).stem
+    fingerprint = 'persistence:document_size_limit'
+    pipeline.get_sync_segment_quarantine = MagicMock(
+        side_effect=lambda uid, segment: fingerprint if cached and segment == 'a' else None
+    )
+    pipeline.quarantine_sync_segment = MagicMock(return_value=True)
+    pipeline._finalize_sync_job_for_run = MagicMock()
+    pipeline.release_sync_content_claim = MagicMock(return_value=True)
+    pipeline.release_sync_content_claim_after_job_retired = MagicMock(return_value=True)
+    pipeline.mark_sync_content_completed = MagicMock()
+    pipeline._record_sync_job_outcome_async = _noop_job_metric
+    called = []
+
+    def process(path, uid, response, lock, errors, *args, **kwargs):
+        called.append(path)
+        kwargs.get('deferred_outcome', {}).update(
+            outcome=(
+                pipeline.TranscriptionOutcome.UPSTREAM_ERROR
+                if path.endswith('a.wav')
+                else pipeline.TranscriptionOutcome.SUCCESS
+            ),
+            phase='persistence',
+            provider='unknown',
+            model='unknown',
+            retryable=False,
+        )
+        # The real process_segment releases the assignment slot in finally.
+        args[5].complete(path)
+        if path.endswith('a.wav'):
+            errors.append('sync_persistence_failed')
+            kwargs['deferred_outcome'].update(
+                repeat_failure_key='persistent_persistence',
+                repeat_failure_fingerprint=fingerprint,
+            )
+            return False
+        response['new_memories'].add('synthetic-sibling')
+        return True
+
+    pipeline.process_segment = process
+    await pipeline._run_full_pipeline_background_async(
+        'job-quarantine',
+        'uid',
+        ['/tmp/a.opus'],
+        'omi',
+        False,
+        '/tmp/job-quarantine',
+        content_id='different-batch' if cached else 'first-batch',
+        content_run_bound=True,
+        ledger_fence_active=fenced,
+    )
+    assert ('/tmp/a.wav' in called) is (not cached)
+    assert '/tmp/b.wav' in called
+    assert pipeline.quarantine_sync_segment.call_count == (0 if cached else 1)
+    pipeline.mark_sync_content_completed.assert_not_called()
+    result = pipeline._finalize_sync_job_for_run.call_args.args[2]
+    assert result['failed_segments'] == 1 and result['total_segments'] == 2
+    assert result['repeat_failure_fingerprint'] == fingerprint
+    assert result['provider'] == result['model'] == 'unknown'
+    assert result['new_memories'] == ['synthetic-sibling']
+    release = pipeline.release_sync_content_claim_after_job_retired if fenced else pipeline.release_sync_content_claim
+    assert release.call_args.kwargs['failure_fingerprint'] == fingerprint
+
+
+async def _noop_job_metric(*args, **kwargs):
+    pass

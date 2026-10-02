@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, cast
 
 from google.cloud import firestore
 
-from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
+from config.sync_telemetry import SYNC_STRUCTURAL_PERSISTENCE_FINGERPRINTS
 from database._client import get_firestore_client
 from utils.sync import stage as sync_stage
 
@@ -24,14 +24,14 @@ _INVALID_AUDIO_FINGERPRINT = 'decode:sync_invalid_audio'
 def _validated_failure_fingerprint(key: str | None, fingerprint: str | None) -> str | None:
     if key == 'invalid_audio':
         return _INVALID_AUDIO_FINGERPRINT
-    if key == 'persistent_persistence' and fingerprint in {
-        f'persistence:{subtype}' for subtype in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
-    }:
+    if key == 'persistent_persistence' and fingerprint in SYNC_STRUCTURAL_PERSISTENCE_FINGERPRINTS:
         return fingerprint
     return None
 
 
 def _repeat_failure_capped(existing: Dict[str, Any], now: datetime) -> bool:
+    if existing.get('persistence_quarantined') is True:
+        return True
     until = existing.get('repeat_failure_pause_until')
     return isinstance(until, datetime) and until > now
 
@@ -40,6 +40,16 @@ def _repeat_failure_updates(
     existing: Dict[str, Any], key: str | None, fingerprint: str | None, now: datetime
 ) -> Dict[str, Any]:
     fingerprint = _validated_failure_fingerprint(key, fingerprint)
+    if key == 'persistent_persistence' and fingerprint:
+        # The same write cannot heal by paying for STT again. Retain checkpoints
+        # and the retryable state; only an explicit repair may release this row.
+        # No TTL: expiring the guard would restart the deterministic loop.
+        return {
+            'persistence_quarantined': True,
+            'repeat_failure_key': key,
+            'repeat_failure_fingerprint': fingerprint,
+            'expires_at': firestore.DELETE_FIELD,
+        }
     if fingerprint is None:
         return {
             'repeat_failure_key': firestore.DELETE_FIELD,
@@ -94,6 +104,56 @@ class SyncContentRunBinding:
 def _ledger_ref(client: Any, uid: str, content_id: str) -> Any:
     collection = sync_stage.collection_name('sync_content_ledger')
     return client.collection('users').document(uid).collection(collection).document(content_id)
+
+
+def get_sync_segment_quarantine(uid: str, segment_id: str, *, firestore_client: Any = None) -> str | None:
+    """Reuse the ledger namespace for metadata-only guards across batch changes."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    row = _ledger_ref(client, uid, f'quarantine-{segment_id}').get().to_dict() or {}
+    return _validated_failure_fingerprint('persistent_persistence', row.get('repeat_failure_fingerprint'))
+
+
+@firestore.transactional
+def _quarantine_segment_transaction(
+    transaction: Any,
+    owner_ref: Any,
+    segment_ref: Any,
+    job_id: str,
+    fingerprint: str,
+    run_token: str | None,
+    run_epoch: int | None,
+) -> bool:
+    owner = owner_ref.get(transaction=transaction).to_dict() or {}
+    if owner.get('status') != 'processing' or not _ledger_owner_matches(owner, job_id, run_token, run_epoch):
+        return False
+    transaction.set(segment_ref, {'status': 'quarantined_segment', 'repeat_failure_fingerprint': fingerprint})
+    return True
+
+
+def quarantine_sync_segment(
+    uid: str,
+    content_id: str,
+    segment_id: str,
+    job_id: str,
+    fingerprint: str,
+    *,
+    run_token: str | None = None,
+    run_epoch: int | None = None,
+    firestore_client: Any = None,
+) -> bool:
+    """Fence a permanent failure to its owner; never mark the audio completed."""
+    if fingerprint not in SYNC_STRUCTURAL_PERSISTENCE_FINGERPRINTS:
+        raise ValueError('unclassified persistence quarantine')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return _quarantine_segment_transaction(
+        client.transaction(),
+        _ledger_ref(client, uid, content_id),
+        _ledger_ref(client, uid, f'quarantine-{segment_id}'),
+        job_id,
+        fingerprint,
+        run_token,
+        run_epoch,
+    )
 
 
 def _ledger_owner_matches(
@@ -197,10 +257,11 @@ def _claim_transaction(transaction: Any, ref: Any, job_id: str, lane: str, now: 
         )
         return {'outcome': 'owned'}
     if _repeat_failure_capped(existing, now):
-        pause_until = cast(datetime, existing['repeat_failure_pause_until'])
+        pause_until = cast(datetime, existing.get('repeat_failure_pause_until', now + REPEAT_FAILURE_PAUSE))
         return {
             'outcome': 'capped',
             'failure_key': existing.get('repeat_failure_key'),
+            'quarantined': existing.get('persistence_quarantined') is True,
             'retry_after': max(1, min(86400, int((pause_until - now).total_seconds()) + 1)),
         }
     if existing.get('job_id') == job_id:

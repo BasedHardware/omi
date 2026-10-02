@@ -2099,6 +2099,24 @@ stubs use ordinary temporal assignment; stubs remain untouched. Explicit targets
 with real live transcript or photo content retain live attachment and identity.
 Source, device and lock state isolate components; unknown device is its own partition.
 
+`SYNC_ASSIGNMENT_RECOVERY_ENABLED` defaults on (unknown/blank values disable it).
+An incompatible or locked explicit target falls back to strict-compatible temporal
+assignment; locked rows never accept appends. The target remains untouched. This
+can retain speech already present in an incompatible live row as a second conversation:
+dedupe is scoped to compatible selected rows, not cross-device transcript similarity.
+The flag is pinned on in both runtime overlays for every main.py service.
+
+Known deterministic persistence failures (provenance, redirect cycles, document size,
+and approved data-shape exceptions) quarantine the content without TTL or automatic
+redrive, including partial failures. The existing failed-job response retains local
+WAL audio and never reports completion. Successful segment checkpoints remain.
+Repair requires explicitly clearing the quarantine after correcting the cause;
+turning the recovery flag off does not re-arm paid retries. Unknown Firestore 400s,
+expired transactions and transport failures are not treated as size-limit errors.
+`sync_assignment_target` reports bounded `mismatch` tokens; `sync_persistence_exception`
+reports `firestore_error`. Persistence failures use provider/model `unknown` and
+`sync_persistence_failed`, preserving STT provider attribution for STT failures only.
+
 `utils/conversation_continuity.py` owns the shared predicate. The remaining policy
 input difference is that realtime can configure its timeout per session, while WALs
 do not carry this setting and sync uses the default. Job leases, persistence fences,
