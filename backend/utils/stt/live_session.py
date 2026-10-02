@@ -6,6 +6,8 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
+from starlette.websockets import WebSocketState
+
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
@@ -421,6 +423,8 @@ class LiveLegSocket(STTSocket):
             getattr(getattr(session.receiver.host, 'request', None), 'uid', None),
             self._cost_generations,
             health.record_session,
+            client_has_left=self._client_has_left,
+            text_seen=lambda: self._cost_text_seen,
         )
         self._cost_text_seen = False
         self._target_death_recorded = False
@@ -533,7 +537,12 @@ class LiveLegSocket(STTSocket):
     def is_connection_dead(self) -> bool:
         # Observing liveness never settles evidence. Only the serving owner
         # knows whether this death caused failover or was found during teardown.
-        return self._dead or self.raw.is_connection_dead
+        raw_dead = self.raw.is_connection_dead
+        if raw_dead:
+            self._latch_failure()
+        elif self._dead and self._terminal_reason is not None:
+            self.leg_outcome.observe_death()
+        return self._dead or raw_dead
 
     def record_target_death(self, reason: str) -> bool:
         target = self._routing_target_entry
@@ -823,6 +832,7 @@ class LiveLegSocket(STTSocket):
     def _latch_failure(self, *, reason: str | None = None) -> None:
         if self._terminal_reason is None:
             self._terminal_reason = normalize_live_stt_reason(self.typed_death_reason, self.death_reason, reason)
+        self.leg_outcome.observe_death()
 
     def _finish_transport(self) -> None:
         self._closing_for_health = True
@@ -840,12 +850,27 @@ class LiveLegSocket(STTSocket):
                 self._health_close()
             self._release_open_gauge()
 
+    def _client_has_left(self) -> bool:
+        host = self.session.receiver.host
+        state = getattr(host, 'state', None)
+        if getattr(state, 'active', None) is False:
+            return True
+        shutdown = getattr(state, 'shutdown_event', None)
+        if shutdown is not None and shutdown.is_set() is True:
+            return True
+        client = getattr(getattr(host, 'request', None), 'websocket', None)
+        return (
+            getattr(client, 'client_state', None) == WebSocketState.DISCONNECTED
+            or getattr(client, 'application_state', None) == WebSocketState.DISCONNECTED
+        )
+
     def mark_owner_teardown(self) -> None:
         if self.leg_outcome.owner_closing:
             return
         # Snapshot the already-published death latch before the owner fence or
         # any close/await. Provider callbacks run on this same serving loop.
-        # A pre-existing death stays evidence even if the 1s monitor lost the race.
+        # A pre-existing death stays evidence if the client is still eligible
+        # at the first claim, even if the 1s monitor lost the race.
         if not self.leg_outcome.claimed and self.is_connection_dead:
             self._latch_failure()
             settle_terminal_socket(self, self.service.value, self.normalized_death_reason)

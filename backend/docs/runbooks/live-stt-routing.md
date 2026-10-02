@@ -42,7 +42,7 @@ wrong classification, and neither proves Redis persistence. Redis drop counters 
 `omi_stt_cost_routing_votes_total{target,scope,result}` prove whether classified
 evidence reached shared state (`applied|user_cap|window_full|generation|stage`).
 
-State uses `omi:live-stt:cost-v6:<target>:<bounded-language>` and `all`. Do not
+State uses `omi:live-stt:cost-v7:<target>:<bounded-language>` and `all`. Do not
 reuse v5 evidence. At stage 100, one hashed user contributes at most three
 success/failure outcomes in a five-minute Redis-time window. Windows hold at
 most 2,048 ordinary fingerprints (above 1,500 at 10x 1,800 sessions/hour),
@@ -59,9 +59,9 @@ reconciliation. Trials retain their separate user votes, generation fences,
 of this fleet-wide. Shared snapshots refresh off connect, normally every five
 seconds, under a 75 ms deadline; local fallback retains known benches.
 
-The [architecture](../../utils/stt/ARCHITECTURE.md#serving-owned-health-evidence-cost-v6)
+The [architecture](../../utils/stt/ARCHITECTURE.md#serving-owned-health-evidence-cost-v7)
 has the taxonomy, registry and second-endpoint example, exact gate, and
-reproducible calibration. The gate stays 8%. In cost-v6 simulation, every
+reproducible calibration. The gate stays 8%. In cost-v7 simulation, every
 realistic-floor row has zero false benches in 400k sessions; 40%/60%/100%
 provider errors bench at median 20/13/8 and p95 48/21/8 sessions. At 62 sessions
 per five minutes that is about four minutes at the 40% p95, plus settlement
@@ -129,6 +129,38 @@ The last query includes legacy/PTT traffic and uses provider-family labels;
 endpoint-specific equality is checked by the paired-counter difference. For managed failure
 settlements, account labels map budget→quota and rejected-auth→auth. Connect
 settlements belong to `stt_selection`, terminal deaths to `stt_live_session`.
+
+Deaths are eligible at the first serving claim, not at a read-only liveness
+poll. Explicit client/application disconnect, inactive state or shutdown at
+that claim excludes the death and suppresses its fallback emission. A claim
+already made with a connected client remains valid after later departure.
+Existing text remains one success; otherwise the excluded leg settles as
+censored no-text. Repeated claims/close/validation cannot revive a settled leg.
+The backend cannot recover the ordering of an unclaimed raw death and client
+departure retrospectively.
+
+For a fixed accepted-socket cohort and bounded provider reasons:
+`provider_failure observations = settled nonterminal hops + connected terminal deaths`.
+Terminal deaths now also emit fallback to `unavailable`, so do not add their
+session-level terminal counter to the whole fallback total again. Connect-chain
+exhaustion remains a separate surface and can be zero for a serving terminal
+Soniox death. Excluded deaths have no provider-failure or hop emission; read:
+
+```promql
+sum by (target, reason, boundary) (increase(omi_stt_cost_routing_ignored_deaths_total{job="backend-listen-metrics"}[1h]))
+sum by (component, from_mode, to_mode, reason, outcome) (increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session"}[1h]))
+sum by (provider, outcome, phase) (increase(omi_live_stt_terminal_failures_total{job="backend-listen-metrics"}[1h]))
+sum(increase(omi_stt_chain_exhausted_total{job="backend-listen-metrics"}[1h])) or vector(0)
+```
+
+The ignored counter covers a claimed death excluded by lifecycle, not every
+late transport-close symptom. Its labels are registered target (<=16), bounded
+reason vocabulary and boundary (`client_gone`/`owner_teardown`), preinitialized.
+Require Modulate provider-failure counts to match the managed serving cohort
+of selection plus live/terminal fallback emissions per reason before `on`.
+The paired counters alone can agree while both classify client churn wrongly.
+New `cost-v7` state discards v5/v6 post-client failures and strikes; it does not
+migrate or backfill those samples. The sequential gate and vote budgets stay intact.
 
 Independent lifecycle oracle: the chain counts `opened` when handing off a
 connected managed leg (including same-provider replacement), transport release

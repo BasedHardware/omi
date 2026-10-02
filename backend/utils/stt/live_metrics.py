@@ -134,6 +134,11 @@ COST_EVENTS = Counter(
 COST_ALL_DEGRADED = Counter(
     'omi_stt_cost_routing_all_degraded_total', 'Selections with every eligible target unhealthy', ['target']
 )
+COST_IGNORED_DEATHS = Counter(
+    'omi_stt_cost_routing_ignored_deaths_total',
+    'Claimed socket deaths excluded by client departure or owner teardown',
+    ['target', 'reason', 'boundary'],
+)
 COST_OBSERVATIONS = Counter(
     'omi_stt_cost_routing_observations_total', 'Classified cost health outcomes', ['target', 'outcome', 'reason']
 )

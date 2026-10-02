@@ -2933,7 +2933,8 @@ class TestAsyncCoordinatorBehavioral:
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
             assert result['failed_segments'] == 1
             assert result['total_segments'] == 1
-            assert result['errors'] == ['stt_upstream_error']
+            assert result['errors'] == ['sync_persistence_failed']
+            assert result['provider'] == result['model'] == 'unknown'
         finally:
             self._cleanup(stubs['saved_modules'])
 

@@ -1307,7 +1307,7 @@ async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(mon
         assert base.emitted == []
         _fire_first_text_deadline_at_budget(previous.raw, clock)
         assert previous.raw.death_reason == 'first_text_deadline'
-        assert previous.raw.first_text_diagnostics.seconds_since_deadline_speech == 12
+        assert previous.raw.first_text_diagnostics.seconds_since_deadline_speech == pytest.approx(12, abs=1e-9)
         assert await actual._failover_stt_socket()
         assert len(callbacks) == 1
     await actual._drain_stt_sockets()
