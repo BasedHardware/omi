@@ -17,7 +17,21 @@ SDK_DIR = os.path.abspath(os.path.join(APP_DIR, "..", "omi-plugin-sdk", "src"))
 if os.path.exists(SDK_DIR) and SDK_DIR not in sys.path:
     sys.path.insert(0, SDK_DIR)
 
-from fastapi import HTTPException
+try:
+    from fastapi import HTTPException
+except ImportError:
+    from types import ModuleType
+
+    class HTTPException(Exception):
+        def __init__(self, status_code=None, detail=None, **kwargs):
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    _fastapi_stub = ModuleType("fastapi")
+    _fastapi_stub.HTTPException = HTTPException
+    _fastapi_stub.Request = object
+    sys.modules["fastapi"] = _fastapi_stub
 
 import ms365_disconnect_auth as auth
 
