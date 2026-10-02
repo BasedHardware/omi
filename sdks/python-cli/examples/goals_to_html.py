@@ -7,6 +7,7 @@ import argparse
 from datetime import datetime, timezone
 import html
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -178,27 +179,72 @@ def text(value: Any) -> str:
 
 
 def parse_float(value: Any) -> Optional[float]:
-    """Parse a float value safely, rejecting non-finite numbers."""
+    """Parse a float value safely, rejecting non-finite numbers and handling overflow."""
     if value is None:
         return None
     try:
         val = float(value)
-        import math
         if not math.isfinite(val):
             return None
         return val
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         return None
+
+
+def normalize_bool_flag(value: Any) -> Optional[bool]:
+    """Normalize boolean flags, integer flags, and string aliases safely."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    s = str(value).strip().lower()
+    if s in ("true", "1", "yes"):
+        return True
+    if s in ("false", "0", "no"):
+        return False
+    return None
 
 
 def derive_status(goal: Dict[str, Any]) -> str:
     """Derive status strictly: inactive first, then completed/achieved, then active."""
-    is_active = goal.get("is_active")
-    if is_active is False or is_active == 0 or str(is_active).strip().lower() in ("false", "0", "no"):
+    active_flag = normalize_bool_flag(goal.get("is_active"))
+    if active_flag is False:
         return "inactive"
-    is_achieved = goal.get("is_achieved") or goal.get("is_completed")
-    if is_achieved is True or is_achieved == 1 or str(is_achieved).strip().lower() in ("true", "1", "yes"):
+
+    achieved_flag = normalize_bool_flag(goal.get("is_achieved"))
+    completed_flag = normalize_bool_flag(goal.get("is_completed"))
+    if achieved_flag is True or completed_flag is True:
         return "completed"
+    if achieved_flag is False or completed_flag is False:
+        return "active"
+
+    goal_type = str(goal.get("goal_type") or "").strip().lower()
+    if goal_type == "boolean":
+        c = parse_float(goal.get("current_value"))
+        if c is not None and c >= 1.0:
+            return "completed"
+        return "active"
+
+    curr = parse_float(goal.get("current_value"))
+    target = parse_float(goal.get("target_value"))
+    min_v = parse_float(goal.get("min_value"))
+    max_v = parse_float(goal.get("max_value"))
+    base = min_v if min_v is not None else 0.0
+    denominator = None
+    if target is not None and target != base:
+        denominator = target - base
+    elif max_v is not None and max_v != base:
+        denominator = max_v - base
+
+    if curr is not None and denominator is not None and denominator > 0:
+        if (curr - base) >= denominator:
+            return "completed"
+
+    if target == 0.0 and curr == 0.0:
+        return "completed"
+
     return "active"
 
 
@@ -210,9 +256,6 @@ def calc_progress(goal: Dict[str, Any]) -> Tuple[float, str, bool]:
     goal_type = str(goal.get("goal_type") or "").strip().lower()
     if goal_type == "boolean":
         if is_done:
-            return 1.0, "100.0%", True
-        c = parse_float(goal.get("current_value"))
-        if c is not None and c >= 1.0:
             return 1.0, "100.0%", True
         return 0.0, "0.0%", False
 
@@ -239,12 +282,11 @@ def calc_progress(goal: Dict[str, Any]) -> Tuple[float, str, bool]:
         ratio = (curr - base) / denominator
         clamped = max(0.0, min(1.0, ratio))
         disp = f"{ratio * 100.0:.1f}%"
-        completed = is_done or (ratio >= 1.0)
-        return clamped, disp, completed
+        return clamped, disp, is_done
 
     # Fallback when target == base or target is 0
     if target == 0.0 and curr == 0.0:
-        return 1.0, "100.0%", True
+        return 1.0, "100.0%", is_done
     if is_done:
         return 1.0, "100.0%", True
     return 0.0, "—", False
