@@ -309,7 +309,7 @@ existing bench. A hard outage's wall time depends on completed speech-session
 volume: eight failures at 62 sessions/5 minutes take about 39 seconds at full
 traffic or 155 seconds at 25%, plus outcome and cache delays.
 
-The v5 gate measures provider-path availability, separate from transcript/audio
+The v6 gate measures provider-path availability, separate from transcript/audio
 quality. `live_signal.provider_observation` classifies one outcome per leg:
 
 - Completed text is a non-failure even without VAD speech evidence. Actual
@@ -328,7 +328,7 @@ quality. `live_signal.provider_observation` classifies one outcome per leg:
   nor denominator, and they cannot advance a trial. Existing leg no-text and
   conversation transcript counters remain diagnostic and unchanged in shadow.
 
-`live_reason.normalize_live_stt_reason` owns the closed 27-token vocabulary
+`live_reason.normalize_live_stt_reason` owns the closed 28-token vocabulary
 used by both cost observations and source-leg fallback metrics. The serving leg
 latches the first bounded cause: socket-owned typed reason, bounded raw socket
 reason, then the send/monitor symptom. Unknown/free-text transport death is
@@ -337,6 +337,8 @@ provider evidence; explicit window/session/account causes are censored.
 Provider and window sockets publish cause metadata before their death latch.
 A failed hop keeps its source reason even when its successor rejects the
 connection; that rejection determines settlement outcome, not source attribution.
+This includes selection hops: accepted connect-validation deaths retain their
+socket-owned reason instead of a generic serving-check rejection reason.
 Observation labels are target/outcome/reason, never raw diagnostic messages.
 Accepted deaths rejected by connect-time validation share an accounting receipt
 with session completion: one counter and one sample per local/Redis scope. A
@@ -347,8 +349,13 @@ No-text deadlines no longer seal health evidence early. Completed text waits
 until close; later attributable death therefore wins, once. Intentional client
 teardown is censored; transport symptoms first observed after owner close do
 not become serving failures. Plain no-text still requires a one-second VAD
-speech sample. The v5 namespace is retained: previously missed observations
-are added, with no reinterpretation of stored failure/success outcomes. A deadline-only window failover is not a hard failure,
+speech sample. New death evidence requires a connected, active client at first
+observation and no owner-teardown fence. Explicit disconnect, shutdown or owner
+teardown suppresses an unobserved death, even if the raw socket was already dead.
+The pre-owner-close poll still records an already-dead socket while the client
+is connected. Previously recorded connected-client deaths are retained. A suppressed receipt
+prevents fresh connect validation from undoing this fence. Actual text already
+delivered still counts once as success when a later death is ignored. The bounded ignored-death counter exposes target/reason/boundary without changing gate evidence. A deadline-only window failover is not a hard failure,
 regardless of its successor: aggregate data has no successor/session join,
 and adding a cross-leg adjudication is outside this calibration. This loses
 automatic gate detection of a recognizer that connects but silently returns
@@ -357,7 +364,7 @@ The prior 5–7% VAD/no-word floor must not become provider-error evidence.
 
 At independent 5%, 7% and 10% no-text floors with zero provider errors, each of
 20 seeded 20,000-session replays observed **0 false benches / 400,000 sessions**.
-For this clean v5 state and correctly classified zero-error condition, the
+For this clean v6 state and correctly classified zero-error condition, the
 false-bench probability is exactly zero: censored outcomes do nothing and
 successful outcomes cannot increase a CUSUM score. This is a conditional
 classification guarantee, not a lifetime guarantee when real errors exist.
@@ -435,14 +442,15 @@ Local breakers are omitted from the replay, so their additional protection
 is not credited. Other providers' failures are outside this trial budget.
 
 `live_cost_health.py` stores target/global and target/language state in the
-`omi:live-stt:cost-v5` Redis namespace. Compare-and-set updates preserve shared
+`omi:live-stt:cost-v6` Redis namespace. Compare-and-set updates preserve shared
 counts and transitions across pods; leases serialize trial starts. Fleet
 bench deadlines and trial admission use Redis `TIME`, not pod wall clocks.
 Redis-down local deadlines use the last known server offset and translate once
 on recovery before CAS reconciliation. Tests cover opposite +/-60-second pod
 skews and a ten-minute Redis outage with sixty successful connection decisions.
-The v5 namespace prevents v3 audio/no-text and misclassified v4 evidence from
-being reinterpreted as provider errors. It starts fresh shadow history; warm it before raising on-percent.
+The v6 namespace also discards v5 post-client/owner failure evidence; the
+narrower serving boundary makes that historical sample population invalid.
+No old evidence or strikes are migrated. State shape and thresholds are unchanged. It starts fresh shadow history; warm it before raising on-percent.
 A background refresh uses the existing 75 ms deadline. Connect reads memory only. Redis
 faults use local evidence and retain known benches, then unknown health and
 configured cost order. A router exception restores today's configured chain. Local benches backed by failed Redis writes remain restrictive when Redis returns, and are reconciled
@@ -536,7 +544,7 @@ Stage/bench gauges are **pod views of global target state**, not a central
 fleet gauge. The old code published on selection/events only and refreshed
 only traffic-interest keys: an idle or Parakeet-ineligible pod could retain
 100 despite a remote trial. v3 already selected the global state, so the code
-provides no evidence of language-state leakage into that gauge. Every v5
+provides no evidence of language-state leakage into that gauge. Every v6
 background refresh watches all registry global keys and republishes gauges,
 even without eligible sessions. Unknown health is NaN, with
 `omi_stt_cost_routing_state_known{target}=0`, not a claimed healthy 100.

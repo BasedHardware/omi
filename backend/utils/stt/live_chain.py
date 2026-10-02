@@ -233,6 +233,7 @@ async def connect_configured_chain(
         return target.id != policy_primary if active and target is not None else active or service != primary_service
 
     prior_reason = 'circuit_open'
+    prior_recordable = True
     prior_capacity_subtype: str | None = None
     attempted = False
     primary_open = False
@@ -241,7 +242,7 @@ async def connect_configured_chain(
     capacity_resorts = []
 
     async def attempt(service: STTService, connect: Connect, target=None) -> tuple[STTSocket, STTService] | None:
-        nonlocal origin, prior_reason, prior_capacity_subtype, attempted
+        nonlocal origin, prior_reason, prior_capacity_subtype, attempted, prior_recordable
         attempted = True
         if active and backup(service, target):
             target_id = target.id if target is not None else DEFAULT_IDS.get(service.value, service.value)
@@ -310,6 +311,7 @@ async def connect_configured_chain(
             # Count the accepted socket once, but retain fresh connect evidence
             # if its session-generation fence excluded a newer gate epoch.
             observed = getattr(socket, 'cost_observation', None)
+            evidence_reason = getattr(socket, 'normalized_death_reason', reason) if observed is not None else reason
             health.record_connect_failure(
                 (
                     target.id
@@ -322,7 +324,7 @@ async def connect_configured_chain(
                 ),
                 bounded_language(routing_language),
                 routing_uid,
-                getattr(socket, 'normalized_death_reason', reason) if observed is not None else reason,
+                evidence_reason,
                 observed=observed,
             )
             if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
@@ -330,7 +332,7 @@ async def connect_configured_chain(
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
             # Preserve legacy omi_fallback_total quota/auth labels while the
             # health observation and connect counter retain precise tokens.
-            fallback_reason = fallback_metric_reason(reason)
+            fallback_reason = fallback_metric_reason(evidence_reason)
             capacity_subtype = getattr(error, 'capacity_subtype', None) if reason == 'capacity_full' else None
             if active and target is not None and not (reason == 'auth' or account_rejection):
                 failed_targets.add(target.id)
@@ -365,16 +367,17 @@ async def connect_configured_chain(
             LEG_ATTEMPTS.labels(
                 to_mode=service.value, outcome='rejected' if reason in EXPECTED_REJECTIONS else 'error'
             ).inc()
-            if backup(service, target):
+            if backup(service, target) and prior_recordable:
                 record_fallback(
                     component='stt_selection',
                     from_mode=origin,
                     to_mode=service.value,
-                    reason=fallback_reason,
+                    reason=prior_reason,
                     outcome='degraded',
-                    **capacity_fallback_kwargs(capacity_subtype),
+                    **capacity_fallback_kwargs(prior_capacity_subtype),
                 )
             origin, prior_reason, prior_capacity_subtype = service.value, fallback_reason, capacity_subtype
+            prior_recordable = observed is None or not observed.suppressed
             return None
         LEG_ATTEMPTS.labels(to_mode=service.value, outcome='success').inc()
         _note_connect_result(failed_provider=None)
@@ -384,7 +387,7 @@ async def connect_configured_chain(
             attach_health(on_success, on_close)
         else:
             on_success()
-        if backup(service, target) or primary_open:
+        if (backup(service, target) or primary_open) and prior_recordable:
             pending = PendingLiveFailover(
                 component='stt_selection',
                 from_mode=origin,
@@ -508,12 +511,13 @@ async def connect_configured_chain(
                     return result
                 break
     CHAIN_EXHAUSTED.inc()
-    record_fallback(
-        component='stt_selection',
-        from_mode=origin,
-        to_mode='unavailable',
-        reason=prior_reason,
-        outcome='exhausted',
-        **capacity_fallback_kwargs(prior_capacity_subtype),
-    )
+    if prior_recordable:
+        record_fallback(
+            component='stt_selection',
+            from_mode=origin,
+            to_mode='unavailable',
+            reason=prior_reason,
+            outcome='exhausted',
+            **capacity_fallback_kwargs(prior_capacity_subtype),
+        )
     raise RuntimeError('Configured STT chain exhausted')

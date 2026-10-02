@@ -6,6 +6,8 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
+from starlette.websockets import WebSocketState
+
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
@@ -841,10 +843,53 @@ class LiveLegSocket(STTSocket):
             self._record_cost_outcome(dead)
             self._release_open_gauge()
 
+    def _client_has_left(self) -> bool:
+        host = self.session.receiver.host
+        state = getattr(host, 'state', None)
+        if getattr(state, 'active', None) is False:
+            return True
+        shutdown = getattr(state, 'shutdown_event', None)
+        if shutdown is not None and shutdown.is_set() is True:
+            return True
+        client = getattr(getattr(host, 'request', None), 'websocket', None)
+        return (
+            getattr(client, 'client_state', None) == WebSocketState.DISCONNECTED
+            or getattr(client, 'application_state', None) == WebSocketState.DISCONNECTED
+        )
+
     def _record_cost_outcome(self, dead: bool, *, reason: str | None = None) -> None:
-        # A transport symptom created by owner-initiated teardown is not a
-        # serving death. Real pre-close deaths already have their latched cause.
-        if dead and self._closing_for_health and self._terminal_reason is None:
+        # First observation defines the serving boundary. Preserve evidence
+        # already observed with a connected client, but never discover a new
+        # provider failure retrospectively during client/owner teardown.
+        if dead and not self._cost_recorded and (self._closing_for_health or self._client_has_left()):
+            self._cost_recorded = True
+            observed = None
+            # Ignore the late death, not text already delivered by this leg.
+            if self._cost_text_seen:
+                try:
+                    observed = health.record_session(
+                        self.routing_target,
+                        self._health_language,
+                        'text',
+                        self._cost_generations,
+                        getattr(getattr(self.session.receiver.host, 'request', None), 'uid', None),
+                        'text',
+                    )
+                except Exception:
+                    record_fallback(
+                        component='stt_selection',
+                        from_mode=self.service.value,
+                        to_mode=self.service.value,
+                        reason='config_incomplete',
+                        outcome='degraded',
+                    )
+            self._cost_observation = health.suppress_session_death(
+                self.routing_target,
+                self._cost_generations,
+                normalize_live_stt_reason(self.typed_death_reason, self.death_reason, reason),
+                owner_teardown=self._closing_for_health,
+                observed=observed,
+            )
             return
         if dead and self._terminal_reason is None:
             try:

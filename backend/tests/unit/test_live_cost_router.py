@@ -816,7 +816,7 @@ async def test_local_bench_is_reconciled_before_redis_recovery_can_unbench(monke
     now[0] = 1010
     await pod.refresh_cost_once()
     assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['parakeet-window'].stage == 0
-    stored = json.loads(redis.data['omi:live-stt:cost-v5:parakeet-window:all'])
+    stored = json.loads(redis.data['omi:live-stt:cost-v6:parakeet-window:all'])
     assert stored['stage'] == 0 and stored['until'] == 1300
     now[0] = 1300
     pod.prefer_recovery('parakeet-window', 'en')
@@ -830,7 +830,7 @@ async def test_healthy_fleet_is_not_benched_by_an_isolated_pod_local_rate():
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
     for lang in ('all', 'en'):
         healthy = GateState(n=200)
-        redis.data[f'omi:live-stt:cost-v5:parakeet-window:{lang}'] = json.dumps(healthy.encode())
+        redis.data[f'omi:live-stt:cost-v6:parakeet-window:{lang}'] = json.dumps(healthy.encode())
         pod._cost_local[('parakeet-window', lang)] = GateState(stage=0, generation=1, until=1300)
     pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
@@ -894,7 +894,7 @@ async def test_static_out_of_cohort_sessions_cannot_accelerate_reentry(stage, re
     redis = MemoryRedis()
     state = GateState(stage=stage, generation=1)
     for lang in ('all', 'en'):
-        redis.data[f'omi:live-stt:cost-v5:parakeet-window:{lang}'] = json.dumps(state.encode())
+        redis.data[f'omi:live-stt:cost-v6:parakeet-window:{lang}'] = json.dumps(state.encode())
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: 1000)
     pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
@@ -1127,7 +1127,7 @@ async def test_server_clock_controls_deadlines_despite_sixty_second_pod_skew():
         pod.cost_snapshot(DEFAULT_TARGETS, 'en')
     for i in range(8):
         await pods[i % 2]._write_cost_result('modulate-velma-2', 'en', True, None, f'{i:016x}')
-    assert json.loads(redis.data['omi:live-stt:cost-v5:modulate-velma-2:all'])['until'] == 1300
+    assert json.loads(redis.data['omi:live-stt:cost-v6:modulate-velma-2:all'])['until'] == 1300
     now[0] = 1299
     for pod in pods:
         pod.prefer_recovery('modulate-velma-2', 'en')
@@ -1184,7 +1184,7 @@ async def test_ten_minute_redis_outage_remains_usable_then_reconciles(monkeypatc
     now[0] = 1600
     redis.down = False
     await pod.refresh_cost_once()
-    state = json.loads(redis.data['omi:live-stt:cost-v5:modulate-velma-2:all'])
+    state = json.loads(redis.data['omi:live-stt:cost-v6:modulate-velma-2:all'])
     assert state['stage'] == 0 and state['failures'] == 8
     assert not pod._cost_unreconciled
     assert (
@@ -1523,3 +1523,18 @@ def test_shadow_pairs_are_bounded_and_global_stage_does_not_follow_language():
     before = COST_SHADOW.labels(**labels)._value.get()
     live_router.propose(pod, ['deepgram'], 'synthetic', 'en', 'arbitrary-unregistered-model')
     assert COST_SHADOW.labels(**labels)._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_v6_starts_fresh_without_reinterpreting_teardown_contaminated_v5():
+    redis = MemoryRedis()
+    old_key = 'omi:live-stt:cost-v5:modulate-velma-2:all'
+    old_evidence = json.dumps(GateState(stage=0, n=20, failures=20, generation=3, until=9999).encode())
+    redis.data[old_key] = old_evidence
+    pod = live_health.FleetHealth(redis_client=redis)
+    await pod.refresh_cost_once()
+    assert pod.cost_snapshot(DEFAULT_TARGETS, 'en')['modulate-velma-2'].stage == 100
+    await pod._write_cost_result('modulate-velma-2', 'en', True, None, '0123456789abcdef')
+    assert redis.data[old_key] == old_evidence
+    fresh = GateState.decode(json.loads(redis.data['omi:live-stt:cost-v6:modulate-velma-2:all']))
+    assert fresh.n == fresh.failures == 1 and fresh.stage == 100

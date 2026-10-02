@@ -79,8 +79,9 @@ observed in each window (>=92% healthy observed users) promote within 360
 classified outcomes. Censored noise does not advance this bound; healthy
 users absent from the sticky cohort cannot establish recovery.
 
-The v5 namespace starts fresh provider-error evidence. Do not reinterpret v3/v4
-misclassified history, or raise on-percent until the new shadow data is warm.
+The v6 namespace starts fresh serving-only provider-error evidence. Do not
+reinterpret v3/v4 misclassified history or v5 evidence polluted by deaths first
+observed after client departure. Warm v6 shadow data before raising on-percent.
 
 At 17.9k eligible sessions/day and 61% Modulate disruption, the delayed-result
 trial replay averages 75.46 disruptions/day (p95 80; worst seeded run 83),
@@ -102,7 +103,7 @@ sum by (kind) (rate(omi_stt_fleet_health_write_dropped_total{job="backend-listen
 sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[5m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[5m])), 1)
 ```
 
-Cost state uses `omi:live-stt:cost-v5:<target>:<bounded-language>` (and `all`)
+Cost state uses `omi:live-stt:cost-v6:<target>:<bounded-language>` (and `all`)
 with atomic compare-and-set updates and trial-start leases. A full result-write
 pool, deadline or CAS contention can drop a fleet sample and increments
 `omi_stt_fleet_health_write_dropped_total`; local evidence still advances.
@@ -124,7 +125,7 @@ initialised at zero before traffic so first post-scrape transitions are counted.
 Increments before a pod's first scrape cannot be recovered by `increase()`.
 Transition rates are classified outcomes; promotion uses user votes.
 Shadow labels remain at most 16 registry IDs plus fixed sentinels; no UID or
-content. Drain old pods before using the v5 reason-labelled observation queries.
+content. Drain old pods before using the v6 serving-boundary observation queries.
 
 The `omi-modulate-failing-soniox` Telegram rule names the active spend lever.
 The existing `Omi - Services Alerting (Telegram)` Grafana contact point must
@@ -172,45 +173,80 @@ sum by (from_mode, reason, outcome) (increase(omi_fallback_total{job="backend-li
 count(omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"} != omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"}) or vector(0)
 ```
 
-**Before enabling `on`, require Modulate's `provider_failure` counts to track its attributable
-mid-session failovers by reason.** `modulate-velma-2` maps to fallback
-`from_mode="modulate"`; `parakeet-window` maps to `parakeet`. Fallbacks use family
-labels: sibling endpoints cannot be distinguished there, so compare their
-combined health counts when more than one endpoint is configured. Health counts
-once on death; fallback settlement occurs later, on successor text/exhaustion.
-Allow for settlement delay and first-scrape counter boundaries. Connect failures
-without an accepted managed socket are additional health observations. An
-accepted socket death counts once, including before any audio, below one second
-of speech, with VAD disabled, or on VAD-negative audio; connect-time serving
-rejection does not count that same leg twice. If a gate generation changes
-during connect, the fresh rejection may update the new gate; a shared receipt
-keeps the observation counter and each local/Redis scope counted once, including
-when the first update itself promotes a trial. Trial cohort admission still
-applies. Text is success evidence even
-without a VAD sample. Only plain no-text requires at least one second of VAD
-speech and remains censored. Explain these differences rather than demanding
-instantaneous equality. Compare only provider-attributable reasons for the
-failure count (`modulate_serve_error`, `connection_lost`, `send_failed`,
-`provider_5xx`, `provider_429`, `provider_rate_limited`, `timeout`).
+**Before enabling `on`, require Modulate's provider-error counts to reconcile
+across selection and live-session hops, by the socket's own reason.**
+`modulate-velma-2` maps to fallback `from_mode="modulate"`; `parakeet-window`
+maps to `parakeet`. Family fallback labels combine sibling endpoints; sum their
+health counts if more than one endpoint is configured.
 
-For a fixed set of accepted Modulate legs that produce mid-session hops,
-provider-failure observations and settled source-hop counts must match per
-reason after all hops settle. Speech duration is no longer an exclusion. The
-same bounded latched cause feeds both paths; a serve error cannot become
-connection loss in only one of them. Aggregate target health can legitimately
-exceed the live-session fallback count: a provider may die with no replacement
-candidate, a connect can fail before there is a managed leg, or an accepted
-leg can die during connect-time serving validation before a source hop. A terminal
-Soniox death therefore has health evidence without a new Soniox hop. Intentional
-owner close is outside serving evidence; a later teardown transport symptom
-must not create a failure. Soniox finished/idle/rotation remain non-failures.
-Family labels also include PTT and legacy/non-managed paths; compare the same
-serving scope before demanding equality.
+One accepted physical socket/managed leg has one observation slot, regardless
+of repeated frames, send/death/finish observers, or connect-validation writes.
+A new replay/reconnect socket is a distinct leg and can contribute a new death.
+Provider availability needs no speech/audio minimum; completed text counts
+without VAD. Only plain no-text requires one second of VAD speech and is censored.
+A shared receipt prevents repeated local/Redis samples, including generation
+changes and trial promotion; fresh connect evidence still obeys trial admission.
 
-Keep the v5 namespace: this accounting fix adds missing failures and text
-successes without changing the meaning of stored outcomes, reason vocabulary,
-gate thresholds or state shape. No old evidence is reinterpreted or backfilled.
+A death first observed with an active, connected client is evidence. A death
+first observed after explicit client/application disconnect, inactive/shutdown
+state or owner teardown is excluded, even if the raw socket already died before
+cleanup began. The teardown poll checks client state before recording; an
+already-dead socket with a still-connected client is valid pre-fence evidence.
+The owner fence excludes later close-induced deaths. Evidence already observed
+while connected is retained; the backend cannot reconstruct
+whether an unobserved raw death preceded client departure. A censored receipt
+also prevents connect validation from resurrecting that excluded evidence.
+Text already produced by the leg still contributes one successful observation,
+even when its later death is ignored; the valid denominator is retained.
 
+For a fixed cohort of accepted sockets, after all hops settle, per reason:
+
+`provider_failure = settled stt_selection hops + settled stt_live_session hops + connected-client deaths with no successor`.
+
+Connect-time accepted serve errors now keep `modulate_serve_error` in selection
+fallback telemetry, instead of generic `provider_5xx`. A rejected successor
+settles the source's reason, never the successor's reason. Selection hops whose
+source was already client/owner-censored are excluded too. Errors before any
+managed socket exists are additional connect-attempt observations; compare
+those against selection telemetry separately. Circuit/config/capability skips
+have no accepted socket death and must not be included in that cohort. Settlement
+and first-scrape boundaries can shift aggregate time buckets. Family labels also
+include legacy/PTT paths, so compare the same managed serving scope.
+
+A connected-client terminal Soniox death emits `stt_failed`/1011 and increments
+`omi_live_stt_terminal_failures_total`. `omi_stt_chain_exhausted_total` counts
+connect-chain construction exhaustion; it does not count a receiver that has no
+replacement after an already-serving leg dies. Zero connect exhaustion therefore
+does not rule out terminal deaths. The existing Soniox reconnect predicate
+requires a raw `ws ` diagnostic prefix: a managed leg's bounded transport cause
+does not pass that predicate and takes ordinary failover/terminal handling.
+That serving behavior is unchanged here. Raw eligible reconnect paths use
+`omi_stt_reconnect_total`; a settled same-family hop is `soniox` → `soniox`.
+Finished/idle/rotation remain non-failures.
+
+Read all these surfaces together (labels are bounded, with no socket/UID ids):
+
+```promql
+sum by (target, outcome, reason) (increase(omi_stt_cost_routing_observations_total{job="backend-listen-metrics"}[1h]))
+sum by (component, from_mode, reason, outcome) (increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session"}[1h]))
+sum by (target, reason, boundary) (increase(omi_stt_cost_routing_ignored_deaths_total{job="backend-listen-metrics"}[1h]))
+sum by (provider, outcome, phase) (increase(omi_live_stt_terminal_failures_total{job="backend-listen-metrics"}[1h]))
+sum by (provider, reason, outcome) (increase(omi_stt_reconnect_total{job="backend-listen-metrics"}[1h]))
+sum(increase(omi_stt_chain_exhausted_total{job="backend-listen-metrics"}[1h])) or vector(0)
+```
+
+The ignored-death counter exposes the excluded source reason and boundary
+(`client_gone` or `owner_teardown`), once per leg. It has <=16 registered targets,
+28 bounded reasons and two boundaries, preinitialized for first-increment
+visibility. It never feeds health. Terminal metrics are session-level and lack
+reason/target labels, so these aggregate queries diagnose differences rather
+than providing an exact per-socket join. Do not infer how historical excess
+observations split across paths from a partial aggregate table.
+
+Use `omi:live-stt:cost-v6`: v5 contains invalid post-client/owner failure evidence,
+so retaining its samples or backoff strikes would carry the biased history into
+the new gate. Stored shape, thresholds, vocabulary, registry and serving policy
+are unchanged. No history is migrated, reinterpreted or backfilled.
 
 A socket-owned typed cause precedes a bounded raw cause, then the observing
 send/monitor symptom. Unknown/free-text serving deaths become `connection_lost`,
@@ -219,9 +255,9 @@ Window `first_text_deadline`, `empty_streak`, `capacity_full`, account refusals,
 rotation/idle timeout and explicit client/VAD causes keep their own censored
 reason. Normal completion uses `text` or `no_text`. Failed hops retain the source
 cause instead of relabelling that source with the successor's rejection.
-Budget/auth reasons now use `provider_budget_exhausted`/`provider_auth_rejected`
-in these STT fallback metrics rather than `quota`/`auth`; serving account
-protection is unchanged. The closed vocabulary has 27 reasons, with up to 16
+Budget/auth cost reasons are `provider_budget_exhausted`/`provider_auth_rejected`;
+fallback metrics retain their established `quota`/`auth` aliases. Serving account
+protection is unchanged. The closed vocabulary has 28 reasons, with up to 16
 registry targets and three outcomes. No UID or diagnostic text is exported.
 
 Unavailable proposals, degraded-only selection, dropped samples and errors:
@@ -242,7 +278,7 @@ on; verify runtime mode before calling them shadow qualification.
 ## Shadow go/no-go before on
 
 Keep `shadow`/on-percent `0` for at least a full 24h traffic/language cycle after
-the v5 rollout. Do not increase the router percentage until all checks pass:
+the v6 rollout. Do not increase the router percentage until all checks pass:
 
 - Positive observation/proposal coverage for all configured targets; snapshot
   age <15s, known state, and converged pod min/max. No sustained write drops,
@@ -259,7 +295,9 @@ the v5 rollout. Do not increase the router percentage until all checks pass:
   and pair disagreement with static selection, accounting for language,
   actual window/RNNT engine eligibility, cohort repetition and capacity.
 - **Reason reconciliation passes:** Modulate provider failures track settled
-  provider-error failovers, not censored outcomes. Window deadline/empty/capacity
+  provider-error selection/live hops plus connected terminal deaths, not censored
+  outcomes. Explain ignored deaths and reconnect/terminal metrics; zero connect
+  exhaustion alone is insufficient. Window deadline/empty/capacity
   failovers appear only as censored health observations; rotation/account/client
   reasons do too. No pod has a never-refreshed snapshot after startup warmup.
 - Provider-error fractions for healthy targets stay around the observed

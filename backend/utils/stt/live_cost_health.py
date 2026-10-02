@@ -20,6 +20,7 @@ from utils.stt.live_metrics import (
     COST_SNAPSHOT_AT,
     COST_STATE_KNOWN,
     COST_OBSERVATIONS,
+    COST_IGNORED_DEATHS,
     COST_ALL_DEGRADED,
     FLEET_HEALTH_WRITE_DROPPED,
 )
@@ -40,6 +41,7 @@ class CostObservation:
     Local/remote application are independent: generation fences can reject a
     session completion while a fresh connect rejection is still valid. Mark
     each scope only after application, including a CAS that changes generation.
+    A client/owner-censored socket stays suppressed during connect validation.
     """
 
     recorded: bool
@@ -47,9 +49,10 @@ class CostObservation:
     local_applied: set[str] = field(default_factory=set)
     remote_applied: set[str] = field(default_factory=set)
     write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    suppressed: bool = False
 
 
-PREFIX = 'omi:live-stt:cost-v5'
+PREFIX = 'omi:live-stt:cost-v6'
 CAS = """
 local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
@@ -110,6 +113,8 @@ class CostHealthMixin(ABC):
                 failed = provider_observation('text' if reason == 'text' else 'failover', reason)
                 outcome = 'censored' if failed is None else 'provider_failure' if failed else 'success'
                 COST_OBSERVATIONS.labels(target=target.id, outcome=outcome, reason=reason)
+                for boundary in ('client_gone', 'owner_teardown'):
+                    COST_IGNORED_DEATHS.labels(target=target.id, reason=reason, boundary=boundary)
 
     @staticmethod
     def _publish_cost_state(target: str, state: GateState) -> None:
@@ -184,6 +189,31 @@ class CostHealthMixin(ABC):
             self._cost_preferred[(target, 'all')] = self._clock()
             self._cost_preferred[(target, language)] = self._clock()
 
+    def suppress_session_death(
+        self,
+        target: str,
+        generations: dict[str, int],
+        reason: str,
+        *,
+        owner_teardown: bool,
+        observed: CostObservation | None = None,
+    ) -> CostObservation:
+        receipt = (
+            replace(observed, suppressed=True)
+            if observed is not None
+            else CostObservation(False, generations, suppressed=True)
+        )
+        try:
+            if os.getenv('STT_ROUTING_MODE', 'off') != 'off' and any(entry.id == target for entry in registry()):
+                COST_IGNORED_DEATHS.labels(
+                    target=target,
+                    reason=normalize_live_stt_reason(reason),
+                    boundary='owner_teardown' if owner_teardown else 'client_gone',
+                ).inc()
+        except Exception:
+            logger.debug('Cost ignored-death diagnostic unavailable; retaining teardown fence')
+        return receipt
+
     def record_connect_failure(
         self, target: str, language: str, uid: str | None, reason: str, *, observed: CostObservation | None = None
     ) -> None:
@@ -205,6 +235,8 @@ class CostHealthMixin(ABC):
         *,
         observed: CostObservation | None = None,
     ) -> CostObservation | None:
+        if observed is not None and observed.suppressed:
+            return observed
         if not uid or os.getenv('STT_ROUTING_MODE', 'off') == 'off':
             return
         witness = hashlib.sha256(('stt-evidence:' + uid).encode()).hexdigest()[:16]
