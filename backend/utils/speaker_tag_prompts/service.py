@@ -670,8 +670,8 @@ def owner_clip_window(
     contiguous owner run (same capture scope + speaker id, gaps at most
     MAX_GAP_SECONDS) whose distinct speech reaches MIN_CLIP_SECONDS, then
     center-crop to MAX_CLIP_SECONDS. Cross-scope duplicates are ignored; a
-    non-owner or different speaker overlapping the window in the same scope
-    rejects that run.
+    non-owner, a different speaker, or an owner segment outside ``segment_ids``
+    overlapping the window in the same scope rejects that run.
     """
     wanted = set(segment_ids)
     all_segments = list(conversation.get('transcript_segments') or [])
@@ -721,7 +721,9 @@ def owner_clip_window(
                 and s.get('speaker_id_scope') == scope
                 and float(s.get('start') or 0) < end
                 and float(s.get('end') or 0) > start
-                and (speaker_id_of(s) != speaker_id or not s.get('is_user'))
+                # Same voice but outside the authorized set (opted out, or never
+                # confirmed): its audio must not ride along inside the window.
+                and (speaker_id_of(s) != speaker_id or not s.get('is_user') or s.get('id') not in wanted)
                 for s in all_segments
             )
             if impure:
