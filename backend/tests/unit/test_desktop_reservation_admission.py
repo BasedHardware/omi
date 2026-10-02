@@ -55,7 +55,9 @@ async def test_refusal_stops_before_metering_or_dispatch_and_is_quiet(app, monke
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('case', ['windows', 'dictation', 'lite', 'pro', 'byok', 'observe', 'unknown'])
+@pytest.mark.parametrize(
+    'case', ['windows', 'untagged', 'dictation', 'lite', 'pro', 'byok', 'observe', 'unknown', 'lite_pin']
+)
 async def test_other_lanes_and_rollback_reach_existing_dispatch(app, monkeypatch, case):
     # Meter sentinel proves admission was allowed without touching a provider.
     reached = []
@@ -72,7 +74,16 @@ async def test_other_lanes_and_rollback_reach_existing_dispatch(app, monkeypatch
         'tools': [{'function_declarations': [{'name': n, 'parameters': {'type': 'object'}} for n in TASK_TOOLS]}],
     }
     if case == 'windows':
+        headers['X-App-Platform'] = 'windows'
+    elif case == 'untagged':
         headers = {}
+    elif case == 'lite_pin':
+        monkeypatch.setenv('OMI_VERTEX_PT_MODEL', 'gemini-3.1-flash-lite')
+
+        async def no_evidence():
+            return {}
+
+        monkeypatch.setattr(proxy, '_refresh_reservations', no_evidence)
     elif case == 'dictation':
         body.pop('tools')
         headers = {'X-Omi-Workload': 'interactive'}

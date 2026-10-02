@@ -10,6 +10,7 @@ from fastapi import Response
 from prometheus_client import Counter
 
 from config.vertex_reservations import State, policy, RESERVATIONS, ENFORCEMENT_ENV
+from utils.llm.vertex_reservation_state import effective_states
 from utils.llm.desktop_gemini_gateway import _sanitize  # pyright: ignore[reportPrivateUsage]
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,7 @@ async def should_refuse(
     if byok or model not in RESERVATIONS or action not in {'generateContent', 'streamGenerateContent'}:
         return False
     payload = json.loads(_sanitize(body, action))
-    states = await refresh()
+    states = effective_states(await refresh(), os.environ, admission=True)
     lane = desktop_lane(headers, payload)
     return admission(model, states.get(model, State.UNKNOWN), lane, os.getenv(ENFORCEMENT_ENV, 'enforce')) == 'refuse'
 

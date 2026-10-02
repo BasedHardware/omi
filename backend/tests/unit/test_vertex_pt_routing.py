@@ -7,6 +7,7 @@ overflow onto it, so most of these assert behaviour across BOTH PT states.
 
 import pytest
 from config.vertex_reservations import State
+from utils.llm.vertex_reservation_state import effective_states
 
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm.model_config import (
@@ -31,9 +32,13 @@ def test_pt_model_promotes_itself_once_target_capacity_answers():
 @pytest.mark.parametrize('ready', [False, True])
 def test_operator_override_pins_the_pt_model_in_either_direction(ready):
     """The emergency flag must beat auto-detection, including a false positive."""
-    assert ptr.resolve_pt_models({ptr.PT_MODEL_CURRENT: State.ACTIVE}, override='gemini-2.5-flash') == {
-        'gemini-2.5-flash'
-    }
+    observed = (
+        {ptr.PT_MODEL_CURRENT: State.INACTIVE, ptr.PT_MODEL_TARGET: State.ACTIVE}
+        if ready
+        else {ptr.PT_MODEL_CURRENT: State.ACTIVE}
+    )
+    states = effective_states(observed, {'OMI_VERTEX_PT_MODEL': ptr.PT_MODEL_CURRENT})
+    assert ptr.resolve_pt_models(states, override='gemini-2.5-flash') == {'gemini-2.5-flash'}
 
 
 def test_overflow_prefers_3_1_flash_lite_while_flash_holds_the_reservation():
@@ -299,9 +304,9 @@ def test_operator_pins_cannot_select_pro_or_image_models(model):
 def test_operator_pins_still_move_between_declared_anchors():
     """The escape hatch survives containment: pinning the reservation back
     during a bad auto-promotion, or overflow onto the cheap floor, both work."""
-    assert ptr.resolve_pt_models({ptr.PT_MODEL_CURRENT: State.ACTIVE}, override='gemini-2.5-flash') == {
-        'gemini-2.5-flash'
-    }
+    observed = {ptr.PT_MODEL_CURRENT: State.INACTIVE, ptr.PT_MODEL_TARGET: State.ACTIVE}
+    states = effective_states(observed, {'OMI_VERTEX_PT_MODEL': ptr.PT_MODEL_CURRENT})
+    assert ptr.resolve_pt_models(states, override='gemini-2.5-flash') == {'gemini-2.5-flash'}
     assert (
         ptr.resolve_overflow_model(pt_model='gemini-2.5-flash', override='gemini-2.5-flash-lite')
         == 'gemini-2.5-flash-lite'

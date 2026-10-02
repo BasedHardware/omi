@@ -59,8 +59,7 @@ class VertexPTPolicyMixin:
             self._capacity_for(serving),
         )
         if (
-            serving in RESERVATIONS
-            and RESERVATIONS[serving].unknown_capacity == 'shared'
+            ptr.should_probe_capacity(serving, effective_states(self._reservation_states, os.environ))
             and self._capacity_for(serving) == 'shared'
             and self._pt_probe_due(serving)
         ):

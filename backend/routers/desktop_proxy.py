@@ -469,7 +469,7 @@ async def _refresh_reservations() -> dict[str, State]:
     async def probe(model: str, location: str) -> str:
         return await probe_reservation(get_desktop_gemini_client(), _vertex_tokens.get_access_token, model, location)
 
-    states = await reservation_state.refresh(probe)
+    states = await reservation_state.refresh(probe, apply_overrides=False)
     _reservation_snapshot.set(states)
     return states
 
@@ -662,8 +662,7 @@ async def _upstream(
         )
         if (
             request_type is None
-            and model in RESERVATIONS
-            and RESERVATIONS[model].unknown_capacity == 'shared'
+            and ptr.should_probe_capacity(model, _reservation_states())
             and capacity == 'shared'
             and _pt_probe_due(model)
         ):

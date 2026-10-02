@@ -555,3 +555,12 @@ def reservation_endpoint(model: str, env: Mapping[str, str]) -> tuple[str, str]:
     return target_capacity_endpoint(
         location=env.get(spec.location_env, spec.location) if spec.location_env else spec.location
     )
+
+
+def should_probe_capacity(model: str, states: Mapping[str, State]) -> bool:
+    """Customer-request discovery is only for unknown, initially shared models."""
+    return (
+        model in RESERVATIONS
+        and RESERVATIONS[model].unknown_capacity == 'shared'
+        and states.get(model, State.UNKNOWN) == State.UNKNOWN
+    )

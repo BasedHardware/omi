@@ -300,3 +300,82 @@ def test_invalid_legacy_pin_cannot_fabricate_inactivity_before_routing_validatio
         OLD: vr.State.UNKNOWN,
         NEW: vr.State.UNKNOWN,
     }
+
+
+@pytest.mark.asyncio
+async def test_positive_cache_is_short_and_overrides_still_apply_per_request(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    store = ReservationState()
+    clock = [10.0]
+    monkeypatch.setattr(time, 'monotonic', lambda: clock[0])
+    read = AsyncMock(return_value=({OLD: vr.State.ACTIVE, NEW: vr.State.UNKNOWN}, None))
+    monkeypatch.setattr(store, 'transact', read)
+    assert (await store.refresh())[OLD] == vr.State.ACTIVE
+    monkeypatch.setenv(vr.STATE_OVERRIDE_ENV, json.dumps({OLD: 'inactive'}))
+    assert (await store.refresh())[OLD] == vr.State.INACTIVE
+    assert read.await_count == 1
+    clock[0] += 1.01
+    await store.refresh()
+    assert read.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_negative_snapshot_is_never_cached_across_a_store_outage(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    store = ReservationState()
+    read = AsyncMock(side_effect=[({OLD: vr.State.INACTIVE, NEW: vr.State.ACTIVE}, None), ({}, None)])
+    monkeypatch.setattr(store, 'transact', read)
+    assert (await store.refresh())[OLD] == vr.State.INACTIVE
+    assert (await store.refresh())[OLD] == vr.State.UNKNOWN
+    assert read.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_unchanged_shared_reads_do_not_rewrite_the_evidence_document():
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = ReservationState(client)
+    await store.transact()
+    await client.expire(store.key(), 100)
+    await store.refresh()
+    assert await client.ttl(store.key()) <= 100
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_refresh_and_positive_publication_respect_the_callers_budget(monkeypatch):
+    store = ReservationState()
+
+    async def stalled(*args, **kwargs):
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(store, 'transact', stalled)
+    states = await asyncio.wait_for(store.refresh(timeout_seconds=0.01), 0.2)
+    assert states[OLD] == vr.State.UNKNOWN
+    await asyncio.wait_for(store.record(OLD, 'dedicated', 200, 'PROVISIONED_THROUGHPUT', timeout_seconds=0.01), 0.2)
+    assert OLD in store._positive
+
+
+@pytest.mark.asyncio
+async def test_owned_store_closes_redis_and_undeclared_models_never_promote(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    store = ReservationState()
+    client = AsyncMock()
+    store._client = client
+    response = httpx.Response(200, json={'usageMetadata': {'trafficType': 'PROVISIONED_THROUGHPUT'}})
+    assert await store.record_response('undeclared', 'dedicated', response) is False
+    assert store._positive == {}
+    await store.aclose()
+    client.aclose.assert_awaited_once()
+
+
+def test_nonreservation_pin_changes_capacity_but_cannot_fabricate_admission_evidence():
+    env = {'OMI_VERTEX_PT_MODEL': 'gemini-3.1-flash-lite'}
+    routing = effective_states({}, env)
+    assert ptr.reservation_capacity(OLD, routing, override=env['OMI_VERTEX_PT_MODEL']) == 'shared'
+    assert effective_states({}, env, admission=True)[OLD] == vr.State.UNKNOWN
+    assert effective_states({OLD: vr.State.INACTIVE}, env, admission=True)[OLD] == vr.State.INACTIVE
+    env[vr.STATE_OVERRIDE_ENV] = json.dumps({OLD: 'inactive'})
+    assert effective_states({}, env, admission=True)[OLD] == vr.State.INACTIVE

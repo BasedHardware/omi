@@ -25,6 +25,7 @@ async def probe_reservation(
         json=ptr.model_payload(
             {
                 'contents': [{'role': 'user', 'parts': [{'text': 'Reply OK.'}]}],
+                # 2.x uses zero thinking; adaptation applies the declared 3.x level.
                 'generationConfig': {'maxOutputTokens': 16, 'thinkingConfig': {'thinkingBudget': 0}},
             },
             model,

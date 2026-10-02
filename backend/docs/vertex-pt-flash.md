@@ -243,11 +243,19 @@ location, optional location override, **exclusive order identity**, unknown-stat
 capacity, overflow mode and thinking level. Both current entries describe the
 same single 5-GSU order: 2.5 Flash at **us-central1**, 3.8 Flash at the declared
 target location (default `us`). They are not two concurrent orders. A second
-purchased order must have a different identity before serving it.
+purchased or split order must have a different identity before serving it.
+[Google supports splitting an order for partial migrations](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/provisioned-throughput/purchase-provisioned-throughput).
+Response metadata cannot verify that inventory or rule out fulfilment overlap;
+the exclusive-order declaration is an operator contract, not unconditional proof.
 
 `ReservationState` shares bounded evidence through Redis across Cloud Run
 instances and gateway pods. Production desktop-backend uses `DESKTOP_REDIS_*`,
-so gateway chart bindings use its existing password secret. Before rollout,
+so gateway chart bindings use its existing password secret. Apply the updated
+`backend-secrets` chart first: its ExternalSecret must populate
+`<env>-omi-backend-secrets[VERTEX_RESERVATION_REDIS_PASSWORD]` from
+`DESKTOP_REDIS_DB_PASSWORD` in prod or `REDIS_DB_PASSWORD` in dev. Verify that
+key exists through the authorized deployment process before rolling gateway
+pods; the reference is mandatory, just like the ConfigMap. Before rollout,
 provision `<env>-omi-reservation-runtime-config` in the gateway namespace with
 `REDIS_DB_HOST` and `REDIS_DB_PORT` matching desktop-backend exactly (dev uses
 its desktop `REDIS_DB_*` configuration). These are non-secret ConfigMap values,
@@ -258,7 +266,13 @@ the backend's separate Redis pool. Keys include the compute project and all decl
 expire after 48 hours idle, and contain only per-model timestamps, counters,
 states and probe leases. No user/request identity or content is stored.
 Transactions use WATCH/CAS with three attempts and a 300ms whole-operation bound;
-Redis time owns ordering. Missing, malformed or unavailable storage cannot
+Redis time owns ordering. Unchanged reads do not rewrite the evidence document.
+Positive/unknown snapshots may be cached for one second; a snapshot containing
+any inactive state is never cached, so a store outage immediately fails admission
+open on the next request. Environment overrides are still resolved per request.
+Gateway refresh and positive publication each consume at most one quarter of
+the remaining inference budget (and retain their absolute limits). Both serving
+services close their owned Redis pools at shutdown. Missing, malformed or unavailable storage cannot
 confirm inactivity. Local positive dedicated evidence can still serve prepaid
 capacity during an outage, but no local negative evidence can refuse a client.
 
@@ -266,7 +280,11 @@ State is `active`, `inactive`, or `unknown`, with its reason and observation
 timestamps. No order-list/control-plane API is called. An authenticated paid
 request can lease **one** synthetic `Reply OK.` dedicated probe for one declared
 model; each model has a fleet-wide 600-second lease. One-second probe deadline,
-16 output tokens, no automatic shared recovery for these synthetic probes.
+16 output tokens, declared model-specific thinking (zero budget on 2.5, low
+level on 3.8), and no automatic shared recovery for these synthetic probes.
+Customer-content discovery attempts run only while state is unknown; an inactive
+model receives shared customer traffic while the independent synthetic lease
+continues checking for recovery.
 Normal requests also publish strict dedicated successes immediately. No startup
 poller or orphan background worker; no demand means no inference. Demand in
 *any* declared model probes all entries, including an inactive/refused old lane,
@@ -361,6 +379,9 @@ False detection: set `OMI_VERTEX_RESERVATION_STATES` to
 forces the reverse direction; `unknown` returns conservative defaults; `auto`
 or removing an entry uses evidence again. These JSON overrides beat the existing
 single-order `OMI_VERTEX_PT_MODEL` pin and are read at request boundaries.
+A legacy pin to a non-reservation Lite model changes capacity routing but does
+not fabricate inactivity at admission: refusal still needs observed inactivity
+or an explicit per-model inactive override.
 Invalid JSON fails open to unknown and emits a bounded error. Do not erase the
 shared evidence to clear a false detection: the first real dedicated success
 clears it transactionally. A missing/wrong shared binding, endpoint or permission

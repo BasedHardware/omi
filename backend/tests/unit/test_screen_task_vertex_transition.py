@@ -481,3 +481,71 @@ async def test_only_target_probe_rejects_3xx_while_shared_target_accepts_its_bod
             ] == 'ok'
         assert not provider._reservation_active(ptr.PT_MODEL_TARGET)
     assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
+
+
+@pytest.mark.asyncio
+async def test_inactive_override_never_probes_with_customer_content_in_either_path(monkeypatch):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', json.dumps({ptr.PT_MODEL_TARGET: 'inactive'}))
+    monkeypatch.setattr(proxy._vertex_tokens, 'get_access_token', _token)
+    monkeypatch.setattr(proxy, 'get_byok_key', lambda name: None)
+    proxy._reservation_snapshot.set({})
+    proxy._pt_probed_at.clear()
+    route = await proxy._upstream(
+        f'models/{ptr.PT_MODEL_TARGET}:generateContent', ptr.PT_MODEL_TARGET, 'generateContent', {}
+    )
+    assert route.headers[ptr.REQUEST_TYPE_HEADER] == 'shared'
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=_response()))
+    ) as client:
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
+        assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [(ptr.PT_MODEL_TARGET, 'shared')]
+        await provider.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stream', [False, True])
+async def test_slow_reservation_io_keeps_short_request_budget_for_inference(monkeypatch, stream):
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        payload = _response()
+        return (
+            httpx.Response(200, text='data: ' + json.dumps(payload) + '\n\n')
+            if stream
+            else httpx.Response(200, json=payload)
+        )
+
+    async def stalled(*args, **kwargs):
+        await asyncio.Event().wait()
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
+        monkeypatch.setattr(provider._reservations, 'transact', stalled)
+        kwargs = dict(
+            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_CURRENT),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=100,
+        )
+        async with asyncio.timeout(0.2):
+            if stream:
+                chunks = [
+                    chunk
+                    async for chunk in provider.stream_chat_completion(
+                        {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
+                    )
+                ]
+                assert chunks
+            else:
+                await provider.create_chat_completion(
+                    {'messages': [{'role': 'user', 'content': 'synthetic'}]}, **kwargs
+                )
+        assert len(seen) == 1
+        close = AsyncMock()
+        monkeypatch.setattr(provider._reservations, 'aclose', close)
+        await provider.aclose()
+        close.assert_awaited_once()

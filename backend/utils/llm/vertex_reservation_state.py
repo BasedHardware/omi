@@ -39,6 +39,10 @@ Probe = Callable[[str, str], Awaitable[str]]
 class ReservationState:
     def __init__(self, client: Any = None) -> None:
         self._client = client
+        self._owns_client = client is None
+        self._snapshot: dict[str, State] = {}
+        self._snapshot_at = 0.0
+        self._snapshot_key = ""
         self._positive: dict[str, float] = {}
 
     def client(self) -> Any:
@@ -69,6 +73,7 @@ class ReservationState:
     async def transact(
         self, model: str = '', outcome: str = '', *, claim: bool = False
     ) -> tuple[dict[str, State], str | None]:
+        failure_reason = 'timeout'
         try:
             client = self.client()
             if client is None:
@@ -86,7 +91,7 @@ class ReservationState:
                             if model in RESERVATIONS and outcome:
                                 evidence[model] = observe(evidence[model], now=now, outcome=outcome)
                             states = {m: observed_state(m, evidence, now=now) for m in RESERVATIONS}
-                            leases = doc.get('leases', {})
+                            leases = dict(doc.get('leases', {}))
                             selected = None
                             if claim:
                                 for m in RESERVATIONS:
@@ -99,6 +104,9 @@ class ReservationState:
                                 'states': {m: state.value for m, (state, _) in states.items()},
                                 'leases': leases,
                             }
+                            if not outcome and selected is None and new == doc:
+                                await pipe.unwatch()
+                                return {m: s for m, (s, _) in states.items()}, None
                             pipe.multi()
                             pipe.set(self.key(), json.dumps(new), ex=172800)
                             await pipe.execute()
@@ -114,43 +122,99 @@ class ReservationState:
                             return {m: s for m, (s, _) in states.items()}, selected
                         except WatchError:
                             continue
-        except Exception:
+        except (ValueError, TypeError, AttributeError):
+            failure_reason = 'malformed_doc'
+        except TimeoutError:
             pass
+        except Exception:
+            failure_reason = 'connection_lost'
         record_fallback(
-            component='llm_gateway', from_mode='redis', to_mode='none', reason='state_unavailable', outcome='degraded'
+            component='vertex_reservations',
+            from_mode='redis',
+            to_mode='none',
+            reason=failure_reason,
+            outcome='degraded',
         )
-        logger.warning('vertex_reservation_store_unavailable state=unknown')
+        logger.warning('vertex_reservation_store_unavailable state=unknown reason=%s', failure_reason)
         return {}, None
 
-    async def refresh(self, probe: Probe | None = None) -> dict[str, State]:
-        states, selected = await self.transact(claim=probe is not None)
-        if selected and probe:
-            spec = RESERVATIONS[selected]
-            location = os.getenv(spec.location_env, spec.location) if spec.location_env else spec.location
+    async def refresh(
+        self, probe: Probe | None = None, *, timeout_seconds: float = 1.6, apply_overrides: bool = True
+    ) -> dict[str, State]:
+        key = self.key()
+        if self._snapshot and self._snapshot_key == key and 0 <= time.monotonic() - self._snapshot_at < 1:
+            states = self._snapshot
+        else:
+            states = {}
             try:
-                async with asyncio.timeout(1):
-                    outcome = await probe(selected, location)
-            except Exception:
-                outcome = 'inconclusive'
-            states, _ = await self.transact(selected, outcome)
+                async with asyncio.timeout(max(0, timeout_seconds)):
+                    states, selected = await self.transact(claim=probe is not None)
+                    if selected and probe:
+                        spec = RESERVATIONS[selected]
+                        location = os.getenv(spec.location_env, spec.location) if spec.location_env else spec.location
+                        try:
+                            async with asyncio.timeout(1):
+                                outcome = await probe(selected, location)
+                        except Exception:
+                            outcome = 'inconclusive'
+                        states, _ = await self.transact(selected, outcome)
+            except TimeoutError:
+                states = {}
+                record_fallback(
+                    component='vertex_reservations',
+                    from_mode='redis',
+                    to_mode='none',
+                    reason='timeout',
+                    outcome='degraded',
+                )
+                logger.warning('vertex_reservation_refresh_budget_exhausted state=unknown')
+            # Never cache a refusal-capable snapshot: outage/recovery must be
+            # checked on every request. Positive/unknown snapshots may lag 1s.
+            self._snapshot = states if states and State.INACTIVE not in states.values() else {}
+            self._snapshot_at = time.monotonic()
+            self._snapshot_key = key
         local = {
             m: State.ACTIVE for m, at in self._positive.items() if 0 <= time.monotonic() - at <= ACTIVE_FRESH_SECONDS
         }
-        return effective_states(states or local, os.environ)
+        raw = {m: (states or local).get(m, State.UNKNOWN) for m in RESERVATIONS}
+        return effective_states(raw, os.environ) if apply_overrides else raw
 
-    async def record(self, model: str, capacity: str, status: int, traffic_type: str | None) -> None:
+    async def aclose(self) -> None:
+        if self._client is not None and self._owns_client:
+            await self._client.aclose()
+        self._client = None
+        self._snapshot = {}
+        self._positive.clear()
+
+    async def record(
+        self, model: str, capacity: str, status: int, traffic_type: str | None, *, timeout_seconds: float = 0.3
+    ) -> None:
         if (
             model in RESERVATIONS
             and capacity == 'dedicated'
             and 200 <= status < 300
             and traffic_type == 'PROVISIONED_THROUGHPUT'
         ):
+            self._snapshot = {}
             self._positive[model] = time.monotonic()
-            await self.transact(model, 'dedicated_success')
+            if timeout_seconds <= 0:
+                return
+            try:
+                async with asyncio.timeout(min(0.3, timeout_seconds)):
+                    await self.transact(model, 'dedicated_success')
+            except TimeoutError:
+                record_fallback(
+                    component='vertex_reservations',
+                    from_mode='redis',
+                    to_mode='none',
+                    reason='timeout',
+                    outcome='degraded',
+                )
+                logger.warning('vertex_reservation_publish_budget_exhausted state=local_positive')
 
     async def record_response(self, model: str, capacity: str, response: httpx.Response) -> bool:
         """Only positive metadata on a dedicated response updates shared evidence."""
-        if capacity != 'dedicated':
+        if model not in RESERVATIONS or capacity != 'dedicated':
             return False
         try:
             traffic = response.json().get('usageMetadata', {}).get('trafficType')
@@ -160,13 +224,16 @@ class ReservationState:
         return 200 <= response.status_code < 300 and traffic == 'PROVISIONED_THROUGHPUT'
 
 
-def effective_states(observed: Mapping[str, State], env: Mapping[str, str]) -> dict[str, State]:
+def effective_states(
+    observed: Mapping[str, State], env: Mapping[str, str], *, admission: bool = False
+) -> dict[str, State]:
     states = {m: observed.get(m, State.UNKNOWN) for m in RESERVATIONS}
     # Retain the existing single-order operator pin; per-model overrides win.
     pin = env.get('OMI_VERTEX_PT_MODEL', '').strip()
     # Invalid pins are rejected by routing; they cannot fabricate absence at
-    # the earlier admission boundary.
-    if pin in COMPANY_PAID_VERTEX_TEXT_MODELS:
+    # the earlier admission boundary. Non-reservation pins only affect routing;
+    # they cannot manufacture evidence for feature refusal.
+    if pin in (RESERVATIONS if admission else COMPANY_PAID_VERTEX_TEXT_MODELS):
         states = {m: State.ACTIVE if m == pin else State.INACTIVE for m in RESERVATIONS}
     raw = env.get(STATE_OVERRIDE_ENV, '').strip()
     if raw:
