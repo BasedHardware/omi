@@ -53,7 +53,8 @@ extension TaskAssistant {
             return await handleResultWithScreenshot(
               result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle,
               recordExtractionEvent: extraction.admission?.auditSample != true,
-              authorization: binding.authorization
+              authorization: binding.authorization,
+              provenance: ScreenTaskDeliveryProvenance(extraction: extraction)
             ) { type, data in
               let boxed = TaskAssistantEventPayloadBox(data)
               Task { @MainActor in
@@ -112,7 +113,7 @@ extension TaskAssistant {
       validateFeature: { guard lease.isCurrent() else { throw ScreenTaskFailure.stopped } },
       quota: {
         try await ScreenTaskFeature.enforceQuota()
-        if ScreenTaskBackpressure.shared.isBlocked(authorization) { throw ScreenTaskFailure.backpressure }
+        if let failure = ScreenTaskBackpressure.shared.blockedFailure(authorization) { throw failure }
       },
       ocr: { try await RewindOCRService.shared.extractTextWithBounds(from: $0) },
       retrieve: { await self.executeKeywordSearch(query: $0) },

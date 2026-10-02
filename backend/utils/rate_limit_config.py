@@ -129,7 +129,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # devices plus reconnect bursts.
     "screen_activity:sync": (600, 3600),
     "screen_task:gate": (30, 60),
-    "screen_task:gate_daily": (1500, 86400),
+    "screen_task:gate_daily": (6000, 86400),
     # Platform tools — backend RAG endpoints
     "tools:search": (60, 3600),
     "tools:mutate": (60, 3600),

@@ -243,6 +243,12 @@ class PostHogManager {
       "Screen Task Frame Terminal", distinctId: ownerID ?? "screen-task-unowned", properties: properties)
   }
 
+  func screenTaskDeliveryCompleted(ownerID: String, completion: ScreenTaskDeliveryCompletion, deferred: Bool) {
+    guard isInitialized else { return }
+    PostHogSDK.shared.capture(
+      "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
+  }
+
   /// Fresh admission for the screen-task kill switch. SDK reload callbacks may
   /// return cached values on quota/failure, so they cannot renew an upload lease.
   func screenTaskFlagAdmission(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> Bool {

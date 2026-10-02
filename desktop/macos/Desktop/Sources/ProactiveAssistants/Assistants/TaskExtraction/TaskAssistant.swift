@@ -322,7 +322,8 @@ actor TaskAssistant: ProactiveAssistant {
         ),
         localRecord: record,
         windowTitle: record.windowTitle,
-        authorization: authorization
+        authorization: authorization,
+        deferred: true
       )
     }
   }
@@ -378,8 +379,20 @@ actor TaskAssistant: ProactiveAssistant {
   /// Used by the test runner to replay past screenshots.
   /// Returns (results, searchCount) — results is one entry per extracted task plus one
   /// terminator entry (no_task_found/reject_task) when no tasks were extracted.
-  func testAnalyze(jpegData: Data, appName: String) async throws -> ([TaskExtractionResult], Int) {
-    return try await extractTaskSingleStage(from: jpegData, appName: appName)
+  func testAnalyze(jpegData: Data, appName: String, binding: ScreenTaskFrameBinding) async throws -> (
+    [TaskExtractionResult], Int
+  ) {
+    let validate: @Sendable () throws -> Void = {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(binding.authorization) else {
+        throw ScreenTaskFailure.ownerRevoked
+      }
+      guard binding.exclusion.appName == appName, binding.isCurrent() else { throw ScreenTaskFailure.privacyRevoked }
+      try Task.checkCancellation()
+    }
+    try validate()
+    return try await ScreenTaskWorkAuthority.$validate.withValue(validate) {
+      try await extractTaskSingleStage(from: jpegData, appName: appName, authorization: binding.authorization)
+    }
   }
 
   // MARK: - ProactiveAssistant Protocol Methods
@@ -599,7 +612,7 @@ actor TaskAssistant: ProactiveAssistant {
   /// Returns (results, searchCount) — one TaskExtractionResult per extract_task plus a
   /// terminator result when zero tasks were extracted.
   func extractTaskSingleStage(
-    from jpegData: Data, appName: String, authorization: RuntimeOwnerAuthorizationSnapshot? = nil
+    from jpegData: Data, appName: String, authorization: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> (
     [TaskExtractionResult], Int
   ) {
@@ -775,7 +788,7 @@ actor TaskAssistant: ProactiveAssistant {
       )
 
       try ScreenTaskWorkAuthority.require()
-      if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) {
+      if !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) {
         throw ScreenTaskFailure.ownerRevoked
       }
       guard let toolCall = result.toolCalls.first else {
@@ -1314,7 +1327,7 @@ actor TaskAssistant: ProactiveAssistant {
   }
 
   /// Execute vector similarity search
-  private func executeVectorSearch(query: String, authorization: RuntimeOwnerAuthorizationSnapshot?) async throws
+  private func executeVectorSearch(query: String, authorization: RuntimeOwnerAuthorizationSnapshot) async throws
     -> [TaskSearchResult]
   {
     var results: [TaskSearchResult] = []
@@ -1376,7 +1389,7 @@ actor TaskAssistant: ProactiveAssistant {
       }
     } catch {
       try ScreenTaskWorkAuthority.require()
-      if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) {
+      if !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) {
         throw ScreenTaskFailure.ownerRevoked
       }
       logError("Task: Vector search failed", error: error)

@@ -40,8 +40,13 @@ Swift characters, rather than the cropped dedupe line list.
 
 The authenticated OCR-only `POST /v1/screen-task/gate` applies company-paid
 `screen_frame_judge` managed-plan authorization and the trial paywall. Separate,
-boost-exempt gate policies allow 30 requests/minute and 1500/day per UID. Gate
-limiter unavailability fails closed. Jev uses one gateway decision attempt with
+boost-exempt gate policies allow 30 requests/minute and 6000/day per UID. Gate
+limiter unavailability fails closed. The daily budget covers 5760 frames at the
+15-second messaging cadence. Gate-budget 429 responses are typed
+`gate_budget_exhausted`; the client caps only that budget cooldown at the
+60-second burst window and emits `error_class=gate_budget_cooldown`, including
+frames suppressed during cooldown. Screenshot/proxy Retry-After remains uncapped.
+Jev uses one gateway decision attempt with
 a two-second provider timeout; this does not bound gateway queue time. Threshold
 `SCREEN_TASK_JEV_THRESHOLD` defaults .5 and reject audit fraction
 `SCREEN_TASK_JEV_AUDIT_RATE` defaults .01. Provider outages, malformed gate
@@ -93,6 +98,10 @@ Ordinary feature-off work does not acquire the separate gate/extraction cooldown
 Legacy model responses are revalidated before any tool executes, and semantic
 search passes the original authorization into embedding. Auth acquisition and
 actual embedding dispatch both revalidate the original owner/session and app privacy.
+The screenshot test runner captures its job owner before loading database rows,
+binds each app/window before loading pixels, and uses the same required original
+authorization through replay inference and tools. Revoked replay results never
+reach the test window.
 Capture still proposes pending candidates, never accepted action items. Policy
 rejection, coalescence and an unsynced outbox are not delivered suggestions.
 
@@ -114,7 +123,8 @@ not inner feature-off tool/model requests), and delivery counts `policy_rejected
 `delivery_ms`, and `capture_to_terminal_ms` (includes queue delay). A stage that
 never completes can report zero; this is not a separate timeout-duration metric.
 Event properties contain no screen/task text, window/app titles, IDs or scores.
-Analytics association uses the capture owner, including revocation outcomes, so
+Frame-terminal counts describe processing at that moment; deferred receipts do
+not rewrite a prior terminal event. Analytics association uses the capture owner, including revocation outcomes, so
 an account swap cannot attribute a prior owner’s delivery to the incoming user.
 
 `desktop_health_event` / `event=fallback_triggered` retains the registered areas
@@ -129,12 +139,32 @@ client-bypass metadata. Client terminal events are the authoritative eligible
 frame denominator, since rejected and pre-upload-failed frames send no screenshot.
 Backend counters cannot deduplicate ambiguous client transport outcomes.
 
-Audited rejects emit `Task Extracted` with `gate_outcome=rejected`,
+Every new outbox row persists bounded `screen_task_delivery_provenance` containing
+`extractor`, `gate_outcome` and `audit_sample`. The first canonical receipt claims
+a `Screen Task Delivery Completed` event in the receipt's SQLite transaction.
+Repeated receipt updates and coalesced/reused candidates do not claim another
+event. Immediate and deferred retries use the same receipt path, retaining the
+original extractor/audit provenance rather than attributing it to the retrying
+frame. Older unsynced rows without provenance report `extractor=unknown`,
+`gate_outcome=none`, `audit_sample=false`.
+
+Completion properties are `schema_version=1`, `extractor`, `gate_outcome`,
+`audit_sample`, `delivery_status` (pending/accepted/rejected/expired/unknown),
+`pending_delivered` (one only for a first pending receipt), and `delivery_path`
+(immediate/deferred). They contain no screen/task text, titles or identifiers.
+The SDK envelope associates the event with the receipt owner's `distinctId`.
+Local transactional claiming prevents duplicate events on receipt replays and
+process restarts; SDK delivery is best effort, and a crash between the receipt
+commit and SDK enqueue can lose the event. This is not an exactly-once analytics
+transport guarantee.
+
+Audited rejects still emit `Task Extracted` with `gate_outcome=rejected`,
 `audit_sample=true`, actual `extractor`, `extracted_candidate_count` (0–8) and
-`task_count` equal to delivered pending suggestions, including zero. The ordinary
-per-task extraction event is suppressed for audits. Compare audit counts with
-`pending_delivered` in the terminal event; legacy-produced results are identified
-separately. An audit is model disagreement evidence, not human recall ground
+`task_count` equal to immediately delivered pending suggestions, including zero.
+The ordinary per-task extraction event is suppressed for audits. Read delivery
+completion events for both immediate and deferred audit suggestions; use frame
+terminal events and `Task Extracted` for the original processing denominator.
+An audit is model disagreement evidence, not human recall ground
 truth. Existing candidate-attribution events retain canonical IDs separately.
 Flag-configured logging suppresses inherited content-bearing task logs through
 extraction, ordinary legacy and staging. Other capture/coordinator logs are outside that
@@ -145,12 +175,12 @@ At each consented ramp stage read these signals:
 
 | Signal | Event/fields or metric |
 | --- | --- |
-| Gate pass rate | Within terminal events filtered to `feature_enabled_at_start=true`, count `gate_outcome=passed` / sum of `eligible_frames`; report rejected, fail-open, dedupe and bypass separately. Backend gate counter cross-checks received calls |
-| Audited-reject misses | `gate_outcome=rejected`, `audit_sample=true`, `extractor=gemini_3_8`, sum `pending_delivered`; show audited frame count and human labels separately |
-| Fallback rate | `desktop_health_event`, `event=fallback_triggered`, the two areas and `reason`; terminal `fallback_reason` over processed feature frames; distinguish gate bypass from admission-loss legacy |
-| Delivered suggestions/user-day | Sum terminal `pending_delivered` by analytics user/day and actual extractor; compare a contemporaneous legacy baseline and active-user exposure |
+| Gate pass rate | Within terminal events filtered to `feature_enabled_at_start=true`, count `gate_outcome=passed` / sum of `eligible_frames`; report rejected, fail-open, dedupe and bypass separately. Backend gate counter cross-checks received calls; report `outcome=gate_budget_exhausted` separately |
+| Audited-reject misses | Completion events filtered to `gate_outcome=rejected`, `audit_sample=true`, `extractor=gemini_3_8`, sum `pending_delivered`; show terminal audited frame count and human labels separately |
+| Fallback rate | `desktop_health_event`, `event=fallback_triggered`, the two areas and `reason`; terminal `fallback_reason` supplies cause context (extraction outages issue no fallback request); distinguish gate bypass from admission-loss legacy |
+| Delivered suggestions/user-day | Sum completion `pending_delivered` by analytics user/receipt day and original extractor, sliced by `delivery_path`; compare a contemporaneous legacy baseline and active-user exposure |
 | Latency | Terminal stage `*_ms`, especially `capture_to_terminal_ms`; slice by pipeline/extractor and messaging cohort using existing cohort metadata |
-| Errors | Terminal `outcome=failed`, `error_class`, `invalid_items`, `failed`; backend gate terminal outcome counts and existing proxy status/error telemetry |
+| Errors | Terminal `outcome=failed`, `error_class` (including `provider_outage` and `gate_budget_cooldown`), `invalid_items`, `failed`; backend gate terminal outcome counts and existing proxy status/error telemetry |
 
 Percentages and hold periods remain the operator's decision. Offline behavioral
 coverage is required before consented dogfood; human labeling of positives,

@@ -1,7 +1,8 @@
 import Foundation
 
 enum ScreenTaskFailure: Error {
-  case invalidResponse, planGated, stopped, privacyRevoked, ownerRevoked, backpressure, providerOutage
+  case invalidResponse, planGated, stopped, privacyRevoked, ownerRevoked, backpressure, providerOutage,
+    gateBudgetCooldown
 }
 
 struct ScreenTaskResponse: Decodable {

@@ -349,6 +349,34 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     XCTAssertEqual(properties["pending_delivered"] as? Int, 0)
   }
 
+  func testGateBudgetCooldownCapsDailyRetryAfterWithoutCappingScreenshotQuota() throws {
+    let state = RampState()
+    let cooldown = ScreenTaskBackpressure(now: { state.now })
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    let owner = try XCTUnwrap(authority.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))
+    let response = try XCTUnwrap(
+      HTTPURLResponse(
+        url: URL(string: "http://local")!, statusCode: 429, httpVersion: nil,
+        headerFields: ["Retry-After": "63900", "X-Omi-Retryable": "false"]))
+    let gate = ScreenTaskHTTPFailure(
+      response: response, data: Data(#"{"detail":{"error":"gate_budget_exhausted"}}"#.utf8))
+    cooldown.record(gate, owner: owner)
+    XCTAssertEqual(ScreenTaskErrorPolicy.errorClass(gate), "gate_budget_cooldown")
+    let failure = try XCTUnwrap(cooldown.blockedFailure(owner))
+    let metrics = ScreenTaskFrameMetrics()
+    metrics.finish(error: failure)
+    XCTAssertEqual(metrics.properties(captureToTerminalMS: 1)["error_class"] as? String, "gate_budget_cooldown")
+    state.time += 59
+    XCTAssertTrue(cooldown.isBlocked(owner))
+    state.time += 1
+    XCTAssertFalse(cooldown.isBlocked(owner))
+    // A screenshot 429 shares the status but does not carry the gate budget type.
+    cooldown.record(ScreenTaskHTTPFailure(response: response, data: Data()), owner: owner)
+    state.time += 60
+    XCTAssertTrue(cooldown.isBlocked(owner))
+    XCTAssertEqual(ScreenTaskErrorPolicy.errorClass(try XCTUnwrap(cooldown.blockedFailure(owner))), "backpressure")
+  }
+
   func testRetryAfterDefersOnlyOriginalOwnerSession() throws {
     let state = RampState()
     let cooldown = ScreenTaskBackpressure(now: { state.now })
@@ -459,6 +487,31 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
         XCTAssertEqual(state.sent, ["inference"], "no retry or later tool may dispatch")
       }
     }
+  }
+
+  func testAuthorizedEmbeddingDispatchKeepsOriginalCredentialsAndReturnsNormalizedVector() async throws {
+    let state = RampState()
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    let original = try XCTUnwrap(authority.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))
+    let service = EmbeddingService(
+      acquireAuth: { snapshot in
+        XCTAssertEqual(snapshot, original)
+        state.append("auth")
+        return "Bearer synthetic-a"
+      },
+      dispatch: { request in
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-a")
+        state.append("embedding")
+        let response = try XCTUnwrap(
+          HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+        return (Data(#"{"embedding":{"values":[3,4]}}"#.utf8), response)
+      }, ownerIsCurrent: { authority.isCurrent($0, ownerID: "synthetic-a") })
+    let vector = try await ScreenTaskWorkAuthority.$validate.withValue({ try state.frameValid() }) {
+      try await service.embed(text: "synthetic request", authorization: original)
+    }
+    XCTAssertEqual(vector[0], 0.6, accuracy: 0.0001)
+    XCTAssertEqual(vector[1], 0.8, accuracy: 0.0001)
+    XCTAssertEqual(state.sent, ["auth", "embedding"])
   }
 
   func testEmbeddingAuthSuspensionRevalidatesOriginalOwnerSessionAndExclusionBeforeDispatch() async throws {

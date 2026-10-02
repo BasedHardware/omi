@@ -48,11 +48,11 @@ async def screen_task_gate(
         await run_blocking(db_executor, check_screen_task_limit, uid, 'screen_task:gate_daily')
     except HTTPException as error:
         SCREEN_TASK_GATE_FRAMES_TOTAL.labels(
-            outcome='quota' if error.status_code == 429 else 'admission_unavailable'
+            outcome='gate_budget_exhausted' if error.status_code == 429 else 'admission_unavailable'
         ).inc()
         raise HTTPException(
             status_code=error.status_code,
-            detail={'error': 'gate_admission_denied'},
+            detail={'error': 'gate_budget_exhausted' if error.status_code == 429 else 'gate_admission_denied'},
             headers={**(error.headers or {}), 'X-Omi-Retryable': 'false'},
         ) from error
     decision = await run_blocking(db_executor, authorize_managed_compute, uid, 'screen_frame_judge', 'omi')

@@ -15,6 +15,7 @@ extension TaskAssistant {
     windowTitle: String? = nil,
     recordExtractionEvent: Bool = true,
     authorization: RuntimeOwnerAuthorizationSnapshot?,
+    provenance: ScreenTaskDeliveryProvenance = ScreenTaskDeliveryProvenance(extractor: "legacy"),
     sendEvent: @escaping (String, [String: Any]) -> Void
   ) async -> ScreenTaskDeliveryCounts {
     guard let authorization else { return .failure }
@@ -76,6 +77,7 @@ extension TaskAssistant {
       screenshotId: screenshotId,
       contextSummary: taskResult.contextSummary,
       windowTitle: windowTitle,
+      provenance: provenance,
       authorization: mutation
     )
 
@@ -142,6 +144,7 @@ extension TaskAssistant {
     screenshotId: Int64?,
     contextSummary: String,
     windowTitle: String? = nil,
+    provenance: ScreenTaskDeliveryProvenance,
     authorization: LocalMutationAuthorization
   ) async -> StagedTaskRecord? {
     var metadata: [String: Any] = [
@@ -157,6 +160,7 @@ extension TaskAssistant {
       "already_done": task.alreadyDone ?? false,
       "ownership_confidence": task.ownershipConfidence ?? 0.5,
     ]
+    provenance.store(in: &metadata)
     if let duplicateOf = task.duplicateOf { metadata["duplicate_of"] = duplicateOf }
     if let refinesTask = task.refinesTask { metadata["refines_task"] = refinesTask }
     if let primaryTag = task.primaryTag {
@@ -226,7 +230,8 @@ extension TaskAssistant {
     taskResult: TaskExtractionResult,
     localRecord: StagedTaskRecord?,
     windowTitle: String? = nil,
-    authorization: RuntimeOwnerAuthorizationSnapshot
+    authorization: RuntimeOwnerAuthorizationSnapshot,
+    deferred: Bool = false
   ) async -> ScreenTaskDeliveryCounts {
     let mutation = Self.mutationAuthorization(authorization)
     guard (try? mutation.require()) != nil else { return .failure }
@@ -301,11 +306,13 @@ extension TaskAssistant {
         else { return .failure }
         let canonicalStatus = canonicalState.status
         let canonicalTaskID = canonicalState.taskID
-        try await StagedTaskStorage.shared.markCanonicalReceipt(
+        let completion = try await ScreenTaskReceiptDelivery.complete(
           id: localID,
           candidateID: canonicalState.candidateID,
           status: canonicalStatus.rawValue,
           taskID: canonicalTaskID,
+          ownerID: authorization.ownerID,
+          deferred: deferred,
           authorization: mutation
         )
         let confidenceBand = TaskIntelligenceConfidenceBand.forCapture(
@@ -350,7 +357,7 @@ extension TaskAssistant {
         log(
           "Task: Canonical capture reconciled candidate=\(canonicalState.candidateID) outcome=\(decision.outcome.rawValue)"
         )
-        return ScreenTaskDeliveryCounts(pendingDelivered: canonicalStatus == .pending ? 1 : 0)
+        return ScreenTaskDeliveryCounts(pendingDelivered: completion?.status == "pending" ? 1 : 0)
       }
 
       // I1: screen capture proposes, it never creates. `.read` above is the only

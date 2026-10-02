@@ -224,15 +224,16 @@ actor StagedTaskStorage {
     }
   }
 
+  @discardableResult
   func markCanonicalReceipt(
     id: Int64, candidateID: String, status: String, taskID: String?,
     authorization: LocalMutationAuthorization = .unrestricted
-  ) async throws {
+  ) async throws -> ScreenTaskDeliveryCompletion? {
     try authorization.require()
     let db = try await ensureInitialized()
 
     enum MarkReceiptResult: Sendable {
-      case updated
+      case updated(ScreenTaskDeliveryCompletion?)
       case mergedDuplicate(existingId: Int64)
     }
 
@@ -278,6 +279,8 @@ actor StagedTaskStorage {
       }
 
       var metadata = record.metadata ?? [:]
+      let firstReceipt = !record.backendSynced && metadata["screen_task_delivery_receipted"] as? Bool != true
+      let provenance = ScreenTaskDeliveryProvenance(metadata: metadata)
       let resolved = Self.resolvedCanonicalReceiptFields(
         existingMetadata: metadata,
         candidateID: candidateID,
@@ -291,6 +294,7 @@ actor StagedTaskStorage {
       } else {
         metadata.removeValue(forKey: "canonical_task_id")
       }
+      metadata["screen_task_delivery_receipted"] = true
       record.setMetadata(metadata)
       record.backendId = candidateID
       record.backendSynced = true
@@ -299,7 +303,8 @@ actor StagedTaskStorage {
       record.updatedAt = Date()
       do {
         try record.update(database)
-        return .updated
+        return .updated(
+          firstReceipt ? ScreenTaskDeliveryCompletion(provenance: provenance, status: resolved.status) : nil)
       } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
         guard
           let existingId = try StagedTaskRecord
@@ -318,12 +323,14 @@ actor StagedTaskStorage {
     }
 
     switch result {
-    case .updated:
+    case .updated(let completion):
       log("StagedTaskStorage: Marked canonical receipt \(id) (candidateID: \(candidateID))")
+      return completion
     case .mergedDuplicate(let existingId):
       log(
         "StagedTaskStorage: Marked canonical receipt idempotent by merging local duplicate \(id) into existing row \(existingId)"
       )
+      return nil
     }
   }
 

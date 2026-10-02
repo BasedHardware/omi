@@ -119,12 +119,13 @@ async def test_managed_denial_is_terminal_and_never_calls_provider(monkeypatch, 
 
 
 @pytest.mark.asyncio
-async def test_gate_has_separate_burst_and_daily_budgets_and_typed_quota(monkeypatch):
+@pytest.mark.parametrize("blocked_policy", ["screen_task:gate", "screen_task:gate_daily"])
+async def test_gate_has_separate_burst_and_daily_budgets_and_typed_quota(monkeypatch, blocked_policy):
     seen = []
 
     def limit(uid, policy):
         seen.append((uid, policy))
-        if policy.endswith('_daily'):
+        if policy == blocked_policy:
             raise HTTPException(429, headers={'Retry-After': '70'})
 
     monkeypatch.setattr(route, 'check_screen_task_limit', limit)
@@ -137,12 +138,15 @@ async def test_gate_has_separate_burst_and_daily_budgets_and_typed_quota(monkeyp
     app.dependency_overrides[route.get_current_user_uid] = lambda: 'synthetic-user'
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://local') as client:
         result = await client.post('/v1/screen-task/gate', json={'ocr_text': 'synthetic'})
-    assert [p for _, p in seen] == ['screen_task:gate', 'screen_task:gate_daily']
+    assert [p for _, p in seen] == (
+        ['screen_task:gate', 'screen_task:gate_daily'] if blocked_policy.endswith('_daily') else ['screen_task:gate']
+    )
     assert result.status_code == 429
     assert result.headers['Retry-After'] == '70'
+    assert result.json()['detail']['error'] == 'gate_budget_exhausted'
     assert result.headers['X-Omi-Retryable'] == 'false'
     assert get_effective_limit('screen_task:gate', boost=100) == (30, 60)
-    assert get_effective_limit('screen_task:gate_daily', boost=100) == (1500, 86400)
+    assert get_effective_limit('screen_task:gate_daily', boost=100) == (6000, 86400)
 
 
 @pytest.mark.asyncio
@@ -177,3 +181,37 @@ def test_gate_budget_fails_closed_on_redis_and_never_obeys_shadow(monkeypatch):
         admission.check_screen_task_limit('synthetic-user', 'screen_task:gate')
     assert caught.value.status_code == 429
     assert caught.value.headers['Retry-After'] == '65'
+
+
+def test_gate_daily_budget_admits_full_day_at_messaging_cadence_and_retains_burst(monkeypatch):
+    from database import redis_db
+
+    clock = [0]
+    counters = {}
+
+    def lua(*, keys, args):
+        key = keys[0]
+        window = args[0]
+        count, expiry = counters.get(key, (0, clock[0] + window))
+        if expiry <= clock[0]:
+            count, expiry = 0, clock[0] + window
+        count += 1
+        counters[key] = count, expiry
+        return count, expiry - clock[0]
+
+    monkeypatch.setattr(redis_db, '_RATE_LIMIT_LUA', lua)
+    monkeypatch.setattr(admission, 'check_rate_limit', redis_db.check_rate_limit)
+    for frame in range(5760):
+        clock[0] = frame * 15
+        admission.check_screen_task_limit('synthetic-cadence', 'screen_task:gate')
+        admission.check_screen_task_limit('synthetic-cadence', 'screen_task:gate_daily')
+    for _ in range(6000 - 5760):
+        admission.check_screen_task_limit('synthetic-cadence', 'screen_task:gate_daily')
+    with pytest.raises(HTTPException) as daily:
+        admission.check_screen_task_limit('synthetic-cadence', 'screen_task:gate_daily')
+    assert daily.value.status_code == 429
+    for _ in range(30):
+        admission.check_screen_task_limit('synthetic-burst', 'screen_task:gate')
+    with pytest.raises(HTTPException) as burst:
+        admission.check_screen_task_limit('synthetic-burst', 'screen_task:gate')
+    assert burst.value.status_code == 429
