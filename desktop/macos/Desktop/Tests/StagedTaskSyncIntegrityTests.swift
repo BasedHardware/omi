@@ -35,7 +35,7 @@ final class StagedTaskSyncIntegrityTests: XCTestCase {
 
   func testRevocationInsideInsertTransactionRollsBackForOwnerSwapAndSameUIDReauthorization() async throws {
     for sameUID in [false, true] {
-      let probe = StorageRevocationProbe(owner: testUserId, sameUID: sameUID)
+      let probe = try StorageRevocationProbe(owner: testUserId, sameUID: sameUID)
       let authorization = LocalMutationAuthorization { probe.validate() }
       do {
         _ = try await StagedTaskStorage.shared.insertLocalStagedTask(
@@ -124,10 +124,10 @@ private final class StorageRevocationProbe: @unchecked Sendable {
   private let owner: String
   private let sameUID: Bool
   private var checks = 0
-  init(owner: String, sameUID: Bool) {
+  init(owner: String, sameUID: Bool) throws {
     self.owner = owner
     self.sameUID = sameUID
-    snapshot = authority.capture(ownerID: owner, expectedOwnerID: owner)!
+    snapshot = try XCTUnwrap(authority.capture(ownerID: owner, expectedOwnerID: owner))
   }
   func validate() -> Bool {
     lock.withLock {
