@@ -98,7 +98,7 @@ UID:omi-conversation-conv_01@omi-cli
 DTSTAMP:20261002T070000Z
 DTSTART:20261001T090000Z
 DTEND:20261001T094500Z
-SUMMARY:Quarterly Planning; Strategy\, & Review
+SUMMARY:Quarterly Planning\; Strategy\, & Review
 DESCRIPTION:Omi conversation: conv_01\nCategory: work\nFolder: Planning
 STATUS:CONFIRMED
 CATEGORIES:Omi\,work

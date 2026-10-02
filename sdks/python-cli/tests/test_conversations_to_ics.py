@@ -247,6 +247,67 @@ class TestConversationsToICS(unittest.TestCase):
             loaded = c2ics.load(["-"])
             self.assertEqual(len(loaded), 3)
 
+    def test_parse_time_date_only(self):
+        dt = c2ics.parse_time("2026-10-01")
+        self.assertIsNotNone(dt)
+        self.assertEqual(dt.year, 2026)
+        self.assertEqual(dt.month, 10)
+        self.assertEqual(dt.day, 1)
+        self.assertEqual(dt.tzinfo, timezone.utc)
+
+    def test_load_empty_or_whitespace_file(self):
+        f_empty = self.tmp / "empty.json"
+        f_empty.write_text("   \n  \t  ", encoding="utf-8")
+        loaded = c2ics.load([str(f_empty)])
+        self.assertEqual(len(loaded), 0)
+
+    def test_load_idless_conversations(self):
+        idless_convs = [
+            {"title": "Conv A without ID", "started_at": "2026-10-01T10:00:00Z"},
+            {"title": "Conv B without ID", "started_at": "2026-10-01T11:00:00Z"},
+        ]
+        src = self.tmp / "idless_convs.json"
+        src.write_text(json.dumps(idless_convs), encoding="utf-8")
+        loaded = c2ics.load([str(src)])
+        self.assertEqual(len(loaded), 2)
+        ics_text, written, _ = c2ics.build_ics(loaded)
+        self.assertEqual(written, 2)
+        uids = [line for line in ics_text.splitlines() if line.startswith("UID:")]
+        self.assertEqual(len(uids), 2)
+        self.assertNotEqual(uids[0], uids[1])
+        self.assertNotIn("UID:omi-conversation-unknown@omi-cli", ics_text)
+
+    def test_default_length_overflow(self):
+        convs_dict = {c["id"]: c for c in self.sample_convs}
+        with self.assertRaises(ValueError):
+            c2ics.build_ics(convs_dict, default_length_mins=10**18)
+
+    def test_main_overwrite_cli_flag(self):
+        src = self.tmp / "cli_overwrite_src.json"
+        dest = self.tmp / "cli_overwrite_dest.ics"
+        src.write_text(json.dumps(self.sample_convs), encoding="utf-8")
+        dest.write_text("old content", encoding="utf-8")
+
+        with self.assertRaises(SystemExit) as ctx:
+            c2ics.main([str(src), "-o", str(dest)])
+        self.assertIn("Refusing to overwrite", str(ctx.exception))
+        self.assertEqual(dest.read_text(encoding="utf-8"), "old content")
+
+        ret = c2ics.main([str(src), "-o", str(dest), "--overwrite"])
+        self.assertEqual(ret, 0)
+        self.assertIn("BEGIN:VCALENDAR", dest.read_text(encoding="utf-8"))
+
+    def test_main_skipped_items_to_stderr_on_stdout(self):
+        src = self.tmp / "convs_skipped.json"
+        src.write_text(json.dumps(self.sample_convs), encoding="utf-8")
+
+        with patch("sys.stderr.write") as mock_err:
+            ret = c2ics.main([str(src), "-o", "-"])
+            self.assertEqual(ret, 0)
+            mock_err.assert_called()
+            call_args = "".join(str(call[0][0]) for call in mock_err.call_args_list)
+            self.assertIn("skipped 1 item(s) without start time", call_args)
+
 
 if __name__ == "__main__":
     unittest.main()

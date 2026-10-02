@@ -126,12 +126,14 @@ def load(sources: Sequence[str]) -> Dict[str, Dict[str, Any]]:
             if not isinstance(item, dict):
                 raise ValueError(f"{source_label} item {idx}: each conversation must be an object")
             item_id = item.get("id")
-            if item_id is not None and str(item_id).strip():
-                clean_id = str(item_id).strip()
+            sanitized_id = ics_text(item_id).strip()
+            if sanitized_id:
+                clean_id = sanitized_id
             else:
                 clean_id = f"auto_{uuid.uuid4().hex}"
                 while clean_id in conversations_by_id:
                     clean_id = f"auto_{uuid.uuid4().hex}"
+            item["id"] = clean_id
             conversations_by_id[clean_id] = item
     return conversations_by_id
 
@@ -143,7 +145,12 @@ def build_ics(
     calendar_name: str = DEFAULT_CALNAME,
 ) -> Tuple[str, int, int]:
     """Build RFC 5545 iCalendar payload from conversations."""
-    default_length = timedelta(minutes=max(1, default_length_mins))
+    try:
+        default_length = timedelta(minutes=max(1, default_length_mins))
+    except OverflowError:
+        raise ValueError(
+            f"Default length {default_length_mins} minutes exceeds maximum allowed range"
+        )
     now = stamp(datetime.now(timezone.utc))
     clean_calname = ics_text(calendar_name) or DEFAULT_CALNAME
     cat_match = category_filter.strip().lower() if category_filter else None
@@ -201,6 +208,8 @@ def build_ics(
 
         categories_val = f"Omi,{ics_text(category)}" if category else "Omi"
 
+        desc_notes = "\\n".join(notes)
+
         lines.extend([
             "BEGIN:VEVENT",
             f"UID:omi-conversation-{item_id}@omi-cli",
@@ -208,7 +217,7 @@ def build_ics(
             f"DTSTART:{stamp(start)}",
             f"DTEND:{stamp(end)}",
             f"SUMMARY:{title}",
-            f"DESCRIPTION:{'\\n'.join(notes)}",
+            f"DESCRIPTION:{desc_notes}",
             "STATUS:CONFIRMED",
             f"CATEGORIES:{categories_val}",
             "END:VEVENT",
@@ -255,7 +264,6 @@ def convert(
                 f"Refusing to overwrite existing {output_path} (use --overwrite to replace)"
             ) from None
         try:
-            os.chmod(output_path, 0o644)
             with output:
                 output.write(payload)
         except OSError:
@@ -266,11 +274,9 @@ def convert(
         tmp_path = parent_dir / tmp_name
         try:
             with tmp_path.open("xb") as tmp_file:
-                os.chmod(tmp_path, 0o644)
                 tmp_file.write(payload)
                 tmp_file.flush()
                 os.fsync(tmp_file.fileno())
-            os.chmod(tmp_path, 0o644)
             tmp_path.replace(output_path)
         except BaseException:
             tmp_path.unlink(missing_ok=True)
@@ -323,13 +329,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         if args.output and args.output != "-":
             print(f"iCalendar written to {args.output} ({written} events written, {skipped} items without start time)")
+        elif skipped > 0:
+            print(f"Note: skipped {skipped} item(s) without start time", file=sys.stderr)
         return 0
     except BrokenPipeError:
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
         os.close(devnull)
         return 1
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, OverflowError) as exc:
         sys.exit(f"iCalendar export failed: {exc}")
 
 
