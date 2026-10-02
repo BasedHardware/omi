@@ -33,7 +33,7 @@ final class ScreenTaskLoggingTests: XCTestCase {
       ])
   }
 
-  func testFlagOffRetainsExistingFreeFormLinesAndPrivacyScopeDoesNotLeak() {
+  func testFreeFormLoggerPrivacyScopeDoesNotLeak() {
     let messages = Messages()
     DesktopLogPrivacy.$sink.withValue({ messages.append($0) }) {
       DesktopLogPrivacy.$suppressContent.withValue(true) { log("suppressed") }

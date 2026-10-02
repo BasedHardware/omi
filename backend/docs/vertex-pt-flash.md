@@ -254,11 +254,19 @@ Capacity is explicitly selected with `X-Vertex-AI-LLM-Request-Type`
    Gateway probes have a whole-attempt deadline of at most one second and one
    quarter of the remaining request budget; shared recovery uses the original
    deadline. Streaming probe output is bounded and buffered until success, so
-   partial output and failed-probe promotion cannot escape. This budget applies
+   partial output and ambiguous promotion cannot escape. This budget applies
    to gateway capacity discovery, not requests on an already confirmed order.
-2. Only a successful dedicated target response latches `_pt_target_ready`.
-   Successful shared requests, generic 429s, 401s and 5xx responses prove
-   nothing about an order. Both streaming and nonstreaming providers observe
+2. A successful dedicated target response or a capacity-exhausted dedicated
+   429 latches `_pt_target_ready`: exhausted capacity proves the order exists.
+   The casefolded absent-order matcher takes precedence over exhaustion; a
+   no-order 429 clears readiness, retries shared and retains the 600-second
+   probe TTL. Successful shared requests, generic 429s, 401s and 5xx responses
+   prove nothing about an order. A full target order spills this request to
+   **gemini-3.8-flash shared**, at the same model/list price as its origin,
+   rather than a cheaper rung: this lane's value is its extraction precision.
+   This gateway target rule also applies after promotion; existing models keep
+   their original overflow ladder, deadlines and HTTP status handling (<400
+   accepts the body). Only target discovery probes require a 2xx response. Both streaming and nonstreaming providers observe
    the actual model and capacity. The latch is process-local, so rollout is
    gradual as instances receive 3.8 traffic; there is no startup probe.
 3. After promotion, new 3.8 requests use dedicated target capacity at its
@@ -266,7 +274,7 @@ Capacity is explicitly selected with `X-Vertex-AI-LLM-Request-Type`
    but now **shared/on-demand**. Pro remains the existing 3.1 Flash-Lite remap;
    client-pinned 2.5 Flash-Lite and BYOK remain unchanged. Remapping old Flash
    to 3.8 shared would raise both input/output prices, so it is disallowed.
-4. Reserved overflow uses shared 3.1 Flash-Lite then 2.5 Flash-Lite, subject to
+4. Existing-model reserved overflow uses shared 3.1 Flash-Lite then 2.5 Flash-Lite, subject to
    reachability, live-reservation exclusion, and the lane's starting price
    ceiling. Old 2.5 overflow never probes the more expensive target. Price
    ceilings also apply to operator overrides and cross-family fallbacks.
@@ -340,7 +348,7 @@ shipping code.
 | --- | --- |
 | `OMI_VERTEX_PT_MODEL` | Pins the reservation model, beating auto-detection in both directions. Must name a declared company-paid anchor (`gemini-2.5-flash`, `gemini-3.8-flash`, `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`); anything else — in particular a Pro or image-output model — fails the request closed instead of serving it (SCA-481). |
 | `OMI_GEMINI_OVERFLOW_MODEL` | Pins the overflow model. Rejected at resolution time if it equals the reservation or names anything outside the declared company-paid anchors (SCA-481); the request then keeps its own error instead of overflowing. |
-| `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables overflow entirely; a full reservation then returns 429 to the client. |
+| `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables cheaper overflow ladders; existing-model full reservations return 429. Gateway target discovery/full-capacity attempts retain same-model shared recovery to preserve extraction precision. |
 | `OMI_VERTEX_PT_TARGET_LOCATION` | Dedicated target order location. Default US multi-region; regional/global require an explicit declared order location. Global requires residency sign-off. Shared target traffic retains its residency default. |
 | `OMI_VERTEX_GLOBAL_LOCATION` | Multi-region for families with no regional endpoint. Default `us`. Setting `global` widens data residency worldwide — see above before flipping it. |
 

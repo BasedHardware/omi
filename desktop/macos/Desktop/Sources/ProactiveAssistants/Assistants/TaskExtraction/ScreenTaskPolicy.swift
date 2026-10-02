@@ -13,7 +13,7 @@ enum ScreenTaskFeature {
 struct ScreenTaskDedupe {
   private struct Entry {
     let date: Date
-    let counts: [String: Int]
+    let lines: [String]
   }
   private var entries: [String: Entry] = [:]
 
@@ -33,11 +33,7 @@ struct ScreenTaskDedupe {
     guard !lines.isEmpty, let entry = entries[key], now >= entry.date,
       now.timeIntervalSince(entry.date) <= 60
     else { return false }
-    return Self.counts(lines).allSatisfy { line, count in count <= (entry.counts[line] ?? 0) }
-  }
-
-  private static func counts(_ lines: [String]) -> [String: Int] {
-    lines.reduce(into: [:]) { $0[$1, default: 0] += 1 }
+    return lines == entry.lines
   }
 
   mutating func record(key: String, lines: [String], now: Date) {
@@ -45,7 +41,7 @@ struct ScreenTaskDedupe {
     if entries.count >= 64, let oldest = entries.min(by: { $0.value.date < $1.value.date })?.key {
       entries.removeValue(forKey: oldest)
     }
-    entries[key] = Entry(date: now, counts: Self.counts(lines))
+    entries[key] = Entry(date: now, lines: lines)
   }
 }
 

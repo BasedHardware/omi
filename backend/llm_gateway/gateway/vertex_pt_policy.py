@@ -90,10 +90,10 @@ class VertexPTPolicyMixin:
         self, served_model: str, status_code: int, preview: bytes, *, origin_model: str = '', capacity: str = ''
     ) -> list[tuple[str, str]]:
         message = _bounded_error_text(preview)
-        if self._is_target_probe(served_model, capacity):
-            # Probe failures describe capacity/location, never shared model health.
-            # Even unclassified errors must leave the user request on PayGo.
-            return [(served_model, ptr.REQUEST_TYPE_SHARED)]
+        if served_model == ptr.PT_MODEL_TARGET and capacity == ptr.REQUEST_TYPE_DEDICATED:
+            if self._is_target_probe(served_model, capacity) or self._overflow_triggered(status_code, message):
+                # Preserve the target lane's precision on absent/full dedicated capacity.
+                return [(served_model, ptr.REQUEST_TYPE_SHARED)]
         if ptr.is_model_unavailable(status_code, message):
             self._record_model_unavailable(served_model)
             return [
@@ -108,7 +108,11 @@ class VertexPTPolicyMixin:
         """Latch PT-target probe outcomes from a dedicated attempt."""
         if model != ptr.PT_MODEL_TARGET or capacity != ptr.REQUEST_TYPE_DEDICATED:
             return
-        if 200 <= status_code < 300:
+        message = _bounded_error_text(preview)
+        if ptr.is_provisioned_capacity_absent(status_code, message):
+            self._record_pt_target_observation(False)
+        elif 200 <= status_code < 300 or ptr.is_provisioned_capacity_exhausted(status_code, message):
+            # A full dedicated order proves the order exists, even without output.
             self._record_pt_target_observation(True)
         else:
             # A 401/5xx/generic quota failure proves nothing about the order.

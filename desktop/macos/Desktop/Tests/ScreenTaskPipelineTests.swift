@@ -32,11 +32,11 @@ final class ScreenTaskPipelineTests: XCTestCase {
     XCTAssertFalse(dedupe.shouldSkip(key: "owner:1:Telegram", lines: [], now: now))
   }
 
-  func testScrollingAwayCanSkipButChangedDeadlineCannot() {
+  func testScrolledFrameAndChangedDeadlinePass() {
     var dedupe = ScreenTaskDedupe()
     let now = Date(timeIntervalSince1970: 100)
     dedupe.record(key: "app", lines: ["send report friday", "older line"], now: now)
-    XCTAssertTrue(dedupe.shouldSkip(key: "app", lines: ["send report friday"], now: now))
+    XCTAssertFalse(dedupe.shouldSkip(key: "app", lines: ["send report friday"], now: now))
     XCTAssertFalse(dedupe.shouldSkip(key: "app", lines: ["send report monday"], now: now))
     XCTAssertFalse(dedupe.shouldSkip(key: "app", lines: ["do not send report friday"], now: now))
   }
@@ -50,7 +50,29 @@ final class ScreenTaskPipelineTests: XCTestCase {
     XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: repeated, now: now.addingTimeInterval(5)))
     dedupe.record(key: "chat", lines: repeated, now: now.addingTimeInterval(5))
     XCTAssertTrue(dedupe.shouldSkip(key: "chat", lines: Array(repeated.reversed()), now: now.addingTimeInterval(6)))
-    XCTAssertTrue(dedupe.shouldSkip(key: "chat", lines: first, now: now.addingTimeInterval(6)))
+    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: first, now: now.addingTimeInterval(6)))
+  }
+
+  func testIdenticalOrderedFrameSkipsWithinSixtySeconds() {
+    var dedupe = ScreenTaskDedupe()
+    let now = Date(timeIntervalSince1970: 100)
+    dedupe.record(key: "chat", lines: ["ok", "send budget"], now: now)
+    XCTAssertTrue(dedupe.shouldSkip(key: "chat", lines: ["ok", "send budget"], now: now.addingTimeInterval(60)))
+    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: ["ok", "send budget"], now: now.addingTimeInterval(61)))
+  }
+
+  func testRepeatedNewLinePassesWhenEarlierOccurrenceScrolledOut() {
+    var dedupe = ScreenTaskDedupe()
+    let now = Date(timeIntervalSince1970: 100)
+    dedupe.record(key: "chat", lines: ["ok", "send budget", "ok"], now: now)
+    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: ["send budget", "ok", "ok"], now: now.addingTimeInterval(5)))
+  }
+
+  func testReplacedLineWithSameCountsButDifferentOrderPasses() {
+    var dedupe = ScreenTaskDedupe()
+    let now = Date(timeIntervalSince1970: 100)
+    dedupe.record(key: "chat", lines: ["ok", "send budget"], now: now)
+    XCTAssertFalse(dedupe.shouldSkip(key: "chat", lines: ["send budget", "ok"], now: now.addingTimeInterval(5)))
   }
 
   @MainActor func testAuditedRejectStagesResultsAndCountsActualSuccessfulWrites() async throws {

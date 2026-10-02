@@ -483,7 +483,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             buffered: list[bytes] = []
             try:
                 # Buffer a probe until it succeeds. No partial dedicated output or
-                # failed-probe promotion can escape before shared recovery.
+                # ambiguous promotion can escape before shared recovery.
                 async with asyncio.timeout(attempt_ms / 1000.0 if probe else None):
                     chunks = self._stream_content_once(
                         payload,
@@ -498,9 +498,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     else:
                         async for chunk in chunks:
                             yield chunk
-                self._observe_attempt(model, capacity, 200, b'')
-                self._record_model_available(model)
                 if probe:
+                    self._observe_attempt(model, capacity, 200, b'')
+                    self._record_model_available(model)
                     for chunk in buffered:
                         yield chunk
                 yield _openai_sse_done()
@@ -554,9 +554,11 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             headers=headers,
             timeout=timeout_ms / 1000.0,
         ) as response:
-            if not 200 <= response.status_code < 300:
+            if response.status_code >= 400 or (bounded and not 200 <= response.status_code < 300):
                 preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
                 raise _VertexHttpError(response.status_code, preview, response.headers.get('retry-after'))
+            if not bounded:
+                self._record_model_available(model)
             async for chunk in response.aiter_bytes():
                 received += len(chunk)
                 if bounded and received > _configured_max_response_bytes():
@@ -653,6 +655,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                         payload=payload,
                         credentials=credentials,
                         timeout_ms=attempt_ms,
+                        probe=probe,
                     )
             except _VertexHttpError as error:
                 last_error = error
@@ -698,6 +701,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         payload: Mapping[str, Any],
         credentials: CredentialContext,
         timeout_ms: int,
+        probe: bool = False,
     ) -> Mapping[str, Any]:
         endpoint = self._endpoint(model, method='generateContent', capacity=capacity)
         try:
@@ -709,7 +713,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                 headers=headers,
                 timeout=timeout_ms / 1000.0,
             ) as response:
-                if not 200 <= response.status_code < 300:
+                if response.status_code >= 400 or (probe and not 200 <= response.status_code < 300):
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
                     raise _VertexHttpError(
                         response.status_code,
