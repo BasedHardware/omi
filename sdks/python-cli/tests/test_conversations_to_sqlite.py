@@ -24,6 +24,7 @@ spec.loader.exec_module(c2s)
 load = c2s.load
 text = c2s.text
 utc_stamp = c2s.utc_stamp
+strip_surrogates = c2s.strip_surrogates
 
 
 SAMPLE_CONVERSATIONS = [
@@ -319,6 +320,43 @@ class TestConversationsToSqlite(unittest.TestCase):
         self.assertIn("title", row[1])
         # The stored raw_json must be valid UTF-8 encodable.
         row[1].encode("utf-8")
+
+    def test_strip_surrogates_drops_rather_than_replaces(self):
+        """A lone surrogate is removed, not substituted with a '?' placeholder.
+
+        errors="replace" would insert '?' and silently alter the imported text
+        even though the function is documented to drop the code point.
+        """
+        self.assertEqual(strip_surrogates("bad \ud800 title"), "bad  title")
+        self.assertNotIn("?", strip_surrogates("bad \ud800 title"))
+        self.assertEqual(strip_surrogates("clean text"), "clean text")
+
+    def test_lone_surrogate_in_id_does_not_abort_import(self):
+        """The id is sanitized too: an unencodable id must not raise UnicodeEncodeError."""
+        record = {"id": "conv_\ud800id", "structured": {"title": "t"}}
+        json_file = self.dir_path / "surrogate_id.json"
+        json_file.write_text(json.dumps([record]), encoding="utf-8")
+
+        loaded, _, total = load(str(self.db_path), [str(json_file)])
+        self.assertEqual((loaded, total), (1, 1))
+
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            row = conn.execute("SELECT id FROM conversations").fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(row[0], "conv_id")
+        row[0].encode("utf-8")
+
+    def test_utc_stamp_keeps_falsy_non_string_values(self):
+        """Only None/'' map to NULL; 0, False, [] and {} stay queryable as text."""
+        self.assertEqual(utc_stamp(0), "0")
+        self.assertEqual(utc_stamp(False), "False")
+        self.assertEqual(utc_stamp([]), "[]")
+        self.assertEqual(utc_stamp({}), "{}")
+        # None and the empty string still become NULL for date functions.
+        self.assertIsNone(utc_stamp(None))
+        self.assertIsNone(utc_stamp(""))
 
     def test_non_string_timestamps_are_coerced(self):
         """A non-string timestamp is stored as text instead of raising."""

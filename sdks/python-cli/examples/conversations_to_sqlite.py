@@ -40,7 +40,7 @@ def utc_stamp(value: Any) -> Optional[str]:
     A non-string or unparseable value is stored as text rather than dropped, so
     the original value stays queryable.
     """
-    if not value:
+    if value is None or value == "":
         return None
     try:
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -58,7 +58,7 @@ def strip_surrogates(value: str) -> str:
     both sqlite3 and file writes raise UnicodeEncodeError on them. Dropping them keeps
     the remaining text and lets the row import.
     """
-    return value.encode("utf-8", "replace").decode("utf-8")
+    return value.encode("utf-8", "ignore").decode("utf-8")
 
 
 def text(value: Optional[Any]) -> Optional[str]:
@@ -109,7 +109,7 @@ def rows_from(pages: Sequence[str]) -> List[Tuple]:
                 structured = {}
             rows.append(
                 (
-                    str(conv_id),
+                    strip_surrogates(str(conv_id)),
                     text(structured.get("title")),
                     text(structured.get("category")),
                     text(item.get("source")),
