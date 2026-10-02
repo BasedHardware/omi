@@ -7,7 +7,6 @@ import 'package:omi/env/env.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/action_items/task_page.dart';
 import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
-import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -56,7 +55,55 @@ Future<ActionItemsResponse?> _items({
       ],
     );
 
-/// One list: done tasks fold under the open sections, and a row opens its own page.
+/// Nothing but locked tasks: what a free account past its limit can have.
+Future<ActionItemsResponse?> _lockedOnly({
+  int limit = 100,
+  int offset = 0,
+  bool? completed,
+  String? conversationId,
+  DateTime? startDate,
+  DateTime? endDate,
+  DateTime? dueStartDate,
+  DateTime? dueEndDate,
+}) async =>
+    ActionItemsResponse(
+      actionItems: [
+        ActionItemWithMetadata(
+            id: 'done-locked',
+            description: 'A done task behind the…',
+            completed: true,
+            isLocked: true,
+            completedAt: DateTime(2026, 9, 30)),
+        const ActionItemWithMetadata(
+            id: 'locked', description: 'An older task behind the…', completed: false, isLocked: true),
+      ],
+    );
+
+/// A first page of locked tasks, then a page with an open one.
+Future<ActionItemsResponse?> _lockedFirstPage({
+  int limit = 100,
+  int offset = 0,
+  bool? completed,
+  String? conversationId,
+  DateTime? startDate,
+  DateTime? endDate,
+  DateTime? dueStartDate,
+  DateTime? dueEndDate,
+}) async =>
+    offset == 0
+        ? const ActionItemsResponse(
+            actionItems: [
+              ActionItemWithMetadata(
+                  id: 'locked', description: 'An older task behind the…', completed: false, isLocked: true),
+            ],
+            hasMore: true,
+          )
+        : const ActionItemsResponse(
+            actionItems: [ActionItemWithMetadata(id: 'older', description: 'Book the venue', completed: false)],
+          );
+
+/// One list: done tasks fold under the open sections, and a row opens its own page. Locked tasks
+/// are left off it for now.
 final deletes = <String>[];
 
 void main() {
@@ -67,10 +114,11 @@ void main() {
   });
   tearDown(Env.clearApiBaseUrlOverrideForTesting);
 
-  Future<(ActionItemsProvider, List<bool>)> pumpPage(WidgetTester tester) async {
+  Future<(ActionItemsProvider, List<bool>)> pumpPage(WidgetTester tester,
+      {ActionItemsFetcher getActionItems = _items}) async {
     final completions = <bool>[];
     final provider = ActionItemsProvider(
-      getActionItems: _items,
+      getActionItems: getActionItems,
       updateActionItemRequest: (id, {description, completed, dueAt}) async {
         if (completed != null) completions.add(completed);
         return ActionItemWithMetadata(id: id, description: id, completed: completed ?? false);
@@ -128,7 +176,8 @@ void main() {
     final (_, completions) = await pumpPage(tester);
 
     expect(find.text('Completed'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
+    // Two done tasks are listed; the locked one is not, and is not counted.
+    expect(find.text('2'), findsOneWidget);
     expect(find.text('Pay the invoice'), findsNothing);
     expect(find.text('Clear'), findsNothing);
 
@@ -150,45 +199,41 @@ void main() {
     expect(completions, [false]);
   });
 
-  testWidgets('a paywalled task shows a lock instead of a ring and offers no completion', (tester) async {
+  testWidgets('a locked task is not listed and not counted', (tester) async {
     await pumpPage(tester);
-    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
-    expect(find.text('An older task behind the…'), findsOneWidget);
-    // Two open rows: only the unlocked one can be completed.
+    // Its only dated task is locked, so no dated section shows.
+    expect(find.text('An older task behind the…'), findsNothing);
+    expect(find.text('Today'), findsNothing);
+    expect(find.text('Overdue'), findsNothing);
+    expect(find.byIcon(Icons.lock_outline), findsNothing);
+    // One open row, and its ring completes it.
     expect(find.bySemanticsLabel('Mark Complete'), findsOneWidget);
   });
 
-  testWidgets('tapping a paywalled task goes to the plan page, with no task menu or page', (tester) async {
-    await pumpApp(tester);
-
-    await tester.tap(find.text('An older task behind the…'));
-    // The plan page animates while it loads, so settle by time rather than by quiescence.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 600));
-    expect(find.byType(UsagePage), findsOneWidget);
-    expect(find.byType(TaskPage), findsNothing);
-    expect(find.text('Open'), findsNothing);
-    // Tear the route down so its timers don't outlive the test.
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(seconds: 1));
-  });
-
-  testWidgets('a paywalled done task shows a lock and holding it opens no menu', (tester) async {
-    await pumpApp(tester);
+  testWidgets('a locked done task is not listed under Completed', (tester) async {
+    await pumpPage(tester);
     await tester.tap(find.text('Completed'));
     await tester.pumpAndSettle();
 
-    expect(find.text('A done task behind the…'), findsOneWidget);
-    expect(find.byIcon(Icons.lock_outline), findsNWidgets(2));
-    // Holding it ends like a tap on any locked row: the plan page, never the task menu.
-    await tester.longPress(find.text('A done task behind the…'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text('Delete Task'), findsNothing);
-    expect(find.text('Mark Incomplete'), findsNothing);
-    expect(find.byType(UsagePage), findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('A done task behind the…'), findsNothing);
+    expect(find.byIcon(Icons.lock_outline), findsNothing);
+    expect(find.bySemanticsLabel('Mark Incomplete'), findsNWidgets(2));
+  });
+
+  testWidgets('a list of only locked tasks shows the empty state, with nothing locked on it', (tester) async {
+    await pumpPage(tester, getActionItems: _lockedOnly);
+    expect(find.byKey(const ValueKey('omi.action_items.empty')), findsOneWidget);
+    expect(find.text('An older task behind the…'), findsNothing);
+    expect(find.text('Completed'), findsNothing);
+    expect(find.byIcon(Icons.lock_outline), findsNothing);
+  });
+
+  testWidgets('a first page of locked tasks still loads the next page, and its tasks are listed', (tester) async {
+    // Hidden rows leave nothing to scroll, and a scroll is what asks for the next page.
+    await pumpPage(tester, getActionItems: _lockedFirstPage);
+    expect(find.text('Book the venue'), findsOneWidget);
+    expect(find.text('An older task behind the…'), findsNothing);
+    expect(find.byKey(const ValueKey('omi.action_items.empty')), findsNothing);
   });
 
   testWidgets('selecting a done task never selects the rows under it', (tester) async {
@@ -207,11 +252,11 @@ void main() {
     expect(provider.selectedCount, 1);
   });
 
-  testWidgets('a paywalled task shows no selection box, and Clear leaves paywalled done tasks', (tester) async {
+  testWidgets('selecting boxes every listed task, and Clear deletes only the listed done tasks', (tester) async {
     final (provider, _) = await pumpApp(tester);
     provider.startSelection();
     await tester.pumpAndSettle();
-    // Two open rows on screen, one of them locked: one selection box.
+    // One open row is listed (the locked one is not): one selection box.
     expect(find.byType(TaskSelectionSquare), findsOneWidget);
     provider.clearSelection();
     await tester.pumpAndSettle();
@@ -222,7 +267,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete').last);
     await tester.pumpAndSettle();
-    // The locked done task is not sent for deletion.
+    // The locked done task is neither listed nor sent for deletion.
     expect(deletes.toSet(), {'done1', 'done2'});
   });
 

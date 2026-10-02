@@ -85,7 +85,8 @@ void main() {
     expect(tester.widget<Text>(late).style!.color, OmiColors.danger);
     expect(find.text(weekday(3)), findsOneWidget);
     expect(find.text(DateFormat.MMMd('en').format(_day(13))), findsOneWidget);
-    expect(tester.widget<Text>(find.text(weekday(3))).style!.color, OmiColors.textTertiary);
+    // Set like the meta line of a Home conversation row.
+    expect(tester.widget<Text>(find.text(weekday(3))).style!.color, OmiColors.textSecondary);
     expect(find.text(weekday(0)), findsNothing, reason: 'Today already names the day');
   });
 
