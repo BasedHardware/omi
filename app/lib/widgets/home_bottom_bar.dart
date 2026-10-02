@@ -53,10 +53,12 @@ class HomeWarmBlend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // The palette is a static, so the theme is what rebuilds this when the app turns dark on a Home
-    // already on screen. Dark has no blend.
-    if (Theme.brightnessOf(context) == Brightness.dark) return const SizedBox.shrink();
+    // already on screen. Dark has no blend. With no blend it is still positioned: a bare box would
+    // size Home's bottom Stack to nothing and take the floating row with it.
+    const none = Positioned.fill(child: SizedBox.shrink());
+    if (Theme.brightnessOf(context) == Brightness.dark) return none;
     final blend = OmiColors.canvasBlend;
-    if (blend.a == 0) return const SizedBox.shrink();
+    if (blend.a == 0) return none;
     return Positioned.fill(
       child: IgnorePointer(
         child: DecoratedBox(

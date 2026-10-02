@@ -173,6 +173,57 @@ void main() {
     expect(find.byKey(const ValueKey('home_warm_blend')), findsNothing);
   });
 
+  testWidgets('the Ask anything row is laid out in light and in dark', (tester) async {
+    // Home's bottom layers as in home/page.dart: a Stack inside the body's Stack, holding only the
+    // fade, the blend and the floating row. With no blend (dark) it must not shrink to nothing.
+    Future<void> pump(Brightness brightness) async {
+      OmiColors.active = OmiColors.forBrightness(brightness);
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(brightness),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildOmiTheme(brightness: Brightness.light),
+          darkTheme: buildOmiTheme(brightness: Brightness.dark),
+          themeMode: brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+          home: Scaffold(
+            body: OmiCanvas(
+              child: Builder(
+                builder: (context) => Stack(
+                  children: [
+                    const SizedBox.expand(),
+                    Stack(
+                      children: [
+                        const HomeChatBarBackdrop(),
+                        const HomeWarmBlend(),
+                        Positioned(
+                          left: 16,
+                          right: 16,
+                          bottom: homeChatBarOffset(context),
+                          child: Row(children: [Expanded(child: HomeAskOmiButton(onTap: () {}))]),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    addTearDown(() => OmiColors.active = OmiPalette.light);
+    for (final brightness in Brightness.values) {
+      await pump(brightness);
+      final ask = tester.getRect(find.byType(HomeAskOmiButton));
+      expect(ask.width, greaterThan(300), reason: '$brightness: the row spans the screen');
+      expect(ask.bottom, lessThanOrEqualTo(600), reason: '$brightness: it sits at the bottom, on screen');
+      expect(ask.top, greaterThan(400), reason: '$brightness: at the bottom, not the top');
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('turning the app dark takes the warm blend away from a Home already on screen', (tester) async {
     // As in main.dart: the palette is set above MaterialApp, and the navigator keeps its global key,
     // so Home stays mounted through the switch.
