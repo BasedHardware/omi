@@ -74,6 +74,7 @@ def make_database_client_stub() -> ModuleType:
     client_mod.delete_collection_recursive = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
     client_mod.get_customer_firestore_client = lambda: client_mod.db
+    client_mod.run_transactional = lambda client, operation: operation(client.transaction())
     # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
     # memory_apply_store, jit_proactivity_store, and screen/frame sync import
     # `data_plane_db` at their module boundary instead of the shared `db` above.
