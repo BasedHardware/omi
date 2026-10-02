@@ -6,7 +6,6 @@ and chat tools for accessing strain, recovery, sleep, and workout data.
 """
 import html
 import os
-import html
 import sys
 import secrets
 from datetime import datetime, timedelta
