@@ -9,6 +9,9 @@ and the existing evidence/decision lines carry the same session id.
 """
 
 import logging
+from collections import deque
+
+import numpy as np
 from types import SimpleNamespace
 
 import pytest
@@ -72,7 +75,15 @@ def _ring_with(seconds: float = 1.0, at: float = 100.0) -> AudioRingBuffer:
 @pytest.mark.anyio
 async def test_exit_reasons_are_enumerated():
     assert SPEAKER_ID_EXIT_REASONS == frozenset(
-        {'window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'}
+        {
+            'window_outside_buffer',
+            'too_short',
+            'no_pcm',
+            'stale_generation',
+            'already_mapped',
+            'rejected',
+            'manual_decision',
+        }
     )
 
 
@@ -135,3 +146,38 @@ async def test_post_embedding_stale_generation_is_counted(monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
         await matcher.match(0, _queued(97.5, 103.0))
     assert _counter('stale_generation') == before + 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('reason', ['rejected', 'manual_decision'])
+async def test_receipt_exits_count_and_log_one_bounded_reason(reason, monkeypatch, caplog):
+    host = _host(_ring_with(seconds=10.0, at=110.0))
+    host.limits.speaker_id_min_audio = 1.0
+    matcher = SpeakerMatcher(host)
+    matcher._profile_conversation_id = 'conv-receipt'
+    embedding = np.array([[1.0, 0.0]])
+    matcher.person_embeddings['p1'] = {'embedding': embedding, 'name': 'Person'}
+    matcher.speaker_evidence[0] = deque([(embedding, 10.0)])
+    decision = (
+        {'rejection': {'kind': 'not_a_person', 'person_id': None}, 'generation': 1}
+        if reason == 'rejected'
+        else {'person_id': 'p1', 'is_user': False, 'generation': 1}
+    )
+
+    async def receipt_call(fn, *args, **kwargs):
+        assert fn is speakers_module.conversations_db.get_manual_speaker_receipt
+        return {'speakers': {'0': decision}}
+
+    host.persistence.call = receipt_call
+    monkeypatch.setattr(speakers_module, 'extract_embedding_from_bytes', lambda *args: embedding)
+    monkeypatch.setattr(speakers_module, 'compare_embeddings', lambda *args: 0.0)
+    before = _counter(reason)
+    with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+        await matcher.match(0, _queued(100.0, 110.0, conversation='conv-receipt'))
+    assert _counter(reason) == before + 1
+    assert sum(f'speaker_id_exit reason={reason}' in record.message for record in caplog.records) == 1
+    assert host.state.speaker_map_dirty
+    if reason == 'rejected':
+        assert 0 not in matcher.speaker_to_person
+    else:
+        assert matcher.speaker_to_person[0] == ('p1', 'Person')

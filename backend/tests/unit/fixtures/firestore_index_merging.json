@@ -1,0 +1,2785 @@
+{
+  "schema_version": 1,
+  "runs": {
+    "partial": "36815028841",
+    "full": "36816465029"
+  },
+  "indexes": {
+    "i0": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "discarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "structured.category",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i1": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "source",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i2": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "discarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i3": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "discarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "source",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i4": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "discarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i5": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i6": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "discarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i7": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "starred",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i8": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "folder_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i9": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "arrayConfig": "CONTAINS",
+          "fieldPath": "apps_results"
+        },
+        {
+          "fieldPath": "discarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i10": {
+      "collectionGroup": "action_items",
+      "fields": [
+        {
+          "fieldPath": "completed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i11": {
+      "collectionGroup": "action_items",
+      "fields": [
+        {
+          "fieldPath": "conversation_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i12": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "source",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i13": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "discarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i14": {
+      "collectionGroup": "conversations",
+      "fields": [
+        {
+          "fieldPath": "discarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "starred",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    },
+    "i15": {
+      "collectionGroup": "action_items",
+      "fields": [
+        {
+          "fieldPath": "completed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "conversation_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "due_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "queryScope": "COLLECTION"
+    }
+  },
+  "cases": [
+    {
+      "label": "automatic-equalities-partial",
+      "run": "partial",
+      "query_id": "03e7904c05576e1f",
+      "signature": {
+        "aggregations": [
+          {
+            "field": null,
+            "kind": "count"
+          }
+        ],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "folder_id",
+              "operator": "=="
+            },
+            {
+              "field": "starred",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "automatic-in-count-partial",
+      "run": "partial",
+      "query_id": "0e33d8bf1d6e19f3",
+      "signature": {
+        "aggregations": [
+          {
+            "field": null,
+            "kind": "count"
+          }
+        ],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 2,
+              "field": "structured.category",
+              "operator": "in"
+            },
+            {
+              "field": "folder_id",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "automatic-array-equality-partial",
+      "run": "partial",
+      "query_id": "5f9461ce14dbf534",
+      "signature": {
+        "aggregations": [],
+        "collection": "plugins_data",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "capabilities",
+              "operator": "array_contains"
+            },
+            {
+              "field": "uid",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "plugins_data",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "automatic-array-in-partial",
+      "run": "partial",
+      "query_id": "9ea20722a744fd5c",
+      "signature": {
+        "aggregations": [],
+        "collection": "plugins_data",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 1,
+              "field": "id",
+              "operator": "in"
+            },
+            {
+              "field": "capabilities",
+              "operator": "array_contains"
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "plugins_data",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "multiple-multi-in-ordered-partial",
+      "run": "partial",
+      "query_id": "3fcf0fb3985167cb",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 1,
+              "field": "structured.category",
+              "operator": "in"
+            },
+            {
+              "disjunction_size": 2,
+              "field": "source",
+              "operator": "in"
+            },
+            {
+              "disjunction_size": 2,
+              "field": "status",
+              "operator": "in"
+            },
+            {
+              "field": "discarded",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i0",
+        "i1"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "multiple-multi-in-range-partial",
+      "run": "partial",
+      "query_id": "04c9b1e8670f03f3",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 2,
+              "field": "source",
+              "operator": "in"
+            },
+            {
+              "disjunction_size": 2,
+              "field": "structured.category",
+              "operator": "in"
+            },
+            {
+              "field": "created_at",
+              "operator": "<="
+            },
+            {
+              "field": "discarded",
+              "operator": "=="
+            },
+            {
+              "field": "status",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i0",
+        "i1"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "singleton-in-ordered-partial",
+      "run": "partial",
+      "query_id": "335a3ff79728b47b",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 1,
+              "field": "structured.category",
+              "operator": "in"
+            },
+            {
+              "field": "discarded",
+              "operator": "=="
+            },
+            {
+              "field": "source",
+              "operator": "=="
+            },
+            {
+              "field": "status",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i0",
+        "i1"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "single-multi-in-ordered-partial",
+      "run": "partial",
+      "query_id": "06db692917b22a67",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 2,
+              "field": "structured.category",
+              "operator": "in"
+            },
+            {
+              "field": "discarded",
+              "operator": "=="
+            },
+            {
+              "field": "source",
+              "operator": "=="
+            },
+            {
+              "field": "status",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i0",
+        "i1"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "refused-single-multi-in-ordered-partial",
+      "run": "partial",
+      "query_id": "626163d7c2abd9d0",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 1,
+              "field": "structured.category",
+              "operator": "in"
+            },
+            {
+              "disjunction_size": 2,
+              "field": "status",
+              "operator": "in"
+            },
+            {
+              "field": "discarded",
+              "operator": "=="
+            },
+            {
+              "field": "source",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i2",
+        "i3",
+        "i4",
+        "i0",
+        "i1",
+        "i5",
+        "i6"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "unserved",
+      "suggested_index": {
+        "collectionGroup": "conversations",
+        "fields": [
+          {
+            "fieldPath": "discarded",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "source",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "status",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "structured.category",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "created_at",
+            "order": "DESCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "DESCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION"
+      }
+    },
+    {
+      "label": "refused-single-multi-in-range-partial",
+      "run": "partial",
+      "query_id": "5f9889d2f85ee9f8",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 1,
+              "field": "structured.category",
+              "operator": "in"
+            },
+            {
+              "disjunction_size": 2,
+              "field": "status",
+              "operator": "in"
+            },
+            {
+              "field": "created_at",
+              "operator": ">="
+            },
+            {
+              "field": "discarded",
+              "operator": "=="
+            },
+            {
+              "field": "source",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i2",
+        "i3",
+        "i4",
+        "i0",
+        "i1",
+        "i5",
+        "i6"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "unserved",
+      "suggested_index": {
+        "collectionGroup": "conversations",
+        "fields": [
+          {
+            "fieldPath": "discarded",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "source",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "status",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "structured.category",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "created_at",
+            "order": "DESCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "DESCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION"
+      }
+    },
+    {
+      "label": "refused-missing-equality-partial",
+      "run": "partial",
+      "query_id": "2739a3abfa540bb2",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "discarded",
+              "operator": "=="
+            },
+            {
+              "field": "folder_id",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i2",
+        "i3"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "unserved",
+      "suggested_index": {
+        "collectionGroup": "conversations",
+        "fields": [
+          {
+            "fieldPath": "discarded",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "folder_id",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "created_at",
+            "order": "DESCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "DESCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION"
+      }
+    },
+    {
+      "label": "refused-group-partial",
+      "run": "partial",
+      "query_id": "a7f28862912e41fb",
+      "signature": {
+        "aggregations": [],
+        "collection": "fair_use_state",
+        "cursors": [],
+        "filters": {
+          "disjunction_size": 3,
+          "field": "stage",
+          "operator": "in"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "updated_at"
+          }
+        ],
+        "scope": "COLLECTION_GROUP"
+      },
+      "index_ids": [],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "fair_use_state",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "unserved",
+      "suggested_index": {
+        "collectionGroup": "fair_use_state",
+        "fields": [
+          {
+            "fieldPath": "stage",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "updated_at",
+            "order": "DESCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "DESCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION_GROUP"
+      }
+    },
+    {
+      "label": "automatic-equalities-full",
+      "run": "full",
+      "query_id": "03e7904c05576e1f",
+      "signature": {
+        "aggregations": [
+          {
+            "field": null,
+            "kind": "count"
+          }
+        ],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "folder_id",
+              "operator": "=="
+            },
+            {
+              "field": "starred",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "automatic-in-count-full",
+      "run": "full",
+      "query_id": "0e33d8bf1d6e19f3",
+      "signature": {
+        "aggregations": [
+          {
+            "field": null,
+            "kind": "count"
+          }
+        ],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 2,
+              "field": "structured.category",
+              "operator": "in"
+            },
+            {
+              "field": "folder_id",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "automatic-array-equality-full",
+      "run": "full",
+      "query_id": "5f9461ce14dbf534",
+      "signature": {
+        "aggregations": [],
+        "collection": "plugins_data",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "capabilities",
+              "operator": "array_contains"
+            },
+            {
+              "field": "uid",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "plugins_data",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "automatic-array-in-full",
+      "run": "full",
+      "query_id": "9ea20722a744fd5c",
+      "signature": {
+        "aggregations": [],
+        "collection": "plugins_data",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 1,
+              "field": "id",
+              "operator": "in"
+            },
+            {
+              "field": "capabilities",
+              "operator": "array_contains"
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "plugins_data",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "multiple-multi-in-ordered-full",
+      "run": "full",
+      "query_id": "4fa748fa2708b587",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 2,
+              "field": "source",
+              "operator": "in"
+            },
+            {
+              "disjunction_size": 2,
+              "field": "status",
+              "operator": "in"
+            },
+            {
+              "field": "starred",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i1",
+        "i7"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "multiple-multi-in-range-full",
+      "run": "full",
+      "query_id": "085f4b1ce4020ca6",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 2,
+              "field": "source",
+              "operator": "in"
+            },
+            {
+              "disjunction_size": 2,
+              "field": "status",
+              "operator": "in"
+            },
+            {
+              "field": "created_at",
+              "operator": ">="
+            },
+            {
+              "field": "folder_id",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i8",
+        "i1"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "singleton-in-ordered-full",
+      "run": "full",
+      "query_id": "335a3ff79728b47b",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 1,
+              "field": "structured.category",
+              "operator": "in"
+            },
+            {
+              "field": "discarded",
+              "operator": "=="
+            },
+            {
+              "field": "source",
+              "operator": "=="
+            },
+            {
+              "field": "status",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i0",
+        "i1"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "single-multi-in-ordered-full",
+      "run": "full",
+      "query_id": "148cd995edcc0b70",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 2,
+              "field": "source",
+              "operator": "in"
+            },
+            {
+              "field": "starred",
+              "operator": "=="
+            },
+            {
+              "field": "status",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i1",
+        "i7"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "refused-single-multi-in-ordered-full",
+      "run": "full",
+      "query_id": "840eeff79bc23ec8",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 2,
+              "field": "status",
+              "operator": "in"
+            },
+            {
+              "field": "source",
+              "operator": "=="
+            },
+            {
+              "field": "starred",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i1",
+        "i7",
+        "i5",
+        "i9"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "unserved",
+      "suggested_index": {
+        "collectionGroup": "conversations",
+        "fields": [
+          {
+            "fieldPath": "source",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "starred",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "status",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "created_at",
+            "order": "DESCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "DESCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION"
+      }
+    },
+    {
+      "label": "refused-single-multi-in-range-full",
+      "run": "full",
+      "query_id": "081f2136caa89eb1",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 2,
+              "field": "status",
+              "operator": "in"
+            },
+            {
+              "field": "created_at",
+              "operator": "<="
+            },
+            {
+              "field": "source",
+              "operator": "=="
+            },
+            {
+              "field": "starred",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i1",
+        "i7",
+        "i5",
+        "i9"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "unserved",
+      "suggested_index": {
+        "collectionGroup": "conversations",
+        "fields": [
+          {
+            "fieldPath": "source",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "starred",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "status",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "created_at",
+            "order": "DESCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "DESCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION"
+      }
+    },
+    {
+      "label": "refused-missing-equality-full",
+      "run": "full",
+      "query_id": "fb3f179255dca5bd",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "discarded",
+              "operator": "=="
+            },
+            {
+              "field": "starred",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i2",
+        "i9"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "unserved",
+      "suggested_index": {
+        "collectionGroup": "conversations",
+        "fields": [
+          {
+            "fieldPath": "discarded",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "starred",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "created_at",
+            "order": "DESCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "DESCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION"
+      }
+    },
+    {
+      "label": "scalar-ordered-full",
+      "run": "full",
+      "query_id": "631f41b4c20a7248",
+      "signature": {
+        "aggregations": [],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "folder_id",
+              "operator": "=="
+            },
+            {
+              "field": "source",
+              "operator": "=="
+            },
+            {
+              "field": "status",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i8",
+        "i1"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "scalar-range-full",
+      "run": "full",
+      "query_id": "2c0b9e0205b064c9",
+      "signature": {
+        "aggregations": [],
+        "collection": "action_items",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "completed",
+              "operator": "=="
+            },
+            {
+              "field": "conversation_id",
+              "operator": "=="
+            },
+            {
+              "field": "created_at",
+              "operator": "<="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i10",
+        "i11"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "action_items",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "scalar-range-count-full",
+      "run": "full",
+      "query_id": "49d5c3d79f5b1b23",
+      "signature": {
+        "aggregations": [
+          {
+            "field": null,
+            "kind": "count"
+          }
+        ],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "created_at",
+              "operator": ">="
+            },
+            {
+              "field": "discarded",
+              "operator": "=="
+            },
+            {
+              "field": "source",
+              "operator": "=="
+            },
+            {
+              "field": "status",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i6",
+        "i12"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    },
+    {
+      "label": "refused-single-multi-in-count-full",
+      "run": "full",
+      "query_id": "3d91127bd2a6e532",
+      "signature": {
+        "aggregations": [
+          {
+            "field": null,
+            "kind": "count"
+          }
+        ],
+        "collection": "conversations",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "disjunction_size": 2,
+              "field": "status",
+              "operator": "in"
+            },
+            {
+              "field": "created_at",
+              "operator": ">="
+            },
+            {
+              "field": "discarded",
+              "operator": "=="
+            },
+            {
+              "field": "source",
+              "operator": "=="
+            },
+            {
+              "field": "starred",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i13",
+        "i14",
+        "i6",
+        "i12",
+        "i9"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        },
+        {
+          "collectionGroup": "conversations",
+          "fieldPath": "status",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION_GROUP"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "unserved",
+      "suggested_index": {
+        "collectionGroup": "conversations",
+        "fields": [
+          {
+            "fieldPath": "discarded",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "source",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "starred",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "status",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "created_at",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "ASCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION"
+      }
+    },
+    {
+      "label": "same-query-partial-refused",
+      "run": "partial",
+      "query_id": "2c0b9e0205b064c9",
+      "signature": {
+        "aggregations": [],
+        "collection": "action_items",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "completed",
+              "operator": "=="
+            },
+            {
+              "field": "conversation_id",
+              "operator": "=="
+            },
+            {
+              "field": "created_at",
+              "operator": "<="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i10",
+        "i15"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "action_items",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "unserved",
+      "suggested_index": {
+        "collectionGroup": "action_items",
+        "fields": [
+          {
+            "fieldPath": "completed",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "conversation_id",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "created_at",
+            "order": "DESCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "DESCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION"
+      }
+    },
+    {
+      "label": "same-query-full-merged",
+      "run": "full",
+      "query_id": "2c0b9e0205b064c9",
+      "signature": {
+        "aggregations": [],
+        "collection": "action_items",
+        "cursors": [],
+        "filters": {
+          "filters": [
+            {
+              "field": "completed",
+              "operator": "=="
+            },
+            {
+              "field": "conversation_id",
+              "operator": "=="
+            },
+            {
+              "field": "created_at",
+              "operator": "<="
+            }
+          ],
+          "op": "AND"
+        },
+        "limit_to_last": false,
+        "orders": [
+          {
+            "direction": "DESCENDING",
+            "field": "created_at"
+          }
+        ],
+        "scope": "COLLECTION"
+      },
+      "index_ids": [
+        "i10",
+        "i11"
+      ],
+      "fieldOverrides": [
+        {
+          "collectionGroup": "action_items",
+          "fieldPath": "*",
+          "indexes": [
+            {
+              "arrayConfig": "CONTAINS",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "ASCENDING",
+              "queryScope": "COLLECTION"
+            },
+            {
+              "order": "DESCENDING",
+              "queryScope": "COLLECTION"
+            }
+          ]
+        }
+      ],
+      "observed": "served"
+    }
+  ]
+}

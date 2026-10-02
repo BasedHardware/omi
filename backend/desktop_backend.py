@@ -25,6 +25,7 @@ from routers import (
     desktop_deprecated,
     desktop_experiments,
     desktop_proxy,
+    desktop_task_gate,
     metrics,
     desktop_proactivity,
     jit_ledger_snapshot,
@@ -124,6 +125,7 @@ def _build_app() -> FastAPI:
     app.include_router(desktop_agent_vm.router)
     app.include_router(desktop_chat.router)
     app.include_router(desktop_proxy.router)
+    app.include_router(desktop_task_gate.router)
     app.include_router(desktop_proactivity.router)
     app.include_router(desktop_experiments.router)
     app.include_router(jit_ledger_snapshot.router)

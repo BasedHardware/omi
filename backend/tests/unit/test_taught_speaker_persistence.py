@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock
 import numpy as np
 import pytest
 
+from database import speaker_learning as speaker_learning_db
 from database import users
 from routers.listen import speakers
 from utils.audio import AudioRingBuffer
@@ -23,6 +24,7 @@ from models.conversation import Conversation
 from routers import conversations
 from datetime import datetime, timezone
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils import speaker_assignment_teaching as teaching_tasks
 from utils import speaker_identification as teaching
 from utils import speaker_sample
 
@@ -47,6 +49,7 @@ def world(monkeypatch):
     store.rows[person_path] = person
     store.rows[conversation_path] = conversation
     monkeypatch.setattr(users, 'db', store)
+    monkeypatch.setattr(speaker_learning_db, 'get_firestore_client', lambda *a, **k: store)
     monkeypatch.setattr(users, 'get_person', lambda uid, pid: deepcopy(store.rows.get(('users', uid, 'people', pid))))
     monkeypatch.setattr(
         users,
@@ -115,7 +118,11 @@ def test_opt_out_during_inflight_teaching_discards_the_upload(world, monkeypatch
     assert not saved.get('speaker_embedding')
     assert not saved.get('speech_samples'), 'the publish transaction must re-check the opt-out atomically'
     assert world.uploads[-1] in world.deleted
-    assert not world.store.transactions[-1].has_written, 'preference and person reads precede the first write'
+    assert all(
+        'speech_samples' not in patch
+        for transaction in world.store.transactions
+        for _path, patch in transaction.updates
+    ), 'no transaction may publish a voice sample once the opt-out lands'
 
 
 def test_expanded_audio_is_verified_against_all_contributing_text(world):
@@ -203,7 +210,13 @@ def test_reteaching_replaces_legacy_profile_and_failed_embedding_preserves_it(wo
 
     monkeypatch.setattr(teaching, 'extract_embedding_from_bytes', fail)
     teach()
-    assert world.store.rows[world.person_path] == saved
+    learning_keys = {'voice_learning_state', 'voice_learning_outcome', 'voice_speech_seconds', 'voice_needed_seconds'}
+    current = world.store.rows[world.person_path]
+    assert {k: v for k, v in current.items() if k not in learning_keys} == {
+        k: v for k, v in saved.items() if k not in learning_keys
+    }
+    assert current['voice_learning_outcome'] == 'embedding_failed'
+    assert current['voice_learning_state'] == 'learned', 'a still-usable profile keeps learned across a failed retry'
 
 
 def test_same_person_id_in_two_accounts_never_shares_a_profile(world, monkeypatch):
@@ -310,8 +323,10 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
     # the real command/transaction while leaving storage encryption out of scope.
     monkeypatch.setattr(conversations.conversations_db, '_prepare_conversation_for_write', lambda data, *args: data)
     monkeypatch.setattr(conversations, 'deserialize_conversation', deserialize)
+    # Free plan: naming a person in your own transcript must still work and teach.
+    monkeypatch.setattr('utils.speaker_permissions.users_db.get_user_valid_subscription', lambda uid, **kwargs: None)
     monkeypatch.setattr(conversations, '_emit_speaker_identity_confirmed', lambda **kwargs: None)
-    monkeypatch.setattr(conversations, 'delete_speech_profile_blob', lambda path: world.deleted.append(path))
+    monkeypatch.setattr(teaching_tasks, 'delete_speech_profile_blob', lambda path: world.deleted.append(path))
     app = FastAPI()
     app.include_router(conversations.router)
     app.dependency_overrides[conversations.auth.get_current_user_uid] = lambda: 'account-a'

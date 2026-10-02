@@ -212,12 +212,18 @@
         ".github/scripts/verify_release_eligibility.py",
         ".github/scripts/verify_backend_release_admission.py",
         ".github/scripts/verify_auto_backend_release_admission.py",
-        ".github/scripts/check_backend_deploy_source_admission.py"
+        ".github/scripts/check_backend_deploy_source_admission.py",
+        ".github/actions/firestore-readiness/action.yml",
+        ".github/workflows/**"
       ],
       "tests": [
-        "tests/unit/test_reconcile_firestore_indexes.py",
         "tests/unit/test_backend_runtime_env_validator.py",
-        "tests/unit/test_verify_backend_release_vector.py"
+        "tests/unit/test_firestore_index_rules.py",
+        "tests/unit/test_firestore_query_shapes.py",
+        "tests/unit/test_firestore_shape_recorder.py",
+        "tests/unit/test_reconcile_firestore_indexes.py",
+        "tests/unit/test_verify_backend_release_vector.py",
+        "tests/unit/test_workflow_contracts.py"
       ],
       "checks": [],
       "invariants": [
