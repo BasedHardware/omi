@@ -147,10 +147,14 @@ function CreateMcpKeyDialog({
 
 export function McpSection({
   mcpKeys,
+  listError = false,
+  onRetry,
   onCreateMcpKey,
   onDeleteMcpKey,
 }: {
   mcpKeys: McpApiKey[];
+  listError?: boolean;
+  onRetry?: () => void;
   onCreateMcpKey: (name: string) => Promise<McpApiKey | null>;
   onDeleteMcpKey: (keyId: string) => void;
 }) {
@@ -213,7 +217,20 @@ export function McpSection({
 
       {/* MCP Keys List */}
       <Card>
-        {mcpKeys.length > 0 ? (
+        {listError ? (
+          <div
+            role="alert"
+            className="space-y-3 py-6 text-center text-sm text-text-secondary"
+          >
+            <p>Failed to load MCP keys. Please try again.</p>
+            <button
+              onClick={onRetry}
+              className="rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-medium hover:bg-white/[0.14]"
+            >
+              Retry
+            </button>
+          </div>
+        ) : mcpKeys.length > 0 ? (
           <div className="space-y-3">
             {mcpKeys.map((key) => (
               <div
@@ -236,6 +253,7 @@ export function McpSection({
                   </p>
                 </div>
                 <button
+                  aria-label={`Delete MCP key ${key.name}`}
                   onClick={() => onDeleteMcpKey(key.id)}
                   className="rounded-lg p-2 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-400"
                 >
