@@ -79,8 +79,8 @@ observed in each window (>=92% healthy observed users) promote within 360
 classified outcomes. Censored noise does not advance this bound; healthy
 users absent from the sticky cohort cannot establish recovery.
 
-The v4 namespace starts fresh provider-error evidence. Do not reinterpret v3
-no-text history, or raise on-percent until the new shadow data is warm.
+The v5 namespace starts fresh provider-error evidence. Do not reinterpret v3/v4
+misclassified history, or raise on-percent until the new shadow data is warm.
 
 At 17.9k eligible sessions/day and 61% Modulate disruption, the delayed-result
 trial replay averages 75.46 disruptions/day (p95 80; worst seeded run 83),
@@ -102,7 +102,7 @@ sum by (kind) (rate(omi_stt_fleet_health_write_dropped_total{job="backend-listen
 sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[5m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[5m])), 1)
 ```
 
-Cost state uses `omi:live-stt:cost-v4:<target>:<bounded-language>` (and `all`)
+Cost state uses `omi:live-stt:cost-v5:<target>:<bounded-language>` (and `all`)
 with atomic compare-and-set updates and trial-start leases. A full result-write
 pool, deadline or CAS contention can drop a fleet sample and increments
 `omi_stt_fleet_health_write_dropped_total`; local evidence still advances.
@@ -115,14 +115,16 @@ The bench/stage gauges are **pod views of global target state**, including
 local fallback during Redis faults. Every refresh observes all registry global
 keys and republishes, even on idle/ineligible pods; unknown is NaN with
 `omi_stt_cost_routing_state_known=0`. The snapshot timestamp is Redis server
-time. Require fresh, known, converged views before interpreting min/max.
+time; NaN means never refreshed, whereas a finite old timestamp is stale.
+The background loop refreshes registry targets even without session traffic.
+Require fresh, known, converged views before interpreting min/max.
 Counters record CAS transitions once at the writer with `scope=global|language`;
 local Redis-down transitions remain logs. Target/event/scope series are
 initialised at zero before traffic so first post-scrape transitions are counted.
 Increments before a pod's first scrape cannot be recovered by `increase()`.
 Transition rates are classified outcomes; promotion uses user votes.
 Shadow labels remain at most 16 registry IDs plus fixed sentinels; no UID or
-content. Drain old pods before using v4 event-scope and freshness queries.
+content. Drain old pods before using the v5 reason-labelled observation queries.
 
 The `omi-modulate-failing-soniox` Telegram rule names the active spend lever.
 The existing `Omi - Services Alerting (Telegram)` Grafana contact point must
@@ -162,6 +164,39 @@ sum by (target) (rate(omi_stt_cost_routing_observations_total{job="backend-liste
 sum by (target, outcome) (increase(omi_stt_cost_routing_observations_total{job="backend-listen-metrics"}[1h]))
 ```
 
+Reconcile classifications with settled source-leg failovers over the same window:
+
+```promql
+sum by (target, outcome, reason) (increase(omi_stt_cost_routing_observations_total{job="backend-listen-metrics"}[1h]))
+sum by (from_mode, reason, outcome) (increase(omi_fallback_total{job="backend-listen-metrics",component="stt_live_session"}[1h]))
+count(omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"} != omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"}) or vector(0)
+```
+
+**Before enabling `on`, require Modulate's `provider_failure` counts to track its attributable
+mid-session failovers by reason.** `modulate-velma-2` maps to fallback
+`from_mode="modulate"`; `parakeet-window` maps to `parakeet`. Fallbacks use family
+labels: sibling endpoints cannot be distinguished there, so compare their
+combined health counts when more than one endpoint is configured. Health counts
+once on death; fallback settlement occurs later, on successor text/exhaustion.
+Allow for settlement delay and first-scrape counter boundaries. Connect failures
+are additional health observations; deaths before one second of VAD speech do
+not enter serving health. Explain these differences rather than demanding
+instantaneous equality. Compare only provider-attributable reasons for the
+failure count (`modulate_serve_error`, `connection_lost`, `send_failed`,
+`provider_5xx`, `provider_429`, `provider_rate_limited`, `timeout`).
+
+A socket-owned typed cause precedes a bounded raw cause, then the observing
+send/monitor symptom. Unknown/free-text serving deaths become `connection_lost`,
+or `send_failed` when observed directly on send; free text is never a label.
+Window `first_text_deadline`, `empty_streak`, `capacity_full`, account refusals,
+rotation/idle timeout and explicit client/VAD causes keep their own censored
+reason. Normal completion uses `text` or `no_text`. Failed hops retain the source
+cause instead of relabelling that source with the successor's rejection.
+Budget/auth reasons now use `provider_budget_exhausted`/`provider_auth_rejected`
+in these STT fallback metrics rather than `quota`/`auth`; serving account
+protection is unchanged. The closed vocabulary has 27 reasons, with up to 16
+registry targets and three outcomes. No UID or diagnostic text is exported.
+
 Unavailable proposals, degraded-only selection, dropped samples and errors:
 
 ```promql
@@ -180,7 +215,7 @@ on; verify runtime mode before calling them shadow qualification.
 ## Shadow go/no-go before on
 
 Keep `shadow`/on-percent `0` for at least a full 24h traffic/language cycle after
-the v4 rollout. Do not increase the router percentage until all checks pass:
+the v5 rollout. Do not increase the router percentage until all checks pass:
 
 - Positive observation/proposal coverage for all configured targets; snapshot
   age <15s, known state, and converged pod min/max. No sustained write drops,
@@ -196,6 +231,10 @@ the v4 rollout. Do not increase the router percentage until all checks pass:
   healthy Parakeet session to a more expensive target. Compare target shares
   and pair disagreement with static selection, accounting for language,
   actual window/RNNT engine eligibility, cohort repetition and capacity.
+- **Reason reconciliation passes:** Modulate provider failures track settled
+  provider-error failovers, not censored outcomes. Window deadline/empty/capacity
+  failovers appear only as censored health observations; rotation/account/client
+  reasons do too. No pod has a never-refreshed snapshot after startup warmup.
 - Provider-error fractions for healthy targets stay around the observed
   0.3–1%, and no-text floors no longer affect benches. Headline conversation
   transcript success and first-text latency do not regress. Deadline/empty
