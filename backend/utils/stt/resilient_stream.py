@@ -464,7 +464,8 @@ async def replay_chunks(
         accepted = replay_send(data, start) if callable(replay_send) else socket.send(data, start_sample=start)
         if not accepted:
             return start
-        accepted_chunks.append((start, data))
+        if soniox is not None:
+            accepted_chunks.append((start, data))
         source.record_replay(provider, len(data) // 2)
         # Let transport/receive tasks run; a provider can die after accepting
         # a packet. No real-time-duration sleep, and no unbounded replay task.
