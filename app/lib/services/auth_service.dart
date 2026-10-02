@@ -172,6 +172,7 @@ class AuthService {
 
   final StreamController<AuthSessionExpiredEvent> _sessionExpiredController =
       StreamController<AuthSessionExpiredEvent>.broadcast(sync: true);
+  final StreamController<int> _sessionGenerationController = StreamController<int>.broadcast(sync: true);
   Future<AuthTokenResult>? _refreshInFlight;
   Future<void>? _expireSessionInFlight;
   bool _sessionExpired = false;
@@ -179,6 +180,25 @@ class AuthService {
   String? _refreshUserUid;
 
   Stream<AuthSessionExpiredEvent> get sessionExpiredEvents => _sessionExpiredController.stream;
+
+  Stream<int> get sessionGenerationEvents => _sessionGenerationController.stream;
+
+  AuthSessionSnapshot? captureSessionSnapshot({String? expectedUid}) {
+    handleAuthUserChanged(_tokenGateway.currentUser?.uid);
+    final user = _tokenGateway.currentUser;
+    if (_sessionExpired || user == null || user.isAnonymous) return null;
+    if (expectedUid != null && user.uid != expectedUid) return null;
+    return AuthSessionSnapshot(ownerUid: user.uid, generation: _sessionGeneration);
+  }
+
+  bool isSessionSnapshotCurrent(AuthSessionSnapshot snapshot) {
+    final user = _tokenGateway.currentUser;
+    return !_sessionExpired &&
+        user != null &&
+        !user.isAnonymous &&
+        user.uid == snapshot.ownerUid &&
+        _sessionGeneration == snapshot.generation;
+  }
 
   static void _recordProductionTelemetry(String eventName, Map<String, dynamic> properties) {
     PlatformManager.instance.analytics.track(eventName, properties: properties);
@@ -330,6 +350,7 @@ class AuthService {
   void _invalidateRefreshes() {
     _sessionGeneration++;
     _refreshInFlight = null;
+    _sessionGenerationController.add(_sessionGeneration);
   }
 
   void handleAuthUserChanged(String? uid) {

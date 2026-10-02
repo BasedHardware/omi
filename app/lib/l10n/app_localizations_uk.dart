@@ -12134,17 +12134,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Учасників: $count',
-      one: '1 учасник',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Увімкніть Omi у Командах → Siri. Скажіть «$askPhrase» або «$questionPhrase», а потім поставте своє запитання.';
   }
@@ -12166,6 +12155,21 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Ця версія Omi більше не підтримується. Оновіть, щоб і далі записувати та синхронізувати.';
+
+  @override
+  String get exportingAllData =>
+      'Експорт ваших даних… Не закривайте Omi; для великих акаунтів це може тривати кілька хвилин.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Учасників: $count',
+      one: '1 учасник',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Автоматичне видалення синхронізованих копій';

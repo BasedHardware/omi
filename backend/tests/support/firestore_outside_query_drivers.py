@@ -261,7 +261,7 @@ _driver(
     serving=False,
 )
 _driver(
-    'services.users.data_export._iter_user_subcollection',
+    'services.users.data_export_iterators.iter_user_subcollection',
     base={'uid': UID},
     domains={
         'collection_name': [
@@ -312,7 +312,7 @@ for parent, child in [
     ('workstreams', 'artifact_refs'),
     ('workstreams', 'continuation_checkpoints'),
 ]:
-    key = 'services.users.data_export._iter_user_nested_subcollection'
+    key = 'services.users.data_export_iterators.iter_user_nested_subcollection'
     profile = CallerProfile(
         f'export-{parent}-{child}', {'parent_collection_name': [parent], 'child_collection_name': [child]}
     )

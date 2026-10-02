@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
+from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,7 @@ _SAFE_LABEL_CHARS = frozenset('._:-')
 
 ALLOWED_OUTCOMES = frozenset({'recovered', 'degraded', 'exhausted'})
 
-ALLOWED_REASONS = frozenset(
+ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
     {
         'timeout',
         'provider_5xx',
@@ -156,8 +157,8 @@ ALLOWED_REASONS = frozenset(
     }
 )
 
-# Diagnostic detail in the log only. The shared metric's reason vocabulary and
-# label dimensions remain unchanged.
+# Diagnostic detail stays in the log; metric dimensions stay fixed and live
+# STT reasons share the bounded vocabulary used by cost health.
 ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap'})
 ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
     {

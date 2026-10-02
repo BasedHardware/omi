@@ -9,7 +9,7 @@ import time
 from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS, routing_on
 from utils.stt.live_gate import GateState, gate_rate
 from utils.stt.live_health import bounded_language
-from utils.stt.live_metrics import COST_DECISION, COST_SHADOW
+from utils.stt.live_metrics import COST_DECISION, COST_SHADOW, COST_ALL_DEGRADED
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 
@@ -84,30 +84,55 @@ def target_circuit(target: Target | None, default: ProviderCircuitBreaker | None
 
 
 def select(targets, states, uid, language, *, features=frozenset({'streaming'}), required_languages=(), recovery=None):
-    result = []
+    eligible, available, result = [], [], []
     for target in sorted(targets, key=lambda item: item.cost_per_audio_hour):
-        state = states.get(target.id, GateState())
-        reason = None
         if not target.capable(language, features) or any(
             not target.capable(code, features) for code in required_languages
         ):
             reason = 'capability'
         elif not assigned(uid, target.id, target.ramp()):
             reason = 'ramp_skip'
-        elif not capacity_available(target):
+        else:
+            eligible.append(target)
+            if capacity_available(target):
+                available.append(target)
+                continue
             reason = 'capacity_skip'
-        elif state.stage == 0:
-            reason = 'benched_skip'
+        COST_DECISION.labels(target=target.id, reason=reason).inc()
+
+    for target in available:
+        state = states.get(target.id, GateState())
+        terminal = target == available[-1]
+        absorbs = any(
+            states.get(t.id, GateState()).stage == 100
+            for t in available
+            if t != target and t.cost_per_audio_hour <= target.cost_per_audio_hour
+        )
+        protected = terminal and not absorbs
+        if state.stage == 0:
+            COST_DECISION.labels(target=target.id, reason='benched_skip').inc()
             if not result and recovery:
                 recovery(target.id, language)
-        elif not assigned(uid, 'stt-reentry:' + target.id, state.stage):
-            reason = 'ramp_skip'
-        if reason:
-            COST_DECISION.labels(target=target.id, reason=reason).inc()
-        else:
-            if not result:
-                COST_DECISION.labels(target=target.id, reason='cost_primary').inc()
+        elif not assigned(uid, 'stt-reentry:' + target.id, state.stage) and not protected:
+            COST_DECISION.labels(target=target.id, reason='ramp_skip').inc()
+        if protected or (state.stage > 0 and assigned(uid, 'stt-reentry:' + target.id, state.stage)):
             result.append(target)
+
+    def health_order(target):
+        state = states.get(target.id, GateState())
+        return -state.stage, state.failures / state.n if state.n else 0, target.cost_per_audio_hour
+
+    if available and all(states.get(target.id, GateState()).stage < 100 for target in available):
+        # Availability escape: health stages demote, they cannot remove the
+        # whole chain. Config ramps and account gates remain hard exclusions.
+        result = sorted(available, key=health_order)
+    elif not result and eligible:
+        # All capacity-signalled/cooled: normal admission decides one escape.
+        result = sorted(eligible, key=capacity_refused_at)
+    if result:
+        if all(states.get(target.id, GateState()).stage < 100 for target in (available or eligible)):
+            COST_ALL_DEGRADED.labels(target=result[0].id).inc()
+        COST_DECISION.labels(target=result[0].id, reason='cost_primary').inc()
     return result
 
 
@@ -136,10 +161,11 @@ def propose(
     account_states = (
         account_states if account_states is not None else health.cached_snapshot(configured_families, language)
     )
-    for target in targets:
-        account = account_states.get(target.family)
-        if account and account.bench == 'account' and account.excluded:
-            states[target.id] = GateState(stage=0, until=account.bench_until)
+    targets = [
+        target
+        for target in targets
+        if not ((account := account_states.get(target.family)) and account.bench == 'account' and account.excluded)
+    ]
     proposed = select(
         targets, states, uid, language, required_languages=required_languages, recovery=health.prefer_recovery
     )
@@ -147,7 +173,8 @@ def propose(
         last_resorts.extend(
             target
             for target in sorted(targets, key=lambda target: target.cost_per_audio_hour)
-            if states.get(target.id, GateState()).stage == 0
+            if states.get(target.id, GateState()).stage < 100
+            and target not in proposed
             and not (
                 account_states.get(target.family)
                 and account_states[target.family].bench == 'account'

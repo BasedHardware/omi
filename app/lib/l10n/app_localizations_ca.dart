@@ -12178,17 +12178,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count participants',
-      one: '1 participant',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Activa Omi a Dreceres → Siri. Digueu «$askPhrase» o «$questionPhrase» i feu la vostra pregunta.';
   }
@@ -12210,6 +12199,21 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Aquesta versió d\'Omi ja no és compatible. Actualitza-la per continuar gravant i sincronitzant.';
+
+  @override
+  String get exportingAllData =>
+      'S\'estan exportant les teves dades… No tanquis Omi; els comptes grans poden trigar diversos minuts.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count participants',
+      one: '1 participant',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Elimina automàticament les còpies sincronitzades';

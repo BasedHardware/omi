@@ -25,6 +25,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations as conversations_db
+from database import smart_merge_audit as audit_db
 from database._client import get_firestore_client, run_transactional
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
 
@@ -72,6 +73,7 @@ Plan = Callable[
 class AbsorbResult:
     outcome: str  # 'absorbed' | 'already_absorbed' | 'rejected'
     reason: str
+    audit: str = 'none'  # audit sibling outcome of a committed absorb (database/smart_merge_audit.py)
 
 
 def _collection(client: Any, uid: str) -> Any:
@@ -157,8 +159,9 @@ def absorb_conversation(
     survivor_ref = collection.document(survivor_id)
     donor_ref = collection.document(donor_id)
 
-    @firestore.transactional
-    def absorb(transaction) -> AbsorbResult:
+    audit_io_failed = False
+
+    def absorb_attempt(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
@@ -177,15 +180,46 @@ def absorb_conversation(
         reason, survivor_update, donor_update = plan(survivor, survivor_segments, donor, donor_segments)
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
+        # Last read, only on the absorbing path: the gate fence for the audit sibling.
+        audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         # The survivor transcript changed: a stored client projection described the old one.
         conversations_db._invalidate_client_processing(payload)  # pyright: ignore[reportPrivateUsage]
         transaction.update(survivor_ref, payload)
         transaction.update(donor_ref, donor_update)
-        return AbsorbResult('absorbed', 'absorbed')
+        audit = audit or audit_db.stage_audit(
+            transaction,
+            client,
+            uid,
+            donor_id=donor_id,
+            survivor_id=survivor_id,
+            survivor_state=survivor_update[SMART_MERGE_FIELD],
+            donor_update=donor_update,
+            source=donor.get('source'),
+        )
+        return AbsorbResult('absorbed', 'absorbed', audit)
 
-    result = run_transactional(client, absorb)
+    @firestore.transactional
+    def absorb(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
+        nonlocal audit_io_failed
+        try:
+            return absorb_attempt(transaction, audit_unavailable=audit_unavailable)
+        except audit_db.AuditUnavailable:
+            # The SDK's rollback RPC can mask this exception. Remember that
+            # the callback failed before commit even if rollback also fails.
+            audit_io_failed = True
+            raise
+
+    try:
+        result = run_transactional(client, absorb)
+    except Exception:
+        if not audit_io_failed:
+            raise
+        # No commit was attempted. Never continue writing on a transaction whose
+        # optional read/staging failed; re-read and re-plan on a fresh transaction.
+        logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
+        result = run_transactional(client, absorb, audit_unavailable=True)
     if result.outcome == 'absorbed':
         # The same fail-open search-index hooks the conversation adapter runs after its writes.
         conversations_db._sync_conversation_search_index(uid, survivor_id)  # pyright: ignore[reportPrivateUsage]

@@ -24713,6 +24713,70 @@
         "title": "ScreenFrameSubjectIn",
         "type": "object"
       },
+      "ScreenTaskGateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "app_name": {
+            "default": "",
+            "maxLength": 128,
+            "title": "App Name",
+            "type": "string"
+          },
+          "ocr_text": {
+            "maxLength": 12000,
+            "title": "Ocr Text",
+            "type": "string"
+          },
+          "related_tasks": {
+            "items": {
+              "maxLength": 576,
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Related Tasks",
+            "type": "array"
+          },
+          "user_context": {
+            "default": "",
+            "maxLength": 1024,
+            "title": "User Context",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ocr_text"
+        ],
+        "title": "ScreenTaskGateRequest",
+        "type": "object"
+      },
+      "ScreenTaskGateResponse": {
+        "properties": {
+          "audit_sample": {
+            "title": "Audit Sample",
+            "type": "boolean"
+          },
+          "gate_outcome": {
+            "enum": [
+              "passed",
+              "rejected",
+              "fail_open"
+            ],
+            "title": "Gate Outcome",
+            "type": "string"
+          },
+          "should_extract": {
+            "title": "Should Extract",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "should_extract",
+          "gate_outcome",
+          "audit_sample"
+        ],
+        "title": "ScreenTaskGateResponse",
+        "type": "object"
+      },
       "SearchConversationsResponse": {
         "properties": {
           "current_page": {
@@ -31005,6 +31069,17 @@
             },
             "title": "Conversations",
             "type": "array"
+          },
+          "export_complete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Complete"
           },
           "frame_requests": {
             "items": {
@@ -57948,6 +58023,90 @@
         ]
       }
     },
+    "/v1/screen-task/gate": {
+      "post": {
+        "operationId": "screen_task_gate_v1_screen_task_gate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenTaskGateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenTaskGateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Screen Task Gate"
+      }
+    },
     "/v1/search/overview": {
       "get": {
         "description": "Counts for the global-search tiles shown before the user types.\n\nEvery count is a Firestore server-side aggregation and fails independently\n(reported as null, so the tile shows no number rather than a false 0). Semantics:\n\n- `starred`: starred, non-discarded, non-deleted conversations (same count as\n  `GET /v1/conversations/count?starred=true`).\n- `folders`: the user's folders in display order, each with its non-discarded,\n  non-deleted conversation count.\n- `recaps`: stored daily summaries.\n- `memories`: approximation of the default memories list — active canonical\n  memory items (Archive tier included), or the legacy collection when the\n  account has no canonical items. See `count_default_visible_memories`.\n- `people`: the people (speaker profiles) collection.\n- `places`: conversations with a geolocation, discarded ones included (an\n  exact non-discarded filter would need an undeclared composite index).",
@@ -63483,9 +63642,21 @@
     },
     "/v1/users/export": {
       "get": {
-        "description": "Export all user data for GDPR/CCPA compliance from a disk-backed spool.",
+        "description": "Export all user data for GDPR/CCPA compliance.",
         "operationId": "export_all_user_data_v1_users_export_get",
         "parameters": [
+          {
+            "description": "Stream the export lazily instead of spooling it server-side before headers. When true, clients MUST verify the body ends with the \"export_complete\": true completion suffix; a truncated body is a failed export even after HTTP 200.",
+            "in": "query",
+            "name": "stream",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Stream the export lazily instead of spooling it server-side before headers. When true, clients MUST verify the body ends with the \"export_complete\": true completion suffix; a truncated body is a failed export even after HTTP 200.",
+              "title": "Stream",
+              "type": "boolean"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

@@ -12110,17 +12110,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count talere',
-      one: '1 taler',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Slå på Omi i Snarveier → Siri. Si «$askPhrase» eller «$questionPhrase», og still deretter spørsmålet ditt.';
   }
@@ -12142,6 +12131,20 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Denne versjonen av Omi støttes ikke lenger. Oppdater for å fortsette å ta opp og synkronisere.';
+
+  @override
+  String get exportingAllData => 'Eksporterer dataene dine… Hold Omi åpen; store kontoer kan ta flere minutter.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count talere',
+      one: '1 taler',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Fjern synkroniserte kopier automatisk';

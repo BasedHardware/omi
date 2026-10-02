@@ -32,6 +32,7 @@ from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
 from utils.other.list_budget import ListReadBudget, budgeted_get_all, budgeted_stream_list
+from utils.other.portability_read import current_portability_read, verified_encrypted_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
 
@@ -174,17 +175,21 @@ def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
 def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(memory_data)
 
+    in_portability_export = current_portability_read() is not None
     if 'content' in data and isinstance(data['content'], str):
+        raw_content = data['content']
         try:
-            data['content'] = encryption.decrypt(data['content'], uid)
+            data['content'] = encryption.decrypt(raw_content, uid)
         except Exception:
             pass
+        data['content'] = verified_encrypted_read(raw_content, data['content'])
     if 'evidence' in data and isinstance(data['evidence'], str):
         try:
-            decrypted = encryption.decrypt(data['evidence'], uid)
+            decrypted = verified_encrypted_read(data['evidence'], encryption.decrypt(data['evidence'], uid))
             data['evidence'] = json.loads(decrypted)
         except Exception:
-            pass
+            if in_portability_export:
+                raise
     return data
 
 

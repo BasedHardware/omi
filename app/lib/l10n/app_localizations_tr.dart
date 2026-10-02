@@ -12121,17 +12121,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count konuşmacı',
-      one: '1 konuşmacı',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Kısayollar → Siri içinde Omi’yi etkinleştirin. “$askPhrase” veya “$questionPhrase” deyin, sonra sorunuzu sorun.';
   }
@@ -12153,6 +12142,21 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Omi\'nin bu sürümü artık desteklenmiyor. Kayda ve eşitlemeye devam etmek için güncelleyin.';
+
+  @override
+  String get exportingAllData =>
+      'Verileriniz dışa aktarılıyor… Omi\'yi açık tutun; büyük hesaplar birkaç dakika sürebilir.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşmacı',
+      one: '1 konuşmacı',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Senkronize Kopyaları Otomatik Kaldır';

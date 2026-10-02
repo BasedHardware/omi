@@ -12108,17 +12108,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Mluvčí: $count',
-      one: '1 mluvčí',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Zapněte Omi v Zkratkách → Siri. Řekněte „$askPhrase“ nebo „$questionPhrase“ a pak položte svou otázku.';
   }
@@ -12140,6 +12129,21 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Tato verze Omi už není podporovaná. Aktualizujte ji, abyste mohli dál nahrávat a synchronizovat.';
+
+  @override
+  String get exportingAllData =>
+      'Exportují se vaše data… Nechejte Omi otevřené; u velkých účtů to může trvat několik minut.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Mluvčí: $count',
+      one: '1 mluvčí',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Automaticky odstranit synchronizované kopie';

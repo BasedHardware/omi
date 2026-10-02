@@ -10,6 +10,7 @@ from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLag
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
+from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, bounded_language
@@ -384,6 +385,8 @@ class LiveLegSocket(STTSocket):
         self._send_tracker = send_tracker
         self.speaker_provider_epoch: SpeakerProviderEpoch | None = None
         self._dead = False
+        self._local_death_reason: str | None = None
+        self._terminal_reason: str | None = None
         self._seconds = 0.0
         self._replaying = False
         self._pending_selection: PendingLiveFailover | None = None
@@ -410,6 +413,7 @@ class LiveLegSocket(STTSocket):
         self._health_language = bounded_language(session.receiver.host.language)
         self._cost_generations = health.cost_generations(self.routing_target, self._health_language)
         self._cost_recorded = False
+        self._cost_text_seen = False
         self._cost_censored_no_text = False
         self._target_death_recorded = False
         self._closing_for_health = False
@@ -553,16 +557,28 @@ class LiveLegSocket(STTSocket):
 
     @property
     def death_reason(self) -> str | None:
-        return self._replay_failure_reason or ('vad_failed' if self._dead else self.raw.death_reason)
+        return self._terminal_reason or self._replay_failure_reason or self._local_death_reason or self.raw.death_reason
 
     @property
     def typed_death_reason(self) -> str | None:
-        return self._replay_failure_reason or getattr(self.raw, 'typed_death_reason', None)
+        return (
+            self._terminal_reason
+            or self._replay_failure_reason
+            or getattr(self.raw, 'typed_death_reason', None)
+            or self._local_death_reason
+        )
+
+    @property
+    def normalized_death_reason(self) -> str:
+        # First observation owns the immutable cause used by both telemetry paths.
+        return self._terminal_reason or normalize_live_stt_reason(self.typed_death_reason, self.death_reason)
 
     def set_selection_outcome(self, pending: PendingLiveFailover) -> None:
         self._pending_selection = pending
 
     def note_selection_transcript(self, segments: list[dict[str, Any]]) -> None:
+        if any(str(segment.get('text') or '').strip() for segment in segments):
+            self._cost_text_seen = True
         if self._tracks_window_replay:
             for segment in segments:
                 end = segment.get('_capture_end_sample')
@@ -585,17 +601,10 @@ class LiveLegSocket(STTSocket):
         if self._transcript_outcome is not None:
             return
         self._transcript_outcome = outcome
-        if outcome == 'no_text':
-            self._record_cost_outcome(False)
         health.record(self.service.value, self.session.receiver.host.language, outcome)
         if self._routing_active:
             if outcome == 'text':
                 self._health_success()
-            elif not self._cost_censored_no_text:
-                self._health_close()
-                circuit = target_circuit(self._routing_target_entry, st._circuit_for_primary(self.service))  # type: ignore[reportPrivateUsage]
-                circuit.record_serve_failure()
-                health.quarantine(self.service.value, 'selection', circuit.serve_error_bench_seconds)
             else:
                 self._health_close()
 
@@ -688,6 +697,7 @@ class LiveLegSocket(STTSocket):
                 output = self.gate.process_audio(data, 1.0 + self._seconds, score_pcm, start_sample=start_sample)
             except Exception:
                 if self.window:
+                    self._local_death_reason = 'vad_failed'
                     self._dead = True
                     try:
                         self.raw.finish()
@@ -724,17 +734,35 @@ class LiveLegSocket(STTSocket):
             else:
                 sent_spans = tuple(output.send_spans) if output is not None else ()
         try:
-            if audio and self.raw.send(audio) is not True:
-                self._record_cost_outcome(True)
-                self.finish()
-                self._dead = True
-                return False
+            if audio:
+                try:
+                    sent = self.raw.send(audio)
+                except Exception:
+                    # A raised send is transport evidence unless the socket
+                    # already owns a more specific bounded cause.
+                    self._record_cost_outcome(True, reason='connection_lost')
+                    self._dead = True
+                    self.finish()
+                    return False
+                if sent is not True:
+                    # False is a send symptom only while the raw socket still
+                    # reports alive. A dead socket with unknown diagnostics is
+                    # a connection loss, and typed causes win in normalization.
+                    try:
+                        raw_dead = bool(self.raw.is_connection_dead)
+                    except Exception:
+                        raw_dead = True
+                    self._record_cost_outcome(True, reason='connection_lost' if raw_dead else 'send_failed')
+                    self.finish()
+                    self._dead = True
+                    return False
             if output is not None and output.should_finalize:
                 if self.window and isinstance(self.raw, WindowedParakeetSocket):
                     self.raw.finalize(vad_pause=True)
                 else:
                     self.raw.finalize()
         except Exception:
+            self._local_death_reason = 'send_failed'
             self._dead = True
             self.finish()
             return False
@@ -801,11 +829,16 @@ class LiveLegSocket(STTSocket):
             self._record_cost_outcome(dead)
             self._release_open_gauge()
 
-    def _record_cost_outcome(self, dead: bool) -> None:
+    def _record_cost_outcome(self, dead: bool, *, reason: str | None = None) -> None:
+        if dead and self._terminal_reason is None:
+            try:
+                self._terminal_reason = normalize_live_stt_reason(self.typed_death_reason, self.death_reason, reason)
+            except Exception:
+                self._terminal_reason = normalize_live_stt_reason(reason)
         if not self._cost_recorded and self._first_speech_at is not None and self._speech_ms_for_health >= 1000:
             self._cost_recorded = True
-            outcome = 'failover' if dead else self._transcript_outcome or 'no_text'
-            if self._cost_censored_no_text and self._transcript_outcome != 'text':
+            outcome = 'failover' if dead else 'text' if self._cost_text_seen else 'no_text'
+            if not dead and self._cost_censored_no_text and not self._cost_text_seen:
                 return
             try:
                 health.record_session(
@@ -814,6 +847,7 @@ class LiveLegSocket(STTSocket):
                     outcome,
                     self._cost_generations,
                     getattr(getattr(self.session.receiver.host, 'request', None), 'uid', None),
+                    self._terminal_reason if dead else 'text' if self._cost_text_seen else 'no_text',
                 )
             except Exception:
                 record_fallback(
