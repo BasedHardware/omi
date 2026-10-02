@@ -1298,6 +1298,15 @@ can give that number to another voice. A missing or user-deleted survivor
 remains a 404; missing selected segments fail instead of labeling another
 speaker. The returned conversation carries the survivor ID for client refresh.
 
+The hosted MCP `assign_speaker` tool (`utils/mcp_server/handlers/speakers.py`,
+scope `speakers.assign`) commits through the same
+`utils.speaker_assignment_teaching.commit_manual_assignment` as the REST routes
+and applies the same named-person plan check. It differs in one default:
+`use_for_speech_training` is false unless the caller sets it, so an agent's label
+records `use_for_speech_training: false` on the receipt and authorizes no
+teaching. Follow-up tasks run on `postprocess_executor` after commit, because a
+hosted MCP call has no request lifecycle for FastAPI background tasks.
+
 Enrollment stays fire-and-forget, now receipt-driven: `extract_speaker_samples`
 pools clean same-scope speech (10 s min, 30 s / 12 clips / 10 s each), verifies
 one pooled WAV under the unchanged gates, and records one outcome on

@@ -72,6 +72,8 @@ EXPECTED_TOOL_ORDER = [
     "get_goals",
     "get_chat_messages",
     "get_people",
+    "create_person",
+    "assign_speaker",
     "get_screen_activity",
     "get_daily_summaries",
 ]
@@ -108,6 +110,14 @@ FAKE_SUCCESS = {
     "get_goals": {"goals": []},
     "get_chat_messages": {"messages": []},
     "get_people": {"people": []},
+    "create_person": {"success": True, "created": True, "person": {"id": "p1", "name": "Ada"}},
+    "assign_speaker": {
+        "success": True,
+        "conversation_id": "c1",
+        "assignee": "p1",
+        "updated_segment_count": 3,
+        "use_for_speech_training": False,
+    },
     "get_screen_activity": {"screen_activity": []},
     "get_daily_summaries": {"daily_summaries": []},
 }
@@ -724,6 +734,11 @@ class TestMalformedJsonRpc:
             ("update_action_item", {"action_item_id": 7, "description": "x"}),
             ("delete_action_item", {"action_item_id": 7}),
             ("create_action_item", {"description": 123}),
+            ("create_person", {"name": 7}),
+            ("assign_speaker", {"conversation_id": 7, "assignee": "user", "speaker_id": 0}),
+            ("assign_speaker", {"conversation_id": "c1", "assignee": 7, "speaker_id": 0}),
+            ("assign_speaker", {"conversation_id": "c1", "assignee": "user", "speaker_id": "0"}),
+            ("assign_speaker", {"conversation_id": "c1", "assignee": "user", "segment_ids": "s1"}),
         ],
     )
     def test_required_field_type_errors_are_model_visible(self, tool_name, arguments):
@@ -880,6 +895,9 @@ class TestToolResultContract:
         assert by_name["create_memory"]["annotations"]["idempotentHint"] is False
         assert by_name["delete_memory"]["annotations"]["destructiveHint"] is True
         assert by_name["edit_memory"]["annotations"]["destructiveHint"] is False
+        assert by_name["create_person"]["annotations"]["idempotentHint"] is True
+        assert by_name["assign_speaker"]["annotations"]["readOnlyHint"] is False
+        assert by_name["assign_speaker"]["annotations"]["destructiveHint"] is False
 
     def test_non_serializable_results_are_json_safe(self):
         class Opaque:
@@ -1226,6 +1244,8 @@ class TestOAuthResourceCanonicalization:
             "chat.read",
             "screen_activity.read",
             "people.read",
+            "people.create",
+            "speakers.assign",
         ]
 
     def test_sse_suffixed_env_resource_is_canonicalized(self, monkeypatch):

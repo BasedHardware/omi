@@ -14,4 +14,6 @@ MCP_FULL_ACCESS_SCOPES = [
     "chat.read",
     "screen_activity.read",
     "people.read",
+    "people.create",
+    "speakers.assign",
 ]

@@ -3539,6 +3539,8 @@ routes:
           - chat.read
           - screen_activity.read
           - people.read
+          - people.create
+          - speakers.assign
       byok: not_applicable
       rate_limit:
         policy_name: mcp:sse
@@ -3643,6 +3645,8 @@ routes:
           - chat.read
           - screen_activity.read
           - people.read
+          - people.create
+          - speakers.assign
       byok: not_applicable
       rate_limit:
         policy_name: mcp:sse

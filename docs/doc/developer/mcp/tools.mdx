@@ -279,6 +279,33 @@ Due dates accept `YYYY-MM-DD` or an ISO 8601 date-time where noted by the client
 
 ---
 
+## People and Speaker Tools
+
+| Tool | Required parameters | Optional parameters | Scope | Description |
+| --- | --- | --- | --- | --- |
+| `create_person` | `name` (2-40 characters) | None | `people.create` | Add a person; an existing person with the same name is returned instead (`created: false`) |
+| `assign_speaker` | `conversation_id`, `assignee`, and `speaker_id` and/or `segment_ids` | `use_for_speech_training` (default false) | `speakers.assign` | Label a transcript speaker as the user or a saved person |
+
+`assignee` is `"user"` for the account owner, or a person `id` from `get_people`
+or `create_person`. Read `speaker_id` and segment `id` values from
+`get_conversation_by_id`. `speaker_id` labels every segment of that diarized
+speaker; `segment_ids` (up to 500) labels specific segments; with both, every
+listed segment must belong to that speaker. The result reports the conversation
+id (a merged conversation resolves to the one that survived) and how many
+segments were labeled. It contains no transcript text.
+
+`use_for_speech_training` defaults to **false** for MCP callers. Set it to true
+only when the user has confirmed the label: Omi then learns that voice from the
+labeled segments, exactly as when the user labels a speaker in the app. Voice
+learning for other people still follows the user's "save other voice profiles"
+setting. Naming a person other than the user requires the same plan as naming
+people in the app.
+
+OAuth clients must request `people.create` and `speakers.assign` explicitly; the
+default grant contains read scopes only.
+
+---
+
 ## Error Handling
 
 A `tools/call` result always carries `structuredContent` (a JSON value) plus a

@@ -22,9 +22,12 @@ from utils.mcp_server.constants import (
     MCP_MEMORY_BATCH_MAX_ITEMS,
     MCP_MEMORY_LIST_DEFAULT_LIMIT,
     MCP_MEMORY_LIST_MAX_LIMIT,
+    MCP_PERSON_NAME_MAX_CHARS,
+    MCP_PERSON_NAME_MIN_CHARS,
+    MCP_SPEAKER_ASSIGN_MAX_SEGMENT_IDS,
 )
 from utils.mcp_server.errors import ToolExecutionError
-from utils.mcp_server.handlers import action_items, conversations, memories, other, profile
+from utils.mcp_server.handlers import action_items, conversations, memories, other, profile, speakers
 
 ToolHandler = Callable[[str, Dict[str, Any], Optional[ProductAuthorizationContext]], Dict[str, Any]]
 
@@ -126,6 +129,8 @@ GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
+PEOPLE_CREATE_SECURITY = [{"type": "oauth2", "scopes": ["people.create"]}]
+SPEAKERS_ASSIGN_SECURITY = [{"type": "oauth2", "scopes": ["speakers.assign"]}]
 
 _SECURITY_BY_SCOPE = {
     entry["scopes"][0]: [{"type": "oauth2", "scopes": list(entry["scopes"])}]
@@ -139,6 +144,8 @@ _SECURITY_BY_SCOPE = {
         CHAT_READ_SECURITY,
         SCREEN_ACTIVITY_READ_SECURITY,
         PEOPLE_READ_SECURITY,
+        PEOPLE_CREATE_SECURITY,
+        SPEAKERS_ASSIGN_SECURITY,
     )
     for entry in security
 }
@@ -193,6 +200,8 @@ _ACTION_ITEM_CREATE = "action_item_create"
 _ACTION_ITEM_COMPLETE = "action_item_complete"
 _ACTION_ITEM_UPDATE = "action_item_update"
 _ACTION_ITEM_DELETE = "action_item_delete"
+_PEOPLE_CREATE = "people_create"
+_SPEAKER_ASSIGN = "speaker_assign"
 
 TOOL_SPECS: Tuple[ToolSpec, ...] = (
     ToolSpec(
@@ -994,6 +1003,97 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         write_operation=_READ,
         rate_bucket=None,
         handler=other.get_people,
+    ),
+    ToolSpec(
+        name="create_person",
+        title="Create person",
+        description=(
+            "Add a person to the user's People so their speech can be labeled with assign_speaker. If a person "
+            "with exactly this name already exists, it is returned instead (created=false), so retries never "
+            "duplicate. Returns only the person's id and name."
+        ),
+        annotations=_create_annotations("Create person", idempotent=True),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The person's display name",
+                    "minLength": MCP_PERSON_NAME_MIN_CHARS,
+                    "maxLength": MCP_PERSON_NAME_MAX_CHARS,
+                },
+            },
+            "required": ["name"],
+        },
+        output_schema=_output_schema(
+            _object_schema(
+                ["success", "created", "person"],
+                success={"type": "boolean"},
+                created={"type": "boolean"},
+                person=_object_schema(["id", "name"], id={"type": "string"}, name={"type": "string"}),
+            )
+        ),
+        scope="people.create",
+        operation="other",
+        write_operation=_PEOPLE_CREATE,
+        rate_bucket="people:create",
+        handler=speakers.create_person,
+    ),
+    ToolSpec(
+        name="assign_speaker",
+        title="Assign speaker",
+        description=(
+            "Label who is speaking in a conversation transcript: the user themself (assignee='user') or a person "
+            "id from get_people/create_person. Pass speaker_id to label every segment of that diarized speaker, "
+            "or segment_ids to label specific segments (with both, the segments must belong to that speaker). "
+            "Speaker and segment ids come from get_conversation_by_id. Voice learning is off unless "
+            "use_for_speech_training=true; only set it when the user confirms the label is correct, because it "
+            "teaches Omi that voice."
+        ),
+        annotations=_edit_annotations("Assign speaker"),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "conversation_id": {"type": "string", "description": "The ID of the conversation"},
+                "speaker_id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Diarized speaker number to label (every segment with this speaker_id)",
+                },
+                "segment_ids": {
+                    "type": "array",
+                    "description": "Specific transcript segment ids to label",
+                    "minItems": 1,
+                    "maxItems": MCP_SPEAKER_ASSIGN_MAX_SEGMENT_IDS,
+                    "items": {"type": "string", "minLength": 1},
+                },
+                "assignee": {
+                    "type": "string",
+                    "description": "'user' for the account owner, or a person id from get_people/create_person",
+                },
+                "use_for_speech_training": {
+                    "type": "boolean",
+                    "description": "Also learn this voice from the labeled segments (default false)",
+                    "default": False,
+                },
+            },
+            "required": ["conversation_id", "assignee"],
+        },
+        output_schema=_output_schema(
+            _object_schema(
+                ["success", "conversation_id", "assignee", "updated_segment_count", "use_for_speech_training"],
+                success={"type": "boolean"},
+                conversation_id={"type": "string"},
+                assignee={"type": "string"},
+                updated_segment_count={"type": "integer", "minimum": 0},
+                use_for_speech_training={"type": "boolean"},
+            )
+        ),
+        scope="speakers.assign",
+        operation="other",
+        write_operation=_SPEAKER_ASSIGN,
+        rate_bucket="speakers:assign",
+        handler=speakers.assign_speaker,
     ),
     ToolSpec(
         name="get_screen_activity",
