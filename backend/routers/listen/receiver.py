@@ -68,7 +68,13 @@ from config.stt_provider_policy import provider_for_service
 from utils.stt.live_router import note_failed_route
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.brand_terms import normalize_brand_segments
-from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
+from utils.stt.resilient_stream import (
+    ReplayFilterMixin,
+    ResilientAudio,
+    replay_chunks,
+    socket_is_finishing,
+    retire_window_replay_socket,
+)
 from utils.stt.resilient_stream import (
     enabled as resilient_reconnect_enabled,
     reconnect_live_stt_socket,
@@ -77,7 +83,7 @@ from utils.stt.resilient_stream import (
     window_replay_action,
 )
 from utils.stt.language_policy import observe_live_segments, record_live_connection
-from utils.stt.provider_resilience import fallback_socket_is_serving
+from utils.stt.provider_resilience import fallback_socket_is_serving, close_rejected_socket
 from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
 from utils.stt.streaming import (
     STTService,
@@ -1250,13 +1256,24 @@ class ListenReceiver(ReplayFilterMixin):
             return await retry_failed_replacement(self, raw, epoch, hop, previous)
         self._pending_live_failover = hop
         # Replay capture positions after the last emitted segment.
-        rejected_sample = replay_chunks(
-            raw,
-            replay,
-            source=window_ring,
-            provider=dead_provider or 'parakeet',
-            soniox=self._resilient_audio if self.host.stt_service == STTService.soniox else None,
-        )
+        try:
+            rejected_sample = await replay_chunks(
+                raw,
+                replay,
+                source=window_ring,
+                provider=dead_provider or 'parakeet',
+                soniox=self._resilient_audio if self.host.stt_service == STTService.soniox else None,
+                is_active=lambda: self.host.state.active and not socket_is_finishing(previous),
+            )
+        except asyncio.CancelledError:
+            hop.note_failure(None)
+            retire_window_replay_socket(self, raw)
+            close_rejected_socket(raw)
+            raise
+        if not self.host.state.active or socket_is_finishing(previous):
+            hop.note_failure(None)
+            close_rejected_socket(raw)
+            return False
         if rejected_sample is not None and window_ring is not None:
             # Accepted bytes have not necessarily produced text. The next
             # candidate needs the entire remaining span, including that prefix.

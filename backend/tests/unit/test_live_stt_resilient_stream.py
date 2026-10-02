@@ -279,6 +279,7 @@ async def test_failed_window_replays_only_untranscribed_audio_once(monkeypatch, 
 
 @pytest.mark.asyncio
 async def test_two_partial_replay_failures_preserve_tail_and_new_audio(monkeypatch):
+    monkeypatch.setattr("utils.stt.resilient_stream.REPLAY_PACKET_BYTES", 4)
     listener = receiver(monkeypatch, enabled=False)
     listener.host.stt_service = STTService.parakeet
     listener.host.stt_model = 'parakeet-window'

@@ -20,6 +20,7 @@ from config.stt_provider_policy import normalized_stt_language, soniox_accepts_l
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
+from utils.stt.send_queue import AudioSendQueue
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import (
@@ -185,7 +186,7 @@ class SafeSonioxSocket(STTSocket):
         # terminal-failure vocabulary; None until the socket dies.
         self._typed_death_reason: Optional[str] = None
         self._lock = threading.Lock()
-        self._send_queue: asyncio.Queue[bytes | str] = asyncio.Queue(maxsize=2000)
+        self._send_queue: AudioSendQueue[bytes | str] = AudioSendQueue(maxsize=2000)
         # A response can end in the middle of a word. Downstream joins distinct
         # segments with spaces, so retain the last word until its boundary is known.
         self._pending_segment: Optional[Dict[str, Any]] = None
@@ -244,6 +245,13 @@ class SafeSonioxSocket(STTSocket):
             self._mark_dead('send queue full', typed_reason='capacity_full')
             return False
         return True
+
+    async def wait_send_capacity(self) -> bool:
+        try:
+            await self._send_queue.wait_for_capacity()
+        except TimeoutError:
+            self._mark_dead('replay send queue stalled', typed_reason='capacity_full')
+        return not (self._dead or self._closed or self._finishing)
 
     def finalize(self) -> None:
         def enqueue() -> None:

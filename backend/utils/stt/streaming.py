@@ -41,6 +41,7 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
+from utils.stt.send_queue import AudioSendQueue
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
@@ -1346,7 +1347,7 @@ class SafeModulateSocket(STTSocket):
         self._lock = threading.Lock()
         self._header_sent = False
         self._wav_header: Optional[bytes] = None
-        self._send_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=2000)
+        self._send_queue: AudioSendQueue[bytes] = AudioSendQueue(maxsize=2000)
         self._done_event = asyncio.Event()
         self._prev_partial_text: str = ''
         self._prev_partial_start_ms: int = 0
@@ -1466,6 +1467,13 @@ class SafeModulateSocket(STTSocket):
             with self._lock:
                 self._header_sent = True
         return True
+
+    async def wait_send_capacity(self) -> bool:
+        try:
+            await self._send_queue.wait_for_capacity()
+        except TimeoutError:
+            self._mark_dead('replay send queue stalled', typed_reason='capacity_full')
+        return not (self._dead or self._closed)
 
     def finalize(self) -> None:
         pass
