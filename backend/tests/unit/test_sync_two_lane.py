@@ -364,7 +364,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     # evening peak; the cap is owned by code so a deploy cannot drift it back.
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
     sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
-    assert '--max-instances=40' in sync_step
+    assert '--max-instances=50' in sync_step
     assert 'gcloud tasks queues create sync-backfill' in action
     assert '--max-concurrent-dispatches=40' in action
     assert '--max-dispatches-per-second=10' in action
