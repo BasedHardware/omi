@@ -1001,8 +1001,64 @@ stop the batch and cancellation propagates. Apple Reminders retains its single
 push. This is best-effort export, not a durable retry queue: the worker does not
 automatically repeat an uncertain provider create after a failed marker write.
 
-A reprocess (smart-merge survivor refresh, user reprocess, sync update, server
-recovery) replaces the conversation's tasks. A new item whose description has the
+Automatic `SMART_MERGE` and `SYNC_UPDATE` refreshes with prior tasks use
+`utils/conversations/action_item_refresh.py`: existing documents (including Apple
+links, completion, edited descriptions/dates, folders, manual assignments and
+provenance) are untouched, even when extraction omits them. Only missing exact
+normalized identities are appended. Repeated identical descriptions pair by
+occurrence, within this conversation only; segment-anchor shadow pairs never act.
+A bounded conversation receipt (`action_item_refresh`, generation + hashed keys
+and task ids) retains aliases after edits and suppresses recreation after hard
+deletion. Soft-deleted rows also suppress recreation. **Hard deletions and original
+titles edited before the first receipt are unknowable**; a delete-time identity
+tombstone would close that historical gap, but is outside this change.
+
+Before smart-merge or sync-bridge donor cleanup, an atomic transaction transfers donor task ids
+to the survivor without delivery. Exact matches are annotated with
+`refresh_duplicate_of`; both live rows remain visible because equal descriptions
+cannot prove their completion, edits, folders or external links are interchangeable.
+Only a user-deleted survivor target (soft deletion or missing receipt target) suppresses
+a matching donor. Donor provenance and user/external fields stay on their own rows.
+Pending donor delivery markers are retired atomically on transfer, so survivor refresh
+cannot export or reschedule them. Donor deletion receipts transfer too. Existing
+duplicate external objects are not deleted or reconciled.
+Transactions read current rows before writes and retry conflicts, check the
+conversation sync revision and account generation, and never fall back to replace
+on error. Bounds are 200 task documents, 200 identity hashes and 400 alias slots;
+overflow fails closed for that conversation: further automatic additions or donor
+cleanup can remain blocked until explicitly resolved. Manual task creation and other
+conversations are unaffected; rollback restores the destructive legacy behavior and
+must not be treated as a lossless capacity recovery. No receipt pruning is introduced.
+Pure planning and database/orchestration live in separate small modules.
+
+New tasks persist atomically with the receipt, then receive vectors, then a durable
+one-time delivery claim. Exported, completed, deleted, Apple-linked or pending
+Apple tasks are not delivered. The worker rereads current rows before delivery.
+Retries before a claim recover pending tasks; **a crash after a claim or ambiguous
+provider failure can leave an unexported task**. This is at-most-once submission,
+not provider exactly-once delivery; no new outbox sweeper is introduced. Other task
+export paths and a user mutation after the final read remain outside this fence.
+
+`ACTION_ITEM_REFRESH_PRESERVE_ENABLED` is default on (blank/unset/on/true/yes/1/enabled);
+false or any unknown value restores legacy replacement and donor cleanup for future
+work. It does not undo prior transfers. Declare it on backend, backend-sync,
+backend-sync-backfill, backend-integration, pusher and backend-listen. The content-free
+`event=action_item_identity mode=preserve` log and `omi_action_item_refresh_total`
+count kept_existing, added_new, transferred_from_donor, skipped_duplicate and disabled.
+
+For N existing rows and A additions, reconciliation reads two control/conversation
+documents, N projected query results and N full rows, plus A collision reads; it writes
+A new tasks and one receipt. An empty query is billed at least one read. Pending P
+rows add P vector-payload reads, P+2 transactional claim reads, up to P claim writes,
+and up to P worker reads (plus unchanged external integration reads/writes). Donor
+transfer adds one donor conversation read and a second query/full-read pair, and
+writes one patch per donor plus the survivor receipt. Retries multiply these counts;
+cache invalidation is unchanged infrastructure. Unscoped triggers and flag-off add
+no Firestore reads. First-time scoped processing probes for existing rows, then uses
+the unchanged legacy writer/delivery order.
+
+Legacy processing (`USER_REPROCESS`, `SERVER_RECOVERY`, first processing without
+prior rows/receipt, or preservation disabled) replaces the conversation's tasks. A new item whose description has the
 same exact canonical form (width/typography normalized, ordinary text case-folded,
 sentence punctuation and whitespace collapsed; internal punctuation, numeric signs,
 numeric compatibility symbols and Unicode joiners retained; code-bearing descriptions
@@ -2000,19 +2056,18 @@ recording, not just one buffer length). Flipping it mid-session can mismatch
 the retained ring-buffer spans for up to the buffer's duration; it is an
 emergency lever, not a toggle.
 
-Every early return before a live speaker-ID match decision — in
-`speakers._match_unmapped` and in the callers that drop a queued detection —
-emits exactly one bounded reason as the `omi_speaker_id_match_exits_total`
-counter (label = reason only) plus one log line:
-`window_outside_buffer` (the post-failover signature), `too_short`, `no_pcm`,
-`stale_generation`, `already_mapped`. Pending evidence accumulation is not a
-drop (it logs and decides on the next clip). `speaker_id_evidence` /
-`speaker_id_decision` / the exit line carry `session=<recording session id>`
-— never uid, never transcript content — so one user's report is attributable
-without replaying the saved conversation. "That's me" outcomes are likewise attributable:
-`store_owner_voice_sample` logs one `owner sample outcome=… conversation=<id>` line next to the counter.
-Owner confirmation publication reads the current conversation receipt in the pooling transaction:
-a deleted/missing conversation or changed receipt generation drops the attempt as `stale_assignment`.
+Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs;
+owner learning records `omi_speaker_tag_prompt_voice_samples_total`, including `stale_assignment`.
+Automatic non-owner naming (voiceprints and introductions) requires `named_speaker_prompts_allowed`.
+Live checks once per conversation (upgrade/downgrade observed at rotation/reconnect); sync/shadow
+reuse one batch snapshot, even with zero prints. Processing/history check once per request.
+Free users load only the owner print. Owner recognition, manual edits, rejection-only card answers,
+same-stream receipt carry, and teaching from free manual tags remain available on every plan.
+Owner teaching requires current receipt consent; a card grants teaching only to its exact generation.
+Corrections retract intersecting owner contributions and rebuild from the base and remaining sources;
+legacy provenance retracts at conversation granularity. Retries retain one contribution per conversation.
+Owner and person publication fence source existence and generation; person publication rechecks consent.
+Owner clip coordination uses `sync_executor`; history competes against all usable prints, including owner.
 
 Provider segment IDs are normalized once at `TranscriptProcessor.enqueue`
 admission: a raw segment arriving with a missing or empty `id` is minted a

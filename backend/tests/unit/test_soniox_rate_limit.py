@@ -1,6 +1,7 @@
 """Transient Soniox rate limits, bounded reconnects, and provider socket gauge leases."""
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,7 @@ from utils.stt.socket import (
     record_live_stt_socket_open,
     track_live_stt_socket,
 )
+from utils.stt.recovery_state import LiveRecoveryController
 from utils.stt import streaming
 from utils.stt.streaming import STTService, _classify_provider_account_rejection, _fallback_failure_reason
 
@@ -209,15 +211,19 @@ def test_provider_socket_gauge_open_close_helpers_balance():
 
 @pytest.mark.asyncio
 async def test_receiver_drain_releases_gauge_when_close_raises():
-    from types import SimpleNamespace
-
     from utils.metrics import OMI_LIVE_STT_OPEN_STREAMS
 
     gauge = OMI_LIVE_STT_OPEN_STREAMS.labels(provider='soniox')
     before = gauge._value.get()
     socket = FakeSocket(fail_drain=True)
     receiver = ListenReceiver.__new__(ListenReceiver)
-    receiver.host = SimpleNamespace(is_multi_channel=False, stt_service=STTService.soniox)
+    receiver.host = SimpleNamespace(
+        is_multi_channel=False,
+        stt_service=STTService.soniox,
+        state=SimpleNamespace(active=True, stt_terminal_failure=False),
+        request=SimpleNamespace(),
+    )
+    receiver.recovery = LiveRecoveryController(receiver.host)
     receiver.channel_configs = []
     receiver.stt_socket = socket
     receiver.stt_sockets_multi = []

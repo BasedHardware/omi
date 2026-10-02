@@ -6,6 +6,13 @@ import pytest
 from utils.sync import pipeline
 
 
+@pytest.fixture(autouse=True)
+def paid_plan():
+    # These guards cover naming other people, which is paid; declare the plan instead of reading it.
+    with patch('utils.sync.speaker_identity.named_speaker_prompts_allowed', return_value=True):
+        yield
+
+
 def test_build_person_embeddings_cache_missing_id():
     uid = 'user-123'
     # Person with voiceprint but missing 'id'

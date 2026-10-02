@@ -22,6 +22,7 @@ from database.firestore_tier_context import invalidate_subscription, observe_sub
 from database.person_aliases import rename_person_retaining_aliases
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.speaker_learning_fields import voice_learning_fields
+from database.speaker_profile_authority import person_teaching_authorized
 from database.redis_db import (
     delete_cached_user_geolocation,
     try_acquire_client_device_write_lock,
@@ -995,23 +996,7 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
 def add_person_speech_sample(
     uid: str, person_id: str, sample_path: str, transcript: Optional[str] = None, max_samples: int = 5
 ) -> bool:
-    """
-    Append speech sample path to person's speech_samples list.
-    Limits to max_samples to prevent unlimited growth.
-
-    Uses Firestore transaction to ensure atomic read-modify-write,
-    preventing array drift from concurrent updates.
-
-    Args:
-        uid: User ID
-        person_id: Person ID
-        sample_path: GCS path to the speech sample
-        transcript: Optional transcript text for the sample
-        max_samples: Maximum number of samples to keep (default 5)
-
-    Returns:
-        True if sample was added, False if limit reached or person not found
-    """
+    """Atomically append a sample; return False for a missing person or a full sample list."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     transaction = db.transaction()
     return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
@@ -1030,7 +1015,11 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
 
 
 @transactional
-def _replace_speech_profile_transaction(transaction, person_ref, expected_updated_at, profile, user_ref=None):
+def _replace_speech_profile_transaction(
+    transaction, person_ref, expected_updated_at, profile, user_ref=None, source=None
+):
+    if source and not person_teaching_authorized(transaction, user_ref, person_ref.id, *source):
+        return None
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
         return None
@@ -1057,11 +1046,9 @@ def replace_person_speech_profile(
     segment_ids: list[str],
     *,
     speech_seconds: Optional[float] = None,
+    expected_receipt_generation: Optional[int] = None,
 ) -> Optional[list[str]]:
-    """Publish one verified sample, its embedding and teaching provenance atomically.
-
-    None means the result lost its ownership/version fence; [] is a first enrollment.
-    """
+    """Publish verified teaching atomically; None means its source/version fence failed."""
     user_ref = db.collection('users').document(uid)
     ref = user_ref.collection('people').document(person_id)
     profile = {
@@ -1072,7 +1059,14 @@ def replace_person_speech_profile(
         'speech_sample_source': {'conversation_id': conversation_id, 'segment_ids': segment_ids},
         **voice_learning_fields('learned', 'stored', speech_seconds),
     }
-    return _replace_speech_profile_transaction(db.transaction(), ref, expected_updated_at, profile, user_ref=user_ref)
+    return _replace_speech_profile_transaction(
+        db.transaction(),
+        ref,
+        expected_updated_at,
+        profile,
+        user_ref=user_ref,
+        source=(uid, conversation_id, segment_ids, expected_receipt_generation),
+    )
 
 
 @transactional
@@ -1178,10 +1172,12 @@ def get_user_speaker_embedding(uid: str) -> Optional[list]:
 
 def set_person_speaker_embedding(uid: str, person_id: str, embedding: list, *, expected_updated_at) -> bool:
     """Recover a vector only while the sample snapshot that produced it is current."""
-    ref = db.collection('users').document(uid).collection('people').document(person_id)
+    # user_ref revalidates save_other_voice_profiles; recovery needs no source fence.
+    user_ref = db.collection('users').document(uid)
+    ref = user_ref.collection('people').document(person_id)
     return (
         _replace_speech_profile_transaction(
-            db.transaction(), ref, expected_updated_at, {'speaker_embedding': embedding}
+            db.transaction(), ref, expected_updated_at, {'speaker_embedding': embedding}, user_ref=user_ref
         )
         is not None
     )

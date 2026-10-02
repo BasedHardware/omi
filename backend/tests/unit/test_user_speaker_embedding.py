@@ -320,6 +320,7 @@ def live_owner_profile(monkeypatch):
     # Owner display names come from the shared resolver, not a hardcoded label.
     world.name = MagicMock(return_value='David')
     monkeypatch.setattr(speakers_module, 'get_user_name', world.name)
+    monkeypatch.setattr(speakers_module, 'named_speaker_prompts_allowed', lambda uid: True)
     monkeypatch.setattr(runtime_module.user_db, 'get_user_speaker_embedding', world.embedding)
     monkeypatch.setattr(runtime_module, 'get_user_has_speech_profile', world.blob)
     monkeypatch.setattr(speakers_module, 'get_profile_audio_if_exists', world.audio)

@@ -44,13 +44,8 @@ void main() {
 
     test('nothing connected: every paired device, none live; the phone is never listed', () {
       final omi = device('omi-1', '', DeviceType.omi);
-      final doc = HomeWidgetsPayload.devices(
-        saved: [omi],
-        connected: null,
-        isConnected: false,
-        battery: 80,
-        charging: false,
-      );
+      final doc =
+          HomeWidgetsPayload.devices(saved: [omi], connected: null, isConnected: false, battery: 80, charging: false);
       final devices = (doc['devices'] as List).cast<Map<String, Object?>>();
       expect(devices, hasLength(1));
       expect(devices.single['name'], 'Omi', reason: 'an unnamed pendant still has a name');
@@ -83,12 +78,8 @@ void main() {
         task('tomorrow', due: DateTime.utc(2026, 9, 27)),
       ];
       expect(HomeWidgetsPayload.pickUpNext(today, open).map((t) => t.id), ['today', 'tomorrow', 'next-week']);
-      expect(HomeWidgetsPayload.pickUpNext(today, open, limit: 5).map((t) => t.id), [
-        'today',
-        'tomorrow',
-        'next-week',
-        'undated',
-      ]);
+      expect(HomeWidgetsPayload.pickUpNext(today, open, limit: 5).map((t) => t.id),
+          ['today', 'tomorrow', 'next-week', 'undated']);
     });
 
     test('nothing due today: upcoming tasks still show ahead of their day', () {
@@ -113,12 +104,8 @@ void main() {
   });
 
   group('Latest', () {
-    ServerConversation conversation(
-      String id, {
-      bool discarded = false,
-      ConversationStatus? status,
-      String title = '',
-    }) {
+    ServerConversation conversation(String id,
+        {bool discarded = false, ConversationStatus? status, String title = ''}) {
       final structured = Structured(title, '')..actionItems = [ActionItem('Call back')];
       return ServerConversation(
         id: id,
