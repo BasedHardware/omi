@@ -278,7 +278,7 @@ async def test_build_floor_override_is_read_per_request(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_build_floor_refusal_log_and_counter_are_bounded(monkeypatch, caplog):
-    from utils.metrics import SCREEN_TASK_BUILD_FLOOR_REFUSALS_TOTAL
+    from utils.llm.screen_task_admission import SCREEN_TASK_BUILD_FLOOR_REFUSALS_TOTAL
 
     monkeypatch.delenv('SCREEN_TASK_MIN_MACOS_BUILD', raising=False)
     counter = SCREEN_TASK_BUILD_FLOOR_REFUSALS_TOTAL.labels(surface='gate')
