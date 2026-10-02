@@ -1365,18 +1365,17 @@ REST tries immediately, sockets queue a delayed attempt, and fanout completion
 schedules a bounded retry for receipt-named people lacking a usable voiceprint
 (≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
 
-Legacy person teaching, owner confirmations and speaker-tag preview clips use
-`utils/speaker_audio.py`. Main's manifest timestamp selection is retained.
-Authoritative spans use strict sample placement: newest selected blobs fill
-positions first, earlier overlaps fill holes, and gaps/truncation always reject.
-No padding or rounding tolerance is permitted in this policy. Filename-only
-chunks and unverified legacy/live batches use main's exact merger and trim for
-the selected window, preserving its samples and format priority. These clips
-are labelled `compatibility/uncertain_timing`, never proven `covered`.
-Pooled teaching skips unavailable windows and includes only their contributors.
-The 10 s floor, text-containment (0.9), dominant-speaker (0.7), embedding and
-voiceprint publication gates are unchanged. Existing voiceprints survive
-rejected attempts. No producer, entitlement or feature-flag change is included.
+Legacy person teaching, owner confirmations and speaker-tag preview clips use `utils/speaker_audio.py` through one shared pure gate in `utils/conversations/audio_placement.py`:
+strict `locate` requires a real `started_at` and trusts only a fully validating v2 manifest or a `sync:`-scoped contributor union covering the window; other clocks answer
+`untrusted_clock` and may cut provisional candidates (a legacy preview can still seed from `created_at`) only behind the mandatory transcript verification, while `unplaced`,
+`invalid_window` and `missing_origin` refuse. Because legacy provider and stored-audio clocks may differ, flagged-off `SPEAKER_TEACHING_TEXT_PLACEMENT` adds a text-anchored
+re-cut on `text_mismatch` alone — person teaching only when exactly one fully decoded ≥10 s interval failed, owner on the existing ≥5 s clip — searching ±10 s (≤32 s of audio),
+one STT pass plus one final verification (≤44 audio-seconds under a shared 30 s STT deadline that suppresses internal provider retries), and refusing ambiguous or
+segment-granular word times. Main's manifest timestamp selection is retained. Authoritative spans use strict sample placement: newest selected blobs fill positions first, earlier
+overlaps fill holes, and gaps/truncation always reject. No padding or rounding tolerance is permitted in this policy. Filename-only chunks and unverified legacy/live batches use
+main's exact merger and trim for the selected window, preserving its samples and format priority. These clips are labelled `compatibility/uncertain_timing`, never proven `covered`.
+Pooled teaching skips unavailable windows and includes only their contributors. The 10 s floor, text-containment (0.9), dominant-speaker (0.7), embedding and voiceprint
+publication gates are unchanged. Existing voiceprints survive rejected attempts. No entitlement or deployed flag setting changes; future manual merges rebase segments from source wall-clock origins.
 
 One session shares listing and decoded cache across all legacy pooled windows.
 Both policies have identical limits: 32 actual download attempts including SDK
@@ -1393,7 +1392,7 @@ The 30 s value bounds admission, not preemption of a running SDK request or
 native decode. A final listing request/retry can overrun it by up to 2 s;
 CPU decode and transport scheduling cannot be assigned a strict wall-time
 upper bound by this synchronous API. No elapsed-time latency was measured.
-Person teaching retains 30 s / 12 windows, one verification and one embedding.
+Person teaching retains 30 s / 12 windows and one embedding; the default-off text-placement path alone can add its bounded search and re-verification.
 
 `omi_speaker_clip_coverage_total` uses bounded `outcome`, `reason` and `caller`
 labels: `complete`, `gap`, `uncertain_timing`, `download_limit`, `decode_failed`,
