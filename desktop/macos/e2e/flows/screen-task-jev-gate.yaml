@@ -1,0 +1,36 @@
+version: 2
+name: screen-task-jev-gate
+tier: manual
+description: Synthetic screen fixtures verify default-off extraction, OCR admission, canonical suggestions and owner-bound recovery.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskPolicy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskPrompt.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskResponse.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskTransport.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant+ScreenTask.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift
+preconditions:
+  - signed_in
+  - onboarding_completed
+
+steps:
+  - id: S1
+    name: Default-off preserves the existing extractor
+    do: "Use an isolated named bundle and synthetic local backend fixtures only. With screen_task_jev_gate absent or false, analyze a synthetic request screenshot and verify the existing 2.5 Flash tool loop runs without a screen-task gate request. Do not enable the flag on real screen data before privacy approval."
+
+  - id: S2
+    name: Content admission avoids duplicate requests and rejected pixel uploads
+    do: "Enable the flag only in the synthetic fixture profile. Replay a Telegram request frame, then the same main-pane text with changed unread count and OCR punctuation. Verify only the first sends gate/extractor traffic. Add a novel request or changed deadline and verify another gate request. Stub rejection and verify no image upload; stub audited rejection and verify one image call with bounded audit metadata."
+
+  - id: S3
+    name: Structured results remain pending suggestions
+    do: "Stub new, duplicate, refinement and completion JSON with active canonical IDs and a bounded related-task list. Verify capture policy and Suggested staging handle each independently, and no automatic acceptance or new action-item writer is invoked. Verify an empty tasks array retains context/activity observation. Unknown IDs or malformed output must use the legacy recovery path."
+
+  - id: S4
+    name: Fail-open and account revocation preserve authority
+    do: "Stub gate timeout and verify one screenshot extraction with fail_open telemetry. Stub extraction failure and verify the legacy loop uses the original owner. Revoke that owner before gate completion and before a fallback retry; verify no subsequent request with another account's token and no late suggestion/event. Confirm fallback telemetry contains bounded fields and no screen text."
+
+  - id: S5
+    name: Focused behavioral evidence
+    do: "Run ScreenTaskPipelineTests, TaskAssistantContextPromptTests, TaskAssistantPromptTests and TaskIntelligenceContractFixtureTests. Run the explicit backend gate and reservation-transition test files through backend/test.sh. Retain command results separately from live app acceptance."

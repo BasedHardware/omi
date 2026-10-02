@@ -2,7 +2,7 @@ import Foundation
 
 /// `@unchecked Sendable` carrier for the non-Sendable `[String: Any]` event
 /// payload captured by a `@MainActor` `Task` in `processFrame`.
-private struct TaskAssistantEventPayloadBox: @unchecked Sendable {
+struct TaskAssistantEventPayloadBox: @unchecked Sendable {
   let value: [String: Any]
   init(_ value: [String: Any]) { self.value = value }
 }
@@ -34,6 +34,7 @@ actor TaskAssistant: ProactiveAssistant {
   // MARK: - Properties
 
   private let geminiClient: GeminiClient
+  var screenTaskDedupe = ScreenTaskDedupe()
   private var isRunning = false
   private var previousTasks: [ExtractedTask] = []  // Last 10 extracted tasks for context
   private let maxPreviousTasks = 10
@@ -413,7 +414,7 @@ actor TaskAssistant: ProactiveAssistant {
     // Fast in-app trigger: for messaging apps, arm a ~15s timer keyed to the
     // current (app, window). Lets a new chat message turn into a task without
     // requiring the user to leave the app.
-    armFastFallbackIfNeeded(frame: frame)
+    await armFastFallbackIfNeeded(frame: frame)
 
     return nil
   }
@@ -422,8 +423,12 @@ actor TaskAssistant: ProactiveAssistant {
   /// arrives (subject to the per-window dedupe TTL). Lets chat content turn into a task
   /// without requiring the user to leave the app. Non-messaging apps continue to rely on
   /// the regular context-switch + fallback-timer path.
-  private func armFastFallbackIfNeeded(frame: CapturedFrame) {
+  private func armFastFallbackIfNeeded(frame: CapturedFrame) async {
     guard Self.messagingFastPathApps.contains(frame.appName) else { return }
+    if await ScreenTaskFeature.isEnabled {
+      triggerContinuation.yield(.timerFallback(frame))
+      return
+    }
 
     let key = Self.analyzedKey(for: frame)
 
@@ -447,7 +452,7 @@ actor TaskAssistant: ProactiveAssistant {
   }
 
   /// Handle result with screenshot ID for SQLite storage
-  private func handleResultWithScreenshot(
+  func handleResultWithScreenshot(
     _ taskResult: TaskExtractionResult,
     screenshotId: Int64?,
     appName: String,
@@ -842,7 +847,8 @@ actor TaskAssistant: ProactiveAssistant {
       ? Self.messagingFastPathDelay
       : TimeInterval(analysisDelay)
     let now = Date()
-    if dedupeTTL > 0, let last = lastAnalyzedByKey[dedupeKey] {
+    let screenTaskEnabled = await ScreenTaskFeature.isEnabled
+    if !screenTaskEnabled, dedupeTTL > 0, let last = lastAnalyzedByKey[dedupeKey] {
       let elapsed = now.timeIntervalSince(last)
       if elapsed < dedupeTTL {
         log(
@@ -892,41 +898,6 @@ actor TaskAssistant: ProactiveAssistant {
 
   // MARK: - Single-Stage Analysis with Tool Calling
 
-  private func processFrame(_ frame: CapturedFrame) async {
-    let enabled = await isEnabled
-    guard enabled else {
-      log("Task: Skipping analysis (disabled)")
-      return
-    }
-
-    log("Task: Analyzing frame from \(frame.appName)...")
-    do {
-      let (results, searchCount) = try await extractTaskSingleStage(from: frame.jpegData, appName: frame.appName)
-      guard !results.isEmpty else {
-        log("Task: Analysis returned no results")
-        return
-      }
-
-      let extractedCount = results.filter { $0.hasNewTask }.count
-      log(
-        "Task: Analysis complete - results: \(results.count) (extracted: \(extractedCount)), context: \(results.first?.contextSummary ?? ""), searches: \(searchCount)"
-      )
-
-      for result in results {
-        await handleResultWithScreenshot(
-          result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle
-        ) { type, data in
-          let boxed = TaskAssistantEventPayloadBox(data)
-          Task { @MainActor in
-            AssistantCoordinator.shared.sendEvent(type: type, data: boxed.value)
-          }
-        }
-      }
-    } catch {
-      logError("Task extraction error", error: error)
-    }
-  }
-
   /// Loop-based extraction: image analysis + iterative tool calling. A single frame can
   /// contain multiple distinct commitments (e.g. two unrelated asks in one chat) — the
   /// loop accumulates every extract_task call instead of stopping after the first.
@@ -934,7 +905,9 @@ actor TaskAssistant: ProactiveAssistant {
   /// until no_task_found terminates it or the iteration budget is exhausted.
   /// Returns (results, searchCount) — one TaskExtractionResult per extract_task plus a
   /// terminator result when zero tasks were extracted.
-  private func extractTaskSingleStage(from jpegData: Data, appName: String) async throws -> (
+  func extractTaskSingleStage(
+    from jpegData: Data, appName: String, authorization: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> (
     [TaskExtractionResult], Int
   ) {
     // 1. Gather context
@@ -1103,7 +1076,8 @@ actor TaskAssistant: ProactiveAssistant {
         systemPrompt: prompts.system,
         tools: [tools],
         forceToolCall: iteration == 0,
-        thinkingBudget: 1024
+        thinkingBudget: 1024,
+        authorization: authorization
       )
 
       guard let toolCall = result.toolCalls.first else {
@@ -1705,7 +1679,7 @@ actor TaskAssistant: ProactiveAssistant {
   }
 
   /// Execute FTS5 keyword search (searches both action_items and staged_tasks)
-  private func executeKeywordSearch(query: String) async -> [TaskSearchResult] {
+  func executeKeywordSearch(query: String) async -> [TaskSearchResult] {
     var results: [TaskSearchResult] = []
 
     do {

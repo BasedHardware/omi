@@ -480,13 +480,13 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             if remaining_ms <= 0:
                 raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
             try:
-                endpoint = self._endpoint(model, method='streamGenerateContent')
+                endpoint = self._endpoint(model, method='streamGenerateContent', capacity=capacity)
                 headers = _vertex_headers(await self._vertex_access_token(), capacity)
                 async with self._http_client.stream(
                     'POST',
                     endpoint,
                     params={'alt': 'sse'},
-                    json=payload,
+                    json=ptr.model_payload(payload, model),
                     headers=headers,
                     timeout=remaining_ms / 1000.0,
                 ) as response:
@@ -494,7 +494,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                         error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
                         self._observe_attempt(model, capacity, response.status_code, error_preview)
                         recovery = self._recovery_attempts(
-                            model, response.status_code, error_preview, origin_model=origin_model
+                            model, response.status_code, error_preview, origin_model=origin_model, capacity=capacity
                         )
                         if recovery:
                             attempts = recovery
@@ -505,6 +505,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                             credential_mode=credentials.mode,
                             retry_after_header=response.headers.get('retry-after'),
                         )
+                    self._observe_attempt(model, capacity, response.status_code, b'')
                     self._record_model_available(model)
                     async for chunk in response.aiter_bytes():
                         for event in decoder.feed(chunk):
@@ -608,7 +609,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             except _VertexHttpError as error:
                 last_error = error
                 self._observe_attempt(model, capacity, error.status_code, error.preview)
-                recovery = self._recovery_attempts(model, error.status_code, error.preview, origin_model=origin_model)
+                recovery = self._recovery_attempts(
+                    model, error.status_code, error.preview, origin_model=origin_model, capacity=capacity
+                )
                 if recovery:
                     attempts = recovery
                     continue
@@ -618,6 +621,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     credential_mode=credentials.mode,
                     retry_after_header=error.retry_after_header,
                 )
+            self._observe_attempt(model, capacity, 200, b'')
             self._record_model_available(model)
             assert parsed is not None
             return parsed
@@ -639,13 +643,13 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         credentials: CredentialContext,
         timeout_ms: int,
     ) -> Mapping[str, Any]:
-        endpoint = self._endpoint(model, method='generateContent')
+        endpoint = self._endpoint(model, method='generateContent', capacity=capacity)
         try:
             headers = _vertex_headers(await self._vertex_access_token(), capacity)
             async with self._http_client.stream(
                 'POST',
                 endpoint,
-                json=payload,
+                json=ptr.model_payload(payload, model),
                 headers=headers,
                 timeout=timeout_ms / 1000.0,
             ) as response:
