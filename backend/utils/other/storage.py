@@ -1022,7 +1022,7 @@ def _align_pcm16_frames(pcm_data: bytes, source: str) -> bytes:
     return pcm_data[:-remainder]
 
 
-def _download_and_decode_chunk_blob(bucket: Any, path: str, uid: str, sample_rate: int) -> bytes | None:
+def download_and_decode_chunk_blob(bucket: Any, path: str, uid: str, sample_rate: int) -> bytes | None:
     """Download one stored chunk blob (single or batch) and decode/decrypt it by extension to PCM16."""
     ext = _get_extension_for_path(path)
     encrypted = ext in ('opus.enc', 'enc', 'batch.enc')
@@ -1049,30 +1049,6 @@ def _download_and_decode_chunk_blob(bucket: Any, path: str, uid: str, sample_rat
     except Exception as e:
         logger.warning(f"Failed to decode/decrypt {path}: {e}")
         return None
-
-
-def iter_audio_chunk_pcm(
-    uid: str,
-    conversation_id: str,
-    wanted: Callable[[float, Optional[float]], bool],
-    sample_rate: int = 16000,
-) -> Any:
-    """Yield ``(start_timestamp, pcm16)`` for each stored chunk blob, oldest first.
-
-    One listing serves the whole pass, and each blob is decoded on its own so a
-    caller can place audio by the blob's own start: merging several chunks drifts
-    wherever stored chunks overlap. ``wanted(start, next_start)`` skips a blob
-    before it is downloaded; ``next_start`` is None for the last blob.
-    """
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
-    chunks = list_audio_chunks(uid, conversation_id)
-    for index, chunk in enumerate(chunks):
-        next_start = chunks[index + 1]['timestamp'] if index + 1 < len(chunks) else None
-        if not wanted(chunk['timestamp'], next_start):
-            continue
-        pcm = _download_and_decode_chunk_blob(bucket, chunk['path'], uid, sample_rate)
-        if pcm:
-            yield chunk['timestamp'], pcm
 
 
 def download_audio_chunks_and_merge(
@@ -1135,7 +1111,7 @@ def download_audio_chunks_and_merge(
             single_chunk_timestamps.append(chunk['timestamp'])
 
     def _download_and_decode_blob(path: str) -> bytes | None:
-        return _download_and_decode_chunk_blob(bucket, path, uid, sample_rate)
+        return download_and_decode_chunk_blob(bucket, path, uid, sample_rate)
 
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
         """Download a single-chunk blob by trying extensions in priority order."""

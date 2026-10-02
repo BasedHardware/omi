@@ -34,6 +34,7 @@ from utils.other.storage import (
     upload_person_speech_sample_from_bytes,
 )
 from utils.speaker_sample import verify_and_transcribe_sample, delete_sample_from_storage
+from utils.speaker_audio import legacy_speaker_clip_pcm
 from utils.speaker_tag_prompts.clips import v2_relevant_timestamps
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
@@ -849,9 +850,6 @@ async def extract_speaker_samples(
             outcome = 'no_chunks'
             return outcome
 
-        # Build chunks list in expected format
-        chunks: List[Dict[str, Any]] = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
-
         requested_ids = {sid for sid in (segment_ids or []) if sid}
         receipt = conversation.get('manual_speaker_assignments') or {}
         if receipt.get('segments') or receipt.get('speakers'):
@@ -913,7 +911,6 @@ async def extract_speaker_samples(
         )
         contributing_ids = [seg['id'] for seg in ordered_contributors if seg['id'] in authorized_ids]
 
-        sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
         timeline_v2 = is_audio_timeline_v2(conversation)
         clips: List[bytes] = []
         decoded_seconds = 0.0
@@ -923,39 +920,37 @@ async def extract_speaker_samples(
             if clip_start >= end:
                 continue
             covered_end = end
-            if timeline_v2:
-                window = segment_wall_window(conversation, clip_start, end)
-                if window is None:
-                    continue
-                abs_start, abs_end = window
-                relevant_timestamps = v2_relevant_timestamps(conversation, abs_start, abs_end)
-                span_starts = [
-                    bounds[0]
-                    for audio_file in audio_files
-                    for span in audio_file.get('chunk_spans') or []
-                    if (bounds := chunk_span_bounds(span)) is not None and bounds[0] < abs_end and bounds[1] > abs_start
-                ]
-                if not relevant_timestamps or not span_starts:
-                    continue
-                buffer_start = min(span_starts)
-            else:
-                abs_start = started_at_ts + clip_start
-                abs_end = started_at_ts + end
-                # Find relevant chunks
-                # Find first chunk that starts at or before abs_start
-                first_idx = 0
-                for i, chunk in enumerate(sorted_chunks):
-                    if chunk['timestamp'] <= abs_start:
-                        first_idx = i
-                    else:
-                        break
-                # Collect from first_idx up to abs_end
-                relevant_timestamps = [
-                    chunk['timestamp'] for chunk in sorted_chunks[first_idx:] if chunk['timestamp'] <= abs_end
-                ]
-                if not relevant_timestamps:
-                    continue
-                buffer_start = min(relevant_timestamps)
+            if not timeline_v2:
+                clip = await run_blocking(
+                    sync_executor,
+                    legacy_speaker_clip_pcm,
+                    uid,
+                    conversation_id,
+                    started_at_ts + clip_start,
+                    started_at_ts + end,
+                    sample_rate,
+                )
+                if clip is None:
+                    clean_seconds = decoded_seconds
+                    outcome = 'uncovered_audio'
+                    return outcome
+                clips.append(clip)
+                decoded_seconds += len(clip) / (sample_rate * 2)
+                continue
+            window = segment_wall_window(conversation, clip_start, end)
+            if window is None:
+                continue
+            abs_start, abs_end = window
+            relevant_timestamps = v2_relevant_timestamps(conversation, abs_start, abs_end)
+            span_starts = [
+                bounds[0]
+                for audio_file in audio_files
+                for span in audio_file.get('chunk_spans') or []
+                if (bounds := chunk_span_bounds(span)) is not None and bounds[0] < abs_end and bounds[1] > abs_start
+            ]
+            if not relevant_timestamps or not span_starts:
+                continue
+            buffer_start = min(span_starts)
             # Download, merge, and extract (sync_executor avoids parent-child deadlock on storage_executor, #7387)
             try:
                 merged = await run_blocking(

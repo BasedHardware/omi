@@ -56,11 +56,13 @@ def test_conversation_clip_pcm_falls_back_to_created_at_and_normalizes_naive_utc
         'created_at': naive_created,
         'audio_files': [{'chunk_timestamps': [expected_epoch], 'duration': 10.0}],
     }
-    monkeypatch.setattr(
-        clips,
-        'download_audio_chunks_and_merge',
-        lambda uid, cid, relevant, fill_gaps=True, sample_rate=16000: b'\x01\x00' * (sample_rate * 10),
-    )
+
+    def positioned_clip(uid, cid, start, end, sample_rate):
+        assert start == expected_epoch + 1.0
+        assert end == expected_epoch + 6.0
+        return b'\x01\x00' * round((end - start) * sample_rate)
+
+    monkeypatch.setattr(clips, 'legacy_speaker_clip_pcm', positioned_clip)
     pcm = clips.conversation_clip_pcm('uid-1', conv, 1.0, 6.0)
     assert pcm is not None
     assert len(pcm) == 5 * 16000 * 2
