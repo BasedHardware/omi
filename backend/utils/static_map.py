@@ -381,7 +381,9 @@ async def _render_from_provider(
         )
         return None
     try:
-        # Short leaf image work, off the event loop.
+        # Off the event loop on storage_executor, next to the provider bytes it works on. No pool is
+        # dedicated to image work, and this is short: about 10 ms for a card and 50 ms at the largest
+        # size, once per distinct pin set (the render lock and the cache absorb repeats).
         return await run_blocking(storage_executor, draw_pins, response.content, pins, width, height, theme)
     except Exception as error:
         # A render without its pins would mislead; fail like any other bad render.
