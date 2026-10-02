@@ -1191,6 +1191,12 @@ OMI_ACTION_ITEM_IDENTITY_TOTAL = Counter(
     ['outcome'],
 )
 
+OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
+    'omi_action_item_refresh_total',
+    'Automatic refresh task preservation: kept_existing|added_new|transferred_from_donor|skipped_duplicate|disabled',
+    ['outcome'],
+)
+
 # Conversation shape at first durable completed persist. source is a closed
 # 6-value vocabulary (live/sync/import/integration/desktop/unknown). Sync
 # children are emitted from backend-sync, which is not scraped today; the

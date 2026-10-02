@@ -54,11 +54,11 @@ exception in it is logged as ``shadow=error`` and swallowed; its kill switch is
 from __future__ import annotations
 
 import logging
-import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, cast
 
+from config.action_item_identity_key import identity_key
 from config.action_item_identity import (
     action_item_identity_anchor_shadow_enabled,
     action_item_identity_preserve_enabled,
@@ -109,46 +109,6 @@ _SHADOW_ERROR_NAMES = frozenset({'RuntimeError', 'TypeError', 'ValueError', 'Ass
 
 class AnchorShadowLimitExceeded(Exception):
     """Measurement exceeded its work budget; the completed write plan is still valid."""
-
-
-def identity_key(description: object) -> str:
-    """Exact canonical form of a task description; empty means "never the same task"."""
-    if not isinstance(description, str):
-        return ''
-    # NFKC turns x² into x2 and Ⅳ into IV. Keep numeric compatibility symbols;
-    # width folding (including full-width digits) and composed accents are safe.
-    normalized = unicodedata.normalize(
-        'NFC',
-        ''.join(
-            char if unicodedata.category(char) in ('No', 'Nl') else unicodedata.normalize('NFKC', char)
-            for char in description
-        ),
-    )
-    words = normalized.split()
-    code_bearing = any(
-        word.casefold().strip('.,:;!?') in {'code', 'password', 'token', 'identifier', 'secret'} for word in words
-    )
-    code_bearing = code_bearing or any(
-        any(char.isalpha() for char in word) and any(char.isnumeric() for char in word) for word in words
-    )
-    folded = unicodedata.normalize('NFC', normalized if code_bearing else normalized.casefold())
-    chars: List[str] = []
-    for index, char in enumerate(folded):
-        category = unicodedata.category(char)
-        if char in ('\u200b', '\ufeff'):
-            continue
-        # Curly apostrophes are typography; signs, decimal separators, identifiers
-        # and emoji/script joiners are content. Never erase all Unicode punctuation.
-        if char in ('\u2018', '\u2019'):
-            char = "'"
-        next_char = folded[index + 1 : index + 2]
-        previous_char = folded[index - 1 : index] if index else ''
-        sentence_separator = char in '.,!?;' and (not next_char or next_char.isspace() or next_char in '.,!?;')
-        if sentence_separator and not previous_char.isdigit():
-            char = ' '
-        chars.append(' ' if category == 'Cc' else char)
-    key = ' '.join(''.join(chars).split())
-    return key if any(not unicodedata.category(char).startswith(('P', 'Z', 'C')) for char in key) else ''
 
 
 def _instant(value: object) -> Optional[int]:
