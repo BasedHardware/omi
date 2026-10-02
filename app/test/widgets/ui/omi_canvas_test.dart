@@ -77,7 +77,9 @@ void main() {
       expect(OmiColors.glass, const Color(0x8CFFFFFF));
       expect(OmiColors.glassEdge, const Color(0x17000000));
       expect(OmiColors.glassRim, const Color(0x17000000), reason: 'one even hairline round a circle');
-      expect(OmiGlass.fill(const CircleBorder()).shadows, isNull, reason: 'circles have no shadow');
+      expect(OmiGlass.shadows, hasLength(1), reason: 'a touch of lift');
+      expect(OmiGlass.shadows!.single.blurRadius, lessThanOrEqualTo(12), reason: 'close under it, no haze');
+      expect(OmiGlass.fill(const CircleBorder()).shadows, OmiGlass.shadows);
       expect(OmiColors.floatGlass, const Color(0x9EFFFFFF));
       expect(OmiGlass.floatShadows, hasLength(2), reason: 'a faint outline and a soft shadow');
 
@@ -86,6 +88,7 @@ void main() {
       expect(OmiColors.glassEdge, const Color(0x29FFFFFF));
       expect(OmiColors.floatGlass, OmiColors.glass, reason: 'the floating bar is the same glass in dark');
       expect(OmiGlass.floatShadows, isEmpty, reason: 'dark is unchanged');
+      expect(OmiGlass.shadows, isNull);
     });
 
     test('a tint replaces the glass fill; the rim follows the palette', () {

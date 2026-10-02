@@ -27,9 +27,16 @@ class OmiGlass extends StatelessWidget {
 
   static const double blurSigma = 16;
 
-  /// The glass fill in [shape], or [tint] for a control that is on or busy.
+  /// The glass fill in [shape], or [tint] for a control that is on or busy, with its [shadows].
   static ShapeDecoration fill(ShapeBorder shape, {Color? tint}) =>
-      ShapeDecoration(shape: shape, color: tint ?? OmiColors.glass);
+      ShapeDecoration(shape: shape, color: tint ?? OmiColors.glass, shadows: shadows);
+
+  /// A small soft shadow close under a control, a touch of lift; none in dark.
+  static List<BoxShadow>? get shadows {
+    final color = OmiColors.glassShadow;
+    if (color.a == 0) return null;
+    return [BoxShadow(color: color, blurRadius: 12, offset: const Offset(0, 4))];
+  }
 
   /// Around a floating control: a hairline outline and a soft shadow; none in dark.
   static List<BoxShadow> get floatShadows {

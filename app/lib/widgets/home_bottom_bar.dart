@@ -44,6 +44,34 @@ double homeChatBarOffset(BuildContext context) => homeBottomInset(context) + kHo
 /// floating chat bar, with a little air above it.
 double homeChatBarClearance(BuildContext context) => homeChatBarOffset(context) + kHomeChatBarHeight + 20;
 
+/// Home's page in light mode blends into a warm white toward the bottom of the screen (Omi v8):
+/// white down to 62% of the height, half-way by 72%, the warm tint from 82%. Fixed to the screen,
+/// under the floating row. Nothing in dark.
+class HomeWarmBlend extends StatelessWidget {
+  const HomeWarmBlend({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final blend = OmiColors.canvasBlend;
+    if (blend.a == 0) return const SizedBox.shrink();
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: DecoratedBox(
+          key: const ValueKey('home_warm_blend'),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: const [0.62, 0.72, 0.82],
+              colors: [blend.withValues(alpha: 0), blend.withValues(alpha: blend.a / 2), blend],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The backdrop behind Home's floating [Ask Omi | record] row: list content fades into the page
 /// colour as it passes under the glass row (half by the row's top, solid below its bottom edge), so
 /// the row stays legible while what scrolls beneath shows through its blur. Paint only; a [Stack]

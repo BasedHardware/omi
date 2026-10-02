@@ -797,6 +797,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           child: Stack(
                             children: [
                               const HomeChatBarBackdrop(),
+                              const HomeWarmBlend(),
                               Positioned(
                                 left: 16,
                                 right: 16,

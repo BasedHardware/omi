@@ -40,9 +40,11 @@ class OmiPalette {
       required this.dangerSurface,
       required this.canvas,
       required this.canvasCard,
+      required this.canvasBlend,
       required this.glass,
       required this.glassEdge,
       required this.glassRim,
+      required this.glassShadow,
       required this.floatGlass,
       required this.floatEdge,
       required this.floatRim,
@@ -80,11 +82,17 @@ class OmiPalette {
   final Color canvas;
   final Color canvasCard;
 
+  /// The warm tint Home's page blends into toward the bottom of the screen (Omi v8); clear in dark.
+  final Color canvasBlend;
+
   /// A control on the canvas (`OmiGlass`): a translucent fill, its rim lit along the top
   /// ([glassEdge]) and quieter below ([glassRim]).
   final Color glass;
   final Color glassEdge;
   final Color glassRim;
+
+  /// The small soft shadow under a control on the canvas; clear in dark.
+  final Color glassShadow;
 
   /// A control floating over the list, blurred (`OmiGlass(blur: true)`): its fill, its rim from top
   /// ([floatEdge]) to bottom ([floatRim]), a hairline outside it ([floatOutline]) and a soft shadow
@@ -123,9 +131,11 @@ class OmiPalette {
     dangerSurface: Color(0x26FF453A),
     canvas: Color(0xFF000000),
     canvasCard: Color(0xFF1C1C1E),
+    canvasBlend: Color(0x00000000),
     glass: Color(0x803A3A3C),
     glassEdge: Color(0x29FFFFFF),
     glassRim: Color(0x12FFFFFF),
+    glassShadow: Color(0x00000000),
     floatGlass: Color(0x803A3A3C),
     floatEdge: Color(0x29FFFFFF),
     floatRim: Color(0x12FFFFFF),
@@ -159,11 +169,14 @@ class OmiPalette {
     dangerSurface: Color(0x26FF3B30),
     canvas: Color(0xFFFFFFFF),
     canvasCard: Color(0xFFF2F2F7),
+    // #C9B89A at 10%: over the white page, #FAF8F4.
+    canvasBlend: Color(0x1AC9B89A),
     // Omi v8 in light: circles are frosted white with a 9% hairline and no shadow; the Ask bar and
     // record button are frosted white with a white edge, a faint outline and a soft shadow.
     glass: Color(0x8CFFFFFF),
     glassEdge: Color(0x17000000),
     glassRim: Color(0x17000000),
+    glassShadow: Color(0x0F000000),
     floatGlass: Color(0x9EFFFFFF),
     floatEdge: Color(0xF2FFFFFF),
     floatRim: Color(0xD9FFFFFF),
@@ -204,9 +217,11 @@ abstract final class OmiColors {
   static Color get dangerSurface => active.dangerSurface;
   static Color get canvas => active.canvas;
   static Color get canvasCard => active.canvasCard;
+  static Color get canvasBlend => active.canvasBlend;
   static Color get glass => active.glass;
   static Color get glassEdge => active.glassEdge;
   static Color get glassRim => active.glassRim;
+  static Color get glassShadow => active.glassShadow;
   static Color get floatGlass => active.floatGlass;
   static Color get floatEdge => active.floatEdge;
   static Color get floatRim => active.floatRim;

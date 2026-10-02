@@ -151,4 +151,25 @@ void main() {
     expect(find.descendant(of: find.byType(HomeAskOmiButton), matching: find.byType(Icon)), findsNothing);
     expect(find.descendant(of: find.byType(HomeAskOmiButton), matching: find.byType(OmiGlass)), findsOneWidget);
   });
+
+  testWidgets('light Home blends into a warm white toward the bottom; dark has no blend', (tester) async {
+    // A fresh key each time, as a theme change rebuilds the app with the new palette.
+    Future<void> pump() => tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: OmiCanvas(child: Stack(children: [HomeWarmBlend(key: UniqueKey())]))),
+          ),
+        );
+    await pump();
+    final box = tester.widget<DecoratedBox>(find.byKey(const ValueKey('home_warm_blend')));
+    final gradient = (box.decoration as BoxDecoration).gradient! as LinearGradient;
+    expect(gradient.stops, [0.62, 0.72, 0.82]);
+    expect(Color.alphaBlend(gradient.colors.last, OmiColors.canvas),
+        isSameColorAs(const Color(0xFFFAF8F4), threshold: 0.01));
+    expect(gradient.colors.first.a, 0, reason: 'the top of the screen stays white');
+
+    OmiColors.active = OmiPalette.dark;
+    addTearDown(() => OmiColors.active = OmiPalette.light);
+    await pump();
+    expect(find.byKey(const ValueKey('home_warm_blend')), findsNothing);
+  });
 }
