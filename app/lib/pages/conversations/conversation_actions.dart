@@ -242,7 +242,8 @@ Future<ConversationRowAction?> showConversationActionsSheet(
   final l10n = context.l10n;
   return showOmiSheet<ConversationRowAction>(
     context: context,
-    title: conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.actions),
+    title: conversationDisplayTitle(conversation, l10n,
+        surface: ConversationUntitledRenderedSurface.actions, dates: OmiDateFormat.of(context)),
     padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
     builder: (sheetContext) {
       // FontAwesome glyphs, the same ones the conversation page's "…" menu uses for the same actions.
