@@ -4,14 +4,19 @@ export function Toggle({
   enabled,
   onChange,
   disabled = false,
+  label,
 }: {
   enabled: boolean;
   onChange: (enabled: boolean) => void;
   disabled?: boolean;
+  /** Accessible name; screen readers announce this plus the pressed state. */
+  label: string;
 }) {
   return (
     <button
       type="button"
+      aria-pressed={enabled}
+      aria-label={label}
       onClick={() => !disabled && onChange(!enabled)}
       disabled={disabled}
       className={cn(

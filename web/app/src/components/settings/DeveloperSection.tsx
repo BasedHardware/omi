@@ -215,6 +215,8 @@ function CreateApiKeyDialog({
                             onClick={() =>
                               setScopes({ ...scopes, [readKey]: !scopes[readKey] })
                             }
+                            aria-pressed={scopes[readKey]}
+                            aria-label={`${resource} read permission`}
                             className={cn(
                               'px-3 py-1.5 text-xs font-semibold transition-colors',
                               scopes[readKey]
@@ -228,6 +230,8 @@ function CreateApiKeyDialog({
                             onClick={() =>
                               setScopes({ ...scopes, [writeKey]: !scopes[writeKey] })
                             }
+                            aria-pressed={scopes[writeKey]}
+                            aria-label={`${resource} write permission`}
                             className={cn(
                               'px-3 py-1.5 text-xs font-semibold transition-colors',
                               scopes[writeKey]
@@ -380,20 +384,7 @@ export function DeveloperSection({
           </button>
         </div>
         <Card>
-          {apiKeysError ? (
-            <div
-              role="alert"
-              className="space-y-3 py-6 text-center text-sm text-text-secondary"
-            >
-              <p>Failed to load API keys. Please try again.</p>
-              <button
-                onClick={onRetryApiKeys}
-                className="rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-medium hover:bg-white/[0.14]"
-              >
-                Retry
-              </button>
-            </div>
-          ) : apiKeys.length > 0 ? (
+          {apiKeys.length > 0 ? (
             <div className="space-y-3">
               {apiKeys.map((apiKey) => (
                 <div
@@ -431,6 +422,19 @@ export function DeveloperSection({
                   </button>
                 </div>
               ))}
+            </div>
+          ) : apiKeysError ? (
+            <div
+              role="alert"
+              className="space-y-3 py-6 text-center text-sm text-text-secondary"
+            >
+              <p>Failed to load API keys. Please try again.</p>
+              <button
+                onClick={onRetryApiKeys}
+                className="rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-medium hover:bg-white/[0.14]"
+              >
+                Retry
+              </button>
             </div>
           ) : (
             <p className="py-6 text-center text-sm text-text-quaternary">
@@ -491,6 +495,7 @@ export function DeveloperSection({
                       </div>
                       <Toggle
                         enabled={isEnabled}
+                        label={`${webhook.label} webhook`}
                         onChange={(enabled) =>
                           onWebhookChange(
                             webhook.id,

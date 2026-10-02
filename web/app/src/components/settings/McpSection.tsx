@@ -217,20 +217,7 @@ export function McpSection({
 
       {/* MCP Keys List */}
       <Card>
-        {listError ? (
-          <div
-            role="alert"
-            className="space-y-3 py-6 text-center text-sm text-text-secondary"
-          >
-            <p>Failed to load MCP keys. Please try again.</p>
-            <button
-              onClick={onRetry}
-              className="rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-medium hover:bg-white/[0.14]"
-            >
-              Retry
-            </button>
-          </div>
-        ) : mcpKeys.length > 0 ? (
+        {mcpKeys.length > 0 ? (
           <div className="space-y-3">
             {mcpKeys.map((key) => (
               <div
@@ -261,6 +248,19 @@ export function McpSection({
                 </button>
               </div>
             ))}
+          </div>
+        ) : listError ? (
+          <div
+            role="alert"
+            className="space-y-3 py-6 text-center text-sm text-text-secondary"
+          >
+            <p>Failed to load MCP keys. Please try again.</p>
+            <button
+              onClick={onRetry}
+              className="rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-medium hover:bg-white/[0.14]"
+            >
+              Retry
+            </button>
           </div>
         ) : (
           <p className="py-6 text-center text-sm text-text-quaternary">

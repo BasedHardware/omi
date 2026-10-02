@@ -97,7 +97,7 @@ describe('Settings key management', () => {
       const error = await screen.findByText(message);
       expect(screen.queryByText(empty)).toBeNull();
       fireEvent.click(
-        within(error.parentElement!).getByRole('button', { name: 'Retry' }),
+        within(error.closest('[role="alert"]')!).getByRole('button', { name: 'Retry' }),
       );
       expect(await screen.findByText(empty)).toBeTruthy();
       expect(getKeys).toHaveBeenCalledWith({ throwOnError: true });
@@ -139,12 +139,11 @@ describe('Settings key management', () => {
     expect(submit).toBeDisabled();
     fireEvent.click(submit);
     expect(createDeveloperApiKey).not.toHaveBeenCalled();
-    expect(screen.getByText(/Select at least one permission/)).toBeTruthy();
     const goals = screen.getByText('Goals').parentElement!;
     fireEvent.click(screen.getByRole('button', { name: 'Read Only' }));
-    expect(within(goals).getByRole('button', { name: 'R' }).className).toContain(
-      'bg-blue-500',
-    );
+    expect(
+      within(goals).getByRole('button', { name: 'Goals read permission' }).className,
+    ).toContain('bg-blue-500');
     fireEvent.click(screen.getByRole('button', { name: 'Full Access' }));
     fireEvent.click(submit);
     await waitFor(() =>

@@ -527,6 +527,7 @@ function ProfileSection({
               enabled={dailySummary?.enabled ?? false}
               onChange={onDailySummaryToggle}
               disabled={dailySummary === null}
+              label="Daily Summary"
             />
           </SettingRow>
 
@@ -566,7 +567,11 @@ function PrivacySection({
           label="Store Recordings"
           description="Allow storing audio recordings for improved accuracy"
         >
-          <Toggle enabled={recordingPermission} onChange={onRecordingChange} />
+          <Toggle
+            enabled={recordingPermission}
+            onChange={onRecordingChange}
+            label="Store Recordings"
+          />
         </SettingRow>
 
         <SettingRow
@@ -577,6 +582,7 @@ function PrivacySection({
             enabled={trainingDataOptIn}
             onChange={onTrainingDataChange}
             disabled={trainingDataOptIn}
+            label="Training Data"
           />
         </SettingRow>
       </Card>
@@ -1979,6 +1985,14 @@ export function SettingsPage() {
     try {
       const newKey = await createDeveloperApiKey(name, scopes);
       setApiKeys((keys) => [...keys, newKey]);
+      // A create after a failed list load must recover the list: clear the
+      // error only when a fresh refresh succeeds, so a still-broken list
+      // keeps its retry affordance instead of hiding the appended key.
+      try {
+        await loadApiKeys();
+      } catch {
+        // loadApiKeys already re-latched the error state.
+      }
       return newKey;
     } catch (error) {
       console.error('Failed to create API key:', error);
@@ -2001,6 +2015,13 @@ export function SettingsPage() {
     try {
       const newKey = await createMcpApiKey(name);
       setMcpKeys((keys) => [...keys, newKey]);
+      // Same recovery contract as developer keys: a successful create
+      // retries the list and clears its error only on a successful refresh.
+      try {
+        await loadMcpKeys();
+      } catch {
+        // loadMcpKeys already re-latched the error state.
+      }
       return newKey;
     } catch (error) {
       console.error('Failed to create MCP key:', error);
