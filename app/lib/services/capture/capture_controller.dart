@@ -3335,8 +3335,10 @@ class CaptureController extends ChangeNotifier
       await _pendingFinalizeAndStamp;
       _pendingFinalizeAndStamp = null;
     }
-    // Live segment times are seconds from the conversation's start.
-    final origin = (conversation.startedAt ?? conversation.createdAt).millisecondsSinceEpoch ~/ 1000;
+    // Live segment times are seconds from the conversation's start. The server sets it on every
+    // conversation it creates; without it, this session's start is the closest origin.
+    final startedAt = conversation.startedAt;
+    final origin = startedAt == null ? sessionStartSeconds : startedAt.millisecondsSinceEpoch ~/ 1000;
     final spans = [
       for (final segment in conversation.transcriptSegments)
         (origin + segment.start.floor(), origin + segment.end.ceil()),

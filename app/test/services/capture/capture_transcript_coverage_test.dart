@@ -11,6 +11,8 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
+import 'package:omi/services/wals/wal.dart';
+import 'package:omi/utils/wal_file_manager.dart';
 
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
@@ -50,10 +52,12 @@ void main() {
   }
 
   /// A conversation whose saved transcript has one segment per [spans] entry, in seconds from [startedAt].
-  ServerConversation conversation(String id, DateTime startedAt, List<(double, double)> spans) => ServerConversation(
+  ServerConversation conversation(String id, DateTime startedAt, List<(double, double)> spans,
+          {DateTime? createdAt, bool hasStart = true}) =>
+      ServerConversation(
         id: id,
-        createdAt: startedAt,
-        startedAt: startedAt,
+        createdAt: createdAt ?? startedAt,
+        startedAt: hasStart ? startedAt : null,
         structured: Structured('fixture', 'fixture'),
         transcriptSegments: [
           for (final (i, span) in spans.indexed)
@@ -85,6 +89,24 @@ void main() {
       if (now == last && i >= 3) return;
       last = now;
     }
+  }
+
+  /// Waits, in real time, until the phone's WALs satisfy [done] in memory and in the saved index, and
+  /// fails with their state if they never do. Stamping and release touch real files outside the
+  /// virtual scheduler, so a quiet moment does not prove they are done; and a release only counts once
+  /// it is saved, because an app kill reloads the index.
+  Future<List<Wal>> walsReach(String expectation, bool Function(List<Wal> wals) done) async {
+    for (var i = 0; i < 200; i++) {
+      final wals = await world.wal.syncs.phone.getAllWals();
+      if (done(wals) && done(await WalFileManager.loadWals())) return wals;
+      await world.settle();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    final wals = await world.wal.syncs.phone.getAllWals();
+    final state = [
+      for (final wal in wals) '${wal.timerStart}+${wal.seconds}s ${wal.status.name} conv=${wal.conversationId}'
+    ];
+    fail('WALs never reached "$expectation": ${state.join('; ')}');
   }
 
   /// The server closes [memory]: processing starts, then the conversation arrives with its transcript.
@@ -132,15 +154,19 @@ void main() {
 
     // The server saved text for the first 20 s only; the rest of the speech never reached Firestore.
     await serverCloses(conversation('c1', origin, [(1, 20)]));
-    await recoveryPass();
+    final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
+    await walsReach('only audio after the first minute kept',
+        (wals) => wals.isNotEmpty && wals.every((wal) => wal.timerStart - originSeconds >= 60));
 
     final kept = await recoverableSecondsAfter(origin, 60);
     printOnFailure(await describeWals(origin));
     expect(kept, greaterThanOrEqualTo(120), reason: 'audio the transcript does not cover must not be deleted');
-    expect(world.uploads.attempts, isNotEmpty, reason: 'the kept audio goes to the server for repair');
-    expect(world.uploads.attempts.map((attempt) => attempt.conversationId).toSet(), {'c1'});
     expect(await recoverableSecondsAfter(origin, 0) - kept, lessThan(60),
         reason: 'the first minute, which the transcript covers, is released');
+
+    await recoveryPass();
+    expect(world.uploads.attempts, isNotEmpty, reason: 'the kept audio goes to the server for repair');
+    expect(world.uploads.attempts.map((attempt) => attempt.conversationId).toSet(), {'c1'});
   });
 
   test('pendant: a gap in the middle of the transcript keeps that audio for repair', () async {
@@ -150,12 +176,13 @@ void main() {
 
     // Text saved for the opening and the end; the server lost the middle.
     await serverCloses(conversation('c1', origin, [(1, 20), (180, 195)]));
-    await recoveryPass();
+    final wals = await walsReach('one copy kept', (wals) => wals.length == 1);
 
-    final wals = await world.wal.syncs.phone.getAllWals();
     printOnFailure(await describeWals(origin));
     final originSeconds = origin.millisecondsSinceEpoch ~/ 1000;
     expect(wals.map((wal) => wal.timerStart - originSeconds), [60], reason: 'only the uncovered middle minute stays');
+
+    await recoveryPass();
     expect(world.uploads.attempts, hasLength(1));
   });
 
@@ -165,10 +192,11 @@ void main() {
     await streamPendant(link, 200);
 
     await serverCloses(conversation('c1', origin, [for (var t = 1.0; t < 190; t += 20) (t, t + 15)]));
-    await recoveryPass();
-
+    await walsReach('every copy released', (wals) => wals.isEmpty);
     printOnFailure(await describeWals(origin));
     expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
+
+    await recoveryPass();
     expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
   });
 
@@ -181,10 +209,11 @@ void main() {
     await streamPendant(link, 140);
 
     await serverCloses(conversation('c1', talkStart, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)]));
-    await recoveryPass();
-
+    await walsReach('every copy released', (wals) => wals.isEmpty);
     printOnFailure(await describeWals(origin));
     expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
+
+    await recoveryPass();
     expect(world.uploads.attempts, isEmpty);
   });
 
@@ -199,10 +228,28 @@ void main() {
     await streamPendant(link, 140);
 
     await serverCloses(conversation('c1', origin, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)]));
-    await recoveryPass();
-
+    await walsReach('every copy released', (wals) => wals.isEmpty);
     printOnFailure(await describeWals(origin));
     expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
+
+    await recoveryPass();
+    expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
+  });
+
+  test('pendant: a conversation with no start time is judged from the session start', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+
+    // An old row without started_at, created ten minutes before this audio.
+    final memory = conversation('c1', origin, [for (var t = 1.0; t < 130; t += 20) (t, t + 15)],
+        createdAt: origin.subtract(const Duration(minutes: 10)), hasStart: false);
+    await serverCloses(memory);
+    await walsReach('every copy released', (wals) => wals.isEmpty);
+    printOnFailure(await describeWals(origin));
+    expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
+
+    await recoveryPass();
     expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
   });
 }
