@@ -10754,9 +10754,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceConnecting => 'Kumokonekta…';
 
   @override
-  String get recordOptionsTip => 'Tip: i-tap ang arrow sa record button para mag-record ng tawag.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Nabigo ang Update';
 
   @override
@@ -11303,9 +11300,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get recordWith => 'Mag-record gamit ang';
-
-  @override
-  String get moreWaysToRecord => 'Iba pang paraan ng pag-record';
 
   @override
   String get openCall => 'Buksan ang tawag';

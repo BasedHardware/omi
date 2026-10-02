@@ -12552,10 +12552,6 @@
     "@deviceConnecting": {
         "description": "Header device pill while a paired device reconnects"
     },
-    "recordOptionsTip": "Tip: tap the arrow on the record button to record a phone call.",
-    "@recordOptionsTip": {
-        "description": "One-time hint after the first phone-mic recording"
-    },
     "firmwareUpdateFailedTitle": "Update Failed",
     "@firmwareUpdateFailedTitle": {
         "description": "Title of the firmware update failed state"
@@ -13311,10 +13307,6 @@
     "recordWith": "Record with",
     "@recordWith": {
         "description": "Title of the sheet listing ways to record (Phone mic, Phone call)."
-    },
-    "moreWaysToRecord": "More ways to record",
-    "@moreWaysToRecord": {
-        "description": "Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet."
     },
     "openCall": "Open call",
     "@openCall": {

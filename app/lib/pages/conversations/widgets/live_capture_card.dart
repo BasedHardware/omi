@@ -4,11 +4,12 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/capture_sources.dart';
+import 'package:omi/widgets/device_tile.dart';
 
 /// The one capture status and control surface on Home: what is recording now.
 ///
-/// Leading: the source as a glyph in a circle (pendant, phone or call), named for screen readers
-/// but not in text. Then two lines: the short [status] ("Listening", "Paused", "Not
+/// Leading: the source's [DeviceTile] (pendant, phone or call) with a dot, green while live and grey
+/// when paused or in trouble, named for screen readers but not in text. Then two lines: the short [status] ("Listening", "Paused", "Not
 /// transcribing"), and in a muted colour the elapsed time and the [detail] ("0:14 · Audio saved,
 /// transcribes later"). A problem ([explanation] set) carries an amber warning glyph instead of a
 /// status dot, and tapping the text opens a sheet that explains it. Trailing: Pause while live,
@@ -50,9 +51,6 @@ class LiveCaptureCard extends StatelessWidget {
   final VoidCallback? onPauseToggle;
 
   static const String callSource = 'call';
-
-  /// Diameter of the leading source glyph's circle.
-  static const double sourceDiameter = 36;
 
   /// Pausing means nothing to a photo-capture device (OmiGlass, Ray-Ban Meta): it keeps taking
   /// photos. The live card and the live page use this one rule.
@@ -96,18 +94,16 @@ class LiveCaptureCard extends StatelessWidget {
         : source == 'phone'
             ? l10n.phone
             : CaptureSources.label(context, source);
-    final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
+    final secondary = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
     final problem = explanation != null;
 
     final leading = Semantics(
       label: sourceName,
       excludeSemantics: true,
-      child: Container(
-        width: sourceDiameter,
-        height: sourceDiameter,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
-        child: Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
+      child: DeviceTile(
+        source: isCall ? null : source,
+        icon: isCall ? Icons.call_rounded : null,
+        status: paused || problem ? OmiColors.textTertiary : OmiColors.success,
       ),
     );
 
@@ -126,7 +122,7 @@ class LiveCaptureCard extends StatelessWidget {
           child: Text(status,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+              style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
         ),
       ]),
       if (line2.isNotEmpty)
@@ -150,7 +146,7 @@ class LiveCaptureCard extends StatelessWidget {
 
     final statusRow = Row(children: [
       leading,
-      const SizedBox(width: OmiSpacing.xs),
+      const SizedBox(width: OmiSpacing.sm),
       Expanded(child: text),
       if (isCall)
         SizedBox(
@@ -162,23 +158,30 @@ class LiveCaptureCard extends StatelessWidget {
           icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 22),
           label: paused ? l10n.resume : l10n.pause,
           diameter: 36,
-          fillColor: OmiColors.surface3,
           onPressed: onPauseToggle,
         ),
     ]);
+    // The transcript line and the note sit under the text, clear of the tile.
+    const indent = EdgeInsetsDirectional.only(start: DeviceTile.size + OmiSpacing.sm);
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       statusRow,
       if (lastLine != null && lastLine!.trim().isNotEmpty) ...[
-        const SizedBox(height: OmiSpacing.xs),
-        Text('… ${lastLine!.trim()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary),
+        const SizedBox(height: OmiSpacing.xxs),
+        Padding(
+          padding: indent,
+          child: Text('… ${lastLine!.trim()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary),
+        ),
       ],
       if (note != null) ...[
-        const SizedBox(height: OmiSpacing.sm),
-        Row(children: [
-          Icon(CaptureSources.icon('omi'), size: 14, color: OmiColors.textTertiary),
-          const SizedBox(width: OmiSpacing.xs),
-          Flexible(child: Text(note!, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary))),
-        ]),
+        const SizedBox(height: OmiSpacing.xs),
+        Padding(
+          padding: indent,
+          child: Row(children: [
+            Icon(CaptureSources.icon('omi'), size: 14, color: OmiColors.textTertiary),
+            const SizedBox(width: OmiSpacing.xs),
+            Flexible(child: Text(note!, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary))),
+          ]),
+        ),
       ],
     ]);
   }

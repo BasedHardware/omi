@@ -10660,9 +10660,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deviceConnecting => 'در حال اتصال…';
 
   @override
-  String get recordOptionsTip => 'نکته: برای ضبط تماس تلفنی، روی فلش دکمه ضبط بزنید.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'به‌روزرسانی ناموفق بود';
 
   @override
@@ -11202,9 +11199,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get recordWith => 'ضبط با';
-
-  @override
-  String get moreWaysToRecord => 'روش‌های دیگر ضبط';
 
   @override
   String get openCall => 'باز کردن تماس';

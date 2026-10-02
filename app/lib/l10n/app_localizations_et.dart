@@ -10659,9 +10659,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceConnecting => 'Ühendamine…';
 
   @override
-  String get recordOptionsTip => 'Nõuanne: telefonikõne salvestamiseks puuduta salvestusnupul olevat noolt.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Värskendamine ebaõnnestus';
 
   @override
@@ -11203,9 +11200,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get recordWith => 'Salvestusviis';
-
-  @override
-  String get moreWaysToRecord => 'Rohkem salvestusviise';
 
   @override
   String get openCall => 'Ava kõne';

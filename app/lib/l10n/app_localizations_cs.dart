@@ -10661,9 +10661,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceConnecting => 'Připojování…';
 
   @override
-  String get recordOptionsTip => 'Tip: klepnutím na šipku na tlačítku nahrávání nahrajete telefonní hovor.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Aktualizace se nezdařila';
 
   @override
@@ -11203,9 +11200,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get recordWith => 'Nahrát pomocí';
-
-  @override
-  String get moreWaysToRecord => 'Další způsoby nahrávání';
 
   @override
   String get openCall => 'Otevřít hovor';

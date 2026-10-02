@@ -43,7 +43,7 @@ class RecordingListItem extends StatelessWidget {
           padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
           child: Container(
             width: double.maxFinite,
-            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+            decoration: BoxDecoration(color: OmiCanvas.cardOf(context), borderRadius: OmiRadius.xlAll),
             child: ClipRRect(
               borderRadius: OmiRadius.xlAll,
               child: Dismissible(

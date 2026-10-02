@@ -979,8 +979,11 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     });
   }
 
+  // The conversation page paints the canvas: a white page in light mode.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OmiCanvas(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     // Empty shell on first build (before initState's setCachedConversation
     // post-frame); after init, an unresolved conversation pops the route.
     final detailProvider = context.watch<ConversationDetailProvider>();
@@ -1010,8 +1013,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       child: Scaffold(
         key: scaffoldKey,
         extendBody: true,
+        backgroundColor: OmiColors.canvas,
         appBar: AppBar(
           automaticallyImplyLeading: false,
+          backgroundColor: OmiColors.canvas,
           leading: const Center(child: OmiBackButton.circled()),
           // No title: the tab bar below already names the active view, so a
           // header label only crowds the row with the back button and actions.
@@ -1159,8 +1164,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   }
 }
 
-/// Solid page colour from the screen edge up through the floating bar, fading out above it. Paint
-/// only; a [Stack] child placed before the bar.
+/// The page colour behind the floating glass bar: half by the bar's top, solid below its bottom
+/// edge, so text under the bar shows through its blur without crowding it. Paint only; a [Stack]
+/// child placed before the bar.
 class _DetailBarBackdrop extends StatelessWidget {
   const _DetailBarBackdrop({required this.barBottom});
 
@@ -1168,12 +1174,12 @@ class _DetailBarBackdrop extends StatelessWidget {
   final double barBottom;
 
   static const double _barHeight = 56;
-  static const double _fade = 28;
+  static const double _fade = 48;
 
   @override
   Widget build(BuildContext context) {
     final height = barBottom + _barHeight + _fade;
-    final page = OmiColors.surface0;
+    final page = OmiCanvas.pageOf(context);
     return Positioned(
       key: const ValueKey('detail_bar_backdrop'),
       left: 0,
@@ -1186,8 +1192,8 @@ class _DetailBarBackdrop extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: [0, _fade / height, 1],
-              colors: [page.withValues(alpha: 0), page, page],
+              stops: const [0, 0.4, 0.76],
+              colors: [page.withValues(alpha: 0), page.withValues(alpha: 0.5), page],
             ),
           ),
         ),

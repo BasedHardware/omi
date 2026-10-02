@@ -10734,10 +10734,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deviceConnecting => 'இணைக்கிறது…';
 
   @override
-  String get recordOptionsTip =>
-      'குறிப்பு: தொலைபேசி அழைப்பைப் பதிவுசெய்ய பதிவு பொத்தானில் உள்ள அம்புக்குறியைத் தட்டவும்.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'புதுப்பிப்பு தோல்வியடைந்தது';
 
   @override
@@ -11282,9 +11278,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get recordWith => 'பதிவுசெய்யும் முறை';
-
-  @override
-  String get moreWaysToRecord => 'பதிவுசெய்ய மேலும் வழிகள்';
 
   @override
   String get openCall => 'அழைப்பைத் திறக்கவும்';

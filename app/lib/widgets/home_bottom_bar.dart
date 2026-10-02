@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/ui/components/omi_glass.dart';
+import 'package:omi/ui/omi_canvas.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -13,8 +15,8 @@ const FaIconData kAskOmiGlyph = FontAwesomeIcons.comments;
 /// thing at the bottom is Home's floating [Ask Omi | record] row. These helpers are the one source
 /// of the space that row and the system inset take, so nothing positions itself with a literal.
 
-/// Height of the fade that dissolves list content just above the chat bar. Paint only.
-const double kHomeBottomFadeHeight = 20;
+/// Height of the fade that dissolves list content above the chat bar. Paint only.
+const double kHomeBottomFadeHeight = 48;
 
 /// Gap between the chat bar and the system inset (or the screen edge when there is none).
 const double kHomeChatBarBottomGap = 8;
@@ -42,34 +44,30 @@ double homeChatBarOffset(BuildContext context) => homeBottomInset(context) + kHo
 /// floating chat bar, with a little air above it.
 double homeChatBarClearance(BuildContext context) => homeChatBarOffset(context) + kHomeChatBarHeight + 20;
 
-/// Interpolate the light fade through transparent page-coloured pixels. A zero-alpha black stop
-/// darkens intermediate gradient colours and shows up as a grey band against the light page.
-Color get _fadeStart =>
-    OmiColors.active == OmiPalette.light ? OmiColors.surface0.withValues(alpha: 0) : Colors.transparent;
-
-/// The backdrop behind Home's floating [Ask Omi | record] row: solid page colour from the screen
-/// edge up through the row, fading out above it, so list content never shows between the chat bar
-/// and the record button or around them. Paint only; a [Stack] child placed before the row.
+/// The backdrop behind Home's floating [Ask Omi | record] row: list content fades into the page
+/// colour as it passes under the glass row (half by the row's top, solid below its bottom edge), so
+/// the row stays legible while what scrolls beneath shows through its blur. Paint only; a [Stack]
+/// child placed before the row.
 class HomeChatBarBackdrop extends StatelessWidget {
   const HomeChatBarBackdrop({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final solid = homeChatBarOffset(context) + kHomeChatBarHeight;
-    final height = solid + kHomeBottomFadeHeight;
+    // Fade through transparent page-coloured pixels: a zero-alpha black stop greys the light page.
+    final page = OmiCanvas.pageOf(context);
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
-      height: height,
+      height: homeChatBarOffset(context) + kHomeChatBarHeight + kHomeBottomFadeHeight,
       child: IgnorePointer(
         child: DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: [0.0, kHomeBottomFadeHeight / height, 1.0],
-              colors: [_fadeStart, OmiColors.surface0, OmiColors.surface0],
+              stops: const [0.0, 0.4, 0.76],
+              colors: [page.withValues(alpha: 0), page.withValues(alpha: 0.5), page],
             ),
           ),
         ),
@@ -79,8 +77,8 @@ class HomeChatBarBackdrop extends StatelessWidget {
 }
 
 /// Home's text-only Ask Anything button, left of the record button in the floating row. The same
-/// pill, height and border as the record button, so the pair reads as one set. Voice lives in the
-/// chat composer.
+/// height and glass as the record button, so the pair reads as one set. Voice lives in the chat
+/// composer.
 class HomeAskOmiButton extends StatelessWidget {
   const HomeAskOmiButton({super.key, required this.onTap});
 
@@ -98,16 +96,14 @@ class HomeAskOmiButton extends StatelessWidget {
         key: const ValueKey('home_ask_omi_bar'),
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
-          height: kHomeChatBarHeight,
-          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-          decoration: BoxDecoration(
-            color: OmiColors.surface1,
-            borderRadius: OmiRadius.pillAll,
-            border: Border.all(color: OmiColors.border, width: 1),
-          ),
-          child: ExcludeSemantics(
-            child: Center(
+        child: OmiGlass(
+          shape: const StadiumBorder(),
+          blur: true,
+          child: Container(
+            height: kHomeChatBarHeight,
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+            alignment: Alignment.center,
+            child: ExcludeSemantics(
               child: Text(
                 label,
                 style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600),

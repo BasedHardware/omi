@@ -10695,10 +10695,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceConnecting => 'Łączenie…';
 
   @override
-  String get recordOptionsTip =>
-      'Wskazówka: stuknij strzałkę na przycisku nagrywania, aby nagrać rozmowę telefoniczną.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Aktualizacja nie powiodła się';
 
   @override
@@ -11241,9 +11237,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get recordWith => 'Nagraj za pomocą';
-
-  @override
-  String get moreWaysToRecord => 'Więcej sposobów nagrywania';
 
   @override
   String get openCall => 'Otwórz połączenie';

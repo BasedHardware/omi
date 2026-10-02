@@ -10674,9 +10674,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceConnecting => 'Bağlanıyor…';
 
   @override
-  String get recordOptionsTip => 'İpucu: telefon görüşmesi kaydetmek için kayıt düğmesindeki oka dokunun.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Güncelleme Başarısız';
 
   @override
@@ -11217,9 +11214,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get recordWith => 'Kayıt yöntemi';
-
-  @override
-  String get moreWaysToRecord => 'Diğer kayıt yöntemleri';
 
   @override
   String get openCall => 'Aramayı aç';

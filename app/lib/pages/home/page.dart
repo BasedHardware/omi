@@ -740,7 +740,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               });
             }
           }
-          return child!;
+          // Home and Tasks paint the canvas: a white page in light mode.
+          return OmiCanvas(child: child!);
         },
         child: Selector<HomeProvider, int>(
           selector: (_, homeProvider) => homeProvider.selectedIndex,
@@ -756,7 +757,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 _schedulePageInitialization(HomeProvider.homeTab);
               },
               child: Scaffold(
-                backgroundColor: OmiColors.surface0,
+                backgroundColor: OmiColors.canvas,
                 resizeToAvoidBottomInset: false,
                 appBar: _buildAppBar(context),
                 body: GestureDetector(
@@ -852,7 +853,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             ),
             HeaderCircleButton(
               semanticLabel: context.l10n.completed,
-              color: showCompleted ? OmiColors.surface3 : OmiColors.surface1,
+              color: showCompleted ? OmiColors.surface3 : null,
               icon: FaIcon(
                 FontAwesomeIcons.solidCircleCheck,
                 size: 16,
@@ -872,7 +873,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: OmiColors.canvas,
       // The trailing buttons paint 36pt circles inside 44pt touch targets, so the
       // title gives up the 4pt the last target overhangs by. The circles stay on
       // the 16pt margin the rest of the screen uses.
@@ -984,12 +985,12 @@ class _TabLoadingSkeleton extends StatelessWidget {
         itemBuilder: (context, index) => Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: ShimmerWithTimeout(
-            baseColor: OmiColors.surface1,
+            baseColor: OmiColors.canvasCard,
             highlightColor: OmiColors.surface2,
             child: Container(
               height: index == 0 ? 34 : 76,
               width: double.infinity,
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              decoration: BoxDecoration(color: OmiColors.canvasCard, borderRadius: OmiRadius.lgAll),
             ),
           ),
         ),

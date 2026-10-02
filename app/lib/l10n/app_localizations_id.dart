@@ -10672,9 +10672,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get deviceConnecting => 'Menghubungkan…';
 
   @override
-  String get recordOptionsTip => 'Tips: ketuk panah pada tombol rekam untuk merekam panggilan telepon.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Pembaruan Gagal';
 
   @override
@@ -11215,9 +11212,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get recordWith => 'Rekam dengan';
-
-  @override
-  String get moreWaysToRecord => 'Cara lain untuk merekam';
 
   @override
   String get openCall => 'Buka panggilan';

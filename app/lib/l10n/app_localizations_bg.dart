@@ -10702,9 +10702,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deviceConnecting => 'Свързване…';
 
   @override
-  String get recordOptionsTip => 'Съвет: докоснете стрелката на бутона за запис, за да запишете телефонно обаждане.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Неуспешна актуализация';
 
   @override
@@ -11247,9 +11244,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get recordWith => 'Запис с';
-
-  @override
-  String get moreWaysToRecord => 'Още начини за запис';
 
   @override
   String get openCall => 'Отвори обаждането';

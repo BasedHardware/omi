@@ -10675,9 +10675,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deviceConnecting => 'Conectando…';
 
   @override
-  String get recordOptionsTip => 'Dica: toque na seta do botão de gravar para gravar uma ligação.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Falha na atualização';
 
   @override
@@ -11220,9 +11217,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get recordWith => 'Gravar com';
-
-  @override
-  String get moreWaysToRecord => 'Mais formas de gravar';
 
   @override
   String get openCall => 'Abrir chamada';

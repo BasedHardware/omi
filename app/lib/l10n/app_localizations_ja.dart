@@ -10485,9 +10485,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceConnecting => '接続中…';
 
   @override
-  String get recordOptionsTip => 'ヒント：録音ボタンの矢印をタップすると通話を録音できます。';
-
-  @override
   String get firmwareUpdateFailedTitle => 'アップデートに失敗しました';
 
   @override
@@ -11021,9 +11018,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recordWith => '録音方法';
-
-  @override
-  String get moreWaysToRecord => 'その他の録音方法';
 
   @override
   String get openCall => '通話を開く';

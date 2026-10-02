@@ -10576,9 +10576,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceConnecting => 'מתחבר…';
 
   @override
-  String get recordOptionsTip => 'טיפ: הקישו על החץ בכפתור ההקלטה כדי להקליט שיחת טלפון.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'העדכון נכשל';
 
   @override
@@ -11117,9 +11114,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get recordWith => 'הקלטה באמצעות';
-
-  @override
-  String get moreWaysToRecord => 'דרכים נוספות להקליט';
 
   @override
   String get openCall => 'פתיחת השיחה';

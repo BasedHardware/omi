@@ -19497,12 +19497,6 @@ abstract class AppLocalizations {
   /// **'Connecting…'**
   String get deviceConnecting;
 
-  /// One-time hint after the first phone-mic recording
-  ///
-  /// In en, this message translates to:
-  /// **'Tip: tap the arrow on the record button to record a phone call.'**
-  String get recordOptionsTip;
-
   /// Title of the firmware update failed state
   ///
   /// In en, this message translates to:
@@ -20414,12 +20408,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Record with'**
   String get recordWith;
-
-  /// Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet.
-  ///
-  /// In en, this message translates to:
-  /// **'More ways to record'**
-  String get moreWaysToRecord;
 
   /// Accessibility hint on the live card during a call; tapping opens the call screen.
   ///

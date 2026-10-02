@@ -10665,9 +10665,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceConnecting => 'Yhdistetään…';
 
   @override
-  String get recordOptionsTip => 'Vinkki: tallenna puhelu napauttamalla tallennuspainikkeen nuolta.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Päivitys epäonnistui';
 
   @override
@@ -11208,9 +11205,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get recordWith => 'Tallennustapa';
-
-  @override
-  String get moreWaysToRecord => 'Lisää tallennustapoja';
 
   @override
   String get openCall => 'Avaa puhelu';

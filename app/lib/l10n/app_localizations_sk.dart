@@ -10653,9 +10653,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceConnecting => 'Pripája sa…';
 
   @override
-  String get recordOptionsTip => 'Tip: klepnutím na šípku na tlačidle nahrávania nahráte telefonický hovor.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Aktualizácia zlyhala';
 
   @override
@@ -11196,9 +11193,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get recordWith => 'Nahrať pomocou';
-
-  @override
-  String get moreWaysToRecord => 'Ďalšie spôsoby nahrávania';
 
   @override
   String get openCall => 'Otvoriť hovor';

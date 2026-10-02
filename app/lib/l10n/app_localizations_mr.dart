@@ -10671,9 +10671,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deviceConnecting => 'कनेक्ट होत आहे…';
 
   @override
-  String get recordOptionsTip => 'टीप: फोन कॉल रेकॉर्ड करण्यासाठी रेकॉर्ड बटणावरील बाण टॅप करा.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'अपडेट अयशस्वी';
 
   @override
@@ -11215,9 +11212,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get recordWith => 'रेकॉर्ड करण्याची पद्धत';
-
-  @override
-  String get moreWaysToRecord => 'रेकॉर्ड करण्याचे आणखी मार्ग';
 
   @override
   String get openCall => 'कॉल उघडा';

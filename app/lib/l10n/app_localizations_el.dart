@@ -10735,9 +10735,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceConnecting => 'Σύνδεση…';
 
   @override
-  String get recordOptionsTip => 'Συμβουλή: πατήστε το βέλος στο κουμπί εγγραφής για να καταγράψετε μια κλήση.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Η ενημέρωση απέτυχε';
 
   @override
@@ -11281,9 +11278,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get recordWith => 'Εγγραφή με';
-
-  @override
-  String get moreWaysToRecord => 'Περισσότεροι τρόποι εγγραφής';
 
   @override
   String get openCall => 'Άνοιγμα κλήσης';

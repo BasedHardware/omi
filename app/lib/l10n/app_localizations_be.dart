@@ -10692,9 +10692,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceConnecting => 'Падключэнне…';
 
   @override
-  String get recordOptionsTip => 'Парада: націсніце стрэлку на кнопцы запісу, каб запісаць тэлефонны званок.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Абнаўленне не ўдалося';
 
   @override
@@ -11235,9 +11232,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get recordWith => 'Запісаць праз';
-
-  @override
-  String get moreWaysToRecord => 'Іншыя спосабы запісу';
 
   @override
   String get openCall => 'Адкрыць званок';

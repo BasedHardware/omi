@@ -47,6 +47,7 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   int pauses = 0;
   int resumes = 0;
   int phoneStarts = 0;
+  int finishes = 0;
   Object? phoneStartFailure;
 
   @override
@@ -125,6 +126,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   Future<void> pauseCapture() async => pauses++;
   @override
   Future<void> resumeCapture() async => resumes++;
+  @override
+  Future<void> finishCapture() async => finishes++;
   @override
   Future<void> streamRecording({bool resumeCapture = true}) async {
     phoneStarts++;
@@ -384,14 +387,32 @@ void main() {
   });
 
   group('record-with-this-phone button', () {
-    testWidgets('idle: a white dot and a badge that opens the ways to record', (tester) async {
-      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idle));
+    /// Idle, a tap asks how to record; Phone mic starts it.
+    Future<void> startPhoneMic(WidgetTester tester) async {
+      await tester.tap(find.bySemanticsLabel(en.startRecording));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(en.captureSourcePhoneMic));
+      await tester.pump();
+    }
+
+    testWidgets('idle: one glass button; a tap asks how to record before anything starts', (tester) async {
+      final capture = _Capture(_Live.idle);
+      await pump(tester, const HomeRecordButton(), capture: capture);
       expect(find.bySemanticsLabel(en.startRecording), findsOneWidget);
-      await tester.tap(find.bySemanticsLabel(en.moreWaysToRecord));
+      expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing, reason: 'no badge: one control');
+      expect(find.descendant(of: find.byType(HomeRecordButton), matching: find.byType(BackdropFilter)), findsOneWidget,
+          reason: 'glass that blurs the list scrolling under it');
+
+      await tester.tap(find.bySemanticsLabel(en.startRecording));
       await tester.pumpAndSettle();
       expect(find.text(en.recordWith), findsOneWidget);
       expect(find.text(en.captureSourcePhoneMic), findsOneWidget);
       expect(find.text(en.phoneCall), findsOneWidget);
+      expect(capture.phoneStarts, 0, reason: 'asking never opens the microphone');
+
+      await tester.tap(find.text(en.captureSourcePhoneMic));
+      await tester.pump();
+      expect(capture.phoneStarts, 1);
     });
 
     testWidgets('while the pendant records, a tap explains instead of taking over', (tester) async {
@@ -421,8 +442,7 @@ void main() {
     testWidgets('a start that fails says so and never opens the capturing page', (tester) async {
       final capture = _Capture(_Live.idle)..phoneStartFailure = StateError('refused');
       await pump(tester, const HomeRecordButton(), capture: capture);
-      await tester.tap(find.bySemanticsLabel(en.startRecording));
-      await tester.pump();
+      await startPhoneMic(tester);
       expect(capture.phoneStarts, 1);
       expect(find.text(en.somethingWentWrong), findsOneWidget);
       expect(find.byType(ConversationCapturingPage), findsNothing);
@@ -431,8 +451,7 @@ void main() {
     testWidgets('a start that resolves without phone ownership navigates nowhere', (tester) async {
       final capture = _Capture(_Live.idle);
       await pump(tester, const HomeRecordButton(), capture: capture);
-      await tester.tap(find.bySemanticsLabel(en.startRecording));
-      await tester.pump();
+      await startPhoneMic(tester);
       expect(capture.phoneStarts, 1);
       expect(find.byType(ConversationCapturingPage), findsNothing);
       expect(find.text(en.somethingWentWrong), findsNothing, reason: 'a refusal is not an error toast');
@@ -446,22 +465,13 @@ void main() {
       await tester.pumpWidget(const SizedBox()); // the call page itself is not under test here
     });
 
-    testWidgets('the badge is fully tappable and does not cover the circle\'s centre', (tester) async {
-      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idle));
-      final badge = tester.getRect(find
-          .ancestor(of: find.byIcon(Icons.keyboard_arrow_down_rounded), matching: find.byType(GestureDetector))
-          .first);
-      final button = tester.getRect(find.byType(HomeRecordButton));
-      expect(badge.width, greaterThanOrEqualTo(30));
-      expect(button.inflate(0.1).contains(badge.topLeft) && button.inflate(0.1).contains(badge.bottomRight), isTrue,
-          reason: 'a Stack only hit-tests inside its own box');
-      expect(badge.contains(button.center), isFalse);
-    });
-
-    testWidgets('while the phone records, the button is its stop', (tester) async {
-      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.phone));
-      expect(find.bySemanticsLabel(en.stopRecording), findsOneWidget);
-      expect(find.bySemanticsLabel(en.moreWaysToRecord), findsNothing);
+    testWidgets('while the phone records, a tap stops it and never asks', (tester) async {
+      final capture = _Capture(_Live.phone);
+      await pump(tester, const HomeRecordButton(), capture: capture);
+      await tester.tap(find.bySemanticsLabel(en.stopRecording));
+      await tester.pump();
+      expect(capture.finishes, 1);
+      expect(find.text(en.recordWith), findsNothing);
     });
   });
 

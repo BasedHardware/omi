@@ -27,6 +27,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/device_tile.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key, this.showsCall = false});
@@ -100,9 +101,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         button: true,
         hint: l10n.openCall,
         child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => routeToPage(context, const ActiveCallPage()),
           child: _cardShell(
-            padding: _liveCardPadding,
             LiveCaptureCard(
               source: LiveCaptureCard.callSource,
               // Connecting and ringing say so, with no time: they are not listening yet.
@@ -130,8 +131,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         );
         final pendantDropped = _trackPendantDrop(provider, connected: pendantConnected, paired: pendantPaired);
         if (pendantDropped) {
-          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting),
-              padding: _liveCardPadding);
+          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting));
         }
         final phoneLive = provider.recordingState == RecordingState.record ||
             provider.recordingState == RecordingState.initialising ||
@@ -143,6 +143,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         }
 
         return GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () async {
             // Offline/batch mode has no live transcript — the card is informational,
             // so swallow taps instead of opening the (empty) capturing page. Covers both
@@ -171,22 +172,17 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           child: Semantics(
             button: !batch,
             hint: batch ? null : context.l10n.liveTranscript,
-            child: _cardShell(_buildUnifiedRecordingUI(provider), padding: _liveCardPadding),
+            child: _cardShell(_buildUnifiedRecordingUI(provider)),
           ),
         );
       },
     );
   }
 
-  /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter
-  /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
-  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 10, 8, 12);
-
-  Widget _cardShell(Widget child, {EdgeInsets? padding}) => Container(
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+  /// A flat row on the page, its device tile on the gutter like the conversations below it.
+  Widget _cardShell(Widget child) => Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         width: double.maxFinite,
-        padding: padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16),
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),
         child: child,
       );
 
@@ -757,72 +753,53 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () async {
         routeToPage(context, ProcessingConversationPage(conversation: widget.conversation));
       },
+      // A row like the conversation it will become: its device, faded while it is being made, then
+      // "Processing" over the real start time (hub audit #25). Static, to save CPU and battery.
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        child: Container(
-          width: double.maxFinite,
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24.0)),
-          // Static skeleton - no animation to save CPU/battery
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                // Header row
-                Row(
-                  children: [
-                    // Icon placeholder
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: OmiColors.surface2,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Processing label
-                    Container(
-                      decoration: BoxDecoration(
-                        color: OmiColors.categorySurface,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
+                DeviceTile(source: widget.conversation.source?.name, faded: true),
+                const SizedBox(width: OmiSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                         captureStateLabel(context.l10n, CaptureDisplayState.processing),
-                        style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
+                        style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
                       ),
-                    ),
-                    const Spacer(),
-                    // The real start time, not a placeholder bar (hub audit #25).
-                    Text(
-                      OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Title placeholder
-                Container(
-                  width: double.maxFinite,
-                  height: 16,
-                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(4)),
-                ),
-                if (_timedOut) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    context.l10n.processingTakingLonger,
-                    style: TextStyle(color: OmiColors.textTertiary, fontSize: 13, height: 1.3),
+                      const SizedBox(height: 3),
+                      Text(
+                        OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
+                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: GestureDetector(
-                      onTap: () {}, // absorb so the card's open-on-tap does not fire
+                ),
+              ],
+            ),
+            if (_timedOut)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: DeviceTile.size + OmiSpacing.sm, top: OmiSpacing.xs),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.processingTakingLonger,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, height: 1.3),
+                    ),
+                    const SizedBox(height: 10),
+                    GestureDetector(
+                      onTap: () {}, // absorb so the row's open-on-tap does not fire
                       child: TextButton(
                         key: const Key('processing_conversation_retry_button'),
                         onPressed: _retrying ? null : _onRetry,
@@ -835,11 +812,10 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                         child: _retrying ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.tryAgain),
                       ),
                     ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );

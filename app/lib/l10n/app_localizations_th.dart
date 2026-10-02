@@ -10600,9 +10600,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deviceConnecting => 'กำลังเชื่อมต่อ…';
 
   @override
-  String get recordOptionsTip => 'เคล็ดลับ: แตะลูกศรบนปุ่มบันทึกเพื่อบันทึกการโทร';
-
-  @override
   String get firmwareUpdateFailedTitle => 'อัปเดตไม่สำเร็จ';
 
   @override
@@ -11142,9 +11139,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get recordWith => 'บันทึกด้วย';
-
-  @override
-  String get moreWaysToRecord => 'วิธีบันทึกเพิ่มเติม';
 
   @override
   String get openCall => 'เปิดการโทร';

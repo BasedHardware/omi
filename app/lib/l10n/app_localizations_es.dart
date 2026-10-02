@@ -10690,9 +10690,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deviceConnecting => 'Conectando…';
 
   @override
-  String get recordOptionsTip => 'Consejo: toca la flecha del botón de grabar para grabar una llamada.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Error en la actualización';
 
   @override
@@ -11236,9 +11233,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get recordWith => 'Grabar con';
-
-  @override
-  String get moreWaysToRecord => 'Más formas de grabar';
 
   @override
   String get openCall => 'Abrir llamada';

@@ -10703,9 +10703,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceConnecting => 'Csatlakozás…';
 
   @override
-  String get recordOptionsTip => 'Tipp: telefonhívás rögzítéséhez koppints a felvétel gomb nyilára.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'A frissítés nem sikerült';
 
   @override
@@ -11248,9 +11245,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get recordWith => 'Rögzítés ezzel';
-
-  @override
-  String get moreWaysToRecord => 'További rögzítési módok';
 
   @override
   String get openCall => 'Hívás megnyitása';

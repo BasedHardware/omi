@@ -10711,9 +10711,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deviceConnecting => 'కనెక్ట్ అవుతోంది…';
 
   @override
-  String get recordOptionsTip => 'చిట్కా: ఫోన్ కాల్ రికార్డ్ చేయడానికి రికార్డ్ బటన్‌పై ఉన్న బాణం గుర్తును నొక్కండి.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'అప్‌డేట్ విఫలమైంది';
 
   @override
@@ -11254,9 +11251,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get recordWith => 'రికార్డ్ చేసే విధానం';
-
-  @override
-  String get moreWaysToRecord => 'రికార్డ్ చేయడానికి మరిన్ని మార్గాలు';
 
   @override
   String get openCall => 'కాల్‌ను తెరవండి';

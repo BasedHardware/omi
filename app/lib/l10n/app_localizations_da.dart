@@ -10650,9 +10650,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deviceConnecting => 'Opretter forbindelse…';
 
   @override
-  String get recordOptionsTip => 'Tip: tryk på pilen på optageknappen for at optage et telefonopkald.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Opdateringen mislykkedes';
 
   @override
@@ -11192,9 +11189,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get recordWith => 'Optag med';
-
-  @override
-  String get moreWaysToRecord => 'Flere måder at optage på';
 
   @override
   String get openCall => 'Åbn opkald';

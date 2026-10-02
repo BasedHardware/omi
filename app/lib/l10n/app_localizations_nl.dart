@@ -10693,9 +10693,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deviceConnecting => 'Verbinden…';
 
   @override
-  String get recordOptionsTip => 'Tip: tik op de pijl op de opnameknop om een telefoongesprek op te nemen.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Update mislukt';
 
   @override
@@ -11239,9 +11236,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get recordWith => 'Opnemen met';
-
-  @override
-  String get moreWaysToRecord => 'Meer manieren om op te nemen';
 
   @override
   String get openCall => 'Gesprek openen';

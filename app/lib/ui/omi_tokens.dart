@@ -37,7 +37,15 @@ class OmiPalette {
       required this.successSurface,
       required this.warning,
       required this.danger,
-      required this.dangerSurface});
+      required this.dangerSurface,
+      required this.canvas,
+      required this.canvasCard,
+      required this.glass,
+      required this.glassEdge,
+      required this.glassRim,
+      required this.deviceTile,
+      required this.deviceTileEdge,
+      required this.deviceTileInk});
 
   final Color surface0;
   final Color surface1;
@@ -63,6 +71,22 @@ class OmiPalette {
   final Color danger;
   final Color dangerSurface;
 
+  /// The canvas page (Home, Tasks, a conversation) and a card on it: white with grouped-grey cards
+  /// in light mode, the usual surfaces in dark. Read through `OmiCanvas`, never directly.
+  final Color canvas;
+  final Color canvasCard;
+
+  /// A control floating on the canvas (`OmiGlass`): a translucent fill, its rim lit along the top
+  /// ([glassEdge]) and quieter below ([glassRim]).
+  final Color glass;
+  final Color glassEdge;
+  final Color glassRim;
+
+  /// The tile behind a device glyph on a list row (`DeviceTile`).
+  final Color deviceTile;
+  final Color deviceTileEdge;
+  final Color deviceTileInk;
+
   static const dark = OmiPalette(
     surface0: Color(0xFF000000),
     surface1: Color(0xFF1C1C1E),
@@ -85,6 +109,14 @@ class OmiPalette {
     warning: Color(0xFFFF9F0A),
     danger: Color(0xFFFF453A),
     dangerSurface: Color(0x26FF453A),
+    canvas: Color(0xFF000000),
+    canvasCard: Color(0xFF1C1C1E),
+    glass: Color(0x803A3A3C),
+    glassEdge: Color(0x29FFFFFF),
+    glassRim: Color(0x12FFFFFF),
+    deviceTile: Color(0xFF1A1A1A),
+    deviceTileEdge: Color(0x12FFFFFF),
+    deviceTileInk: Color(0xFFB3AEA6),
   );
 
   static const light = OmiPalette(
@@ -109,6 +141,14 @@ class OmiPalette {
     warning: Color(0xFFFF9500),
     danger: Color(0xFFFF3B30),
     dangerSurface: Color(0x26FF3B30),
+    canvas: Color(0xFFFFFFFF),
+    canvasCard: Color(0xFFF2F2F7),
+    glass: Color(0xC7ECECF2),
+    glassEdge: Color(0xF2FFFFFF),
+    glassRim: Color(0x14000000),
+    deviceTile: Color(0xFFFAF8F4),
+    deviceTileEdge: Color(0x12000000),
+    deviceTileInk: Color(0xFF5F5B55),
   );
 }
 
@@ -140,6 +180,14 @@ abstract final class OmiColors {
   static Color get warning => active.warning;
   static Color get danger => active.danger;
   static Color get dangerSurface => active.dangerSurface;
+  static Color get canvas => active.canvas;
+  static Color get canvasCard => active.canvasCard;
+  static Color get glass => active.glass;
+  static Color get glassEdge => active.glassEdge;
+  static Color get glassRim => active.glassRim;
+  static Color get deviceTile => active.deviceTile;
+  static Color get deviceTileEdge => active.deviceTileEdge;
+  static Color get deviceTileInk => active.deviceTileInk;
 }
 
 /// Omi's type ramp, modelled on iOS text styles so that sizes land where the app's text already

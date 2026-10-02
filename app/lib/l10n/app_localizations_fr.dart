@@ -10753,9 +10753,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get deviceConnecting => 'Connexion…';
 
   @override
-  String get recordOptionsTip => 'Astuce : touchez la flèche du bouton d\'enregistrement pour enregistrer un appel.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Échec de la mise à jour';
 
   @override
@@ -11301,9 +11298,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get recordWith => 'Enregistrer avec';
-
-  @override
-  String get moreWaysToRecord => 'Autres façons d\'enregistrer';
 
   @override
   String get openCall => 'Ouvrir l\'appel';

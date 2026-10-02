@@ -10720,10 +10720,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deviceConnecting => 'Connessione…';
 
   @override
-  String get recordOptionsTip =>
-      'Suggerimento: tocca la freccia sul pulsante di registrazione per registrare una telefonata.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Aggiornamento non riuscito';
 
   @override
@@ -11268,9 +11264,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get recordWith => 'Registra con';
-
-  @override
-  String get moreWaysToRecord => 'Altri modi per registrare';
 
   @override
   String get openCall => 'Apri chiamata';

@@ -10723,9 +10723,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceConnecting => 'S\'està connectant…';
 
   @override
-  String get recordOptionsTip => 'Consell: toca la fletxa del botó de gravació per gravar una trucada.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'L\'actualització ha fallat';
 
   @override
@@ -11269,9 +11266,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get recordWith => 'Grava amb';
-
-  @override
-  String get moreWaysToRecord => 'Més maneres de gravar';
 
   @override
   String get openCall => 'Obre la trucada';

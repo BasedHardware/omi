@@ -10652,9 +10652,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceConnecting => 'Connecting…';
 
   @override
-  String get recordOptionsTip => 'Tip: tap the arrow on the record button to record a phone call.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Update Failed';
 
   @override
@@ -11195,9 +11192,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recordWith => 'Record with';
-
-  @override
-  String get moreWaysToRecord => 'More ways to record';
 
   @override
   String get openCall => 'Open call';

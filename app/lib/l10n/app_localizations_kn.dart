@@ -10695,9 +10695,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deviceConnecting => 'ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…';
 
   @override
-  String get recordOptionsTip => 'ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್‌ನಲ್ಲಿರುವ ಬಾಣದ ಗುರುತನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಗಿದೆ';
 
   @override
@@ -11240,9 +11237,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get recordWith => 'ರೆಕಾರ್ಡ್ ಮಾಡುವ ವಿಧಾನ';
-
-  @override
-  String get moreWaysToRecord => 'ರೆಕಾರ್ಡ್ ಮಾಡಲು ಇನ್ನಷ್ಟು ಮಾರ್ಗಗಳು';
 
   @override
   String get openCall => 'ಕರೆ ತೆರೆಯಿರಿ';

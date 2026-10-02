@@ -10679,9 +10679,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deviceConnecting => 'Jungiamasi…';
 
   @override
-  String get recordOptionsTip => 'Patarimas: norėdami įrašyti skambutį, bakstelėkite rodyklę ant įrašymo mygtuko.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Atnaujinti nepavyko';
 
   @override
@@ -11224,9 +11221,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get recordWith => 'Įrašyti naudojant';
-
-  @override
-  String get moreWaysToRecord => 'Daugiau įrašymo būdų';
 
   @override
   String get openCall => 'Atidaryti skambutį';

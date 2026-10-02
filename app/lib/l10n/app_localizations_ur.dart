@@ -10672,9 +10672,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deviceConnecting => 'منسلک ہو رہا ہے…';
 
   @override
-  String get recordOptionsTip => 'مشورہ: فون کال ریکارڈ کرنے کے لیے ریکارڈ بٹن پر تیر کو ٹیپ کریں۔';
-
-  @override
   String get firmwareUpdateFailedTitle => 'اپ ڈیٹ ناکام';
 
   @override
@@ -11215,9 +11212,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get recordWith => 'ریکارڈ کرنے کا ذریعہ';
-
-  @override
-  String get moreWaysToRecord => 'ریکارڈ کرنے کے مزید طریقے';
 
   @override
   String get openCall => 'کال کھولیں';

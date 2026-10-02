@@ -10489,9 +10489,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceConnecting => '연결 중…';
 
   @override
-  String get recordOptionsTip => '팁: 녹음 버튼의 화살표를 누르면 전화 통화를 녹음할 수 있습니다.';
-
-  @override
   String get firmwareUpdateFailedTitle => '업데이트 실패';
 
   @override
@@ -11025,9 +11022,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get recordWith => '녹음 방법';
-
-  @override
-  String get moreWaysToRecord => '다른 녹음 방법';
 
   @override
   String get openCall => '통화 열기';

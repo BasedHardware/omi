@@ -10700,9 +10700,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deviceConnecting => 'Подключение…';
 
   @override
-  String get recordOptionsTip => 'Совет: нажмите стрелку на кнопке записи, чтобы записать телефонный звонок.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Не удалось обновить';
 
   @override
@@ -11243,9 +11240,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get recordWith => 'Записать через';
-
-  @override
-  String get moreWaysToRecord => 'Другие способы записи';
 
   @override
   String get openCall => 'Открыть звонок';

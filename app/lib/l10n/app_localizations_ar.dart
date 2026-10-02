@@ -10597,9 +10597,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceConnecting => 'جارٍ الاتصال…';
 
   @override
-  String get recordOptionsTip => 'نصيحة: اضغط على السهم في زر التسجيل لتسجيل مكالمة هاتفية.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'فشل التحديث';
 
   @override
@@ -11138,9 +11135,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get recordWith => 'التسجيل باستخدام';
-
-  @override
-  String get moreWaysToRecord => 'طرق أخرى للتسجيل';
 
   @override
   String get openCall => 'فتح المكالمة';

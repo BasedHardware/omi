@@ -10695,9 +10695,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deviceConnecting => 'Povezovanje…';
 
   @override
-  String get recordOptionsTip => 'Namig: tapnite puščico na gumbu za snemanje, da posnamete telefonski klic.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Posodobitev ni uspela';
 
   @override
@@ -11237,9 +11234,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get recordWith => 'Snemaj z';
-
-  @override
-  String get moreWaysToRecord => 'Več načinov snemanja';
 
   @override
   String get openCall => 'Odpri klic';

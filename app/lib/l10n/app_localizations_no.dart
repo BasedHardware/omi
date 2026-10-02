@@ -10663,9 +10663,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceConnecting => 'Kobler til…';
 
   @override
-  String get recordOptionsTip => 'Tips: trykk på pilen på opptaksknappen for å ta opp en telefonsamtale.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Oppdateringen mislyktes';
 
   @override
@@ -11206,9 +11203,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get recordWith => 'Ta opp med';
-
-  @override
-  String get moreWaysToRecord => 'Flere måter å ta opp på';
 
   @override
   String get openCall => 'Åpne anrop';

@@ -10750,9 +10750,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deviceConnecting => 'Verbindung wird hergestellt…';
 
   @override
-  String get recordOptionsTip => 'Tipp: Tippe auf den Pfeil an der Aufnahmetaste, um ein Telefonat aufzunehmen.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Update fehlgeschlagen';
 
   @override
@@ -11297,9 +11294,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get recordWith => 'Aufnehmen mit';
-
-  @override
-  String get moreWaysToRecord => 'Weitere Aufnahmeoptionen';
 
   @override
   String get openCall => 'Anruf öffnen';

@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/daily_summary_card.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 
 class _TestEnvFields implements EnvFields {
@@ -34,9 +35,10 @@ void main() {
   // OmiMapPreview builds proxy URLs from Env.apiBaseUrl; statics are per-isolate.
   setUpAll(() => Env.init(_TestEnvFields()));
 
-  testWidgets('renders a map preview strip for a recap with valid locations', (tester) async {
+  testWidgets('a recap with places shows the first one on a map along the top of the card', (tester) async {
     final summary = _summary(
       locations: [
+        LocationPin(latitude: 0, longitude: 0),
         LocationPin(latitude: 37.7749, longitude: -122.4194),
         LocationPin(latitude: 37.7849, longitude: -122.4094),
       ],
@@ -44,20 +46,30 @@ void main() {
 
     await _pumpCard(tester, summary);
 
-    expect(find.byKey(const ValueKey('daily_summary_map_summary-1')), findsOneWidget);
-    expect(
-      tester.getSize(find.byKey(const ValueKey('daily_summary_map_summary-1'))).height,
-      DailySummaryCard.mapHeight,
-    );
+    final map = find.byKey(const ValueKey('daily_summary_map_summary-1'));
+    expect(map, findsOneWidget);
+    expect(tester.getSize(map).height, DailySummaryCard.mapHeight);
+    expect(tester.getRect(map).top, tester.getRect(find.byKey(const ValueKey('daily_summary_card_summary-1'))).top);
+    expect(tester.getRect(find.text('Yesterday')).top, greaterThan(tester.getRect(map).bottom),
+        reason: 'the date and headline sit under the map');
 
-    // The card hands its pins to the shared preview widget (URL building and
-    // the auth gate are covered by omi_map_preview_test).
+    // One pin, the first usable place (URL building and the auth gate are covered by
+    // omi_map_preview_test).
     final preview = tester.widget<OmiMapPreview>(find.byType(OmiMapPreview));
-    expect(preview.pins, hasLength(2));
-    expect(preview.pins.first.latitude, 37.7749);
-    expect(preview.pins.first.longitude, -122.4194);
-    expect(preview.pins.last.latitude, 37.7849);
-    expect(preview.pins.last.longitude, -122.4094);
+    expect(preview.pins, hasLength(1));
+    expect(preview.pins.single.latitude, 37.7749);
+    expect(preview.pins.single.longitude, -122.4194);
+  });
+
+  testWidgets('the card is glass, and only a recap without a map shows its emoji', (tester) async {
+    await _pumpCard(tester, _summary(locations: [LocationPin(latitude: 51.5072, longitude: -0.1276)], emoji: '🌉'));
+    final card = tester.widget<Container>(find.byKey(const ValueKey('daily_summary_card_summary-1')));
+    expect(card.decoration, isA<ShapeDecoration>());
+    expect(card.foregroundDecoration, isA<OmiGlassRim>());
+    expect(find.text('🌉'), findsNothing);
+
+    await _pumpCard(tester, _summary(locations: const [], emoji: '🌉'));
+    expect(find.text('🌉'), findsOneWidget);
   });
 
   testWidgets('renders a centered preview for a recap with one valid location', (tester) async {
@@ -68,22 +80,6 @@ void main() {
     final preview = tester.widget<OmiMapPreview>(find.byType(OmiMapPreview));
     expect(preview.pins, hasLength(1));
     expect(preview.pins.single.latitude, 51.5072);
-  });
-
-  testWidgets('treats repeated coordinates as a single map location', (tester) async {
-    final summary = _summary(
-      locations: [
-        LocationPin(latitude: 51.5072, longitude: -0.1276),
-        LocationPin(latitude: 51.5072, longitude: -0.1276),
-      ],
-    );
-
-    await _pumpCard(tester, summary);
-
-    // Both pins flow to the preview; URL-side dedupe is asserted in
-    // omi_map_preview_test's buildOmiStaticMapUrl cases.
-    final preview = tester.widget<OmiMapPreview>(find.byType(OmiMapPreview));
-    expect(preview.pins, hasLength(2));
   });
 
   testWidgets('shows the offline pin-dot canvas when the image cannot load', (tester) async {
@@ -156,11 +152,13 @@ Future<void> _pumpCard(WidgetTester tester, DailySummary summary, {double textSc
   await tester.pump(const Duration(milliseconds: 100));
 }
 
-DailySummary _summary({required List<LocationPin> locations, String headline = 'A day around the city'}) {
+DailySummary _summary(
+    {required List<LocationPin> locations, String headline = 'A day around the city', String emoji = '📅'}) {
   return DailySummary(
     id: 'summary-1',
     date: '2026-07-15',
     createdAt: DateTime(2026, 7, 16),
+    dayEmoji: emoji,
     headline: headline,
     overview: '',
     stats: DayStats(),

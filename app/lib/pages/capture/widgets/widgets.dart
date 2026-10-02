@@ -17,6 +17,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
+import 'package:omi/widgets/device_tile.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
 
@@ -62,7 +63,8 @@ class SpeechProfileCardWidget extends StatelessWidget {
   }
 }
 
-/// A tappable card row on the capture surfaces: icon, label, chevron; announced as a button.
+/// A tappable row on Home, in the conversation rows' layout: its glyph in a tile, the label and a
+/// chevron; announced as a button.
 class _CardRow extends StatelessWidget {
   const _CardRow({required this.icon, required this.label, required this.onTap, this.badge = false});
 
@@ -74,29 +76,27 @@ class _CardRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, 0),
+      padding: const EdgeInsets.only(top: OmiSpacing.xxs),
       child: Semantics(
         button: true,
         label: label,
         excludeSemantics: true,
         child: Material(
-          color: OmiColors.surface1,
-          borderRadius: OmiRadius.xlAll,
-          clipBehavior: Clip.antiAlias,
+          type: MaterialType.transparency,
           child: InkWell(
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.all(OmiSpacing.md),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 9),
               child: Row(
                 children: [
-                  Icon(icon, color: OmiColors.textPrimary),
-                  const SizedBox(width: OmiSpacing.md),
-                  Expanded(child: Text(label, style: OmiType.callout)),
+                  DeviceTile(icon: icon),
+                  const SizedBox(width: OmiSpacing.sm),
+                  Expanded(child: Text(label, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500))),
                   if (badge) ...[
                     Icon(Icons.fiber_manual_record, color: OmiColors.danger, size: 10),
                     const SizedBox(width: OmiSpacing.xs),
                   ],
-                  Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
+                  Icon(Icons.chevron_right_rounded, color: OmiColors.textTertiary, size: 22),
                 ],
               ),
             ),

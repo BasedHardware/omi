@@ -10656,9 +10656,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceConnecting => 'Đang kết nối…';
 
   @override
-  String get recordOptionsTip => 'Mẹo: nhấn vào mũi tên trên nút ghi âm để ghi âm cuộc gọi điện thoại.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Cập nhật thất bại';
 
   @override
@@ -11200,9 +11197,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get recordWith => 'Ghi âm bằng';
-
-  @override
-  String get moreWaysToRecord => 'Thêm cách ghi âm';
 
   @override
   String get openCall => 'Mở cuộc gọi';

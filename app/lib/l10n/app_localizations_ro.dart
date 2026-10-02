@@ -10711,9 +10711,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceConnecting => 'Se conectează…';
 
   @override
-  String get recordOptionsTip => 'Sfat: atinge săgeata de pe butonul de înregistrare pentru a înregistra un apel.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Actualizarea a eșuat';
 
   @override
@@ -11257,9 +11254,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get recordWith => 'Înregistrează cu';
-
-  @override
-  String get moreWaysToRecord => 'Mai multe moduri de înregistrare';
 
   @override
   String get openCall => 'Deschide apelul';

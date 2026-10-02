@@ -10467,9 +10467,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceConnecting => '正在连接…';
 
   @override
-  String get recordOptionsTip => '提示：点按录音按钮上的箭头即可录制电话通话。';
-
-  @override
   String get firmwareUpdateFailedTitle => '更新失败';
 
   @override
@@ -11002,9 +10999,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recordWith => '录音方式';
-
-  @override
-  String get moreWaysToRecord => '更多录音方式';
 
   @override
   String get openCall => '打开通话';

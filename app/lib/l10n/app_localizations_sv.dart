@@ -10669,9 +10669,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceConnecting => 'Ansluter…';
 
   @override
-  String get recordOptionsTip => 'Tips: tryck på pilen på inspelningsknappen för att spela in ett telefonsamtal.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Uppdateringen misslyckades';
 
   @override
@@ -11214,9 +11211,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get recordWith => 'Spela in med';
-
-  @override
-  String get moreWaysToRecord => 'Fler sätt att spela in';
 
   @override
   String get openCall => 'Öppna samtal';
