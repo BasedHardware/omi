@@ -37,7 +37,9 @@ from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.free_tier_basic_gates import basic_plan_gate_proxy_embed_enabled
+from utils.metrics import SCREEN_TASK_CLIENT_BYPASS_TOTAL
 from utils.managed_compute import Decision, authorize_managed_compute
+from utils.llm.screen_task_admission import screen_task_stopped
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import RELEASE_PROBE_UID, is_desktop_trial_paywalled
 
@@ -1696,6 +1698,12 @@ async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
 
 @router.post('/v1/proxy/gemini/{path:path}')
 async def gemini_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
+    if request.headers.get('X-Omi-Screen-Task-Client-Bypass') == 'true':
+        SCREEN_TASK_CLIENT_BYPASS_TOTAL.inc()
+    if request.headers.get('X-Omi-Screen-Task-Gate') in {'passed', 'rejected', 'fail_open'} and screen_task_stopped():
+        raise HTTPException(
+            status_code=409, detail={'error': 'screen_task_stopped'}, headers={'X-Omi-Retryable': 'false'}
+        )
     await _enforce_managed_plan_gate(uid, path)
     return await _proxy(request, path, False, uid)
 

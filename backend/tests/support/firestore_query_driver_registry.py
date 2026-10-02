@@ -29,7 +29,13 @@ from tests.support.firestore_query_drivers import (
     ref_document,
     ref_transaction,
 )
-from tests.support.firestore_conversation_profiles import COUNT_PROFILES, PHOTO_PROFILES, WITHOUT_PHOTOS_PROFILES
+from tests.support.firestore_conversation_profiles import (
+    COUNT_PROFILES,
+    PHOTO_PROFILES,
+    RECIPE_PROFILES,
+    SCAN_PROFILES,
+    WITHOUT_PHOTOS_PROFILES,
+)
 from tests.support import firestore_outside_query_drivers as outside_drivers
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
@@ -46,6 +52,7 @@ from models.task_recommendation import (
 )
 from models.workstream import TaskGoalLinkImportRequest
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
+from utils.other.list_budget import ListReadBudget
 from database.memory_vector_repair_outbox_worker import VectorRepairOutboxWorkerTickConfig
 
 UID = SHAPE_UID
@@ -69,6 +76,25 @@ def _seed(path: str, data: dict):
         client.documents[path] = dict(data)
 
     return apply
+
+
+def _queue_conversation_scan_pages(client, combo, trial):
+    """One full batch page then an empty one, forcing a ``start_after`` cursor."""
+    snapshot = client.snapshot(
+        f'users/{UID}/conversations/conv-1',
+        {'id': 'conv-1', 'created_at': T0, 'discarded': False, 'data_protection_level': 'standard'},
+    )
+    client.queue_results([snapshot])
+    client.queue_results([])
+
+
+def _queue_conversation_scan_page(client, combo, trial):
+    """One short page: the recipe batches (50/100) end the scan without a cursor."""
+    snapshot = client.snapshot(
+        f'users/{UID}/conversations/conv-1',
+        {'id': 'conv-1', 'created_at': T0, 'discarded': False, 'data_protection_level': 'standard'},
+    )
+    client.queue_results([snapshot])
 
 
 def _redis_noop(dotted: str):
@@ -703,6 +729,65 @@ _add(
         'database.conversation_finalization_jobs.scan_in_progress_conversations',
         domains={'resume_after_path': [None, 'users/shape-user/conversations/c-1']},
         neutrals={'page_size': _PAGE, 'max_scan': (200, 'scan bound; fixed, not filter-affecting')},
+    )
+)
+_add(
+    DriverEntry(
+        'database.conversation_scan.iter_conversations',
+        base={'uid': UID},
+        profiles=SCAN_PROFILES,
+        neutrals={
+            'limit': (1000, 'visible-row work bound; fixed, not filter-affecting'),
+            'batch': (1, 'page size; fixed small so one queued row forces a cursor page'),
+            'budget': (
+                ListReadBudget(
+                    deadline_monotonic=12.0,
+                    max_documents=2000,
+                    clock=lambda: 0.0,
+                    started_monotonic=0.0,
+                ),
+                'required scan budget; frozen clock, deep-copied fresh per trial',
+            ),
+        },
+        setup=_queue_conversation_scan_pages,
+    )
+)
+_add(
+    DriverEntry(
+        'database.conversation_scan.people_stats_scan',
+        base={'uid': UID},
+        profiles=(RECIPE_PROFILES[0],),
+        neutrals={
+            'budget': (
+                ListReadBudget(
+                    deadline_monotonic=12.0,
+                    max_documents=2000,
+                    clock=lambda: 0.0,
+                    started_monotonic=0.0,
+                ),
+                'required scan budget; frozen clock, deep-copied fresh per trial',
+            ),
+        },
+        setup=_queue_conversation_scan_page,
+    )
+)
+_add(
+    DriverEntry(
+        'database.conversation_scan.speaker_browse_scan',
+        base={'uid': UID},
+        profiles=(RECIPE_PROFILES[1],),
+        neutrals={
+            'budget': (
+                ListReadBudget(
+                    deadline_monotonic=12.0,
+                    max_documents=2000,
+                    clock=lambda: 0.0,
+                    started_monotonic=0.0,
+                ),
+                'required scan budget; frozen clock, deep-copied fresh per trial',
+            ),
+        },
+        setup=_queue_conversation_scan_page,
     )
 )
 
