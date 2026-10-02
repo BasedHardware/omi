@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:omi/ui/components/omi_settings.dart';
 import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/ui/components/omi_settings.dart';
 
 /// Smallest comfortable touch target: Apple's HIG asks for 44x44pt, Material for 48dp. Icon
 /// controls use the smaller of the two so a row of them still fits a phone-width app bar.
@@ -66,8 +66,7 @@ class OmiIconButton extends StatelessWidget {
   /// Whether a circle is painted behind the glyph.
   final bool filled;
 
-  /// Circle colour for [OmiIconButton.filled]. Defaults to [OmiColors.surface1], or
-  /// [OmiColors.iconTile] on a page in the Settings look ([OmiGroupedScope]).
+  /// Circle colour for [OmiIconButton.filled]. Defaults to [OmiColors.surface1].
   final Color? fillColor;
 
   /// Diameter of the painted circle. The touch target stays [kOmiMinTapTarget].
@@ -76,6 +75,8 @@ class OmiIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
+    // On a page in the Settings look ([OmiGroupedScope]) the circle defaults to the icon-tile colour.
+    final fillColor = this.fillColor ?? (OmiGroupedScope.of(context) ? OmiColors.iconTile : null);
     var glyphColor = color ?? (isDestructive ? OmiColors.danger : OmiColors.textPrimary);
     if (!enabled) glyphColor = glyphColor.withValues(alpha: 0.38);
 
@@ -88,10 +89,7 @@ class OmiIconButton extends StatelessWidget {
         width: diameter,
         height: diameter,
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: fillColor ?? (OmiGroupedScope.of(context) ? OmiColors.iconTile : OmiColors.surface1),
-          shape: BoxShape.circle,
-        ),
+        decoration: BoxDecoration(color: fillColor ?? OmiColors.surface1, shape: BoxShape.circle),
         child: glyph,
       );
     }
