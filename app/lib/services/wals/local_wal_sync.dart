@@ -149,6 +149,22 @@ String? _walLocationBatchKey(Wal wal) {
 bool isAutoUploadEligible(Wal wal) =>
     wal.status == WalStatus.miss && wal.storage == WalStorage.disk && wal.retryCount < walMaxAutoRetries;
 
+/// Seconds of slack around each saved transcript segment when matching it to a WAL. It absorbs the
+/// drift between legacy segment offsets and the WAL's approximate start time.
+const walTranscriptSlackSeconds = 30;
+
+/// Whether the saved transcript shows the server heard [wal]: it overlaps a segment, or it ended
+/// before the conversation began. [transcriptSpans] are absolute epoch seconds.
+@visibleForTesting
+bool walCoveredByTranscript(Wal wal, List<(int, int)> transcriptSpans, int conversationStartSeconds) {
+  final start = wal.timerStart;
+  final end = wal.timerStart + wal.seconds;
+  if (end <= conversationStartSeconds - walTranscriptSlackSeconds) return true;
+  return transcriptSpans.any(
+    (span) => start < span.$2 + walTranscriptSlackSeconds && end > span.$1 - walTranscriptSlackSeconds,
+  );
+}
+
 const _kDefinitiveUploadRefusalStatusCodes = {400, 403, 413};
 
 @visibleForTesting
@@ -982,28 +998,45 @@ class LocalWalSyncImpl implements LocalWalSync {
     return reset;
   }
 
-  /// Delete the durable safety copy after the server confirms that this live
-  /// session produced transcript content. Until this acknowledgement arrives,
-  /// socket writes are transport attempts—not delivery confirmation.
-  Future<int> confirmSessionTranscription(int sessionStartSeconds, String conversationId) async {
+  /// Delete the durable safety copy of the audio the saved transcript covers.
+  /// Until this acknowledgement arrives, socket writes are transport
+  /// attempts—not delivery confirmation. A nonempty transcript does not cover
+  /// the whole session: the server can lose text and still save the rest, so
+  /// a WAL the transcript does not reach is kept for repair. Without
+  /// [transcriptSpans] every stamped WAL in the window is released.
+  Future<({int released, int kept})> confirmSessionTranscription(
+    int sessionStartSeconds,
+    String conversationId, {
+    List<(int, int)>? transcriptSpans,
+    int? conversationStartSeconds,
+  }) async {
     final generation = _sessionGeneration;
     final now = _now().millisecondsSinceEpoch ~/ 1000;
-    final confirmed = _wals
+    final stamped = _wals
         .where(
           (wal) =>
               wal.timerStart >= sessionStartSeconds && wal.timerStart <= now && wal.conversationId == conversationId,
         )
         .toList();
-    var deleted = 0;
-    for (final wal in confirmed) {
-      if (await _deleteWal(wal)) deleted++;
+    var released = 0;
+    var kept = 0;
+    for (final wal in stamped) {
+      if (transcriptSpans != null &&
+          !walCoveredByTranscript(wal, transcriptSpans, conversationStartSeconds ?? sessionStartSeconds)) {
+        kept++;
+        continue;
+      }
+      if (await _deleteWal(wal)) released++;
     }
-    if (deleted > 0) {
+    if (released > 0) {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
-      DebugLogManager.logInfo('Pruned transcript-confirmed live-capture WALs', {'count': deleted});
+      DebugLogManager.logInfo('Pruned transcript-confirmed live-capture WALs', {'count': released});
     }
-    return deleted;
+    if (kept > 0) {
+      DebugLogManager.logInfo('Kept live-capture WALs the transcript does not cover', {'count': kept});
+    }
+    return (released: released, kept: kept);
   }
 
   /// Returns the approximate duration (in seconds) of UNSYNCED audio frames

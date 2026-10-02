@@ -922,7 +922,7 @@ void main() {
       );
       local.testWals = [confirmed, unrelated, unstamped];
 
-      expect(await local.confirmSessionTranscription(400, 'confirmed-conversation'), 1);
+      expect((await local.confirmSessionTranscription(400, 'confirmed-conversation')).released, 1);
 
       expect(local.testWals.map((wal) => wal.id), isNot(contains(confirmed.id)));
       expect(local.testWals.map((wal) => wal.id), containsAll([unrelated.id, unstamped.id]));

@@ -1,0 +1,3 @@
+{
+  "change": "If the server saves only part of a pendant conversation, the audio it missed now stays on your phone and is sent again instead of being deleted"
+}

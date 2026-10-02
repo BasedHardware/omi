@@ -3177,7 +3177,7 @@ class CaptureController extends ChangeNotifier
         _pendingAutoSyncConversationId = null;
         _pendingAutoSyncNeedsRepair = false;
         if (event.memory.transcriptSegments.isNotEmpty && !needsRepair) {
-          unawaited(_confirmSessionTranscript(sessionStart, event.memory.id));
+          unawaited(_confirmSessionTranscript(sessionStart, event.memory));
         } else {
           _autoSyncSessionWals(trigger: WakeTrigger.dataStalled);
         }
@@ -3328,12 +3328,26 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> _confirmSessionTranscript(int sessionStartSeconds, String conversationId) async {
+  /// Releases the safety copy of the audio [conversation]'s saved transcript covers, and uploads the
+  /// rest so the server can transcribe what it lost.
+  Future<void> _confirmSessionTranscript(int sessionStartSeconds, ServerConversation conversation) async {
     if (_pendingFinalizeAndStamp != null) {
       await _pendingFinalizeAndStamp;
       _pendingFinalizeAndStamp = null;
     }
-    await _wal.getSyncs().phone.confirmSessionTranscription(sessionStartSeconds, conversationId);
+    // Live segment times are seconds from the conversation's start.
+    final origin = (conversation.startedAt ?? conversation.createdAt).millisecondsSinceEpoch ~/ 1000;
+    final spans = [
+      for (final segment in conversation.transcriptSegments)
+        (origin + segment.start.floor(), origin + segment.end.ceil()),
+    ];
+    final outcome = await _wal.getSyncs().phone.confirmSessionTranscription(
+          sessionStartSeconds,
+          conversation.id,
+          transcriptSpans: spans,
+          conversationStartSeconds: origin,
+        );
+    if (outcome.kept > 0) _autoSyncSessionWals(trigger: WakeTrigger.dataStalled);
   }
 
   Future<void> _autoSyncSessionWals({WakeTrigger trigger = WakeTrigger.cooldownElapsed}) async {
