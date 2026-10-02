@@ -113,10 +113,11 @@ def test_sync_text_matches_are_automatic_without_changing_manual_labels():
 #
 # A server-side limit/offset reader drops invisible rows in Python without
 # padding, so a short page there only means "some rows in this window were
-# filtered". The scan is therefore driven through the scan-and-fill reader
-# (`include_discarded=True`), which keeps reading until the page is full;
-# rows that the scan reads only to keep the offset aligned are excluded
-# during aggregation.
+# filtered". These tests pin how the scan behaves with a reader that fills
+# its pages. The production route does not use Firestore's scan-and-fill
+# branch (`include_discarded=True`): it re-reads from the newest row on every
+# page and timed the People list out, so #19908 is open until the scan has a
+# single-pass reader.
 
 
 class _ScanAndFillReader:
