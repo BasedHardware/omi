@@ -3782,5 +3782,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi จะจำเสียงของ {name} ได้ในครั้งหน้า} pending{ใช้เวลาไม่กี่วินาที} disabled{เปิดการบันทึกเสียงในการตั้งค่าเพื่อให้ Omi จำเสียงของ {name} ได้} other{Omi ต้องการเสียงพูดที่ชัดเจนจาก {name} มากขึ้น และจะพยายามต่อไป}}",
     "speakerLabelEarlierMatches": "การสนทนาก่อนหน้าที่มีเสียงนี้: {count}",
     "speakerLabelText": "{part, select, likely{น่าจะเป็น} soundsLike{เสียงคล้าย {name}} notPerson{ไม่ใช่ {name}} carried{ยังคงเป็น {name} ต่อจากการสนทนาครั้งล่าสุดของคุณ} change{เปลี่ยน} alsoTitle{นี่คือ {name} ด้วยหรือไม่} alsoBody{Omi พบเสียงเดียวกันในการสนทนาก่อนหน้า} confirmed{คุณยืนยันป้ายชื่อนี้แล้ว} other{ตรวจสอบ}}",
-    "speakerLabelTalkTime": "{duration} ของเสียงนี้"
+    "speakerLabelTalkTime": "{duration} ของเสียงนี้",
+    "pairSecondDeviceDescription": "เชื่อมต่อ OmiGlass ควบคู่กับ Omi ของคุณ เพื่อให้รูปภาพและเสียงอยู่ในบทสนทนาเดียวกัน",
+    "pairSecondDevice": "จับคู่อุปกรณ์เครื่องที่สอง",
+    "secondDevice": "อุปกรณ์เครื่องที่สอง",
+    "forgetSecondDevice": "ลืมอุปกรณ์เครื่องที่สอง"
 }

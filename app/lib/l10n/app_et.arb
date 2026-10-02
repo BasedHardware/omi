@@ -3782,5 +3782,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi tunneb {name} järgmisel korral ära.} pending{See võtab mõne sekundi.} disabled{Lülita seadetes sisse häälte salvestamine, et Omi saaks {name} ära tunda.} other{Omi vajab inimeselt {name} rohkem selget kõnet ja proovib edasi.}}",
     "speakerLabelEarlierMatches": "Varasemad vestlused selle häälega: {count}",
     "speakerLabelText": "{part, select, likely{Tõenäoline} soundsLike{Kõlab nagu {name}} notPerson{Pole {name}} carried{Endiselt {name}. Üle võetud sinu viimasest vestlusest.} change{Muuda} alsoTitle{Kas see on ka {name}?} alsoBody{Omi leidis sama hääle varasematest vestlustest.} confirmed{Kinnitasid selle sildi} other{Vaata üle}}",
-    "speakerLabelTalkTime": "{duration} sellest häälest"
+    "speakerLabelTalkTime": "{duration} sellest häälest",
+    "pairSecondDeviceDescription": "Ühenda OmiGlass oma Omi kõrvale, et fotod ja heli jõuaksid samasse vestlusse.",
+    "pairSecondDevice": "Seo teine seade",
+    "secondDevice": "Teine seade",
+    "forgetSecondDevice": "Unusta teine seade"
 }

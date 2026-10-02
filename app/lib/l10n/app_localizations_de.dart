@@ -11720,6 +11720,19 @@ class AppLocalizationsDe extends AppLocalizations {
       'Das Bildschirmfoto wird aus der Notiz dieses Meetings entfernt. Dies kann nicht rückgängig gemacht werden.';
 
   @override
+  String get pairSecondDevice => 'Zweites Gerät koppeln';
+
+  @override
+  String get secondDevice => 'Zweites Gerät';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Verbinde OmiGlass zusätzlich zu deinem Omi, damit Fotos und Audio in dieselbe Unterhaltung fließen.';
+
+  @override
+  String get forgetSecondDevice => 'Zweites Gerät vergessen';
+
+  @override
   String get conversationSummaryFailed => 'Zusammenfassung fehlgeschlagen';
 
   @override

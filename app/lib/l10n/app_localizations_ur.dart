@@ -11636,6 +11636,19 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteMeetingScreenshotMessage => 'یہ اس میٹنگ کے نوٹ سے اسکرین شاٹ ہٹا دے گا۔ اسے واپس نہیں کیا جا سکتا۔';
 
   @override
+  String get pairSecondDevice => 'دوسرا ڈیوائس جوڑیں';
+
+  @override
+  String get secondDevice => 'دوسرا ڈیوائس';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'اپنے Omi کے ساتھ OmiGlass کو کنیکٹ کریں تاکہ تصاویر اور آڈیو ایک ہی گفتگو میں جائیں۔';
+
+  @override
+  String get forgetSecondDevice => 'دوسرا ڈیوائس بھول جائیں';
+
+  @override
   String get conversationSummaryFailed => 'خلاصہ ناکام ہو گیا';
 
   @override

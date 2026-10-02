@@ -11669,6 +11669,19 @@ class AppLocalizationsBg extends AppLocalizations {
       'Екранната снимка ще бъде премахната от бележката за тази среща. Това не може да бъде отменено.';
 
   @override
+  String get pairSecondDevice => 'Сдвояване на второ устройство';
+
+  @override
+  String get secondDevice => 'Второ устройство';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Свържете OmiGlass заедно с вашия Omi, така че снимките и звукът да влизат в един и същ разговор.';
+
+  @override
+  String get forgetSecondDevice => 'Забрави второто устройство';
+
+  @override
   String get conversationSummaryFailed => 'Резюмето не бе създадено';
 
   @override

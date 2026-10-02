@@ -3817,5 +3817,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi reconnaîtra {name} la prochaine fois.} pending{Cela prend quelques secondes.} disabled{Activez l’enregistrement des voix dans les Réglages pour qu’Omi puisse reconnaître {name}.} other{Omi a besoin d’une parole plus claire de {name} et continuera d’essayer.}}",
     "speakerLabelEarlierMatches": "Conversations précédentes avec cette voix : {count}",
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Ressemble à {name}} notPerson{Pas {name}} carried{Toujours {name}. Repris de votre dernière conversation.} change{Modifier} alsoTitle{Est-ce aussi {name} ?} alsoBody{Omi a retrouvé la même voix dans des conversations précédentes.} confirmed{Vous avez confirmé cette étiquette} other{Vérifier}}",
-    "speakerLabelTalkTime": "{duration} de cette voix"
+    "speakerLabelTalkTime": "{duration} de cette voix",
+    "pairSecondDeviceDescription": "Connectez OmiGlass en plus de votre Omi pour que les photos et l'audio rejoignent la même conversation.",
+    "pairSecondDevice": "Associer un deuxième appareil",
+    "secondDevice": "Deuxième appareil",
+    "forgetSecondDevice": "Oublier le deuxième appareil"
 }

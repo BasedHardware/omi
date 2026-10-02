@@ -11704,6 +11704,19 @@ class AppLocalizationsTa extends AppLocalizations {
       'இது இந்தக் கூட்டத்தின் குறிப்பிலிருந்து திரைப்பிடிப்பை நீக்கும். இதைச் செயல்தவிர்க்க முடியாது.';
 
   @override
+  String get pairSecondDevice => 'இரண்டாவது சாதனத்தை இணைக்கவும்';
+
+  @override
+  String get secondDevice => 'இரண்டாவது சாதனம்';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'புகைப்படங்களும் ஒலியும் ஒரே உரையாடலுக்குச் செல்ல, உங்கள் Omi உடன் OmiGlass ஐ இணைக்கவும்.';
+
+  @override
+  String get forgetSecondDevice => 'இரண்டாவது சாதனத்தை மறக்கவும்';
+
+  @override
   String get conversationSummaryFailed => 'சுருக்கம் தோல்வியடைந்தது';
 
   @override

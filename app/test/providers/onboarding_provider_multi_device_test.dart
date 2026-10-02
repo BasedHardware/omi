@@ -47,6 +47,57 @@ void main() {
       expect(provider.visibleDeviceList[1].rssi, -30);
     });
 
+    test('companion slot is saved next to the primary and both are auto-connect targets', () async {
+      final omi = _device(id: 'AA:AA:AA:AA:AA:01', name: 'Omi');
+      final glass = _device(id: 'AA:AA:AA:AA:AA:02', name: 'OmiGlass', type: DeviceType.openglass);
+
+      await SharedPreferencesUtil().btDeviceSet(omi);
+      SharedPreferencesUtil().companionBtDevice = glass;
+
+      expect(SharedPreferencesUtil().btDevice.id, omi.id, reason: 'the companion never displaces the primary');
+      expect(SharedPreferencesUtil().companionBtDevice?.id, glass.id);
+      expect(SharedPreferencesUtil().pairedDeviceIds, [omi.id, glass.id]);
+      expect(SharedPreferencesUtil().btDevices.map((device) => device.id), [omi.id, glass.id]);
+    });
+
+    test('forgetting the primary promotes the companion so it keeps reconnecting', () async {
+      final omi = _device(id: 'AA:AA:AA:AA:AA:01', name: 'Omi');
+      final glass = _device(id: 'AA:AA:AA:AA:AA:02', name: 'OmiGlass', type: DeviceType.openglass);
+      await SharedPreferencesUtil().btDeviceSet(omi);
+      SharedPreferencesUtil().companionBtDevice = glass;
+
+      SharedPreferencesUtil().forgetSavedBtDevice(omi.id);
+
+      expect(SharedPreferencesUtil().btDevice.id, glass.id);
+      expect(SharedPreferencesUtil().companionBtDevice, isNull);
+      expect(SharedPreferencesUtil().pairedDeviceIds, [glass.id]);
+      expect(SharedPreferencesUtil().btDevices.map((device) => device.id), [glass.id]);
+    });
+
+    test('forgetting the companion leaves the primary untouched', () async {
+      final omi = _device(id: 'AA:AA:AA:AA:AA:01', name: 'Omi');
+      final glass = _device(id: 'AA:AA:AA:AA:AA:02', name: 'OmiGlass', type: DeviceType.openglass);
+      await SharedPreferencesUtil().btDeviceSet(omi);
+      SharedPreferencesUtil().companionBtDevice = glass;
+
+      SharedPreferencesUtil().forgetSavedBtDevice(glass.id);
+
+      expect(SharedPreferencesUtil().btDevice.id, omi.id);
+      expect(SharedPreferencesUtil().companionBtDevice, isNull);
+      expect(SharedPreferencesUtil().pairedDeviceIds, [omi.id]);
+    });
+
+    test('forgetting the only saved device clears every slot', () async {
+      final omi = _device(id: 'AA:AA:AA:AA:AA:01', name: 'Omi');
+      await SharedPreferencesUtil().btDeviceSet(omi);
+
+      SharedPreferencesUtil().forgetSavedBtDevice(omi.id);
+
+      expect(SharedPreferencesUtil().btDevice.id, isEmpty);
+      expect(SharedPreferencesUtil().pairedDeviceIds, isEmpty);
+      expect(SharedPreferencesUtil().btDevices, isEmpty);
+    });
+
     test('nearby count and online state ignore saved devices that are not advertising', () async {
       final savedOffline = _device(id: 'AA:AA:AA:AA:AA:01', name: 'Saved Offline');
       final liveNew = _device(id: 'AA:AA:AA:AA:AA:02', name: 'New Nearby', rssi: -45);

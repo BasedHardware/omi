@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/services/devices/connectors/bee_connection.dart';
+import 'package:omi/services/devices/device_pairing_roles.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/connectors/fieldy_connection.dart';
 import 'package:omi/services/devices/connectors/friend_pendant_connection.dart';
@@ -98,12 +99,8 @@ class DeviceConnectionFactory {
     final locator = device.locator;
     if (locator == null) return null;
 
-    // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
-    final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
-        deviceName.contains('openglass') ||
-        deviceName.contains('omiglass') ||
-        deviceName.contains('glass');
+    // Name-based detection covers OmiGlass units that advertise as DeviceType.omi.
+    final isOmiGlass = DevicePairingRoles.isCameraDevice(device);
 
     switch (locator.kind) {
       case TransportKind.bluetooth:

@@ -11557,6 +11557,18 @@ class AppLocalizationsAr extends AppLocalizations {
       'سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك.';
 
   @override
+  String get pairSecondDevice => 'إقران جهاز ثانٍ';
+
+  @override
+  String get secondDevice => 'الجهاز الثاني';
+
+  @override
+  String get pairSecondDeviceDescription => 'اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.';
+
+  @override
+  String get forgetSecondDevice => 'نسيان الجهاز الثاني';
+
+  @override
   String get conversationSummaryFailed => 'فشل إنشاء الملخص';
 
   @override

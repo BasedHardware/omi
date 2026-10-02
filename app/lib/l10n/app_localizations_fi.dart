@@ -11629,6 +11629,19 @@ class AppLocalizationsFi extends AppLocalizations {
       'Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.';
 
   @override
+  String get pairSecondDevice => 'Yhdistä toinen laite';
+
+  @override
+  String get secondDevice => 'Toinen laite';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.';
+
+  @override
+  String get forgetSecondDevice => 'Unohda toinen laite';
+
+  @override
   String get conversationSummaryFailed => 'Yhteenveto epäonnistui';
 
   @override

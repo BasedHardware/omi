@@ -11662,6 +11662,19 @@ class AppLocalizationsHr extends AppLocalizations {
       'Ovo uklanja snimku zaslona iz bilješke ovog sastanka. Radnja se ne može poništiti.';
 
   @override
+  String get pairSecondDevice => 'Upari drugi uređaj';
+
+  @override
+  String get secondDevice => 'Drugi uređaj';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Povežite OmiGlass uz svoj Omi kako bi fotografije i zvuk išli u isti razgovor.';
+
+  @override
+  String get forgetSecondDevice => 'Zaboravi drugi uređaj';
+
+  @override
   String get conversationSummaryFailed => 'Sažetak nije uspio';
 
   @override

@@ -11621,6 +11621,19 @@ class AppLocalizationsVi extends AppLocalizations {
       'Thao tác này sẽ xóa ảnh chụp màn hình khỏi ghi chú của cuộc họp này. Không thể hoàn tác.';
 
   @override
+  String get pairSecondDevice => 'Ghép nối thiết bị thứ hai';
+
+  @override
+  String get secondDevice => 'Thiết bị thứ hai';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.';
+
+  @override
+  String get forgetSecondDevice => 'Quên thiết bị thứ hai';
+
+  @override
   String get conversationSummaryFailed => 'Tạo tóm tắt thất bại';
 
   @override

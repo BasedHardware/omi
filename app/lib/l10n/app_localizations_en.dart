@@ -11615,6 +11615,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'This removes the screenshot from this meeting\'s note. It can\'t be undone.';
 
   @override
+  String get pairSecondDevice => 'Pair a second device';
+
+  @override
+  String get secondDevice => 'Second device';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Connect OmiGlass next to your Omi so photos and audio go into the same conversation.';
+
+  @override
+  String get forgetSecondDevice => 'Forget second device';
+
+  @override
   String get conversationSummaryFailed => 'Summary failed';
 
   @override

@@ -11704,6 +11704,19 @@ class AppLocalizationsEl extends AppLocalizations {
       'Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση.';
 
   @override
+  String get pairSecondDevice => 'Σύζευξη δεύτερης συσκευής';
+
+  @override
+  String get secondDevice => 'Δεύτερη συσκευή';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Συνδέστε τα OmiGlass μαζί με το Omi σας, ώστε φωτογραφίες και ήχος να πηγαίνουν στην ίδια συζήτηση.';
+
+  @override
+  String get forgetSecondDevice => 'Διαγραφή δεύτερης συσκευής';
+
+  @override
   String get conversationSummaryFailed => 'Η σύνοψη απέτυχε';
 
   @override

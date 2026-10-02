@@ -11663,6 +11663,19 @@ class AppLocalizationsPl extends AppLocalizations {
       'Zrzut ekranu zostanie usunięty z notatki tego spotkania. Tej operacji nie można cofnąć.';
 
   @override
+  String get pairSecondDevice => 'Sparuj drugie urządzenie';
+
+  @override
+  String get secondDevice => 'Drugie urządzenie';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Podłącz OmiGlass obok swojego Omi, aby zdjęcia i dźwięk trafiały do tej samej rozmowy.';
+
+  @override
+  String get forgetSecondDevice => 'Zapomnij drugie urządzenie';
+
+  @override
   String get conversationSummaryFailed => 'Nie udało się utworzyć podsumowania';
 
   @override

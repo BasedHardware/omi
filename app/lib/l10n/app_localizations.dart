@@ -21141,6 +21141,30 @@ abstract class AppLocalizations {
   /// **'This removes the screenshot from this meeting\'s note. It can\'t be undone.'**
   String get deleteMeetingScreenshotMessage;
 
+  /// Action on the device page that opens the device picker to pair an OmiGlass next to an Omi (or vice versa)
+  ///
+  /// In en, this message translates to:
+  /// **'Pair a second device'**
+  String get pairSecondDevice;
+
+  /// Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)
+  ///
+  /// In en, this message translates to:
+  /// **'Second device'**
+  String get secondDevice;
+
+  /// Explains what pairing a second device does; product names Omi and OmiGlass stay untranslated
+  ///
+  /// In en, this message translates to:
+  /// **'Connect OmiGlass next to your Omi so photos and audio go into the same conversation.'**
+  String get pairSecondDeviceDescription;
+
+  /// Action that unpairs the second (companion) device only
+  ///
+  /// In en, this message translates to:
+  /// **'Forget second device'**
+  String get forgetSecondDevice;
+
   /// Conversation list row chip: the server could not summarize this conversation after its retries, and retrying can still succeed. Shown next to a Retry button.
   ///
   /// In en, this message translates to:

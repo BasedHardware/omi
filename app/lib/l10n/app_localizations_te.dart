@@ -11675,6 +11675,19 @@ class AppLocalizationsTe extends AppLocalizations {
       'ఇది ఈ సమావేశం నోట్ నుండి స్క్రీన్‌షాట్‌ను తీసివేస్తుంది. దీన్ని రద్దు చేయలేరు.';
 
   @override
+  String get pairSecondDevice => 'రెండవ పరికరాన్ని జోడించండి';
+
+  @override
+  String get secondDevice => 'రెండవ పరికరం';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.';
+
+  @override
+  String get forgetSecondDevice => 'రెండవ పరికరాన్ని మర్చిపోండి';
+
+  @override
   String get conversationSummaryFailed => 'సారాంశం విఫలమైంది';
 
   @override

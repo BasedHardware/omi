@@ -13834,6 +13834,22 @@
     "@deleteMeetingScreenshotMessage": {
         "description": "Body of the dialog confirming deletion of one meeting screenshot"
     },
+    "pairSecondDevice": "Pair a second device",
+    "secondDevice": "Second device",
+    "@pairSecondDevice": {
+        "description": "Action on the device page that opens the device picker to pair an OmiGlass next to an Omi (or vice versa)"
+    },
+    "pairSecondDeviceDescription": "Connect OmiGlass next to your Omi so photos and audio go into the same conversation.",
+    "@secondDevice": {
+        "description": "Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)"
+    },
+    "forgetSecondDevice": "Forget second device",
+    "@forgetSecondDevice": {
+        "description": "Action that unpairs the second (companion) device only"
+    },
+    "@pairSecondDeviceDescription": {
+        "description": "Explains what pairing a second device does; product names Omi and OmiGlass stay untranslated"
+    },
     "conversationSummaryFailed": "Summary failed",
     "@conversationSummaryFailed": {
         "description": "Conversation list row chip: the server could not summarize this conversation after its retries, and retrying can still succeed. Shown next to a Retry button."

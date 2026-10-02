@@ -3782,5 +3782,9 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi अगली बार {name} को पहचान लेगा।} pending{इसमें कुछ सेकंड लगते हैं।} disabled{Omi {name} को पहचान सके, इसके लिए सेटिंग्स में आवाज़ें सेव करना चालू करें।} other{Omi को {name} की और साफ़ आवाज़ चाहिए और वह कोशिश करता रहेगा।}}",
     "speakerLabelEarlierMatches": "इस आवाज़ वाली पिछली बातचीत: {count}",
     "speakerLabelText": "{part, select, likely{संभावित} soundsLike{{name} जैसी लग रही है} notPerson{{name} नहीं} carried{अब भी {name}। आपकी पिछली बातचीत से जारी।} change{बदलें} alsoTitle{क्या यह भी {name} है?} alsoBody{Omi को यही आवाज़ पिछली बातचीतों में मिली।} confirmed{आपने इस लेबल की पुष्टि की} other{समीक्षा करें}}",
-    "speakerLabelTalkTime": "इस आवाज़ का {duration}"
+    "speakerLabelTalkTime": "इस आवाज़ का {duration}",
+    "pairSecondDeviceDescription": "अपने Omi के साथ OmiGlass कनेक्ट करें ताकि फ़ोटो और ऑडियो एक ही बातचीत में जाएँ।",
+    "pairSecondDevice": "दूसरा डिवाइस पेयर करें",
+    "secondDevice": "दूसरा डिवाइस",
+    "forgetSecondDevice": "दूसरा डिवाइस भूल जाएँ"
 }

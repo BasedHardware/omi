@@ -11612,6 +11612,19 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteMeetingScreenshotMessage => 'Dette fjerner skærmbilledet fra mødets note. Det kan ikke fortrydes.';
 
   @override
+  String get pairSecondDevice => 'Par en anden enhed';
+
+  @override
+  String get secondDevice => 'Anden enhed';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Forbind OmiGlass sammen med din Omi, så billeder og lyd ender i samme samtale.';
+
+  @override
+  String get forgetSecondDevice => 'Glem anden enhed';
+
+  @override
   String get conversationSummaryFailed => 'Resuméet mislykkedes';
 
   @override

@@ -11625,6 +11625,19 @@ class AppLocalizationsCs extends AppLocalizations {
       'Snímek obrazovky bude odebrán z poznámky této schůzky. Tuto akci nelze vrátit.';
 
   @override
+  String get pairSecondDevice => 'Spárovat druhé zařízení';
+
+  @override
+  String get secondDevice => 'Druhé zařízení';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.';
+
+  @override
+  String get forgetSecondDevice => 'Zapomenout druhé zařízení';
+
+  @override
   String get conversationSummaryFailed => 'Shrnutí se nepodařilo';
 
   @override

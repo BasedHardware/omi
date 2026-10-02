@@ -11439,6 +11439,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteMeetingScreenshotMessage => '이 회의 노트에서 스크린샷이 삭제됩니다. 되돌릴 수 없습니다.';
 
   @override
+  String get pairSecondDevice => '두 번째 기기 페어링';
+
+  @override
+  String get secondDevice => '두 번째 기기';
+
+  @override
+  String get pairSecondDeviceDescription => 'Omi와 함께 OmiGlass를 연결하면 사진과 오디오가 같은 대화에 담깁니다.';
+
+  @override
+  String get forgetSecondDevice => '두 번째 기기 삭제';
+
+  @override
   String get conversationSummaryFailed => '요약 실패';
 
   @override

@@ -11635,6 +11635,19 @@ class AppLocalizationsSv extends AppLocalizations {
       'Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra.';
 
   @override
+  String get pairSecondDevice => 'Para ihop en andra enhet';
+
+  @override
+  String get secondDevice => 'Andra enhet';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Anslut OmiGlass tillsammans med din Omi så att bilder och ljud hamnar i samma konversation.';
+
+  @override
+  String get forgetSecondDevice => 'Glöm andra enhet';
+
+  @override
   String get conversationSummaryFailed => 'Sammanfattningen misslyckades';
 
   @override

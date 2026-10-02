@@ -11638,6 +11638,19 @@ class AppLocalizationsTr extends AppLocalizations {
       'Bu işlem ekran görüntüsünü bu toplantının notundan kaldırır. Geri alınamaz.';
 
   @override
+  String get pairSecondDevice => 'İkinci cihazı eşleştir';
+
+  @override
+  String get secondDevice => 'İkinci cihaz';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Fotoğraflar ve ses aynı sohbete gitsin diye OmiGlass\'ı Omi\'nizin yanına bağlayın.';
+
+  @override
+  String get forgetSecondDevice => 'İkinci cihazı unut';
+
+  @override
   String get conversationSummaryFailed => 'Özet oluşturulamadı';
 
   @override

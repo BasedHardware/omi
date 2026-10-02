@@ -11662,6 +11662,19 @@ class AppLocalizationsNl extends AppLocalizations {
       'Hiermee wordt de schermafbeelding uit de notitie van deze vergadering verwijderd. Dit kan niet ongedaan worden gemaakt.';
 
   @override
+  String get pairSecondDevice => 'Tweede apparaat koppelen';
+
+  @override
+  String get secondDevice => 'Tweede apparaat';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Verbind OmiGlass naast je Omi zodat foto\'s en audio in hetzelfde gesprek terechtkomen.';
+
+  @override
+  String get forgetSecondDevice => 'Tweede apparaat vergeten';
+
+  @override
   String get conversationSummaryFailed => 'Samenvatting mislukt';
 
   @override

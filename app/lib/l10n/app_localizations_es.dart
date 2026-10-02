@@ -11660,6 +11660,19 @@ class AppLocalizationsEs extends AppLocalizations {
       'Esto elimina la captura de pantalla de la nota de esta reunión. No se puede deshacer.';
 
   @override
+  String get pairSecondDevice => 'Emparejar un segundo dispositivo';
+
+  @override
+  String get secondDevice => 'Segundo dispositivo';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Conecta OmiGlass junto a tu Omi para que las fotos y el audio vayan a la misma conversación.';
+
+  @override
+  String get forgetSecondDevice => 'Olvidar segundo dispositivo';
+
+  @override
   String get conversationSummaryFailed => 'No se pudo crear el resumen';
 
   @override

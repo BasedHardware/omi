@@ -11656,6 +11656,19 @@ class AppLocalizationsBe extends AppLocalizations {
       'Здымак экрана будзе выдалены з нататкі гэтай сустрэчы. Гэта нельга адрабіць.';
 
   @override
+  String get pairSecondDevice => 'Спалучыць другую прыладу';
+
+  @override
+  String get secondDevice => 'Другая прылада';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Падключыце OmiGlass разам з Omi, каб фота і аўдыя траплялі ў адну размову.';
+
+  @override
+  String get forgetSecondDevice => 'Забыць другую прыладу';
+
+  @override
   String get conversationSummaryFailed => 'Не ўдалося стварыць зводку';
 
   @override

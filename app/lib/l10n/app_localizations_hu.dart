@@ -11670,6 +11670,19 @@ class AppLocalizationsHu extends AppLocalizations {
       'A képernyőkép törlődik a megbeszélés jegyzetéből. Ez nem vonható vissza.';
 
   @override
+  String get pairSecondDevice => 'Második eszköz párosítása';
+
+  @override
+  String get secondDevice => 'Második eszköz';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.';
+
+  @override
+  String get forgetSecondDevice => 'Második eszköz elfelejtése';
+
+  @override
   String get conversationSummaryFailed => 'Az összefoglaló nem sikerült';
 
   @override

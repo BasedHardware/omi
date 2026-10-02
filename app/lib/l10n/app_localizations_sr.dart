@@ -11640,6 +11640,19 @@ class AppLocalizationsSr extends AppLocalizations {
       'Ово уклања снимак екрана из белешке овог састанка. Не може се опозвати.';
 
   @override
+  String get pairSecondDevice => 'Упари други уређај';
+
+  @override
+  String get secondDevice => 'Други уређај';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Повежите OmiGlass уз свој Omi како би фотографије и звук ишли у исти разговор.';
+
+  @override
+  String get forgetSecondDevice => 'Заборави други уређај';
+
+  @override
   String get conversationSummaryFailed => 'Резиме није успео';
 
   @override
