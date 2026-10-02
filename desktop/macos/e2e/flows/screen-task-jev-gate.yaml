@@ -20,6 +20,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskPipeline.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskTelemetry.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskModels.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant+Delivery.swift
 preconditions:
   - signed_in
   - onboarding_completed
