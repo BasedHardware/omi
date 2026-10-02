@@ -189,6 +189,206 @@ void main() {
       expect(TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(BleAudioCodec.pcm16, config), isFalse);
     });
   });
+
+  group('CompositeTranscriptionSocket when the Omi socket fails', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+    });
+
+    CompositeTranscriptionSocket build(
+      _ScriptedSocket primary,
+      _ScriptedSocket secondary, {
+      bool keepPrimary = true,
+    }) {
+      return CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        keepPrimaryWhenSecondaryFails: keepPrimary,
+        secondaryRetryInitialDelay: const Duration(milliseconds: 10),
+        secondaryRetryMaxDelay: const Duration(milliseconds: 40),
+      );
+    }
+
+    test('default behaviour is unchanged: a failed Omi connect fails the composite', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [false]);
+      final socket = build(primary, secondary, keepPrimary: false);
+
+      expect(await socket.connect(), isFalse);
+      expect(socket.status, PureSocketStatus.notConnected);
+      expect(primary.status, PureSocketStatus.disconnected);
+    });
+
+    test('a failed Omi connect keeps the custom STT socket live and degraded', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [false, false, false, false, false]);
+      final listener = _RecordingListener();
+      final socket = build(primary, secondary)..setListener(listener);
+
+      expect(await socket.connect(), isTrue);
+      expect(socket.status, PureSocketStatus.connected);
+      expect(socket.secondaryDegraded, isTrue);
+      expect(listener.connected, 1);
+
+      final audio = Uint8List.fromList([7, 8, 9]);
+      socket.send(audio);
+      expect(primary.sent, [same(audio)]);
+      expect(secondary.sent, isEmpty);
+
+      primary.emitMessage(jsonEncode([
+        {'text': 'turn on the lights'},
+      ]));
+      expect(secondary.sent, isEmpty, reason: 'transcripts cannot reach Omi while degraded');
+      await socket.stop();
+    });
+
+    test('an Omi socket that drops mid-session does not tear down the composite', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [true, false, false, false, false, false]);
+      final listener = _RecordingListener();
+      final socket = build(primary, secondary)..setListener(listener);
+
+      expect(await socket.connect(), isTrue);
+      expect(socket.secondaryDegraded, isFalse);
+
+      secondary.emitClosed(1011);
+      expect(socket.status, PureSocketStatus.connected);
+      expect(socket.secondaryDegraded, isTrue);
+      expect(listener.closed, isEmpty);
+      expect(primary.status, PureSocketStatus.connected);
+      await socket.stop();
+    });
+
+    test('the custom STT socket closing still tears everything down', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket();
+      final listener = _RecordingListener();
+      final socket = build(primary, secondary)..setListener(listener);
+
+      expect(await socket.connect(), isTrue);
+      primary.emitClosed(1001);
+      expect(socket.status, PureSocketStatus.disconnected);
+      expect(listener.closed, [1001]);
+    });
+
+    test('the Omi socket is retried in the background and restored', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [false, false, true]);
+      final socket = build(primary, secondary);
+
+      expect(await socket.connect(), isTrue);
+      expect(socket.secondaryDegraded, isTrue);
+
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(secondary.connectCalls, 3);
+      expect(socket.secondaryDegraded, isFalse);
+
+      final audio = Uint8List.fromList([1]);
+      socket.send(audio);
+      expect(secondary.sent, [same(audio)]);
+      await socket.stop();
+    });
+
+    test('stopping the composite cancels Omi retries', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [false, true]);
+      final socket = build(primary, secondary);
+
+      expect(await socket.connect(), isTrue);
+      await socket.stop();
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(secondary.connectCalls, 1);
+      expect(socket.secondaryDegraded, isFalse);
+    });
+
+    test('live custom STT turns degraded mode on and reports delivery to Omi', () async {
+      const config = CustomSttConfig(
+        provider: SttProvider.customLive,
+        url: 'wss://stt.example.test/live',
+      );
+      final service = TranscriptSocketServiceFactory.createFromCustomConfig(16000, BleAudioCodec.pcm16, 'en', config);
+      final composite = service.socket as CompositeTranscriptionSocket;
+
+      expect(composite.keepPrimaryWhenSecondaryFails, isTrue);
+      expect(service.deliversToOmi, isTrue);
+    });
+  });
+}
+
+class _RecordingListener implements IPureSocketListener {
+  int connected = 0;
+  final List<int?> closed = [];
+
+  @override
+  void onConnected() => connected++;
+
+  @override
+  void onMessage(dynamic message) {}
+
+  @override
+  void onClosed([int? closeCode]) => closed.add(closeCode);
+
+  @override
+  void onError(Object err, StackTrace trace) {}
+}
+
+/// Fake socket whose successive connect() calls return [connectResults]
+/// (true once the list is exhausted).
+class _ScriptedSocket implements IPureSocket {
+  _ScriptedSocket({List<bool>? connectResults}) : _connectResults = [...?connectResults];
+
+  final List<bool> _connectResults;
+  final List<dynamic> sent = [];
+  int connectCalls = 0;
+  IPureSocketListener? _listener;
+  PureSocketStatus _status = PureSocketStatus.notConnected;
+
+  @override
+  PureSocketStatus get status => _status;
+
+  @override
+  Future<bool> connect() async {
+    connectCalls++;
+    final ok = _connectResults.isEmpty ? true : _connectResults.removeAt(0);
+    _status = ok ? PureSocketStatus.connected : PureSocketStatus.notConnected;
+    if (ok) _listener?.onConnected();
+    return ok;
+  }
+
+  @override
+  Future<void> disconnect() async {
+    _status = PureSocketStatus.disconnected;
+  }
+
+  @override
+  Future<void> stop() => disconnect();
+
+  @override
+  void send(dynamic message) => sent.add(message);
+
+  @override
+  void setListener(IPureSocketListener listener) => _listener = listener;
+
+  @override
+  void onClosed() => _listener?.onClosed();
+
+  @override
+  void onConnected() => _listener?.onConnected();
+
+  @override
+  void onError(Object err, StackTrace trace) => _listener?.onError(err, trace);
+
+  @override
+  void onMessage(dynamic message) => _listener?.onMessage(message);
+
+  void emitMessage(dynamic message) => _listener?.onMessage(message);
+
+  void emitClosed([int? code]) {
+    _status = PureSocketStatus.disconnected;
+    _listener?.onClosed(code);
+  }
 }
 
 class _TestEnvFields implements EnvFields {
