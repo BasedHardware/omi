@@ -2,7 +2,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from models.speaker_labels import RejectSpeakerRequest, VoiceMatchesResponse
+from models.speaker_labels import VoiceMatchesResponse
+
 from routers import speaker_labels as router_module
 
 
@@ -36,7 +37,14 @@ def _dummy_conversation_dict() -> dict:
             "events": [],
         },
         "transcript_segments": [
-            {"id": "seg-1", "text": "Hello world", "speaker_id": 1, "is_user": False, "start": 0.0, "end": 2.0},
+            {
+                "id": "seg-1",
+                "text": "Hello world",
+                "speaker_id": 1,
+                "is_user": False,
+                "start": 0.0,
+                "end": 2.0,
+            },
         ],
     }
 
@@ -51,14 +59,32 @@ def test_reject_speaker_label_success(monkeypatch):
         assert kwargs["speaker_id"] == 1
         return _dummy_conversation_dict(), ["seg-1"], ["speech_profiles/old.wav"], {}
 
-    monkeypatch.setattr(router_module.conversations_db, "assign_conversation_speaker", mock_assign)
+    def mock_record_ignored(
+        uid, conversation_id, speaker_id, now, assignment_generation=None
+    ):
+        recorded_ignored.append(
+            {
+                "uid": uid,
+                "conversation_id": conversation_id,
+                "speaker_id": speaker_id,
+                "assignment_generation": assignment_generation,
+            }
+        )
+
     monkeypatch.setattr(
-        router_module.voice_profiles_db, "record_ignored_voice", lambda *a, **k: recorded_ignored.append((a, k))
+        router_module.conversations_db, "assign_conversation_speaker", mock_assign
     )
-    monkeypatch.setattr(router_module, "delete_speech_profile_blob", lambda p: removed_blobs.append(p))
+    monkeypatch.setattr(
+        router_module.voice_profiles_db, "record_ignored_voice", mock_record_ignored
+    )
+    monkeypatch.setattr(
+        router_module, "delete_speech_profile_blob", lambda p: removed_blobs.append(p)
+    )
 
     client = _client(monkeypatch)
-    response = client.post("/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload())
+    response = client.post(
+        "/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload()
+    )
     assert response.status_code == 200
     assert response.json()["id"] == "conv-123"
     assert "speech_profiles/old.wav" in removed_blobs
@@ -70,9 +96,23 @@ def test_reject_speaker_label_not_a_person_records_ignored_voice(monkeypatch):
     def mock_assign(uid, conversation_id, **kwargs):
         return _dummy_conversation_dict(), ["seg-1"], [], {}
 
-    monkeypatch.setattr(router_module.conversations_db, "assign_conversation_speaker", mock_assign)
+    def mock_record_ignored(
+        uid, conversation_id, speaker_id, now, assignment_generation=None
+    ):
+        recorded_ignored.append(
+            {
+                "uid": uid,
+                "conversation_id": conversation_id,
+                "speaker_id": speaker_id,
+                "assignment_generation": assignment_generation,
+            }
+        )
+
     monkeypatch.setattr(
-        router_module.voice_profiles_db, "record_ignored_voice", lambda *a, **k: recorded_ignored.append((a, k))
+        router_module.conversations_db, "assign_conversation_speaker", mock_assign
+    )
+    monkeypatch.setattr(
+        router_module.voice_profiles_db, "record_ignored_voice", mock_record_ignored
     )
 
     payload = {"kind": "not_a_person", "person_id": None, "segment_ids": ["seg-1"]}
@@ -80,40 +120,75 @@ def test_reject_speaker_label_not_a_person_records_ignored_voice(monkeypatch):
     response = client.post("/v1/conversations/conv-123/speakers/1/reject", json=payload)
     assert response.status_code == 200
     assert len(recorded_ignored) == 1
-    assert recorded_ignored[0][0][2] == 1  # speaker_id
+    assert recorded_ignored[0]["speaker_id"] == 1
+    assert recorded_ignored[0]["uid"] == "user-123"
+    assert recorded_ignored[0]["conversation_id"] == "conv-123"
 
 
 @pytest.mark.parametrize("whitespace_id", ["   ", "%20"])
-def test_reject_speaker_label_rejects_whitespace_conversation_id(monkeypatch, whitespace_id):
+def test_reject_speaker_label_rejects_whitespace_conversation_id(
+    monkeypatch, whitespace_id
+):
     client = _client(monkeypatch)
-    response = client.post(f"/v1/conversations/{whitespace_id}/speakers/1/reject", json=_valid_reject_payload())
+    response = client.post(
+        f"/v1/conversations/{whitespace_id}/speakers/1/reject",
+        json=_valid_reject_payload(),
+    )
     assert response.status_code == 400
     assert response.json()["detail"] == "Valid conversation_id is required"
 
 
 def test_reject_speaker_label_rejects_empty_conversation_id(monkeypatch):
     client = _client(monkeypatch)
-    response = client.post("/v1/conversations//speakers/1/reject", json=_valid_reject_payload())
-    assert response.status_code in (404, 405)
+    response = client.post(
+        "/v1/conversations//speakers/1/reject", json=_valid_reject_payload()
+    )
+    assert response.status_code == 404
 
 
 def test_reject_speaker_label_rejects_negative_speaker_id(monkeypatch):
     client = _client(monkeypatch)
-    response = client.post("/v1/conversations/conv-123/speakers/-1/reject", json=_valid_reject_payload())
+    response = client.post(
+        "/v1/conversations/conv-123/speakers/-1/reject", json=_valid_reject_payload()
+    )
     assert response.status_code == 400
     assert response.json()["detail"] == "Valid speaker_id must be non-negative"
+
+
+def test_reject_speaker_label_type_error_falls_through_to_500(monkeypatch):
+    def mock_assign(*args, **kwargs):
+        raise TypeError(
+            "internal coding bug: NoneType object cannot be interpreted as an integer"
+        )
+
+    monkeypatch.setattr(
+        router_module.conversations_db, "assign_conversation_speaker", mock_assign
+    )
+
+    client = _client(monkeypatch)
+    response = client.post(
+        "/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload()
+    )
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Unable to process speaker label rejection"
 
 
 def test_reject_speaker_label_not_found_bounded_404(monkeypatch):
     internal_leak = "INTERNAL_LEAK_TARGET_NOT_FOUND_COLLECTION_12345"
 
     def mock_assign(*args, **kwargs):
-        raise LookupError(f"Target conversation doc missing internal leak: {internal_leak}")
+        raise LookupError(
+            f"Target conversation doc missing internal leak: {internal_leak}"
+        )
 
-    monkeypatch.setattr(router_module.conversations_db, "assign_conversation_speaker", mock_assign)
+    monkeypatch.setattr(
+        router_module.conversations_db, "assign_conversation_speaker", mock_assign
+    )
 
     client = _client(monkeypatch)
-    response = client.post("/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload())
+    response = client.post(
+        "/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload()
+    )
     assert response.status_code == 404
     assert response.json()["detail"] == "Conversation or speaker not found"
     assert internal_leak not in response.text
@@ -123,24 +198,37 @@ def test_reject_speaker_label_plan_locked_402(monkeypatch):
     def mock_assign(*args, **kwargs):
         raise PermissionError("Plan locked conversation")
 
-    monkeypatch.setattr(router_module.conversations_db, "assign_conversation_speaker", mock_assign)
+    monkeypatch.setattr(
+        router_module.conversations_db, "assign_conversation_speaker", mock_assign
+    )
 
     client = _client(monkeypatch)
-    response = client.post("/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload())
+    response = client.post(
+        "/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload()
+    )
     assert response.status_code == 402
-    assert response.json()["detail"] == "A paid plan is required to access this conversation."
+    assert (
+        response.json()["detail"]
+        == "A paid plan is required to access this conversation."
+    )
 
 
 def test_reject_speaker_label_conflict_bounded_409(monkeypatch):
     internal_leak = "INTERNAL_LEAK_SECRET_CONFLICT_TOKEN_67890"
 
     def mock_assign(*args, **kwargs):
-        raise ValueError(f"State conflict on speaker assignment with token: {internal_leak}")
+        raise ValueError(
+            f"State conflict on speaker assignment with token: {internal_leak}"
+        )
 
-    monkeypatch.setattr(router_module.conversations_db, "assign_conversation_speaker", mock_assign)
+    monkeypatch.setattr(
+        router_module.conversations_db, "assign_conversation_speaker", mock_assign
+    )
 
     client = _client(monkeypatch)
-    response = client.post("/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload())
+    response = client.post(
+        "/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload()
+    )
     assert response.status_code == 409
     assert response.json()["detail"] == "Invalid speaker rejection request"
     assert internal_leak not in response.text
@@ -152,10 +240,14 @@ def test_reject_speaker_label_unexpected_error_masks_500(monkeypatch):
     def mock_assign(*args, **kwargs):
         raise RuntimeError(f"Database crash with credentials: {internal_secret}")
 
-    monkeypatch.setattr(router_module.conversations_db, "assign_conversation_speaker", mock_assign)
+    monkeypatch.setattr(
+        router_module.conversations_db, "assign_conversation_speaker", mock_assign
+    )
 
     client = _client(monkeypatch)
-    response = client.post("/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload())
+    response = client.post(
+        "/v1/conversations/conv-123/speakers/1/reject", json=_valid_reject_payload()
+    )
     assert response.status_code == 500
     assert response.json()["detail"] == "Unable to process speaker label rejection"
     assert internal_secret not in response.text
@@ -168,8 +260,12 @@ def test_reject_speaker_label_post_processing_error_masks_500(monkeypatch):
     def mock_record_ignored(*args, **kwargs):
         raise RuntimeError("Ignored voice database write failure")
 
-    monkeypatch.setattr(router_module.conversations_db, "assign_conversation_speaker", mock_assign)
-    monkeypatch.setattr(router_module.voice_profiles_db, "record_ignored_voice", mock_record_ignored)
+    monkeypatch.setattr(
+        router_module.conversations_db, "assign_conversation_speaker", mock_assign
+    )
+    monkeypatch.setattr(
+        router_module.voice_profiles_db, "record_ignored_voice", mock_record_ignored
+    )
 
     payload = {"kind": "not_a_person", "person_id": None, "segment_ids": ["seg-1"]}
     client = _client(monkeypatch)
@@ -193,7 +289,9 @@ def test_get_person_voice_matches_success(monkeypatch):
 
 
 @pytest.mark.parametrize("whitespace_id", ["   ", "%20"])
-def test_get_person_voice_matches_rejects_whitespace_person_id(monkeypatch, whitespace_id):
+def test_get_person_voice_matches_rejects_whitespace_person_id(
+    monkeypatch, whitespace_id
+):
     client = _client(monkeypatch)
     response = client.get(f"/v1/users/people/{whitespace_id}/voice-matches")
     assert response.status_code == 400
