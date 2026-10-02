@@ -29,6 +29,7 @@ from utils.llm import vertex_pt_routing as ptr
 from config.vertex_reservations import State, RESERVATIONS
 from utils.llm.vertex_reservation_state import reservation_state, effective_states
 from utils.llm.vertex_reservation_probe import probe_reservation
+from utils.llm.vertex_reservation_response import ReservationResponseEvidence
 from utils.llm.desktop_reservation_policy import should_refuse, refusal_response
 from utils.llm import vertex_direct_attempt as direct_attempt
 from utils.llm import desktop_gemini_gateway
@@ -699,8 +700,6 @@ def _overflow_plan(served_model: str, *, origin_model: str | None = None) -> lis
     Only traffic that was actually routed at the reservation can exhaust it, so
     anything else returns an empty plan and keeps its own error.
 
-    Target probes are driven by new target traffic, never old-client overflow:
-    moving the old Flash lane to 3.8 PayGo would exceed its starting price.
     """
     if not _overflow_enabled():
         return []
@@ -1022,16 +1021,16 @@ def _stream_error_event(*, code: str, phase: str, telemetry: ProxyTelemetry) -> 
 class _StreamingUsageObserver:
     """Incrementally inspect SSE data fields without retaining response content."""
 
-    # A single SSE event larger than this is not a usage event; stop observing
-    # the response rather than retaining provider content or re-scanning it.
     MAX_EVENT_BYTES = 1024 * 1024
 
     def __init__(self, telemetry: ProxyTelemetry) -> None:
         self.telemetry = telemetry
         self.buffer = bytearray()
         self.disabled = False
+        self.evidence = ReservationResponseEvidence()
 
     def feed(self, chunk: bytes) -> None:
+        self.evidence.feed(chunk)
         if self.disabled:
             return
         self.buffer.extend(chunk)
@@ -1167,7 +1166,9 @@ async def _stream_provider(
             yield chunk
         usage_observer.finish()
         if not get_byok_key('gemini'):
-            await reservation_state.record(attempt_model, capacity, upstream.status_code, telemetry.traffic_type)
+            await reservation_state.record(
+                attempt_model, capacity, upstream.status_code, usage_observer.evidence.traffic_type()
+            )
         telemetry.complete(outcome='success', status_code=upstream.status_code, retryable=False, phase='body')
     except ClientDisconnected:
         telemetry.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')

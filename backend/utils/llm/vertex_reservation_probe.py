@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 import httpx
 
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm.vertex_reservation_response import completed_provisioned_traffic
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ async def probe_reservation(
         response.status_code,
         *(n if type(n) is int and n >= 0 else None for n in counts),
     )
-    if 200 <= response.status_code < 300 and usage.get('trafficType') == 'PROVISIONED_THROUGHPUT':
+    if 200 <= response.status_code < 300 and completed_provisioned_traffic(payload):
         return 'dedicated_success'
     if ptr.is_provisioned_capacity_exhausted(response.status_code, response.text):
         return 'capacity_error'

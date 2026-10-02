@@ -30,6 +30,7 @@ from config.vertex_reservations import (
     observed_state,
 )
 from utils.observability.fallback import record_fallback
+from utils.llm.vertex_reservation_response import completed_provisioned_traffic
 from utils.llm.vertex_pt_routing import COMPANY_PAID_VERTEX_TEXT_MODELS
 
 logger = logging.getLogger(__name__)
@@ -217,7 +218,7 @@ class ReservationState:
         if model not in RESERVATIONS or capacity != 'dedicated':
             return False
         try:
-            traffic = response.json().get('usageMetadata', {}).get('trafficType')
+            traffic = completed_provisioned_traffic(response.json())
         except (ValueError, AttributeError):
             return False
         await self.record(model, capacity, response.status_code, traffic)

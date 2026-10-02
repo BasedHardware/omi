@@ -263,7 +263,14 @@ def test_pro_remap_is_a_declared_action_in_every_state():
 @pytest.mark.parametrize(
     'status,payload,expected',
     [
-        (200, {'usageMetadata': {'trafficType': 'PROVISIONED_THROUGHPUT'}}, 'dedicated_success'),
+        (
+            200,
+            {
+                'candidates': [{'content': {'parts': [{'text': 'OK'}]}, 'finishReason': 'STOP'}],
+                'usageMetadata': {'trafficType': 'PROVISIONED_THROUGHPUT'},
+            },
+            'dedicated_success',
+        ),
         (200, {'usageMetadata': {'trafficType': 'ON_DEMAND'}}, 'inconclusive'),
         (200, {'usageMetadata': None}, 'inconclusive'),
         (302, {'usageMetadata': {'trafficType': 'PROVISIONED_THROUGHPUT'}}, 'inconclusive'),

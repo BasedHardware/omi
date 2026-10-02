@@ -55,6 +55,7 @@ from utils.llm.vertex_reservation_state import ReservationState
 from utils.llm.vertex_reservation_probe import probe_reservation
 from config.vertex_reservations import State
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm.vertex_reservation_response import ReservationResponseEvidence, completed_provisioned_traffic
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -551,7 +552,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         headers = _vertex_headers(await self._vertex_access_token(), capacity)
         decoder = SSEEventDecoder()
         received = 0
-        traffic_type = None
+        evidence = ReservationResponseEvidence()
         async with self._http_client.stream(
             'POST',
             endpoint,
@@ -566,6 +567,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             if not bounded:
                 self._record_model_available(model)
             async for chunk in response.aiter_bytes():
+                evidence.feed(chunk)
                 received += len(chunk)
                 if bounded and received > _configured_max_response_bytes():
                     raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
@@ -574,9 +576,6 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     if not data or data == '[DONE]':
                         continue
                     parsed = _parse_limited_json_response(data.encode('utf-8'))
-                    usage_metadata = parsed.get('usageMetadata', {})
-                    if isinstance(usage_metadata, Mapping) and 'trafficType' in usage_metadata:
-                        traffic_type = usage_metadata['trafficType']
                     translated, _ = _vertex_to_openai_stream_chunk(
                         parsed,
                         requested_model=requested_model,
@@ -584,6 +583,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     )
                     if translated is not None:
                         yield translated
+        traffic_type = evidence.traffic_type()
         self._observe_attempt(model, capacity, response.status_code, b'', traffic_type=traffic_type)
         await self._reservations.record(
             model,
@@ -742,8 +742,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                 parsed = _parse_limited_json_response(
                     await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 )
-            usage_metadata = parsed.get('usageMetadata', {})
-            traffic_type = usage_metadata.get('trafficType') if isinstance(usage_metadata, Mapping) else None
+            traffic_type = completed_provisioned_traffic(parsed)
             self._observe_attempt(model, capacity, response.status_code, b'', traffic_type=traffic_type)
             await self._reservations.record(
                 model,
