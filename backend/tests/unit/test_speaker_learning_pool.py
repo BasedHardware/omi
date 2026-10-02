@@ -106,9 +106,12 @@ def world(monkeypatch):
 
     monkeypatch.setattr(teaching, 'download_audio_chunks_and_merge', fake_download)
 
-    def fake_chunks(uid, conversation_id, wanted, sample_rate):
+    def fake_chunks(uid, conversation_id, wanted, sample_rate, **kwargs):
         conv = store.rows.get(CONV_PATH) or {}
-        timestamps = sorted({ts for af in conv.get('audio_files', []) for ts in af.get('chunk_timestamps', [])})
+        timestamps = sorted(
+            {ts for af in conv.get('audio_files', []) for ts in af.get('chunk_timestamps', [])},
+            reverse=kwargs.get('newest_first', False),
+        )
         for index, ts in enumerate(timestamps):
             following = timestamps[index + 1] if index + 1 < len(timestamps) else None
             if wanted(ts, following):
@@ -269,13 +272,15 @@ def test_decoded_truncation_is_uncovered(world):
 def test_teaching_verifies_the_exact_positioned_overlap_clip(world, monkeypatch):
     set_conversation(world, conversation([seg('a', 0.0, 10.0)]))
 
+    pattern = (np.arange(RATE * 6) % 997 + 1).astype(np.int16)
+
     def overlapping_chunks(*args, **kwargs):
         yield STARTED_AT, pcm_for(6)
-        yield STARTED_AT + 4, np.full(RATE * 6, 900, dtype=np.int16).tobytes()
+        yield STARTED_AT + 4, pattern.tobytes()
 
     monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', overlapping_chunks)
     assert teach(('a',)) == 'stored'
-    assert world.captured['pcm'] == pcm_for(6) + np.full(RATE * 4, 900, dtype=np.int16).tobytes()
+    assert world.captured['pcm'] == pcm_for(6) + pattern[RATE * 2 :].tobytes()
 
 
 def test_missing_audio_cannot_replace_a_previous_voiceprint(world):

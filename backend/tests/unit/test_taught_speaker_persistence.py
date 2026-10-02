@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import speaker_assignment_teaching as teaching_tasks
 from utils import speaker_identification as teaching
-from utils import speaker_sample
+from utils import speaker_sample, speaker_audio
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ def world(monkeypatch):
         lambda uid, cid: deepcopy(store.rows.get(('users', uid, 'conversations', cid))),
     )
     pcm = np.full(16000 * 10, 1000, dtype=np.int16).tobytes()
-    monkeypatch.setattr(teaching, 'download_audio_chunks_and_merge', lambda *a, **k: pcm)
+    monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', lambda *a, **k: iter([(1700000000.0, pcm)]))
     vector = np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
     monkeypatch.setattr(teaching, 'extract_embedding_from_bytes', lambda *a: vector)
     uploads = []

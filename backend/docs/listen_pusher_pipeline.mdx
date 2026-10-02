@@ -1314,20 +1314,24 @@ schedules a bounded retry for receipt-named people lacking a usable voiceprint
 (≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
 
 Legacy person teaching, owner confirmations and speaker-tag preview clips use
-`utils/speaker_audio.py` to cut each blob on its own timestamp. Overlapping
-decoded chunks contribute each sample position once; a window inside a batch
-blob uses that blob's start rather than an interior requested chunk timestamp.
+`utils/speaker_audio.py` to position individual blobs on their own timestamps.
+Newer blobs fill each sample position first; earlier overlapping blobs can fill
+holes left by shorter or missing newer blobs. Batch blobs are rejected on this
+legacy path: their interior chunks may have been concatenated without retaining
+individual timestamps, so aggregate byte length cannot prove continuity.
 Every requested sample must exist: gaps and truncated windows return no clip,
 never silence padding or a shortened clip. Person teaching records
-`uncovered_audio` and remains pending without replacing its previous voiceprint.
-`omi_speaker_clip_coverage_total{outcome=covered|gap|missing|invalid_window}`
-records bounded, content-free extraction outcomes. V2 span validation remains
-unchanged. This does not repair drift in legacy transcript timestamps, and the
-existing STT text-containment and speaker-purity checks still run before learning.
-Each legacy window requires one blob listing and sequential decoding of its
-predecessor/intersecting blobs, stopping once complete (at most 12 s of returned
-PCM); person teaching retains its existing 12-window cap and one STT verification
-plus one embedding call. Blob sizes themselves are not capped by this reader.
+`uncovered_audio` without replacing its previous voiceprint; a person without a
+usable profile remains pending. `omi_speaker_clip_coverage_total` reports bounded
+`covered`, `gap`, `missing` (including unverified batch-only storage), and
+`invalid_window` outcomes. V2 span validation remains unchanged. This does not
+repair legacy transcript-clock drift, and STT text-containment and speaker-purity
+checks still run before learning.
+Each window lists blobs once and tries at most 32 individual blob downloads,
+including missing blobs, newest first, stopping once complete. The result is at
+most 12 s PCM; underlying blob size/listing size are not bounded by this output
+cap. Person teaching retains its 12-window cap, one STT verification and one
+embedding call. Older covering blobs beyond the download cap fail closed.
 
 Owner display names share `database.auth.get_user_name`: Firebase display name,
 Firestore `name`, then an explicit identity bullet on the first line of

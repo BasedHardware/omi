@@ -33,7 +33,9 @@ def blobs(monkeypatch):
 
     def add(start, end, *, missing=False, batch=False):
         path = f'synthetic/{start}-{end}.batch.bin' if batch else f'synthetic/{start}.bin'
-        entries.append({'timestamp': ORIGIN + start, 'path': path, 'pcm': None if missing else pcm(start, end)})
+        entries.append(
+            {'timestamp': ORIGIN + start, 'path': path, 'pcm': None if missing else pcm(start, end), 'is_batch': batch}
+        )
 
     return add, reads
 
@@ -52,7 +54,7 @@ def test_overlap_does_not_repeat_samples_or_shift_later_voice(blobs):
     assert len(reads) == 2
 
 
-def test_clip_inside_batch_uses_blob_origin_not_interior_chunk_timestamp(blobs):
+def test_legacy_batch_is_rejected_even_when_byte_length_appears_to_cover_window(blobs):
     add, reads = blobs
     add(0, 30, batch=True)
     conv = {
@@ -60,8 +62,8 @@ def test_clip_inside_batch_uses_blob_origin_not_interior_chunk_timestamp(blobs):
         'started_at': ORIGIN,
         'audio_files': [{'chunk_timestamps': [ORIGIN, ORIGIN + 10, ORIGIN + 20], 'duration': 30}],
     }
-    assert clips.conversation_clip_pcm('synthetic-user', conv, 12, 22, RATE) == pcm(12, 22)
-    assert len(reads) == 1
+    assert clips.conversation_clip_pcm('synthetic-user', conv, 12, 22, RATE) is None
+    assert reads == []
 
 
 @pytest.mark.parametrize('case', ['leading', 'interior', 'trailing', 'missing_blob', 'all_missing'])
@@ -94,7 +96,7 @@ def test_far_windows_skip_unrelated_blobs_and_stop_after_complete_coverage(blobs
     for start in [0, 100, 200, 300, 305, 400]:
         add(start, start + 20)
     assert extract(302, 312) == pcm(302, 312)
-    assert reads == ['synthetic/300.bin']
+    assert reads == ['synthetic/305.bin', 'synthetic/300.bin']
 
 
 def test_overlap_is_trimmed_on_integer_sample_grid(blobs):
@@ -121,3 +123,27 @@ def test_outcomes_have_only_bounded_labels(blobs):
     assert extract(3, 13) is None
     assert extract(19, 21) is None
     assert all(counter.labels(outcome=outcome)._value.get() == value + 1 for outcome, value in before.items())
+
+
+def test_earlier_long_blob_fills_coverage_after_shorter_newer_blob(blobs):
+    add, reads = blobs
+    add(0, 15)
+    add(5, 8)
+    assert extract(7, 12) == pcm(7, 12)
+    assert reads == ['synthetic/5.bin', 'synthetic/0.bin']
+
+
+def test_missing_downloads_are_bounded(blobs):
+    add, reads = blobs
+    for start in range(40):
+        add(start, start + 10, missing=True)
+    assert extract(40, 50) is None
+    assert len(reads) == speaker_audio.MAX_SPEAKER_CLIP_BLOBS
+
+
+def test_legacy_batch_with_hidden_gap_cannot_be_used_to_fill_hole(blobs):
+    add, reads = blobs
+    add(0, 15, batch=True)
+    add(5, 8)
+    assert extract(7, 12) is None
+    assert reads == ['synthetic/5.bin']
