@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -14,6 +15,8 @@ from tests.unit.test_stt_session_failover import FakeSocket, _receiver_with_dead
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt import live_chain, live_session, streaming as st
 from utils.stt.soniox import SafeSonioxSocket
+from utils.stt import live_failure
+from utils.stt.live_failure import _SERVE_FAILURE_REASONS
 from config.live_stt_registry import assigned
 from utils.stt.live_gate import GateState
 from utils.stt.live_cost_health import PREFIX
@@ -237,6 +240,182 @@ async def test_real_soniox_rotation_idle_and_finished_never_become_transport_fai
         assert not live_chain.health._cost_local
     finally:
         await raw.drain_and_close()
+
+
+@pytest.mark.asyncio
+async def test_real_soniox_408_is_censored_but_keeps_serving_circuit_classification(monkeypatch):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
+    receiver.host.language = 'ko'
+    ws = ProviderWebSocket()
+    raw = SafeSonioxSocket(ws, lambda _segments: None, asyncio.get_running_loop())
+    leg = managed_leg(receiver, raw, family='soniox', gate=SpeechGate())
+    await ws.inbound.put(
+        {
+            'error_code': 408,
+            'error_type': 'request_timeout',
+            'error_message': 'Request timeout.',
+        }
+    )
+    before_failures = observed('soniox', 'provider_failure', 'connection_lost')
+    before_censored = observed('soniox', 'censored', 'soniox_request_timeout')
+    try:
+        await raw._recv_task
+        assert raw.typed_death_reason == 'soniox_request_timeout'
+        assert leg.is_connection_dead
+        assert leg.normalized_death_reason == 'soniox_request_timeout'
+        await leg.drain_and_close()
+        assert observed('soniox', 'provider_failure', 'connection_lost') == before_failures
+        assert observed('soniox', 'censored', 'soniox_request_timeout') == before_censored + 1
+        # Before this typed reason, it normalized to connection_lost, which is
+        # in the same terminal serving set that opens the circuit on exhaustion.
+        assert 'soniox_request_timeout' in _SERVE_FAILURE_REASONS
+    finally:
+        await raw.drain_and_close()
+
+
+@pytest.mark.asyncio
+async def test_terminal_soniox_408_still_opens_the_serving_circuit(monkeypatch):
+    opened = []
+    monkeypatch.setattr(
+        live_failure, '_open_serving_provider_circuit', lambda reason, provider: opened.append((reason, provider))
+    )
+    session = SimpleNamespace(stt_terminal_failure=False, active=True, close_code=1000)
+    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    await live_failure.terminate_live_stt_session(
+        websocket,
+        session,
+        failure=live_failure.live_stt_upstream_failure('soniox'),
+        reason='soniox_request_timeout',
+        platform='ios',
+    )
+    assert opened == [('soniox_request_timeout', 'soniox')]
+    assert session.close_code == 1011
+    websocket.close.assert_awaited_once_with(code=1011, reason='transcription_service_unavailable')
+
+
+class _ClientFrames:
+    def __init__(self, frames, *, before_receive=None):
+        self.frames = iter(frames)
+        self.before_receive = before_receive
+
+    async def receive(self):
+        if self.before_receive is not None:
+            callback, self.before_receive = self.before_receive, None
+            callback()
+        return next(self.frames)
+
+
+class _ReceiverRawSocket(ServingSocket):
+    def __init__(self):
+        super().__init__()
+        self.sent = []
+
+    def send(self, audio):
+        self.sent.append(bytes(audio))
+        return super().send(audio)
+
+
+def _receiver_for_close(monkeypatch, *, raw, frames, language='ko', close_code=1000, before_receive=None):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
+    receiver.host.language = language
+    receiver.host.stt_service = st.STTService.soniox
+    receiver.host.stt_model = 'soniox'
+    receiver.host.request = type(
+        'Request',
+        (),
+        {
+            'uid': 'synthetic-health-witness',
+            'websocket': _ClientFrames(frames, before_receive=before_receive),
+            'codec': 'pcm',
+            'sample_rate': 16000,
+            'source': 'omi',
+        },
+    )()
+    receiver.host.state.active = True
+    receiver.host.state.close_code = close_code
+    receiver.host.state.first_audio_byte_timestamp = None
+    receiver.host.state.last_usage_record_timestamp = None
+    receiver.host.state.last_audio_received_time = None
+    receiver.host.state.last_activity_time = None
+    receiver.host.state.audio_ring_buffer = None
+    receiver.host.state.fair_use_dg_budget_exhausted = False
+    receiver.host.state.fair_use_track_dg_usage = False
+    receiver.host.state.realtime_demand = type('Demand', (), {'totals': lambda _self: {}})()
+    receiver.host.limits.ws_receive_timeout = 1.0
+    receiver.host.is_multi_channel = False
+    receiver.host.use_custom_stt = False
+    receiver.host.audio_bytes_send = None
+    receiver.host.client_device_context.platform = 'ios'
+    receiver.vad_gate = None
+    receiver.stt_socket = managed_leg(receiver, raw, family='soniox', gate=None)
+    receiver.capture_timeline = None
+    receiver._emit_realtime_demand = lambda *_args: None
+    return receiver
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('close_code', [1000, 1001])
+async def test_receiver_teardown_fences_late_transport_death_during_final_flush(monkeypatch, close_code):
+    raw = _ReceiverRawSocket()
+    receiver = _receiver_for_close(
+        monkeypatch,
+        raw=raw,
+        frames=[{'bytes': b'\x01\x00' * 8}, {'type': 'websocket.disconnect', 'code': close_code}],
+        close_code=close_code,
+    )
+    leg = receiver.stt_socket
+    seen_flushes = []
+
+    async def final_flush(buffer, *, force=False):
+        if force:
+            seen_flushes.append(bytes(buffer))
+            assert leg.send(bytes(buffer))
+            buffer.clear()
+            await asyncio.sleep(0)
+            raw.die(raw='synthetic raw transport close during owner teardown')
+
+    receiver._flush_stt_buffer = final_flush
+    before = observed('soniox', 'provider_failure', 'connection_lost')
+    await receiver.receive_data()
+    assert seen_flushes == [b'\x01\x00' * 8]
+    assert raw.sent == [b'\x01\x00' * 8]
+    assert observed('soniox', 'provider_failure', 'connection_lost') == before
+
+
+@pytest.mark.asyncio
+async def test_soniox_korean_no_frame_disconnect_reconnect_loop_is_censored(monkeypatch):
+    before = observed('soniox', 'provider_failure', 'connection_lost')
+    for _ in range(5):
+        raw = _ReceiverRawSocket()
+        receiver = _receiver_for_close(
+            monkeypatch,
+            raw=raw,
+            frames=[{'type': 'websocket.disconnect', 'code': 1000}],
+        )
+        await receiver.receive_data()
+        assert raw.sent == []
+    assert observed('soniox', 'provider_failure', 'connection_lost') == before
+
+
+@pytest.mark.asyncio
+async def test_soniox_transport_death_observed_before_client_disconnect_counts_once(monkeypatch):
+    raw = _ReceiverRawSocket()
+    observed_while_connected = []
+
+    def provider_died():
+        raw.die(raw='synthetic provider transport close')
+        observed_while_connected.append(receiver.stt_socket.is_connection_dead)
+
+    receiver = _receiver_for_close(
+        monkeypatch,
+        raw=raw,
+        frames=[{'type': 'websocket.disconnect', 'code': 1000}],
+        before_receive=provider_died,
+    )
+    before = observed('soniox', 'provider_failure', 'connection_lost')
+    await receiver.receive_data()
+    assert observed_while_connected == [True]
+    assert observed('soniox', 'provider_failure', 'connection_lost') == before + 1
 
 
 @pytest.mark.parametrize('early_signal', ['text', 'no_text_deadline'])

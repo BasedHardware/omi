@@ -419,6 +419,7 @@ class LiveLegSocket(STTSocket):
         self._cost_censored_no_text = False
         self._target_death_recorded = False
         self._closing_for_health = False
+        self._closed_for_sends = False
         try:
             self._routing_active = target is not None and routing_on(
                 getattr(getattr(session.receiver.host, 'request', None), 'uid', None)
@@ -685,7 +686,7 @@ class LiveLegSocket(STTSocket):
         setattr(gate, 'process_audio', process_replay_capture)
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
-        if self._closing_for_health:
+        if self._closed_for_sends:
             return False
         if self.is_connection_dead:
             return False
@@ -822,6 +823,7 @@ class LiveLegSocket(STTSocket):
         dead = self.is_connection_dead
         self._censor_early_teardown(dead)
         self._closing_for_health = True
+        self._closed_for_sends = True
         try:
             if self.is_connection_dead and self._pending_selection is not None:
                 self._pending_selection.note_failure(self.typed_death_reason)
@@ -887,10 +889,17 @@ class LiveLegSocket(STTSocket):
         ):
             self._cost_censored_no_text = True
 
+    def mark_owner_teardown(self) -> None:
+        """Fence later transport symptoms while preserving final audio sends."""
+        dead = self.is_connection_dead
+        self._censor_early_teardown(dead)
+        self._closing_for_health = True
+
     async def drain_and_close(self) -> None:
         dead = self.is_connection_dead
         self._censor_early_teardown(dead)
         self._closing_for_health = True
+        self._closed_for_sends = True
         try:
             await st.drain_stt_socket(self.raw)
         finally:
