@@ -2,6 +2,11 @@
 
 from copy import deepcopy
 from pathlib import Path
+import json
+import sys
+from unittest.mock import MagicMock
+
+from starlette.datastructures import UploadFile
 
 from google.api_core.exceptions import InvalidArgument
 import pytest
@@ -10,6 +15,7 @@ import yaml
 from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from database import sync_ledger
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.test_sync_cloud_tasks import _load_sync_router_for_fast_path
 from tests.unit.test_sync_cross_job_assignment import chunk, conversations, intake
 from utils.sync.assignment import capture_mismatch
 from utils.sync.assignment_errors import SyncAssignmentConflict
@@ -160,7 +166,7 @@ def test_segment_quarantine_is_owner_fenced_and_survives_rebatch(stale, monkeypa
 
 
 def test_recovery_flag_reaches_every_sync_host_in_both_environments():
-    manifest = yaml.safe_load((Path(__file__).parents[2] / 'deploy/runtime_env.yaml').read_text())
+    manifest = yaml.load((Path(__file__).parents[2] / 'deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
     for env in manifest['environments'].values():
         hosts = [
             env['cloud_run']['services'][service]
@@ -168,3 +174,43 @@ def test_recovery_flag_reaches_every_sync_host_in_both_environments():
         ]
         hosts.append(env['gke']['backend-listen'])
         assert all(host['env']['SYNC_ASSIGNMENT_RECOVERY_ENABLED']['value'] == 'true' for host in hosts)
+
+
+@pytest.fixture
+def admission_router():
+    module, saved, jobs, bytes_io, _, _ = _load_sync_router_for_fast_path()
+    try:
+        yield module, jobs, bytes_io
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_quarantined_upload_returns_retaining_contract_before_dispatch(admission_router, caplog):
+    module, jobs, bytes_io = admission_router
+    module.claim_sync_content = MagicMock(
+        return_value={
+            'outcome': 'capped',
+            'quarantined': True,
+            'failure_key': 'persistent_persistence',
+        }
+    )
+    module.start_background_task = MagicMock()
+    response = await module.sync_local_files_v2(
+        files=[UploadFile(filename='synthetic.opus', file=bytes_io(b'synthetic'))],
+        uid='test-uid',
+    )
+    assert response.status_code == 202
+    assert json.loads(response.body)['status'] == 'failed'
+    module.mark_job_failed.assert_called_once()
+    assert module.mark_job_failed.call_args.kwargs['reason_code'] == 'sync_repeat_failure_paused'
+    module.enqueue_sync_job.assert_not_called()
+    module.start_background_task.assert_not_called()
+    jobs.mark_job_completed.assert_not_called()
+    assert any('quarantined=true' in r.message for r in caplog.records)

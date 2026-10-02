@@ -204,3 +204,15 @@ def test_whole_job_provider_invalid_input_reaches_existing_app_terminal_reason()
         )[3]['reason_code']
         is None
     )
+
+
+@pytest.mark.parametrize(
+    'error',
+    [
+        SyncAssignmentConflict('wrapped', subtype='provenance_mismatch'),
+        InvalidArgument('exceeds the maximum allowed size'),
+    ],
+)
+def test_structural_error_wrapping_transport_does_not_quarantine(error):
+    error.__cause__ = ServiceUnavailable('transient')
+    assert _persistence_failure_fingerprint(error, 'persistence') is None
