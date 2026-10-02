@@ -103,7 +103,10 @@ _CIRCUIT_OPENING_REASONS = frozenset(
 # helper's threshold logic already sees it, and ``socket_unavailable`` is local
 # state (no socket exists), not provider behavior.
 # Preserve legacy terminal VAD circuit protection; fleet evidence censors it.
-_SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed', 'vad_failed'})
+# Soniox request_timeout used to normalize to connection_lost. Keep it in the
+# serving set so the existing circuit/failover response is unchanged while
+# cost-health classification can censor the client-timing symptom.
+_SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed', 'vad_failed', 'soniox_request_timeout'})
 
 
 def fallback_metric_reason(reason: str | None) -> str:
