@@ -1014,6 +1014,8 @@ def test_default_clients_can_request_all_supported_tool_scopes():
             'people.read',
             'people.rename',
             'people.cleanup',
+            'people.create',
+            'speakers.assign',
         ]
     )
 
