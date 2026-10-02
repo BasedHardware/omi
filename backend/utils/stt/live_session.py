@@ -573,6 +573,10 @@ class LiveLegSocket(STTSocket):
         # First observation owns the immutable cause used by both telemetry paths.
         return self._terminal_reason or normalize_live_stt_reason(self.typed_death_reason, self.death_reason)
 
+    @property
+    def cost_observation_recorded(self) -> bool:
+        return self._cost_recorded
+
     def set_selection_outcome(self, pending: PendingLiveFailover) -> None:
         self._pending_selection = pending
 
@@ -830,12 +834,21 @@ class LiveLegSocket(STTSocket):
             self._release_open_gauge()
 
     def _record_cost_outcome(self, dead: bool, *, reason: str | None = None) -> None:
+        # A transport symptom created by owner-initiated teardown is not a
+        # serving death. Real pre-close deaths already have their latched cause.
+        if dead and self._closing_for_health and self._terminal_reason is None:
+            return
         if dead and self._terminal_reason is None:
             try:
                 self._terminal_reason = normalize_live_stt_reason(self.typed_death_reason, self.death_reason, reason)
             except Exception:
                 self._terminal_reason = normalize_live_stt_reason(reason)
-        if not self._cost_recorded and self._first_speech_at is not None and self._speech_ms_for_health >= 1000:
+        # Provider availability and actual text do not depend on VAD. Only
+        # audio/no-text evidence needs a minimum speech sample.
+        eligible = (
+            dead or self._cost_text_seen or (self._first_speech_at is not None and self._speech_ms_for_health >= 1000)
+        )
+        if not self._cost_recorded and eligible:
             self._cost_recorded = True
             outcome = 'failover' if dead else 'text' if self._cost_text_seen else 'no_text'
             if not dead and self._cost_censored_no_text and not self._cost_text_seen:

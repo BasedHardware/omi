@@ -307,20 +307,23 @@ async def connect_configured_chain(
                     routing_models=routing_models,
                 )
             reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
-            health.record_connect_failure(
-                (
-                    target.id
-                    if target is not None
-                    else (
-                        (routing_models or {}).get('parakeet') or 'parakeet'
-                        if service.value == 'parakeet'
-                        else DEFAULT_IDS.get(service.value, service.value)
-                    )
-                ),
-                bounded_language(routing_language),
-                routing_uid,
-                reason,
-            )
+            # An accepted managed socket may already have recorded its death
+            # during the serving check or close; this is the same target attempt.
+            if not getattr(socket, 'cost_observation_recorded', False):
+                health.record_connect_failure(
+                    (
+                        target.id
+                        if target is not None
+                        else (
+                            (routing_models or {}).get('parakeet') or 'parakeet'
+                            if service.value == 'parakeet'
+                            else DEFAULT_IDS.get(service.value, service.value)
+                        )
+                    ),
+                    bounded_language(routing_language),
+                    routing_uid,
+                    reason,
+                )
             if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
                 _note_connect_result(failed_provider=service.value)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS

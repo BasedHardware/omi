@@ -179,11 +179,33 @@ labels: sibling endpoints cannot be distinguished there, so compare their
 combined health counts when more than one endpoint is configured. Health counts
 once on death; fallback settlement occurs later, on successor text/exhaustion.
 Allow for settlement delay and first-scrape counter boundaries. Connect failures
-are additional health observations; deaths before one second of VAD speech do
-not enter serving health. Explain these differences rather than demanding
+without an accepted managed socket are additional health observations. An
+accepted socket death counts once, including before any audio, below one second
+of speech, with VAD disabled, or on VAD-negative audio; connect-time serving
+rejection does not count that same leg twice. Text is success evidence even
+without a VAD sample. Only plain no-text requires at least one second of VAD
+speech and remains censored. Explain these differences rather than demanding
 instantaneous equality. Compare only provider-attributable reasons for the
 failure count (`modulate_serve_error`, `connection_lost`, `send_failed`,
 `provider_5xx`, `provider_429`, `provider_rate_limited`, `timeout`).
+
+For a fixed set of accepted Modulate legs that produce mid-session hops,
+provider-failure observations and settled source-hop counts must match per
+reason after all hops settle. Speech duration is no longer an exclusion. The
+same bounded latched cause feeds both paths; a serve error cannot become
+connection loss in only one of them. Aggregate target health can legitimately
+exceed the live-session fallback count: a provider may die with no replacement
+candidate, or a connect can fail before there is a managed leg. A terminal
+Soniox death therefore has health evidence without a new Soniox hop. Intentional
+owner close is outside serving evidence; a later teardown transport symptom
+must not create a failure. Soniox finished/idle/rotation remain non-failures.
+Family labels also include PTT and legacy/non-managed paths; compare the same
+serving scope before demanding equality.
+
+Keep the v5 namespace: this accounting fix adds missing failures and text
+successes without changing the meaning of stored outcomes, reason vocabulary,
+gate thresholds or state shape. No old evidence is reinterpreted or backfilled.
+
 
 A socket-owned typed cause precedes a bounded raw cause, then the observing
 send/monitor symptom. Unknown/free-text serving deaths become `connection_lost`,

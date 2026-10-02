@@ -312,14 +312,17 @@ traffic or 155 seconds at 25%, plus outcome and cache delays.
 The v5 gate measures provider-path availability, separate from transcript/audio
 quality. `live_signal.provider_observation` classifies one outcome per leg:
 
-- Completed text after at least one second of VAD speech is a non-failure.
-  Actual text received after the diagnostic deadline also qualifies.
-- Serving death/failover counts only for `modulate_serve_error`,
+- Completed text is a non-failure even without VAD speech evidence. Actual
+  text received after the diagnostic deadline also qualifies.
+- Accepted serving death/failover has no speech or audio minimum; it counts
+  with VAD disabled or before the first audio. It counts only for `modulate_serve_error`,
   `connection_lost`, `send_failed`, `provider_5xx`, `provider_rate_limited`,
   `provider_429`, or `timeout`. Provider transport availability includes the
   backend-to-provider path; this is not proof of a vendor incident.
 - Connect errors with those reasons also count once per target attempt, even
-  before speech. Account/config/capacity failures retain their separate gates.
+  before speech. A managed socket already observed dead during the serving
+  check is not counted again as a connect failure. Account/config/capacity
+  failures retain their separate gates.
 - Plain `no_text`, `first_text_deadline`, `empty_streak`, VAD/client failure,
   idle/rotation and account/capacity outcomes are **censored**: neither numerator
   nor denominator, and they cannot advance a trial. Existing leg no-text and
@@ -338,7 +341,10 @@ Observation labels are target/outcome/reason, never raw diagnostic messages.
 
 No-text deadlines no longer seal health evidence early. Completed text waits
 until close; later attributable death therefore wins, once. Intentional client
-teardown is censored. A deadline-only window failover is not a hard failure,
+teardown is censored; transport symptoms first observed after owner close do
+not become serving failures. Plain no-text still requires a one-second VAD
+speech sample. The v5 namespace is retained: previously missed observations
+are added, with no reinterpretation of stored failure/success outcomes. A deadline-only window failover is not a hard failure,
 regardless of its successor: aggregate data has no successor/session join,
 and adding a cross-leg adjudication is outside this calibration. This loses
 automatic gate detection of a recognizer that connects but silently returns
