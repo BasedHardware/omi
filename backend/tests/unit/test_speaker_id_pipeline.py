@@ -170,7 +170,6 @@ for _name in [
     "download_audio_chunks_and_merge",
     "download_speech_profile_bytes",
     "list_audio_chunks",
-    "iter_audio_chunk_pcm",
     "upload_person_speech_sample_from_bytes",
 ]:
     setattr(_storage_mod, _name, MagicMock())

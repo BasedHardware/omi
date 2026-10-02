@@ -8,7 +8,7 @@ import math
 from typing import Optional
 
 from utils.metrics import OMI_SPEAKER_CLIP_COVERAGE_TOTAL
-from utils.other.storage import iter_audio_chunk_pcm
+from utils.other.audio_chunks import iter_audio_chunk_pcm
 
 MAX_SPEAKER_CLIP_SECONDS = 12.0
 MAX_SPEAKER_CLIP_BLOBS = 32

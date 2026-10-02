@@ -36,7 +36,7 @@ from utils.conversations.segment_remap import (
 )
 from utils.conversations.speaker_resolution import apply_speaker_resolution, load_voiceprints_for_resolution
 from utils.executors import start_background_task
-from utils.other.storage import iter_audio_chunk_pcm
+from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16
 from utils.stt.conversation_speakers import resolve_conversation_speakers
 from utils.stt.pre_recorded import parakeet_prerecorded_from_bytes, postprocess_words
