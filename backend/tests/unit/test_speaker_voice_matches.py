@@ -21,7 +21,16 @@ PERSON_ID = 'test-person'
 
 
 def _segment(segment_id='s1', speaker_id=2, start=2.0, end=14.0, **overrides):
-    return dict(id=segment_id, speaker_id=speaker_id, start=start, end=end, is_user=False, person_id=None, **overrides)
+    return dict(
+        id=segment_id,
+        speaker_id=speaker_id,
+        start=start,
+        end=end,
+        is_user=False,
+        person_id=None,
+        speaker_id_scope='sync:test',
+        **overrides,
+    )
 
 
 def _conversation(conversation_id='c1', age=1, **overrides):
@@ -35,8 +44,22 @@ def _conversation(conversation_id='c1', age=1, **overrides):
     }
 
 
-def _cache(entries=None):
-    return resolution.encode_cache(entries or {'s1': (12.0, np.array([1.0, 0.0]))})
+def _cache(conversation, entries=None):
+    entries = entries or {'s1': (12.0, np.array([1.0, 0.0]))}
+    built = {}
+    for index, raw in enumerate(conversation['transcript_segments']):
+        sid = raw.get('id') or legacy_conversation_segment_id(conversation['id'], index)
+        if sid not in entries:
+            continue
+        duration, vector = entries[sid]
+        placement = resolution.placement_for_segment(conversation, dict(raw, id=sid))
+        built[sid] = resolution.CachedEmbedding(
+            duration,
+            np.asarray(vector, dtype=np.float32),
+            placement,
+            resolution.embedding_model_stamp(),
+        )
+    return resolution.encode_cache(built)
 
 
 @pytest.fixture
@@ -50,12 +73,13 @@ def env(monkeypatch):
         },
         allowed=True,
         conversations=[_conversation()],
-        cache={'c1': _cache()},
+        cache=None,
         ignored={},
         reads=[],
         queries=[],
         threads=[],
     )
+    state.cache = {'c1': _cache(state.conversations[0])}
 
     def get_person(uid, person_id):
         assert (uid, person_id) == (UID, PERSON_ID)
@@ -120,7 +144,7 @@ def test_matching_unnamed_voice_has_contract_fields_and_uses_workers(env):
 @pytest.mark.parametrize('distance,level', [(0.1, 'strong'), (0.45, 'likely'), (0.55, None), (1.0, None)])
 def test_pooled_threshold_and_match_levels(env, distance, level):
     cosine = 1.0 - distance
-    env.cache['c1'] = _cache({'s1': (12.0, np.array([cosine, np.sqrt(1.0 - cosine**2)]))})
+    env.cache['c1'] = _cache(env.conversations[0], {'s1': (12.0, np.array([cosine, np.sqrt(1.0 - cosine**2)]))})
     found = _find()
     assert [match.match_level for match in found] == ([level] if level else [])
 
@@ -128,19 +152,21 @@ def test_pooled_threshold_and_match_levels(env, distance, level):
 def test_duration_weighted_normalized_pool(env):
     # Long matching evidence must dominate the short orthogonal segment,
     # regardless of raw vector magnitude.
-    env.cache['c1'] = _cache({'s1': (12.0, np.array([1.0, 0.0])), 's2': (3.0, np.array([0.0, 100.0]))})
+    env.cache['c1'] = _cache(
+        env.conversations[0], {'s1': (12.0, np.array([1.0, 0.0])), 's2': (3.0, np.array([0.0, 100.0]))}
+    )
     assert _find()[0].match_level == 'strong'
 
 
 @pytest.mark.parametrize('duration', [0.5, 4.0])
 def test_insufficient_cached_speech_is_not_a_match(env, duration):
-    env.cache['c1'] = _cache({'s1': (duration, np.array([1.0, 0.0]))})
+    env.cache['c1'] = _cache(env.conversations[0], {'s1': (duration, np.array([1.0, 0.0]))})
     assert _find() == []
 
 
 @pytest.mark.parametrize('vector', [[0.0, 0.0], [float('nan'), 0.0], [1.0, 0.0, 0.0]])
 def test_invalid_cached_vectors_are_skipped(env, vector):
-    env.cache['c1'] = _cache({'s1': (12.0, np.array(vector))})
+    env.cache['c1'] = _cache(env.conversations[0], {'s1': (12.0, np.array(vector))})
     assert _find() == []
 
 
@@ -228,7 +254,7 @@ def test_ineligible_conversation_skips_cache(env, override):
 
 def test_match_bound_and_newest_first(env):
     env.conversations = [_conversation(f'c{i}', age=i) for i in range(1, 12)][::-1]
-    env.cache = {conversation['id']: _cache() for conversation in env.conversations}
+    env.cache = {conversation['id']: _cache(conversation) for conversation in env.conversations}
     assert [match.conversation_id for match in _find()] == ['c1', 'c2', 'c3', 'c4', 'c5']
     assert env.reads == ['c1', 'c2', 'c3', 'c4', 'c5']
 
@@ -236,14 +262,16 @@ def test_match_bound_and_newest_first(env):
 def test_match_bound_also_applies_within_one_conversation(env):
     segments = [_segment(f's{i}', speaker_id=i, start=i * 15.0, end=i * 15.0 + 12.0) for i in range(8)]
     env.conversations[0]['transcript_segments'] = segments
-    env.cache['c1'] = _cache({segment['id']: (12.0, np.array([1.0, 0.0])) for segment in segments})
+    env.cache['c1'] = _cache(
+        env.conversations[0], {segment['id']: (12.0, np.array([1.0, 0.0])) for segment in segments}
+    )
     assert len(_find()) == 5
     assert env.reads == ['c1']
 
 
 def test_conversation_bound_even_if_database_fake_returns_too_many(env):
     env.conversations = [_conversation(f'c{i}') for i in range(30)]
-    env.cache = {'c29': _cache()}
+    env.cache = {'c29': _cache(env.conversations[0])}
     assert _find() == []
     assert len(env.reads) == 25
     assert 'c29' not in env.reads
@@ -255,7 +283,7 @@ def test_legacy_segment_ids_and_speaker_name(env):
     segment.pop('speaker_id')
     segment['speaker'] = 'SPEAKER_2'
     segment_id = legacy_conversation_segment_id('c1', 0)
-    env.cache['c1'] = _cache({segment_id: (12.0, np.array([1.0, 0.0]))})
+    env.cache['c1'] = _cache(env.conversations[0], {segment_id: (12.0, np.array([1.0, 0.0]))})
     assert _find()[0].segment_ids == [segment_id, 's2']
 
 
@@ -280,7 +308,7 @@ def test_deadline_returns_partial_matches_without_waiting_for_slow_cache(env, mo
                 assert release.wait(timeout=2.0)
             finally:
                 completed.set()
-        return _cache()
+        return _cache(env.conversations[0])
 
     monkeypatch.setattr(matches, 'download_speaker_embedding_cache', slow_download)
     monkeypatch.setattr(matches, 'SCAN_SECONDS', 0.25)
@@ -320,6 +348,31 @@ def test_route_ownership_and_response(env, monkeypatch, exists, status):
         assert env.queries == env.reads == []
 
 
+def test_same_duration_shifted_window_offers_nothing(env):
+    segment = env.conversations[0]['transcript_segments'][0]
+    segment['start'] += 4.0
+    segment['end'] += 4.0
+    assert _find() == []
+
+
+def test_model_stamp_mismatch_offers_nothing(env, monkeypatch):
+    monkeypatch.setenv('CONVERSATION_SPEAKER_EMBEDDING_MODEL_VERSION', 'other-model')
+    assert _find() == []
+
+
+def test_manifest_change_offers_nothing(env):
+    env.conversations[0]['audio_files'] = [
+        {'id': 'f', 'chunk_timestamps': [0.0], 'chunk_spans': [{'start': 0.0, 'end': 1.0}]}
+    ]
+    assert _find() == []
+
+
+def test_own_scope_with_unchanged_proof_still_offers(env):
+    for segment in env.conversations[0]['transcript_segments']:
+        segment['speaker_id_scope'] = 'conversation:c1'
+    assert len(_find()) == 1
+
+
 @pytest.mark.parametrize('competitor', ['owner', 'duplicate'])
 def test_historical_matches_abstain_when_competing_identity_is_as_close(env, monkeypatch, competitor):
     if competitor == 'owner':
@@ -327,3 +380,19 @@ def test_historical_matches_abstain_when_competing_identity_is_as_close(env, mon
     else:
         monkeypatch.setattr(matches.users_db, 'get_people', lambda uid: [env.person, {**env.person, 'id': 'duplicate'}])
     assert asyncio.run(matches.find_person_voice_matches(UID, PERSON_ID)).matches == []
+
+
+@pytest.mark.parametrize('audio_files', [None, []])
+def test_missing_or_null_manifest_is_stamp_equivalent(env, audio_files):
+    env.conversations[0]['audio_files'] = audio_files
+    assert len(_find()) == 1
+
+
+def test_proof_only_record_offers_nothing(env):
+    conversation = env.conversations[0]
+    segment = dict(conversation['transcript_segments'][0])
+    placement = resolution.placement_for_segment(conversation, segment)
+    env.cache['c1'] = resolution.encode_cache(
+        {'s1': resolution.CachedEmbedding(12.0, None, placement, resolution.embedding_model_stamp())}
+    )
+    assert _find() == []
