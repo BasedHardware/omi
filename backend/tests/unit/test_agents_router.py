@@ -1,14 +1,6 @@
-import sys
-from unittest.mock import MagicMock
-import pytest
-
-# Hermetic isolation: mock process_conversation if not available
-if 'utils.conversations.process_conversation' not in sys.modules:
-    mock_pc = MagicMock()
-    sys.modules['utils.conversations.process_conversation'] = mock_pc
-
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+import pytest
 
 from routers import agents as router_module
 
