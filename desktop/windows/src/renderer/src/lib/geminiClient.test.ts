@@ -66,7 +66,7 @@ describe('renderer geminiClient — attribution transport', () => {
       workload: 'extraction'
     })
     const [, init] = h.fetch.mock.calls[0] as [string, RequestInit]
-    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe('linux')
+    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe('other')
   })
 
   it('degrades to unknown when the preload bridge is absent', async () => {

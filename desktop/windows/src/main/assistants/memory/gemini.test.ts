@@ -11,6 +11,7 @@ vi.mock('electron', () => ({ net: { fetch: h.fetch } }))
 vi.mock('../core/session', () => ({ getAbortSignal: () => h.abortSignal }))
 
 import { extractMemory } from './gemini'
+import { geminiClientPlatform } from '../../../shared/geminiProxy'
 import type { BackendSession } from '../core/session'
 
 const session = (): BackendSession => ({ apiBase: 'a', desktopApiBase: 'd', token: 't' })
@@ -113,8 +114,8 @@ describe('extractMemory — retry classification', () => {
       'X-Omi-Lane': 'memory',
       'X-Omi-Workload': 'extraction'
     })
-    expect(['windows', 'macos', 'linux', 'unknown']).toContain(
-      (init.headers as Record<string, string>)['X-App-Platform']
+    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe(
+      geminiClientPlatform(process.platform)
     )
   })
 })

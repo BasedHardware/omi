@@ -12,6 +12,7 @@ vi.mock('../core/session', () => ({ getAbortSignal: () => undefined }))
 import { sendInitialTurn, sendToolResponseTurn, GeminiHttpError, TASK_MODEL } from './geminiWire'
 import type { BackendSession } from '../core/session'
 import type { GeminiTool } from '../insight/models'
+import { geminiClientPlatform } from '../../../shared/geminiProxy'
 
 const session = (): BackendSession => ({ apiBase: 'a', desktopApiBase: 'd', token: 't' })
 
@@ -91,6 +92,9 @@ describe('geminiWire', () => {
       'X-Omi-Lane': 'task_extraction',
       'X-Omi-Workload': 'extraction'
     })
+    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe(
+      geminiClientPlatform(process.platform)
+    )
   })
 
   it('subsequent turn omits tool_config and appends the exact functionCall/functionResponse round-trip', async () => {

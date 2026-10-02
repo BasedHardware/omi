@@ -12,6 +12,7 @@ vi.mock('electron', () => ({ net: { fetch: h.fetch } }))
 vi.mock('../core/session', () => ({ getAbortSignal: () => undefined }))
 
 import { runTwoPhasePipeline } from './gemini'
+import { geminiClientPlatform } from '../../../shared/geminiProxy'
 import type { BackendSession } from '../core/session'
 
 const session = (): BackendSession => ({ apiBase: 'a', desktopApiBase: 'd', token: 't' })
@@ -155,6 +156,9 @@ describe('runTwoPhasePipeline', () => {
       'X-Omi-Lane': 'insight',
       'X-Omi-Workload': 'extraction'
     })
+    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe(
+      geminiClientPlatform(process.platform)
+    )
   })
 
   it('Phase 1 TOLERATES an unknown tool (continues); Phase 2 still reachable', async () => {

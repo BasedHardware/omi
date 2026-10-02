@@ -8,7 +8,11 @@ export const GEMINI_PROXY_ACTIONS = [
 ] as const
 export type GeminiProxyAction = (typeof GEMINI_PROXY_ACTIONS)[number]
 
-export type GeminiClientPlatform = 'windows' | 'macos' | 'linux' | 'unknown'
+// Wire values come from the generated attribution contract
+// (backend/config/desktop_gemini_attribution.json). `other` — not `linux` —
+// is the shared non-mac/non-Windows platform value so Python, Swift, and
+// TypeScript emit the identical bounded set.
+export type GeminiClientPlatform = 'windows' | 'macos' | 'other' | 'unknown'
 
 export function geminiClientPlatform(platform: string | undefined | null): GeminiClientPlatform {
   switch (platform) {
@@ -17,7 +21,7 @@ export function geminiClientPlatform(platform: string | undefined | null): Gemin
     case 'darwin':
       return 'macos'
     case 'linux':
-      return 'linux'
+      return 'other'
     default:
       return 'unknown'
   }
@@ -37,11 +41,15 @@ export type GeminiProxyRequest = {
 
 export type GeminiFetch = (input: string, init?: RequestInit) => Promise<Response>
 
+// The backend exposes two routes: `gemini-stream` marks the request as a
+// stream for gateway routing and cancellation telemetry; a streaming action
+// sent to the plain route would silently lose both.
 export function geminiProxyFetch(
   fetchImpl: GeminiFetch,
   req: GeminiProxyRequest
 ): Promise<Response> {
-  const url = `${req.baseURL}/v1/proxy/gemini/models/${req.model}:${req.action}`
+  const route = req.action === 'streamGenerateContent' ? 'gemini-stream' : 'gemini'
+  const url = `${req.baseURL}/v1/proxy/${route}/models/${req.model}:${req.action}`
   return fetchImpl(url, {
     method: 'POST',
     headers: {

@@ -4,7 +4,7 @@
 // assertions live in src/main/assistants/modelPins.test.ts so `pnpm typecheck`
 // covers them (src/shared is outside the node tsconfig's include roots).
 import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { GEMINI_WORKLOADS, GeminiLane } from './geminiAttribution'
@@ -66,11 +66,29 @@ describe('geminiProxyFetch — transport contract', () => {
       body: '{}',
       lane: GeminiLane.embedding,
       workload: 'maintenance',
-      platform: 'linux'
+      platform: 'other'
     })
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('b/v1/proxy/gemini/models/gemini-embedding-001:batchEmbedContents')
     expect((init.headers as Record<string, string>)['X-Omi-Lane']).toBe('embedding')
+  })
+
+  it('selects the streaming proxy route for streamGenerateContent', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }))
+    await geminiProxyFetch(fetchImpl, {
+      baseURL: 'https://api.example.test',
+      model: 'gemini-2.5-flash',
+      action: 'streamGenerateContent',
+      token: 't',
+      body: '{}',
+      lane: GeminiLane.focus,
+      workload: 'interactive',
+      platform: 'windows'
+    })
+    const [url] = fetchImpl.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(
+      'https://api.example.test/v1/proxy/gemini-stream/models/gemini-2.5-flash:streamGenerateContent'
+    )
   })
 })
 
@@ -78,9 +96,16 @@ describe('geminiClientPlatform', () => {
   it('maps process.platform to the wire value', () => {
     expect(geminiClientPlatform('win32')).toBe('windows')
     expect(geminiClientPlatform('darwin')).toBe('macos')
-    expect(geminiClientPlatform('linux')).toBe('linux')
+    expect(geminiClientPlatform('linux')).toBe('other')
     expect(geminiClientPlatform('freebsd')).toBe('unknown')
     expect(geminiClientPlatform(undefined)).toBe('unknown')
+  })
+
+  it('never emits a value outside the generated platform contract', () => {
+    for (const platform of ['win32', 'darwin', 'linux', 'sunos', 'aix', 'freebsd', '']) {
+      expect(['windows', 'macos', 'other', 'unknown']).toContain(geminiClientPlatform(platform))
+    }
+    expect(['windows', 'macos', 'other', 'unknown']).toContain(geminiClientPlatform(undefined))
   })
 })
 
@@ -111,7 +136,9 @@ describe('transport ownership ratchet', () => {
   it('no file outside the shared transport constructs a proxy URL or sets attribution headers', () => {
     const offenders: string[] = []
     for (const file of walk(SRC)) {
-      const rel = file.slice(SRC.length + 1)
+      // `join`/`fileURLToPath` yield platform separators; the ratchet compares
+      // against forward-slash literals, so normalize once up front.
+      const rel = file.slice(SRC.length + 1).split(sep).join('/')
       if (rel === OWNER || rel === 'shared/geminiAttribution.ts' || rel.endsWith('.test.ts'))
         continue
       const src = readFileSync(file, 'utf8')

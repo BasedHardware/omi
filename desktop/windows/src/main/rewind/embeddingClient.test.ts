@@ -5,6 +5,7 @@ vi.mock('electron', () => ({ net: { fetch: h.fetch } }))
 
 import { embedBatch, embedOne } from './embeddingClient'
 import { EMBED_DIM, EMBED_MODEL } from './embedVector'
+import { geminiClientPlatform } from '../../shared/geminiProxy'
 
 const session = (): { desktopApiBase: string; token: string } => ({
   desktopApiBase: 'd',
@@ -33,8 +34,8 @@ describe('embeddingClient — attribution transport', () => {
       'X-Omi-Lane': 'embedding',
       'X-Omi-Workload': 'maintenance'
     })
-    expect(['windows', 'macos', 'linux', 'unknown']).toContain(
-      (init.headers as Record<string, string>)['X-App-Platform']
+    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe(
+      geminiClientPlatform(process.platform)
     )
     const body = JSON.parse(init.body as string)
     expect(body.model).toBe(`models/${EMBED_MODEL}`)

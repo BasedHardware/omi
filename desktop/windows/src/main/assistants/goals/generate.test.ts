@@ -32,6 +32,7 @@ import {
 } from './generate'
 import { setAppSettings } from '../../appSettings'
 import type { GoalContextData } from './context'
+import { geminiClientPlatform } from '../../../shared/geminiProxy'
 import type { BackendSession } from '../core/session'
 
 beforeEach(() => vi.clearAllMocks())
@@ -293,8 +294,8 @@ describe('generateSuggestionText — proxy transport', () => {
       'X-Omi-Lane': 'goals',
       'X-Omi-Workload': 'interactive'
     })
-    expect(['windows', 'macos', 'linux', 'unknown']).toContain(
-      (init.headers as Record<string, string>)['X-App-Platform']
+    expect((init.headers as Record<string, string>)['X-App-Platform']).toBe(
+      geminiClientPlatform(process.platform)
     )
   })
 })
