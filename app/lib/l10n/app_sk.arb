@@ -1794,7 +1794,7 @@
     "processedFilesDeleted": "Spracované súbory odstránené",
     "deviceNotResponding": "Zariadenie neodpovedá. Skúste to prosím znova.",
     "sdCardProcessing": "Spracovanie SD karty",
-    "sdCardProcessingMessage": "Spracovávajú sa súbory z SD karty",
+    "sdCardProcessingMessage": "Spracováva sa {count} nahrávok. Súbory sa potom odstránia z SD karty.",
     "process": "Spracovať",
     "processingFailed": "Spracovanie zlyhalo",
     "downloadingFromSdCard": "Sťahovanie z SD karty",
@@ -2030,7 +2030,7 @@
             }
         }
     },
-    "tagSpeaker": "Označiť rečníka",
+    "tagSpeaker": "Označiť rečníka {speakerId}",
     "@tagSpeaker": {
         "placeholders": {
             "speakerId": {
@@ -2104,7 +2104,7 @@
     "statusProcessed": "Spracované",
     "statusUnprocessed": "Nespracované",
     "transferCompleteMessage": "Prenos dokončený",
-    "transferFailedMessage": "Prenos zlyhal. Skúste to prosím znova.",
+    "transferFailedMessage": "Prenos zlyhal: {error}",
     "transferCancelled": "Prenos zrušený",
     "bluetoothSyncEnabled": "Synchronizácia Bluetooth povolená",
     "bluetooth": "Bluetooth",
@@ -2138,7 +2138,7 @@
     "allObjectsMigratedFinalizing": "Všetky objekty migrované, dokončuje sa",
     "migrationErrorOccurred": "Počas migrácie sa vyskytla chyba",
     "migrationComplete": "Migrácia dokončená",
-    "dataProtectedWithSettings": "Vaše údaje sú chránené vašimi nastaveniami",
+    "dataProtectedWithSettings": "Vaše údaje sú teraz chránené novými nastaveniami {level}.",
     "chatsLowercase": "chaty",
     "dataLowercase": "dáta",
     "fallNotificationTitle": "Au",
@@ -2240,7 +2240,7 @@
     "failedToConnectAsana": "Pripojenie k Asana zlyhalo",
     "failedToConnectGoogleTasks": "Pripojenie k Google Tasks zlyhalo",
     "failedToConnectClickUp": "Pripojenie k ClickUp zlyhalo",
-    "failedToConnectServiceWithError": "Nepodarilo sa pripojiť k službe: {error}",
+    "failedToConnectServiceWithError": "Nepodarilo sa pripojiť k {serviceName}: {error}",
     "successfullyConnectedTodoist": "Úspešne pripojené k Todoist",
     "failedToConnectTodoistRetry": "Nepodarilo sa pripojiť k Todoist. Skúste to znova.",
     "successfullyConnectedAsana": "Úspešne pripojené k Asana",

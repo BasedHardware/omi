@@ -294,6 +294,30 @@ def require_placeholder_subset(
         )
 
 
+_PLURAL_OR_SELECT = re.compile(r"\{\s*\w+\s*,\s*(plural|select)\b")
+
+
+def require_placeholders_kept(
+    english: str, translated: str, locale: str, key: str, use_escaping: bool = False
+) -> None:
+    """A simple (no plural/select) translation must keep every English placeholder.
+
+    Dropping one silently hides runtime data ("ETA" instead of "ETA: 5 min"). Plural/select
+    messages are exempt because locales legitimately restructure them.
+    """
+    if _PLURAL_OR_SELECT.search(english) or _PLURAL_OR_SELECT.search(translated):
+        return
+    dropped = placeholder_names(english, use_escaping=use_escaping) - placeholder_names(
+        translated, use_escaping=use_escaping
+    )
+    if dropped:
+        raise L10nError(
+            f"locale {locale}: {key!r} drops placeholders {sorted(dropped)} that English uses\n"
+            f"  en: {english}\n"
+            f"  {locale}: {translated}"
+        )
+
+
 # --- ARB mutation ----------------------------------------------------------
 
 
@@ -853,10 +877,11 @@ def cmd_check(args: argparse.Namespace) -> int:
             value = data.get(key)
             if not isinstance(value, str):
                 continue
-            try:
-                require_placeholder_subset(english, value, locale, key, use_escaping=use_escaping)
-            except L10nError as exc:
-                errors.append(str(exc))
+            for requirement in (require_placeholder_subset, require_placeholders_kept):
+                try:
+                    requirement(english, value, locale, key, use_escaping=use_escaping)
+                except L10nError as exc:
+                    errors.append(str(exc))
     if errors:
         raise L10nError("l10n check failed:\n" + "\n".join(f"  {e}" for e in errors))
     if is_flutter_app(app_dir) and (app_dir / ".dart_tool" / "package_config.json").is_file():

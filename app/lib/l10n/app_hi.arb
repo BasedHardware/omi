@@ -1785,7 +1785,7 @@
     "limitless": "Limitless",
     "syncingStatus": "सिंक हो रहा है",
     "failedStatus": "विफल",
-    "etaLabel": "अनुमानित समय",
+    "etaLabel": "अनुमानित समय: {time}",
     "phone": "फोन",
     "cancelSync": "सिंक रद्द करें",
     "cancelSyncMessage": "पहले से डाउनलोड किया गया डेटा सहेजा जाएगा। आप बाद में फिर से शुरू कर सकते हैं।",
@@ -1799,7 +1799,7 @@
     "processingFailed": "प्रोसेसिंग विफल",
     "downloadingFromSdCard": "SD कार्ड से डाउनलोड हो रहा है",
     "processingProgress": "{current}/{total} प्रोसेस हो रहा है",
-    "conversationsCreated": "वार्तालाप बनाए गए",
+    "conversationsCreated": "{count} वार्तालाप बनाए गए",
     "internetRequired": "प्रोसेसिंग के लिए इंटरनेट कनेक्शन आवश्यक है",
     "processAudio": "ऑडियो प्रोसेस करें",
     "start": "शुरू करें",
@@ -2030,7 +2030,7 @@
             }
         }
     },
-    "tagSpeaker": "वक्ता टैग करें",
+    "tagSpeaker": "वक्ता {speakerId} टैग करें",
     "@tagSpeaker": {
         "placeholders": {
             "speakerId": {
@@ -2042,7 +2042,7 @@
     "selectYouFromList": "सूची से अपना नाम चुनें",
     "enterPersonsName": "व्यक्ति का नाम दर्ज करें",
     "addPerson": "व्यक्ति जोड़ें",
-    "tagOtherSegmentsFromSpeaker": "इस वक्ता के अन्य खंड टैग करें",
+    "tagOtherSegmentsFromSpeaker": "इस वक्ता के अन्य खंड टैग करें ({selected}/{total})",
     "@tagOtherSegmentsFromSpeaker": {
         "placeholders": {
             "selected": {
@@ -2080,7 +2080,7 @@
     "storageLocationLimitlessPendant": "Limitless पेंडेंट",
     "storageLocationPhone": "फोन",
     "storageLocationPhoneMemory": "फोन मेमोरी",
-    "storedOnDevice": "डिवाइस पर संग्रहीत",
+    "storedOnDevice": "{deviceName} पर संग्रहीत",
     "transferring": "ट्रांसफर हो रहा है",
     "transferRequired": "ट्रांसफर आवश्यक",
     "downloadingAudioFromSdCard": "SD कार्ड से ऑडियो डाउनलोड हो रहा है",
@@ -2104,7 +2104,7 @@
     "statusProcessed": "प्रोसेस किया गया",
     "statusUnprocessed": "प्रोसेस नहीं किया गया",
     "transferCompleteMessage": "ट्रांसफर पूर्ण। अब आप यह रिकॉर्डिंग चला सकते हैं।",
-    "transferFailedMessage": "ट्रांसफर विफल। कृपया पुनः प्रयास करें।",
+    "transferFailedMessage": "ट्रांसफर विफल: {error}",
     "transferCancelled": "ट्रांसफर रद्द कर दिया गया",
     "bluetoothSyncEnabled": "ब्लूटूथ सिंक सक्षम",
     "bluetooth": "ब्लूटूथ",
@@ -2138,7 +2138,7 @@
     "allObjectsMigratedFinalizing": "सभी ऑब्जेक्ट माइग्रेट हो गए, अंतिम चरण में…",
     "migrationErrorOccurred": "माइग्रेशन के दौरान त्रुटि हुई। कृपया पुनः प्रयास करें।",
     "migrationComplete": "माइग्रेशन पूर्ण",
-    "dataProtectedWithSettings": "आपका डेटा अब सुरक्षित है। आप सेटिंग्स में डेटा सुरक्षा प्रबंधित कर सकते हैं।",
+    "dataProtectedWithSettings": "आपका डेटा अब नई {level} सेटिंग्स से सुरक्षित है।",
     "chatsLowercase": "चैट",
     "dataLowercase": "डेटा",
     "fallNotificationTitle": "गिरने का पता चला",

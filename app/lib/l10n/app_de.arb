@@ -1794,12 +1794,12 @@
     "processedFilesDeleted": "Verarbeitete Dateien gelöscht",
     "deviceNotResponding": "Gerät reagiert nicht",
     "sdCardProcessing": "SD-Karten-Verarbeitung",
-    "sdCardProcessingMessage": "Möchtest du die verarbeiteten Dateien von der SD-Karte behalten oder löschen?",
+    "sdCardProcessingMessage": "{count} Aufnahme(n) werden verarbeitet. Die Dateien werden danach von der SD-Karte entfernt.",
     "process": "Verarbeiten",
     "processingFailed": "Verarbeitung fehlgeschlagen",
     "downloadingFromSdCard": "Wird von SD-Karte heruntergeladen",
-    "processingProgress": "Verarbeitungsfortschritt",
-    "conversationsCreated": "Gespräche erstellt",
+    "processingProgress": "Verarbeitung {current}/{total}",
+    "conversationsCreated": "{count} Gespräche erstellt",
     "internetRequired": "Internet erforderlich",
     "processAudio": "Audio verarbeiten",
     "start": "Starten",
@@ -2035,7 +2035,7 @@
             }
         }
     },
-    "tagSpeaker": "Sprecher markieren",
+    "tagSpeaker": "Sprecher {speakerId} markieren",
     "@tagSpeaker": {
         "placeholders": {
             "speakerId": {
@@ -2047,7 +2047,7 @@
     "selectYouFromList": "Wähle dich selbst aus der Liste",
     "enterPersonsName": "Namen der Person eingeben",
     "addPerson": "Person hinzufügen",
-    "tagOtherSegmentsFromSpeaker": "Andere Segmente von diesem Sprecher markieren?",
+    "tagOtherSegmentsFromSpeaker": "Andere Segmente von diesem Sprecher markieren ({selected}/{total})",
     "@tagOtherSegmentsFromSpeaker": {
         "placeholders": {
             "selected": {
@@ -2085,7 +2085,7 @@
     "storageLocationLimitlessPendant": "Limitless Pendant",
     "storageLocationPhone": "Telefon",
     "storageLocationPhoneMemory": "Telefon (Speicher)",
-    "storedOnDevice": "Auf dem Gerät gespeichert",
+    "storedOnDevice": "Gespeichert auf {deviceName}",
     "transferring": "Übertragung…",
     "transferRequired": "Übertragung erforderlich",
     "downloadingAudioFromSdCard": "Audio von der SD-Karte deines Geräts wird heruntergeladen",
@@ -2109,7 +2109,7 @@
     "statusProcessed": "Verarbeitet",
     "statusUnprocessed": "Unverarbeitet",
     "transferCompleteMessage": "Übertragung abgeschlossen! Du kannst diese Aufnahme jetzt abspielen.",
-    "transferFailedMessage": "Übertragung fehlgeschlagen. Bitte versuche es erneut.",
+    "transferFailedMessage": "Übertragung fehlgeschlagen: {error}",
     "transferCancelled": "Übertragung abgebrochen",
     "bluetoothSyncEnabled": "Bluetooth-Synchronisierung aktiviert",
     "bluetooth": "Bluetooth",
@@ -2143,7 +2143,7 @@
     "allObjectsMigratedFinalizing": "Alle Objekte migriert. Abschließen…",
     "migrationErrorOccurred": "Ein Fehler ist während der Migration aufgetreten. Bitte versuche es erneut.",
     "migrationComplete": "Migration abgeschlossen",
-    "dataProtectedWithSettings": "Deine Daten sind geschützt mit deinen aktuellen Datenschutzeinstellungen",
+    "dataProtectedWithSettings": "Deine Daten sind jetzt mit den neuen {level}-Einstellungen geschützt.",
     "chatsLowercase": "Chats",
     "dataLowercase": "Daten",
     "fallNotificationTitle": "Autsch",
