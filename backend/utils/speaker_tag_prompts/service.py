@@ -21,11 +21,14 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 
+from config.speaker_prior import pinned_speaker_prior_enabled
 from database import conversations as conversations_db
 from database import redis_db
 from database import users as users_db
 from database import voice_profiles as voice_profiles_db
 from models.speaker_tag_prompts import (
+    IgnoredVoice,
+    IgnoredVoicesResponse,
     SpeakerTagPromptAnswer,
     SpeakerTagPromptAnswerRequest,
     SpeakerTagPromptAnswerResponse,
@@ -35,6 +38,7 @@ from models.speaker_tag_prompts import (
     SpeakerTagPromptsResponse,
 )
 from utils.manual_speaker_assignments import teaching_segment_ids
+from models.person_confidence import SOURCE_CARD
 from utils.text_utils import compute_text_containment
 from utils.observability.speaker_tag_prompts import (
     SPEAKER_TAG_PROMPT_ANSWERS,
@@ -59,16 +63,19 @@ from utils.executors import (
 from utils.speaker_identification import extract_speaker_samples
 from utils.speaker_sample import verify_and_transcribe_sample, verify_and_transcribe_sample_in_worker
 from utils.speaker_tag_prompts.clips import CLIP_SAMPLE_RATE, conversation_clip_pcm, pcm_to_wav
+from utils.speaker_learning_policy import union_seconds
 from utils.speaker_tag_prompts.selection import (
     MAX_CLIP_SECONDS,
+    MAX_GAP_SECONDS,
     MIN_CLIP_SECONDS,
     PROMPT_WINDOW,
+    prompt_id,
     speaker_id_of,
     select_prompts,
 )
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
+from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.speaker_match import mean_embedding
-from utils.subscription import is_paid_plan
 
 logger = logging.getLogger(__name__)
 
@@ -93,15 +100,6 @@ class TagPromptForbidden(Exception):
 
 class TagPromptInvalid(Exception):
     """The answer does not fit the prompt."""
-
-
-def named_speaker_prompts_allowed(uid: str) -> bool:
-    """Naming other people follows the named speaker-ID entitlement (paid plans).
-
-    "Is this you?" never calls this: the owner check is free for everyone.
-    """
-    subscription = users_db.get_user_valid_subscription(uid, provision=False)
-    return bool(subscription and is_paid_plan(subscription.plan))
 
 
 def _cooldown_until(state: Dict[str, Any]) -> Optional[datetime]:
@@ -294,7 +292,9 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
         start_date=now - PROMPT_WINDOW,
         end_date=now,
     )
-    people = {person['id']: person.get('name') or '' for person in users_db.get_people(uid) if person.get('id')}
+    stored_people = [person for person in users_db.get_people(uid) if person.get('id')]
+    people = {person['id']: person.get('name') or '' for person in stored_people}
+    pinned = {person['id'] for person in stored_people if person.get('pinned') is True}
     deadline = time.monotonic() + LIST_VERIFY_BUDGET_SECONDS
     timed_out = False
 
@@ -332,6 +332,9 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
         named_allowed=named_allowed,
         answered=voice_profiles_db.answered_prompt_ids(state, now),
         people=people,
+        pinned=pinned,
+        ignored=voice_profiles_db.ignored_voice_keys(state),
+        prior_enabled=pinned_speaker_prior_enabled(),
         verify=verify_in_budget,
         on_skip=lambda reason: SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason=reason).inc(),
     )
@@ -394,6 +397,7 @@ _ALLOWED_ANSWERS = {
         SpeakerTagPromptAnswer.new_person,
         SpeakerTagPromptAnswer.someone_else,
         SpeakerTagPromptAnswer.skip,
+        SpeakerTagPromptAnswer.not_a_person,
     },
     SpeakerTagPromptKind.confirm_person: {
         SpeakerTagPromptAnswer.me,
@@ -401,6 +405,7 @@ _ALLOWED_ANSWERS = {
         SpeakerTagPromptAnswer.new_person,
         SpeakerTagPromptAnswer.someone_else,
         SpeakerTagPromptAnswer.skip,
+        SpeakerTagPromptAnswer.not_a_person,
     },
     SpeakerTagPromptKind.identify: {
         SpeakerTagPromptAnswer.me,
@@ -408,9 +413,20 @@ _ALLOWED_ANSWERS = {
         SpeakerTagPromptAnswer.new_person,
         SpeakerTagPromptAnswer.someone_else,
         SpeakerTagPromptAnswer.skip,
+        SpeakerTagPromptAnswer.not_a_person,
     },
 }
 _NAMED_ANSWERS = {SpeakerTagPromptAnswer.person, SpeakerTagPromptAnswer.new_person}
+
+
+def effective_answer(request: SpeakerTagPromptAnswerRequest) -> SpeakerTagPromptAnswer:
+    """ "Someone else" that names who it is behaves like picking that person (the correction path)."""
+    if request.answer == SpeakerTagPromptAnswer.someone_else:
+        if request.person_id:
+            return SpeakerTagPromptAnswer.person
+        if request.name:
+            return SpeakerTagPromptAnswer.new_person
+    return request.answer
 
 
 def quality_outcome(
@@ -440,8 +456,10 @@ def quality_outcome(
     return Q.unknown_voice
 
 
-def _resolve_person(uid: str, request: SpeakerTagPromptAnswerRequest) -> Tuple[str, Dict[str, Any]]:
-    if request.answer == SpeakerTagPromptAnswer.person:
+def _resolve_person(
+    uid: str, request: SpeakerTagPromptAnswerRequest, answer: SpeakerTagPromptAnswer
+) -> Tuple[str, Dict[str, Any]]:
+    if answer == SpeakerTagPromptAnswer.person:
         if not request.person_id:
             raise TagPromptInvalid('person_id is required')
         found: Optional[Dict[str, Any]] = users_db.get_person(uid, request.person_id)
@@ -469,7 +487,9 @@ def apply_answer(
 ) -> SpeakerTagPromptAnswerResponse:
     """Apply one answer. ``schedule(fn, **kwargs)`` runs slow voice work after the response."""
     now = now or datetime.now(timezone.utc)
-    answer = request.answer
+    if request.answer not in _ALLOWED_ANSWERS[request.kind]:
+        raise TagPromptInvalid(f'{request.answer.value} is not a valid answer for {request.kind.value}')
+    answer = effective_answer(request)
     if answer not in _ALLOWED_ANSWERS[request.kind]:
         raise TagPromptInvalid(f'{answer.value} is not a valid answer for {request.kind.value}')
     needs_named = request.kind != SpeakerTagPromptKind.owner_check or answer in _NAMED_ANSWERS
@@ -480,13 +500,9 @@ def apply_answer(
     person_enrolled = False
     voice_sample_queued = False
     if answer in _NAMED_ANSWERS:
-        person_id, person = _resolve_person(uid, request)
+        person_id, person = _resolve_person(uid, request, answer)
         person_enrolled = bool(person.get('speaker_embedding'))
 
-    clears_auto_label = request.origin != SpeakerTagPromptOrigin.unnamed and answer in {
-        SpeakerTagPromptAnswer.not_me,
-        SpeakerTagPromptAnswer.someone_else,
-    }
     if answer == SpeakerTagPromptAnswer.me:
         conversation, resolved = _assign(uid, request, is_user=True, person_id=None, train=False)
         if schedule is not None:
@@ -516,9 +532,38 @@ def apply_answer(
             )
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='queued').inc()
             voice_sample_queued = True
-    elif clears_auto_label:
+    elif answer in {
+        SpeakerTagPromptAnswer.not_me,
+        SpeakerTagPromptAnswer.someone_else,
+        SpeakerTagPromptAnswer.not_a_person,
+    }:
         # The automatic label was wrong: record an explicit "not the owner / not them".
-        _assign(uid, request, is_user=False, person_id=None, train=False)
+        if answer == SpeakerTagPromptAnswer.not_a_person:
+            rejection = {'kind': 'not_a_person', 'person_id': None}
+        elif answer == SpeakerTagPromptAnswer.not_me or request.kind == SpeakerTagPromptKind.owner_check:
+            rejection = {'kind': 'not_me', 'person_id': None}
+        elif request.kind == SpeakerTagPromptKind.confirm_person:
+            if not request.suggested_person_id:
+                raise TagPromptInvalid('person_id is required')
+            rejection = {'kind': 'not_person', 'person_id': request.suggested_person_id}
+        else:
+            rejection = None
+        conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False, rejection=rejection)
+        if answer == SpeakerTagPromptAnswer.not_a_person:
+            resolved_ids = set(resolved)
+            speaker_ids = {
+                speaker_id_of(segment)
+                for segment in conversation.get('transcript_segments') or []
+                if segment.get('id') in resolved_ids
+            }
+            for speaker_id in sorted(speaker_ids):
+                voice_profiles_db.record_ignored_voice(
+                    uid,
+                    conversation['id'],
+                    speaker_id,
+                    now,
+                    assignment_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation'),
+                )
 
     outcome = quality_outcome(
         request.origin,
@@ -554,6 +599,7 @@ def _assign(
     is_user: bool,
     person_id: Optional[str],
     train: bool,
+    rejection: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, Any], List[str]]:
     """Label the whole diarized speaker in that conversation, like "apply to all" in the tag sheet."""
     raw, resolved, _removed, _before = conversations_db.assign_conversation_speaker(
@@ -563,8 +609,50 @@ def _assign(
         is_user=is_user,
         speaker_id=request.speaker_id,
         use_for_speech_training=train,
+        evidence_source=SOURCE_CARD,
+        **({'rejection': rejection} if rejection else {}),
     )
     return raw, resolved
+
+
+# ---------------------------------------------------------------------------
+# Ignored voices ("Not a Person")
+# ---------------------------------------------------------------------------
+
+IGNORED_VOICES_LIST_LIMIT = 50
+
+
+def list_ignored_voices(uid: str) -> IgnoredVoicesResponse:
+    entries = voice_profiles_db.ignored_voices(voice_profiles_db.get_tag_prompt_state(uid))
+    ids = list(dict.fromkeys(entry['conversation_id'] for entry in entries))
+    conversations = (
+        {c.get('id'): c for c in conversations_db.get_conversations_by_id_without_photos(uid, ids) if c} if ids else {}
+    )
+    voices = []
+    for entry in entries:
+        conversation = conversations.get(entry['conversation_id'])
+        if not conversation or conversation.get('deleted'):
+            continue
+        voices.append(
+            IgnoredVoice(
+                conversation_id=entry['conversation_id'],
+                speaker_id=entry['speaker_id'],
+                ignored_at=voice_profiles_db.as_utc(entry.get('ignored_at')) or datetime.now(timezone.utc),
+                conversation_title=((conversation.get('structured') or {}).get('title') or '').strip(),
+                conversation_started_at=voice_profiles_db.as_utc(
+                    conversation.get('started_at') or conversation.get('created_at')
+                ),
+            )
+        )
+        if len(voices) == IGNORED_VOICES_LIST_LIMIT:
+            break
+    return IgnoredVoicesResponse(voices=voices)
+
+
+def restore_ignored_voice(uid: str, conversation_id: str, speaker_id: int) -> bool:
+    """Undo "Not a Person"; Omi may ask about this voice again."""
+    prompt_ids = [prompt_id(conversation_id, speaker_id, kind) for kind in SpeakerTagPromptKind]
+    return voice_profiles_db.remove_ignored_voice(uid, conversation_id, speaker_id, prompt_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -578,46 +666,82 @@ def _pool(vectors: List[List[float]]) -> List[float]:
 
 
 def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> Optional[Tuple[float, float, str]]:
-    """The confirmed stretch, if it is still the owner's and long enough: (start, end, text)."""
+    """The confirmed stretch, if it is still the owner's and long enough: (start, end, text).
+
+    A whole-speaker label may resolve to several captures; choose the longest
+    contiguous owner run (same capture scope + speaker id, gaps at most
+    MAX_GAP_SECONDS) whose distinct speech reaches MIN_CLIP_SECONDS, then
+    center-crop to MAX_CLIP_SECONDS. Cross-scope duplicates are ignored; a
+    non-owner or different speaker overlapping the window in the same scope
+    rejects that run.
+    """
     wanted = set(segment_ids)
-    chosen = [
-        segment
-        for segment in conversation.get('transcript_segments') or []
-        if segment.get('id') in wanted and segment.get('is_user')
-    ]
-    if not chosen or len(chosen) != len(wanted):
+    all_segments = list(conversation.get('transcript_segments') or [])
+    chosen = [segment for segment in all_segments if segment.get('id') in wanted and segment.get('is_user')]
+    if len(chosen) != len(wanted):
         return None
-    speaker_ids = {speaker_id_of(segment) for segment in chosen}
-    if len(speaker_ids) != 1:
-        return None
-    speaker_id = speaker_ids.pop()
-    chosen.sort(key=lambda segment: float(segment.get('start') or 0))
-    start = float(chosen[0].get('start') or 0)
-    end = max(float(segment.get('end') or 0) for segment in chosen)
-    if end - start < MIN_CLIP_SECONDS:
-        return None
-    if end - start > MAX_CLIP_SECONDS:
-        center = (start + end) / 2
-        start, end = center - MAX_CLIP_SECONDS / 2, center + MAX_CLIP_SECONDS / 2
-    others = [
-        segment
-        for segment in conversation.get('transcript_segments') or []
-        if float(segment.get('start') or 0) < end
-        and float(segment.get('end') or 0) > start
-        and speaker_id_of(segment) != speaker_id
-    ]
-    if others:
-        return None
-    text = ' '.join(
-        (segment.get('text') or '').strip()
+    if any(
+        segment.get('audio_alignment') == 'unplaced' or segment.get('start') is None or segment.get('end') is None
         for segment in chosen
-        # Overlapping, not contained: the quality gate checks the clip's words are contained in this
-        # text, so a cropped long segment must still contribute its words.
-        if float(segment.get('start') or 0) < end and float(segment.get('end') or 0) > start
-    ).strip()
-    if not text:
+    ):
         return None
-    return start, end, text
+    groups: Dict[Tuple[Any, int], List[Dict[str, Any]]] = {}
+    for segment in chosen:
+        groups.setdefault((segment.get('speaker_id_scope'), speaker_id_of(segment)), []).append(segment)
+    best = None
+    for members in groups.values():
+        members.sort(key=lambda segment: float(segment.get('start') or 0))
+        scope, speaker_id = members[0].get('speaker_id_scope'), speaker_id_of(members[0])
+        runs: List[List[Dict[str, Any]]] = [[]]
+        for segment in members:
+            previous = runs[-1]
+            if previous and float(segment.get('start') or 0) - float(previous[-1].get('end') or 0) > MAX_GAP_SECONDS:
+                runs.append([])
+            runs[-1].append(segment)
+        for run in runs:
+            speech = union_seconds([(float(s.get('start') or 0), float(s.get('end') or 0)) for s in run])
+            if speech < MIN_CLIP_SECONDS:
+                continue
+            start = float(run[0].get('start') or 0)
+            end = max(float(s.get('end') or 0) for s in run)
+            if end - start > MAX_CLIP_SECONDS:
+                center = (start + end) / 2
+                start, end = center - MAX_CLIP_SECONDS / 2, center + MAX_CLIP_SECONDS / 2
+                speech = union_seconds(
+                    [
+                        (max(float(s.get('start') or 0), start), min(float(s.get('end') or 0), end))
+                        for s in run
+                        if float(s.get('end') or 0) > start and float(s.get('start') or 0) < end
+                    ]
+                )
+                if speech < MIN_CLIP_SECONDS:
+                    continue
+            impure = any(
+                s.get('audio_alignment') != 'unplaced'
+                and s.get('start') is not None
+                and s.get('end') is not None
+                and s.get('speaker_id_scope') == scope
+                and float(s.get('start') or 0) < end
+                and float(s.get('end') or 0) > start
+                and (speaker_id_of(s) != speaker_id or not s.get('is_user'))
+                for s in all_segments
+            )
+            if impure:
+                continue
+            text = ' '.join(
+                (s.get('text') or '').strip()
+                for s in run
+                # Overlapping, not contained: the quality gate checks the clip's words are contained in this
+                # text, so a cropped long segment must still contribute its words.
+                if float(s.get('start') or 0) < end and float(s.get('end') or 0) > start
+            ).strip()
+            if not text:
+                continue
+            if best is None or speech > best[0]:
+                best = (speech, start, end, text)
+    if best is None:
+        return None
+    return best[1], best[2], best[3]
 
 
 async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: List[str]) -> str:
@@ -645,6 +769,10 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
         if not pcm:
             outcome = 'no_audio'
             return outcome
+        pcm = pcm[: int(round((end - start) * CLIP_SAMPLE_RATE)) * 2]
+        if len(pcm) < int(MIN_CLIP_SECONDS * CLIP_SAMPLE_RATE) * 2:
+            outcome = 'clip_not_clean'
+            return outcome
         wav = pcm_to_wav(pcm)
         language = conversation.get('language') or await run_blocking(
             db_executor, users_db.get_user_language_preference, uid
@@ -657,14 +785,18 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
         if not np.isfinite(embedding).all() or not np.any(embedding):
             outcome = 'rejected_embedding'
             return outcome
-        await run_blocking(
+        stored = await run_blocking(
             db_executor,
             voice_profiles_db.add_owner_voice_confirmation,
             uid,
             embedding.flatten().tolist(),
             _pool,
             conversation_id=conversation_id,
+            expected_receipt_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
         )
+        if not stored:
+            outcome = 'stale_assignment'
+            return outcome
         outcome = 'stored'
         return outcome
     except Exception as error:

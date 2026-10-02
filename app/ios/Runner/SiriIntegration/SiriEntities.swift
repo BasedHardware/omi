@@ -20,7 +20,6 @@ struct OmiFolderEntity: IndexedEntity {
     var attributeSet: CSSearchableItemAttributeSet {
         let attributes = defaultAttributeSet
         attributes.title = name
-        attributes.relatedUniqueIdentifier = "omi://folder/\(id)"
         return attributes
     }
 }
@@ -75,7 +74,6 @@ struct ConversationEntity: IndexedEntity {
         attributes.contentDescription = content.map { String($0.characters) }
         attributes.contentCreationDate = creationDate
         attributes.contentModificationDate = modificationDate
-        attributes.relatedUniqueIdentifier = folder?.id == "memories" ? "omi://memory/\(id)" : "omi://conversation/\(id)"
         return attributes
     }
 }
@@ -100,7 +98,6 @@ struct MemoryEntity: IndexedEntity {
         attributes.title = name
         attributes.contentDescription = content
         attributes.contentCreationDate = creationDate
-        attributes.relatedUniqueIdentifier = "omi://memory/\(id)"
         return attributes
     }
 }
@@ -119,7 +116,6 @@ struct OmiListEntity: IndexedEntity {
     var attributeSet: CSSearchableItemAttributeSet {
         let attributes = defaultAttributeSet
         attributes.title = name
-        attributes.relatedUniqueIdentifier = "omi://list/\(id)"
         return attributes
     }
 }
@@ -202,7 +198,6 @@ struct TaskEntity: IndexedEntity {
         attributes.contentCreationDate = creationDate
         attributes.dueDate = dueDate.flatMap { Calendar.current.date(from: $0) }
         attributes.completionDate = completionDate
-        attributes.relatedUniqueIdentifier = "omi://task/\(id)"
         return attributes
     }
 }

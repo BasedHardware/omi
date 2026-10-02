@@ -60,25 +60,61 @@ Deploy the Parakeet server revision and its 3–6 replica HPA first. Wait until
 at least three ready replicas all expose `live_pending_requests` and
 `live_oldest_pending_seconds` from `/batch/metrics`. Then deploy listen with
 `PARAKEET_WINDOW_MAX_SESSIONS=8` and the pressure gate. During a mixed-revision
-server rollout, a replica missing either field invalidates the fleet sample, so
-listen sends allocated sessions to the vendor chain. Unmarked HTTP requests
+server rollout, replicas without valid live fields count as unknown unless they
+still have a fresh cached sample. The quorum and conservative unknown-pod
+accounting below decide whether listen admits the window leg. Unmarked HTTP requests
 remain in the backfill lane; only the window client's explicit
 `X-Omi-STT-Surface: live-window` header enters the live lane. Soniox stays on
 the fallback chain. Keep the merged 5% allocation for this code release; a later
 configuration rollout advances it only after the gates below pass.
 
-The headless Service selects ready Parakeet pods. Each listen process polls
-all ready replica `/batch/metrics` responses every five seconds with a
-one-second deadline, then caches the sample for at most 15 seconds. The
-per-replica live pending limit is **4** and the maximum oldest live wait is
-**0.75 s**. Backfill pending does not trip this gate. The count is per replica,
-so capacity scales with 3–6 pods, while a hot replica still causes a fleet
-stand-down. At the measured 0.87 s POST p95, a 0.75 s queued wait leaves
-about 0.38 s before the ~2 s live POST budget; four waiting on one replica is
-an earlier load signal. These are conservative starting thresholds, not an
-observed 100% guarantee: refine them from live queue-wait and POST p95 data.
-Missing, stale, non-finite, negative, or mixed-revision metrics stand down.
-Admission reads only the cache; it never waits on DNS or HTTP.
+The headless Service selects ready Parakeet pods. `utils/stt/batch_pressure.py`
+polls each replica every five seconds with its own one-second HTTP and wall-clock
+deadline. A failed fetch does not discard the other responses: each replica
+keeps its last valid sample and original timestamp for **at most 15 seconds**.
+Departed replicas are removed. DNS failure immediately stands down; admission
+never performs DNS or HTTP. Poll/cache fan-out is bounded at **64 ready pods**,
+well above the seven-pod HPA maximum; fleets above that bound still stand down.
+
+Fresh telemetry must cover **both** `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` and a
+strict majority (`floor(ready / 2) + 1`) of the current ready pool. Pressure is
+measured as `(busy replicas + unknown replicas) / ready replicas`: by default,
+**50% or more refuses admission**. Thus a six-pod pool needs at least four
+replicas known healthy; one isolated hot pod or intermittent failed fetch does
+not void healthy fleet capacity. Unknown replicas cannot supply headroom.
+The existing per-pod thresholds still define busy; backfill pending alone does
+not. Small two-pod pools retain the conservative one-hot-pod stand-down.
+
+| Environment setting | Default | Meaning |
+| --- | ---: | --- |
+| `PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA` | `4` | Busy when live pending reaches this count |
+| `PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS` | `0.75` | Busy when oldest live queue wait reaches this many seconds |
+| `PARAKEET_BATCH_PRESSURE_BUSY_REPLICA_SHARE` | `0.5` | Stand down when busy plus unknown reaches this ready-pool share |
+
+Invalid configuration stands down. Invalid, negative, non-finite or old-revision
+responses leave that replica's timestamp unchanged; it becomes unknown after
+its cached sample expires. Refusal labels stay `unconfigured`, `missing`,
+`stale`, `pressure`. Refresh outcomes add `partial` for a usable quorum with
+failed fetches, including when the remaining pressure decision stands down;
+quorum loss is `unavailable`. The bounded gauge
+`omi_stt_window_batch_pressure_replicas{state="fresh"|"ready"}` exposes coverage.
+A stalled poller still stands down after 15 seconds.
+
+Using a pool share follows the scheduler: live requests have priority at each
+dispatch, with one aged backfill turn after four live batches. An isolated wait
+can be one non-preemptible backfill inference; it is not proof of fleet-wide
+saturation. The majority-of-healthy-pods rule retains conservative headroom,
+while the existing per-session deadlines and replay handle a slow individual
+POST. Queue-wait, POST latency and actual refusals still gate traffic ramps;
+this change does not guarantee the production refusal target without a bake.
+
+`/batch/metrics` is already an async event-loop snapshot of bounded queue state;
+it does not wait for GPU inference or take the batch lock. Inference runs on the
+GPU worker thread. A real-engine ASGI test holds inference and the batch lock
+while the endpoint reports the queued live request. Offloading this snapshot
+would not remove Python GIL contention and would complicate its event-loop
+ownership. The admission fix needs **only a listen image**, with no Parakeet
+runtime change or separate Parakeet deploy.
 
 The batch engine selects live requests before backfill at each GPU dispatch.
 An aged backfill item (5 s) receives one turn after four live batches; this
@@ -97,7 +133,10 @@ over sessions with VAD speech, and the `capacity_full` ratio from
 `omi_stt_window_admissions_total{outcome="overflow"}`. Require no sustained
 capacity overflow or no-text increase relative to the control SLI. First-text
 p50 and p95 come from `omi_stt_window_first_text_seconds_bucket`; p95 must
-remain below 30 seconds and p50 must not drift upward through the bake.
+remain below 30 seconds and p50 must not drift upward through the bake. This
+histogram measures from the session's first VAD speech, so sparse quiet gaps
+can push elapsed first-VAD-to-text beyond 12 seconds without indicating a
+stall; the p95 threshold remains the bake gate.
 Compare `omi_stt_window_sessions_active` with the summed process caps, TDT
 POST p50/p95 from `omi_stt_window_post_seconds_bucket`, and
 `DCGM_FI_DEV_GPU_UTIL`/free GPU memory on the Parakeet pool. The same GPUs
@@ -144,7 +183,11 @@ sentence so the next POST starts on a sentence boundary.
 The last sentence is held on a paced POST unless it ended ≥1.2 s ago with
 terminal punctuation (`.?!`). `finalize()` from the live VAD gate (300 ms hangover)
 is a **soft** pause POST: `[anchor, now]` with `force=False` as soon as pacing
-and the single in-flight slot allow. On that pause POST the last segment is
+and the single in-flight slot allow. Managed windows enable this pause and
+the normal idle paths once unresolved VAD-admitted speech reaches one second.
+Sub-second fragments retain the five-second capture-silence flush and the
+three-second cumulative answered-empty startup budget documented in the
+listen pipeline. On that pause POST the last segment is
 emitted only if it already ends with `.?!` — there is no 1.2 s gap, because
 the gate has already stripped silence from the timeline. Treating every
 `finalize()` as a forced cut re-anchors at a breath and the next POST starts
@@ -153,7 +196,9 @@ mid-sentence, which is the empty-clip failure mode.
 Forced flush (emit everything, re-anchor at `now`) happens only on close /
 `drain_and_close()`, ≥1.5 s of non-speech bytes after speech (ungated
 callers), or **wall-clock idle**: no audio accepted by `send()` for ≥2.0 s
-while unemitted speech remains after the anchor. Idle fires once per idle
+while ordinary unemitted speech remains after the anchor. An empty managed
+idle answer retains its anchor, PCM and replay; only the long-silence path
+settles empty-answered accounting. Idle fires once per idle
 period, but only after a forced job that reached `received`; a capped idle
 POST leaves `_idle_flushed` false so the pump takes another paced forced job
 for the remainder. Under the gate no audio arrives during silence, so the
@@ -196,14 +241,19 @@ inference plus ingest AGC on 512-sample chunks, or ~5.8–6.2% of one core for e
 continuously active sessions. This excludes HTTP/serialization and other
 listen work and is a local CPU result, not a pod RSS or production p95 measure.
 
-The 60 s cushion absorbs a catch-up burst while one POST is in flight.
-Before its first emitted text, a window leg fails at 12 seconds from the first
-VAD speech mark or after four consecutive speech-containing empty POSTs, whichever
-comes first. The timer also fires during a slow POST. The existing listen death
-monitor selects the next vendor and replays the untranscribed capture from the
-90-second ring; the failed Parakeet leg is excluded for the rest of that session.
-Once text has been emitted, these startup bounds are disarmed. No sentence anchor
-or emitted text is changed. `omi_stt_window_session_outcome_total` retains
+The 60 s cushion absorbs a catch-up burst while one POST is in flight. Before
+its first emitted text, a window leg has a 12-second rescue deadline. The
+deadline is retired after an answered-empty short episode: less than 1 s of
+admitted provider audio followed by at least 5 s of silence. Retirements share
+a cumulative 3.0 s budget of answered-empty admitted audio; only emitted text
+resets it. Once that budget is exhausted, the deadline remains armed. The
+timer also fires during a slow POST or after four consecutive speech-containing
+empty POSTs, whichever comes first. The existing listen death monitor selects
+the next vendor and replays the untranscribed capture from the 90-second ring;
+failover happens at most once per session, and the failed Parakeet leg is
+excluded for the rest of that session. Once text has been emitted, these
+startup bounds are disarmed. No sentence anchor or emitted text is changed.
+`omi_stt_window_session_outcome_total` retains
 `outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
 the matching recovered failover uses the same reason on `omi_fallback_total`.
 The 90-second replay ring follows the window's last emitted sentence anchor.

@@ -1604,7 +1604,7 @@ async def transcribe_voice_message_stream(
             # The second check also covers a selector that ignores ``exclude``
             # and re-offers a provider this session already marked dead.
             return False
-        hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
+        hop = PendingLiveFailover.from_socket(dg_socket, dead_provider or 'unknown', service.value)
         try:
             if service == STTService.parakeet:
                 # A provider is never offered its own failure as a fallback, so
@@ -1653,7 +1653,7 @@ async def transcribe_voice_message_stream(
         dg_socket = socket
         stt_service, stt_language, stt_model = actual_service, next_language, next_model
         if actual_service.value != hop.to_mode:
-            hop = PendingLiveFailover(from_mode=hop.from_mode, to_mode=actual_service.value)
+            hop.to_mode = actual_service.value
         pending_live_failover = hop
         logger.info(f'STT failover mid-session: {dead_provider} -> {actual_service.value}')
         if previous_socket is not None:

@@ -174,6 +174,11 @@ def _build_fakes() -> dict:
     speaker_identification.detect_speaker_from_text = _detect_speaker_from_text
     fakes['utils.speaker_identification'] = speaker_identification
 
+    speaker_learning_jobs = ModuleType('utils.speaker_learning_jobs')
+    speaker_learning_jobs.schedule_person_voice_learning_retry = MagicMock()
+    speaker_learning_jobs.schedule_person_voice_learning_retries = MagicMock()
+    fakes['utils.speaker_learning_jobs'] = speaker_learning_jobs
+
     speaker_embedding = ModuleType('utils.stt.speaker_embedding')
     speaker_embedding.extract_embedding_from_bytes = MagicMock()
     speaker_embedding.compare_embeddings = _compare_embeddings

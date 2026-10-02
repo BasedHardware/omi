@@ -409,6 +409,7 @@ struct SiriTelemetryRecord: Hashable {
   var outcome: String
   var latencyMs: Int64
   var entityCounts: Int64
+  var entryPath: String
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -418,13 +419,15 @@ struct SiriTelemetryRecord: Hashable {
     let outcome = pigeonVar_list[2] as! String
     let latencyMs = pigeonVar_list[3] as! Int64
     let entityCounts = pigeonVar_list[4] as! Int64
+    let entryPath = pigeonVar_list[5] as! String
 
     return SiriTelemetryRecord(
       kind: kind,
       intent: intent,
       outcome: outcome,
       latencyMs: latencyMs,
-      entityCounts: entityCounts
+      entityCounts: entityCounts,
+      entryPath: entryPath
     )
   }
   func toList() -> [Any?] {
@@ -434,13 +437,14 @@ struct SiriTelemetryRecord: Hashable {
       outcome,
       latencyMs,
       entityCounts,
+      entryPath,
     ]
   }
   static func == (lhs: SiriTelemetryRecord, rhs: SiriTelemetryRecord) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return deepEqualsSiriPigeon(lhs.kind, rhs.kind) && deepEqualsSiriPigeon(lhs.intent, rhs.intent) && deepEqualsSiriPigeon(lhs.outcome, rhs.outcome) && deepEqualsSiriPigeon(lhs.latencyMs, rhs.latencyMs) && deepEqualsSiriPigeon(lhs.entityCounts, rhs.entityCounts)
+    return deepEqualsSiriPigeon(lhs.kind, rhs.kind) && deepEqualsSiriPigeon(lhs.intent, rhs.intent) && deepEqualsSiriPigeon(lhs.outcome, rhs.outcome) && deepEqualsSiriPigeon(lhs.latencyMs, rhs.latencyMs) && deepEqualsSiriPigeon(lhs.entityCounts, rhs.entityCounts) && deepEqualsSiriPigeon(lhs.entryPath, rhs.entryPath)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -450,6 +454,48 @@ struct SiriTelemetryRecord: Hashable {
     deepHashSiriPigeon(value: outcome, hasher: &hasher)
     deepHashSiriPigeon(value: latencyMs, hasher: &hasher)
     deepHashSiriPigeon(value: entityCounts, hasher: &hasher)
+    deepHashSiriPigeon(value: entryPath, hasher: &hasher)
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct SiriPendingRoute: Hashable {
+  var route: String
+  var uid: String
+  var generation: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> SiriPendingRoute? {
+    let route = pigeonVar_list[0] as! String
+    let uid = pigeonVar_list[1] as! String
+    let generation = pigeonVar_list[2] as! Int64
+
+    return SiriPendingRoute(
+      route: route,
+      uid: uid,
+      generation: generation
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      route,
+      uid,
+      generation,
+    ]
+  }
+  static func == (lhs: SiriPendingRoute, rhs: SiriPendingRoute) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return deepEqualsSiriPigeon(lhs.route, rhs.route) && deepEqualsSiriPigeon(lhs.uid, rhs.uid) && deepEqualsSiriPigeon(lhs.generation, rhs.generation)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("SiriPendingRoute")
+    deepHashSiriPigeon(value: route, hasher: &hasher)
+    deepHashSiriPigeon(value: uid, hasher: &hasher)
+    deepHashSiriPigeon(value: generation, hasher: &hasher)
   }
 }
 
@@ -466,6 +512,8 @@ private class SiriPigeonPigeonCodecReader: FlutterStandardReader {
       return SiriSessionConfig.fromList(self.readValue() as! [Any?])
     case 133:
       return SiriTelemetryRecord.fromList(self.readValue() as! [Any?])
+    case 134:
+      return SiriPendingRoute.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
     }
@@ -488,6 +536,9 @@ private class SiriPigeonPigeonCodecWriter: FlutterStandardWriter {
       super.writeValue(value.toList())
     } else if let value = value as? SiriTelemetryRecord {
       super.writeByte(133)
+      super.writeValue(value.toList())
+    } else if let value = value as? SiriPendingRoute {
+      super.writeByte(134)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -532,9 +583,13 @@ protocol SiriIndexApi {
   func setEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   func setCurrentScreen(route: String, entityId: String?) throws
   func publishSessionConfig(config: SiriSessionConfig, completion: @escaping (Result<Void, Error>) -> Void)
-  func takePendingRoute() throws -> String?
+  func takePendingRoute() throws -> SiriPendingRoute?
+  func finishPendingRoute(route: String, uid: String, generation: Int64, delivered: Bool) throws
   func isEnabled() throws -> Bool
   func takeTelemetry() throws -> [SiriTelemetryRecord]
+  /// True only when the Runner was compiled with the Siri toolchain, so Dart can
+  /// skip App Shortcuts UI (e.g. the Shortcuts button) in stable-compiler builds.
+  func appShortcutsAvailable() throws -> Bool
   func donateAction(uid: String, type: String, id: String, completion: @escaping (Result<Void, Error>) -> Void)
 }
 
@@ -806,6 +861,24 @@ class SiriIndexApiSetup {
     } else {
       takePendingRouteChannel.setMessageHandler(nil)
     }
+    let finishPendingRouteChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.finishPendingRoute\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      finishPendingRouteChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let routeArg = args[0] as! String
+        let uidArg = args[1] as! String
+        let generationArg = args[2] as! Int64
+        let deliveredArg = args[3] as! Bool
+        do {
+          try api.finishPendingRoute(route: routeArg, uid: uidArg, generation: generationArg, delivered: deliveredArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      finishPendingRouteChannel.setMessageHandler(nil)
+    }
     let isEnabledChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.isEnabled\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       isEnabledChannel.setMessageHandler { _, reply in
@@ -832,6 +905,21 @@ class SiriIndexApiSetup {
     } else {
       takeTelemetryChannel.setMessageHandler(nil)
     }
+    /// True only when the Runner was compiled with the Siri toolchain, so Dart can
+    /// skip App Shortcuts UI (e.g. the Shortcuts button) in stable-compiler builds.
+    let appShortcutsAvailableChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.appShortcutsAvailable\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      appShortcutsAvailableChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.appShortcutsAvailable()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      appShortcutsAvailableChannel.setMessageHandler(nil)
+    }
     let donateActionChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.donateAction\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       donateActionChannel.setMessageHandler { message, reply in
@@ -857,7 +945,7 @@ class SiriIndexApiSetup {
 protocol SiriEventsApiProtocol {
   func memoryCreated(id idArg: String, completion: @escaping (Result<Void, SiriPigeonError>) -> Void)
   func taskChanged(id idArg: String, completion: @escaping (Result<Void, SiriPigeonError>) -> Void)
-  func openRoute(route routeArg: String, completion: @escaping (Result<Bool, SiriPigeonError>) -> Void)
+  func openRoute(route routeArg: String, uid uidArg: String, generation generationArg: Int64, completion: @escaping (Result<Bool, SiriPigeonError>) -> Void)
   func setListening(enabled enabledArg: Bool, completion: @escaping (Result<Void, SiriPigeonError>) -> Void)
 }
 class SiriEventsApi: SiriEventsApiProtocol {
@@ -906,10 +994,10 @@ class SiriEventsApi: SiriEventsApiProtocol {
       }
     }
   }
-  func openRoute(route routeArg: String, completion: @escaping (Result<Bool, SiriPigeonError>) -> Void) {
+  func openRoute(route routeArg: String, uid uidArg: String, generation generationArg: Int64, completion: @escaping (Result<Bool, SiriPigeonError>) -> Void) {
     let channelName: String = "dev.flutter.pigeon.omi_siri.SiriEventsApi.openRoute\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([routeArg] as [Any?]) { response in
+    channel.sendMessage([routeArg, uidArg, generationArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

@@ -201,6 +201,22 @@ def _list_budget_getattr(name):
 
 
 list_budget_stub.__getattr__ = _list_budget_getattr
+portability_read_stub = _stub_module("utils.other.portability_read")
+_portability_read_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "portability_read.py"
+_portability_read_spec = importlib.util.spec_from_file_location("_omi_real_portability_read", _portability_read_path)
+_portability_read_real = importlib.util.module_from_spec(_portability_read_spec)
+_portability_read_spec.loader.exec_module(_portability_read_real)
+for _name in (
+    "PortabilityReadContext",
+    "PortabilityReadCancelled",
+    "PortabilityReadVerificationError",
+    "check_portability_read",
+    "current_portability_read",
+    "iter_portability_guarded",
+    "portability_read_scope",
+    "verified_encrypted_read",
+):
+    setattr(portability_read_stub, _name, getattr(_portability_read_real, _name))
 task_intelligence_stub = _stub_package("utils.task_intelligence")
 candidate_service_stub = _stub_module("utils.task_intelligence.candidate_service")
 candidate_service_stub.create_candidate = MagicMock()

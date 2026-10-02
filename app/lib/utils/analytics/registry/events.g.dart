@@ -1494,7 +1494,8 @@ enum SpeakerTagPromptAnswerSubmittedAnswer {
   newPerson("new_person"),
   someoneElse("someone_else"),
   skip("skip"),
-  unknown("unknown");
+  unknown("unknown"),
+  notAPerson("not_a_person");
   const SpeakerTagPromptAnswerSubmittedAnswer(this.wireName);
   final String wireName;
 }
@@ -1688,7 +1689,9 @@ enum SiriIntentPerformedInvokedVia {
   siri("siri"),
   shortcuts("shortcuts"),
   spotlight("spotlight"),
-  unknown("unknown");
+  unknown("unknown"),
+  appIntent("app_intent"),
+  userActivity("user_activity");
   const SiriIntentPerformedInvokedVia(this.wireName);
   final String wireName;
 }

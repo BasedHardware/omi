@@ -212,11 +212,13 @@ def gemini_body_to_openai_chat(
         if isinstance(stop, list) and stop:
             request['stop'] = stop
         thinking = config.get('thinkingConfig') or config.get('thinking_config')
-        if isinstance(thinking, Mapping) and isinstance(
-            thinking.get('thinkingBudget') or thinking.get('thinking_budget'), int
-        ):
-            budget = thinking.get('thinkingBudget') or thinking.get('thinking_budget')
-            request['google'] = {'thinking_config': {'thinking_budget': budget}}
+        if isinstance(thinking, Mapping):
+            level = thinking.get('thinkingLevel', thinking.get('thinking_level'))
+            budget = thinking.get('thinkingBudget', thinking.get('thinking_budget'))
+            if level in {'minimal', 'low', 'medium', 'high'}:
+                request['google'] = {'thinking_config': {'thinking_level': level}}
+            elif isinstance(budget, int):
+                request['google'] = {'thinking_config': {'thinking_budget': budget}}
         response_schema = config.get('responseSchema') or config.get('response_schema')
         mime = config.get('responseMimeType') or config.get('response_mime_type')
         if isinstance(response_schema, Mapping):

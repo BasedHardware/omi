@@ -67,6 +67,7 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
         'utils.conversations.factory': _module(
             'utils.conversations.factory',
             deserialize_conversation=lambda value: value,
+            deserialize_conversations=lambda items: list(items),
         ),
         'utils.llm.external_integrations': _module(
             'utils.llm.external_integrations',

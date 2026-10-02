@@ -477,6 +477,119 @@ void main() {
     });
   });
 
+  group('synced-copy auto-remove (expired synced retention)', () {
+    Wal syncedCopy(
+            {required int syncedAt, WalStatus status = WalStatus.synced, WalStorage storage = WalStorage.disk}) =>
+        Wal(
+          timerStart: syncedAt - 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          storage: storage,
+          status: status,
+          syncedAt: syncedAt,
+        );
+
+    test('removes synced disk copies past the retention window and keeps the rest', () async {
+      SharedPreferencesUtil().autoRemoveSyncedCopies = true;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final old = syncedCopy(syncedAt: now - 31 * Duration.secondsPerDay);
+      final fresh = syncedCopy(syncedAt: now - 3600);
+      sync.testWals = [old, fresh];
+
+      final removed = await sync.enforceSyncedCopyRetentionForTesting();
+
+      expect(removed, 1);
+      expect(sync.testWals.map((wal) => wal.id), contains(fresh.id));
+      expect(sync.testWals.map((wal) => wal.id), isNot(contains(old.id)));
+    });
+
+    test('never removes synced copies with an unknown sync time (syncedAt == 0)', () async {
+      SharedPreferencesUtil().autoRemoveSyncedCopies = true;
+      final legacy = Wal(
+        timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 400 * Duration.secondsPerDay,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        storage: WalStorage.disk,
+        status: WalStatus.synced,
+        syncedAt: 0,
+      );
+      sync.testWals = [legacy];
+
+      final removed = await sync.enforceSyncedCopyRetentionForTesting();
+
+      expect(removed, 0);
+      expect(sync.testWals, hasLength(1));
+    });
+
+    test('removes nothing when the preference is off', () async {
+      SharedPreferencesUtil().autoRemoveSyncedCopies = false;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final old = syncedCopy(syncedAt: now - 400 * Duration.secondsPerDay);
+      sync.testWals = [old];
+
+      final removed = await sync.enforceSyncedCopyRetentionForTesting();
+
+      expect(removed, 0);
+      expect(sync.testWals, hasLength(1));
+    });
+
+    test('only ever touches synced disk WALs', () async {
+      SharedPreferencesUtil().autoRemoveSyncedCopies = true;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final oldSyncedMem = syncedCopy(syncedAt: now - 400 * Duration.secondsPerDay, storage: WalStorage.mem);
+      final oldPending = syncedCopy(syncedAt: now - 400 * Duration.secondsPerDay, status: WalStatus.miss);
+      sync.testWals = [oldSyncedMem, oldPending];
+
+      final removed = await sync.enforceSyncedCopyRetentionForTesting();
+
+      expect(removed, 0);
+      expect(sync.testWals, hasLength(2));
+    });
+
+    test('never touches synced sdcard or pendant flash copies however old', () async {
+      SharedPreferencesUtil().autoRemoveSyncedCopies = true;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final oldSd = syncedCopy(syncedAt: now - 400 * Duration.secondsPerDay, storage: WalStorage.sdcard);
+      final oldFlash = syncedCopy(syncedAt: now - 400 * Duration.secondsPerDay, storage: WalStorage.flashPage);
+      sync.testWals = [oldSd, oldFlash];
+
+      final removed = await sync.enforceSyncedCopyRetentionForTesting();
+
+      expect(removed, 0);
+      expect(sync.testWals, hasLength(2));
+    });
+
+    test('honors a non-default retention window', () async {
+      SharedPreferencesUtil().autoRemoveSyncedCopies = true;
+      SharedPreferencesUtil().autoRemoveSyncedCopiesDays = 7;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final eightDaysOld = syncedCopy(syncedAt: now - 8 * Duration.secondsPerDay);
+      final fiveDaysOld = syncedCopy(syncedAt: now - 5 * Duration.secondsPerDay);
+      sync.testWals = [eightDaysOld, fiveDaysOld];
+
+      final removed = await sync.enforceSyncedCopyRetentionForTesting();
+
+      expect(removed, 1);
+      expect(sync.testWals, [fiveDaysOld]);
+    });
+
+    test('streamed WALs born synced (all frames acked) carry syncedAt == 0', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final key = FrameSyncKey([0x77]);
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: key));
+      sync.markFrameSynced(key);
+      await sync.finalizeCurrentSession();
+
+      final wal = sync.testWals.single;
+      expect(wal.status, WalStatus.synced);
+      // Socket-send bookkeeping is transport, not server confirmation, so the
+      // retention clock must NOT start: only server-confirmed transitions
+      // (upload fast-path / reconciler) stamp syncedAt. The transcript
+      // acknowledgement flow owns this copy's lifecycle instead.
+      expect(wal.syncedAt, 0);
+    });
+  });
+
   group('audio_player_utils temp file serialization (no double-strip)', () {
     test('headerless payloads are serialized without extra sublist(3)', () {
       // Simulate a Wal with headerless payloads (as now stored by _chunk)

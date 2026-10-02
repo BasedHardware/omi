@@ -32,6 +32,12 @@ inputs:
     description: Shared Cloud Run network/runtime flags (mode=worker)
     required: false
     default: ''
+  identity_flags:
+    description: >-
+      Manifest-rendered runtime identity flags for backend-sync-backfill (mode=worker). When set, the
+      worker runs as that service account and the cloned backend-sync contract drops key-credential refs.
+    required: false
+    default: ''
   backfill_env_vars:
     description: Manifest-rendered backend-sync-backfill env overlay (mode=worker)
     required: false
@@ -98,9 +104,16 @@ runs:
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
-        REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+        REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH${{ inputs.project_id == 'based-hardware' && ',CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST' || '' }}
+        IDENTITY_FLAGS: ${{ inputs.identity_flags }}
       run: |
         DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
+        # A worker pinned to its own runtime identity cannot read backend-sync's key secret, and
+        # gcloud applies --update-secrets after --remove-secrets, so the clone itself must drop it.
+        if [[ -n "$IDENTITY_FLAGS" ]]; then
+          REMOVE_ENV_VARS="${REMOVE_ENV_VARS},SERVICE_ACCOUNT_JSON,GOOGLE_APPLICATION_CREDENTIALS"
+          export REMOVE_ENV_VARS
+        fi
         gcloud run services describe backend-sync \
           --region=${{ inputs.region }} \
           --project=${{ inputs.project_id }} \
@@ -140,14 +153,15 @@ runs:
         flags: >-
           --revision-suffix=${{ inputs.revision_suffix }}
           ${{ steps.candidate-tag.outputs.flag }}
-          --min-instances=2
-          --max-instances=20
-          --max=20
-          --concurrency=2
+          --min-instances=3
+          --max-instances=15
+          --max=15
+          --concurrency=3
           --cpu=2
           --memory=8Gi
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
           ${{ inputs.cloud_run_flags }}
+          ${{ inputs.identity_flags }}
         env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
         secrets: ${{ steps.backfill-runtime.outputs.secrets }}
 
@@ -194,16 +208,16 @@ runs:
           gcloud tasks queues update sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=30 \
-            --max-dispatches-per-second=30 \
+            --max-concurrent-dispatches=36 \
+            --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s
         else
           gcloud tasks queues create sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=30 \
-            --max-dispatches-per-second=30 \
+            --max-concurrent-dispatches=36 \
+            --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s
         fi

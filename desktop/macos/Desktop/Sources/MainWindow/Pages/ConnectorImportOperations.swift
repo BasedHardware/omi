@@ -139,6 +139,50 @@ enum ConnectorImportOperations {
     }
   }
 
+  /// Revoke the shared Google Calendar grant. A missing grant is already the
+  /// desired end state, so DELETE 404 is idempotent success rather than an
+  /// error that strands a locally connected import card.
+  @MainActor
+  static func disconnectCalendar(
+    performDelete: @escaping @MainActor () async throws -> Void
+  ) async -> Outcome {
+    do {
+      try await performDelete()
+      return calendarDisconnectSuccess()
+    } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
+      return calendarDisconnectSuccess()
+    } catch {
+      return .failure(
+        message: "Couldn't disconnect Google Calendar. Check your connection and try again.",
+        failureClass: calendarDisconnectFailureClass(error))
+    }
+  }
+
+  private static func calendarDisconnectSuccess() -> Outcome {
+    .success(
+      SyncResult(sourceCount: nil, memoryCount: nil, newItems: nil),
+      message: "Google Calendar disconnected. Imported memories remain in Omi."
+    )
+  }
+
+  private static func calendarDisconnectFailureClass(_ error: Error) -> IntegrationConnectTelemetry.ErrorClass {
+    if let urlError = error as? URLError {
+      return urlError.code == .timedOut ? .timeout : .network
+    }
+    guard case APIError.httpError(let statusCode, _) = error else {
+      return IntegrationConnectTelemetry.ErrorClass.fromMessage(error.localizedDescription)
+    }
+    switch statusCode {
+    case 401: return .authentication
+    case 403: return .authorizationDenied
+    case 408: return .timeout
+    case 409: return .conflict
+    case 429: return .rateLimit
+    case 500...599: return .server
+    default: return .unknown
+    }
+  }
+
   /// Connect X via backend-mediated OAuth: open the authorize URL in the
   /// browser, then poll the backend until the account is linked. The backend
   /// kicks off the first ingest, so once connected we surface the synced count.
