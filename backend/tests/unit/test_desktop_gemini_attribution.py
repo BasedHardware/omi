@@ -107,6 +107,28 @@ def test_generator_validation_rejects_bad_wire_values():
         )
 
 
+def test_generator_validation_rejects_swift_unsafe_identifiers():
+    """Lane keys and workload/platform values are interpolated unquoted into
+    Swift `case` declarations; Python-valid but Swift-invalid values must fail
+    `--check` instead of breaking only the desktop compilers."""
+    base = {'lanes': {'a': 'a_lane'}, 'workloads': ['interactive'], 'platforms': ['unknown']}
+    assert generator.validate_attribution(dict(base))
+    for bad_lane_key in ('default', 'class', 'import', 'extraction-service', ''):
+        with pytest.raises(AssertionError):
+            generator.validate_attribution(
+                {'lanes': {bad_lane_key: 'wire'}, 'workloads': ['interactive'], 'platforms': ['unknown']}
+            )
+    for bad_workload in ('extraction-service', 1, 'Interactive'):
+        with pytest.raises(AssertionError):
+            generator.validate_attribution(
+                {'lanes': {'a': 'a_lane'}, 'workloads': [bad_workload], 'platforms': ['unknown']}
+            )
+    with pytest.raises(AssertionError):
+        generator.validate_attribution(
+            {'lanes': {'a': 'a_lane'}, 'workloads': ['interactive'], 'platforms': ['not-a-platform']}
+        )
+
+
 def test_generator_render_functions_match_checked_in_artifacts():
     assert generator.render_python(CANONICAL) == generator.PYTHON_PATH.read_text()
     if generator.SWIFT_PATH.exists():
@@ -149,7 +171,9 @@ def test_generated_typescript_matches_canonical_json():
 
 # Source-inspection ratchet: a GeminiClient init that drops the required `lane`
 # fails compilation in app builds, but this ratchet runs in backend CI where no
-# Swift compiler exists.
+# Swift compiler exists. Slow-marked: the parameterized chunks walk the desktop
+# source tree (~2,500 files), which belongs in the slow-guardrail lane.
+@pytest.mark.slow
 @pytest.mark.parametrize('chunk', _MACOS_CHUNKS, ids=_chunk_id)
 def test_macos_every_gemini_client_init_declares_a_lane(chunk):
     offenders = []
@@ -179,7 +203,10 @@ def test_macos_gemini_transports_route_through_the_shared_header_helper():
 
 
 # Source-inspection ratchet: only the centralized transports may construct the
-# proxy path or set the X-Omi-* attribution headers.
+# proxy path or set the X-Omi-* attribution headers. Slow-marked: the
+# parameterized chunks walk the desktop source tree (~2,500 files), which
+# belongs in the slow-guardrail lane.
+@pytest.mark.slow
 @pytest.mark.parametrize('chunk', _MACOS_CHUNKS + _WINDOWS_CHUNKS, ids=_chunk_id)
 def test_no_raw_proxy_url_or_attribution_headers_outside_transport_owners(chunk):
     macos_owner = 'ProactiveAssistants/Core/GeminiProxyRequestHeaders.swift'
@@ -660,6 +687,83 @@ def test_streaming_unfinished_iterator_reports_incomplete(client_app, capsys, mo
     assert events[0]['status_code'] == 502
 
 
+@pytest.mark.asyncio
+async def test_streaming_routing_failure_keeps_structured_outcome(capsys, monkeypatch):
+    """Overflow recovery resolves the next route inside the stream body
+    iterator. A RoutingFailure raised there must surface its structured
+    routing outcome, not a generic 500 stream_iterator_error."""
+    routed = False
+
+    async def route_refused_on_recovery(*_args, **_kwargs):
+        # First call resolves the primary route; the overflow-recovery call
+        # inside the iterator fails routing outright.
+        nonlocal routed
+        if routed:
+            raise desktop_proxy.RoutingFailure(code='no_provider_credentials', message='credentials exhausted')
+        routed = True
+        return desktop_proxy.UpstreamRoute(
+            url='https://provider.invalid/v1/models',
+            headers={},
+            params={},
+            provider='vertex_ai',
+            credential_source='server',
+            region='us-central1',
+        )
+
+    class Refused:
+        status_code = 429
+        text = 'Too many requests. Exceeded the Provisioned Throughput.'
+
+        async def aread(self):
+            return self.text.encode()
+
+        async def aiter_bytes(self):
+            yield b''
+
+    class StreamContext:
+        def __init__(self, response):
+            self._response = response
+
+        async def __aenter__(self):
+            return self._response
+
+        async def __aexit__(self, *_args):
+            return None
+
+    class Client:
+        def stream(self, *_args, **_kwargs):
+            return StreamContext(Refused())
+
+    semaphore = asyncio.Semaphore(1)
+    monkeypatch.setattr(desktop_proxy, '_upstream', route_refused_on_recovery)
+    monkeypatch.setattr(desktop_proxy, '_cancel_on_disconnect', lambda _req, aw: aw)
+    monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_stream_client', lambda: Client())
+    monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_semaphore', lambda: semaphore)
+
+    telemetry = _telemetry()
+    telemetry.identify('models/gemini-2.5-flash:streamGenerateContent')
+    primary = await route_refused_on_recovery('p', 'gemini-2.5-flash', 'streamGenerateContent', {})
+    emitted = [
+        chunk
+        async for chunk in desktop_proxy._stream_provider(
+            _telemetry_request(),
+            primary,
+            _body(),
+            telemetry,
+            model='gemini-2.5-flash',
+            action='streamGenerateContent',
+            query={},
+        )
+    ]
+    assert b'no_provider_credentials' in b''.join(emitted)
+    events = _events(capsys)
+    assert len(events) == 1
+    assert events[0]['outcome'] == 'no_provider_credentials'
+    assert events[0]['status_code'] == 503
+    assert events[0]['phase'] == 'credential'
+    assert semaphore.locked() is False
+
+
 def _telemetry():
     request = Request(
         {
@@ -671,6 +775,20 @@ def _telemetry():
         }
     )
     return desktop_gemini_telemetry.ProxyTelemetry(request, streaming=True)
+
+
+def _telemetry_request() -> Request:
+    # The stream provider only touches the request through
+    # _cancel_on_disconnect, which the test patches to a passthrough.
+    return Request(
+        {
+            'type': 'http',
+            'method': 'POST',
+            'path': '/v1/proxy/gemini-stream/x',
+            'query_string': b'',
+            'headers': [(b'x-app-platform', b'macos')],
+        }
+    )
 
 
 @pytest.mark.asyncio

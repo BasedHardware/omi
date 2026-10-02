@@ -975,6 +975,13 @@ async def _stream_provider(
     except ClientDisconnected:
         telemetry.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
         yield _stream_error_event(code='client_cancelled', phase='client_disconnect', telemetry=telemetry)
+    except RoutingFailure as exc:
+        # Overflow recovery resolves the next route while the stream body is
+        # already being consumed. Without this branch the generic iterator
+        # handler below (or the terminal stream guard) masks the structured
+        # routing failure as a 500 stream_iterator_error.
+        telemetry.complete(outcome=exc.code, status_code=503, retryable=False, phase=exc.phase)
+        yield _stream_error_event(code=exc.code, phase=exc.phase, telemetry=telemetry)
     except httpx.TimeoutException as exc:
         phase = _timeout_phase(exc)
         telemetry.complete(outcome=f'{phase}_timeout', status_code=504, retryable=False, phase=phase)
