@@ -41,7 +41,8 @@ def _real_package_path(dotted_name):
     not every open pull request.
     """
     candidate = _BACKEND_ROOT.joinpath(*dotted_name.split('.'))
-    if (candidate / '__init__.py').is_file():
+    # Include namespace packages such as utils.other, which have no __init__.py.
+    if candidate.is_dir():
         return [str(candidate)]
     return []
 
