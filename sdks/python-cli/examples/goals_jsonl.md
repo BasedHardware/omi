@@ -82,7 +82,7 @@ Each line is a complete, self-contained JSON object without outer wrappers or tr
 | `min_value` | `number \| null` | Minimum scale value |
 | `max_value` | `number \| null` | Maximum scale value |
 | `unit` | `string \| null` | Metric unit label (e.g. `books`, `km`, `hours`) |
-| `is_active` | `boolean` | Active status flag (`true` or `false`) |
+| `is_active` | `boolean` | `false` only for inactive/archived goals; stays `true` for completed goals, so combine with `is_completed` |
 | `is_completed` | `boolean` | Completed status flag (`true` or `false`) |
 | `progress_pct` | `number \| null` | Calculated completion percentage (e.g. `75.5`) |
 | `created_at` | `string \| null` | ISO-8601 UTC timestamp (`YYYY-MM-DDTHH:MM:SSZ`) |
@@ -113,9 +113,9 @@ Each line is a complete, self-contained JSON object without outer wrappers or tr
 Filter and query your goals JSONL stream directly in the terminal:
 
 ```sh
-# List all active goals with completion percentage >= 50%
-cat goals.jsonl | jq -c 'select(.is_active and .progress_pct >= 50)'
+# List in-progress goals (active, not yet completed) at >= 50%
+cat goals.jsonl | jq -c 'select(.is_active and .is_completed == false and .progress_pct >= 50)'
 
-# Extract titles and progress for active goals
-cat goals.jsonl | jq -r 'select(.is_active) | "\(.title): \(.progress_pct)%"'
+# Extract titles and progress for in-progress goals
+cat goals.jsonl | jq -r 'select(.is_active and .is_completed == false) | "\(.title): \(.progress_pct)%"'
 ```
