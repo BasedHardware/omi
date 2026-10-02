@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -15,6 +16,18 @@ import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+
+/// A periodic timer the test fires by hand.
+class _IdleTimer implements Timer {
+  @override
+  void cancel() {}
+
+  @override
+  bool get isActive => true;
+
+  @override
+  int get tick => 0;
+}
 
 /// Minimal listener for testing — records calls without side effects.
 class _MockListener implements IWalSyncListener {
@@ -229,6 +242,68 @@ void main() {
       for (int i = 0; i < 5; i++) {
         expect(sync.testFrameStreamed[i], i == 3);
       }
+    });
+  });
+
+  group('extending a live WAL', () {
+    // A chunk that lands on an existing WAL's start second joins it when its capture evidence continues
+    // that WAL's frames.
+    late DateTime clock;
+    late void Function(Timer) chunkTick;
+    late LocalWalSyncImpl live;
+
+    setUp(() async {
+      clock = DateTime.fromMillisecondsSinceEpoch(2000000 * 1000);
+      live = LocalWalSyncImpl(
+        listener,
+        now: () => clock,
+        periodic: (interval, tick) {
+          if (interval.inSeconds == chunkSizeInSeconds + newFrameSyncDelaySeconds) chunkTick = tick;
+          return _IdleTimer();
+        },
+        persistWals: (_) async {},
+        loadWals: () async => [],
+      );
+      live.start();
+      await live.walReady;
+    });
+
+    Future<void> chunkAt(DateTime at) async {
+      clock = at;
+      await (chunkTick as dynamic)(_IdleTimer());
+    }
+
+    void capture(int from, int to, {int? notStreamed}) {
+      for (var i = from; i < to; i++) {
+        final key = FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF]);
+        live.onFrameCaptured(WalFrame(payload: [1], syncKey: key), captureRoot: 'root');
+        if (i != notStreamed) live.markFrameStreamed(key);
+      }
+    }
+
+    // The first chunk at t0 stores frames 0-5999 from t0 - 75 s; a chunk computed 45 s earlier for the next
+    // 1500 frames lands on the same second and joins it.
+    Future<Wal> chunkTwice({int? notStreamed}) async {
+      final t0 = clock;
+      capture(0, 7500, notStreamed: notStreamed);
+      await chunkAt(t0);
+      capture(7500, 9000);
+      await chunkAt(t0.subtract(const Duration(seconds: 45)));
+      expect(live.testWals, hasLength(1), reason: 'the second chunk joined the first WAL');
+      expect(live.testWals.single.totalFrames, 7500);
+      return live.testWals.single;
+    }
+
+    test('a fully streamed WAL stays fully streamed when a streamed chunk joins it', () async {
+      expect((await chunkTwice()).syncedFrameOffset, 7500);
+    });
+
+    test('a frame the socket did not take ends the run, across chunks too', () async {
+      expect((await chunkTwice(notStreamed: 6000)).syncedFrameOffset, 6000);
+    });
+
+    test('a run that ended in the first chunk does not resume in the next', () async {
+      expect((await chunkTwice(notStreamed: 3000)).syncedFrameOffset, 3000);
     });
   });
 

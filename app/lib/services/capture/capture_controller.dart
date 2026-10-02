@@ -3309,12 +3309,9 @@ class CaptureController extends ChangeNotifier
     final locationGeneration = _sessionGeolocationGeneration;
     // Capture before the flush. A device update can roll the session while
     // finalize awaits disk, and the rolled session must not cancel this stamp.
-    final phoneSync = _wal.getSyncs().phone;
-    // A stopped phone recording has no active id by the time the server closes its conversation,
-    // but its WALs still carry the id the WAL store last bound.
-    final recordingSessionId =
-        activeRecordingId ?? (phoneSync is LocalWalSyncImpl ? phoneSync.activeRecordingSessionId : null);
+    final recordingSessionId = activeRecordingId;
     try {
+      final phoneSync = _wal.getSyncs().phone;
       await phoneSync.finalizeCurrentSession();
       if (sessionStartSeconds > 0) {
         if (phoneSync is LocalWalSyncImpl) {

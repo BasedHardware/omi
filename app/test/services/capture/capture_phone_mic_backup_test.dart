@@ -139,6 +139,18 @@ void main() {
     expect(world.uploads.attempts.map((attempt) => attempt.conversationId).toSet(), {'c1'});
   });
 
+  test('phone mic: a recording bound after the stop does not orphan the stopped one', () async {
+    final origin = world.clock.now();
+    await recordOnline(130);
+
+    // A newer recording binds to the WAL store before the server closes c1.
+    world.wal.syncs.phone.setActiveRecordingSessionId('a-newer-recording');
+    await serverCloses(conversation('c1', origin, const []));
+
+    await walsReach(
+        'every copy stamped c1', (wals) => wals.isNotEmpty && wals.every((wal) => wal.conversationId == 'c1'));
+  });
+
   test('phone mic: a transcript that covers the recording releases the copy without uploading', () async {
     final origin = world.clock.now();
     await recordOnline(130);

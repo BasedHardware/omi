@@ -195,9 +195,6 @@ class LocalWalSyncImpl implements LocalWalSync {
   String? _activeRecordingSessionId;
   String? _conversationStampRecordingId;
 
-  /// The recording id copied onto new WALs; it outlives the recording until the next one binds.
-  String? get activeRecordingSessionId => _activeRecordingSessionId;
-
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
     _activeRecordingSessionId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
@@ -585,7 +582,13 @@ class LocalWalSyncImpl implements LocalWalSync {
         wal.sourceFrameStart = null;
         wal.sourceClockEpoch = null;
       }
-      wal.syncedFrameOffset = syncedOffset;
+      // The streamed run counts from the WAL's first frame, so it carries into the new chunk only
+      // when the socket took every earlier frame.
+      if (!contiguousEvidence) {
+        wal.syncedFrameOffset = syncedOffset;
+      } else if (wal.syncedFrameOffset >= oldFrameCount) {
+        wal.syncedFrameOffset = oldFrameCount + syncedOffset;
+      }
       wal.status = WalStatus.miss;
       // New unacknowledged frames invalidate the retention clock: the next
       // server-confirmed transition must re-stamp syncedAt so the whole WAL
@@ -805,6 +808,20 @@ class LocalWalSyncImpl implements LocalWalSync {
         .toList();
   }
 
+  /// The recording the session's audio was captured under: the id on its earliest unstamped WAL.
+  /// A phone recording stopped before the server closed its conversation has no active id left,
+  /// and the store may have bound a newer recording since, but the session's own WALs still say.
+  String? _recordingSessionIdFrom(int sessionStartSeconds) {
+    Wal? earliest;
+    for (final wal in _wals) {
+      final id = wal.recordingSessionId;
+      if (wal.status != WalStatus.miss || wal.conversationId != null || id == null || id.isEmpty) continue;
+      if (wal.timerStart < sessionStartSeconds) continue;
+      if (earliest == null || wal.timerStart < earliest.timerStart) earliest = wal;
+    }
+    return earliest?.recordingSessionId;
+  }
+
   /// Mark a WAL as synced and persist the change to disk.
   Future<void> markWalSyncedAndPersist(Wal wal) async {
     final generation = _sessionGeneration;
@@ -891,7 +908,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<void> stampConversationId(int sessionStartSeconds, String conversationId) async {
     final generation = _sessionGeneration;
     final now = _now().millisecondsSinceEpoch ~/ 1000;
-    final recordingId = _conversationStampRecordingId;
+    final recordingId = _conversationStampRecordingId ?? _recordingSessionIdFrom(sessionStartSeconds);
     _conversationStampRecordingId = null;
     final matchRecording = recordingId != null && recordingId.isNotEmpty;
     int stamped = 0;
