@@ -131,8 +131,10 @@ provider-attributable reason set; later failures after a no-text diagnostic
 remain observable. Failed recovery trials require the same failure-user
 breadth as fleet benches; narrow failing cohorts retain their trial share with
 bounded per-user voting windows, while healthy small cohorts can promote.
-The cost-v6 evidence seam is `LiveLegOutcome.settle`: the serving decision
-settles both source-leg fallback and router observation exactly once. Liveness
+The cost-v7 evidence seam is `LiveLegOutcome.settle`: the serving decision
+settles both source-leg fallback and router observation exactly once. A first
+claim after client disconnect/inactive/shutdown excludes the death and preserves
+prior text success; already claimed connected-client evidence remains valid. Liveness
 reads and transport closes do not infer provider blame. Accepted provider deaths
 and actual text have no VAD minimum. Receiver teardown is marked before tail
 sends; idle/request timeouts, rotation, local capacity and audio/client causes
