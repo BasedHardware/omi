@@ -417,6 +417,14 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         count=1,
         flags=re.DOTALL,
     )
+    # Gateway/secret fixtures must include the task-preservation binding on each
+    # Cloud Run conversation-processing host, leaving their intended error intact.
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},',
+        payload,
+        flags=re.DOTALL,
+    )
     return with_backend_integration_events_secret(payload)
 
 
