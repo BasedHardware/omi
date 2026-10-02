@@ -15,7 +15,7 @@ from database import users as users_db
 from database import voice_profiles as voice_profiles_db
 from models.speaker_labels import VoiceMatch, VoiceMatchesResponse
 from models.transcript_segment import legacy_conversation_segment_id
-from utils.conversations.speaker_resolution import cached_embedding_valid, decode_cache
+from utils.conversations.speaker_resolution import decode_cache
 from utils.executors import db_executor, run_blocking, storage_executor
 from utils.manual_speaker_assignments import manual_rejected_speakers
 from utils.other.storage import download_speaker_embedding_cache
@@ -123,9 +123,9 @@ def _conversation_matches(
             if time.monotonic() >= deadline:
                 return matches
             cached = cache.get(segment['id'])
-            if cached is None or not cached_embedding_valid(conversation, segment, cached):
+            if cached is None:
                 continue
-            duration, raw_vector = cached.duration, cached.vector
+            duration, raw_vector = cached
             if not isfinite(duration) or duration < MIN_EMBED_SECONDS:
                 continue
             vector = unit_voice_vector(raw_vector)

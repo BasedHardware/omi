@@ -251,36 +251,15 @@ failover, and uploaded sync chunk (`sync:{segment_id}`) restarts numbering, so a
 3.6h pendant dinner measured 1874 ids for about five voices. Processing
 therefore resolves speakers for the whole conversation before it summarizes
 (`utils/conversations/speaker_resolution.py`, called from `process_conversation`
-on every trigger). Each segment is admitted individually through the shared
-`utils/conversations/audio_placement.locate` gate: a `sync:`-scoped segment is
-trusted because its clock is the uploaded file that became the stored chunk, an
-audio-timeline v2 manifest proves coverage directly, and this stage's own
-`conversation:` scopes may regain trust only by reusing an unchanged
-source-clock proof stored with a prior cache entry — the scope alone proves
-nothing. Live provider scopes and `legacy-conversation:` donor scopes place
-nothing. A segment that cannot be placed
-abstains: it keeps its capture id and scope, borrows no neighbor's voice, and
-loses any name this stage previously gave it; manual receipts are untouched.
-Live (non-sync) clocks are additionally gated behind
-`CONVERSATION_LIVE_SPEAKER_RESOLUTION_ENABLED` (default off), so v2-manifest live
-segments resolve only when the deployment opts in. Embeddings are cached,
-encrypted, at `audio/{uid}/{conversation_id}/speaker-embeddings.v1.enc`, so a
-sync update reuses unchanged placements and conversation/account deletion
-purges the cache with the audio. Each cache entry carries its exact provenance
-— the absolute window, the source scope it was proven under, a stamp over the
-conversation's origin, audio manifest, and segment identity fields, and a
-separate source-clock stamp that excludes the manifest — plus the embedding
-model stamp (`CONVERSATION_SPEAKER_EMBEDDING_MODEL_VERSION`). Growing the
-manifest changes the full stamp, so vectors conservatively re-embed under the
-still-proven source clock; a changed origin, offset, text, alignment, or
-timeline also breaks the source proof and safely abstains. Operators must bump
-the model version whenever the served model changes even at the same endpoint
-(endpoint URL changes already alter the stamp automatically). A failed
-extraction keeps a proof-only record — provenance and source clock, no vector —
-so a later run can retry without trusting a stale vector; if the whole cache is
-lost, old rewritten sync scopes cannot prove their clock and abstain. The
-shared placement API bounds each requested clip to 12 seconds, so longer
-segments embed a centered 12-second window. `utils/stt/conversation_speakers.py` then clusters the embeddings
+on every trigger). When every capture scope is a sync chunk, it embeds each
+segment of at least 1s from the stored private cloud sync audio (each chunk blob
+decoded on its own; merging chunks drifts where they overlap). Live scopes are not
+resolved yet: live `started_at` can drift minutes from the arrival-stamped chunks
+until the capture-position clock lands, and misplaced audio would merge the wrong
+voices. It caches the embeddings, encrypted, at
+`audio/{uid}/{conversation_id}/speaker-embeddings.v1.enc`, so sync updates embed
+only new segments and conversation/account deletion purges the cache with the
+audio. `utils/stt/conversation_speakers.py` then clusters the embeddings
 (average-linkage AHC at cosine 0.70, then fragments within 0.60 of a voice with at
 least 30s of speech are absorbed into it; calibrated on real pendant audio against
 the owner's voiceprint), matches each voice's pooled centroid against enrolled
@@ -299,7 +278,7 @@ conversation's `speaker_resolution` tells clients whether ids are people:
 open onto capture's ids; `CONVERSATION_SPEAKER_RESOLUTION_ENABLED=false` disables
 it, and `CONVERSATION_SPEAKER_RESOLUTION_BUDGET_SECONDS` (45) and
 `..._MAX_EMBEDDINGS` (1500) bound one run, which resumes from the cache next time.
-Every early exit records an anonymous reason (`no_audio`, `no_placements`, or
+Every early exit records an anonymous reason (`no_audio`, `unaligned_audio`, or
 `no_embeddings`) so a successful sync reprocess cannot conceal an unavailable
 resolution. The Flutter transcript presents anonymous IDs as provisional when
 the status is `unavailable`; those chunk-local IDs must not be displayed as
