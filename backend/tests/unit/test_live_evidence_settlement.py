@@ -326,3 +326,38 @@ def test_out_of_order_writer_cannot_rewind_the_healthy_user_budget():
     for now in (1000, 1300) * 23:
         assert transition(state, True, now, witness='a' * 16) == state
     assert state.n == 3 and state.healthy_window == 4
+
+
+@pytest.mark.asyncio
+async def test_monitor_survives_retiring_a_claimed_leg_during_reconnect(monkeypatch):
+    from tests.unit.test_live_stt_resilient_stream import receiver as make_receiver
+    from utils.stt import resilient_stream
+
+    listener = make_receiver(monkeypatch)
+    old, new = serving_leg(family='soniox'), serving_leg(family='soniox')
+    old.raw.die('soniox_rotation')
+    listener.stt_socket = old
+    listener._resilient_audio.append(b'\x00\x00', 0)
+    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
+    listener._wrap_legacy_stt_socket = lambda raw, epoch: raw
+    listener.host.wait = AsyncMock(return_value=True)
+    connecting, proceed = asyncio.Event(), asyncio.Event()
+
+    async def connect(*args, **kwargs):
+        connecting.set()
+        await proceed.wait()
+        return new
+
+    listener._create_stt_socket = connect
+    monkeypatch.setattr(resilient_stream, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    replacement = asyncio.create_task(listener._failover_stt_socket())
+    await connecting.wait()
+    assert old.leg_outcome.claimed and not old.leg_outcome.owner_closing
+    monitor = asyncio.create_task(listener._monitor_stt_death())
+    await asyncio.sleep(0)
+    proceed.set()
+    assert await replacement
+    await monitor
+    listener.host.wait.assert_awaited_once()  # The monitor followed the replacement.
+    listener._settle_pending_live_failover_failure()
+    new.finish()

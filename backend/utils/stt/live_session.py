@@ -838,7 +838,8 @@ class LiveLegSocket(STTSocket):
     def finish(self) -> None:
         # Owner close is never a provider failure, even if the raw transport
         # died before the owner noticed. A claimed hop owns its own settlement.
-        self.leg_outcome.owner_closing = True
+        if not self.leg_outcome.claimed:
+            self.leg_outcome.owner_closing = True
         try:
             self._finish_transport()
         finally:
@@ -847,7 +848,8 @@ class LiveLegSocket(STTSocket):
             self.leg_outcome.close(self._cost_text_seen)
 
     async def drain_and_close(self) -> None:
-        self.leg_outcome.owner_closing = True
+        if not self.leg_outcome.claimed:
+            self.leg_outcome.owner_closing = True
         self._closing_for_health = True
         try:
             await st.drain_stt_socket(self.raw)
