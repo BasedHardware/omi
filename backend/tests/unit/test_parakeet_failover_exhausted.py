@@ -168,6 +168,8 @@ async def test_every_replacement_late_rejects_once_then_terminates_when_chain_ex
             'reason=connection_lost outcome=degraded',
             'omi_fallback_event component=stt_live_session from=soniox to=deepgram '
             'reason=connection_lost outcome=exhausted',
+            'omi_fallback_event component=stt_live_session from=deepgram to=unavailable '
+            'reason=connection_lost outcome=exhausted',
         ]
         # An additional recovery attempt cannot loop or settle either hop again.
         assert not await actual._failover_stt_socket()
@@ -175,7 +177,7 @@ async def test_every_replacement_late_rejects_once_then_terminates_when_chain_ex
         assert checked == ['modulate', 'soniox', 'deepgram']
         assert len(legs['modulate']) == len(legs['soniox']) == len(legs['deepgram']) == 1
         actual.host.request.websocket.close.assert_awaited_once()
-        assert len([r for r in caplog.records if 'component=stt_live_session' in r.message]) == 3
+        assert len([r for r in caplog.records if 'component=stt_live_session' in r.message]) == 4
     finally:
         await actual._drain_stt_sockets()
 
