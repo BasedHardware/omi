@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -30,6 +31,8 @@ def _item(**updates) -> MemoryItem:
                 source_version="v1",
                 artifact_preservation=ArtifactPreservationState.preserved,
                 source_state=SourceState.active,
+                source_signal="transcription",
+                attribution="user_spoken",
             )
         ],
         "source_state": SourceState.active,
@@ -45,6 +48,15 @@ def _item(**updates) -> MemoryItem:
     return MemoryItem(**data)
 
 
+def _new_item(**updates) -> MemoryItem:
+    evidence = _item().evidence[0].model_copy(update={"evidence_id": "ev-2", "source_id": "conv-2"})
+    return _item(memory_id="mem-new", evidence=[evidence], **updates)
+
+
+def _reader(_uid, memory_id, _db):
+    return {"mem-old": _item(), "mem-new": _new_item()}.get(memory_id)
+
+
 def test_restated_increments_corroboration_and_resets_clock():
     existing = _item()
     patch = patch_for_evidence_event(
@@ -57,8 +69,8 @@ def test_restated_increments_corroboration_and_resets_clock():
     logical, extra = patch
     assert extra["corroboration_count"] == 1
     assert extra["last_corroborated_at"] == NOW
-    assert logical["metadata"]["evidence_event"] == "restated"
-    assert logical["metadata"]["pointer"] == "mem-new"
+    assert json.loads(extra["rationale"])["evidence_event"] == "restated"
+    assert json.loads(extra["rationale"])["pointer"] == "mem-new"
 
 
 def test_contradicted_supersedes_when_authorized():
@@ -77,7 +89,7 @@ def test_contradicted_supersedes_when_authorized():
     assert logical["result_status"] == "superseded"
 
 
-def test_contradicted_lowers_truth_without_supersede_when_less_authoritative():
+def test_weaker_contradiction_does_not_erase_stronger_truth():
     existing = _item(user_asserted=True)
     patch = patch_for_evidence_event(
         existing,
@@ -86,11 +98,9 @@ def test_contradicted_lowers_truth_without_supersede_when_less_authoritative():
         now=NOW,
         new_is_as_authoritative=False,
     )
-    assert patch is not None
-    logical, extra = patch
-    assert extra["confidence"] == 0.0
-    assert "superseded_by" not in extra
-    assert "result_status" not in logical
+    # Accepted forgetting source-authority policy: weaker evidence is retained
+    # as its own observation, not allowed to zero or supersede the stronger fact.
+    assert patch is None
 
 
 def test_resolved_sets_valid_to():
@@ -103,9 +113,9 @@ def test_resolved_sets_valid_to():
     )
     assert patch is not None
     logical, extra = patch
-    assert logical["valid_to"] == NOW
+    assert extra["valid_to"] == NOW
     assert "result_status" not in logical
-    assert extra == {}
+    assert logical == {}
 
 
 def test_unrelated_and_similarity_alone_write_nothing():
@@ -175,6 +185,7 @@ def test_admit_below_score_gate_skips_judge(monkeypatch):
         ],
         judge=_judge,
         applier=lambda *args: None,
+        reader=_reader,
     )
     assert judged == []
     assert judgment is not None
@@ -201,6 +212,7 @@ def test_admit_at_score_gate_calls_judge(monkeypatch):
         ],
         judge=_judge,
         applier=lambda *args: None,
+        reader=_reader,
     )
     assert judged == [["mem-old"]]
     assert judgment is not None
@@ -249,12 +261,100 @@ def test_admit_restated_applies_to_existing_row(monkeypatch):
         neighbor_fetcher=lambda *_: [{"memory_id": "mem-old", "content": "Lives in NYC", "score": 0.95}],
         judge=lambda *_: EvidenceEventJudgment(event=EvidenceEventKind.restated, target_memory_id="mem-old"),
         applier=lambda *args: applied.append(args),
-        reader=lambda _uid, memory_id, _db: existing if memory_id == "mem-old" else None,
+        reader=lambda _uid, memory_id, _db: existing if memory_id == "mem-old" else _new_item(),
     )
     assert judgment.event is EvidenceEventKind.restated
     assert len(applied) == 1
+
+
+def test_same_capture_and_derivative_summary_never_call_judge(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    existing = _item()
+    copied = existing.model_copy(update={"memory_id": "mem-new"})
+    judgment = admit_claim_against_neighbors(
+        "uid-1",
+        "mem-new",
+        existing.content,
+        db_client=SimpleNamespace(),
+        neighbor_fetcher=lambda *_: [{"memory_id": "mem-old", "score": 0.99}],
+        reader=lambda _uid, key, _db: existing if key == "mem-old" else copied,
+        judge=lambda *_: (_ for _ in ()).throw(AssertionError("copies are not evidence")),
+    )
+    assert judgment.event == EvidenceEventKind.unrelated
+
+
+def test_weaker_evidence_cannot_resolve_or_contradict_user(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    existing = _item(user_asserted=True, confidence=0.95)
+    judgment = admit_claim_against_neighbors(
+        "uid-1",
+        "mem-new",
+        "Plan is finished",
+        db_client=SimpleNamespace(),
+        neighbor_fetcher=lambda *_: [{"memory_id": "mem-old", "score": 0.99}],
+        reader=lambda _uid, key, _db: existing if key == "mem-old" else _new_item(),
+        judge=lambda *_: (_ for _ in ()).throw(AssertionError("weaker source may not decide")),
+    )
+    assert judgment.event == EvidenceEventKind.unrelated
+    assert existing.confidence == 0.95
+
+
+def test_judge_receives_canonical_source_and_cannot_select_another_target(monkeypatch):
+    import json
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    seen = []
+    applied = []
+
+    def judge(new, neighbors):
+        seen.append((json.loads(new), neighbors))
+        return EvidenceEventJudgment(event=EvidenceEventKind.contradicted, target_memory_id="not-a-candidate")
+
+    judgment = admit_claim_against_neighbors(
+        "uid-1",
+        "mem-new",
+        "untrusted caller content",
+        db_client=SimpleNamespace(),
+        neighbor_fetcher=lambda *_: [{"memory_id": "mem-old", "content": "untrusted vector text", "score": 0.99}],
+        reader=_reader,
+        judge=judge,
+        applier=lambda *args: applied.append(args),
+    )
+    assert seen[0][0]["content"] == "Lives in NYC"
+    assert seen[0][0]["evidence"][0]["source_id"] == "conv-2"
+    assert seen[0][1][0]["evidence_families"] == ["conversation:conv-1"]
+    assert judgment.event == EvidenceEventKind.unrelated
+    assert not applied
+
+
+def test_delayed_evidence_uses_original_clock_not_processing_time(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    applied = []
+    admit_claim_against_neighbors(
+        "uid-1",
+        "mem-new",
+        "Lives in NYC",
+        db_client=SimpleNamespace(),
+        now=NOW + timedelta(days=90),
+        neighbor_fetcher=lambda *_: [{"memory_id": "mem-old", "score": 0.99}],
+        reader=_reader,
+        judge=lambda *_: EvidenceEventJudgment(event=EvidenceEventKind.restated, target_memory_id="mem-old"),
+        applier=lambda *args: applied.append(args),
+    )
+    assert applied[0][3]["last_corroborated_at"] == NOW
     uid, memory_id, logical, extra, _db = applied[0]
     assert uid == "uid-1"
     assert memory_id == "mem-old"
     assert extra["corroboration_count"] == 1
-    assert logical["metadata"]["pointer"] == "mem-new"
+    assert json.loads(extra["rationale"])["pointer"] == "mem-new"
+
+
+def test_automation_pause_keeps_new_claim_without_scheduling_judgment(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    monkeypatch.setenv("MEMORY_BELIEF_AUTOMATION_PAUSED", "true")
+    calls = []
+    result = admit_claim_against_neighbors(
+        "uid-1", "mem-new", "Likes tea", db_client=SimpleNamespace(), neighbor_fetcher=lambda *_: calls.append(True)
+    )
+    assert result is None
+    assert calls == []

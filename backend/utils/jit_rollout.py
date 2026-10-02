@@ -44,10 +44,6 @@ JIT_PROCESSING_FLAG_KEY = 'jit-processing-v1'
 # Live operational authority: the only flag that can revoke admission from
 # the allowlist. Read on every evaluation alongside the exposure flag above.
 JIT_KILL_SWITCH_FLAG_KEY = 'jit-processing-kill-switch-v1'
-# Retired admission keys. Kept as names so tests can prove they no longer
-# authorize work. Do not read them for permits_work.
-JIT_LEDGER_MIGRATION_FLAG_KEY = 'jit-processing-ledger-migration-v1'
-JIT_DAILY_SWEEP_FLAG_KEY = 'daily-memory-sweep-v1'
 JIT_ADMISSION_ALLOWLIST = frozenset(
     {
         'vi7SA9ckQCe4ccobWNxlbdcNdC23',
@@ -645,26 +641,13 @@ async def resolve_jit_rollout(
     return await _authority.resolve(uid, stage=stage, force_refresh=force_refresh)
 
 
-async def resolve_jit_ledger_migration_rollout(
-    uid: str,
-    *,
-    stage: JITDecisionStage,
-    force_refresh: bool = False,
-) -> JITRolloutDecision:
-    """Same admission helper as processing; the retired migration flag is ignored."""
-
-    return await resolve_jit_rollout(uid, stage=stage, force_refresh=force_refresh)
-
-
 __all__ = [
     'JITDecisionStage',
     'JITDecisionReason',
     'JITErrorClass',
     'JITFlagEvaluation',
     'JIT_ADMISSION_ALLOWLIST',
-    'JIT_DAILY_SWEEP_FLAG_KEY',
     'JIT_KILL_SWITCH_FLAG_KEY',
-    'JIT_LEDGER_MIGRATION_FLAG_KEY',
     'JIT_PROCESSING_FLAG_KEY',
     'JITRolloutAuthority',
     'JITRolloutDecision',
@@ -672,7 +655,6 @@ __all__ = [
     'TriState',
     'close_posthog_control_plane',
     'is_jit_admission_allowlisted',
-    'resolve_jit_ledger_migration_rollout',
     'resolve_jit_rollout',
     'resolve_jit_rollout_sync',
 ]

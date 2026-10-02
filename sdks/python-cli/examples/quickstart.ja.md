@@ -1,9 +1,10 @@
 # omi-cli 日本語クイックスタートガイド
 
-> ターミナルから Omi と対話するための実践ガイド。人間にも AI エージェントにも対応しています。
+> ターミナルから Omi を操作するための実践ガイド。人間にも AI エージェントにも使えます。
 
-`omi-cli` は、[Omi](https://omi.me) 開発者 API を操作するための公式コマンドラインインターフェースです。
-Omi が保持する 4 つの主要リソース（メモリ、会話、アクションアイテム、目標）を効率的かつスクリプト可能に操作できます。
+`omi-cli` は [Omi](https://omi.me) 開発者 API の公式コマンドラインクライアントです。
+Omi が持つ 4 つの主要リソース（メモリ、会話、アクションアイテム、目標）に、
+素早く・スクリプトから扱える形でアクセスできます。
 
 * **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
 * **公式ドキュメント:** [docs.omi.me/doc/developer/cli/introduction](https://docs.omi.me/doc/developer/cli/introduction)
@@ -13,21 +14,22 @@ Omi が保持する 4 つの主要リソース（メモリ、会話、アクシ�
 
 ## 1. インストール
 
-推奨されるインストール方法は、依存関係が分離される `pipx` を使用することです。
+推奨は `pipx` です。ツールが独立した環境にインストールされるので、
+依存関係が手元のプロジェクトと衝突しません。
 
 ```bash
-# 推奨: pipx を使用したインストール
+# 推奨: pipx でインストール
 pipx install omi-cli
 
-# または pip を使用
+# または pip で
 pip install omi-cli
 ```
 
-> **重要: パッケージ名とコマンド名の違い**
-> * インストールする Python パッケージ名は **`omi-cli`** です（単体の `omi` は別の無関係なパッケージです）。
-> * インストール後にターミナルで実行するコマンド名は **`omi`** です。
+> **重要: パッケージ名とコマンド名は別物です。**
+> * インストールするパッケージは **`omi-cli`** です（`omi` という別パッケージは無関係の別プロジェクトです）。
+> * インストール後に実行するコマンドは **`omi`** です。
 
-インストール後、バージョンとヘルプを確認します。
+動作確認:
 
 ```bash
 omi --version
@@ -36,192 +38,296 @@ omi --help
 
 ---
 
-## 2. 認証 (Authentication)
+## 2. 認証
 
-`omi-cli` は 2 つの認証方式をサポートしています。
+`omi-cli` は 2 つのログイン方法に対応しています。
 
-| 認証方式 | 主な用途 | コマンド例 |
+| 方法 | 向いている用途 | コマンド |
 | :--- | :--- | :--- |
-| **開発者 API キー (`omi_dev_*`)** | CI/CD、自動化スクリプト、AI エージェント | `omi auth login --api-key ...` または環境変数 |
-| **ブラウザ OAuth (Google/Apple)** | 開発者のローカル PC / ラップトップ | `omi auth login --browser` |
+| **開発者キー (`omi_dev_*`)** | CI/CD、スクリプト、AI エージェント | `omi auth login --api-key ...` または環境変数 |
+| **ブラウザログイン (Google/Apple)** | 自分の PC での作業 | `omi auth login --browser` |
 
 ### 対話型ログイン
-オプションなしで実行すると、ブラウザログインまたは API キー入力の選択肢が表示されます。
+
+オプションなしで実行すると、どちらの方法を使うか聞かれます。
 
 ```bash
 omi auth login
-# 1) Browser — Google または Apple アカウントでログイン（人間向け）
-# 2) API key — app.omi.me で取得した開発者キーを貼り付け（エージェント/CI向け）
+# 1) Browser — Google または Apple でログイン（人間向け）
+# 2) API key — app.omi.me で取得した開発者キーを貼り付け（エージェント・CI 向け）
 ```
 
+キーを選んだ場合、入力は隠されるのでターミナルの履歴にキーが残りません。
+
 ### ブラウザで直接ログイン
+
 ```bash
 omi auth login --browser
 ```
 
-### API キーを使用する場合
-[app.omi.me](https://app.omi.me) の「Developer → API Keys」から開発者キーを取得し、設定します。
+### 開発者キーでログイン
+
+キーは [app.omi.me](https://app.omi.me) の **Developer → API Keys** で取得します。
 
 ```bash
-# コマンドで設定
+# キーを設定ファイルに保存する
 omi auth login --api-key omi_dev_...
 
-# または環境変数で設定 (CI/CD やコンテナ環境に最適)
+# または環境変数で渡す — CI/CD やコンテナではこちらを推奨
 export OMI_API_KEY=omi_dev_...
 ```
 
-### 認証状態の確認
-* `omi auth status`: ローカルに保存されている認証プロファイル、マスクされたトークン、有効期限を表示します（オフラインで動作）。
-* `omi auth whoami`: Omi サーバーに実際に検証リクエストを送信し、認証情報が有効であることを確認します（ネットワーク接続が必要）。
+環境変数 `OMI_API_KEY` は、**使用中のプロファイルにキーが保存されていないとき**に使われます。
+コンテナではディスクに何も書かずに済みます。
+プロファイルに既にキーがある場合は、そちらが環境変数より優先されます。
+
+### ログイン状態の確認
+
+次の 2 つのコマンドは答える質問が違うので、混同しないでください。
+
+* `omi auth status` — **ローカルに保存されている**内容: プロファイル名、マスクされたキー、有効期限。
+  ネットワークなしで動きます。
+* `omi auth whoami` — **Omi サーバーに問い合わせ**て、キーが実際に受け付けられるか確認します。
+  ネットワークが必要です。
 
 ```bash
-omi auth status
-omi auth whoami
+omi auth status    # ローカル確認（オフライン可）
+omi auth whoami    # サーバー側で確認
 ```
 
-ログアウトする場合は以下を実行します。
+期限が近いトークンをログインし直さずに更新するコマンドがありますが、これは
+**ブラウザ/OAuth セッションにだけ**使えます。API キー（`omi_dev_*`）で認証した
+プロファイルでは、`omi auth refresh` は「更新するトークンがない」という利用法エラー
+（終了コード 1）になります。必要なら Omi のウェブアプリでキーを作り直してください。
+
+```bash
+omi auth refresh
+```
+
+ログアウト:
+
 ```bash
 omi auth logout
 ```
 
 ---
 
-## 3. 基本的な使い方
+## 3. 基本コマンド
 
-Omi の 4 つのコアリソースを一覧表示・操作できます。
+### メモリ (memories)
 
-### メモリ (Memories)
-システムが学習した事実や知識を管理します。
+システムがあなたについて覚えている事実や知識です。
 
 ```bash
-# メモリ一覧の取得
+# メモリの一覧
 omi memory list
 
-# 新しいメモリの作成
+# 新しく作る
 omi memory create "ユーザーはダークモードを好む" --category lifestyle
 
-# 特定のメモリの詳細表示
+# 特定のメモリを見る
 omi memory get <MEMORY_ID>
 ```
 
-### 会話 (Conversations)
-ウェアラブルデバイスやアプリから取得された音声・テキストの会話履歴です。
+### 会話 (conversations)
+
+デバイスやアプリから届いた音声・テキストの履歴です。
 
 ```bash
-# 最近の会話 5 件を取得
+# 最近の会話 5 件
 omi conversation list --limit 5
 
-# 会話の詳細と文字起こしを表示
+# 文字起こしつきで 1 件を丸ごと見る
 omi conversation get <CONVERSATION_ID> --include-transcript
 ```
 
-### アクションアイテム (Action Items)
-会話から自動抽出されたタスクやフォローアップ項目です。
+### アクションアイテム (action items)
+
+Omi が会話から見つけたタスクです。
 
 ```bash
-# 未完了のアクションアイテムのみ一覧表示
+# 未完了のものだけ
 omi action-item list --open
 
-# アクションアイテムを完了としてマーク
+# 完了にする
 omi action-item complete <ACTION_ITEM_ID>
 ```
 
-### 目標 (Goals)
-進捗を追跡している目標を管理します。
+### 目標 (goals)
 
 ```bash
-# 目標の一覧表示
+# 目標の一覧
 omi goal list
+
+# 進捗の値を記録する（目標 ID と値の **両方** が必要）
+omi goal progress <GOAL_ID> 25
+
+# 変更履歴
+omi goal history <GOAL_ID>
 ```
 
 ---
 
-## 4. スクリプト処理と JSON 出力 (`--json`)
+## 自分の言葉で質問する (`ask`)
 
-`omi-cli` は JSON 出力にネイティブ対応しています。`jq` や Python スクリプトと連携する際は、**グローバルオプション**としてサブコマンドの前に `--json` を指定します。
+独立したトップレベルのコマンドです。自然な言葉で質問すると、
+あなた自身の会話をもとに答えが作られます。
 
 ```bash
-# メモリ一覧を JSON で取得し、ID と内容を抽出
+omi ask "引っ越しについて何を決めたっけ"
+omi --json ask "今週中に終わらせると約束したタスクは何"
+```
+
+---
+
+## 4. JSON とスクリプト (`--json`)
+
+`omi-cli` は機械で読める JSON を出力できます。`--json` は**グローバル**オプションなので、
+サブコマンドの**前**に置きます。
+
+```bash
+# メモリ: id・本文・カテゴリを取り出す
 omi --json memory list | jq '.[] | {id, content, category}'
 
-# 最近の会話のタイトル一覧を取得
+# 最近の会話のタイトル
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
-# 未完了アクションアイテムの一覧
+# 未完了のアクションアイテム
 omi --json action-item list --open | jq '.'
 ```
 
-> **ポイント:** `--json` は必ず `memory` や `conversation` などの**サブコマンドより前**に配置してください。
-> * 正しい例: `omi --json memory list`
-> * 誤った例: `omi memory list --json`
+> **よくある間違い。** `--json` はサブコマンドの前です。後ろではありません。
+> * 正しい: `omi --json memory list`
+> * 誤り: `omi memory list --json`
+
+`--json` モードでは、stdout には JSON そのもの以外は一切出力されません。
+スクリプトはこれを前提にして構いません。
 
 ---
 
-## 5. 終了コード (Exit Codes)
+## 5. 終了コード
 
-スクリプトや CI で分岐処理を行うために、明確な終了コードが定義されています。
+終了コードは固定です。スクリプトや CI はこの値で分岐できます。
 
-| 終了コード | 意味 | 詳細 |
+| コード | 意味 | いつ |
 | :---: | :--- | :--- |
-| `0` | 成功 (Success) | コマンドが正常に完了 |
-| `1` | コマンド利用法エラー (Usage Error) | 不正なフラグ、引数の不足など |
-| `2` | 認証エラー (Auth Error) | 未ログイン、無効な API キーまたはトークン期限切れ |
-| `3` | サーバーエラー (Server Error) | 5xx 応答、接続タイムアウト、ネットワーク接続障害 |
-| `4` | レート制限 (Rate Limited) | 429 Too Many Requests |
-| `5` | リソース未検出 (Not Found) | 404 Not Found (指定された ID が存在しない) |
+| `0` | 成功 | コマンドが正常に終わった |
+| `1` | 利用法エラー | omi-cli 自身の検証（例: `--browser` と `--api-key` の同時指定、ログイン方法の選択が不正、stdin が空） |
+| `2` | 認証エラー | 未ログイン、キーが無効または期限切れ |
+| `3` | サーバーエラー | 5xx 応答、タイムアウト、接続できない |
+| `4` | リクエスト過多 | 429 Too Many Requests |
+| `5` | 見つからない | 404、その ID が存在しない |
+
+> **補足。** 未知のオプションや引数不足は Click が先に捕まえるため、終了コードは `2` になります。
+
+Bash での判定例:
+
+```bash
+if omi --json auth whoami > /dev/null 2>&1; then
+  echo "キーは有効です"
+else
+  code=$?
+  [ "$code" -eq 2 ] && echo "ログインし直してください"
+  [ "$code" -eq 3 ] && echo "サーバーが落ちています。あとで再試行してください"
+fi
+```
 
 ---
 
-## 6. シェル別環境変数設定の例
+## 6. 環境変数
 
-### Bash / Zsh (Linux / macOS)
+### Bash / Zsh (Linux, macOS)
+
 ```bash
-# API キーの設定
-export OMI_API_KEY="omi_dev_your_actual_key_here"
+export OMI_API_KEY="omi_dev_あなたのキー"
 
-# 一覧取得
 omi --json memory list --limit 10
 ```
 
-### PowerShell (Windows)
-```powershell
-# API キーの設定
-$env:OMI_API_KEY = "omi_dev_your_actual_key_here"
+新しいセッションでもキーを読み込ませたい場合は、この行を `~/.bashrc` か `~/.zshrc` に追加します。
 
-# PowerShell での JSON パース例
+### PowerShell (Windows)
+
+```powershell
+$env:OMI_API_KEY = "omi_dev_あなたのキー"
+
+# PowerShell で JSON をパースする
 (omi --json memory list | ConvertFrom-Json) | Select-Object id, content
 ```
 
----
+恒久的に設定する場合:
 
-## 7. ローカル Desktop API との連携
-
-Omi Desktop アプリが起動している環境では、クラウド API を経由せずにローカル画面履歴や SQL データベースを直接照会できます。
-
-```bash
-# ローカル API の接続先を設定
-omi local configure --url http://127.0.0.1:47778 --token YOUR_DESKTOP_TOKEN
-
-# 接続ステータスの確認
-omi --json local status
-
-# 画面履歴の検索
-omi --json local search-screen "料金プラン" --days 7 --app Safari
+```powershell
+[Environment]::SetEnvironmentVariable("OMI_API_KEY", "omi_dev_あなたのキー", "User")
 ```
 
 ---
 
-## 8. プロファイル機能 (Profiles)
+## 7. ローカルの Omi Desktop アプリ
 
-複数のアカウントや環境（本番環境、検証環境など）を使い分ける場合、`--profile` オプションを使用します。設定は `~/.omi/config.toml` に保存されます。
+Omi のデスクトップアプリが起動していれば、一部のデータはクラウドを経由せずに
+直接読めます。
+
+```bash
+# ローカル API の接続先を登録する
+omi local configure --url http://127.0.0.1:47778 --token あなたのトークン
+
+# 応答するか確認する
+omi --json local status
+
+# 画面履歴を検索する
+omi --json local search-screen "料金プラン" --days 7 --app Safari
+
+# ID を指定してスクリーンショットを保存する
+omi --json local screenshot 123 --output /tmp/omi-shot.jpg
+
+# ローカル DB に任意の SQL を投げる
+omi --json local sql "SELECT appName, COUNT(*) FROM screenshots GROUP BY appName"
+```
+
+おすすめの手順: まず `local status`、次に `local tools` で使えるツールとその引数を確認し、
+それから実際の呼び出しに進みます。
+
+---
+
+## 8. プロファイル
+
+複数のアカウントや環境を使い分けるなら、プロファイルで分けます。
+設定は `~/.omi/config.toml` に保存されます。
 
 ```bash
 # 個人用プロファイルでログイン
 omi --profile personal auth login
 
-# 開発・仕事用プロファイルでログイン
+# 仕事用プロファイルでログイン
 omi --profile work auth login
 
-# プロファイルを切り替えて実行
+# 指定したプロファイルでコマンドを実行する
 omi --profile work memory list
 ```
+
+使われるプロファイルは次の順で決まります。`--profile`（または `-p`）オプションが最優先。
+なければ環境変数 `OMI_PROFILE`。なければ `~/.omi/config.toml` に設定された使用中のプロファイル。
+最後の手段として `default` プロファイルです。
+
+設定そのものを見る・変える:
+
+```bash
+# いま設定されている内容
+omi config show
+
+# 設定ファイルの場所
+omi config path
+
+# 値を変える
+omi config set api_base https://api.omi.me
+```
+
+---
+
+## 9. 次のステップ
+
+* [`agent_quickstart.ja.md`](./agent_quickstart.ja.md) — `omi-cli` を AI エージェントにつなぐ方法（日本語）。
+* [`agent_quickstart.md`](./agent_quickstart.md) — 同じ内容の英語版。
+* [`shell_examples.sh`](./shell_examples.sh) — そのまま使えるシェルの例。
+* [Omi ドキュメント](https://docs.omi.me/doc/developer/cli/introduction) — コマンドの完全なリファレンス。

@@ -274,3 +274,41 @@ def test_developer_patch_rejects_empty_payload():
 
     assert exc.value.status_code == 422
     assert exc.value.detail == 'At least one field must be provided'
+
+
+def test_developer_patch_rejects_blank_description():
+    # #13933: {"description": "   "} satisfied min_length=1, so the handler persisted ''
+    # while the sibling create path rejected it with 422. Blank text must now fail at the
+    # request-model boundary and never reach the Firestore update.
+    existing, _ = _update_fixture()
+
+    with (
+        patch.object(action_items_db, 'get_action_item', return_value=existing),
+        patch.object(action_items_db, 'update_action_item', return_value=True) as update,
+    ):
+        response = _build().patch('/v1/dev/user/action-items/a1', json={'description': '   '})
+
+    assert response.status_code == 422
+    update.assert_not_called()
+
+
+def test_developer_patch_strips_padded_description():
+    existing, _ = _update_fixture()
+    updated = {**existing, 'description': 'Updated task'}
+
+    with (
+        patch.object(action_items_db, 'get_action_item', side_effect=[existing, updated]),
+        patch.object(action_items_db, 'update_action_item', return_value=True) as update,
+    ):
+        response = _build().patch('/v1/dev/user/action-items/a1', json={'description': '  Updated task  '})
+
+    assert response.status_code == 200
+    assert update.call_args.args[2] == {'description': 'Updated task'}
+
+
+def test_update_action_item_request_null_description_means_unchanged():
+    # The other half of the PATCH contract: an omitted/null description is "leave unchanged",
+    # not a rejection — the validator must pass None through.
+    request = developer_module.UpdateActionItemRequest.model_validate({'description': None, 'completed': True})
+    assert request.description is None
+    assert request.completed is True

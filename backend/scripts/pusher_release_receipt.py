@@ -208,6 +208,19 @@ def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]
             http_get = probe.get("httpGet") if isinstance(probe.get("httpGet"), dict) else None
             if http_get is not None:
                 http_get.setdefault("scheme", "HTTP")
+    # The API server marshals env value with omitempty, so a Helm-rendered
+    # `value: ""` (e.g. FREE_TIER_LOCAL_PROCESSING_COHORT from an unset repo
+    # variable) is stored and read back as {name} without the value key. Strip
+    # the empty value key from the rendered projection before hashing, the same
+    # way this projection already normalizes probe defaults and quantities.
+    projected_container["env"] = [
+        (
+            {key: value for key, value in item.items() if not (key == "value" and value == "")}
+            if isinstance(item, dict) and "valueFrom" not in item
+            else item
+        )
+        for item in projected_container["env"]
+    ]
     resources = projected_container.get("resources")
     if isinstance(resources, dict):
         for scope in ("requests", "limits"):

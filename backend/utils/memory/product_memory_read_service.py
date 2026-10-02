@@ -20,6 +20,7 @@ from database.firestore_index_registry import (
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.memory_read_api import query_archive_product_memory_items
+from utils.memory.belief_model import normalize_temporal_read_view
 from utils.other.list_budget import ListReadBudget
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
@@ -38,6 +39,8 @@ def fetch_default_product_memory_search(
     now: Optional[datetime] = None,
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
     offset: int = 0,
+    view: str = 'released',
+    as_of: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """Return the universal default-memory product view.
 
@@ -48,6 +51,7 @@ def fetch_default_product_memory_search(
     """
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
+    temporal_view = normalize_temporal_read_view(view)
     from utils.memory.memory_service import MemoryService
 
     return MemoryService(db_client=db_client).default_product_search(
@@ -57,6 +61,8 @@ def fetch_default_product_memory_search(
         now=now,
         limit=bounded_limit,
         offset=bounded_offset,
+        view=temporal_view,
+        as_of=as_of,
     )
 
 
@@ -69,6 +75,8 @@ def fetch_archive_product_memory_search(
     now: Optional[datetime] = None,
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
     offset: int = 0,
+    view: str = 'history',
+    as_of: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """Fetch authoritative memory `memory_items` and return explicit archive search results.
 
@@ -79,8 +87,9 @@ def fetch_archive_product_memory_search(
 
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
+    normalize_temporal_read_view(view)
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
-    results = query_archive_product_memory_items(query, items, policy=policy, now=now)
+    results = query_archive_product_memory_items(query, items, policy=policy, now=as_of or now)
     total_count = len(results)
     paged_items = results[bounded_offset : bounded_offset + bounded_limit]
     return {
@@ -134,6 +143,7 @@ def iter_authoritative_product_memory_items_newest_first(
     *,
     db_client: Any,
     limit: int,
+    start_after: Optional[tuple[datetime, str]] = None,
     budget: Optional["ListReadBudget"] = None,
 ) -> Iterator[MemoryItem]:
     """Read a bounded authoritative page in stable newest-first order.
@@ -154,7 +164,18 @@ def iter_authoritative_product_memory_items_newest_first(
         {},
         field_filter_factory=FieldFilter,
     )
-    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__').limit(limit)
+    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__')
+    if start_after is not None:
+        updated_at, memory_id = start_after
+        if not memory_id.strip() or '/' in memory_id:
+            raise ValueError('history cursor memory_id is invalid')
+        query = query.start_after(
+            {
+                'updated_at': updated_at,
+                '__name__': collection.document(memory_id),
+            }
+        )
+    query = query.limit(limit)
     if budget is None:
         snapshots: Iterator[Any] = query.stream()
     else:

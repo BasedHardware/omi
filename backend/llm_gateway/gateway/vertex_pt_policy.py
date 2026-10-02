@@ -38,34 +38,52 @@ class VertexPTPolicyMixin:
     _pt_target_probed_at: float | None
     _model_unavailable_at: dict[str, float]
 
-    def _attempt_plan(self, anchor: str) -> list[tuple[str, str]]:
-        serving = self._serving_model(anchor)
+    def _attempt_plan(self, anchor: str, *, origin_model: str = '') -> list[tuple[str, str]]:
+        serving = self._serving_model(anchor, origin_model=origin_model)
         return [(serving, self._capacity_for(serving))]
 
-    def _serving_model(self, anchor: str) -> str:
-        intended = ptr.desktop_serving_model(
-            anchor,
-            target_dedicated_ready=self._pt_target_is_ready(),
-            override=self._env(self._pt_model_override_env),
+    def _serving_model(self, anchor: str, *, origin_model: str = '') -> str:
+        intended = self._validated_pin(
+            lambda: ptr.desktop_serving_model(
+                anchor,
+                target_dedicated_ready=self._pt_target_is_ready(),
+                override=self._env(self._pt_model_override_env),
+            )
         )
-        return self._first_reachable(intended)
+        return self._first_reachable(intended, origin_model=origin_model)
 
     def _provisioned_model(self) -> str:
-        return ptr.resolve_pt_model(
-            target_dedicated_ready=self._pt_target_is_ready(),
-            override=self._env(self._pt_model_override_env),
+        return self._validated_pin(
+            lambda: ptr.resolve_pt_model(
+                target_dedicated_ready=self._pt_target_is_ready(),
+                override=self._env(self._pt_model_override_env),
+            )
         )
+
+    @staticmethod
+    def _validated_pin(resolve: Callable[[], str]) -> str:
+        """SCA-481: a prohibited or undeclared operator pin — a Pro/image-output
+        shape — fails the request closed instead of dispatching PayGo."""
+        try:
+            return resolve()
+        except ValueError as exc:
+            raise ProviderFailure(FailureClass.INVALID_CONFIG, str(exc)) from exc
 
     def _capacity_for(self, model: str) -> str:
         return ptr.request_type_for(model=model, pt_model=self._provisioned_model())
 
-    def _recovery_attempts(self, served_model: str, status_code: int, preview: bytes) -> list[tuple[str, str]]:
+    def _recovery_attempts(
+        self, served_model: str, status_code: int, preview: bytes, *, origin_model: str = ''
+    ) -> list[tuple[str, str]]:
         message = _bounded_error_text(preview)
         if ptr.is_model_unavailable(status_code, message):
             self._record_model_unavailable(served_model)
-            return [(rung, ptr.REQUEST_TYPE_SHARED) for rung in self._fallback_chain(served_model)]
+            return [
+                (rung, ptr.REQUEST_TYPE_SHARED)
+                for rung in self._fallback_chain(served_model, origin_model=origin_model)
+            ]
         if self._overflow_triggered(status_code, message):
-            return self._overflow_plan(served_model)
+            return self._overflow_plan(served_model, origin_model=origin_model)
         return []
 
     def _observe_attempt(self, model: str, capacity: str, status_code: int, preview: bytes) -> None:
@@ -83,7 +101,7 @@ class VertexPTPolicyMixin:
             status_code, message
         )
 
-    def _overflow_plan(self, served_model: str) -> list[tuple[str, str]]:
+    def _overflow_plan(self, served_model: str, *, origin_model: str = '') -> list[tuple[str, str]]:
         if not self._overflow_enabled():
             return []
         pt_model = self._provisioned_model()
@@ -91,7 +109,9 @@ class VertexPTPolicyMixin:
             return []
         try:
             ladder = ptr.resolve_overflow_ladder(
-                pt_model=pt_model, override=self._env(self._overflow_model_override_env)
+                pt_model=pt_model,
+                override=self._env(self._overflow_model_override_env),
+                origin_model=origin_model,
             )
         except ValueError:
             return []
@@ -104,13 +124,14 @@ class VertexPTPolicyMixin:
             plan.append((rung, ptr.REQUEST_TYPE_SHARED))
         return plan
 
-    def _fallback_chain(self, model: str) -> tuple[str, ...]:
+    def _fallback_chain(self, model: str, *, origin_model: str = '') -> tuple[str, ...]:
         try:
             return ptr.resolve_fallback_chain(
                 model=model,
                 pt_model=self._provisioned_model(),
                 unreachable=self._unreachable_models(),
                 override=self._env(self._overflow_model_override_env),
+                origin_model=origin_model,
             )
         except ValueError:
             return ()
@@ -127,10 +148,10 @@ class VertexPTPolicyMixin:
     def _unreachable_models(self) -> frozenset[str]:
         return frozenset(model for model in self._model_unavailable_at if not self._model_believed_available(model))
 
-    def _first_reachable(self, model: str) -> str:
+    def _first_reachable(self, model: str, *, origin_model: str = '') -> str:
         if self._model_believed_available(model):
             return model
-        for rung in self._fallback_chain(model):
+        for rung in self._fallback_chain(model, origin_model=origin_model):
             if self._model_believed_available(rung):
                 return rung
         return model

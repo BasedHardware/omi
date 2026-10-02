@@ -16,5 +16,6 @@
     "desktop/windows/src/main/windowsUpdateFeed.ts",
     "backend/routers/updates.py"
   ],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-09-14T09:26:47.107846Z"
 }

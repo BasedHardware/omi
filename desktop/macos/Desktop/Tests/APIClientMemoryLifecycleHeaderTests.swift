@@ -164,4 +164,22 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
     XCTAssertFalse(raw.contains("offset="), raw)
   }
 
+  func testBeliefCapabilityHeaderIsExposedIncludingFalse() async throws {
+    MemoryLifecycleURLStub.headers = ["X-Omi-Memory-Belief-Enabled": "false"]
+    let client = await makeClient()
+
+    let page = try await client.getMemoriesPage()
+
+    XCTAssertEqual(page.beliefEnabled, false)
+  }
+
+  func testTemporalViewIsAddedOnlyWhenRequested() async throws {
+    let client = await makeClient()
+
+    _ = try await client.getMemoriesPage(view: .history)
+
+    let url = try XCTUnwrap(MemoryLifecycleURLStub.lastRequestURL)
+    XCTAssertTrue(url.absoluteString.contains("view=history"), url.absoluteString)
+  }
+
 }

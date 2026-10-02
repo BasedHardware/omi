@@ -141,6 +141,38 @@ private func minimumInput() -> DeterministicMinimumInput {
       XCTAssertFalse(LocalInferenceRuntime.isRetryable(CancellationError()))
     }
 
+    func testSelectedAFMFailureReturnsDeterministicMinimumAndDoesNotCallLocalServer() async {
+      let afm = CallCountingEngine(
+        engineID: .afm,
+        generateResults: [
+          .failure(LocalInferenceError.engineFailed("afm failed")),
+          .failure(LocalInferenceError.engineFailed("afm failed")),
+        ]
+      )
+      let local = CallCountingEngine(
+        engineID: .localServer,
+        generateResults: [.success(ProbeSummary(title: "local-server must not run"))]
+      )
+      let runtime = LocalInferenceRuntime(
+        engines: [local, afm],
+        killSwitches: .enabled,
+        fallback: DesktopLocalInferenceFallbackRecorder(),
+        defaultEngineID: .afm
+      )
+
+      let result: LocalInferenceGeneration<ProbeSummary> = await runtime.generateStructuredFailClosed(
+        prompt: "summarize",
+        schema: ProbeSchema.json,
+        minimumInput: minimumInput()
+      )
+
+      guard case .deterministicMinimum = result else {
+        return XCTFail("selected AFM failure must yield the deterministic minimum, not local-server")
+      }
+      XCTAssertEqual(afm.generateCallCount, 2)
+      XCTAssertEqual(local.generateCallCount, 0, "AFM is a selection, not a fallback onto local-server")
+    }
+
     func testForcedEngineFailureReturnsDeterministicMinimumRecordsFallbackAndDoesNotCallCloud() async throws {
       let local = CallCountingEngine(
         engineID: .localServer,

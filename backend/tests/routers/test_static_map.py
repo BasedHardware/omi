@@ -201,8 +201,11 @@ class _FakeRedis:
         self.store.pop(key, None)
 
 
-def _fake_response(status_code=200, content=b'png-bytes', content_type='image/png'):
-    return SimpleNamespace(status_code=status_code, headers={'content-type': content_type}, content=content)
+def _fake_response(status_code=200, content=b'png-bytes', content_type='image/png', warning=None):
+    headers = {'content-type': content_type}
+    if warning is not None:
+        headers['X-Staticmap-API-Warning'] = warning
+    return SimpleNamespace(status_code=status_code, headers=headers, content=content)
 
 
 def _patch_environment(monkeypatch, response=None, redis=None, delay=0.0):
@@ -344,6 +347,20 @@ async def test_provider_error_status_is_returned_as_none_and_not_cached(monkeypa
 
     assert result is None
     assert redis.store == {}  # failures are never cached
+
+
+@pytest.mark.asyncio
+async def test_degraded_render_with_provider_warning_header_is_none_and_not_cached(monkeypatch):
+    # Google serves the authorization / "for development purposes only" watermark
+    # as a normal HTTP 200 image/png, flagged only by X-Staticmap-API-Warning.
+    # Treat it as a failure so a single poisoned render is never cached and
+    # shared to every user for the whole cache TTL.
+    redis, _ = _patch_environment(monkeypatch, response=_fake_response(warning='For development purposes only'))
+
+    result = await static_map_mod.fetch_static_map([(37.7749, -122.4194)], 300, 150)
+
+    assert result is None
+    assert redis.store == {}  # degraded renders are never cached
 
 
 @pytest.mark.asyncio

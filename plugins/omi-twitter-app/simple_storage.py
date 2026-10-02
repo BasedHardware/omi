@@ -130,7 +130,7 @@ class SimpleSessionStorage:
         """Update session fields"""
         if session_id in sessions:
             sessions[session_id].update(kwargs)
-            print(f"💾 Updated session {session_id}: {kwargs}", flush=True)
+            print(f"💾 Updated session {session_id}: {sorted(kwargs.keys())}", flush=True)
         else:
             print(f"⚠️  Session {session_id} not found for update!", flush=True)
     

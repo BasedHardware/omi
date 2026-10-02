@@ -70,6 +70,77 @@ if OMI_E2E_POOL_PREFIX=Omi-Lab "$POOL" slots >/dev/null 2>&1; then fail "a prefi
 assert_contains "$(OMI_E2E_POOL_PREFIX=omi-lab-2 OMI_E2E_POOL_SIZE=1 "$POOL" slots)" "omi-lab-2-1" "an already-slug-form prefix is accepted"
 if OMI_E2E_POOL_SIZE=0 "$POOL" slots >/dev/null 2>&1; then fail "pool size 0 must be rejected"; fi
 
+# ── acquired routing survives a clean shell ────────────────────────────────
+# Reproduce #13127 directly: acquire under a non-default bundle/port tuple,
+# then inspect and verify it from a later shell that has none of those values.
+CROSS_POOL_DIR="$TMP/cross-shell-pool"
+CROSS_WT="$TMP/wt-cross"
+mkdir -p "$CROSS_WT"
+OMI_E2E_POOL_DIR="$CROSS_POOL_DIR" \
+OMI_E2E_POOL_SIZE=1 \
+OMI_E2E_POOL_PREFIX=omi-cross \
+OMI_E2E_POOL_AUTOMATION_BASE=48780 \
+OMI_E2E_POOL_BACKEND_BASE=10280 \
+OMI_E2E_POOL_PYTHON_BASE=8480 \
+  "$POOL" acquire --quiet --worktree "$CROSS_WT" --holder cross-shell >/dev/null
+
+cross_env="$(OMI_E2E_POOL_DIR="$CROSS_POOL_DIR" OMI_E2E_POOL_SIZE=1 "$POOL" env --worktree "$CROSS_WT")"
+assert_contains "$cross_env" "export OMI_APP_NAME='omi-cross-1'" "a clean shell loads the acquired bundle prefix"
+assert_contains "$cross_env" "export OMI_AUTOMATION_PORT='48781'" "a clean shell loads the acquired automation base"
+assert_contains "$cross_env" "export PORT='10281'" "a clean shell loads the acquired backend base"
+assert_contains "$cross_env" "export PYTHON_PORT='8481'" "a clean shell loads the acquired Python base"
+assert_eq "$(OMI_E2E_POOL_DIR="$CROSS_POOL_DIR" OMI_E2E_POOL_SIZE=1 "$POOL" verify --worktree "$CROSS_WT" omi-cross-1)" \
+  "1" "verify recognizes a persisted custom-prefix slot from a clean shell"
+if out="$(OMI_E2E_POOL_DIR="$CROSS_POOL_DIR" OMI_E2E_POOL_SIZE=1 "$POOL" verify --worktree "$WT_A" omi-cross-1 2>&1)"; then
+  fail "a persisted custom-prefix slot must still reject another worktree"
+fi
+assert_contains "$out" "held by 'cross-shell'" "custom-prefix verify still enforces the lease"
+
+matching="$(OMI_E2E_POOL_DIR="$CROSS_POOL_DIR" \
+  OMI_E2E_POOL_SIZE=1 \
+  OMI_E2E_POOL_PREFIX=omi-cross \
+  OMI_E2E_POOL_AUTOMATION_BASE=48780 \
+  OMI_E2E_POOL_BACKEND_BASE=10280 \
+  OMI_E2E_POOL_PYTHON_BASE=8480 \
+  "$POOL" slots)"
+assert_contains "$matching" $'omi-cross-1\tcom.omi.omi-cross-1\t48781\t10281\t8481' \
+  "matching explicit routing remains valid"
+if out="$(OMI_E2E_POOL_DIR="$CROSS_POOL_DIR" OMI_E2E_POOL_SIZE=1 \
+  OMI_E2E_POOL_AUTOMATION_BASE=49900 "$POOL" acquire --quiet --worktree "$CROSS_WT" 2>&1)"; then
+  fail "a conflicting shell must not move an acquired slot"
+fi
+assert_contains "$out" "slot 1 routing is pinned" "routing conflict names the pinned slot"
+assert_contains "$out" "OMI_E2E_POOL_AUTOMATION_BASE='48780'" "routing conflict shows the acquired value"
+assert_contains "$out" "Unset OMI_E2E_POOL_AUTOMATION_BASE" "routing conflict gives a corrective action"
+
+# A slot created before routing persistence has identity/auth state but no safe
+# way to infer its original ports. Fail closed until the operator supplies the
+# complete existing tuple once; never silently pin current-shell defaults.
+LEGACY_POOL_DIR="$TMP/legacy-pool"
+LEGACY_WT="$TMP/wt-legacy"
+mkdir -p "$LEGACY_POOL_DIR/slots/1" "$LEGACY_WT"
+printf '%s' "Omi Local Dev Signing" > "$LEGACY_POOL_DIR/slots/1/identity"
+if out="$(OMI_E2E_POOL_DIR="$LEGACY_POOL_DIR" OMI_E2E_POOL_SIZE=1 "$POOL" slots 2>&1)"; then
+  fail "legacy slot inspection must refuse to guess a missing routing tuple"
+fi
+assert_contains "$out" "no routing record" "legacy slot inspection explains the missing contract"
+if out="$(OMI_E2E_POOL_DIR="$LEGACY_POOL_DIR" OMI_E2E_POOL_SIZE=1 \
+  "$POOL" acquire --quiet --worktree "$LEGACY_WT" 2>&1)"; then
+  fail "legacy slot acquire must require an explicit routing tuple"
+fi
+assert_contains "$out" "Refusing to guess its bundle or ports" "legacy acquire fails closed"
+OMI_E2E_POOL_DIR="$LEGACY_POOL_DIR" \
+OMI_E2E_POOL_SIZE=1 \
+OMI_E2E_POOL_PREFIX=omi-legacy \
+OMI_E2E_POOL_AUTOMATION_BASE=48900 \
+OMI_E2E_POOL_BACKEND_BASE=10300 \
+OMI_E2E_POOL_PYTHON_BASE=8500 \
+  "$POOL" acquire --quiet --worktree "$LEGACY_WT" >/dev/null
+legacy_env="$(OMI_E2E_POOL_DIR="$LEGACY_POOL_DIR" OMI_E2E_POOL_SIZE=1 "$POOL" env --worktree "$LEGACY_WT")"
+assert_contains "$legacy_env" "export OMI_APP_NAME='omi-legacy-1'" "an explicit legacy migration persists routing"
+OMI_E2E_POOL_DIR="$LEGACY_POOL_DIR" OMI_E2E_POOL_SIZE=1 \
+  "$POOL" release --quiet --worktree "$LEGACY_WT"
+
 # ── a non-pool slug passes verify untouched ────────────────────────────────
 "$POOL" verify omi-fix-rewind || fail "non-pool slug must pass verify"
 "$POOL" verify omi-e2e-x || fail "non-numeric suffix is not a pool slot"
@@ -317,6 +388,7 @@ assert_file_contains "$RUN_SH" "Launching cold" "" "non-pool bundles keep the co
 mkdir -p "$TMP/checkbin"
 cat >"$TMP/checkbin/curl" <<'SH'
 #!/usr/bin/env bash
+[ -z "${OMI_E2E_POOL_CHECK_CURL_LOG:-}" ] || printf '%s\n' "$*" > "$OMI_E2E_POOL_CHECK_CURL_LOG"
 cat "${OMI_E2E_POOL_CHECK_FIXTURE:?}"
 SH
 chmod +x "$TMP/checkbin/curl"
@@ -336,6 +408,18 @@ write_check_fixture "$TMP/check-ok.json" true granted
 write_check_fixture "$TMP/check-out.json" false granted
 write_check_fixture "$TMP/check-mic.json" true not_granted
 printf 'gateway timeout\n' >"$TMP/check-dead.json"
+
+OMI_AUTOMATION_TOKEN=test-token \
+OMI_E2E_POOL_DIR="$CROSS_POOL_DIR" \
+OMI_E2E_POOL_SIZE=1 \
+OMI_E2E_POOL_CHECK_FIXTURE="$TMP/check-ok.json" \
+OMI_E2E_POOL_CHECK_CURL_LOG="$TMP/cross-check-curl.log" \
+PATH="$TMP/checkbin:$PATH" \
+  "$POOL" check --slot 1 >/dev/null
+assert_contains "$(cat "$TMP/cross-check-curl.log")" "48781" \
+  "check uses the acquired automation port from a clean shell"
+OMI_E2E_POOL_DIR="$CROSS_POOL_DIR" OMI_E2E_POOL_SIZE=1 \
+  "$POOL" release --quiet --worktree "$CROSS_WT"
 
 run_check() {
   OMI_AUTOMATION_TOKEN=test-token \

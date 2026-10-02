@@ -35,6 +35,8 @@ def _empty_historical_store(monkeypatch):
     monkeypatch.setattr(memories_db, 'get_memories', lambda *args, **kwargs: [])
     monkeypatch.setattr(memories_db, 'list_memory_updated_or_created_index', lambda *args, **kwargs: [])
     monkeypatch.setattr(memories_db, 'get_memories_by_ids', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'scan_memories_updated_at_page', lambda *args, **kwargs: ([], [], True))
+    monkeypatch.setattr(memories_db, 'scan_memories_created_at_page', lambda *args, **kwargs: ([], [], True))
 
 
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):
@@ -429,6 +431,7 @@ def test_chat_get_memories_memory_list_decision_matches_search_denied_empty_and_
 
 def test_chat_default_memory_adapter_hedges_with_as_of_when_flag_on(monkeypatch):
     monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_V3_CURSOR_SECRET', 'test-chat-memory-cursor-secret')
     now = datetime.now(timezone.utc).replace(microsecond=0)
     captured = now - timedelta(days=30)
     memory = _memory_item(
@@ -450,3 +453,31 @@ def test_chat_default_memory_adapter_hedges_with_as_of_when_flag_on(monkeypatch)
     assert 'band:' in result
     assert f'date: {now.strftime("%Y-%m-%d")}' not in result or 'as_of:' in result
     assert 'date:' not in result.split('content_quoted=', 1)[1]
+
+
+def test_chat_default_memory_adapter_supports_explicit_history_view(monkeypatch):
+    monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_V3_CURSOR_SECRET', 'test-chat-memory-cursor-secret')
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    memory = _memory_item(
+        'historical-state',
+        now=now,
+        captured_at=now - timedelta(days=30),
+        content='User was in Berlin',
+        half_life_days=30,
+    )
+    docs = {
+        'users/u1/memory_control/state': _enabled_rollout_doc(),
+        f'users/u1/memory_items/{memory.memory_id}': _stored_item(memory),
+    }
+    result = search_memory_default_chat_memories_text(
+        uid='u1',
+        query='Berlin',
+        limit=10,
+        db_client=_FirestoreFake(docs),
+        now=now,
+        view='history',
+    )
+    assert result is not None
+    assert 'historical: true' in result
+    assert 'as_of:' in result

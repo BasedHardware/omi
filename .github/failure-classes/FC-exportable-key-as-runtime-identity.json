@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-exportable-key-as-runtime-identity",
+  "violated_contract": "A Google Cloud workload that runs on a platform with an attached service identity (Cloud Run, GKE, Cloud Functions) must authenticate as that identity through Application Default Credentials, scoped to the roles its code proves it needs. It must not load a user-managed service-account JSON or PEM key from env or Secret Manager, because an exportable key outlives the workload, cannot be told apart from a leaked copy in audit logs, and usually carries far more authority (Owner) than the workload uses.",
+  "canonical_prevention": "Initialize Google and Firebase Admin clients with applicationDefault() and an explicit project, run the service as a dedicated runtime service account with only the roles derived from its call sites (and per-secret secretAccessor), and remove the key's secret references from the deployment contract so no revision can re-mount it.",
+  "canonical_prevention_artifact": [
+    "web/admin/lib/__tests__/firebase-admin-credential.test.ts",
+    "config/public-build-contract.json"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["web/admin/lib/firebase/**", "config/public-build-contract.json", ".github/workflows/gcp_*.yml"],
+  "status": "open"
+}

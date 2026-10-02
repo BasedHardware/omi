@@ -13,7 +13,7 @@ rename/consolidation (e.g. a legacy 'romance' value before it became
 
 ``routers.mcp`` imports cleanly in this environment (no import-time side
 effects), so this test imports it directly at module scope and uses
-``monkeypatch.setattr`` on its module-level ``conversations_db`` /
+``monkeypatch.setattr`` on the shared handler's ``conversations_db`` /
 ``populate_speaker_names`` references plus FastAPI ``app.dependency_overrides``
 — the sanctioned seams from ``backend/docs/test_isolation.md`` — instead of
 stubbing ``sys.modules``.
@@ -64,9 +64,9 @@ class TestGetConversationByIdPoisonRecord:
         # structured.category holds a legacy value that predates a CategoryEnum
         # rename/consolidation and is therefore not a valid CategoryEnum member today.
         monkeypatch.setattr(
-            rest.conversations_db,
-            'get_conversation',
-            lambda uid, conversation_id: _conversation('conv-poison', category='not_a_real_category'),
+            rest.mcp_conversation_handlers.conversations_db,
+            'get_mcp_conversations_by_id',
+            lambda uid, ids, **kwargs: [_conversation('conv-poison', category='not_a_real_category')],
         )
 
         resp = mcp_test_client.get('/v1/mcp/conversations/conv-poison')
@@ -76,9 +76,9 @@ class TestGetConversationByIdPoisonRecord:
 
     def test_valid_conversation_returns_200(self, monkeypatch, mcp_test_client):
         monkeypatch.setattr(
-            rest.conversations_db,
-            'get_conversation',
-            lambda uid, conversation_id: _conversation('conv-good', category='technology'),
+            rest.mcp_conversation_handlers.conversations_db,
+            'get_mcp_conversations_by_id',
+            lambda uid, ids, **kwargs: [_conversation('conv-good', category='technology')],
         )
 
         resp = mcp_test_client.get('/v1/mcp/conversations/conv-good')
@@ -92,9 +92,9 @@ class TestGetConversationByIdPoisonRecord:
         """Direct-call form (mirrors the sibling list-endpoint test style)."""
         monkeypatch.setattr(rest, 'populate_speaker_names', lambda uid, conversations: None)
         monkeypatch.setattr(
-            rest.conversations_db,
-            'get_conversation',
-            lambda uid, conversation_id: _conversation('conv-poison', category='not_a_real_category'),
+            rest.mcp_conversation_handlers.conversations_db,
+            'get_mcp_conversations_by_id',
+            lambda uid, ids, **kwargs: [_conversation('conv-poison', category='not_a_real_category')],
         )
 
         with pytest.raises(HTTPException) as exc_info:

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
+import json
 
 import pytest
 
@@ -32,6 +33,7 @@ os.environ.setdefault(
 # (round-2 regression). Each test sets the env it needs via `index_env`.
 
 from database import conversations as conversations_db
+from database import helpers as database_helpers
 from utils.conversations import lifecycle as conversations_lifecycle
 from utils.conversations import typesense_index
 from utils.conversations.typesense_index import (
@@ -244,6 +246,28 @@ class TestDocumentShape:
         assert document is not None
         assert document["geolocation"] == [52.52, 13.405]
 
+    def test_structured_firestore_datetime_is_json_serializable(self):
+        class DatetimeWithNanoseconds(datetime):
+            """Stand-in for google.api_core.datetime_helpers.DatetimeWithNanoseconds."""
+
+        event_at = DatetimeWithNanoseconds(2026, 9, 21, 3, 42, 22, tzinfo=timezone.utc)
+        document = build_conversation_index_document(
+            UID,
+            {
+                "id": "c-json",
+                "created_at": 1788609600,
+                "structured": {
+                    "title": "Call",
+                    "overview": "Follow-up",
+                    "events": [{"created_at": event_at, "title": "ping"}],
+                },
+            },
+        )
+
+        assert document is not None
+        json.dumps(document)
+        assert document["structured"]["events"][0]["created_at"] == int(event_at.timestamp())
+
     def test_missing_created_at_is_unindexable(self):
         assert build_conversation_index_document(UID, {"id": "c6"}) is None
         assert build_conversation_index_document(UID, {"id": "", "created_at": 1788609600}) is None
@@ -341,6 +365,18 @@ class TestSync:
 
         assert docs_store == {}
 
+    def test_deleted_tombstone_converges_to_delete(self, index_env, mock_typesense):
+        _, docs_store = mock_typesense
+        docs_store[CONVERSATION_ID] = {"id": CONVERSATION_ID, "userId": UID}
+        payload = _conversation_data()
+        payload["deleted"] = True
+        payload["sync_merged_into"] = "survivor"
+        firestore = _firestore_with_doc(payload)
+
+        assert sync_conversation_index_after_write(UID, CONVERSATION_ID, firestore_client=firestore) is True
+
+        assert docs_store == {}
+
     def test_typesense_down_does_not_raise(self, index_env, mock_typesense):
         typesense_client, _ = mock_typesense
         typesense_client.collections.__getitem__.return_value.documents.upsert.side_effect = Exception(
@@ -367,6 +403,38 @@ class TestSync:
             side_effect=Exception("unexpected bug"),
         ):
             assert sync_conversation_index_after_write(UID, CONVERSATION_ID, firestore_client=firestore) is False
+
+
+class TestDefaultFirestoreResolution:
+    """The projection read's default Firestore client seam.
+
+    Regression: the resolver once returned ``get_firestore_client`` (the
+    factory function itself) instead of calling it, so every default-path
+    dual-write died at ``client.collection(...)`` and the fail-open contract
+    swallowed the ``AttributeError`` — only the Firebase extension wrote the
+    conversations index.
+    """
+
+    def test_resolver_calls_the_factory_and_returns_its_client(self, monkeypatch: pytest.MonkeyPatch):
+        sentinel = object()
+        calls: list[bool] = []
+
+        def _fake_factory() -> object:
+            calls.append(True)
+            return sentinel
+
+        monkeypatch.setattr("database._client.get_firestore_client", _fake_factory)
+
+        assert typesense_index._resolve_firestore_client() is sentinel
+        assert calls == [True]
+
+    def test_default_path_sync_reads_firestore_through_the_factory(self, index_env, mock_typesense, monkeypatch):
+        _, docs_store = mock_typesense
+        monkeypatch.setattr("database._client.get_firestore_client", lambda: _firestore_with_doc(_conversation_data()))
+
+        assert sync_conversation_index_after_write(UID, CONVERSATION_ID) is True
+
+        assert set(docs_store) == {CONVERSATION_ID}
 
 
 class TestDelete:
@@ -470,6 +538,15 @@ class TestConversationWriteWiring:
         delete = MagicMock()
         monkeypatch.setattr(typesense_index, "sync_conversation_index_after_write", sync)
         monkeypatch.setattr(typesense_index, "delete_conversation_index_doc", delete)
+
+        # ``create_conversation_if_absent_with_lifecycle`` is wrapped by
+        # ``set_data_protection_level``.  Its policy lookup belongs to the
+        # helpers module, rather than the conversations DB client patched
+        # below; leaving it live makes this hermetic wiring test reach Redis
+        # and then the user-profile/Firestore path.  Return the same
+        # deterministic policy used by the fake Firestore record while
+        # retaining the real decorator and write path under test.
+        monkeypatch.setattr(database_helpers.redis_db, "get_user_data_protection_level", lambda uid: "standard")
 
         conversation_ref = _Ref(_Snapshot({"data_protection_level": "standard"}))
         db = MagicMock()
@@ -673,6 +750,12 @@ class TestFailOpenWiring:
         )
         monkeypatch.setattr(typesense_index, "_typesense_client", lambda: broken_client)
         monkeypatch.setattr(typesense_index, "_resolve_default_db_client", lambda: _policy_db())
+        # The projection read must be faked like the other I/O seams: against
+        # the once-broken default resolver this sync died before ever reaching
+        # the Typesense outage below, silently narrowing this test's coverage.
+        monkeypatch.setattr(
+            typesense_index, "_resolve_firestore_client", lambda: _firestore_with_doc(_conversation_data())
+        )
 
         conversations_db.set_conversation_as_discarded(UID, CONVERSATION_ID)
         conversations_db.delete_conversation(UID, CONVERSATION_ID)

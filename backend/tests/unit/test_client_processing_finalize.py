@@ -54,6 +54,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 import pytest
+from utils.manual_speaker_assignments import manual_assignment
 from google.cloud import firestore as google_firestore
 from pydantic import ValidationError
 
@@ -106,9 +107,10 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod = ModuleType('database._client')
     client_mod.db = MagicMock(name='db')
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
     client_mod.document_id_from_seed = lambda seed: 'seed-id'
+    client_mod.run_transactional = MagicMock()
     add('database._client', client_mod)
-
     vector_db = add('database.vector_db', AutoMockModule('database.vector_db'))
     for attr in (
         'find_similar_memories',
@@ -187,6 +189,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         'get_reprocess_transcript_structure',
         'extract_action_items',
         'get_conversation_notes',
+        'validate_structured_source_segment_ids',
         'generate_summary_with_prompt',
         'SummaryProviderError',
     ):
@@ -194,6 +197,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.llm.conversation_processing', conv_proc)
 
     add('utils.llm.conversation_prompt_prefix', AutoMockModule('utils.llm.conversation_prompt_prefix'))
+    gateway_error_contract = add('utils.llm.gateway_error_contract', AutoMockModule('utils.llm.gateway_error_contract'))
+    gateway_error_contract.conversation_processing_http_exception = lambda error: error
     add('utils.apps', AutoMockModule('utils.apps'))
     add('utils.analytics', AutoMockModule('utils.analytics')).record_usage = MagicMock()
     add('utils.conversations.transcript_chunks', AutoMockModule('utils.conversations.transcript_chunks'))
@@ -217,6 +222,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
+    subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
 
     byok = ModuleType('utils.byok')
     byok.get_byok_key = lambda _provider: None
@@ -304,8 +310,8 @@ def _add_conversations_fakes(fakes: dict[str, ModuleType]) -> None:
     endpoints.get_current_user_uid = _fake_get_current_user_uid
     endpoints.with_rate_limit = _fake_with_rate_limit
     endpoints.get_user = MagicMock()
+    endpoints.timeit = lambda fn: fn
     add('utils.other.endpoints', endpoints)
-
     request_validation = ModuleType('utils.request_validation')
     request_validation.NonNegativeOffset = int
     request_validation.PositiveLimit = int
@@ -429,7 +435,7 @@ def _paid_decision() -> Decision:
 
 
 def _enable_flag(monkeypatch: pytest.MonkeyPatch, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
 
 
 def _authorize(monkeypatch: pytest.MonkeyPatch, pc: Any, decision: Decision) -> None:
@@ -1185,6 +1191,17 @@ def _capture_segment_write(monkeypatch: pytest.MonkeyPatch, conv: Any) -> dict[s
         return True
 
     monkeypatch.setattr(conv.conversations_db, 'update_conversation_segments', fake_update)
+
+    def assign(uid, cid, **kwargs):
+        conversation = conv.deserialize_conversation({})
+        raw = conversation.model_dump()
+        before = raw['transcript_segments']
+        updated, receipt, ids, _ = manual_assignment(raw, **kwargs)
+        conversation.transcript_segments = [TranscriptSegment(**s) for s in updated]
+        captured['kwargs'] = {'invalidate_client_processing': True}
+        return raw, ids, [], [s for i, s in enumerate(before) if updated[i]['id'] in ids]
+
+    monkeypatch.setattr(conv.conversations_db, 'assign_conversation_speaker', assign)
     monkeypatch.setattr(conv, 'emit_product_event', lambda **_kwargs: None)
     return captured
 
@@ -1368,7 +1385,7 @@ def test_assign_speaker_route_invalidates_projection(monkeypatch, stack) -> None
     monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: conversation)
 
-    result = conv.set_assignee_conversation_segment(_CONV_ID, 0, 'person_id', value='person-9', uid=_UID)
+    result = conv.set_assignee_conversation_speaker(_CONV_ID, 0, 'person_id', value='person-9', uid=_UID)
 
     assert captured['kwargs'].get('invalidate_client_processing', True) is True
     assert result.client_processing is None

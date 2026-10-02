@@ -6,7 +6,8 @@ every task, each component guide whenever an agent works in that area. Every
 line is paid for repeatedly, by every agent, forever. Unbounded guides are how a
 repo ends up with rules nobody reads and pointers nobody maintains.
 
-Budgets are a ratchet. When a file shrinks, lower its budget in the same PR.
+Budgets are a ratchet. After substantial reductions, lower the budget while
+retaining modest headroom for routing and repository-specific facts.
 Never raise a budget to admit detail that has a home one level down:
 
   root AGENTS.md        cross-component rules and the index, nothing else
@@ -27,9 +28,9 @@ from pathlib import Path
 
 # path -> (max_lines, max_bytes). Ratchet down; never up.
 BUDGETS: dict[str, tuple[int, int]] = {
-    "AGENTS.md": (180, 18_000),
+    "AGENTS.md": (60, 4_000),
     ".github/AGENTS.md": (45, 4_500),
-    "app/AGENTS.md": (170, 11_500),
+    "app/AGENTS.md": (164, 11_411),
     "backend/AGENTS.md": (350, 39_000),
     # main grew this with Codemagic release-pipeline detail after the budget was
     # first set from a stale base; recalibrated to current main + headroom.
@@ -39,6 +40,7 @@ BUDGETS: dict[str, tuple[int, int]] = {
     "web/admin/AGENTS.md": (25, 1_500),
     "web/app/AGENTS.md": (55, 2_400),
     "docs/AGENTS.md": (34, 1_309),
+    "scripts/dev-harness/AGENTS.md": (15, 861),
 }
 
 SKIP_PARTS = {"node_modules", ".build", ".git"}

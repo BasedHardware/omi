@@ -23,10 +23,6 @@ Map<TaskCategory, List<ActionItemWithMetadata>> categorizeTasks(
   DateTime? now,
 }) {
   final current = now ?? DateTime.now();
-  final startOfToday = DateTime(current.year, current.month, current.day);
-  final startOfTomorrow = DateTime(current.year, current.month, current.day + 1);
-  final startOfDayAfterTomorrow = DateTime(current.year, current.month, current.day + 2);
-  final sevenDaysAgo = current.subtract(const Duration(days: 7));
 
   final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
     TaskCategory.today: [],
@@ -41,27 +37,47 @@ Map<TaskCategory, List<ActionItemWithMetadata>> categorizeTasks(
     if (item.completed && !showCompleted) continue;
     if (!item.completed && showCompleted) continue;
 
-    if (item.dueAt == null) {
-      // No deadline tasks older than 7 days go to overdue
-      if (!showCompleted && item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
-        categorized[TaskCategory.overdue]!.add(item);
-      } else {
-        categorized[TaskCategory.noDeadline]!.add(item);
-      }
-    } else {
-      final dueDate = item.dueAt!;
-      if (!showCompleted && dueDate.isBefore(startOfToday)) {
-        // Due date in the past → overdue
-        categorized[TaskCategory.overdue]!.add(item);
-      } else if (dueDate.isBefore(startOfTomorrow)) {
-        categorized[TaskCategory.today]!.add(item);
-      } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
-        categorized[TaskCategory.tomorrow]!.add(item);
-      } else {
-        categorized[TaskCategory.later]!.add(item);
-      }
-    }
+    categorized[categoryForItem(item, showCompleted, now: current)]!.add(item);
   }
 
   return categorized;
+}
+
+/// The bucket [item] belongs to, by the same rule [categorizeTasks] uses.
+///
+/// Callers that need one item's section (a drag and drop target, for instance)
+/// must use this rather than their own copy: a second copy that ignores
+/// [showCompleted] reads a past-due completed task as overdue while the list
+/// shows it under Today, and a reorder inside that section then looks like a
+/// move and rewrites the task's due date.
+TaskCategory categoryForItem(
+  ActionItemWithMetadata item,
+  bool showCompleted, {
+  DateTime? now,
+}) {
+  final current = now ?? DateTime.now();
+  final startOfToday = DateTime(current.year, current.month, current.day);
+  final startOfTomorrow = DateTime(current.year, current.month, current.day + 1);
+  final startOfDayAfterTomorrow = DateTime(current.year, current.month, current.day + 2);
+  final sevenDaysAgo = current.subtract(const Duration(days: 7));
+
+  if (item.dueAt == null) {
+    // No deadline tasks older than 7 days go to overdue
+    if (!showCompleted && item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
+      return TaskCategory.overdue;
+    }
+    return TaskCategory.noDeadline;
+  }
+  final dueDate = item.dueAt!;
+  if (!showCompleted && dueDate.isBefore(startOfToday)) {
+    // Due date in the past → overdue
+    return TaskCategory.overdue;
+  }
+  if (dueDate.isBefore(startOfTomorrow)) {
+    return TaskCategory.today;
+  }
+  if (dueDate.isBefore(startOfDayAfterTomorrow)) {
+    return TaskCategory.tomorrow;
+  }
+  return TaskCategory.later;
 }

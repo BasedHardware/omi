@@ -1,5 +1,3 @@
-import XCTest
-
 /// Sentinel: proves strict concurrency is active on this target.
 ///
 /// History: under Swift 5, this sentinel relied on a non-Sendable
@@ -17,22 +15,19 @@ import XCTest
 /// `swiftLanguageMode(.v6)` is itself the proof that strict concurrency is
 /// enforced. The companion shell test now asserts the inverse: a deliberately
 /// unsafe capture is *rejected* by the compiler.
-final class StrictConcurrencySentinelTests: XCTestCase {
-  /// A type that is NOT Sendable (no @unchecked Sendable).
-  final class NonSendableBox {
-    var value: Int = 0
-  }
+/// A type that is NOT Sendable (no @unchecked Sendable).
+final class SemanticFeatureNonSendableBox {
+  var value: Int = 0
+}
 
-  /// Exercises the compiler-approved pattern for Swift 6 strict concurrency:
-  /// copy the Sendable value out before crossing a concurrency boundary.
-  func testSendableValueCrossesTaskBoundarySafely() {
-    let box = NonSendableBox()
-    box.value = 42
-    // `box` is non-Sendable and may NOT be captured across the boundary.
-    // Copying the Sendable `Int` out first is the pattern the compiler now
-    // requires; attempting to capture `box` directly is a compile error.
-    let snapshot = box.value
-    Task.detached { _ = snapshot }
-    XCTAssertEqual(snapshot, 42)
-  }
+/// Exercises the compiler-approved pattern for Swift 6 strict concurrency:
+/// copy the Sendable value out before crossing a concurrency boundary.
+func semanticStrictConcurrencySentinel() {
+  let box = SemanticFeatureNonSendableBox()
+  box.value = 42
+  // `box` is non-Sendable and may NOT be captured across the boundary.
+  // Copying the Sendable `Int` out first is the pattern the compiler now
+  // requires; attempting to capture `box` directly is a compile error.
+  let snapshot = box.value
+  Task.detached { _ = snapshot }
 }

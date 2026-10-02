@@ -1,4 +1,5 @@
 import threading
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from cachetools import TTLCache
@@ -17,6 +18,7 @@ from models.product_memory import MemoryKind, MemorySubjectScope
 from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
 from utils.memory.knowledge_ledger_migration import read_ledger_migration_completion
 from utils.memory.memory_service import MemoryService
+from utils.memory.belief_model import belief_model_enabled, record_passes_proactive_bar
 import logging
 
 logger = logging.getLogger(__name__)
@@ -183,6 +185,8 @@ def _is_prompt_visible(memory: MemoryDB) -> bool:
     if memory.user_review is False:
         return False
     if memory.invalid_at is not None:
+        return False
+    if belief_model_enabled() and not record_passes_proactive_bar(memory, now=datetime.now(timezone.utc)):
         return False
     return True
 

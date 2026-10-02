@@ -12,6 +12,12 @@ from typing import Any, cast
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / 'backend') not in sys.path:
+    sys.path.insert(0, str(ROOT / 'backend'))
+
+from config.free_tier_rollout import validate_free_tier_deploy_value  # noqa: E402
+from scripts.render_backend_runtime_env import require_sync_lineage_rollout  # noqa: E402
+
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 
 LEGACY_GKE_CONFIG_KEYS: dict[str, tuple[str, ...]] = {
@@ -101,6 +107,8 @@ def config_map_entries(env: str, manifest_path: Path = DEFAULT_MANIFEST) -> tupl
     if env_config is None:
         raise ValueError(f'manifest has no environments.{env}')
 
+    require_sync_lineage_rollout(env, env_config)
+
     gke = _as_config_dict(env_config.get('gke')) or {}
     config_map = _as_config_dict(gke.get('config_map'))
     if config_map is None:
@@ -125,13 +133,17 @@ def config_map_entries(env: str, manifest_path: Path = DEFAULT_MANIFEST) -> tupl
             value = entry.get('value')
             if not isinstance(value, str):
                 raise ValueError(f'config_map entry {key} with source=literal requires string value')
+            validate_free_tier_deploy_value(key, value)
             resolved[key] = value
             continue
         if source == 'environment':
             value = os.environ.get(key)
             if value is None or value == '':
+                value = entry.get('default')
+            if value is None:
                 missing.append(key)
                 continue
+            validate_free_tier_deploy_value(key, value)
             resolved[key] = value
             continue
         raise ValueError(f'config_map entry {key} has unsupported source {source!r}')

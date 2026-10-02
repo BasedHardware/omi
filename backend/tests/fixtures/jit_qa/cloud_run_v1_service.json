@@ -29,6 +29,7 @@
               {"name": "OMI_LLM_GATEWAY_URL", "value": "https://llm-gateway-jit-qa.invalid"},
               {"name": "REDIS_DB_HOST", "value": "10.0.0.10"},
               {"name": "REDIS_DB_PORT", "value": "6379"},
+              {"name": "STT_SERVICE_MODELS", "value": "modulate-velma-2,dg-nova-3,parakeet"},
               {"name": "TYPESENSE_HOST", "value": "typesense-jit-qa-1031333818730.us-central1.run.app"},
               {"name": "TYPESENSE_HOST_PORT", "value": "443"},
               {"name": "TYPESENSE_PROTOCOL", "value": "https"},

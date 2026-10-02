@@ -60,22 +60,20 @@ async def call_multion(books: List[str], user_id: str):
 
     try:
         async with httpx.AsyncClient(timeout=120) as client:
-            print(f"Sending request to Multion API: {data}")
             response = await client.post("https://api.multion.ai/v1/web/browse", headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
-            print(f"MultiOn API response: {result}")
             if result.get('status') != "DONE":
                 return await retry_multion(result.get('session_id'))
             return result.get('message')
     except httpx.HTTPStatusError as e:
-        print(f"HTTP error occurred: {e.response.status_code} {e.response.text}")
+        print(f"HTTP error occurred: {e.response.status_code}")
         raise
     except httpx.RequestError as e:
-        print(f"An error occurred while requesting {e.request.url!r}.")
+        print(f"Request to Multion API failed: {type(e).__name__}")
         raise
     except Exception as e:
-        print(f"Unexpected error in call_multion: {str(e)}")
+        print(f"Unexpected error in call_multion: {type(e).__name__}")
         raise
 
 
@@ -97,14 +95,14 @@ async def retry_multion(session_id: str):
             response.raise_for_status()
             return response.json().get('message')
     except httpx.HTTPStatusError as e:
-        print(f"HTTP error occurred: {e.response.status_code} {e.response.text}")
+        print(f"HTTP error occurred: {e.response.status_code}")
         return f"HTTP error: {e.response.status_code}"
     except httpx.RequestError as e:
-        print(f"An error occurred while requesting {e.request.url!r}.")
-        return f"Request error: {str(e)}"
+        print(f"Request to Multion API failed: {type(e).__name__}")
+        return f"Request error: {type(e).__name__}"
     except Exception as e:
-        print(f"Unexpected error in retry_multion: {str(e)}")
-        return f"Unexpected error: {str(e)}"
+        print(f"Unexpected error in retry_multion: {type(e).__name__}")
+        return f"Unexpected error: {type(e).__name__}"
 
 
 @router.get("/multion", response_class=HTMLResponse, tags=['multion'])
@@ -162,8 +160,8 @@ async def multion_endpoint(conversation: Conversation, uid: str = Query(...)):
         print("Timeout error occurred")
         return EndpointResponse(message="Timeout error occurred.")
     except Exception as e:
-        print(f"Error calling Multion API: {str(e)}")
-        return EndpointResponse(message=f"Error calling Multion API: {str(e)}")
+        print(f"Error calling Multion API: {type(e).__name__}")
+        return EndpointResponse(message="Error calling Multion API.")
     if isinstance(result, bytes):
         result = result.decode('utf-8')
 

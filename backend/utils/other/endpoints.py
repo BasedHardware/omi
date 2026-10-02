@@ -14,6 +14,7 @@ import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
+from database.firestore_tier_context import bind_request_owner
 from database.account_deletion_policy import account_deletion_blocks_access
 from database.users import record_client_device, record_user_platform
 from utils.account_cutover.access import (
@@ -29,7 +30,7 @@ from utils.byok import (
     validate_byok_request,
     validate_byok_websocket_keys,
 )
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
@@ -39,6 +40,23 @@ WS_AUTH_CODE_TOKEN_REFRESH = 4001
 WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
 WS_AUTH_CODE_ACCOUNT_DELETION = 4005
 WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
+
+
+def _executor_saturated_http_exception(error: ExecutorSaturatedError) -> HTTPException:
+    """Return the retryable HTTP response for bounded critical-work overload."""
+    return HTTPException(
+        status_code=503,
+        detail='Service temporarily unavailable. Try again shortly.',
+        headers={'Retry-After': '1'},
+    )
+
+
+async def run_critical_ws(fn: Callable[..., Any], *args: Any) -> Any:
+    """Run critical WebSocket work and turn overload into a retryable close frame."""
+    try:
+        return await run_blocking(critical_executor, fn, *args)
+    except ExecutorSaturatedError as error:
+        raise WebSocketException(code=1013, reason='Service temporarily unavailable; retry shortly.') from error
 
 
 def get_user_deletion_wipe_status(uid: str) -> str | None:
@@ -52,8 +70,7 @@ def _account_deletion_status(uid: str) -> str | None:
         return get_user_deletion_wipe_status(uid)
     except Exception as error:
         logger.error(
-            'Account-deletion auth fence unavailable for uid=%s error_type=%s',
-            uid,
+            'Account-deletion auth fence unavailable error_type=%s',
             type(error).__name__,
         )
         raise HTTPException(
@@ -63,6 +80,7 @@ def _account_deletion_status(uid: str) -> str | None:
 
 
 def enforce_account_deletion_http_access(uid: str) -> None:
+    bind_request_owner(uid)
     status = _account_deletion_status(uid)
     if account_deletion_blocks_access(status):
         raise HTTPException(
@@ -76,6 +94,7 @@ def enforce_account_deletion_http_access(uid: str) -> None:
 
 
 def enforce_account_deletion_ws_access(uid: str) -> None:
+    bind_request_owner(uid)
     try:
         status = _account_deletion_status(uid)
     except HTTPException as error:
@@ -140,10 +159,13 @@ def verify_token(token: str) -> str:
         # main.py's firebase_admin.initialize_app branches). This keeps the
         # bypass inert the moment real credentials are present, without
         # requiring test paths to change what they already do.
+        # A keyless deployment has no credential variable at all; its
+        # customer-data project pin marks it as real just the same.
         no_real_credential = not (
             os.getenv('SERVICE_ACCOUNT_JSON')
             or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
             or os.getenv('FIREBASE_AUTH_CREDENTIALS_PATH')
+            or os.getenv('OMI_CUSTOMER_DATA_PROJECT')
         )
         if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'
@@ -393,7 +415,7 @@ async def get_current_user_uid_ws_listen(
     the mutation in the handler's context; the blocking Firebase and
     Firestore calls are offloaded via ``run_blocking``.
     """
-    uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
+    uid = await run_critical_ws(_verify_ws_auth, authorization)
     try:
         enforce_jit_qa_uid(uid)
     except JITQAAdmissionError as error:
@@ -410,8 +432,8 @@ async def get_current_user_uid_ws_listen(
 
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
-        validated_byok_keys, error = await run_blocking(
-            critical_executor, validate_byok_websocket_keys, uid, extract_byok_from_websocket(websocket)
+        validated_byok_keys, error = await run_critical_ws(
+            validate_byok_websocket_keys, uid, extract_byok_from_websocket(websocket)
         )
         if error:
             raise WebSocketException(code=4003, reason=error)
@@ -504,7 +526,7 @@ async def get_current_user_uid_from_ws_message(
     such as ``/v4/web/listen`` the same way header-auth listen does.
     """
     try:
-        uid = await run_blocking(critical_executor, _verify_user_uid_from_ws_message, message)
+        uid = await run_critical_ws(_verify_user_uid_from_ws_message, message)
     except JITQAAdmissionError as error:
         raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from error
     await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
@@ -658,7 +680,10 @@ def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Ca
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
-        await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
+        try:
+            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
+        except ExecutorSaturatedError as error:
+            raise _executor_saturated_http_exception(error) from error
         return uid
 
     return dependency
@@ -681,7 +706,10 @@ def with_rate_limit_context(auth_context_dependency: Callable[..., Any], policy_
 
     async def dependency(auth_context: Any = Depends(auth_context_dependency)) -> Any:
         key = rate_limit_key_for_context(auth_context)
-        await run_blocking(critical_executor, _enforce_rate_limit, key, policy_name, fail_closed=True)
+        try:
+            await run_blocking(critical_executor, _enforce_rate_limit, key, policy_name, fail_closed=True)
+        except ExecutorSaturatedError as error:
+            raise _executor_saturated_http_exception(error) from error
         return auth_context
 
     return dependency

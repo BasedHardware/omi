@@ -106,6 +106,34 @@ void main() {
       await _appendUnreadable(prefs, 'pendingMemories:user-1');
       expect(prefs.pendingMemories.map((m) => m.id), ['pending-1']);
     });
+
+    test('cachedMemories preserves temporal assessment fields', () async {
+      final prefs = await _prefs({'uid': 'user-1'});
+      prefs.cachedMemories = [
+        Memory(
+          id: 'cached-1',
+          uid: 'user-1',
+          content: 'cached',
+          category: MemoryCategory.manual,
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+          visibility: MemoryVisibility.private,
+          asOf: DateTime.utc(2026, 9, 12),
+          currency: 0.7,
+          currencyBand: 'fading',
+          beliefComputedAt: DateTime.utc(2026, 9, 13),
+        ),
+      ];
+      expect(prefs.cachedMemories.single.currencyBand, 'fading');
+      expect(
+        prefs.cachedMemories.single.beliefComputedAt?.toUtc(),
+        DateTime.utc(2026, 9, 13),
+      );
+      expect(
+        prefs.cachedMemories.single.asOf?.toUtc(),
+        DateTime.utc(2026, 9, 12),
+      );
+    });
   });
 
   test('addCachedPerson still works after a bad entry and rewrites the cache clean', () async {

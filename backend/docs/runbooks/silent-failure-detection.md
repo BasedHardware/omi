@@ -176,3 +176,10 @@ to page anyone.
 Every breach in that table is a real defect, not noise. Re-run the backtest when changing
 a threshold — a rule that fires on healthy weeks gets muted, and a muted rule is worse
 than no rule.
+
+## Related: live-STT initialize_stt() deaths (2026-09-19)
+
+A `/v4/listen` session that dies in `initialize_stt()` never constructs a
+`LiveSTTAttempt`, so `omi-journey-live-transcription-fail` cannot see it. That
+outage is covered by `omi-stt-chain-exhausted-warn` / `omi-stt-chain-exhausted-page`
+on Resilience / Fallbacks panel 15 — see [resilience-dashboards.md](./resilience-dashboards.md).

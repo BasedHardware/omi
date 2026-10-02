@@ -94,12 +94,19 @@ def test_desktop_backend_cors_middleware_enforces_allowlist(monkeypatch):
                 'Access-Control-Request-Method': 'GET',
             },
         )
+        exposed = client.get('/', headers={'Origin': 'https://app.example'})
         without_origin = client.get('/')
 
     assert allowed.status_code == 200
     assert allowed.headers['access-control-allow-origin'] == 'https://app.example'
     assert denied.status_code == 400
     assert 'access-control-allow-origin' not in denied.headers
+    exposed_headers = {name.strip().lower() for name in exposed.headers['access-control-expose-headers'].split(',')}
+    assert {
+        'x-omi-memory-belief-enabled',
+        'x-omi-memory-next-cursor',
+        'x-omi-list-truncated',
+    } <= exposed_headers
     assert 'access-control-allow-origin' not in without_origin.headers
 
 
@@ -167,6 +174,11 @@ def test_desktop_backend_metrics_route_is_fail_closed(monkeypatch):
 
 def test_desktop_backend_mounts_authenticated_metrics(monkeypatch):
     monkeypatch.setenv('METRICS_SECRET', 'test-metrics-secret')
+    from utils.metrics import OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL
+
+    OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(
+        journey='desktop_chat', client_kind='desktop_macos', app_build='unknown'
+    ).inc()
     client = _test_client(monkeypatch, desktop_backend._build_app())
 
     with client:

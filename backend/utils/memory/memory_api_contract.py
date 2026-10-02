@@ -20,7 +20,9 @@ class MemoryApiExposure(str, Enum):
 
 
 CANONICAL_LIFECYCLE_FIELDS = frozenset({"memory_tier", "layer", "tier", "expires_at"})
-BELIEF_VIEW_FIELDS = frozenset({"currency", "currency_band", "as_of", "half_life_days", "belief_class"})
+BELIEF_VIEW_FIELDS = frozenset(
+    {"currency", "currency_band", "as_of", "half_life_days", "belief_class", "belief_computed_at"}
+)
 MEMORY_INTERNAL_FIELDS = frozenset(
     {
         "memory_only",

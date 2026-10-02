@@ -26,7 +26,6 @@ def test_get_memories_tool_reads_arbitrary_uid_through_universal_service(monkeyp
             return [_Memory()]
 
     monkeypatch.setattr(memory_tools, "MemoryService", _UniversalService)
-    monkeypatch.setattr(memory_tools.MemoryDB, "get_memories_as_str", lambda memories: "Universal memory")
 
     result = memory_tools.get_memories_tool.invoke(
         {"limit": 10, "offset": 0}, config={"configurable": {"user_id": "uid-former-cohort"}}
@@ -71,7 +70,6 @@ def test_rest_tool_service_reads_arbitrary_uid_through_universal_service(monkeyp
             return [_Memory()]
 
     monkeypatch.setattr(memory_service_tools, "MemoryService", _UniversalService)
-    monkeypatch.setattr(memory_service_tools.MemoryDB, "get_memories_as_str", lambda memories: "Universal memory")
 
     result = memory_service_tools.get_memories_text(uid="uid-arbitrary-account", limit=10, offset=0)
 

@@ -12,7 +12,11 @@ export const KNOWLEDGE_LEDGER_SCHEMA_VERSION = 'knowledge_ledger.v1' as const
 export type KnowledgeLedgerKind = 'fact' | 'document' | 'trigger' | 'unknown'
 export type KnowledgeLedgerStatus = 'active' | 'superseded' | 'tombstoned' | 'purged' | 'unknown'
 export type KnowledgeLedgerSubjectScope =
-  'primary_user' | 'user_owned_project' | 'user_relationship' | 'third_party' | 'unknown'
+  | 'primary_user'
+  | 'user_owned_project'
+  | 'user_relationship'
+  | 'third_party'
+  | 'unknown'
 
 export type KnowledgeLedgerEvidence = {
   artifact_ref?: Record<string, unknown>
@@ -72,6 +76,18 @@ export type KnowledgeLedgerMemory = {
   curation_weight?: number | null
   intent_backed?: boolean
   user_asserted?: boolean
+  /**
+   * Read-only temporal belief projection. These fields are deliberately
+   * optional: legacy rows and a server with the beta disabled do not expose
+   * them. The client must never infer currentness when the projection is
+   * absent.
+   */
+  currency?: number | null
+  currency_band?: string | null
+  as_of?: string | null
+  belief_class?: string | null
+  half_life_days?: number | null
+  belief_computed_at?: string | null
   write_reason?: string | null
   sensitivity?: string | null
   account_generation?: number | null
@@ -99,10 +115,20 @@ export type KnowledgeLedgerMemory = {
 }
 
 export type ChatEvidenceReferenceKind =
-  'conversation_summary' | 'conversation_segment' | 'screen' | 'keyframe' | 'request' | 'unknown'
+  | 'conversation_summary'
+  | 'conversation_segment'
+  | 'screen'
+  | 'keyframe'
+  | 'request'
+  | 'unknown'
 
 export type ChatEvidenceReferenceState =
-  'available' | 'loading' | 'offline' | 'pruned' | 'failed' | 'unknown'
+  | 'available'
+  | 'loading'
+  | 'offline'
+  | 'pruned'
+  | 'failed'
+  | 'unknown'
 
 export type ChatEvidenceReference = {
   id: string
@@ -404,6 +430,22 @@ export function parseKnowledgeLedgerMemory(value: unknown): KnowledgeLedgerMemor
       : {}),
     ...(isLedgerV1 && asBoolean(raw.user_asserted) !== undefined
       ? { user_asserted: raw.user_asserted as boolean }
+      : {}),
+    ...(asFiniteNumber(raw.currency) !== undefined
+      ? { currency: asFiniteNumber(raw.currency) }
+      : {}),
+    ...(asString(raw.currency_band) !== undefined
+      ? { currency_band: raw.currency_band as string }
+      : {}),
+    ...(boundedString(raw.as_of) !== undefined ? { as_of: boundedString(raw.as_of) } : {}),
+    ...(asString(raw.belief_class) !== undefined
+      ? { belief_class: raw.belief_class as string }
+      : {}),
+    ...(asFiniteNumber(raw.half_life_days) !== undefined
+      ? { half_life_days: asFiniteNumber(raw.half_life_days) }
+      : {}),
+    ...(boundedString(raw.belief_computed_at) !== undefined
+      ? { belief_computed_at: boundedString(raw.belief_computed_at) }
       : {}),
     ...(isLedgerV1 && LEDGER_WRITE_REASONS.has(boundedString(raw.write_reason)?.toLowerCase() ?? '')
       ? { write_reason: boundedString(raw.write_reason)?.toLowerCase() }

@@ -10,9 +10,15 @@ import secrets
 import struct
 import wave
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 from datetime import datetime, timedelta
 from typing import Dict, Optional
+import html
 from urllib.parse import urlencode
+from datetime import datetime, timedelta
+from typing import Dict, Optional
+from urllib.parse import quote, urlencode
 
 import requests
 from dotenv import load_dotenv
@@ -53,9 +59,13 @@ app = FastAPI(
 )
 
 # ============== Audio Buffer ==============
+MAX_AUDIO_BUFFER_BYTES = 25 * 1024 * 1024  # 25 MB per user
+AUDIO_BUFFER_TTL_SECONDS = 3600  # 1 hour eviction
+
 # Store audio chunks by user ID
 audio_buffers: Dict[str, bytes] = defaultdict(bytes)
 audio_sample_rates: Dict[str, int] = {}
+audio_buffer_created: Dict[str, datetime] = {}
 
 
 def create_wav_file(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
@@ -77,8 +87,24 @@ def get_and_clear_audio(uid: str) -> Optional[bytes]:
         del audio_buffers[uid]
         if uid in audio_sample_rates:
             del audio_sample_rates[uid]
+        if uid in audio_buffer_created:
+            del audio_buffer_created[uid]
         return create_wav_file(audio_data, sample_rate)
     return None
+
+
+def _evict_stale_audio_buffers() -> None:
+    """Remove audio buffers that have exceeded TTL."""
+    now = datetime.now(timezone.utc)
+    stale_uids = [
+        uid for uid, created in audio_buffer_created.items()
+        if (now - created).total_seconds() > AUDIO_BUFFER_TTL_SECONDS
+    ]
+    for uid in stale_uids:
+        audio_buffers.pop(uid, None)
+        audio_sample_rates.pop(uid, None)
+        audio_buffer_created.pop(uid, None)
+        print(f"[AUDIO] Evicted stale buffer for uid={uid} (TTL exceeded)")
 
 
 # ============== Helper Functions ==============
@@ -103,8 +129,13 @@ def get_valid_access_token(uid: str) -> Optional[str]:
             expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
             if datetime.now(expires_at.tzinfo) >= expires_at - timedelta(minutes=5):
                 # Token expired or about to expire, refresh it
-                new_token = refresh_access_token(refresh_token)
-                if new_token:
+                token_data = refresh_access_token_full(refresh_token)
+                if token_data:
+                    new_token = token_data.get("access_token")
+                    new_expires_at = token_data.get("expires_at")
+                    new_refresh = token_data.get("refresh_token")
+                    if new_token and new_expires_at:
+                        update_dropbox_tokens(uid, new_token, new_expires_at, new_refresh)
                     return new_token
                 return None
         except Exception:
@@ -114,7 +145,13 @@ def get_valid_access_token(uid: str) -> Optional[str]:
 
 
 def refresh_access_token(refresh_token: str) -> Optional[str]:
-    """Refresh the access token using refresh token."""
+    """Refresh the access token using refresh token, returning token string."""
+    data = refresh_access_token_full(refresh_token)
+    return data.get("access_token") if data else None
+
+
+def refresh_access_token_full(refresh_token: str) -> Optional[Dict[str, Any]]:
+    """Refresh the access token using refresh token, returning token metadata."""
     try:
         response = requests.post(
             DROPBOX_TOKEN_URL,
@@ -124,16 +161,22 @@ def refresh_access_token(refresh_token: str) -> Optional[str]:
                 "client_id": DROPBOX_APP_KEY,
                 "client_secret": DROPBOX_APP_SECRET,
             },
+            timeout=10,
         )
 
         if response.status_code == 200:
             data = response.json()
             new_access_token = data.get("access_token")
+            if not new_access_token:
+                return None
             expires_in = data.get("expires_in", 14400)  # Default 4 hours
-            new_expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
+            new_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            # Note: We can't update tokens here without uid, caller should handle
-            return new_access_token
+            return {
+                "access_token": new_access_token,
+                "expires_at": new_expires_at,
+                "refresh_token": data.get("refresh_token", refresh_token),
+            }
 
         return None
     except Exception:
@@ -218,6 +261,11 @@ def get_home_page_html(
     if settings is None:
         settings = get_user_settings(uid)
 
+    # uid is reflected into form actions and hrefs below — percent-encode
+    # it so quotes cannot break the attribute and &, #, or .. cannot
+    # corrupt the query (same hardening as the other plugin apps).
+    uid_q = quote(uid or "", safe="")
+
     if connected:
         return f"""
 <!DOCTYPE html>
@@ -253,7 +301,7 @@ def get_home_page_html(
             <span style="color: #666;">{email}</span>
         </div>
 
-        <form class="settings-form" method="POST" action="/settings?uid={uid}">
+        <form class="settings-form" method="POST" action="/settings?uid={uid_q}">
             <div class="form-group">
                 <label for="folder_name">Folder Name</label>
                 <input type="text" id="folder_name" name="folder_name" value="{settings.get('folder_name', 'Omi Conversations')}" placeholder="Omi Conversations">
@@ -282,7 +330,7 @@ def get_home_page_html(
 
             <div class="actions">
                 <button type="submit" class="btn btn-primary">Save Settings</button>
-                <a href="/disconnect?uid={uid}" class="btn btn-danger">Disconnect</a>
+                <a href="/disconnect?uid={uid_q}" class="btn btn-danger">Disconnect</a>
             </div>
         </form>
     </div>
@@ -309,7 +357,7 @@ def get_home_page_html(
     <div class="card">
         <h1>Connect Dropbox</h1>
         <p>Connect your Dropbox account to automatically save your Omi conversations.</p>
-        <a href="/auth/dropbox?uid={uid}" class="btn">Connect Dropbox</a>
+        <a href="/auth/dropbox?uid={uid_q}" class="btn">Connect Dropbox</a>
     </div>
 </body>
 </html>
@@ -398,7 +446,7 @@ async def auth_callback(
 <head><title>Authorization Failed</title></head>
 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
     <h1 style="color: #dc3545;">Authorization Failed</h1>
-    <p>{error_description or error}</p>
+    <p>{html.escape(error_description or error, quote=True)}</p>
 </body>
 </html>
 """,
@@ -447,8 +495,8 @@ async def auth_callback(
         if not access_token:
             return HTMLResponse("No access token received", status_code=400)
 
-        # Calculate expiration
-        expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
+        # Calculate expiration (timezone-aware)
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         # Get user info
         display_name = ""
@@ -471,8 +519,9 @@ async def auth_callback(
             email=email,
         )
 
-        # Redirect to home page
-        return RedirectResponse(url=f"/?uid={uid}")
+        # Redirect to home page (uid is server-verified here, but keep it
+        # percent-encoded so a hostile stored uid cannot corrupt the query)
+        return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
     except Exception as e:
         return HTMLResponse(f"Error during authorization: {str(e)}", status_code=500)
@@ -482,7 +531,7 @@ async def auth_callback(
 async def disconnect(uid: str = Query(...)):
     """Disconnect Dropbox account."""
     delete_dropbox_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 # ============== Settings Endpoint ==============
@@ -501,7 +550,7 @@ async def update_settings(request: Request, uid: str = Query(...)):
     }
 
     store_user_settings(uid, settings)
-    return RedirectResponse(url=f"/?uid={uid}", status_code=303)
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
 
 
 # ============== Webhook Endpoint ==============
@@ -610,6 +659,8 @@ async def on_conversation_created(
 
     # Save audio if available
     if save_audio:
+        # Evict stale buffers before reading
+        _evict_stale_audio_buffers()
         audio_wav = get_and_clear_audio(uid)
         if audio_wav:
             print(f"[WEBHOOK] Uploading audio.wav ({len(audio_wav)} bytes)")
@@ -702,8 +753,11 @@ async def tool_search_dropbox(request: Request):
     """Search for files in Dropbox."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            return {"error": "request body must be a JSON object"}
         uid = body.get("uid")
-        query = body.get("query", "")
+        raw_query = body.get("query")
+        query = str(raw_query).strip() if raw_query is not None else ""
 
         if not uid:
             return {"error": "Missing user ID"}
@@ -752,8 +806,11 @@ async def tool_list_dropbox(request: Request):
     """List files in Dropbox folder."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            return {"error": "request body must be a JSON object"}
         uid = body.get("uid")
-        folder = body.get("folder", "")
+        raw_folder = body.get("folder")
+        folder = str(raw_folder).strip() if raw_folder is not None else ""
 
         if not uid:
             return {"error": "Missing user ID"}
@@ -806,8 +863,11 @@ async def tool_read_dropbox_file(request: Request):
     """Read and extract text content from a file in Dropbox."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            return {"error": "request body must be a JSON object"}
         uid = body.get("uid")
-        path = body.get("path", "")
+        raw_path = body.get("path")
+        path = str(raw_path).strip() if raw_path is not None else ""
 
         if not uid:
             return {"error": "Missing user ID"}
@@ -931,11 +991,27 @@ async def receive_audio(
     Accumulates audio until the conversation webhook is triggered.
     """
     try:
+        # Validate sample rate (human speech: 8kHz - 48kHz)
+        if sample_rate < 8000 or sample_rate > 48000:
+            return {"status": "error", "message": f"Invalid sample_rate: {sample_rate}. Must be between 8000 and 48000."}
+
         audio_bytes = await request.body()
 
         if audio_bytes:
+            # Evict stale buffers (TTL-based cleanup)
+            _evict_stale_audio_buffers()
+
+            current_size = len(audio_buffers[uid])
+            if current_size + len(audio_bytes) > MAX_AUDIO_BUFFER_BYTES:
+                return {
+                    "status": "error",
+                    "message": f"Audio buffer overflow: {current_size} + {len(audio_bytes)} exceeds {MAX_AUDIO_BUFFER_BYTES} bytes",
+                }
+
             audio_buffers[uid] += audio_bytes
             audio_sample_rates[uid] = sample_rate
+            if uid not in audio_buffer_created:
+                audio_buffer_created[uid] = datetime.now(timezone.utc)
             print(f"[AUDIO] Received {len(audio_bytes)} bytes for uid={uid}, total: {len(audio_buffers[uid])} bytes")
 
         return {"status": "ok"}

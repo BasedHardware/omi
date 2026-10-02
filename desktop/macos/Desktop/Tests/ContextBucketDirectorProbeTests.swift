@@ -70,7 +70,7 @@
           return ProactiveLaneResult(
             operation: operation,
             lane: "omi:auto:desktop-proactive-reasoning",
-            providerModel: "gpt-5.6-luna",
+            providerModel: "gpt-6-luna",
             usage: ProactiveLaneUsage(cachedTokens: 1, cacheWriteTokens: 0),
             cacheWrite: false,
             fallbackClass: "unknown",
@@ -119,7 +119,7 @@
       XCTAssertEqual(result["decision"], "suggest")
       XCTAssertEqual(result["bucket_entry_ref_count"], "1")
       XCTAssertEqual(result["fact_ref_count"], "1")
-      XCTAssertEqual(result["model"], "gpt-5.6-luna")
+      XCTAssertEqual(result["model"], "gpt-6-luna")
       XCTAssertNotNil(result["latency_ms"])
     }
 
@@ -275,7 +275,10 @@
       let descriptor = DesktopAutomationActionRegistry.shared.descriptors().first {
         $0.name == "probe_context_bucket_director"
       }
-      XCTAssertEqual(descriptor?.safety, "network_or_model")
+      // Main later added notification/journal delivery-state persistence to the
+      // probe, so its typed effects now include .remoteWrite — which the derived
+      // coarse label surfaces ahead of network_or_model.
+      XCTAssertEqual(descriptor?.safety, "remote_write")
       XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("without it nothing is delivered") }) == true)
       XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("reasoning quota") }) == true)
       XCTAssertEqual(
@@ -320,7 +323,7 @@
           return ProactiveLaneResult(
             operation: operation,
             lane: "omi:auto:desktop-proactive-reasoning",
-            providerModel: "gpt-5.6-luna",
+            providerModel: "gpt-6-luna",
             usage: ProactiveLaneUsage(cachedTokens: 0, cacheWriteTokens: 0),
             cacheWrite: false,
             fallbackClass: "unknown",

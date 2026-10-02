@@ -23,6 +23,7 @@ import httpx
 
 from database.auth import get_user_from_uid
 from utils.conversations.overview_markdown import overview_to_email_html
+from utils.conversations.summary_selection import select_primary_summary
 from utils.share_links import build_share_url
 
 logger = logging.getLogger(__name__)
@@ -360,7 +361,7 @@ def send_summary_email(
     sender_name = _sender_display_name(owner)
     structured = conversation.get('structured') or {}
     title = (structured.get('title') or '').strip()
-    overview = (structured.get('overview') or '').strip()
+    overview = select_primary_summary(conversation).content
     share_url = build_share_url(f"/conversations/{conversation.get('id')}")
 
     content = build_summary_email(

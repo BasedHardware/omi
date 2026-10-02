@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-timer-after-dispose",
+  "violated_contract": "A Dart Timer or Future.delayed armed by a State is retained by the event loop, not by the widget. Dispose that does not cancel it leaves the callback queued after unmount. In production the callback must not use the disposed context; in flutter_test the pending timer fails the suite's invariant check even when the callback itself no-ops on !mounted.",
+  "canonical_prevention": "Hold the Timer on the State, cancel it in dispose, and re-check mounted before touching context. The guard test pumps the production page, disposes it, and ends without elapsing the delay so a leftover timer fails _verifyInvariants.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/home_announcement_timer_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/home/",
+    "app/test/widgets/"
+  ],
+  "status": "open"
+}

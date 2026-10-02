@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from contextlib import nullcontext
 from uuid import UUID, uuid4
@@ -310,7 +311,7 @@ def test_qa_budget_is_sent_to_gateway_and_accounting_stays_outside_model_schema(
         dict(_TRANSCRIPTS),
         llm=llm,
         max_provider_retries=0,
-        max_input_tokens=12_288,
+        max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS,
         max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
         jit_run_id="qa-sweep-run-1",
         jit_max_spend_micro_usd=50_000,
@@ -325,16 +326,16 @@ def test_qa_budget_is_sent_to_gateway_and_accounting_stays_outside_model_schema(
     assert headers["x-omi-jit-contract-version"] == "jit-cloud-qa-v1"
     assert headers["x-omi-jit-run-id"] == "qa-sweep-run-1"
     assert headers["x-omi-jit-max-attempts"] == "1"
-    assert headers["x-omi-jit-max-input-tokens"] == "12288"
-    assert headers["x-omi-jit-max-output-tokens"] == "256"
+    assert headers["x-omi-jit-max-input-tokens"] == str(QA_SWEEP_MAX_INPUT_TOKENS)
+    assert headers["x-omi-jit-max-output-tokens"] == str(QA_SWEEP_MAX_OUTPUT_TOKENS)
     assert headers["x-omi-jit-max-spend-micro-usd"] == "50000"
     assert len(dispatch["requests"]) == 1
     request = dispatch["requests"][0]
     assert request["request_id"] == headers["x-omi-request-id"]
-    assert 0 < request["input_bytes"] <= 12_288
+    assert 0 < request["input_bytes"] <= QA_SWEEP_MAX_INPUT_TOKENS
     assert request["input_bytes"] > len(llm.prompts[0].encode("utf-8"))
-    assert request["max_input_tokens"] == 12_288
-    assert request["max_output_tokens"] == 256
+    assert request["max_input_tokens"] == QA_SWEEP_MAX_INPUT_TOKENS
+    assert request["max_output_tokens"] == QA_SWEEP_MAX_OUTPUT_TOKENS
     assert request["max_spend_micro_usd"] == 50_000
     assert request["usage_observed"] is True
     assert request["usage_tokens"] == {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}
@@ -560,6 +561,84 @@ def test_daily_sweep_memory_omitted_about_defaults_empty_and_sanitizer_preserves
     assert sanitized.memories[0].duplicate_of == 'mem-existing'
 
 
+def test_daily_sweep_sanitizer_preserves_typed_decision_and_drops_task_controls():
+    from utils.llm.memories import DailySweepAgentMemory, DailySweepAgentPassOutput, _sanitized_daily_sweep_output
+
+    output = DailySweepAgentPassOutput(
+        memories=[
+            DailySweepAgentMemory(
+                content='Dave accepted the Omi launch plan',
+                about='user',
+                conversation_ids=['conversation-1'],
+                basis='decided',
+                arguments={
+                    'object': 'Omi launch plan',
+                    'decision': 'accepted',
+                    'rationale': 'keeps the team focused',
+                    'task_id': 'must-not-become-a-task',
+                },
+            )
+        ]
+    )
+
+    sanitized = _sanitized_daily_sweep_output(output, {'conversation-1'}, 8, lookup_ids=set())
+
+    assert sanitized.memories[0].arguments == {
+        'object': 'Omi launch plan',
+        'decision': 'accepted',
+        'rationale': 'keeps the team focused',
+    }
+
+
+def test_daily_sweep_proposed_decision_survives_without_a_standing_slot():
+    from utils.llm.memories import DailySweepAgentMemory, DailySweepAgentPassOutput, _sanitized_daily_sweep_output
+
+    output = DailySweepAgentPassOutput(
+        memories=[
+            DailySweepAgentMemory(
+                content='Dave proposed moving the launch date',
+                about='user',
+                conversation_ids=['conversation-1'],
+                basis='proposed',
+                slot='launch_date',
+                arguments={'decision': 'proposed', 'object': 'launch date'},
+            )
+        ]
+    )
+
+    sanitized = _sanitized_daily_sweep_output(output, {'conversation-1'}, 8, lookup_ids=set())
+
+    assert sanitized.memories[0].arguments['decision'] == 'proposed'
+
+
+def test_non_string_decision_is_dropped_without_raising():
+    """A malformed list/object decision from the model is unhashable and used
+    to raise TypeError during argument normalization, discarding the entire
+    extraction batch; it must be dropped like any other invalid decision."""
+    from utils.llm.memories import DailySweepAgentMemory, DailySweepAgentPassOutput, _sanitized_daily_sweep_output
+    from utils.llm.working_observations import normalize_scoped_claim_arguments
+
+    normalized = normalize_scoped_claim_arguments({'decision': ['proposed'], 'rationale': 'x', 'object': 'y'})
+    assert normalized == {'object': 'y'}
+
+    output = DailySweepAgentPassOutput(
+        memories=[
+            DailySweepAgentMemory(
+                content='Dave proposed moving the launch date',
+                about='user',
+                conversation_ids=['conversation-1'],
+                basis='proposed',
+                slot='launch_date',
+                arguments={'decision': {'state': 'proposed'}, 'object': 'launch date'},
+            )
+        ]
+    )
+
+    sanitized = _sanitized_daily_sweep_output(output, {'conversation-1'}, 8, lookup_ids=set())
+
+    assert sanitized.memories[0].arguments == {'object': 'launch date'}
+
+
 def test_invalid_duplicate_of_is_cleared_so_the_candidate_stays_new():
     from utils.llm.memories import DailySweepAgentMemory, DailySweepAgentPassOutput, _sanitized_daily_sweep_output
 
@@ -614,3 +693,129 @@ def test_lookup_hit_duplicate_of_is_kept_and_invalid_markers_do_not_skip_new_fac
     by_content = {memory.content: memory.duplicate_of for memory in output.memories}
     assert by_content["Dave lifts on Tuesdays"] == "mem-gym"
     assert by_content["Dave now lifts on Fridays too"] == ""
+
+
+def test_input_budget_failure_logs_reason_code(caplog):
+    llm = _ScriptedLlm([_response()])
+    dispatch = {}
+    with caplog.at_level(logging.ERROR, logger="utils.llm.memories"):
+        with pytest.raises(MemoryExtractionError) as captured:
+            run_daily_sweep_summary_agent(
+                "uid-1",
+                _ROWS,
+                dict(_TRANSCRIPTS),
+                llm=llm,
+                max_provider_retries=0,
+                max_input_tokens=32,
+                max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
+                jit_run_id="qa-sweep-run-1",
+                jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD,
+                dispatch_evidence=dispatch,
+            )
+    assert captured.value.extractor == "daily_sweep_summary_input_budget"
+    assert "daily_sweep_summary_input_budget" in caplog.text
+    assert "Daily sweep summary agent failed: daily_sweep_summary_input_budget" in caplog.text
+    assert llm.prompts == []
+    assert dispatch["failure_reason"] == "daily_sweep_summary_input_budget"
+    assert dispatch["requests"] == []
+
+
+def test_non_extraction_failure_logs_cause_class_name(caplog):
+    dispatch = {}
+    with caplog.at_level(logging.ERROR, logger="utils.llm.memories"):
+        with pytest.raises(MemoryExtractionError) as captured:
+            run_daily_sweep_summary_agent(
+                "uid-1",
+                _ROWS,
+                dict(_TRANSCRIPTS),
+                llm=_ProviderFailureLlm([]),
+                max_provider_retries=0,
+                max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS,
+                max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
+                jit_run_id="qa-sweep-run-1",
+                jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD,
+                dispatch_evidence=dispatch,
+            )
+    assert captured.value.extractor == "daily_sweep_summary_agent"
+    assert "Daily sweep summary agent failed: RuntimeError" in caplog.text
+    assert dispatch["failure_reason"] == "daily_sweep_summary_agent"
+    assert dispatch["failure_cause"] == "RuntimeError"
+
+
+def test_oversized_input_trims_oldest_spine_rows_and_still_dispatches():
+    oldest = ("old-conv", "00:01 (work) " + ("oldest-fact " * 1200))
+    newest = ("new-conv", "23:59 (work) " + ("newest-fact " * 1200))
+    llm = _ScriptedLlm(
+        [_response(memories=[{"content": "Dave kept the newest fact", "conversation_ids": ["new-conv"]}])]
+    )
+    dispatch = {}
+    output = run_daily_sweep_summary_agent(
+        "uid-1",
+        (oldest, newest),
+        {"old-conv": "old transcript", "new-conv": "new transcript"},
+        llm=llm,
+        max_candidates=1,
+        max_transcript_fetches=0,
+        max_memory_lookups=0,
+        max_provider_retries=0,
+        max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS,
+        max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS,
+        jit_run_id="qa-sweep-run-1",
+        jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD,
+        dispatch_evidence=dispatch,
+    )
+
+    assert dispatch["truncated"] is True
+    assert len(llm.prompts) == 1
+    assert "[truncated]" in llm.prompts[0]
+    assert "new-conv" in llm.prompts[0]
+    assert "old-conv" not in llm.prompts[0]
+    assert "old transcript" not in llm.prompts[0]
+    assert "new transcript" not in llm.prompts[0]
+    assert len(dispatch["requests"]) == 1
+    assert dispatch["requests"][0]["input_bytes"] <= QA_SWEEP_MAX_INPUT_TOKENS
+    assert [memory.content for memory in output.memories] == ["Dave kept the newest fact"]
+
+
+@pytest.mark.parametrize("failure_point", ["profile", "client", "serialization"])
+def test_preparation_failures_are_certified_only_inside_claim(monkeypatch, failure_point):
+    from models.daily_sweep_dispatch import SweepDispatchScope, SweepPreDispatchError
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("sensitive details")
+
+    target = {"profile": "get_prompt_memories", "client": "get_llm", "serialization": "_daily_sweep_request_body_bytes"}
+    monkeypatch.setattr(memories_module, target[failure_point], fail)
+    model = None if failure_point == "client" else _ScriptedLlm([])
+    scope = SweepDispatchScope()
+    with scope, pytest.raises(SweepPreDispatchError) as caught:
+        run_daily_sweep_summary_agent("user-1", _ROWS, _TRANSCRIPTS, llm=model)
+    assert scope.proves_pre_dispatch(caught.value)
+    assert caught.value.extractor == "daily_sweep_summary_agent"
+    assert "sensitive" not in str(caught.value)
+
+
+@pytest.mark.parametrize("failure_point", ["provider", "parse", "phase_b_budget"])
+def test_failures_after_first_dispatch_never_certified(failure_point):
+    from models.daily_sweep_dispatch import SweepDispatchScope
+
+    if failure_point == "provider":
+        llm = _ProviderFailureLlm([])
+    elif failure_point == "parse":
+        llm = _ScriptedLlm(["not-json"])
+    else:
+
+        class PhaseBFailure(_ScriptedLlm):
+            def _get_request_payload(self, prompt_value, **kwargs):
+                if self.prompts:
+                    raise MemoryExtractionError("daily_sweep_summary_input_budget")
+                return super()._get_request_payload(prompt_value, **kwargs)
+
+        llm = PhaseBFailure(
+            [_response(transcript_requests=[{"conversation_id": "conversation-1", "reason": "detail"}])]
+        )
+    scope = SweepDispatchScope()
+    with scope, pytest.raises(MemoryExtractionError) as caught:
+        run_daily_sweep_summary_agent("user-1", _ROWS, _TRANSCRIPTS, llm=llm)
+    assert not scope.proves_pre_dispatch(caught.value)
+    assert len(llm.prompts) == 1

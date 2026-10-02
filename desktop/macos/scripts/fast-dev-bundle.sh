@@ -94,6 +94,7 @@ for path in [
     "scripts/app-config.sh",
     "scripts/prepare-agent-runtime.sh",
     "scripts/agent-runtime-cache.sh",
+    "scripts/macos-copy-tree.sh",
     "scripts/prepare-desktop-bundle-native-deps.sh",
     "scripts/prepare-local-dev-entitlements.sh",
     "scripts/audit-desktop-bundle-deps.sh",

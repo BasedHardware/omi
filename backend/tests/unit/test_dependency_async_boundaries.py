@@ -471,6 +471,19 @@ def test_authentication_and_scope_failures_preserve_public_http_semantics() -> N
         assert dependencies.Scopes.GOALS_WRITE in scope_exc.value.detail
 
 
+def test_firebase_verification_saturation_is_retryable_503() -> None:
+    with _loaded_dependencies() as (dependencies, _firebase_auth, _mcp_db, _dev_db):
+        dependencies.run_blocking = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            dependencies.ExecutorSaturatedError('critical executor is saturated')
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')))
+
+        assert exc.value.status_code == 503
+        assert exc.value.headers == {'Retry-After': '1'}
+
+
 def test_dev_write_paths_check_burst_and_dedicated_rate_budgets() -> None:
     """GH #13505: the abused /v1/dev/* write paths must ride dedicated limits.
 

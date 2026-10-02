@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import time
 from pathlib import Path
 
@@ -404,20 +403,6 @@ def test_gate_is_wired_into_every_uid_bearing_flag_site(relpath: str, needle: st
     """Static tripwire: delete a consult and this fails; the decision tables above would not."""
     source = (_BACKEND / relpath).read_text(encoding='utf-8')
     assert needle in source, f'{relpath} no longer consults the cohort ({needle})'
-
-
-def test_coordinator_sites_still_read_the_flag_without_a_uid() -> None:
-    """Documents the known gap: process_conversation.py passes no uid at either
-    site, so with a lit flag those two sites admit nobody until the jit lane
-    adds `uid` to the calls (see the overnight evidence record). If this test
-    starts failing because the calls now carry `uid`, delete it and the gap
-    note together."""
-    source = (_BACKEND / 'utils' / 'conversations' / 'process_conversation.py').read_text(encoding='utf-8')
-    assert re.search(r'free_tier_local_processing_enabled\(\)', source)
-    assert re.search(r'free_tier_memory_suppression_enabled\(\)', source)
-
-
-# --------------------------------------------- concurrency is not ill health
 
 
 def test_hitting_the_in_flight_cap_never_blinds_the_kill_switch_process_wide(monkeypatch) -> None:

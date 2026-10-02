@@ -363,7 +363,7 @@ struct ChatQueryErrorDetail: Equatable, Sendable {
       return ChatQueryErrorDetail(
         errorCode: classifierOwnsCode ? classified.code.rawValue : failure.failureCode.rawValue,
         retryable: classifierOwnsCode ? classified.retryable : failure.retryable,
-        failureCode: boundedFailureCode(failure.code),
+        failureCode: failure.failureCode == .unknown ? boundedFailureCode(failure.code) : failure.failureCode.rawValue,
         failureSource: failure.source,
         adapterId: failure.adapterId,
         provider: failure.provider,

@@ -48,7 +48,7 @@ class HolidayRequest(BaseModel):
     year: int = Field(..., ge=1970, le=2100)
     limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
 
-    @field_validator("country_code")
+    @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
@@ -58,7 +58,7 @@ class NextHolidayRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
     limit: int = Field(default=8, ge=1, le=MAX_ITEMS)
 
-    @field_validator("country_code")
+    @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
@@ -69,51 +69,73 @@ class LongWeekendRequest(BaseModel):
     year: int = Field(..., ge=1970, le=2100)
     limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
 
-    @field_validator("country_code")
+    @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
 
 
-def _normalize_country_code(value: str) -> str:
+def _normalize_country_code(value: Any) -> str:
+    if not isinstance(value, str):
+        raise ValueError("country_code must be a 2-letter code, such as US or DE")
     code = value.strip().upper()
     if len(code) != 2 or not code.isalpha():
         raise ValueError("country_code must be a 2-letter code, such as US or DE")
     return code
 
 
-def _format_list(values: list[str] | None) -> str:
-    if not values:
+def _format_list(values: Any) -> str:
+    if not isinstance(values, list):
         return "all regions"
-    visible = values[:5]
+    visible = [str(value) for value in values[:5] if value is not None]
+    if not visible:
+        return "all regions"
     suffix = "" if len(values) <= 5 else f" +{len(values) - 5} more"
     return ", ".join(visible) + suffix
 
 
-def _format_holiday(holiday: dict[str, Any]) -> str:
+def _format_holiday(holiday: Any) -> str:
+    if not isinstance(holiday, dict):
+        return "- Unknown holiday"
     regional = "global" if holiday.get("global") else _format_list(holiday.get("counties"))
-    types = ", ".join(holiday.get("types") or [])
+    raw_types = holiday.get("types")
+    if isinstance(raw_types, list):
+        types = ", ".join(str(value) for value in raw_types if value is not None)
+    elif raw_types:
+        types = str(raw_types)
+    else:
+        types = ""
     type_text = f"; {types}" if types else ""
-    local_name = holiday.get("localName")
-    name = holiday.get("name")
-    display_name = name if name == local_name or not local_name else f"{name} / {local_name}"
-    return f"- {holiday.get('date')}: {display_name} ({regional}{type_text})"
+    local_name = str(holiday.get("localName")) if holiday.get("localName") else ""
+    name = str(holiday.get("name")) if holiday.get("name") else "Unnamed holiday"
+    display_name = name if not local_name or name == local_name else f"{name} / {local_name}"
+    date = str(holiday.get("date")) if holiday.get("date") else "unknown date"
+    return f"- {date}: {display_name} ({regional}{type_text})"
 
 
-def _format_long_weekend(item: dict[str, Any]) -> str:
+def _format_long_weekend(item: Any) -> str:
+    if not isinstance(item, dict):
+        return "- Unknown long weekend"
     raw_bridge_days = item.get("bridgeDays")
     bridge_days = raw_bridge_days if isinstance(raw_bridge_days, list) else []
-    if bridge_days:
-        bridge_text = f"; bridge day: {', '.join(bridge_days)}"
+    bridge_values = [str(value) for value in bridge_days if value is not None]
+    if bridge_values:
+        bridge_text = f"; bridge day: {', '.join(bridge_values)}"
     elif item.get("needBridgeDay"):
         bridge_text = "; bridge day needed"
     else:
         bridge_text = "; no bridge day needed"
-    return f"- {item.get('startDate')} to {item.get('endDate')}: {item.get('dayCount')} days{bridge_text}"
+    start_date = str(item.get("startDate")) if item.get("startDate") else "unknown start"
+    end_date = str(item.get("endDate")) if item.get("endDate") else "unknown end"
+    day_count = str(item.get("dayCount")) if item.get("dayCount") is not None else "unknown"
+    return f"- {start_date} to {end_date}: {day_count} days{bridge_text}"
 
 
 async def _request_json(path: str) -> Any:
-    client: httpx.AsyncClient = app.state.http_client
+    client = getattr(app.state, "http_client", None)
+    if client is None or getattr(client, "is_closed", False):
+        client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
+        app.state.http_client = client
     response = await client.get(f"{NAGER_BASE_URL}{path}")
     response.raise_for_status()
     if response.status_code == 204 or not response.content:
@@ -216,6 +238,8 @@ async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
         holidays = await _request_json(f"/PublicHolidays/{request.year}/{request.country_code}")
         if not holidays:
             return ChatToolResponse(error=f"no holidays returned for {request.country_code} in {request.year}")
+        if not isinstance(holidays, list):
+            return ChatToolResponse(error=f"holiday lookup returned invalid data for {request.country_code} in {request.year}")
         lines = [f"Public holidays for {request.country_code} in {request.year}:"]
         lines.extend(_format_holiday(item) for item in holidays[: request.limit])
         if len(holidays) > request.limit:
@@ -231,6 +255,8 @@ async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolRespo
         holidays = await _request_json(f"/NextPublicHolidays/{request.country_code}")
         if not holidays:
             return ChatToolResponse(error=f"no upcoming holidays returned for {request.country_code}")
+        if not isinstance(holidays, list):
+            return ChatToolResponse(error=f"upcoming holiday lookup returned invalid data for {request.country_code}")
         lines = [f"Upcoming public holidays for {request.country_code}:"]
         lines.extend(_format_holiday(item) for item in holidays[: request.limit])
         if len(holidays) > request.limit:
@@ -246,6 +272,8 @@ async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
         weekends = await _request_json(f"/LongWeekend/{request.year}/{request.country_code}")
         if not weekends:
             return ChatToolResponse(error=f"no long weekends returned for {request.country_code} in {request.year}")
+        if not isinstance(weekends, list):
+            return ChatToolResponse(error=f"long-weekend lookup returned invalid data for {request.country_code} in {request.year}")
         lines = [f"Long weekends for {request.country_code} in {request.year}:"]
         lines.extend(_format_long_weekend(item) for item in weekends[: request.limit])
         if len(weekends) > request.limit:

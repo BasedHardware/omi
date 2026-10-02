@@ -24,6 +24,7 @@ def daily_memory_sweep_job(monkeypatch):
     assert spec is not None and spec.loader is not None
     job = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(job)
+    monkeypatch.setattr(job, "assert_no_live_pre_lock_claims", lambda *_args, **_kwargs: None)
     return job
 
 
@@ -239,3 +240,27 @@ def test_qa_auth_only_uses_explicit_inventory_without_global_scan(monkeypatch, d
 
     assert global_inventory_calls == []
     assert explicit_inventory_calls[-1] == ("qa-user",)
+
+
+def test_pre_lock_preflight_failure_exits_without_scheduler_or_commit(monkeypatch, daily_memory_sweep_job):
+    job = daily_memory_sweep_job
+    monkeypatch.setattr(
+        job, "daily_memory_sweep_authority_from_environment", lambda: sweep.SweepAuthorityState(enabled=True)
+    )
+    monkeypatch.setattr(job, "qa_sweep_run_id_from_environment", lambda: None)
+    monkeypatch.setattr(
+        job,
+        "bounded_daily_memory_sweep_uid_inventory",
+        lambda *_args, **_kwargs: DailySweepUIDInventoryPage(uids=("user-1",)),
+    )
+
+    def trip(*_args, **_kwargs):
+        raise RuntimeError("pre_lock_claim_live")
+
+    monkeypatch.setattr(job, "assert_no_live_pre_lock_claims", trip)
+    monkeypatch.setattr(job, "run_daily_memory_sweep_scheduler", lambda **_kwargs: pytest.fail("dispatched"))
+    monkeypatch.setattr(
+        job, "commit_daily_memory_sweep_uid_inventory", lambda *_args, **_kwargs: pytest.fail("committed")
+    )
+    with pytest.raises(RuntimeError, match="^pre_lock_claim_live$"):
+        job.run_daily_memory_sweep_job()

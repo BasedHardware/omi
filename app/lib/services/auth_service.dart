@@ -15,8 +15,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -25,7 +27,8 @@ final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
   AuthUserSnapshot? get currentUser {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
-    return AuthUserSnapshot(uid: user.uid, email: user.email, displayName: user.displayName);
+    return AuthUserSnapshot(
+        uid: user.uid, email: user.email, displayName: user.displayName, isAnonymous: user.isAnonymous);
   }
 
   @override
@@ -86,7 +89,9 @@ class AuthService {
         _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
         _refreshDelay = _defaultRefreshDelay,
         _recordTelemetry = _recordProductionTelemetry,
-        _telemetryContextProvider = _productionTelemetryContext;
+        _telemetryContextProvider = _productionTelemetryContext,
+        _prepareSiriSignOut = SiriIntegration.current.prepareForSignOut,
+        _siriPreparationTimeout = const Duration(seconds: 2);
 
   @visibleForTesting
   AuthService.forTesting({
@@ -95,11 +100,31 @@ class AuthService {
     Duration? refreshAttemptTimeout,
     AuthTelemetryRecorder? recordTelemetry,
     AuthTelemetryContextProvider? telemetryContextProvider,
+    Future<void> Function()? prepareSiriSignOut,
+    Duration siriPreparationTimeout = const Duration(seconds: 2),
   })  : _tokenGateway = tokenGateway,
         _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
         _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
         _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
-        _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
+        _telemetryContextProvider = telemetryContextProvider ?? (() => const {}),
+        _prepareSiriSignOut = prepareSiriSignOut ?? (() async {}),
+        _siriPreparationTimeout = siriPreparationTimeout;
+
+  /// Replaces the production Firebase token gateway on the **singleton** for
+  /// the local hermetic journey lane (SCA-488).
+  ///
+  /// The gateway is an external-I/O boundary — installing a synthetic one
+  /// fakes Firebase token I/O, never a product decision: every caller
+  /// (`getIdToken`, refresh retries, session expiry) keeps running its real
+  /// logic against the gateway. The full-stack simulator lane does NOT use
+  /// this: it signs in through real FirebaseAuth against the local Auth
+  /// emulator. Debug-only and local_dev-profile-gated; assertions fail in
+  /// production-family builds instead of installing.
+  static void installLocalHarnessTokenGateway(AuthTokenGateway gateway) {
+    assert(kDebugMode, 'local-harness token gateway is a debug-only seam');
+    assert(Env.profile == AppEnvironmentProfile.localDev, 'local-harness token gateway requires the local_dev profile');
+    _instance._tokenGateway = gateway;
+  }
 
   static const int _maxRefreshAttempts = 3;
 
@@ -124,11 +149,27 @@ class AuthService {
 
   static Future<void> _defaultRefreshDelay(Duration duration) => Future<void>.delayed(duration);
 
-  final AuthTokenGateway _tokenGateway;
+  // Non-final solely for the debug-gated local-harness seam above; every
+  // production construction still assigns exactly once in the constructor.
+  AuthTokenGateway _tokenGateway;
   final Duration _refreshAttemptTimeout;
   final AuthRefreshDelay _refreshDelay;
   final AuthTelemetryRecorder _recordTelemetry;
   final AuthTelemetryContextProvider _telemetryContextProvider;
+  final Future<void> Function() _prepareSiriSignOut;
+  final Duration _siriPreparationTimeout;
+
+  Future<void> _prepareSiriBestEffort() async {
+    try {
+      await _prepareSiriSignOut().timeout(_siriPreparationTimeout);
+    } catch (error) {
+      // The auth boundary must complete even when the optional native bridge
+      // is unavailable. A successfully persisted marker remains for launch
+      // maintenance; the auth-state callback still attempts the wipe.
+      Logger.debug('Siri sign-out preparation deferred: ${error.runtimeType}');
+    }
+  }
+
   final StreamController<AuthSessionExpiredEvent> _sessionExpiredController =
       StreamController<AuthSessionExpiredEvent>.broadcast(sync: true);
   Future<AuthTokenResult>? _refreshInFlight;
@@ -149,7 +190,14 @@ class AuthService {
         'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
       };
 
-  bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
+  /// Routes through the token gateway so the declared Firebase I/O seam
+  /// covers identity reads too: the production gateway still answers from
+  /// FirebaseAuth; the local hermetic harness answers from its synthetic
+  /// principal. No behavior change for real builds.
+  bool isSignedIn() {
+    final user = _tokenGateway.currentUser;
+    return user != null && !user.isAnonymous;
+  }
 
   static const _pkceCodeVerifierLength = 64;
   static const _pkceCharset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
@@ -200,8 +248,7 @@ class AuthService {
     try {
       // Sign out the current user first
       Logger.debug('Signing out current user...');
-      handleAuthUserChanged(null);
-      await FirebaseAuth.instance.signOut();
+      await signOutForAccountSwitch();
       Logger.debug('User signed out successfully.');
 
       final rawNonce = generateNonce();
@@ -266,8 +313,17 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    await _prepareSiriBestEffort();
     _invalidateRefreshes();
     _clearCachedIdentityAndAuth();
+    await _tokenGateway.signOut();
+  }
+
+  /// Credential collision and provider switching preserve their existing
+  /// non-Siri cache behavior, while fencing native Siri before Firebase exits.
+  Future<void> signOutForAccountSwitch() async {
+    await _prepareSiriBestEffort();
+    handleAuthUserChanged(null);
     await _tokenGateway.signOut();
   }
 
@@ -315,9 +371,61 @@ class AuthService {
       case AuthTokenMissingUser():
         break;
       case AuthTokenTransientFailure():
+        _scheduleLocalDevRecovery();
         break;
     }
     return null;
+  }
+
+  bool _localDevRecoveryInFlight = false;
+
+  /// Recover a local-development session by minting a new token instead of
+  /// refreshing the old one.
+  ///
+  /// Local dev has an escape hatch production does not: the harness mints a fresh
+  /// custom token on demand, so a session can be *replaced* rather than
+  /// refreshed. That matters because `getIdTokenResult(true)` is not reliable
+  /// against the Auth emulator — measured on iPhone 17 Pro / iOS 27.0 the forced
+  /// refresh never returned, while `signInWithCustomToken` against the same
+  /// emulator succeeded every time.
+  ///
+  /// Scheduled rather than awaited, and deliberately off the current call stack.
+  /// An earlier version awaited it inline from [getIdToken] and **deadlocked on
+  /// device**: the recovery re-enters sign-in from inside the refresh call stack,
+  /// and the probe showed it entering `signInWithLocalDevToken()` and never
+  /// returning — no HTTP request ever left the app — while the identical call
+  /// from the sign-in button succeeds. The caller therefore gets its failure
+  /// immediately, and the *next* request picks up the re-minted session.
+  ///
+  /// Deliberately narrow: `local_dev` only, only after a transient refresh
+  /// failure, and re-entrancy guarded. Production is untouched — a failed refresh
+  /// must stay a failed refresh there, because silently re-authenticating would
+  /// hide exactly the signal an expired or revoked session is meant to give.
+  void _scheduleLocalDevRecovery() {
+    if (Env.profile != AppEnvironmentProfile.localDev) return;
+    if (_localDevRecoveryInFlight) return;
+    _localDevRecoveryInFlight = true;
+
+    unawaited(Future<void>.delayed(Duration.zero, () async {
+      try {
+        Logger.debug('local-dev: refresh failed, re-minting a session out of band');
+        final credential = await signInWithLocalDevToken();
+        final user = credential?.user;
+        if (user == null) return;
+        // Unforced: sign-in just populated a fresh token, so read the cached one
+        // rather than re-entering the forced-refresh path that just failed.
+        final token = await user.getIdToken();
+        if (token == null || token.isEmpty) return;
+        SharedPreferencesUtil().authToken = token;
+        _sessionExpired = false;
+        markAuthenticatedUser(user.uid);
+        Logger.debug('local-dev: session re-minted; the next request will use it');
+      } catch (e) {
+        Logger.debug('local-dev: re-mint failed: $e');
+      } finally {
+        _localDevRecoveryInFlight = false;
+      }
+    }));
   }
 
   Future<AuthTokenResult> refreshIdToken() {
@@ -461,6 +569,7 @@ class AuthService {
   }
 
   Future<void> _runSessionExpiration() async {
+    await _prepareSiriBestEffort();
     try {
       await _tokenGateway.signOut();
     } catch (e) {
@@ -603,6 +712,72 @@ class AuthService {
       Logger.debug('Token exchange error: $e');
       return null;
     }
+  }
+
+  /// Sign in against a local dev harness with no OAuth provider involved.
+  ///
+  /// Community builds cannot complete a real OAuth flow: Google and Apple issue
+  /// OAuth clients against the official bundle id, and a community build is
+  /// deliberately signed with a suffixed one. The backend mints a Firebase custom
+  /// token against the local Auth emulator instead, and this reuses the same
+  /// custom-token sign-in the OAuth path ends with.
+  ///
+  /// The real gate is server-side and structural (the endpoint 404s unless the
+  /// backend is bound to an Auth emulator). The profile check here is only to
+  /// keep the call from being made at all outside local development.
+  Future<UserCredential?> signInWithLocalDevToken({String uid = 'local-dev-user'}) async {
+    if (Env.profile != AppEnvironmentProfile.localDev) {
+      throw StateError('Local development sign-in is only available in the local_dev profile.');
+    }
+
+    final response = await http.post(
+      Uri.parse('${Env.authApiBaseUrl}v1/auth/local-dev/custom-token'),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {'uid': uid},
+    ).timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => throw StateError(
+        'Cannot reach the local development server. Connect the iPhone to the same Wi-Fi as the Mac and build with OMI_DEV_HOST set to the Mac address.',
+      ),
+    );
+
+    if (response.statusCode == 404) {
+      throw StateError(
+        'This backend has no local-dev sign-in endpoint. It is only registered when the '
+        'backend runs against a Firebase Auth emulator — check the harness is up.',
+      );
+    }
+    if (response.statusCode != 200) {
+      throw Exception('Local development sign-in failed: HTTP ${response.statusCode}');
+    }
+
+    final decoded = json.decode(response.body) as Map<String, dynamic>;
+    final customToken = decoded['custom_token'] as String?;
+    if (customToken == null || customToken.isEmpty) {
+      throw Exception('Local development sign-in returned no custom token');
+    }
+
+    // Check reachability before the side-effecting Firebase sign-in. Timing out
+    // signInWithCustomToken would not cancel it: a late success could create a
+    // session after the UI has already reported failure.
+    try {
+      await http
+          .get(Uri(
+            scheme: 'http',
+            host: Env.firebaseAuthEmulatorHost,
+            port: Env.firebaseAuthEmulatorPort,
+          ))
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      throw StateError(
+        'Cannot reach the local Firebase Auth emulator. Connect the iPhone to the same Wi-Fi as the Mac and build with OMI_DEV_HOST set to the Mac address.',
+      );
+    }
+
+    final credential = await FirebaseAuth.instance.signInWithCustomToken(customToken);
+    await _updateUserPreferences(credential, 'local_dev');
+    Logger.debug('Local development sign-in successful');
+    return credential;
   }
 
   Future<UserCredential> _signInWithOAuthCredentials(Map<String, dynamic> oauthCredentials) async {
@@ -936,8 +1111,7 @@ class AuthService {
     final existingCred = e.credential;
 
     // Sign out current anonymous user
-    handleAuthUserChanged(null);
-    await FirebaseAuth.instance.signOut();
+    await signOutForAccountSwitch();
 
     // Sign in with existing account
     final result = await FirebaseAuth.instance.signInWithCredential(existingCred!);

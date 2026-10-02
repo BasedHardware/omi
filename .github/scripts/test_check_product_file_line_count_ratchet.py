@@ -252,10 +252,72 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
             "backend/routers/../escaped.py",
             "desktop/macos/Desktop/Generated/Big.swift",
             "desktop/macos/Desktop/.build/checkouts/Vendor.swift",
+            "app/lib/gen/assets.gen.dart",
+            "app/lib/pages/chat/page.g.dart",
+            "app/lib/backend/schema/gen/schema.dart",
+            "app/lib/l10n/app_localizations.dart",
+            "app/lib/l10n/app_localizations_en.dart",
+            "app/lib/gen_l10n/app_localizations.dart",
+            "app/lib/firebase_options.dart",
+            "app/lib/firebase_options_dev.dart",
+            "app/lib/firebase_options_local.dart",
+            "app/test/unit/big_test.dart",
         ]
 
         for relative in excluded:
             self.assertFalse(RATCHET.is_product_source(relative), relative)
+
+    def test_hand_written_app_lib_dart_is_product_source(self) -> None:
+        included = [
+            "app/lib/pages/chat/page.dart",
+            "app/lib/utils/app_localizations_helper.dart",
+            "app/lib/services/capture/capture_controller.dart",
+            "app/lib/main.dart",
+        ]
+        for relative in included:
+            self.assertTrue(RATCHET.is_product_source(relative), relative)
+
+    def test_rejects_oversized_dart_growth_with_exact_suggestion(self) -> None:
+        relative = "app/lib/pages/settings/wrapped_2025_page.dart"
+        self.write_source(relative, 1500)
+        base = self.commit_base()
+        self.write_source(relative, 1501)
+
+        failures = self.evaluate(base, {relative})
+
+        self.assertEqual(len(failures), 1)
+        self.assertIn("grew from 1500 to 1501", failures[0])
+        self.assertIn(f"Line-Count-Exception: {relative} | 1500 -> 1501", failures[0])
+
+    def test_dart_under_threshold_is_unconstrained(self) -> None:
+        relative = "app/lib/utils/date_formats.dart"
+        self.write_source(relative, 200)
+        base = self.commit_base()
+        self.write_source(relative, 1499)
+
+        self.assertEqual(self.evaluate(base, {relative}), [])
+
+    def test_new_oversized_dart_file_is_refused_without_declaration(self) -> None:
+        placeholder = "app/lib/main.dart"
+        self.write_source(placeholder, 1)
+        base = self.commit_base()
+        relative = "app/lib/pages/settings/new_giant_page.dart"
+        self.write_source(relative, 1500)
+
+        failures = self.evaluate(base, {relative})
+
+        self.assertEqual(len(failures), 1)
+        self.assertIn("grew from 0 to 1500", failures[0])
+        self.assertIn(f"Line-Count-Exception: {relative} | 0 -> 1500", failures[0])
+
+    def test_dart_exception_approves_oversized_growth(self) -> None:
+        relative = "app/lib/services/capture/capture_controller.dart"
+        self.write_source(relative, 1600)
+        base = self.commit_base()
+        self.write_source(relative, 1625)
+        body = f"Line-Count-Exception: {relative} | 1600 -> 1625 | Capture session ownership stays in one file."
+
+        self.assertEqual(self.evaluate(base, {relative}, body), [])
 
     def test_parser_rejects_short_reason_and_unsupported_path(self) -> None:
         _, failures = RATCHET.parse_exceptions(

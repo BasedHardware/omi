@@ -41,20 +41,16 @@ class TwitterClient:
             return None
             
         except tweepy.TweepyException as e:
-            print(f"Twitter API error: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Twitter API error: {type(e).__name__}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": type(e).__name__
             }
         except Exception as e:
-            print(f"Unexpected error: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Unexpected error: {type(e).__name__}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": type(e).__name__
             }
     
     def get_authorization_url(self, redirect_uri: str, uid: str) -> str:
@@ -107,9 +103,10 @@ class TwitterClient:
         token_dict = oauth2_user_handler.fetch_token(authorization_response)
         
         # Debug: Log what we got
+        has_refresh = 'refresh_token' in token_dict
         print(f"📦 Token exchange result:", flush=True)
         print(f"   Keys in token_dict: {list(token_dict.keys())}", flush=True)
-        print(f"   Has refresh_token: {'refresh_token' in token_dict}", flush=True)
+        print(f"   Has refresh: {has_refresh}", flush=True)
         
         # Clean up stored handler and mapping
         if state in self._oauth_handlers:
@@ -145,9 +142,8 @@ class TwitterClient:
                 print(f"✅ Token refresh successful")
                 return token_data
             else:
-                error_msg = response.text
-                print(f"❌ Token refresh failed: {response.status_code} - {error_msg}")
-                raise Exception(f"Token refresh failed: {error_msg}")
+                print(f"❌ Token refresh failed: {response.status_code}")
+                raise Exception(f"Token refresh failed: {response.status_code}")
                 
         except Exception as e:
             print(f"❌ Token refresh error: {e}", flush=True)

@@ -5,10 +5,51 @@ import XCTest
 
 #if DEBUG
   final class LocalProjectionFinalizationTests: XCTestCase {
-    func testFlagDefaultsOff() throws {
+    func testFlagDefaultsOffOutsideBeta() throws {
       let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
-      let enabled = FreeTierLocalProcessingFlag.isEnabled(environment: [:], defaults: defaults)
+      let enabled = FreeTierLocalProcessingFlag.isEnabled(
+        environment: [:], defaults: defaults, isBetaProductionBundle: false)
       XCTAssertFalse(enabled)
+    }
+
+    /// Beta serves through the development plane. If the backend cohort is lit there and the
+    /// client is not, an identified-basic user's conversation arrives with no projection, the
+    /// policy lands on the terminal deterministic minimum, and the cloud summary has been taken
+    /// away with nothing put in its place.
+    func testFlagDefaultsOnInBeta() throws {
+      let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+      let enabled = FreeTierLocalProcessingFlag.isEnabled(
+        environment: [:], defaults: defaults, isBetaProductionBundle: true)
+      XCTAssertTrue(enabled)
+    }
+
+    /// The switch has to stay a kill switch on Beta, or the default cannot be undone without a
+    /// rebuild. `bool(forKey:)` alone cannot express this: it reports `false` both for a stored
+    /// `false` and for a key that was never set.
+    func testExplicitOffOverridesTheBetaDefault() throws {
+      let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+      defaults.set(false, forKey: FreeTierLocalProcessingFlag.defaultsKey)
+      XCTAssertFalse(
+        FreeTierLocalProcessingFlag.isEnabled(
+          environment: [:], defaults: defaults, isBetaProductionBundle: true))
+
+      let viaEnvironment = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+      XCTAssertFalse(
+        FreeTierLocalProcessingFlag.isEnabled(
+          environment: [FreeTierLocalProcessingFlag.environmentKey: "0"],
+          defaults: viaEnvironment,
+          isBetaProductionBundle: true))
+    }
+
+    /// An empty environment value is "unset", not "off" - otherwise an exported-but-blank variable
+    /// would silently disable Beta.
+    func testBlankEnvironmentValueFallsThroughToTheChannelDefault() throws {
+      let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+      XCTAssertTrue(
+        FreeTierLocalProcessingFlag.isEnabled(
+          environment: [FreeTierLocalProcessingFlag.environmentKey: "  "],
+          defaults: defaults,
+          isBetaProductionBundle: true))
     }
 
     func testFlagAcceptsEnvOneAndTrue() throws {

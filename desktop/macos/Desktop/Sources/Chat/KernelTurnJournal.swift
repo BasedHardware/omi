@@ -380,12 +380,18 @@ extension KernelJournalTurn {
     // Persisted served-model attribution: lets a journaled voice turn (or a
     // restored one) show the Response Context Model row that in-memory
     // metadata would otherwise lose.
-    if message.sender == .ai, let models = metadata["modelsUsed"] as? [String], !models.isEmpty {
-      message.metadata = MessageMetadata(
-        adapterId: origin == "realtime_voice" ? "realtime" : "",
-        modelsUsed: models
-      )
+    if message.sender == .ai {
+      let models = metadata["modelsUsed"] as? [String] ?? []
+      let providers = metadata["providerTargets"] as? [String] ?? []
+      if !models.isEmpty || !providers.isEmpty {
+        message.metadata = MessageMetadata(
+          adapterId: origin == "realtime_voice" ? "realtime" : "",
+          modelsUsed: models,
+          providerTargets: providers
+        )
+      }
     }
+    message.failureCode = (metadata["failureCode"] as? String).flatMap(AgentRuntimeFailureCode.init(rawValue:))
     return message
   }
 
@@ -410,8 +416,12 @@ extension ChatMessage {
     answerTextCompleted: Bool? = nil
   ) -> KernelJournalTurnWrite {
     var metadata: [String: Any] = [:]
+    if let failureCode { metadata["failureCode"] = failureCode.rawValue }
     if let continuityKey, !continuityKey.isEmpty { metadata["continuityKey"] = continuityKey }
     if let models = self.metadata?.modelsUsed, !models.isEmpty { metadata["modelsUsed"] = models }
+    if let providers = self.metadata?.providerTargets, !providers.isEmpty {
+      metadata["providerTargets"] = providers
+    }
     if let notificationContext { metadata["notificationContext"] = notificationContext }
     if let screenContext = self.metadata?.screenContext, !screenContext.isEmpty {
       metadata["screen_context"] = String(screenContext.prefix(1_200))

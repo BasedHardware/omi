@@ -34,6 +34,7 @@ from run_checks import (
     resolve_explicit_checks,
     run_git,
     skipped_platform_checks,
+    trigger_matches,
     validate_manifest,
 )
 
@@ -775,6 +776,13 @@ esac
         self.assertIn("failure-class-protocol", selected)
         self.assertIn("diff-hygiene", selected)
 
+    def test_product_invariants_diffs_three_dot_from_base_not_a_changed_files_list(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == "product-invariants")
+        self.assertIn("{base}", check.command)
+        self.assertIn("{head}", check.command)
+        self.assertNotIn("{changed_files}", check.command)
+
     def test_main_push_without_body_still_excludes_pr_body_checks(self) -> None:
         """Fail-closed: a main push with no body must NOT run body-requiring
         checks (they would fail on empty text), preserving the old skip."""
@@ -819,6 +827,8 @@ esac
         )
         self.assertNotIn(check, selected)
         self.assertIn(check, resolve_checks(manifest, ["backend/routers/example.py"], "ci"))
+        self.assertIn(check, resolve_checks(manifest, ["app/lib/pages/chat/page.dart"], "ci"))
+        self.assertIn("app/lib/**/*.dart", check.triggers)
 
         command = command_for_check(
             check,
@@ -868,6 +878,10 @@ esac
             selected = resolve_checks(manifest, list(check.triggers), lane)
             self.assertIn(check, selected)
 
+        try:
+            bash = bash_executable()
+        except FileNotFoundError as exc:
+            self.skipTest(str(exc))
         runner = REPO_ROOT / check.command[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -884,17 +898,16 @@ esac
             sync.write_text(
                 f'''#!/usr/bin/env bash
 set -euo pipefail
-mkdir -p "{python.parent}"
-cat > "{python}" <<'PYTHON'
+mkdir -p "{bash_path(python.parent, bash)}"
+cat > "{bash_path(python, bash)}" <<'PYTHON'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-c" ]]; then
-  [[ "$2" == "import yaml" ]]
-  exit
+  exit 0
 fi
-printf '%s\\n' "$@" > "{root / 'guard-args.txt'}"
+printf '%s\\n' "$@" > "{bash_path(root / 'guard-args.txt', bash)}"
 PYTHON
-chmod +x "{python}"
+chmod +x "{bash_path(python, bash)}"
 ''',
                 encoding="utf-8",
             )
@@ -903,10 +916,6 @@ chmod +x "{python}"
             guard.parent.mkdir(parents=True, exist_ok=True)
             guard.write_text("# fixture\n", encoding="utf-8")
 
-            try:
-                bash = bash_executable()
-            except FileNotFoundError as exc:
-                self.skipTest(str(exc))
             env = os.environ.copy()
             env["PYTHON"] = "ambient-python-must-not-run"
             result = subprocess.run(
@@ -943,6 +952,10 @@ chmod +x "{python}"
             selected = resolve_checks(manifest, list(check.triggers), lane)
             self.assertIn(check, selected)
 
+        try:
+            bash = bash_executable()
+        except FileNotFoundError as exc:
+            self.skipTest(str(exc))
         runner = REPO_ROOT / check.command[1]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -962,26 +975,21 @@ chmod +x "{python}"
             sync.write_text(
                 f'''#!/usr/bin/env bash
 set -euo pipefail
-mkdir -p "{python.parent}"
-cat > "{python}" <<'PYTHON'
+mkdir -p "{bash_path(python.parent, bash)}"
+cat > "{bash_path(python, bash)}" <<'PYTHON'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-c" ]]; then
-  [[ "$2" == "import yaml" ]]
-  exit
+  exit 0
 fi
-printf '%s\\n' "$@" > "{root / 'compose-args.txt'}"
+printf '%s\\n' "$@" > "{bash_path(root / 'compose-args.txt', bash)}"
 PYTHON
-chmod +x "{python}"
+chmod +x "{bash_path(python, bash)}"
 ''',
                 encoding="utf-8",
             )
             sync.chmod(0o755)
 
-            try:
-                bash = bash_executable()
-            except FileNotFoundError as exc:
-                self.skipTest(str(exc))
             env = os.environ.copy()
             env["PYTHON"] = "ambient-python-must-not-run"
             result = subprocess.run(
@@ -1089,6 +1097,40 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(selections[0].check.id, "target")
         self.assertEqual(selections[0].matched_paths, ("desktop/macos/Desktop/Sources/App.swift",))
         self.assertEqual(selections[0].check.reason, "desktop source changed")
+
+    def test_globstar_prefix_trigger_matches_repository_root(self):
+        """`**/x` covers depth 0. A root-level file is not a different file type."""
+        for pattern, path in (
+            ("**/*.json", "firebase.json"),
+            ("**/*.yaml", "codemagic.yaml"),
+            ("**/*.swift", "Package.swift"),
+            ("**/Dockerfile*", "Dockerfile"),
+            ("**/AGENTS.md", "AGENTS.md"),
+        ):
+            with self.subTest(pattern=pattern, path=path):
+                self.assertTrue(trigger_matches(pattern, path))
+
+    def test_globstar_prefix_trigger_still_matches_nested_and_rejects_others(self):
+        self.assertTrue(trigger_matches("**/*.json", "backend/config/plan_catalog.json"))
+        self.assertFalse(trigger_matches("**/*.json", "firebase.yaml"))
+        self.assertFalse(trigger_matches("**/AGENTS.md", "AGENTS.md.bak"))
+
+    def test_root_level_source_change_selects_plan_catalog_contract(self):
+        """The Stripe-literal scan walks from the root, so selection must too.
+
+        `plan-catalog-contract` is triggered only by `**/*.<ext>` patterns. Before
+        the leading-`**/` collapse, a production Stripe object ID committed to a
+        root-level source file -- `firebase.json`, `omi.json`, `codemagic.yaml` --
+        changed no path the guard could see, and the exhaustiveness contract it
+        exists to enforce reported success without running.
+        """
+        manifest = load_manifest(MANIFEST_PATH)
+        for path in ("firebase.json", "codemagic.yaml", "Package.swift"):
+            with self.subTest(path=path):
+                selected = {
+                    selection.check.id for selection in resolve_check_selections(manifest, [path], "ci")
+                }
+                self.assertIn("plan-catalog-contract", selected)
 
     def test_explicit_check_ids_preserve_manifest_commands(self):
         manifest = Manifest(

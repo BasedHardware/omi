@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// Service for real-time speech-to-text transcription.
@@ -93,6 +94,8 @@ class TranscriptionService: @unchecked Sendable {
 
   private let apiKey: String
   private var webSocketTask: URLSessionWebSocketTask?
+  /// Main-actor owned; see attachClientState().
+  private var clientStateSubscription: AnyCancellable?
   private var urlSession: URLSession?
   private var webSocketDelegate: WebSocketConnectionDelegate?
   // Internal for @testable import access in unit tests
@@ -313,6 +316,58 @@ class TranscriptionService: @unchecked Sendable {
     }
   }
 
+  /// Report foreground / live-transcript visibility for the backend's real-time
+  /// demand measurement. Subscribed on every socket open, so reconnects re-send
+  /// the current state; `@Published` replays it on subscription.
+  @MainActor private func attachClientState() {
+    clientStateSubscription = ListenClientState.shared.$snapshot
+      .removeDuplicates()
+      .sink { [weak self] snapshot in self?.sendClientState(snapshot) }
+  }
+
+  @MainActor private func detachClientState() {
+    clientStateSubscription?.cancel()
+    clientStateSubscription = nil
+  }
+
+  func notifySpeakerAssigned(personId: String, segmentIds: [String]) {
+    guard streamingMode == .conversation,
+      isConnected,
+      let webSocketTask,
+      let message = Self.speakerAssignedMessage(personId: personId, segmentIds: segmentIds)
+    else { return }
+    webSocketTask.send(.string(message)) { error in
+      if let error {
+        logError("TranscriptionService: Failed to send speaker assignment", error: error)
+      }
+    }
+  }
+
+  static func speakerAssignedMessage(personId: String, segmentIds: [String]) -> String? {
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: [
+        "type": "speaker_assigned",
+        "person_id": personId,
+        "segment_ids": segmentIds,
+      ])
+    else { return nil }
+    return String(data: data, encoding: .utf8)
+  }
+
+  private func sendClientState(_ snapshot: ListenClientState.Snapshot) {
+    guard streamingMode == .conversation,
+      isConnected,
+      let webSocketTask,
+      let data = try? JSONSerialization.data(withJSONObject: snapshot.jsonObject),
+      let message = String(data: data, encoding: .utf8)
+    else { return }
+    webSocketTask.send(.string(message)) { error in
+      if let error {
+        logError("TranscriptionService: Failed to send client state", error: error)
+      }
+    }
+  }
+
   /// Send audio data to the backend (buffered for efficiency)
   func sendAudio(_ data: Data) {
     guard isConnected else { return }
@@ -385,6 +440,17 @@ class TranscriptionService: @unchecked Sendable {
     }
   }
 
+  /// A meeting whose screenshots are on declares that this Mac runs the pre-notes screen-evidence
+  /// pass (`MeetingScreenEvidencePass`). The backend persists it and then holds the meeting's notes,
+  /// bounded, until that pass stamps its adjudication marker. Nothing else declares it: a session
+  /// that will never run the pass must not make the server wait for evidence that cannot come.
+  static func screenEvidenceQueryItems(
+    role: MeetingConversationBoundaryPolicy.Role, screenshotsEnabled: Bool
+  ) -> [URLQueryItem] {
+    guard role == .meeting, screenshotsEnabled else { return [] }
+    return [URLQueryItem(name: "screen_evidence", value: "enabled")]
+  }
+
   private func connectToBackend(authHeader: String) {
     let base = Self.pythonBackendBaseURL
       .replacingOccurrences(of: "https://", with: "wss://")
@@ -412,6 +478,8 @@ class TranscriptionService: @unchecked Sendable {
         items.append(URLQueryItem(name: "client_conversation_id", value: clientConversationId))
       }
       items.append(URLQueryItem(name: "conversation_role", value: conversationRole.rawValue))
+      items += Self.screenEvidenceQueryItems(
+        role: conversationRole, screenshotsEnabled: MeetingNoteScreenshotsFeature.isEnabled)
       queryItems = items
     case .ptt:
       // PTT-only transcription — no conversation lifecycle
@@ -527,6 +595,9 @@ class TranscriptionService: @unchecked Sendable {
     lastDataReceivedAt = Date()
     log("TranscriptionService: WebSocket opened (handshake complete)")
     startWatchdog()
+    if streamingMode == .conversation {
+      MainActor.assumeIsolated { attachClientState() }
+    }
     onConnected?()
   }
 
@@ -552,6 +623,7 @@ class TranscriptionService: @unchecked Sendable {
 
   private func disconnect() {
     isConnected = false
+    Task { @MainActor [weak self] in self?.detachClientState() }
     watchdogTask?.cancel()
     watchdogTask = nil
     webSocketTask?.cancel(with: .normalClosure, reason: nil)
@@ -567,6 +639,7 @@ class TranscriptionService: @unchecked Sendable {
     guard isConnected else { return }
 
     isConnected = false
+    Task { @MainActor [weak self] in self?.detachClientState() }
     watchdogTask?.cancel()
     watchdogTask = nil
     webSocketTask = nil

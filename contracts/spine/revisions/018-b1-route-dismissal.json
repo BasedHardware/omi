@@ -1,0 +1,7 @@
+{
+  "path": "app/test/spine/b1_surface_contract.dart",
+  "owner": "B1",
+  "before": "45b12037e0bb997406c9de3f9192dfd1b89a40ea1216560b96be3b60fa4460bd",
+  "after": "397abd16eeaf87f43fa8025d05cc2b1f4a50bf14a665c5137bb89d708bc7e5bf",
+  "reason": "Spine turn16: actual SettingsDrawer pops immediately but its reverse ticker starts at elapsed zero on the single 1s pump. Both widget platforms dispose after 13 further 16ms frames. Require the actual route to pop and complete, then require page disposal including offstage; bound frames by reverse duration plus 1s. No pending markers retired; no app behavior changed."
+}

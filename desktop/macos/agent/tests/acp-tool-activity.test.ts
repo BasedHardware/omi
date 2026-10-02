@@ -8,6 +8,7 @@ function translateHarness() {
   });
   const events: Array<any> = [];
   const pendingTools: Array<any> = [];
+  const reportedModels = new Set<string>();
   let syntheticId = 0;
   const translate = (adapter as any).translateSessionUpdate.bind(adapter);
   const nextId = () => `synthetic-${++syntheticId}`;
@@ -20,12 +21,25 @@ function translateHarness() {
       pendingTools,
       nextId,
       (event: any) => events.push(event),
-      () => {}
+      () => {},
+      reportedModels,
     ),
   };
 }
 
 describe("AcpRuntimeAdapter tool activity translation", () => {
+  it("forwards observed model ids from session updates as model_used", () => {
+    const harness = translateHarness();
+
+    harness.translate({
+      sessionUpdate: "usage_update",
+      model: "glm-5",
+      cost: { amount: 0.01, currency: "USD" },
+    });
+
+    expect(harness.events).toEqual([{ type: "model_used", model: "glm-5" }]);
+  });
+
   it("preserves pending tool ids when text implicitly completes tools", () => {
     const harness = translateHarness();
 

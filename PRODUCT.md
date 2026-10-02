@@ -54,6 +54,21 @@ privacy, lineage, graph, and outbox rules. The complete convergence and removal
 ledger lives in
 [`backend/docs/epics/universal_memory_task_convergence.md`](backend/docs/epics/universal_memory_task_convergence.md).
 
+## Mobile own-voice enrollment direction
+
+Keep speech-profile enrollment in first-run onboarding. Offer four optional
+sentence starters to reduce the effort of speaking, plus alternatives and Skip.
+Personal-life answers are never enrollment requirements. Prompt completion,
+audio activity, voice enrollment, and confirmed answer saving have separate
+visible states. Users review and choose which transcribed statements to keep.
+Next starts the following prompt automatically. The fourth answer is a qualitative
+goal and is saved through the goal system, separately from personal memories.
+Review uses one Save and finish action with automatic completion. Goal wording
+is conservatively cleaned before review and can be edited or restored.
+A successful upload, not navigation through All Done, is the enrollment outcome.
+The [approach and verification plan](.github/agent-docs/mobile-voice-enrollment.md)
+describes the capture, memory consent, and quality boundaries.
+
 ## Before you build
 
 - Large or ambiguous features start as a GitHub issue
@@ -71,3 +86,44 @@ ledger lives in
 When declining a PR for direction or taste, either cite an existing invariant
 by ID or open a `proposed` invariant in `product/invariants/` the same
 week. Tribal “no” becomes written law.
+
+## Proposed offline fragment policy
+
+Without an existing explicit target, offline speech follows the same default
+silence boundary as realtime: a speech gap of at least 120 seconds starts a new
+conversation; shorter gaps stay connected.
+Speaker enrollment and own-voice attribution are not prerequisites. Short,
+filler-only fragments stay out of the default conversation list and search,
+without automatic summarization. Their original transcript and audio remain
+recoverable through Show discarded; later meaningful content automatically
+promotes the merged recording. Explicitly restored or curated recordings stay
+visible. Duration alone never establishes irrelevance: brief meaningful speech
+must remain available. Uncertain content stays kept. Long narration is not reliable
+evidence of irrelevance, so it remains one retained recording rather than being
+silently discarded. Implementation and limits: `backend/utils/sync/ARCHITECTURE.md`.
+
+Silence-only audio creates nothing and cannot bridge conversations.
+Without an existing explicit target, sync intake groups connected speech intervals
+independently of arrival order within the same source/device/lock partition. Missing
+client target IDs do not partition that intake. Unknown device identity is not a
+wildcard. Late bridges retain redirects and fence stale enrichment. The shared
+boundary predicate is used on both paths, but realtime currently observes callback
+wall time while sync observes VAD/word ends. Realtime can configure its timeout per session; WALs do not
+carry that setting, so sync uses the default. Shared, photo-bearing and user-curated
+records remain separate from automatic bridges. This change neither uses own-voice
+labels nor debounces LLM work.
+
+The 2026-09-19 fragmentation mechanism was sync adopting empty live-flap stubs:
+STT failures caused reconnects about every 35 seconds, and legacy lookup chose a
+different stub per WAL. Cross-job assignment races are a separate, older class.
+Timestamp hints never adopt live rows. A provenance-compatible, non-deleted explicit
+target is honored and keeps its ID even when empty: fresh admission can verify
+server capture proof before live STT produces words. Missing or tombstoned targets
+use ordinary temporal assignment; retry-lineage deletion fences remain intact.
+Appending chunks keeps the existing sync conversation ID; genuine bridges retain redirects.
+Known limitation: different existing live target IDs can still split one continuous
+recording. Sync cannot bridge live-owned targets while sockets may write to them.
+Realtime reconnects with the same durable origin now reuse a compatible in-progress
+continuation inside the window without rebinding a completed original. Expired empty
+continuations are reaped through content/lock/revision fences on reconnect. Historical
+distinct targets and anonymous cross-device discovery remain separate follow-ups.

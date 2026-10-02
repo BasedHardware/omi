@@ -99,6 +99,7 @@ When creating/updating the Omi app, use these URLs:
 3. Add this to your Twitter app's callback URIs
 4. Install dependencies: `pip install -r requirements.txt`
 5. Run: `python main.py`
+6. Test: `python3 test_max_results.py` (hermetic, no credentials or network; also runs in CI via `.github/checks-manifest.yaml`)
 
 ## Environment Variables
 
@@ -106,6 +107,7 @@ When creating/updating the Omi app, use these URLs:
 |----------|-------------|----------|
 | `TWITTER_CLIENT_ID` | Twitter OAuth2 Client ID | Yes |
 | `TWITTER_CLIENT_SECRET` | Twitter OAuth2 Client Secret | Yes |
+| `TWITTER_TOOLS_SECRET` | HMAC secret for the disconnect link. Unset, disconnect fails closed | Yes |
 | `TWITTER_REDIRECT_URI` | OAuth callback URL | Yes |
 | `PORT` | Server port (default: 8080) | No |
 | `REDIS_URL` | Redis connection URL | No (uses file storage if not set) |

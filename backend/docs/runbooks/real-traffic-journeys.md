@@ -40,9 +40,9 @@ rewrite that contract:
 
 | Metric | Labels | Meaning |
 | --- | --- | --- |
-| `omi_client_journey_accepted_total` | `journey`, `client_kind` | A semantic journey was accepted. |
-| `omi_client_journey_terminal_total` | `journey`, `client_kind`, `outcome` | Its one-shot coarse terminal result. |
-| `omi_client_journey_issues_total` | `journey`, `client_kind`, `issue_class` | One bounded detail for a failed, degraded, or unknown terminal. |
+| `omi_client_journey_accepted_total` | `journey`, `client_kind`, `app_build` | A semantic journey was accepted. |
+| `omi_client_journey_terminal_total` | `journey`, `client_kind`, `app_build`, `outcome` | Its one-shot coarse terminal result. |
+| `omi_client_journey_issues_total` | `journey`, `client_kind`, `app_build`, `issue_class` | One bounded detail for a failed, degraded, or unknown terminal. |
 | `omi_client_journey_duration_seconds` | `journey`, `outcome` | Acceptance-to-terminal duration. |
 
 `outcome` is `success`, `failure`, `degraded`, `cancelled`, or the coercion
@@ -60,13 +60,24 @@ macOS and Windows respectively; headerless Dart resolves to
 server cannot separate them until the clients send `X-App-Platform`; it must not
 guess an operating system.
 
-The family is zero-initialized; only the wired journeys below emit real traffic,
-and no client-segmented alerts exist yet. A zero is meaningful only with the
-owning scrape job/revision selected; an unrelated healthy exporter also exposes
-the bounded zero children. Its closed
-cartesian product is capped at 3,915 Prometheus series per process with the
-pinned client's `_created` series enabled: 180 accepted, 900 terminal, 1,980
-issue, and 855 histogram series.
+Client journey children are created on observed traffic only; no client-segmented
+alert depends on idle zero series. The `app_build` metric label stays in the
+published schema but is always `unknown`: client-supplied build strings can
+grow without a fixed bound, and no dashboard or alert selects them. Keeping
+the label key avoids changing Cloud Monitoring's existing descriptor. The
+other label axes retain their closed vocabularies. Query
+`up{job="backend-listen-metrics"}` to distinguish a
+healthy idle exporter from a failed scrape. A missing child is not evidence of
+zero traffic; range queries become populated after the first event.
+
+The former eager product seeded 3,915 series per process: 180 accepted, 900
+terminal, 1,980 issues, and 855 histogram series. The 0.21.1 client now has
+`_created` exports disabled, and all four families seed **zero** children per
+process. The maximum possible label products remain bounded by the closed
+journey, client kind, outcome, and issue class vocabularies, but the actual
+series count depends on observed combinations. Monitor per-pod child counts
+and the Prometheus head after a rollout; old pod series remain in the head
+until its retention window rolls forward.
 
 Streaming callers must pass their source through
 `ClientJourneyAttempt.observe_stream` and provide both semantic predicates. A

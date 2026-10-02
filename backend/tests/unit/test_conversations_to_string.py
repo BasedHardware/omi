@@ -26,10 +26,10 @@ def _ensure_stub(name):
 # Stub database chain so render.py can import at module level without Firestore
 _ensure_stub("database")
 sys.modules["database"].__path__ = getattr(sys.modules["database"], "__path__", [])
-for _sub in ["_client", "redis_db", "users", "folders"]:
+for _sub in ["_client", "redis_db", "users", "folders", "auth"]:
     _ensure_stub(f"database.{_sub}")
 sys.modules["database._client"].db = MagicMock()
-sys.modules["database.users"].get_user_profile = MagicMock(return_value={"name": "TestUser"})
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="TestUser")
 sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
 sys.modules["database.folders"].get_folders = MagicMock(return_value=[])
 
@@ -114,6 +114,28 @@ class TestConversationsToStringDedup:
         )
         result = conversations_to_string([conv])
         assert "Fallback overview" in result
+
+    def test_first_nonblank_app_result_wins_even_after_blank_result(self):
+        conv = _make_conversation(
+            overview="Fallback overview",
+            apps_results=[
+                AppResult(app_id="blank", content="  "),
+                AppResult(app_id="selected", content="Selected app output"),
+            ],
+        )
+        result = conversations_to_string([conv])
+        assert "Selected app output" in result
+        assert "Fallback overview" not in result
+
+    def test_projected_sections_are_emitted_once(self):
+        conv = _make_conversation(
+            overview="## Decisions\n\n- Ship the design.",
+        )
+        conv.structured.sections = [
+            {'heading': 'Decisions', 'body_markdown': '- Ship the design.'},
+        ]
+        result = conversations_to_string([conv])
+        assert result.count('Ship the design.') == 1
 
     def test_no_duplicate_summarization_label(self):
         conv = _make_conversation(

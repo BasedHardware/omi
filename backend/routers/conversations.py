@@ -11,7 +11,7 @@ import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
-from database.vector_db import delete_vector, delete_transcript_chunk_vectors
+from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files
 from utils.screen_frames.store import delete_conversation_screen_frames
@@ -40,8 +40,10 @@ from models.conversation import (
     project_shared_conversation,
 )
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
+from utils.conversations.onopen_translation import translate_open_page
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
     merge_typesense_page_with_transcript_hits,
@@ -68,6 +70,7 @@ from utils.conversations.process_conversation import (
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
@@ -82,16 +85,18 @@ from utils.conversations.search import (
     clamp_conversation_search_pagination,
     conversation_matches_date_range,
     conversation_matches_speaker,
+    browse_conversations_by_speaker,
     parse_exact_conversation_reference,
     search_conversations,
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
-from utils.speaker_identification import extract_speaker_samples
+from utils.speaker_assignment_teaching import commit_manual_assignment
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.journey_metrics_contract import resolve_client_kind
+from utils.product_metrics import extract_app_build, record_product_event
 from utils.product_telemetry import emit_product_event
 from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
 from utils.other.list_budget import (
@@ -116,12 +121,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
+def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync_bridge: bool = False) -> dict:
     conversation = conversations_db.get_conversation(
         uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
     )
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if conversations_db.is_soft_deleted(conversation):
+        if not follow_sync_bridge or not conversation.get('sync_merged_into'):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        survivor_id = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+        if not survivor_id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        conversation = conversations_db.get_conversation(
+            uid, survivor_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+        )
+        if not conversation or conversations_db.is_soft_deleted(conversation):
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -204,9 +221,8 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     uid,
                     conv_obj.language or 'en',
                     conv_obj,
-                    force_process=True,
-                    is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
+                    trigger=ProcessingTrigger.FIRST_OPEN,
                 )
             # The enrichment itself succeeded here; count it now so a receipt
             # publish failure below is not misattributed to enrichment and does
@@ -503,7 +519,11 @@ def process_in_progress_conversation(
                 outcome='degraded',
                 log=logger,
             )
-            conversation.geolocation = resolve_geolocation(Geolocation(**geolocation))
+            cached_geo = Geolocation.deserialize_safe(geolocation)
+            if cached_geo:
+                conversation.geolocation = resolve_geolocation(cached_geo)
+            else:
+                logger.warning('Skipping malformed cached user geolocation for uid=%s', uid)
 
     # Winner owns ingress. The accepted projection rides the admission CAS:
     # status→processing and client_processing are one write. A later request
@@ -564,10 +584,10 @@ def process_in_progress_conversation(
             uid,
             conversation.language,
             conversation,
-            force_process=True,
             persistence_observer=record_persistence,
             derived_effects_disposition_observer=record_derived_effects_disposition,
             client_projection=client_projection,
+            trigger=ProcessingTrigger.CLIENT_FINALIZE,
         )
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
@@ -589,6 +609,7 @@ def process_in_progress_conversation(
 def finalize_conversation(
     conversation_id: str,
     request: ProcessConversationRequest = None,
+    http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
     """Finalize exactly one backend conversation.
@@ -651,12 +672,18 @@ def finalize_conversation(
             uid,
             conversation.id,
             has_byok_keys=False,
-            force_process=True,
+            trigger=ProcessingTrigger.CLIENT_FINALIZE,
             extra_updates=extra_updates or None,
             require_cloud_tasks=True,
             client_kind=resolve_client_kind(x_app_platform=conversation.client_platform, user_agent=None),
+            app_build=extract_app_build(http_request),
         )
     except lifecycle_service.FinalizationDispatchUnavailable as error:
+        record_product_event(
+            'conversation_finalized',
+            request=http_request,
+            outcome='error',
+        )
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error
 
     if finalization['route'] == 'noop':
@@ -667,6 +694,11 @@ def finalize_conversation(
     # The only accepted outcomes are an enqueued task or an outbox row retained
     # for reconciler retry after an uncertain task-create acknowledgement.
     if finalization['route'] not in {'cloud_tasks', 'queued'}:
+        record_product_event(
+            'conversation_finalized',
+            request=http_request,
+            outcome='error',
+        )
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable')
 
     conversation.status = ConversationStatus.processing
@@ -717,6 +749,7 @@ def reprocess_conversation(
     language_code: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
+    response: Response = None,  # type: ignore[assignment]
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -734,25 +767,46 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    was_discarded = bool(conversation.get('discarded'))
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
 
     explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
+    receipt_applied = False
+
+    def record_speaker_receipt(applied: bool) -> None:
+        nonlocal receipt_applied
+        receipt_applied = applied
+
     processed_conversation = process_conversation(
         uid,
         language_code,
         conversation,
-        force_process=True,
-        is_reprocess=True,
-        bypass_jit_first_open=True,
+        trigger=ProcessingTrigger.USER_REPROCESS,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
+        speaker_receipt_observer=record_speaker_receipt,
     )
+
+    # The mobile speaker-label refresh must distinguish this processor from an
+    # older backend that accepted reprocess but built its prompt before applying
+    # the current manual speaker receipt. A header keeps released JSON decoders
+    # compatible and is emitted only after processing returns successfully.
+    if response is not None and receipt_applied:
+        response.headers['X-Omi-Speaker-Receipt-Summary'] = '1'
+
+    # Reprocessing a hidden conversation is an explicit recovery: persist it as
+    # the user's choice (``restore_discarded``) so no later reassessment hides it
+    # again, including when the selected app supplies the summary.
+    if was_discarded and not processed_conversation.discarded:
+        restored = lifecycle_service.restore_discarded(uid, conversation_id)
+        if restored and processed_conversation.sync_relevance == 'review':
+            processed_conversation.sync_relevance = 'keep'
 
     return processed_conversation
 
@@ -802,43 +856,6 @@ def _reject_oversized_filter(values: List[str], field_name: str) -> None:
         raise HTTPException(status_code=400, detail=f"{field_name} accepts at most {MAX_IN_FILTER_VALUES} values")
 
 
-def _resolve_bulk_segment_indices(conversation: Conversation, requested_ids: List[str]) -> List[int]:
-    """Resolve assignment targets before mutating any transcript segment.
-
-    Desktop sends positional targets for legacy transcripts that were stored without
-    segment IDs. Exact IDs remain the preferred wire contract; positional targets are
-    only accepted for completed conversations because an in-progress transcript can
-    still be reordered or merged.
-    """
-    segments = conversation.transcript_segments
-    segment_indices_by_id = {segment.id: index for index, segment in enumerate(segments)}
-    resolved_indices: List[int] = []
-    unresolved_ids: List[str] = []
-    allow_legacy_indices = conversation.status == ConversationStatus.completed
-
-    for requested_id in requested_ids:
-        segment_index = segment_indices_by_id.get(requested_id)
-        if segment_index is None and allow_legacy_indices and requested_id.startswith(LEGACY_SEGMENT_INDEX_PREFIX):
-            raw_index = requested_id[len(LEGACY_SEGMENT_INDEX_PREFIX) :]
-            if raw_index.isascii() and raw_index.isdecimal():
-                candidate_index = int(raw_index)
-                if candidate_index < len(segments):
-                    segment_index = candidate_index
-
-        if segment_index is None:
-            unresolved_ids.append(requested_id)
-        elif segment_index not in resolved_indices:
-            resolved_indices.append(segment_index)
-
-    if unresolved_ids:
-        raise HTTPException(
-            status_code=409,
-            detail=f'Unable to resolve transcript segment assignment target(s): {", ".join(unresolved_ids)}',
-        )
-
-    return resolved_indices
-
-
 @router.get(
     '/v1/conversations',
     response_model=List[Conversation],
@@ -856,7 +873,7 @@ def get_conversations(
     limit: PositiveLimit = 100,
     offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
-    include_discarded: bool = True,
+    include_discarded: bool = False,
     sources: Optional[str] = Query(
         None,
         description="Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
@@ -965,9 +982,12 @@ def get_conversation_by_id(
     source: Optional[str] = Query(None, description="Optional provenance constraint for a detail read"),
     include_discarded: bool = Query(True),
     uid: str = Depends(auth.get_current_user_uid),
+    include_translations: bool = Query(False),
+    translation_cursor: Optional[str] = Query(None),
+    response: Response = None,
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
     if source is not None:
         if source != 'omi':
             raise HTTPException(
@@ -981,6 +1001,18 @@ def get_conversation_by_id(
         conversation = _enrich_deferred_conversation(uid, conversation)
     else:
         _dispatch_first_open_work(uid, conversation)
+    if include_translations is True:
+        try:
+            conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail='Invalid translation cursor') from error
+        except Exception as error:
+            logger.error('On-open translation unavailable type=%s', type(error).__name__)
+            translation_status, next_cursor = 'unavailable', None
+        if response is not None:
+            response.headers['X-Translation-Status'] = translation_status
+            if next_cursor is not None:
+                response.headers['X-Translation-Cursor'] = next_cursor
     return conversation
 
 
@@ -1156,17 +1188,45 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     return calendar_event
 
 
+@router.post(
+    "/v1/conversations/{conversation_id}/capture-group/separate",
+    response_model=StatusResponse,
+    tags=['conversations'],
+    description=(
+        "Separate this conversation from the capture group (one event recorded by several devices) it belongs to. "
+        "The decision is sticky: this capture is never regrouped with the members it left. Idempotent."
+    ),
+)
+def separate_conversation_from_capture_group(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    group = conversation.get('capture_group') or {}
+    changed = conversations_db.leave_capture_group(uid, conversation_id, sticky=True)
+    if changed:
+        record_capture_outcome(
+            uid,
+            'separate',
+            [m['id'] for m in group.get('members', []) if m.get('id')],
+            separated_id=conversation_id,
+        )
+    return StatusResponse(status='ok' if changed else 'unchanged')
+
+
 @router.patch(
     "/v1/conversations/{conversation_id}/summary", tags=['conversations'], response_model=ConversationStatusResponse
 )
 def patch_conversation_summary(
     conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_summary(uid, conversation_id, data.app_id, data.content)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")
     if result == 'app_result_not_found':
         raise HTTPException(status_code=404, detail="App summary not found for this conversation")
+    if result == 'app_result_ambiguous':
+        raise HTTPException(
+            status_code=409, detail="Multiple summaries share this app ID; edit cannot be targeted safely"
+        )
     return {'status': 'Ok'}
 
 
@@ -1178,6 +1238,7 @@ def patch_conversation_summary(
 def patch_conversation_segment_text(
     conversation_id: str, data: UpdateSegmentTextRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_segment_text(uid, conversation_id, data.segment_id, data.text)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -1216,6 +1277,7 @@ def delete_conversation(
     # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
     # backend/docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
+    http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
@@ -1247,7 +1309,15 @@ def delete_conversation(
 
                 raise account_gate_busy_http_exception() from error
 
+        from utils.notifications import sync_action_item_reminder
+
+        armed = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+        for item in armed:
+            if item.get('due_at') and not item.get('completed'):
+                sync_action_item_reminder(
+                    user_id=uid, action_item_id=item['id'], description='', completed=True, due_at=None
+                )
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
     # Screen frames (meeting-note screenshots) are primary conversation
@@ -1265,6 +1335,7 @@ def delete_conversation(
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
 
+    record_product_event('conversation_deleted', request=http_request)
     return {"status": "Ok"}
 
 
@@ -1337,14 +1408,16 @@ def set_action_item_status(
 
     # Mirror status updates to the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-        # Map descriptions to item IDs for quick lookup
-        description_to_ids = {}
+        # Map descriptions to items for quick lookup
+        description_to_items = {}
         for ai in existing_items:
             desc = ai.get('description')
             if not desc:
                 continue
-            description_to_ids.setdefault(desc, []).append(ai['id'])
+            description_to_items.setdefault(desc, []).append(ai)
 
         for i, action_item_idx in enumerate(data.items_idx):
             if not (0 <= action_item_idx < len(action_items)):
@@ -1352,9 +1425,15 @@ def set_action_item_status(
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]
 
-            ids = description_to_ids.get(action_item.description, [])
-            for action_item_id in ids:
-                action_items_db.mark_action_item_completed(uid, action_item_id, bool(new_completed_status))
+            for ai in description_to_items.get(action_item.description, []):
+                action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status))
+                sync_action_item_reminder(
+                    user_id=uid,
+                    action_item_id=ai['id'],
+                    description=ai.get('description', ''),
+                    completed=bool(new_completed_status),
+                    due_at=ai.get('due_at'),
+                )
     except Exception as e:
         # Don't break conversation route if mirrored update fails
         logger.error(f'Failed to mirror action item status update: {e}')
@@ -1414,13 +1493,75 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
 
     # Mirror deletion in the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         for ai in existing_items:
             if ai.get('description') == data.description:
                 action_items_db.delete_action_item(uid, ai['id'])
+                delete_action_item_vector(uid, ai['id'])
+                # The deleted row may own a client-scheduled reminder; the client only
+                # cancels it on the deletion data message, so send one here too (#5085).
+                if ai.get('due_at') and not ai.get('completed'):
+                    sync_action_item_reminder(
+                        user_id=uid,
+                        action_item_id=ai['id'],
+                        description='',
+                        completed=True,
+                        due_at=None,
+                    )
     except Exception as e:
         logger.error(f'Failed to mirror action item deletion: {e}')
     return {"status": "Ok"}
+
+
+def _assign_manual_speaker(
+    conversation_id,
+    assign_type,
+    value,
+    uid,
+    background_tasks,
+    *,
+    segment_ids=None,
+    speaker_id=None,
+    segment_index=None,
+    use_for_speech_training=True,
+):
+    if assign_type not in {'is_user', 'person_id'}:
+        raise HTTPException(status_code=400, detail='Invalid assign type')
+    value = None if value == 'null' else value
+    is_user = assign_type == 'is_user' and str(value).lower() in {'true', '1'}
+    person_id = value if assign_type == 'person_id' else None
+    try:
+        raw, resolved, removed, before = commit_manual_assignment(
+            uid,
+            conversation_id,
+            person_id=person_id,
+            is_user=is_user,
+            segment_ids=segment_ids,
+            speaker_id=speaker_id,
+            segment_index=segment_index,
+            use_for_speech_training=use_for_speech_training,
+            rejection={'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None,
+            background_tasks=background_tasks,
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    conversation = deserialize_conversation(raw)
+    resolved_conversation_id = raw.get('id') or conversation_id
+    _drop_display_projection(conversation)
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=resolved_conversation_id,
+        scope='speaker' if speaker_id is not None else 'segment' if segment_index is not None else 'bulk',
+        before=[_speaker_assignment(TranscriptSegment(**{'is_user': False, **s})) for s in before],
+        after=[_speaker_assignment(s) for s in conversation.transcript_segments if s.id in resolved],
+    )
+    return conversation
 
 
 @router.patch(
@@ -1435,181 +1576,49 @@ def set_assignee_conversation_segment(
     value: Optional[str] = None,
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
+    background_tasks: BackgroundTasks = None,
 ):
-    """
-    Another complex endpoint.
-
-    Modify the assignee of a segment in the transcript of a conversation.
-    But,
-    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
-
-    Speech training of whom?
-
-    If `assign_type` is 'is_user', the segment will be used for the user speech training.
-    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
-
-    What is required for a segment to be used for speech training?
-    1. The segment must have more than 5 words.
-    2. The conversation audio file shuold be already stored in the user's bucket.
-
-    :return: The updated conversation.
-    """
-    logger.info(
-        f'set_assignee_conversation_segment {conversation_id} {segment_idx} {assign_type} {value} {use_for_speech_training} {uid}'
-    )
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    conversation = deserialize_conversation(conversation)
-
-    # Bound-check segment_idx before indexing. Same class as the events / action-items
-    # handlers above (0 <= idx < len): an out-of-range idx (e.g. a stale client after
-    # reprocess/merge shrank the segments) otherwise raises IndexError -> HTTP 500, and a
-    # negative idx would silently mutate the wrong segment. This is a single-target route,
-    # so a missing segment is a 404 rather than a skip.
-    if not (0 <= segment_idx < len(conversation.transcript_segments)):
-        raise HTTPException(status_code=404, detail="Segment not found")
-
-    if value == 'null':
-        value = None
-
-    is_unassigning = value is None or value is False
-
-    before = [_speaker_assignment(conversation.transcript_segments[segment_idx])]
-    if assign_type == 'is_user':
-        conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
-        conversation.transcript_segments[segment_idx].person_id = None
-    elif assign_type == 'person_id':
-        conversation.transcript_segments[segment_idx].is_user = False
-        conversation.transcript_segments[segment_idx].person_id = value
-    else:
-        logger.info(assign_type)
-        raise HTTPException(status_code=400, detail="Invalid assign type")
-
-    conversations_db.update_conversation_segments(
-        uid,
+    return _assign_manual_speaker(
         conversation_id,
-        [segment.model_dump() for segment in conversation.transcript_segments],
+        assign_type,
+        value,
+        uid,
+        background_tasks,
+        segment_index=segment_idx,
+        use_for_speech_training=use_for_speech_training,
     )
-    _drop_display_projection(conversation)
-    _emit_speaker_identity_confirmed(
-        uid=uid,
-        conversation_id=conversation_id,
-        scope='segment',
-        before=before,
-        after=[_speaker_assignment(conversation.transcript_segments[segment_idx])],
-    )
-    # thinh's note: disabled for now
-    # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
-    # # TODO: can do this async
-    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
-    #     person_id = value if assign_type == 'person_id' else None
-    #     expand_speech_profile(conversation_id, uid, segment_idx, assign_type, person_id)
-    # else:
-    #     path = f'{conversation_id}_segment_{segment_idx}.wav'
-    #     delete_additional_profile_audio(uid, path)
-    #     delete_speech_sample_for_people(uid, path)
-
-    return conversation
 
 
 @router.patch(
     '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
+    operation_id='set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch',
     response_model=Conversation,
     tags=['conversations'],
 )
-def set_assignee_conversation_segment(
+def set_assignee_conversation_speaker(
     conversation_id: str,
     speaker_id: int,
     assign_type: str,
     value: Optional[str] = None,
+    data: Optional[BulkAssignSegmentsRequest] = None,
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
+    background_tasks: BackgroundTasks = None,
 ):
-    """
-    Another complex endpoint.
-
-    Modify the assignee of all segments in the transcript of a conversation with the given speaker_id.
-    But,
-    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
-
-    Speech training of whom?
-
-    If `assign_type` is 'is_user', the segment will be used for the user speech training.
-    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
-
-    What is required for a segment to be used for speech training?
-    1. The segment must have more than 5 words.
-    2. The conversation audio file should be already stored in the user's bucket.
-
-    :return: The updated conversation.
-    """
-    logger.info(
-        f'set_assignee_conversation_segment {conversation_id} {speaker_id} {assign_type} {value} {use_for_speech_training} {uid}'
-    )
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    conversation = deserialize_conversation(conversation)
-
-    if value == 'null':
-        value = None
-
-    is_unassigning = value is None or value is False
-
-    targeted_segments = [segment for segment in conversation.transcript_segments if segment.speaker_id == speaker_id]
-    before = [_speaker_assignment(segment) for segment in targeted_segments]
-
-    if assign_type == 'is_user':
-        for segment in conversation.transcript_segments:
-            if segment.speaker_id == speaker_id:
-                segment.is_user = bool(value) if value is not None else False
-                segment.person_id = None
-    elif assign_type == 'person_id':
-        for segment in conversation.transcript_segments:
-            if segment.speaker_id == speaker_id:
-                logger.info(f"{segment.speaker_id} {speaker_id} {value}")
-                segment.is_user = False
-                segment.person_id = value
-    else:
-        logger.info(assign_type)
-        raise HTTPException(status_code=400, detail="Invalid assign type")
-
-    conversations_db.update_conversation_segments(
-        uid,
+    return _assign_manual_speaker(
         conversation_id,
-        [segment.model_dump() for segment in conversation.transcript_segments],
+        assign_type,
+        value,
+        uid,
+        background_tasks,
+        speaker_id=speaker_id,
+        segment_ids=data.segment_ids if data else None,
+        use_for_speech_training=use_for_speech_training,
     )
-    _drop_display_projection(conversation)
-    _emit_speaker_identity_confirmed(
-        uid=uid,
-        conversation_id=conversation_id,
-        scope='speaker',
-        before=before,
-        after=[_speaker_assignment(segment) for segment in targeted_segments],
-    )
-    # This will be used when we setup recording for conversations, not used for now
-    # get the segment with the most words with the speaker_id
-    # segment_idx = 0
-    # segment_words = 0
-    # for segment in conversation.transcript_segments:
-    #     if segment.speaker == speaker_id:
-    #         if len(segment.text.split(' ')) > segment_words:
-    #             segment_words = len(segment.text.split(' '))
-    #             if segment_words > 5:
-    #                 segment_idx = segment.idx
-    #
-    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
-    #     person_id = value if assign_type == 'person_id' else None
-    #     expand_speech_profile(conversation_id, uid, segment_idx, assign_type, person_id)
-    # else:
-    #     path = f'{conversation_id}_segment_{segment_idx}.wav'
-    #     delete_additional_profile_audio(uid, path)
-    #     delete_speech_sample_for_people(uid, path)
-
-    return conversation
 
 
 @router.patch(
-    '/v1/conversations/{conversation_id}/segments/assign-bulk',
-    response_model=Conversation,
-    tags=['conversations'],
+    '/v1/conversations/{conversation_id}/segments/assign-bulk', response_model=Conversation, tags=['conversations']
 )
 def assign_segments_bulk(
     conversation_id: str,
@@ -1617,54 +1626,14 @@ def assign_segments_bulk(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    conversation = deserialize_conversation(conversation)
-
-    if data.assign_type not in {'is_user', 'person_id'}:
-        raise HTTPException(status_code=400, detail="Invalid assign type")
-
-    value = data.value
-    if value == 'null':
-        value = None
-
-    segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
-    resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
-    before = [_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices]
-
-    for index in segment_indices:
-        segment = conversation.transcript_segments[index]
-        if data.assign_type == 'is_user':
-            segment.is_user = bool(value) if value is not None else False
-            segment.person_id = None
-        else:
-            segment.is_user = False
-            segment.person_id = value
-
-    conversations_db.update_conversation_segments(
-        uid,
+    return _assign_manual_speaker(
         conversation_id,
-        [segment.model_dump() for segment in conversation.transcript_segments],
+        data.assign_type,
+        data.value,
+        uid,
+        background_tasks,
+        segment_ids=data.segment_ids,
     )
-    _drop_display_projection(conversation)
-    _emit_speaker_identity_confirmed(
-        uid=uid,
-        conversation_id=conversation_id,
-        scope='bulk',
-        before=before,
-        after=[_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices],
-    )
-
-    # Trigger speaker sample extraction when assigning to a person
-    if data.assign_type == 'person_id' and value:
-        background_tasks.add_task(
-            extract_speaker_samples,
-            uid=uid,
-            person_id=value,
-            conversation_id=conversation_id,
-            segment_ids=resolved_segment_ids,
-        )
-
-    return conversation
 
 
 # *********************************************
@@ -1848,17 +1817,23 @@ def send_conversation_share_email(
         # resolves would block the address until its TTL expires. Quota stands
         # and the link stays published. The caller still gets 504 — we do not
         # know that it arrived, and only the ledger pretends otherwise.
+        logger.warning('share email: ambiguous delivery: %s', e)
         try:
             conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
         except Exception:
             logger.exception('share email: failed to record ambiguous dispatch')
-        raise HTTPException(status_code=504, detail=str(e))
+        raise HTTPException(
+            status_code=504,
+            detail="Email delivery timed out or is pending confirmation. Please check back shortly.",
+        )
     except ValueError as e:
+        logger.warning('share email: invalid recipient or configuration: %s', e)
         _release_reservation_and_quota()
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail="Invalid email recipient or configuration.")
     except RuntimeError as e:
+        logger.warning('share email: delivery service temporarily unavailable: %s', e)
         _release_reservation_and_quota()
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Email delivery service temporarily unavailable.")
     except HTTPException:
         raise
     except Exception:
@@ -1899,7 +1874,7 @@ def get_shared_conversation_by_id(conversation_id: str):
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, person_ids)
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     # Public unauthenticated surface: return only the explicit allowlist.
     # SharedConversationResponse does not inherit Conversation and ignores extras,
@@ -1999,6 +1974,31 @@ def search_conversations_endpoint(
             'per_page': exact_per_page,
         }
 
+    if search_request.speaker_id and not (search_request.query or '').strip():
+        # Browsing one speaker's conversations: Typesense cannot filter by speaker, so walk Firestore
+        # (a post-filter over Typesense's first page only ever found the latest 20 conversations).
+        browse_page, browse_per_page = clamp_conversation_search_pagination(
+            search_request.page, search_request.per_page
+        )
+        include_discarded = bool(search_request.include_discarded)
+        start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
+        end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
+        browse_results = browse_conversations_by_speaker(
+            lambda limit, offset: conversations_db.get_conversations_without_photos(
+                uid,
+                limit=limit,
+                offset=offset,
+                include_discarded=include_discarded,
+                start_date=start_dt,
+                end_date=end_dt,
+            ),
+            search_request.speaker_id,
+            page=browse_page,
+            per_page=browse_per_page,
+        )
+        redact_conversations_for_list(browse_results['items'])
+        return browse_results
+
     try:
         search_results = search_conversations(
             query=search_request.query,
@@ -2069,7 +2069,8 @@ def search_conversations_endpoint(
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
-    search_results['total_pages'] = effective_page + 1 if len(conversations) >= effective_per_page else effective_page
+    has_more = len(conversations) >= effective_per_page or len(typesense_ids) >= effective_per_page
+    search_results['total_pages'] = effective_page + 1 if has_more else effective_page
     return search_results
 
 

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Fast, idempotent wake-up repair for Omi orbs. Amp waits at most 10 seconds,
+# so this only checks/repairs cheap things; dependency installs stay in setup.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Redis is the repo's cache/lock store; restart it in-process if the
+# supervised service did not come up. Backend code fails open, so never fail
+# the orb over this.
+if command -v redis-cli >/dev/null 2>&1; then
+  if ! redis-cli -h 127.0.0.1 -p 6379 ping >/dev/null 2>&1; then
+    redis-server --daemonize yes --port 6379 --save '' --appendonly no >/dev/null 2>&1 || true
+  fi
+fi
+
+# Toolchain sanity (no installs here): report only.
+[ -x "$ROOT/backend/.venv/bin/python" ] || echo "omi resume: backend/.venv missing; run .agents/setup or make setup-backend" >&2
+command -v flutter >/dev/null 2>&1 || echo "omi resume: flutter missing; run .agents/setup" >&2
+
+exit 0

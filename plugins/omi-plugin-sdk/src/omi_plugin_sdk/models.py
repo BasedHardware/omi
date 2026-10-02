@@ -2,7 +2,23 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
+
+MeetingType = Literal[
+    'interview', 'intro', 'sales', 'customer', 'one_on_one', 'team_sync', 'planning', 'demo', 'social', 'other'
+]
+
+# Optional structured fields added for rich meeting notes are serialized only
+# when the producer actually set them: the flag-off note shape must stay
+# byte-identical in prompts, responses, and persisted documents.
+_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights')
+
+
+def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple[str, ...]) -> dict:
+    for field_name in fields:
+        if field_name not in model.model_fields_set:
+            data.pop(field_name, None)
+    return data
 
 
 class CategoryEnum(str, Enum):
@@ -132,6 +148,31 @@ class Section(BaseModel):
     source_segment_ids: List[str] = Field(
         default_factory=list, description='Transcript segment IDs that directly support this section'
     )
+    kind: Literal['main', 'side_notes'] = Field(
+        default='main', description='Whether the section is primary recap or the closing side-notes section'
+    )
+
+    @model_serializer(mode='wrap')
+    def _omit_unset_kind(self, handler):
+        return _drop_unset_fields(self, handler(self), ('kind',))
+
+
+class Participant(BaseModel):
+    name: Optional[str] = Field(default=None, description="Participant's display name")
+    email: Optional[str] = Field(default=None, description="Participant's email address")
+    organization: Optional[str] = Field(default=None, description="Participant's organization when known")
+    role: Optional[str] = Field(default=None, description="Participant's role or relationship when known")
+    is_ai_agent: bool = Field(default=False, description='True for AI notetakers and assistants, never people')
+    source: Literal['roster', 'transcript'] = Field(
+        description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
+    )
+
+
+class Insight(BaseModel):
+    text: str = Field(description='One insight connecting background context to this conversation')
+    kind: Literal['prior_meeting', 'goal', 'memory', 'person'] = Field(
+        description='Which background source the insight draws on'
+    )
 
 
 class Structured(BaseModel):
@@ -152,6 +193,21 @@ class Structured(BaseModel):
         description="A list of events extracted from the conversation, that the user must have on his calendar.",
         default_factory=list,
     )
+    meeting_type: Optional[MeetingType] = Field(
+        default=None, description='The kind of meeting, when the capture is a meeting'
+    )
+    participants: List[Participant] = Field(
+        default_factory=list,
+        description='People and AI agents evidenced by the meeting roster or the transcript; never the account owner',
+    )
+    insights: List[Insight] = Field(
+        default_factory=list,
+        description='Insights connecting supplied background context to this conversation; empty without background',
+    )
+
+    @model_serializer(mode='wrap')
+    def _omit_unset_rich_fields(self, handler):
+        return _drop_unset_fields(self, handler(self), _OMIT_WHEN_UNSET)
 
     @field_validator("category", mode="before")
     @classmethod
@@ -286,9 +342,12 @@ class TranscriptSegment(BaseModel):
 
         segments.extend(joined_similar_segments)
 
+        # Normalize punctuation spacing. Collapsing a double space to a single
+        # space (never to nothing) keeps the word boundary this method itself
+        # creates when it joins " " + a segment whose text is already padded.
         for i, segment in enumerate(segments):
             segments[i].text = (
-                segments[i].text.strip().replace("  ", "").replace(" ,", ",").replace(" .", ".").replace(" ?", "?")
+                segments[i].text.strip().replace("  ", " ").replace(" ,", ",").replace(" .", ".").replace(" ?", "?")
             )
         return segments
 
@@ -340,8 +399,8 @@ class Conversation(BaseModel):
 
 class Geolocation(BaseModel):
     google_place_id: Optional[str] = None
-    latitude: float
-    longitude: float
+    latitude: float = Field(..., ge=-90.0, le=90.0, description="Latitude in degrees (-90 to 90)")
+    longitude: float = Field(..., ge=-180.0, le=180.0, description="Longitude in degrees (-180 to 180)")
     address: Optional[str] = None
     location_type: Optional[str] = None
 

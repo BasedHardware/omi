@@ -11,6 +11,12 @@ from dataclasses import dataclass
 from typing import Dict, Tuple, Union
 
 from utils.llm.gateway_client import is_auto_lane_id
+from utils.llm.vertex_pt_routing import (
+    LANE_OVERFLOW_ORIGINS as FEATURE_PT_OVERFLOW_ORIGIN,
+    OVERFLOW_ORIGIN_OPTION,
+    is_prohibited_company_paid_model,
+    lane_overflow_origin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +36,11 @@ class AutoLaneRouteRef:
 
 
 RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
+
+# Canonical Luna model id. Feature defaults, scripts, and tests import this
+# instead of embedding a versioned string. A bump changes this constant plus
+# the gateway route artifacts and the provider rate card.
+LUNA_MODEL = 'gpt-6-luna'
 
 # ---------------------------------------------------------------------------
 # Model QoS Profile System
@@ -55,37 +66,37 @@ RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 # tier or BYOK route from reintroducing a retired OpenAI text model.
 _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     # OpenAI — default intelligence
-    'conv_action_items': ('gpt-5.6-luna', 'openai'),
-    'wake_word_adjudication': ('gpt-5.6-luna', 'openai'),
-    'conv_structure': ('gpt-5.6-luna', 'openai'),
-    'conv_app_result': ('gpt-5.6-luna', 'openai'),
-    'daily_summary': ('gpt-5.6-luna', 'openai'),
-    'external_structure': ('gpt-5.6-luna', 'openai'),
-    'memories': ('gpt-5.6-luna', 'openai'),
-    'x_memory_extraction_flex': ('gpt-5.6-luna', 'openai'),
-    'learnings': ('gpt-5.6-luna', 'openai'),
-    'memory_conflict': ('gpt-5.6-luna', 'openai'),
-    'memory_conflict_flex': ('gpt-5.6-luna', 'openai'),
-    'knowledge_graph': ('gpt-5.6-luna', 'openai'),
-    'memory_l1': ('gpt-5.6-luna', 'openai'),
-    'memory_l2': ('gpt-5.6-luna', 'openai'),
-    'memory_l2_flex': ('gpt-5.6-luna', 'openai'),
-    'chat_responses': ('gpt-5.6-luna', 'openai'),
-    'file_chat_vision': ('gpt-5.6-luna', 'openai'),
-    'file_chat_documents': ('gpt-5.6-luna', 'openai'),
-    'chat_agent': ('gpt-5.6-luna', 'openai'),
-    'chat_extraction': ('gpt-5.6-luna', 'openai'),
-    'chat_graph': ('gpt-5.6-luna', 'openai'),
-    'goals': ('gpt-5.6-luna', 'openai'),
-    'goals_advice': ('gpt-5.6-luna', 'openai'),
-    'notifications': ('gpt-5.6-luna', 'openai'),
-    'proactive_notification': ('gpt-5.6-luna', 'openai'),
-    'desktop_proactive_reasoning': ('gpt-5.6-luna', 'openai'),
-    'what_matters_now': ('gpt-5.6-luna', 'openai'),
-    'openglass': ('gpt-5.6-luna', 'openai'),
-    'app_generator': ('gpt-5.6-luna', 'openai'),
-    'persona_clone': ('gpt-5.6-luna', 'openai'),
-    'persona_chat_premium': ('gpt-5.6-luna', 'openai'),
+    'conv_action_items': (LUNA_MODEL, 'openai'),
+    'wake_word_adjudication': (LUNA_MODEL, 'openai'),
+    'conv_structure': (LUNA_MODEL, 'openai'),
+    'conv_app_result': (LUNA_MODEL, 'openai'),
+    'daily_summary': (LUNA_MODEL, 'openai'),
+    'external_structure': (LUNA_MODEL, 'openai'),
+    'memories': (LUNA_MODEL, 'openai'),
+    'x_memory_extraction_flex': (LUNA_MODEL, 'openai'),
+    'learnings': (LUNA_MODEL, 'openai'),
+    'memory_conflict': (LUNA_MODEL, 'openai'),
+    'memory_conflict_flex': (LUNA_MODEL, 'openai'),
+    'knowledge_graph': (LUNA_MODEL, 'openai'),
+    'memory_l1': (LUNA_MODEL, 'openai'),
+    'memory_l2': (LUNA_MODEL, 'openai'),
+    'memory_l2_flex': (LUNA_MODEL, 'openai'),
+    'chat_responses': (LUNA_MODEL, 'openai'),
+    'file_chat_vision': (LUNA_MODEL, 'openai'),
+    'file_chat_documents': (LUNA_MODEL, 'openai'),
+    'chat_agent': (LUNA_MODEL, 'openai'),
+    'chat_extraction': (LUNA_MODEL, 'openai'),
+    'chat_graph': (LUNA_MODEL, 'openai'),
+    'goals': (LUNA_MODEL, 'openai'),
+    'goals_advice': (LUNA_MODEL, 'openai'),
+    'notifications': (LUNA_MODEL, 'openai'),
+    'proactive_notification': (LUNA_MODEL, 'openai'),
+    'desktop_proactive_reasoning': (LUNA_MODEL, 'openai'),
+    'what_matters_now': (LUNA_MODEL, 'openai'),
+    'openglass': (LUNA_MODEL, 'openai'),
+    'app_generator': (LUNA_MODEL, 'openai'),
+    'persona_clone': (LUNA_MODEL, 'openai'),
+    'persona_chat_premium': (LUNA_MODEL, 'openai'),
     # OpenAI — cheapest light/binary work
     'conv_app_select': ('gpt-5-nano', 'openai'),
     'conv_folder': ('gpt-5-nano', 'openai'),
@@ -113,7 +124,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
 
 # Pinned features — (model, provider) fixed regardless of profile or env override.
 _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
-    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.6-luna').strip() or 'gpt-5.6-luna', 'openai'),
+    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', LUNA_MODEL).strip() or LUNA_MODEL, 'openai'),
 }
 
 # Resolve active profile once at startup.
@@ -128,6 +139,37 @@ _active_profile = MODEL_QOS_PROFILES[_active_profile_name]
 _byok_profile_name = 'byok'
 _byok_profile = MODEL_QOS_PROFILES[_byok_profile_name]
 
+
+def validate_no_prohibited_company_paid_models(
+    profiles: Dict[str, Dict[str, Tuple[str, str]]], pinned: Dict[str, Tuple[str, str]]
+) -> None:
+    """Fail closed when a company-paid profile or pin resolves a Pro/image model (SCA-481).
+
+    Pro-text and image-output Gemini shapes are PayGo-only SKUs with no
+    reservation behind them; managed (company-paid) profiles and pinned
+    features — extraction, proactivity, summarization, every managed feature —
+    must never resolve one. BYOK pays for what it asks, so the byok profile is
+    exempt.
+    """
+    for profile_name, profile in profiles.items():
+        if profile_name == _byok_profile_name:
+            continue
+        for feature, (model, _provider) in profile.items():
+            if is_prohibited_company_paid_model(model):
+                raise RuntimeError(
+                    f'Model QoS profile {profile_name!r} feature {feature!r} resolves prohibited '
+                    f'company-paid model {model!r}; Pro/image-output SKUs cannot serve managed '
+                    'traffic (SCA-481)'
+                )
+    for feature, (model, _provider) in pinned.items():
+        if is_prohibited_company_paid_model(model):
+            raise RuntimeError(
+                f'Pinned feature {feature!r} resolves prohibited company-paid model {model!r}; '
+                'Pro/image-output SKUs cannot serve managed traffic (SCA-481)'
+            )
+
+
+validate_no_prohibited_company_paid_models(MODEL_QOS_PROFILES, _PINNED_FEATURES)
 # Features that can't go through get_llm() (non-ChatOpenAI providers).
 # chat_agent is OpenAI/Luna via get_llm(); the Anthropic Messages path is not a chat lane.
 _ANTHROPIC_ONLY_FEATURES: set[str] = set()
@@ -147,11 +189,11 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
 # so we detect by family prefix.
 #
 #   prompt_cache_key             — prefix-cache request routing. Supported by the gpt-4o,
-#                                  gpt-4o, gpt-5.x and o-series families.
+#                                  gpt-4o, gpt-5.x and o-series families, and by gpt-x-luna.
 #   prompt_cache_retention='24h' — extended (24h) cache retention. Supported by the
-#                                  gpt-5.x and o-series families, except gpt-5.6, which
-#                                  uses the explicit prompt_cache_options contract instead
-#                                  (see supports_cache_retention).
+#                                  gpt-5.x and o-series families, except gpt-5.6 and
+#                                  gpt-x-luna, which use the explicit prompt_cache_options
+#                                  contract instead (see supports_cache_retention).
 _CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4o', 'o1', 'o3', 'o4')
 _CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
 
@@ -245,7 +287,7 @@ def get_model(feature: str) -> str:
         feature: Feature name (e.g. 'conv_action_items', 'chat_agent').
 
     Returns:
-        Model name string (e.g. 'gpt-5.6-luna', 'claude-sonnet-4-6').
+        Model name string (e.g. 'gpt-x-luna', 'claude-sonnet-4-6').
     """
     return _get_model_config(feature)[0]
 
@@ -273,6 +315,13 @@ def get_route_options(feature: str, model: str, provider: str) -> Dict[str, obje
         # Structured-output features use .with_structured_output(), which routes through
         # Completions.parse() and rejects thinking_budget (issue #7898).
         options['thinking_budget'] = 0
+    # Price ceiling for a feature later admitted to PT. The map is data
+    # (FEATURE_PT_OVERFLOW_ORIGIN); an absent feature adds nothing, so every
+    # current route's options stay unchanged.
+    if feature in FEATURE_PT_OVERFLOW_ORIGIN:
+        origin = lane_overflow_origin(feature)
+        if origin:
+            options[OVERFLOW_ORIGIN_OPTION] = origin
     return options
 
 
@@ -315,17 +364,32 @@ def get_route_ref(feature: str) -> RouteRef:
     )
 
 
+def uses_explicit_cache_and_chat_sanitizer(model: str) -> bool:
+    """True when a model keeps the explicit-cache fields and the chat-completions sanitizer.
+
+    gpt-5.6-sol and gpt-5.6-terra match the family prefix. The canonical Luna
+    id does not, so it is compared exactly. Callers attach prompt_cache_options,
+    keep cache breakpoints, skip legacy prompt_cache_retention, and sanitize
+    chat-completions tool effort and temperature.
+    """
+    return bool(model) and (model.startswith('gpt-5.6') or model == LUNA_MODEL)
+
+
 def supports_prompt_cache(model: str) -> bool:
     """Whether a model supports OpenAI prompt-cache routing (prompt_cache_key)."""
-    return bool(model) and model.startswith(_CACHE_KEY_MODEL_PREFIXES)
+    return bool(model) and (model.startswith(_CACHE_KEY_MODEL_PREFIXES) or model == LUNA_MODEL)
 
 
 def supports_cache_retention(model: str) -> bool:
     """Whether a model supports 24h OpenAI prompt-cache retention (prompt_cache_retention='24h')."""
-    # GPT-5.6 uses the explicit cache contract (prompt_cache_options + a
-    # breakpoint) rather than the legacy prompt_cache_retention field. Sending
+    # GPT-5.6 and gpt-x-luna use the explicit cache contract (prompt_cache_options
+    # + a breakpoint) rather than the legacy prompt_cache_retention field. Sending
     # both contracts in the same request is rejected by the provider.
-    return bool(model) and not model.startswith('gpt-5.6') and model.startswith(_CACHE_RETENTION_MODEL_PREFIXES)
+    return (
+        bool(model)
+        and not uses_explicit_cache_and_chat_sanitizer(model)
+        and model.startswith(_CACHE_RETENTION_MODEL_PREFIXES)
+    )
 
 
 def is_structured_output_feature(feature: str) -> bool:

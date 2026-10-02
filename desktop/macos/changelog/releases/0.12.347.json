@@ -1,0 +1,7 @@
+{
+  "version": "0.12.347",
+  "date": "2026-09-13",
+  "changes": [
+    "Fixed conversation summaries flashing while scrolling on desktop"
+  ]
+}

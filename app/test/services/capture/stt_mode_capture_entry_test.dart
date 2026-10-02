@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/transcription_allowance.dart';
@@ -25,6 +26,7 @@ class _RecordingSocketCapture extends CaptureProvider {
     String? source,
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     openCalls++;
     lastConfig = customSttConfig;
@@ -52,15 +54,11 @@ void main() {
   test('entry: basic on_device + ready never opens a managed Omi socket', () async {
     SttModeResolver.instance = SttModeResolver(
       flagReader: () => true,
-      allowanceReader: () => const TranscriptionAllowanceSnapshot(
-        mode: 'on_device',
-        reason: 'plan_allowance_exhausted',
-      ),
+      allowanceReader: () =>
+          const TranscriptionAllowanceSnapshot(mode: 'on_device', reason: 'plan_allowance_exhausted'),
       readinessReader: () async => FreemiumReadiness.ready,
-      onDeviceConfigBuilder: () => const CustomSttConfig(
-        provider: SttProvider.onDeviceWhisper,
-        identity: SttModeResolver.freemiumOnDeviceId,
-      ),
+      onDeviceConfigBuilder: () =>
+          const CustomSttConfig(provider: SttProvider.onDeviceWhisper, identity: SttModeResolver.freemiumOnDeviceId),
     );
     final capture = _RecordingSocketCapture();
     await start(capture);
@@ -74,10 +72,7 @@ void main() {
   test('entry: Android not-ready basic never reaches openConversationSocket', () async {
     SttModeResolver.instance = SttModeResolver(
       flagReader: () => true,
-      allowanceReader: () => const TranscriptionAllowanceSnapshot(
-        mode: 'on_device',
-        reason: 'subscription_inactive',
-      ),
+      allowanceReader: () => const TranscriptionAllowanceSnapshot(mode: 'on_device', reason: 'subscription_inactive'),
       readinessReader: () async => FreemiumReadiness.requiresSetup,
       onDeviceConfigBuilder: () => const CustomSttConfig(provider: SttProvider.onDeviceWhisper),
     );
@@ -90,15 +85,11 @@ void main() {
   test('entry: unsupported codec + on_device never falls back to Omi', () async {
     SttModeResolver.instance = SttModeResolver(
       flagReader: () => true,
-      allowanceReader: () => const TranscriptionAllowanceSnapshot(
-        mode: 'on_device',
-        reason: 'plan_allowance_exhausted',
-      ),
+      allowanceReader: () =>
+          const TranscriptionAllowanceSnapshot(mode: 'on_device', reason: 'plan_allowance_exhausted'),
       readinessReader: () async => FreemiumReadiness.ready,
-      onDeviceConfigBuilder: () => const CustomSttConfig(
-        provider: SttProvider.onDeviceWhisper,
-        identity: SttModeResolver.freemiumOnDeviceId,
-      ),
+      onDeviceConfigBuilder: () =>
+          const CustomSttConfig(provider: SttProvider.onDeviceWhisper, identity: SttModeResolver.freemiumOnDeviceId),
     );
     final capture = _RecordingSocketCapture();
     await start(capture, codec: BleAudioCodec.aac);
@@ -109,10 +100,8 @@ void main() {
   test('entry: flag off still opens today\'s managed socket for basic', () async {
     SttModeResolver.instance = SttModeResolver(
       flagReader: () => false,
-      allowanceReader: () => const TranscriptionAllowanceSnapshot(
-        mode: 'on_device',
-        reason: 'plan_allowance_exhausted',
-      ),
+      allowanceReader: () =>
+          const TranscriptionAllowanceSnapshot(mode: 'on_device', reason: 'plan_allowance_exhausted'),
       readinessReader: () async => FreemiumReadiness.ready,
       onDeviceConfigBuilder: () => const CustomSttConfig(provider: SttProvider.onDeviceWhisper),
     );

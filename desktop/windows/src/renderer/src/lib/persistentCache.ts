@@ -31,6 +31,16 @@ function keyFor(surface: string, uid: string): string {
   return `${PREFIX}${surface}.${uid}`
 }
 
+/**
+ * Build a stable per-owner, per-backend key for capability snapshots. A
+ * capability is a server decision, so a value observed against dev must never
+ * silently enable a feature against prod (or another signed-in owner).
+ */
+export function scopedCacheKey(surface: string, scope: string): string {
+  const safeScope = scope.replace(/[^a-zA-Z0-9._:-]/g, '_')
+  return `${surface}.${safeScope}`
+}
+
 // The uid the persistent caches are currently scoped to (the last signed-in uid,
 // null when signed out). Async fetch paths capture this at fetch START and re-check
 // it before committing their result, so a fetch that resolves AFTER an account

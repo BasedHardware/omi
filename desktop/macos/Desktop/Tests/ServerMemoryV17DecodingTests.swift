@@ -128,16 +128,97 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     XCTAssertTrue(memory.tier.isDefaultAccessible)
     // Legacy records carry no tier from the backend, so the badge is suppressed.
     XCTAssertFalse(memory.tierIsExplicit)
+    XCTAssertTrue(SiriIndexScope.memory(MemoryRecord.from(memory), now: Date()))
   }
 
-  func testUnknownPresentTierFailsClosed() {
+  func testNullAndActiveTiersStayIndexableWhileArchiveAndUnknownAreExcluded() throws {
+    let base: [String: Any] = [
+      "id": "legacy-1", "content": "Legacy memory", "category": "interesting",
+      "created_at": "2026-06-21T10:00:00Z", "updated_at": "2026-06-21T10:05:00Z",
+    ]
+    let cases: [(String, Any?, Bool)] = [
+      ("absent", nil, true), ("null", NSNull(), true),
+      ("short_term", "short_term", true), ("long_term", "long_term", true),
+      ("archive", "archive", false),
+    ]
+    for (name, tier, expected) in cases {
+      var payload = base
+      if name != "absent" { payload["memory_tier"] = tier }
+      let data = try JSONSerialization.data(withJSONObject: payload)
+      let row = try decoder.decode(ServerMemory.self, from: data)
+      XCTAssertEqual(SiriIndexScope.memory(MemoryRecord.from(row), now: Date()), expected, name)
+    }
+    var unknown = base
+    unknown["memory_tier"] = "future_tier"
+    XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: JSONSerialization.data(withJSONObject: unknown)))
+  }
+
+  func testUnknownLegacyTierAliasesAreIgnoredLikeBackendExtras() throws {
+    let payload: [String: Any] = [
+      "id": "legacy-extra", "content": "Legacy memory", "category": "interesting",
+      "created_at": "2026-06-21T10:00:00Z", "updated_at": "2026-06-21T10:05:00Z",
+      "layer": "future_tier", "tier": "future_tier",
+    ]
+    let memory = try decoder.decode(ServerMemory.self, from: JSONSerialization.data(withJSONObject: payload))
+    XCTAssertEqual(memory.tier, .longTerm)
+    XCTAssertFalse(memory.tierIsExplicit)
+    XCTAssertTrue(SiriIndexScope.memory(MemoryRecord.from(memory), now: Date()))
+  }
+
+  func testDecodesServerOwnedCurrencyEvidenceAndKeepsUnknownUsefulNow() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-currency",
+        "content": "A dated product decision",
+        "category": "system",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "as_of": "2026-06-20",
+        "currency_band": "history",
+        "belief_class": "decision",
+        "belief_computed_at": "2026-06-21T11:00:00Z"
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertTrue(memory.currencyMetadataIsExplicit)
+    XCTAssertEqual(memory.currencyBand, "history")
+    XCTAssertFalse(memory.isUsefulNow)
+    XCTAssertTrue(memory.isHistory)
+    XCTAssertNotNil(memory.asOf)
+    XCTAssertNotNil(memory.beliefComputedAt)
+  }
+
+  func testMissingCurrencyEvidenceRemainsUnknownAndUsefulNow() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-legacy",
+        "content": "Legacy memory",
+        "category": "system",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z"
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertFalse(memory.currencyMetadataIsExplicit)
+    XCTAssertNil(memory.currencyBand)
+    XCTAssertTrue(memory.isUsefulNow)
+    XCTAssertFalse(memory.isHistory)
+  }
+
+  func testUnknownCanonicalMemoryTierFailsClosed() {
     let json = Data(
       """
       {
         "id": "mem-future",
         "content": "Future tier",
         "category": "system",
-        "tier": "future_archive",
+        "memory_tier": "future_archive",
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }

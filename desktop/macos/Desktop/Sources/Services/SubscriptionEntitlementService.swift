@@ -206,8 +206,129 @@ enum ManagedPlanGateHTTP {
     return body.contains("plan_gated")
   }
 
+  /// Exact typed code at a known JSON field. Prose that happens to mention
+  /// `plan_gated` must not classify. Hub mint uses this; the legacy
+  /// `isPlanGated(status:data:)` scanner still serves Gemini/lane clients.
+  static func isTypedPlanGatedCode(_ value: String?) -> Bool {
+    guard let value else { return false }
+    return value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "plan_gated"
+  }
+
+  static func isPlanGated(status: Int, payload: APIErrorPayload?) -> Bool {
+    guard status == 402, let payload else { return false }
+    return isTypedPlanGatedCode(payload.error)
+      || isTypedPlanGatedCode(payload.code)
+      || isTypedPlanGatedCode(payload.detail)
+  }
+
+  /// Exact `error` / `code` / `detail.error` (or a string `detail`) on a 402.
+  /// Does not scan the raw body for substring containment.
+  static func isPlanGatedTypedJSON(status: Int, data: Data) -> Bool {
+    guard status == 402 else { return false }
+    guard let object = try? JSONSerialization.jsonObject(with: data) else { return false }
+    if isTypedPlanGatedCode(errorField(object)) || isTypedPlanGatedCode(codeField(object)) {
+      return true
+    }
+    guard let root = object as? [String: Any], let detail = root["detail"] else { return false }
+    if isTypedPlanGatedCode(errorField(detail)) || isTypedPlanGatedCode(codeField(detail)) {
+      return true
+    }
+    return isTypedPlanGatedCode(detail as? String)
+  }
+
+  static func isPlanGatedMint(_ error: RealtimeTokenMintError) -> Bool {
+    isPlanGatedTypedJSON(status: error.statusCode, data: error.responseBody)
+      || isPlanGated(status: error.statusCode, payload: error.payload)
+  }
+
+  /// Typed 402 `plan_gated` from the managed proxy, or a client that already
+  /// classified it. Distinct from chat-quota / trial-expired 402.
+  static func isPlanGatedWarmFailure(_ error: Error) -> Bool {
+    if case GeminiClient.GeminiClientError.planGated = error {
+      return true
+    }
+    if case ProactiveLaneClientError.planGated = error {
+      return true
+    }
+    if let mint = error as? RealtimeTokenMintError {
+      return isPlanGatedMint(mint)
+    }
+    return false
+  }
+
   private static func errorField(_ object: Any) -> String? {
     (object as? [String: Any])?["error"] as? String
+  }
+
+  private static func codeField(_ object: Any) -> String? {
+    (object as? [String: Any])?["code"] as? String
+  }
+}
+
+/// Bounded server-denial latch for managed proactivity.
+///
+/// Cached unknown plans fail open to `.allowManagedProactivity`, so an upgrade
+/// that never changes the decision would otherwise retry forever after a typed
+/// 402 `plan_gated`. Clear when the decision becomes allow, or after
+/// `defaultLifetime` (one probe per window). LiveNotes (`shouldSkipManagedAINotes`
+/// on `fix/desktop-livenotes-respects-plan-gate`) and the realtime hub both use
+/// this so the two call sites cannot drift.
+struct ManagedPlanGateLatch: Equatable, Sendable {
+  static let defaultLifetime: TimeInterval = 10 * 60
+
+  private(set) var ownerID: String?
+  private(set) var lastDecision: SubscriptionEntitlementDecision?
+  private(set) var serverDenied = false
+  private(set) var deniedAt: Date?
+
+  /// Returns whether automatic managed work should skip. User-initiated PTT is
+  /// a separate admission decision and must not consult this for a key press.
+  /// An owner change always resets: both users can fail-open to `.allow`, so
+  /// comparing only the enum would carry A's 402 latch onto B.
+  mutating func shouldSkipAutomaticManagedWork(
+    decision: SubscriptionEntitlementDecision,
+    now: Date,
+    ownerID: String? = nil,
+    lifetime: TimeInterval = Self.defaultLifetime
+  ) -> Bool {
+    if self.ownerID != ownerID {
+      reset()
+      self.ownerID = ownerID
+    }
+    if lastDecision != decision {
+      let previous = lastDecision
+      lastDecision = decision
+      // Only an observed `.planGated` → `.allow` transition drops a 402 latch.
+      // `nil` → allow is the first observation of a fail-open cache, which is
+      // exactly when a typed 402 must stick until owner change or expiry.
+      if previous == .planGated, decision == .allowManagedProactivity {
+        clearServerDenial()
+      }
+    }
+    if serverDenied, let deniedAt, now.timeIntervalSince(deniedAt) >= lifetime {
+      clearServerDenial()
+    }
+    return decision == .planGated || serverDenied
+  }
+
+  mutating func latchServerDenial(at now: Date, ownerID: String? = nil) {
+    if self.ownerID != ownerID {
+      lastDecision = nil
+    }
+    self.ownerID = ownerID
+    serverDenied = true
+    deniedAt = now
+  }
+
+  mutating func clearServerDenial() {
+    serverDenied = false
+    deniedAt = nil
+  }
+
+  mutating func reset() {
+    lastDecision = nil
+    ownerID = nil
+    clearServerDenial()
   }
 }
 

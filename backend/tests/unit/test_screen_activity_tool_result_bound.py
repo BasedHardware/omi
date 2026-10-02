@@ -117,7 +117,7 @@ class TestBoundedScreenActivityResult:
         assert "Summarize what is shown" in out
         # Clipped at the app-record boundary: the first complete record is kept and the oversized
         # second record is dropped whole, never left as a partial "**Slack**" block.
-        note_idx = out.index("[Only the most-used apps")
+        note_idx = out.index("[Only a subset of the observed apps")
         body = out[:note_idx].rstrip("\n")
         assert "Chrome" in body
         assert "Slack" not in body
@@ -130,6 +130,59 @@ class TestBoundedScreenActivityResult:
         big = self.HEADER + only
         out = sa._bounded_screen_activity_result(big, truncated=False)
         assert len(out) <= sa.MAX_RESULT_CHARS + 400
-        note_idx = out.index("[Only the most-used apps")
+        note_idx = out.index("[Only a subset of the observed apps")
         body = out[:note_idx]
         assert "**Chrome**" in body  # the app record is present, not dropped down to the header
+
+
+@pytest.mark.parametrize('truncated', [False, True])
+def test_chat_summary_reports_observations_without_invented_duration(monkeypatch, sa, truncated):
+    summary = {
+        'apps': {
+            'Editor': {
+                'count': 120,
+                'first_seen': '2026-07-03 01:00:00.000',
+                'last_seen': '2026-07-03 12:00:00.000',
+                'window_titles': ['Example'],
+            }
+        },
+        'total_screenshots': 120,
+        'coverage': {
+            'truncated': truncated,
+            'first_observed_at': '2026-07-03 01:00:00.000',
+            'last_observed_at': '2026-07-03 12:00:00.000',
+        },
+    }
+    monkeypatch.setattr(sa.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary, raising=False)
+    tool = sa.get_screen_activity_tool.func
+    result = tool('2026-07-03', '2026-07-04', config={'configurable': {'user_id': 'synthetic-user'}})
+    assert '120 synced screen observations' in result
+    assert '**Editor** — 120 observations' in result
+    assert 'Observed (UTC):' in result
+    assert 'Sampled windows: Example' in result
+    assert 'Capture and sync completeness are unknown' in result
+    assert 'not measured usage durations or proof of intent' in result
+    assert ' min' not in result
+    assert 'Active:' not in result
+    assert ('later observations exist' in result) is truncated
+    # Absence from a capped sample must not become a claim about the whole date range.
+    missing = tool(
+        '2026-07-03', '2026-07-04', app_filter='Later app', config={'configurable': {'user_id': 'synthetic-user'}}
+    )
+    assert 'in the summarized rows' in missing
+    assert ('later observations exist' in missing) is truncated
+
+
+def test_empty_chat_summary_does_not_infer_inactivity(monkeypatch, sa):
+    monkeypatch.setattr(
+        sa.screen_activity_db,
+        'get_screen_activity_summary',
+        lambda *a, **k: {'apps': {}, 'total_screenshots': 0},
+        raising=False,
+    )
+    result = sa.get_screen_activity_tool.func(
+        '2026-07-03', '2026-07-04', config={'configurable': {'user_id': 'synthetic-user'}}
+    )
+    assert 'No synced screen observations' in result
+    assert 'completeness are unknown' in result
+    assert 'does not establish that the user was inactive' in result

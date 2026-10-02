@@ -5,7 +5,7 @@ globs:
 alwaysApply: false
 ---
 - Use l10n for all user-facing strings: `context.l10n.keyName`.
-- Add ARB keys with `jq`; avoid loading entire ARB files.
-- Translate all 33 non-English locales; keep placeholders identical.
-- Regenerate l10n after ARB edits: `cd app && flutter gen-l10n`.
-- See AGENTS.md for full rules.
+- Add, change, or remove a key with `python3 app/scripts/l10n.py` (`add`/`set`/`remove`/`template`/`check`). Do not edit ARB files by hand or with `jq`.
+- The caller supplies translations for every locale `template` lists; keep ICU placeholders identical to English.
+- The tool regenerates (`flutter gen-l10n`) and formats; do not stop with untranslated messages for the key you just wrote.
+- See `app/AGENTS.md` for the localization section.

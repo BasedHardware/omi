@@ -1,4 +1,7 @@
 import asyncio
+from contextvars import copy_context
+from datetime import datetime, timezone
+import hashlib
 import json
 import types
 from unittest.mock import MagicMock, patch
@@ -9,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from routers import users as users_router
 from services.users import data_export
+from utils import byok, subscription as subscription_utils
 
 
 class _FakeRequest:
@@ -552,8 +556,122 @@ def test_usage_quota_endpoint_reads_customer_firestore_like_desktop_enforcement(
         users_router.get_user_chat_usage_quota(uid='uid1', x_app_platform='desktop')
 
     snapshot_mock.assert_called_once_with(
-        'uid1', platform='desktop', firestore_client=sentinel_customer_client, provision=False
+        'uid1',
+        platform='desktop',
+        firestore_client=sentinel_customer_client,
+        provision=False,
+        required_llm_provider='anthropic',
     )
+
+
+def _mock_desktop_quota_storage(monkeypatch, *, enrolled, questions):
+    customer_client = object()
+    monkeypatch.setattr(users_router, 'get_customer_firestore_client', lambda: customer_client)
+    monkeypatch.setattr(subscription_utils, 'get_customer_firestore_client', lambda: customer_client)
+
+    def is_byok_active(uid, *, firestore_client=None):
+        assert firestore_client is customer_client
+        return enrolled
+
+    monkeypatch.setattr(users_router.users_db, 'is_byok_active', is_byok_active)
+    monkeypatch.setattr(subscription_utils, 'is_trial_paywalled', lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        subscription_utils.users_db,
+        'get_user_valid_subscription',
+        lambda *args, **kwargs: types.SimpleNamespace(plan=users_router.PlanType.basic),
+    )
+    monkeypatch.setattr(
+        subscription_utils.user_usage_db,
+        'get_monthly_chat_usage',
+        lambda *args, **kwargs: {'questions': questions, 'cost_usd': 0.0, 'reset_at': 1_790_812_800},
+    )
+
+
+@pytest.mark.parametrize(
+    'provider,enrolled,validated',
+    [
+        ('gemini', True, True),
+        ('openrouter', True, True),
+        ('openai', True, True),
+        ('deepgram', True, True),
+        ('anthropic', True, True),
+        (None, True, True),
+        ('anthropic', True, False),
+        ('anthropic', False, True),
+        (None, False, False),
+    ],
+)
+@pytest.mark.parametrize('questions', [29, 30])
+def test_desktop_usage_quota_matches_enforcement_for_enrolled_provider(
+    monkeypatch, provider, enrolled, validated, questions
+):
+    """#19331: an enrolled Gemini key cannot fund desktop's Anthropic chat."""
+    _mock_desktop_quota_storage(monkeypatch, enrolled=enrolled, questions=questions)
+
+    def exercise_request():
+        keys = {provider: 'fake-enrolled-key'} if provider else {}
+        if validated:
+            byok.set_validated_byok_keys(keys, uid='uid1')
+        else:
+            byok.set_byok_keys(keys)
+        quota = users_router.get_user_chat_usage_quota(uid='uid1', x_app_platform='macos')
+        if provider == 'anthropic' and enrolled and validated:
+            subscription_utils.enforce_desktop_chat_quota('uid1', platform='macos')
+            assert quota.allowed is True
+            assert quota.limit is None
+            assert quota.plan == 'Free (BYOK)'
+        elif questions == 30:
+            with pytest.raises(HTTPException) as exc:
+                subscription_utils.enforce_desktop_chat_quota('uid1', platform='macos')
+            assert exc.value.status_code == 402
+            assert quota.allowed is False
+            assert quota.used == exc.value.detail['used'] == 30
+            assert quota.limit == exc.value.detail['limit'] == 30
+            assert quota.reset_at == exc.value.detail['reset_at']
+            assert quota.plan_type == users_router.PlanType.basic.value
+        else:
+            subscription_utils.enforce_desktop_chat_quota('uid1', platform='macos')
+            assert quota.allowed is True
+            assert quota.used == questions
+            assert quota.limit == 30
+            assert quota.plan_type == users_router.PlanType.basic.value
+
+    copy_context().run(exercise_request)
+
+
+@pytest.mark.parametrize('provider', ['gemini', 'anthropic', None])
+def test_usage_quota_http_uses_the_validated_request_provider(monkeypatch, provider):
+    """Exercise header validation and response serialization, not a mocked gate."""
+    _mock_desktop_quota_storage(monkeypatch, enrolled=True, questions=30)
+    key = 'fake-enrolled-key'
+    state = {
+        'active': True,
+        'last_seen_at': datetime.now(timezone.utc),
+        'fingerprints': {provider: hashlib.sha256(key.encode()).hexdigest()} if provider else {},
+    }
+    monkeypatch.setattr(byok, 'get_cached_byok_state', lambda uid: state)
+    monkeypatch.setattr(users_router.auth, 'verify_token', lambda token: 'uid1')
+
+    async def authenticated_uid():
+        return 'uid1'
+
+    app = FastAPI()
+    app.add_middleware(byok.BYOKMiddleware)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = authenticated_uid
+    app.add_api_route(
+        '/v1/users/me/usage-quota', users_router.get_user_chat_usage_quota, response_model=users_router.ChatUsageQuota
+    )
+    headers = {'Authorization': 'Bearer fake-session', 'X-App-Platform': 'macos'}
+    if provider:
+        headers[byok.BYOK_HEADERS[provider]] = key
+    with TestClient(app) as client:
+        response = client.get('/v1/users/me/usage-quota', headers=headers)
+
+    assert response.status_code == 200
+    quota = response.json()
+    assert quota['allowed'] is (provider == 'anthropic')
+    assert quota['limit'] == (None if provider == 'anthropic' else 30)
+    assert quota['used'] == (0 if provider == 'anthropic' else 30)
 
 
 @pytest.mark.parametrize(

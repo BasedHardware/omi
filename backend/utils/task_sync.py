@@ -7,6 +7,7 @@ import database.users as users_db
 import database.action_items as action_items_db
 from utils.executors import db_executor, run_blocking
 from utils.notifications import send_apple_reminders_sync_push_async
+from utils.observability.fallback import record_fallback
 from utils.task_integrations_ops import create_task_internal
 import logging
 
@@ -134,10 +135,25 @@ async def auto_sync_action_items_batch(uid: str, action_items: List[Dict[str, An
             result = await _sync_to_apple_reminders(uid, action_items)
             return [result] * len(action_items)
 
-        # Cloud services: sync individually
+        # Cloud exports are independent. Preserve earlier outcomes and attempt the
+        # tail even if a read, OAuth refresh, or export-marker write raises. Do not
+        # retry here: the provider may have accepted a task before a local failure.
         results: List[Dict[str, Any]] = []
         for item in action_items:
-            result = await _sync_to_cloud_service(uid, default_app, integration, item)
+            try:
+                result = await _sync_to_cloud_service(uid, default_app, integration, item)
+            except Exception as e:
+                logger.error(
+                    'Auto-sync item %s failed for user %s (%s): %s', item.get('id'), uid, default_app, type(e).__name__
+                )
+                record_fallback(
+                    component='other',
+                    from_mode='task_sync_batch',
+                    to_mode='remaining_items',
+                    reason='other',
+                    outcome='degraded',
+                )
+                result = {'synced': False, 'platform': default_app, 'error': 'Auto-sync failed'}
             results.append(result)
         return results
 

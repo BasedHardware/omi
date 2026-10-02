@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Calendar, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDateInputValue } from '@/lib/dateInput';
 
 interface TaskQuickAddProps {
   onAdd: (description: string, dueAt?: string) => Promise<void>;
@@ -32,7 +33,7 @@ export function TaskQuickAdd({
   // Set default due date when provided
   useEffect(() => {
     if (defaultDueDate && isExpanded) {
-      setDueDate(defaultDueDate.toISOString().split('T')[0]);
+      setDueDate(formatDateInputValue(defaultDueDate));
     }
   }, [defaultDueDate, isExpanded]);
 
@@ -42,7 +43,7 @@ export function TaskQuickAdd({
 
     setIsSubmitting(true);
     try {
-      const dueAt = dueDate ? new Date(dueDate).toISOString() : undefined;
+      const dueAt = dueDate ? new Date(dueDate + 'T12:00:00').toISOString() : undefined;
       await onAdd(value.trim(), dueAt);
       setValue('');
       setDueDate('');
@@ -75,15 +76,15 @@ export function TaskQuickAdd({
         onClick={() => setIsExpanded(true)}
         disabled={disabled}
         className={cn(
-          'flex items-center gap-2 w-full px-3 py-2.5',
+          'flex w-full items-center gap-2 px-3 py-2.5',
           'rounded-lg border border-dashed border-bg-quaternary',
           'text-text-tertiary hover:text-text-secondary',
           'hover:border-white/50 hover:bg-bg-tertiary',
           'transition-all duration-150',
-          disabled && 'opacity-50 cursor-not-allowed',
+          disabled && 'cursor-not-allowed opacity-50',
         )}
       >
-        <Plus className="w-4 h-4" />
+        <Plus className="h-4 w-4" />
         <span className="text-sm">Add new task...</span>
       </button>
     );
@@ -96,7 +97,7 @@ export function TaskQuickAdd({
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.15 }}
       onSubmit={handleSubmit}
-      className={cn('rounded-lg border border-white/50', 'bg-bg-secondary p-3 space-y-3')}
+      className={cn('rounded-lg border border-white/50', 'space-y-3 bg-bg-secondary p-3')}
     >
       {/* Input */}
       <input
@@ -119,15 +120,15 @@ export function TaskQuickAdd({
         {/* Date picker */}
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Calendar className="w-4 h-4 text-text-quaternary absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Calendar className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-text-quaternary" />
             <input
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               disabled={isSubmitting}
               className={cn(
-                'pl-8 pr-2 py-1 text-xs rounded',
-                'bg-bg-secondary border border-transparent',
+                'rounded py-1 pl-8 pr-2 text-xs',
+                'border border-transparent bg-bg-secondary',
                 'text-text-secondary',
                 'focus:border-white/50 focus:outline-none',
                 'transition-colors',
@@ -140,7 +141,7 @@ export function TaskQuickAdd({
               onClick={() => setDueDate('')}
               className="p-1 text-text-quaternary hover:text-text-secondary"
             >
-              <X className="w-3 h-3" />
+              <X className="h-3 w-3" />
             </button>
           )}
         </div>
@@ -152,7 +153,7 @@ export function TaskQuickAdd({
             onClick={handleCancel}
             disabled={isSubmitting}
             className={cn(
-              'px-3 py-1 text-xs rounded',
+              'rounded px-3 py-1 text-xs',
               'text-text-tertiary hover:text-text-secondary',
               'transition-colors',
             )}
@@ -163,11 +164,11 @@ export function TaskQuickAdd({
             type="submit"
             disabled={!value.trim() || isSubmitting}
             className={cn(
-              'px-3 py-1 text-xs rounded',
+              'rounded px-3 py-1 text-xs',
               'bg-white hover:bg-white/90',
-              'text-black font-medium',
+              'font-medium text-black',
               'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'disabled:cursor-not-allowed disabled:opacity-50',
             )}
           >
             {isSubmitting ? 'Adding...' : 'Add Task'}

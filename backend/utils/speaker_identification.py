@@ -1,20 +1,40 @@
+import asyncio
 import io
 import re
 import wave
-from typing import Any, Dict, List, Optional, cast
+from dataclasses import dataclass
+from typing import Any, Dict, List, Mapping, Optional, cast
 
 import av
 import numpy as np
 
 from database import conversations as conversations_db
+from database import speaker_learning as speaker_learning_db
 from database import users as users_db
+from database import voice_profiles as voice_profiles_db
+from utils.audio_timeline import (
+    chunk_span_bounds,
+    coverage_outcome,
+    is_audio_timeline_v2,
+    segment_wall_window,
+)
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL, OMI_PERSON_VOICE_LEARNING_TOTAL
+from utils.speaker_learning_policy import (
+    PooledClipPlan,
+    TEACHING_MIN_TOTAL_SECONDS,
+    authorized_teaching_segments,
+    learning_state_for_outcome,
+    plan_pooled_intervals,
+    segment_group,
+    union_seconds,
+)
 from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
 )
-from utils.speaker_sample import verify_and_transcribe_sample
-from utils.speaker_sample_migration import maybe_migrate_person_samples
+from utils.speaker_sample import verify_and_transcribe_sample, delete_sample_from_storage
+from utils.speaker_tag_prompts.clips import v2_relevant_timestamps
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
 
@@ -95,13 +115,13 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
 
             if frame_time < start_sec:
                 # Trim beginning of frame
-                skip_samples = int((start_sec - frame_time) * sample_rate)
+                skip_samples = int(round((start_sec - frame_time) * sample_rate))
                 frame_start_sample = skip_samples
 
             if frame_end_time > end_sec:
                 # Trim end of frame
                 keep_duration = end_sec - max(frame_time, start_sec)
-                frame_end_sample = frame_start_sample + int(keep_duration * sample_rate)
+                frame_end_sample = frame_start_sample + int(round(keep_duration * sample_rate))
 
             if frame_start_sample < frame_end_sample:
                 trimmed_samples.append(arr[frame_start_sample:frame_end_sample])
@@ -111,10 +131,6 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
 
     return np.concatenate(trimmed_samples).astype(np.int16).tobytes()
 
-
-# Constants for speaker sample extraction
-SPEAKER_SAMPLE_MIN_SEGMENT_DURATION = 10.0
-SPEAKER_SAMPLE_WINDOW_HALF = SPEAKER_SAMPLE_MIN_SEGMENT_DURATION / 2
 
 # Language-specific patterns for speaker identification from text
 # Each pattern should have a capture group for the name.
@@ -233,6 +249,57 @@ for lang, lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.items():
     patterns_to_check.extend(lang_patterns)
     for pat in lang_patterns:
         PATTERN_TO_LANG[pat] = lang
+
+# Lead-ins above that are a bare copula — "I am <something>" — rather than a
+# self-introduction. They match a nationality, a mood, a brand or a sentence-cased
+# filler just as readily as a name ("I'm Chinese", "I'm Googling it", 我是因为…),
+# so a hit is a *hint* only: good enough to reuse a person the user already has,
+# never good enough to mint a new one. The explicit forms in the same alternation
+# ("My name is", 我叫, Je m'appelle, …) do carry that authority.
+#
+# Compared case-insensitively against capture group 1, so only one case variant
+# of each lead-in is listed.
+COPULAR_SELF_REFERENCE_LEAD_INS = frozenset(
+    {
+        'аз съм',  # bg
+        'sóc',  # ca
+        '我是',  # zh
+        'jsem',  # cs
+        'jeg er',  # da, no
+        'ich bin',  # de
+        'είμαι',  # el
+        'i am',  # en
+        "i'm",  # en
+        'soy',  # es
+        'ma olen',  # et
+        'olen',  # fi
+        'je suis',  # fr
+        'मैं हूँ',  # hi
+        'én vagyok',  # hu
+        'saya',  # id, ms
+        'sono',  # it
+        '私は',  # ja
+        'わたしは',  # ja
+        '저는',  # ko
+        'aš esu',  # lt
+        'es esmu',  # lv
+        'ik ben',  # nl
+        'jestem',  # pl
+        'eu sou',  # pt
+        'sunt',  # ro
+        'я',  # ru, uk
+        'som',  # sk
+        'jag är',  # sv
+        'ผมคือ',  # th
+        'ฉันคือ',  # th
+        'tôi là',  # vi
+    }
+)
+
+# Name-first patterns capture the name in group 1, so there is no lead-in to
+# classify. Only Hungarian "<Name> vagyok" is a bare copula; "<Name> is my name"
+# and "<Name> es mi nombre" are explicit introductions.
+_NAME_FIRST_COPULAR_PATTERNS = frozenset({r"\b([A-Z][a-zA-Z]*)\s+vagyok\b"})
 
 # CJK stopwords and grammatical elements to avoid false-positive speaker creation
 # from ordinary conversational sentences (#12900).
@@ -526,6 +593,8 @@ SPEAKER_NAME_STOPWORDS = frozenset(
         'ok',
         'yeah',
         'just',
+        'because',
+        'googling',
         'like',
         'so',
         'very',
@@ -609,7 +678,41 @@ def _is_valid_cjk_speaker_name(name: str, pattern_lang: Optional[str] = None) ->
     return True
 
 
+@dataclass(frozen=True)
+class SpeakerNameDetection:
+    """A name read out of transcript text, and how much authority the phrasing carries.
+
+    ``explicit`` is true only for a self-introduction ("My name is Ada", 私の名前は…).
+    A bare copula ("I'm Ada") sets it false: the same phrasing produces "I'm Chinese"
+    and "I'm Googling it", so the name may be reused to resolve a person the user
+    already has, but must not create one (#15247 fallout — auto-created people).
+    """
+
+    name: str
+    explicit: bool
+
+
+def _is_explicit_introduction(pattern: str, match: 're.Match[str]') -> bool:
+    groups = match.groups()
+    if len(groups) < 2:
+        return pattern not in _NAME_FIRST_COPULAR_PATTERNS
+    lead_in = groups[0]
+    if not lead_in:
+        return False
+    return lead_in.strip().lower() not in COPULAR_SELF_REFERENCE_LEAD_INS
+
+
 def detect_speaker_from_text(text: str, language: Optional[str] = None) -> Optional[str]:
+    """Back-compatible name-only view of :func:`detect_speaker_introduction`.
+
+    Callers that only *resolve* an existing person keep using this; anything that
+    can create a person must read ``explicit`` from the detection instead.
+    """
+    detection = detect_speaker_introduction(text, language=language)
+    return detection.name if detection else None
+
+
+def detect_speaker_introduction(text: str, language: Optional[str] = None) -> Optional[SpeakerNameDetection]:
     if language and language in SPEAKER_IDENTIFICATION_PATTERNS:
         seen = set()
         patterns = []
@@ -656,12 +759,21 @@ def detect_speaker_from_text(text: str, language: Optional[str] = None) -> Optio
             if not _is_valid_cjk_speaker_name(name, pattern_lang=matched_lang):
                 continue
 
-            return (
+            normalized = (
                 name
                 if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name)
                 else name.capitalize()
             )
+            return SpeakerNameDetection(name=normalized, explicit=_is_explicit_introduction(pattern, match))
     return None
+
+
+_VERIFY_OUTCOMES = frozenset({'transcription_failed', 'insufficient_words', 'multi_speaker', 'text_mismatch'})
+
+
+def _verify_outcome(reason: str) -> str:
+    outcome = reason.split(':', 1)[0].strip()
+    return outcome if outcome in _VERIFY_OUTCOMES else 'error'
 
 
 async def extract_speaker_samples(
@@ -670,30 +782,40 @@ async def extract_speaker_samples(
     conversation_id: str,
     segment_ids: List[str],
     sample_rate: int = 16000,
-):
+) -> str:
     """
-    Extract speech samples from segments and store as speaker profiles.
-    Fetches conversation from DB to get started_at and segment details.
-    Processes each segment one by one, stops when sample limit reached.
-    """
-    try:
-        # Run lazy migration for samples before checking count
-        # (migration may drop invalid samples, freeing up space)
-        person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
-        if person:
-            person = await maybe_migrate_person_samples(uid, person)
+    Extract a pooled speech sample for ``person_id`` and store it as their voice profile.
 
-        # Check sample count after migration
-        sample_count = await run_blocking(db_executor, users_db.get_person_speech_samples_count, uid, person_id)
-        if sample_count >= 1:
-            logger.warning(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
-            return
+    Candidate segments come from the winning manual receipt decision when a
+    receipt exists (pooled across the requested anchors' voice groups, resolving
+    stale ids to the current receipt), or are restricted to the explicitly
+    passed ids when it does not. Exactly one bounded outcome is recorded per
+    invocation via ``omi_person_voice_learning_total`` plus the C2 fields.
+    """
+    outcome = 'error'
+    person: Optional[Dict[str, Any]] = None
+    clean_seconds = 0.0
+    try:
+        # The user can turn off saving other people's voices; this is the one choke
+        # point every teaching path (tag sheet, tag prompts, live socket) reaches.
+        settings = await run_blocking(db_executor, voice_profiles_db.get_voice_profile_settings, uid)
+        if not settings['save_other_voice_profiles']:
+            outcome = 'disabled'
+            person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
+            return outcome
+
+        # Snapshot the person before slow audio work. Publishing compares this version
+        # so a correction, deletion or replacement cannot resurrect stale teaching.
+        person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
+        if not person:
+            outcome = 'person_missing'
+            return outcome
 
         # Fetch conversation to get started_at and segment details
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation:
-            logger.warning(f"Conversation {conversation_id} not found {uid}")
-            return
+            outcome = 'conversation_missing'
+            return outcome
 
         # Sample extraction runs live, while the conversation is still processing, so
         # conversation['language'] (only resolved at finalization) is normally empty here.
@@ -705,190 +827,246 @@ async def extract_speaker_samples(
 
         started_at = conversation.get('started_at')
         if not started_at:
-            logger.info(f"Conversation {conversation_id} has no started_at {uid}")
-            return
+            outcome = 'no_audio'
+            return outcome
 
         started_at_ts = started_at.timestamp() if hasattr(started_at, 'timestamp') else float(started_at)
 
         # Build segment lookup from conversation's transcript_segments
         conv_segments = conversation.get('transcript_segments', [])
-        segment_map = {s.get('id'): s for s in conv_segments if s.get('id')}
 
         # Get chunks from audio_files instead of storage listing
         audio_files = conversation.get('audio_files', [])
         if not audio_files:
-            logger.warning(f"No audio files found for {conversation_id}, skipping speaker sample extraction {uid}")
-            return
+            outcome = 'no_audio'
+            return outcome
 
         # Collect all chunk timestamps from audio files
         all_timestamps: List[Any] = []
         for af in audio_files:
-            timestamps = af.get('chunk_timestamps', [])
-            all_timestamps.extend(timestamps)
-
+            all_timestamps.extend(af.get('chunk_timestamps', []))
         if not all_timestamps:
-            logger.warning(f"No chunk timestamps found for {conversation_id}, skipping speaker sample extraction {uid}")
-            return
+            outcome = 'no_chunks'
+            return outcome
 
         # Build chunks list in expected format
         chunks: List[Dict[str, Any]] = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
 
-        samples_added = 0
-        max_samples_to_add = 1 - sample_count
+        requested_ids = {sid for sid in (segment_ids or []) if sid}
+        receipt = conversation.get('manual_speaker_assignments') or {}
+        if receipt.get('segments') or receipt.get('speakers'):
+            authorized = authorized_teaching_segments(conversation, person_id)
+            anchor_groups = {segment_group(s) for s in authorized if s.get('id') in requested_ids}
+            if not anchor_groups:
+                anchor_groups = {segment_group(s) for s in authorized}
+            candidates = [s for s in authorized if segment_group(s) in anchor_groups]
+            authorized_ids = {s.get('id') for s in authorized}
+        else:
+            candidates = [
+                s
+                for s in conv_segments
+                if s.get('id') in requested_ids and s.get('person_id') == person_id and not s.get('is_user')
+            ]
+            authorized_ids = {s.get('id') for s in candidates}
+        if not candidates:
+            still_present = any(s.get('id') in requested_ids for s in conv_segments)
+            outcome = 'stale_assignment' if still_present else 'no_authorized_segments'
+            return outcome
 
-        # Build ordered list with index lookup for expansion
-        ordered_segments = [s for s in conv_segments if s.get('id')]
-        segment_index_map = {s.get('id'): i for i, s in enumerate(ordered_segments)}
+        plan = plan_pooled_intervals(candidates, conv_segments, allowed_source_ids=authorized_ids)
+        clean_seconds = plan.total_seconds
 
-        for seg_id in segment_ids:
-            if samples_added >= max_samples_to_add:
-                break
-
-            seg = segment_map.get(seg_id)
-            if not seg:
-                logger.warning(f"Segment {seg_id} not found in conversation {uid} {conversation_id}")
-                continue
-
-            segment_start = seg.get('start')
-            segment_end = seg.get('end')
-            if segment_start is None or segment_end is None:
-                continue
-
-            seg_duration = segment_end - segment_start
-            speaker_id = seg.get('speaker_id')
-
-            # If segment is too short, try expanding to adjacent segments with same speaker
-            if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION and speaker_id is not None:
-                seg_idx = segment_index_map.get(seg_id)
-                if seg_idx is not None:
-                    i = seg_idx - 1
-                    while i >= 0:
-                        prev_seg = ordered_segments[i]
-                        if prev_seg.get('speaker_id') != speaker_id:
-                            break
-                        prev_start = prev_seg.get('start')
-                        if prev_start is not None:
-                            segment_start = min(segment_start, prev_start)
-                            seg_duration = segment_end - segment_start
-                        if seg_duration >= SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
-                            logger.info(
-                                f"Expanded segment to {seg_duration:.1f}s by including adjacent segments {uid} {conversation_id}"
-                            )
-                            break
-                        i -= 1
-
-            if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
-                logger.info(
-                    f"Segment too short ({seg_duration:.1f}s) even after expansion, skipping {uid} {conversation_id}"
-                )
-                continue
-
-            # Extract centered sample window (10 seconds max from center of segment)
-            seg_center = (segment_start + segment_end) / 2
-            sample_start = max(segment_start, seg_center - SPEAKER_SAMPLE_WINDOW_HALF)
-            sample_end = min(segment_end, seg_center + SPEAKER_SAMPLE_WINDOW_HALF)
-
-            # Calculate absolute timestamps using the sample window
-            abs_start = started_at_ts + sample_start
-            abs_end = started_at_ts + sample_end
-
-            # Find relevant chunks
-            sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
-
-            # Find first chunk that starts at or before abs_start
-            first_idx = 0
-            for i, chunk in enumerate(sorted_chunks):
-                if chunk['timestamp'] <= abs_start:
-                    first_idx = i
+        if is_audio_timeline_v2(conversation):
+            # v2: extract only from validated coverage; an uncovered
+            # window is unavailable, never an embedding of other audio.
+            kept_intervals: List[Any] = []
+            kept_contributors: List[Any] = []
+            uncovered = False
+            for interval, contributors in zip(plan.intervals, plan.contributors):
+                coverage = coverage_outcome(conversation, interval[0], interval[1])
+                OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode='v2', outcome=coverage).inc()
+                if coverage == 'covered':
+                    kept_intervals.append(interval)
+                    kept_contributors.append(contributors)
                 else:
-                    break
+                    uncovered = True
+            plan = PooledClipPlan(kept_intervals, kept_contributors, union_seconds(kept_intervals), plan.contaminated)
+            clean_seconds = plan.total_seconds
+            if uncovered and plan.total_seconds < TEACHING_MIN_TOTAL_SECONDS:
+                outcome = 'uncovered_audio'
+                return outcome
 
-            # Collect from first_idx up to abs_end
-            relevant_timestamps: List[Any] = []
-            for chunk in sorted_chunks[first_idx:]:
-                if chunk['timestamp'] <= abs_end:
-                    relevant_timestamps.append(chunk['timestamp'])
-                else:
-                    break
+        if plan.total_seconds < TEACHING_MIN_TOTAL_SECONDS:
+            outcome = 'contaminated' if plan.contaminated else 'insufficient_speech'
+            return outcome
 
-            if not relevant_timestamps:
-                logger.info(
-                    f"No relevant chunks for segment {segment_start:.1f}-{segment_end:.1f}s {uid} {conversation_id}"
-                )
+        contributing: Dict[Any, Mapping] = {}
+        for contributors in plan.contributors:
+            for seg in contributors:
+                if seg.get('id'):
+                    contributing[seg['id']] = seg
+        ordered_contributors = sorted(
+            contributing.values(), key=lambda seg: (float(seg.get('start') or 0.0), str(seg.get('id')))
+        )
+        expected_text = ' '.join(
+            str(seg.get('text') or '').strip() for seg in ordered_contributors if str(seg.get('text') or '').strip()
+        )
+        contributing_ids = [seg['id'] for seg in ordered_contributors if seg['id'] in authorized_ids]
+
+        sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
+        timeline_v2 = is_audio_timeline_v2(conversation)
+        clips: List[bytes] = []
+        decoded_seconds = 0.0
+        covered_end: Optional[float] = None
+        for start, end in plan.intervals:
+            clip_start = start if covered_end is None else max(start, covered_end)
+            if clip_start >= end:
                 continue
-
-            # Download, merge, and extract (sync_executor avoids parent-child deadlock on storage_executor, #7387)
-            merged = await run_blocking(
-                sync_executor,
-                download_audio_chunks_and_merge,
-                uid,
-                conversation_id,
-                relevant_timestamps,
-                fill_gaps=True,
-                sample_rate=sample_rate,
-            )
-            buffer_start = min(relevant_timestamps)
-
-            # Use av for sample-accurate trimming
-            trim_start = abs_start - buffer_start
-            trim_end = abs_end - buffer_start
-            sample_audio = _trim_pcm_audio(merged, sample_rate, trim_start, trim_end)
-
-            # Ensure minimum sample length (8 seconds)
-            min_sample_seconds = 8.0
-            min_sample_bytes = int(sample_rate * min_sample_seconds * 2)
-            if len(sample_audio) < min_sample_bytes:
-                actual_seconds = len(sample_audio) / (sample_rate * 2)
-                logger.info(
-                    f"Sample too short ({actual_seconds:.1f}s), need {min_sample_seconds}s, skipping {uid} {conversation_id}"
-                )
-                continue
-
-            # Get expected text from segment for comparison
-            expected_text = seg.get('text', '')
-
-            # Convert PCM to WAV for Deepgram
-            wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
-
-            # Verify sample quality and get transcript using centralized function
-            transcript, is_valid, reason = await verify_and_transcribe_sample(
-                wav_bytes, sample_rate, expected_text, language=sample_language
-            )
-            if not is_valid:
-                logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
-                continue  # Try next segment
-
-            # Upload and store
-            path = await run_blocking(
-                storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
-            )
-
-            success = await run_blocking(
-                db_executor, users_db.add_person_speech_sample, uid, person_id, path, transcript=transcript
-            )
-            if success:
-                samples_added += 1
-                seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
-                logger.info(
-                    f"Stored speech sample {samples_added} for person {person_id}: segment_id={seg_id}, file={path}, text={seg_text} {uid} {conversation_id}"
-                )
-
-                # Extract and store speaker embedding (reuse wav_bytes from verification)
-                try:
-                    embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
-                    # Convert numpy array to list for Firestore storage
-                    embedding_list = embedding.flatten().tolist()
-                    await run_blocking(
-                        db_executor, users_db.set_person_speaker_embedding, uid, person_id, embedding_list
-                    )
-                    logger.info(
-                        f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
-                    )
-                except Exception as emb_err:
-                    logger.error(f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}")
+            covered_end = end
+            if timeline_v2:
+                window = segment_wall_window(conversation, clip_start, end)
+                if window is None:
+                    continue
+                abs_start, abs_end = window
+                relevant_timestamps = v2_relevant_timestamps(conversation, abs_start, abs_end)
+                span_starts = [
+                    bounds[0]
+                    for audio_file in audio_files
+                    for span in audio_file.get('chunk_spans') or []
+                    if (bounds := chunk_span_bounds(span)) is not None and bounds[0] < abs_end and bounds[1] > abs_start
+                ]
+                if not relevant_timestamps or not span_starts:
+                    continue
+                buffer_start = min(span_starts)
             else:
-                logger.error(f"Failed to add speech sample for person {person_id} {uid} {conversation_id}")
-                break  # Likely hit limit
+                abs_start = started_at_ts + clip_start
+                abs_end = started_at_ts + end
+                # Find relevant chunks
+                # Find first chunk that starts at or before abs_start
+                first_idx = 0
+                for i, chunk in enumerate(sorted_chunks):
+                    if chunk['timestamp'] <= abs_start:
+                        first_idx = i
+                    else:
+                        break
+                # Collect from first_idx up to abs_end
+                relevant_timestamps = [
+                    chunk['timestamp'] for chunk in sorted_chunks[first_idx:] if chunk['timestamp'] <= abs_end
+                ]
+                if not relevant_timestamps:
+                    continue
+                buffer_start = min(relevant_timestamps)
+            # Download, merge, and extract (sync_executor avoids parent-child deadlock on storage_executor, #7387)
+            try:
+                merged = await run_blocking(
+                    sync_executor,
+                    download_audio_chunks_and_merge,
+                    uid,
+                    conversation_id,
+                    relevant_timestamps,
+                    fill_gaps=True,
+                    sample_rate=sample_rate,
+                )
+            except FileNotFoundError:
+                continue
+            # Use av for sample-accurate trimming
+            clip = _trim_pcm_audio(merged or b'', sample_rate, abs_start - buffer_start, abs_end - buffer_start)
+            clip = clip[: int(round((end - clip_start) * sample_rate)) * 2]
+            if clip:
+                clips.append(clip)
+                decoded_seconds += len(clip) / (sample_rate * 2)
 
-    except Exception as e:
-        logger.error(f"Error extracting speaker samples: {e} {uid} {conversation_id}")
+        if not clips:
+            outcome = 'no_chunks'
+            return outcome
+        sample_audio = b''.join(clips)
+        clean_seconds = min(plan.total_seconds, decoded_seconds)
+        if decoded_seconds < TEACHING_MIN_TOTAL_SECONDS:
+            outcome = 'insufficient_speech'
+            return outcome
+
+        wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
+
+        transcript, is_valid, reason = await verify_and_transcribe_sample(
+            wav_bytes, sample_rate, expected_text, language=sample_language
+        )
+        if not is_valid or transcript is None:
+            outcome = _verify_outcome(reason)
+            return outcome
+
+        # Complete embedding work before replacing anything. A failed provider
+        # call leaves the prior profile intact and allows a later retry.
+        try:
+            embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
+        except Exception:
+            outcome = 'embedding_failed'
+            return outcome
+        embedding_list = embedding.flatten().tolist()
+        if not embedding_list or not np.isfinite(embedding).all() or not np.any(embedding):
+            outcome = 'embedding_failed'
+            return outcome
+        path = await run_blocking(
+            storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
+        )
+        old_samples = await run_blocking(
+            db_executor,
+            users_db.replace_person_speech_profile,
+            uid,
+            person_id,
+            person.get('updated_at'),
+            path,
+            transcript,
+            embedding_list,
+            conversation_id,
+            contributing_ids,
+            speech_seconds=clean_seconds,
+        )
+        if old_samples is None:
+            await run_blocking(storage_executor, delete_sample_from_storage, path)
+            outcome = 'stale_assignment'
+            return outcome
+        outcome = 'stored'
+        try:
+            for old_path in old_samples:
+                if old_path != path:
+                    await run_blocking(storage_executor, delete_sample_from_storage, old_path)
+        except Exception as error:
+            logger.warning(
+                'speaker_voice_learning cleanup failed conversation=%s exception_type=%s',
+                conversation_id,
+                type(error).__name__,
+            )
+        return outcome
+    except asyncio.CancelledError:
+        outcome = 'timeout'
+        raise
+    except TimeoutError:
+        outcome = 'timeout'
+    except Exception as error:
+        outcome = 'error'
+        logger.warning(
+            'speaker_voice_learning failed conversation=%s exception_type=%s', conversation_id, type(error).__name__
+        )
+    finally:
+        OMI_PERSON_VOICE_LEARNING_TOTAL.labels(outcome=outcome).inc()
+        try:
+            if person is not None and outcome != 'stored':
+                state = learning_state_for_outcome(outcome)
+                needed_seconds = (
+                    max(0.0, TEACHING_MIN_TOTAL_SECONDS - clean_seconds) if state == 'needs_more_speech' else None
+                )
+                await run_blocking(
+                    db_executor,
+                    speaker_learning_db.update_person_voice_learning,
+                    uid,
+                    person_id,
+                    person.get('updated_at'),
+                    outcome=outcome,
+                    state=state,
+                    speech_seconds=clean_seconds or None,
+                    needed_seconds=needed_seconds,
+                )
+        except BaseException:
+            pass
+        logger.info('speaker_voice_learning outcome=%s conversation=%s', outcome, conversation_id)
+    return outcome

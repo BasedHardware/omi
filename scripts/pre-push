@@ -7,6 +7,14 @@ set -eo pipefail
 # work tree. This keeps linked worktrees from aborting into a --no-verify push.
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
+# Git exports GIT_DIR to hooks; from a linked worktree it is the absolute path of
+# .git/worktrees/<name>. Everything below inherits it, including `git init
+# <fixture>` in check self-tests and unit tests, which then reinitializes this
+# repository instead: git guesses it bare and writes core.bare=true into the
+# config every worktree shares. Discovery from the work tree top reaches the
+# same repository, so no child needs the exported location.
+unset GIT_DIR GIT_WORK_TREE
+
 # shellcheck source=dev-harness/_resolve_python.sh
 source scripts/dev-harness/_resolve_python.sh
 PYTHON_BIN="$(dev_harness_python)"
@@ -366,9 +374,6 @@ check_flutter_generated_if_needed() {
     fi
     echo "==> Flutter build_runner generated-output check"
     (
-      # Git exports linked-worktree metadata to hooks. Flutter resolves its own
-      # SDK version through Git, so those variables must not leak into Flutter.
-      unset GIT_DIR GIT_WORK_TREE
       cd app
       flutter pub run build_runner build --delete-conflicting-outputs
       git diff --exit-code -- lib || {
@@ -394,8 +399,6 @@ check_flutter_generated_if_needed() {
     fi
     echo "==> Flutter l10n generated-output check"
     (
-      # Keep Flutter's SDK-version Git lookup isolated from hook worktree state.
-      unset GIT_DIR GIT_WORK_TREE
       cd app
       flutter gen-l10n
       git diff --exit-code -- lib/l10n || {

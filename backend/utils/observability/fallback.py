@@ -10,13 +10,112 @@ Contract fields (same mental model as desktop Swift/Rust emitters):
 from __future__ import annotations
 
 import logging
-from typing import Literal
+import math
+from dataclasses import dataclass
+from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
 
 logger = logging.getLogger(__name__)
 
 FallbackOutcome = Literal['recovered', 'degraded', 'exhausted']
+
+
+@dataclass(frozen=True)
+class ReplayLagDiagnostics:
+    """Numeric snapshot at replay-ring overflow; never contains customer content."""
+
+    capture_seconds: float
+    admitted_seconds: float
+    seconds_since_text: float
+    posts_since_anchor: int
+    empty_posts_since_anchor: int
+    post_in_flight: bool
+    empty_streak: int
+    cut_pending: bool
+    pacing_wait: bool
+
+    def log_fields(self) -> str:
+        # Bounds apply to log values, never metric labels. -1 means no text yet.
+        def seconds(value: float) -> float:
+            return min(86400.0, max(-1.0, value)) if math.isfinite(value) else -1.0
+
+        def count(value: int) -> int:
+            return min(1000000, max(0, value))
+
+        return (
+            f' un_emitted_capture_seconds={seconds(self.capture_seconds):.3f}'
+            f' vad_admitted_seconds={seconds(self.admitted_seconds):.3f}'
+            f' seconds_since_text={seconds(self.seconds_since_text):.3f}'
+            f' posts_since_anchor={count(self.posts_since_anchor)}'
+            f' empty_posts_since_anchor={count(self.empty_posts_since_anchor)}'
+            f' post_in_flight={int(bool(self.post_in_flight))}'
+            f' empty_streak={count(self.empty_streak)}'
+            f' cut_pending={int(bool(self.cut_pending))}'
+            f' pacing_wait={int(bool(self.pacing_wait))}'
+        )
+
+
+@dataclass(frozen=True)
+class FirstTextDeadlineDiagnostics:
+    """Immutable numeric startup state before cancellation clears the window."""
+
+    admitted_seconds: float
+    posts: int
+    empty_posts: int
+    answered_empty_stranded_flushes: int
+    seconds_since_first_speech: float
+    episode_admitted_seconds: float
+    seconds_since_deadline_speech: float
+    answered_empty_admitted_seconds: float
+
+    def log_fields(self) -> str:
+        def seconds(value: float) -> float:
+            return min(86400.0, max(0.0, value)) if math.isfinite(value) else -1.0
+
+        def count(value: int) -> int:
+            return min(1000000, max(0, value))
+
+        return (
+            f' vad_admitted_seconds={seconds(self.admitted_seconds):.3f}'
+            f' posts={count(self.posts)}'
+            f' empty_posts={count(self.empty_posts)}'
+            f' answered_empty_stranded_flushes={count(self.answered_empty_stranded_flushes)}'
+            f' seconds_since_first_speech={seconds(self.seconds_since_first_speech):.3f}'
+            f' episode_admitted_seconds={seconds(self.episode_admitted_seconds):.3f}'
+            f' seconds_since_deadline_speech={seconds(self.seconds_since_deadline_speech):.3f}'
+            f' answered_empty_admitted_seconds={seconds(self.answered_empty_admitted_seconds):.3f}'
+        )
+
+
+class FirstTextFallbackKwargs(TypedDict, total=False):
+    first_text_diagnostics: FirstTextDeadlineDiagnostics
+
+
+def first_text_fallback_kwargs(diagnostics: FirstTextDeadlineDiagnostics | None) -> FirstTextFallbackKwargs:
+    return {} if diagnostics is None else {'first_text_diagnostics': diagnostics}
+
+
+class CapacityFallbackKwargs(TypedDict, total=False):
+    capacity_subtype: str
+    replay_diagnostics: ReplayLagDiagnostics
+
+
+class FailureFallbackKwargs(TypedDict, total=False):
+    failure_subtype: str
+
+
+def capacity_fallback_kwargs(
+    subtype: str | None, diagnostics: ReplayLagDiagnostics | None = None
+) -> CapacityFallbackKwargs:
+    """Add capacity detail only when present; other fallback calls stay unchanged."""
+    result: CapacityFallbackKwargs = {}
+    if subtype is not None:
+        result['capacity_subtype'] = subtype
+    if diagnostics is not None:
+        result['replay_diagnostics'] = diagnostics
+    return result
+
 
 FALLBACK_EVENT = 'omi_fallback_event'
 
@@ -33,6 +132,9 @@ ALLOWED_REASONS = frozenset(
         'enqueue_failed',
         'config_incomplete',
         'circuit_open',
+        'last_resort',
+        'connection_lost',
+        'modulate_serve_error',
         'capability_mismatch',
         'auth',
         'quota',
@@ -42,6 +144,8 @@ ALLOWED_REASONS = frozenset(
         'byok',
         'malformed_doc',
         'capacity_full',
+        'first_text_deadline',
+        'empty_streak',
         'allocation_rejected',
         'private_tool_output_in_context',
         'not_authorized',
@@ -52,11 +156,34 @@ ALLOWED_REASONS = frozenset(
     }
 )
 
+# Diagnostic detail in the log only. The shared metric's reason vocabulary and
+# label dimensions remain unchanged.
+ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap'})
+ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
+    {
+        'initialization_failed',
+        'connection_lost',
+        'send_failed',
+        'socket_unavailable',
+        'modulate_serve_error',
+        'provider_rate_limited',
+        'soniox_idle_timeout',
+        'soniox_rotation',
+        'provider_5xx',
+        'capacity_full',
+        'first_text_deadline',
+        'empty_streak',
+        'soniox_invalid_hint',
+        'untyped',
+    }
+)
+
 ALLOWED_COMPONENTS = frozenset(
     {
         'sync_dispatch',
         'pusher',
         'stt_selection',
+        'stt_live_session',
         'vad',
         'audio_merge',
         'webhook',
@@ -73,6 +200,7 @@ ALLOWED_COMPONENTS = frozenset(
         'knowledge_graph',
         'agent_tools',
         'conversation_finalization',
+        'conversation_notes',
         'daily_summary',
         'other',
     }
@@ -87,6 +215,10 @@ def record_fallback(
     reason: str,
     outcome: str,
     log: logging.Logger | None = None,
+    capacity_subtype: str | None = None,
+    replay_diagnostics: ReplayLagDiagnostics | None = None,
+    first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None,
+    failure_subtype: str | None = None,
 ) -> None:
     """Increment ``omi_fallback_total`` and emit a matching warning log.
 
@@ -112,15 +244,28 @@ def record_fallback(
 
     emit_log = log or logger
     try:
-        emit_log.warning(
-            '%s component=%s from=%s to=%s reason=%s outcome=%s',
-            FALLBACK_EVENT,
-            component_label,
-            from_label,
-            to_label,
-            reason_label,
-            outcome_label,
-        )
+        fields = (FALLBACK_EVENT, component_label, from_label, to_label, reason_label, outcome_label)
+        if reason_label == 'capacity_full':
+            subtype = capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown'
+            detail = (
+                replay_diagnostics.log_fields()
+                if subtype == 'replay_ring_cap' and replay_diagnostics is not None
+                else ''
+            )
+            emit_log.warning(
+                '%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s%s', *fields, subtype, detail
+            )
+        elif reason_label == 'first_text_deadline' and first_text_diagnostics is not None:
+            emit_log.warning(
+                '%s component=%s from=%s to=%s reason=%s outcome=%s%s',
+                *fields,
+                first_text_diagnostics.log_fields(),
+            )
+        elif reason_label == 'other' and failure_subtype is not None:
+            subtype = failure_subtype if failure_subtype in ALLOWED_STT_FAILURE_SUBTYPES else 'unknown'
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
+        else:
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s', *fields)
     except Exception:
         pass
 

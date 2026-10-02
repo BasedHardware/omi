@@ -43,12 +43,14 @@ import database.redis_db as redis_db
 class _FakeRedis:
     def __init__(self) -> None:
         self._store: Dict[str, Any] = {}
+        self.set_calls: List[Dict[str, Any]] = []
         self.expire_calls: List[tuple[str, int]] = []
 
     def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
         # Real Redis returns bytes from GET; encode str writes so round-trips
         # exercise the production ``.decode()`` readers.
         self._store[key] = value.encode() if isinstance(value, str) else value
+        self.set_calls.append({'key': key, 'value': value, 'ex': ex})
 
     def get(self, key: str) -> Optional[Any]:
         return self._store.get(key)
@@ -95,12 +97,13 @@ def test_set_in_progress_conversation_id_round_trip(fake_redis: _FakeRedis) -> N
 
 def test_set_in_progress_conversation_id_applies_default_ttl(fake_redis: _FakeRedis) -> None:
     redis_db.set_in_progress_conversation_id('uid-1', 'conv-1')
-    assert fake_redis.expire_calls == [('users:uid-1:in_progress_memory_id', 300)]
+    assert fake_redis.set_calls == [{'key': 'users:uid-1:in_progress_memory_id', 'value': 'conv-1', 'ex': 300}]
+    assert fake_redis.expire_calls == []
 
 
 def test_set_in_progress_conversation_id_applies_custom_ttl(fake_redis: _FakeRedis) -> None:
     redis_db.set_in_progress_conversation_id('uid-1', 'conv-1', ttl=90)
-    assert fake_redis.expire_calls == [('users:uid-1:in_progress_memory_id', 90)]
+    assert fake_redis.set_calls == [{'key': 'users:uid-1:in_progress_memory_id', 'value': 'conv-1', 'ex': 90}]
 
 
 def test_set_in_progress_conversation_id_fail_open_on_maxmemory(
@@ -164,7 +167,8 @@ def test_set_conversation_meeting_id_round_trip(fake_redis: _FakeRedis) -> None:
 
 def test_set_conversation_meeting_id_applies_default_ttl(fake_redis: _FakeRedis) -> None:
     redis_db.set_conversation_meeting_id('conv-1', 'meeting-9')
-    assert fake_redis.expire_calls == [('conversation:conv-1:meeting_id', 86400)]
+    assert fake_redis.set_calls == [{'key': 'conversation:conv-1:meeting_id', 'value': 'meeting-9', 'ex': 86400}]
+    assert fake_redis.expire_calls == []
 
 
 def test_set_conversation_meeting_id_fail_open_on_maxmemory(

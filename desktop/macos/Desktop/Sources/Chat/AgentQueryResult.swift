@@ -21,6 +21,9 @@ extension AgentBridge {
     /// provider response stream), deduplicated by the adapter. Empty when the
     /// runtime predates the field or the run produced no completion.
     let modelsUsed: [String]
+    /// Provider identities observed beside served models on completion events.
+    /// Kept separate from the requested model and runtime adapter.
+    let providerTargets: [String]
     let artifacts: [AgentArtifactProjection]
     let completionDeltaArtifacts: [AgentArtifactProjection]
     let jitCostStatus: String?
@@ -42,6 +45,7 @@ extension AgentBridge {
       cacheReadTokens: Int,
       cacheWriteTokens: Int,
       modelsUsed: [String] = [],
+      providerTargets: [String] = [],
       artifacts: [AgentArtifactProjection] = [],
       completionDeltaArtifacts: [AgentArtifactProjection] = [],
       jitCostStatus: String? = nil,
@@ -62,6 +66,7 @@ extension AgentBridge {
       self.cacheReadTokens = cacheReadTokens
       self.cacheWriteTokens = cacheWriteTokens
       self.modelsUsed = modelsUsed
+      self.providerTargets = providerTargets
       self.artifacts = artifacts
       self.completionDeltaArtifacts = completionDeltaArtifacts
       self.jitCostStatus = jitCostStatus
@@ -108,6 +113,7 @@ extension AgentRuntimeProcess {
       cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
       cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
       modelsUsed: payload["modelsUsed"] as? [String] ?? [],
+      providerTargets: payload["providerTargets"] as? [String] ?? [],
       artifacts: AgentArtifactProjection.parseList(
         fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
       ),

@@ -1,0 +1,146 @@
+---
+title: "First-Party Memory Clients"
+icon: "brain"
+description: "The shared memory currency and history contract for Omi's first-party clients"
+---
+
+This page describes the shared contract used by Omi's macOS, Flutter, web, and
+Windows clients. It is an internal first-party client contract, not the
+Developer API. The Developer API reference remains the source for
+`/v1/dev/user/memories`.
+
+## Beta capability
+
+When the memory belief feature is available, the backend returns the exact
+header `X-Omi-Memory-Belief-Enabled: true`. It returns `false` when the
+capability is unavailable. The header is present on both `/v3/memories` and
+`/v3/memories/ledger-history`, including empty responses, and is exposed to
+browser clients through CORS.
+
+Clients scope their cached capability state to the signed-in owner and backend
+environment. A missing, malformed, or non-`true` response clears Beta-only
+state and restores the released behavior.
+
+## List and history views
+
+The optional `view` query parameter accepts:
+
+| Value | Meaning |
+| --- | --- |
+| `useful_now` | Current, fading, and unknown memories suitable for the default view |
+| `history` | Dated, superseded, or suppressed history, with the owner record retained |
+| `all` | Both useful-now and history records |
+
+If `view` is omitted, the backend preserves the released list semantics for
+older callers. Beta first-party clients request `useful_now` for their default
+list and provide a discoverable history path. This presentation choice does
+not change the existing `short_term`, `long_term`, or `archive` storage tiers;
+the ledger-history route is not blanket Archive access.
+Unknown rows remain inspectable in both `useful_now` and `history` until their
+classification is known; `all` includes both views.
+
+The optional `as_of` query parameter fixes the evaluation clock for the whole
+bounded traversal. It is separate from the per-record `as_of` response field:
+the query parameter is the traversal clock, the response field is the original
+evidence clock, and `belief_computed_at` is the assessment clock.
+
+Historical semantic search supplements current-only indexes with one authorized
+newest-first canonical scan of at most 60 raw rows. It keyword-matches and
+interleaves provider IDs, then rehydrates at most 60 unique memories. This is a
+bounded supplement, so it does not search every retained version or guarantee
+complete semantic recall of old records. Use explicit paged history for deeper
+inspection.
+
+## Currency and evidence
+
+Currency is a read-side assessment. It does not change a memory's truth,
+status, tier, or deletion state.
+
+| Field | Meaning |
+| --- | --- |
+| `currency` | A value from `0` to `1`, or `null` when no usable horizon is known |
+| `currency_band` | `current`, `fading`, `history`, or `null` when currency is unknown |
+| `as_of` | The original evidence timestamp used for the assessment |
+| `belief_computed_at` | When the current policy computed the returned assessment |
+
+An unknown row may therefore have both `currency: null` and
+`currency_band: null` while still carrying `belief_computed_at`. Clients must
+not treat display, retrieval, citations, or the passage of time as new
+evidence.
+
+Evidence keeps its original capture lineage and source family. A screen/OCR
+capture cannot become independent corroboration simply because it was seen
+again. Manual saves preserve owner authority and the record, but a temporary
+claim can still become dated when its class or explicit horizon says it
+should. A standing instruction or timeless identity claim can remain current.
+Evidence authority follows the original source: direct owner input, the
+owner's writing, the owner's speech, screen/OCR, then third-party or inferred
+material. Unknown or assistant-generated material cannot overpower an owner
+fact. Display, retrieval, and citation do not raise authority.
+Legacy evidence with missing attribution remains unknown even when transport
+metadata says `transcription` or the subject is the owner. Transport metadata
+alone does not establish source authority.
+When supplied, evidence `captured_at` remains the original capture time. It is
+separate from item creation time and does not rewrite creation timestamps or
+create a new TTL or status transition. Currency assessment never makes a new
+status claim.
+
+## Owner use
+
+The owner can mark a memory as not useful or useful without deleting it. The
+shared endpoint is:
+
+```text
+POST /v3/memories/{memory_id}/use
+```
+
+```json
+{
+  "action": "suppress",
+  "feedback_id": "stable-client-retry-id"
+}
+```
+
+`action` is one of `suppress`, `allow`, or `useful`. `suppress` removes the
+memory from default reliance while leaving the owner record inspectable;
+`allow` restores default reliance; `useful` records a positive signal and does
+not undo an existing suppression. None of these actions changes truth,
+currency, evidence, or storage tier.
+
+`feedback_id` is the retry-stable receipt identity. The canonical transaction
+writes the owner-use state and the unified feedback receipt atomically. A
+replayed request with the same owner, memory, and action is idempotent; using
+the same receipt for a different action returns a conflict.
+
+Evidence-event audits use a typed patch with rationale JSON in
+`journal.mutation_metadata`. Event details do not go into opaque logical
+metadata, so the operation digest remains stable and replay-safe.
+
+## Operational stop
+
+`MEMORY_BELIEF_AUTOMATION_PAUSED=true` pauses automated evidence, admission,
+enrichment, and backfill writers while leaving read-side currency and explicit
+owner corrections available. This is a deployment-wide incident control, not a
+per-user rollout switch. The belief capability header and the automation pause
+are separate controls.
+
+## Daily sweep recovery
+
+A failed daily summary does not attest an empty day or advance the sweep
+cursor. When the backend proves that preparation failed before the first
+provider dispatch, it releases that claim for a later run, at most three
+times. The fourth such failure records `pre_dispatch_exhausted` and requires
+explicit operator repair. Failures after dispatch or with an unknown origin
+remain fenced against automatic retry. Account deletion and generation
+boundaries continue to block writes throughout recovery.
+
+Missing gateway accounting is never proof of no dispatch: the ledger is
+best-effort and written after provider execution. QA repair without recorded
+attempts requires an explicit operator attestation that the exact claim never
+dispatched and its worker has terminated, bound to independently reviewed
+evidence and an expired lease plus margin. The receipt labels this
+`operator_attested_no_dispatch`, not a reservation-absence or no-spend proof.
+Without that evidence the claim remains indeterminate, including legacy
+claims with no persisted provider identifiers. The operator procedure and
+reservation-boundary analysis live in
+`backend/docs/runbooks/jit-qa-cloud-run.md`.

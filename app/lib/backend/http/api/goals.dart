@@ -226,9 +226,9 @@ Future<Goal?> getCurrentGoal() async {
 }
 
 /// Get all active goals (up to 4)
-Future<List<Goal>> getAllGoals() async {
+Future<List<Goal>?> getAllGoals() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals/all', headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
+  if (response == null) return null;
   Logger.debug('getAllGoals response: ${response.body}');
   if (response.statusCode == 200) {
     final goals = <Goal>[];
@@ -245,7 +245,7 @@ Future<List<Goal>> getAllGoals() async {
     }
     return goals;
   }
-  return [];
+  return null;
 }
 
 /// Create a new goal
@@ -280,6 +280,26 @@ Future<Goal?> createGoal({
     );
   }
   return null;
+}
+
+/// Persist an introduction as a qualitative goal. The stable request key makes
+/// retries safe even if the first response was lost after the server committed.
+Future<Goal?> createIntroductionGoal({
+  required String text,
+  required String idempotencyKey,
+  required int accountGeneration,
+}) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/goals/canonical',
+    headers: {'Idempotency-Key': idempotencyKey, 'X-Account-Generation': '$accountGeneration'},
+    method: 'POST',
+    body: json.encode({'title': text, 'desired_outcome': text, 'source': 'user'}),
+    timeout: const Duration(seconds: 30),
+  );
+  if (response?.statusCode != 200) return null;
+  return Goal.fromGenerated(
+    wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json.decode(response!.body) as Map<String, dynamic>)),
+  );
 }
 
 /// Update an existing goal

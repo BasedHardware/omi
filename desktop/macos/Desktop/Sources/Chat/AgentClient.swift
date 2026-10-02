@@ -76,6 +76,7 @@ enum AgentClient {
     let cacheReadTokens: Int
     let cacheWriteTokens: Int
     let modelsUsed: [String]
+    let providerTargets: [String]
     let artifacts: [AgentArtifactProjection]
     let completionDeltaArtifacts: [AgentArtifactProjection]
     let jitCostStatus: String?
@@ -97,6 +98,7 @@ enum AgentClient {
       cacheReadTokens = result.cacheReadTokens
       cacheWriteTokens = result.cacheWriteTokens
       modelsUsed = result.modelsUsed
+      providerTargets = result.providerTargets
       artifacts = result.artifacts
       completionDeltaArtifacts = result.completionDeltaArtifacts
       jitCostStatus = result.jitCostStatus
@@ -674,10 +676,16 @@ enum AgentClient {
       guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
       }
-      let usesNativeModelChoice = ["hermes", "openclaw"].contains(harnessMode)
+      let persistedChatBridgeMode =
+        UserDefaults.standard.string(forKey: .chatBridgeMode)
+        ?? ChatProvider.BridgeMode.piMono.rawValue
       let creationProfile = AgentSessionCreationProfile(
         adapterId: requestedAdapter,
-        modelProfile: model ?? (usesNativeModelChoice ? nil : ModelQoS.Claude.chat),
+        modelProfile: model
+          ?? AgentRuntimeRouting.defaultModelProfileForRunHarness(
+            harnessMode,
+            persistedChatBridgeMode: persistedChatBridgeMode
+          ),
         workingDirectory: cwd?.isEmpty == false ? cwd! : AgentRuntimeProcess.defaultArtifactsDirectory()
       )
       let session = try await bridge.resolveSurfaceSession(

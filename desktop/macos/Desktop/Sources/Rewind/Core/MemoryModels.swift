@@ -25,6 +25,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   var scoring: String?
   var source: String?  // desktop, omi, screenshot, phone
   var conversationId: String?
+  var expiresAt: Date?
 
   // Desktop extraction fields
   var screenshotId: Int64?
@@ -54,6 +55,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   // Status flags
   var isRead: Bool
   var isDismissed: Bool
+  var isLocked: Bool?
   var deleted: Bool
 
   // Timestamps
@@ -80,6 +82,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     scoring: String? = nil,
     source: String? = nil,
     conversationId: String? = nil,
+    expiresAt: Date? = nil,
     screenshotId: Int64? = nil,
     confidence: Double? = nil,
     reasoning: String? = nil,
@@ -96,6 +99,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     captureDeviceIdsJson: String? = nil,
     isRead: Bool = false,
     isDismissed: Bool = false,
+    isLocked: Bool? = false,
     deleted: Bool = false,
     createdAt: Date = Date(),
     updatedAt: Date = Date()
@@ -115,6 +119,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     self.scoring = scoring
     self.source = source
     self.conversationId = conversationId
+    self.expiresAt = expiresAt
     self.screenshotId = screenshotId
     self.confidence = confidence
     self.reasoning = reasoning
@@ -131,6 +136,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     self.captureDeviceIdsJson = captureDeviceIdsJson
     self.isRead = isRead
     self.isDismissed = isDismissed
+    self.isLocked = isLocked
     self.deleted = deleted
     self.createdAt = createdAt
     self.updatedAt = updatedAt
@@ -214,6 +220,49 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
 // MARK: - ServerMemory Conversion
 
 extension MemoryRecord {
+  private static let memoryAssessmentKeys = [
+    "omi_memory_as_of", "omi_memory_currency", "omi_memory_currency_band",
+    "omi_memory_belief_class", "omi_memory_half_life_days", "omi_memory_belief_computed_at",
+  ]
+
+  private static func memoryAssessmentDateFormatter() -> ISO8601DateFormatter {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+  }
+
+  private static func encodeMemoryAssessment(_ memory: ServerMemory) -> [String: String] {
+    var metadata = memory.ledgerMetadata
+    guard memory.currencyMetadataIsExplicit else { return metadata }
+    for key in memoryAssessmentKeys { metadata.removeValue(forKey: key) }
+    if let value = memory.asOf { metadata["omi_memory_as_of"] = memoryAssessmentDateFormatter().string(from: value) }
+    if let value = memory.currency { metadata["omi_memory_currency"] = String(value) }
+    if let value = memory.currencyBand { metadata["omi_memory_currency_band"] = value }
+    if let value = memory.beliefClass { metadata["omi_memory_belief_class"] = value }
+    if let value = memory.halfLifeDays { metadata["omi_memory_half_life_days"] = String(value) }
+    if let value = memory.beliefComputedAt {
+      metadata["omi_memory_belief_computed_at"] = memoryAssessmentDateFormatter().string(from: value)
+    }
+    return metadata
+  }
+
+  private static func decodeMemoryAssessment(_ metadata: [String: String]) -> (
+    Date?, Double?, String?, String?, Double?, Date?
+  ) {
+    func date(_ key: String) -> Date? {
+      guard let raw = metadata[key] else { return nil }
+      return memoryAssessmentDateFormatter().date(from: raw)
+    }
+    return (
+      date("omi_memory_as_of"),
+      metadata["omi_memory_currency"].flatMap(Double.init),
+      metadata["omi_memory_currency_band"],
+      metadata["omi_memory_belief_class"],
+      metadata["omi_memory_half_life_days"].flatMap(Double.init),
+      date("omi_memory_belief_computed_at")
+    )
+  }
+
   /// Create a local record from a ServerMemory (for caching API responses)
   static func from(_ memory: ServerMemory) -> MemoryRecord {
     let tagsJson: String?
@@ -241,6 +290,7 @@ extension MemoryRecord {
       scoring: memory.scoring,
       source: memory.source,
       conversationId: memory.conversationId,
+      expiresAt: memory.expiresAt,
       screenshotId: nil,  // Not available from API
       confidence: memory.confidence,
       reasoning: memory.reasoning,
@@ -250,13 +300,14 @@ extension MemoryRecord {
       currentActivity: memory.currentActivity,
       inputDeviceName: memory.inputDeviceName,
       headline: memory.headline,
-      ledgerMetadataJson: Self.encodeLedgerMetadata(memory.ledgerMetadata),
+      ledgerMetadataJson: Self.encodeLedgerMetadata(Self.encodeMemoryAssessment(memory)),
       ledgerEvidenceJson: Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: memory.evidenceIsExplicit),
       ledgerEvidenceRevision: memory.evidenceIsExplicit ? memory.updatedAt : nil,
       primaryCaptureDevice: memory.primaryCaptureDevice,
       captureDeviceIdsJson: encodeCaptureDeviceIds(memory.captureDeviceIds),
       isRead: memory.isRead,
       isDismissed: memory.isDismissed,
+      isLocked: memory.isLocked,
       deleted: false,
       createdAt: memory.createdAt,
       updatedAt: memory.updatedAt
@@ -281,6 +332,7 @@ extension MemoryRecord {
     self.scoring = memory.scoring
     self.source = memory.source
     self.conversationId = memory.conversationId
+    self.expiresAt = memory.expiresAt
 
     // Update tags
     if !memory.tags.isEmpty,
@@ -317,7 +369,16 @@ extension MemoryRecord {
     if let headline = memory.headline {
       self.headline = headline
     }
-    self.ledgerMetadataJson = Self.encodeLedgerMetadata(memory.ledgerMetadata)
+    if memory.currencyMetadataIsExplicit {
+      self.ledgerMetadataJson = Self.encodeLedgerMetadata(Self.encodeMemoryAssessment(memory))
+    } else {
+      var metadata = memory.ledgerMetadata
+      let existing = self.ledgerMetadata
+      for key in Self.memoryAssessmentKeys where metadata[key] == nil {
+        metadata[key] = existing[key]
+      }
+      self.ledgerMetadataJson = Self.encodeLedgerMetadata(metadata)
+    }
     if memory.evidenceIsExplicit,
       ledgerEvidenceJson == nil
         || (ledgerEvidenceRevision.map { memory.updatedAt >= $0 } ?? false)
@@ -333,6 +394,7 @@ extension MemoryRecord {
     // Update status
     self.isRead = memory.isRead
     self.isDismissed = memory.isDismissed
+    self.isLocked = memory.isLocked
 
     // Update timestamp
     self.updatedAt = memory.updatedAt
@@ -361,13 +423,50 @@ extension MemoryRecord {
     return changed
   }
 
+  /// A stale server page may not overwrite a newer local edit, but exclusion
+  /// signals must still close an already indexed memory. A later, newer server
+  /// revision can re-enable it through `updateFrom`.
+  @discardableResult
+  mutating func mergeAuthoritativeSiriEligibilityFrom(_ memory: ServerMemory) -> Bool {
+    var changed = false
+    if memory.userReview == false && userReview != false {
+      userReview = false
+      changed = true
+    }
+    if memory.isDismissed && !isDismissed {
+      isDismissed = true
+      changed = true
+    }
+    if memory.isLocked && isLocked != true {
+      isLocked = true
+      changed = true
+    }
+    if !["private", "shared", "public"].contains(memory.visibility) && visibility != memory.visibility {
+      visibility = memory.visibility
+      changed = true
+    }
+    if let expiry = memory.expiresAt, expiresAt.map({ expiry < $0 }) ?? true {
+      expiresAt = expiry
+      changed = true
+    }
+    return changed
+  }
+
   /// Ledger lifecycle metadata is server-authoritative even when an unrelated
   /// local edit makes this row newer. Keeping stale trigger/fact metadata would
   /// let a closed server row remain locally eligible after a conflict.
   @discardableResult
   mutating func mergeAuthoritativeLedgerMetadataFrom(_ memory: ServerMemory) -> Bool {
-    guard ledgerMetadata != memory.ledgerMetadata else { return false }
-    ledgerMetadataJson = Self.encodeLedgerMetadata(memory.ledgerMetadata)
+    let incoming = Self.encodeMemoryAssessment(memory)
+    var metadata = incoming
+    if !memory.currencyMetadataIsExplicit {
+      let existing = self.ledgerMetadata
+      for key in Self.memoryAssessmentKeys where existing[key] != nil {
+        metadata[key] = existing[key]
+      }
+    }
+    guard ledgerMetadata != metadata else { return false }
+    ledgerMetadataJson = Self.encodeLedgerMetadata(metadata)
     return true
   }
 
@@ -430,6 +529,7 @@ extension MemoryRecord {
       return nil
     }
 
+    let assessment = Self.decodeMemoryAssessment(ledgerMetadata)
     return ServerMemory(
       id: memoryId,
       content: content,
@@ -438,6 +538,7 @@ extension MemoryRecord {
       tierIsExplicit: tierIsExplicit,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      expiresAt: expiresAt,
       conversationId: conversationId,
       reviewed: reviewed,
       userReview: userReview,
@@ -450,15 +551,23 @@ extension MemoryRecord {
       contextSummary: contextSummary,
       isRead: isRead,
       isDismissed: isDismissed,
+      isLocked: isLocked ?? false,
       tags: tags,
       reasoning: reasoning,
       currentActivity: currentActivity,
       inputDeviceName: inputDeviceName,
       windowTitle: windowTitle,
       headline: headline,
-      ledgerMetadata: ledgerMetadata,
+      ledgerMetadata: ledgerMetadata.filter { !Self.memoryAssessmentKeys.contains($0.key) },
       evidence: MemoryLedgerEvidence.decode(ledgerEvidenceJson),
       evidenceIsExplicit: ledgerEvidenceJson != nil,
+      asOf: assessment.0,
+      currency: assessment.1,
+      currencyBand: assessment.2,
+      beliefClass: assessment.3,
+      halfLifeDays: assessment.4,
+      beliefComputedAt: assessment.5,
+      currencyMetadataIsExplicit: Self.memoryAssessmentKeys.contains { ledgerMetadata[$0] != nil },
       primaryCaptureDevice: primaryCaptureDevice,
       captureDeviceIds: captureDeviceIds
     )
@@ -485,6 +594,9 @@ extension MemoryRecord {
     else { return [:] }
     return metadata
   }
+
+  /// The server lifecycle is kept in the existing bounded metadata mirror.
+  var siriLedgerMetadata: [String: String] { ledgerMetadata }
 
   /// Read-only access to the bounded evidence mirror for audit/UI surfaces.
   /// This never participates in prompt projection or trigger compilation.
@@ -539,6 +651,13 @@ extension ServerMemory {
       headline: headline,
       ledgerMetadata: ledgerMetadata,
       evidenceState: evidenceState,
+      asOf: asOf,
+      currency: currency,
+      currencyBand: currencyBand,
+      beliefClass: beliefClass,
+      halfLifeDays: halfLifeDays,
+      beliefComputedAt: beliefComputedAt,
+      currencyMetadataIsExplicit: currencyMetadataIsExplicit,
       primaryCaptureDevice: primaryCaptureDevice,
       captureDeviceIds: captureDeviceIds
     )
@@ -567,6 +686,7 @@ extension ServerMemory {
     contextSummary: String?,
     isRead: Bool,
     isDismissed: Bool,
+    isLocked: Bool = false,
     tags: [String],
     reasoning: String?,
     currentActivity: String?,
@@ -577,6 +697,13 @@ extension ServerMemory {
     evidence: [ServerMemoryEvidence] = [],
     evidenceIsExplicit: Bool = false,
     evidenceState: ServerMemoryEvidenceState? = nil,
+    asOf: Date? = nil,
+    currency: Double? = nil,
+    currencyBand: String? = nil,
+    beliefClass: String? = nil,
+    halfLifeDays: Double? = nil,
+    beliefComputedAt: Date? = nil,
+    currencyMetadataIsExplicit: Bool = false,
     primaryCaptureDevice: String? = nil,
     captureDeviceIds: [String] = []
   ) {
@@ -601,6 +728,7 @@ extension ServerMemory {
     self.contextSummary = contextSummary
     self.isRead = isRead
     self.isDismissed = isDismissed
+    self.isLocked = isLocked
     self.tags = tags
     self.reasoning = reasoning
     self.currentActivity = currentActivity
@@ -609,6 +737,13 @@ extension ServerMemory {
     self.headline = headline
     self.ledgerMetadata = ledgerMetadata
     self.evidenceState = evidenceState ?? (evidenceIsExplicit ? .valid(evidence) : .absent)
+    self.asOf = asOf
+    self.currency = currency
+    self.currencyBand = currencyBand
+    self.beliefClass = beliefClass
+    self.halfLifeDays = halfLifeDays
+    self.beliefComputedAt = beliefComputedAt
+    self.currencyMetadataIsExplicit = currencyMetadataIsExplicit
     self.primaryCaptureDevice = primaryCaptureDevice
     self.captureDeviceIds = captureDeviceIds
   }

@@ -25,6 +25,7 @@ struct ChatTurnFailureNotice: Equatable, Sendable {
   /// prompt is worth keeping for a retry; never invites a retry that the
   /// classifier already knows cannot work.
   let retryable: Bool
+  var failureCode: AgentRuntimeFailureCode? = nil
 
   /// `AgentErrorClassifier` returns `.unknown` when its corpus has no rule for
   /// a string, and then echoes the provider's raw text back as the user
@@ -116,6 +117,10 @@ struct ChatTurnFailureNotice: Equatable, Sendable {
       return forFailure(errorDescription: error.localizedDescription, presentsUserError: true)
     }
     if case .stopped = bridgeError { return nil }
+    if bridgeError.isSessionAuthenticationFailure {
+      return ChatTurnFailureNotice(
+        text: ChatErrorState.authRequired.userFacingSummary, retryable: false, failureCode: .authentication)
+    }
     if case .agentRuntimeFailure(let failure) = bridgeError, failure.failureCode == .authentication {
       return stating(providerAuthMessage, retryable: false)
     }

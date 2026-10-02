@@ -86,6 +86,29 @@ make_prettier_lock() {
     }
   }
 }
+
+LOCK
+}
+
+make_bun_lock() {
+  target_dir="$1"
+  version="$2"
+  cat >"$target_dir/bun.lock" <<LOCK
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "devDependencies": {
+        "prettier": "^$version",
+        "prettier-plugin-tailwindcss": "^0.3.0",
+      },
+    },
+  },
+  "packages": {
+    "prettier": ["prettier@$version", "", {}, "sha512-fixture"],
+    "prettier-plugin-tailwindcss": ["prettier-plugin-tailwindcss@0.3.0", "", {}, "sha512-fixture"],
+  },
+}
 LOCK
 }
 
@@ -248,11 +271,21 @@ git -C "$REPO" reset -q --hard
 for webdir in web/app web/admin; do
   mkdir -p "$REPO/$webdir/src"
   printf '{\n  "devDependencies": {\n    "prettier": "^2.8.8",\n    "prettier-plugin-tailwindcss": "^0.3.0"\n  }\n}\n' >"$REPO/$webdir/package.json"
-  make_prettier_lock "$REPO/$webdir" 2.8.8
+  if [ "$webdir" = "web/app" ]; then
+    make_bun_lock "$REPO/$webdir" 2.8.8
+  else
+    make_prettier_lock "$REPO/$webdir" 2.8.8
+  fi
   make_prettier_stub "$REPO/$webdir" 2.8.8
   make_prettier_plugin "$REPO/$webdir" 0.3.0
   printf 'const %s = {b:1}\n' "$(basename "$webdir")" >"$REPO/$webdir/src/a.ts"
   git -C "$REPO" add -A
+  if [ "$webdir" = "web/app" ]; then
+    make_prettier_stub "$REPO/$webdir" 2.0.0
+    expect_refusal "bun lock prettier version mismatch"
+    test "$(cat "$REPO/$webdir/src/a.ts")" = "const app = {b:1}"
+    make_prettier_stub "$REPO/$webdir" 2.8.8
+  fi
   run_hook >/dev/null
   grep -q 'PRETTIER_2.8.8_FORMATTED' "$REPO/$webdir/src/a.ts"
   git -C "$REPO" reset -q --hard

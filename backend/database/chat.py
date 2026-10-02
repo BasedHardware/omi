@@ -22,13 +22,15 @@ CURRENT_CHAT_SESSION_SCAN_LIMIT = 200
 
 from models.chat import Message
 from utils import encryption
-from ._client import db
+from ._client import db, get_firestore_client
 from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
 from database.read_boundary import parse_snapshot_or_none
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
+FILES_BATCH_LIMIT = 499  # Safe Firestore batch limit leaving headroom under 500
 DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write per deleted message.
 DELETE_MESSAGES_CONFLICT_RETRIES = 3
 CHAT_HISTORY_BASE_VISIBLE_MESSAGES = 10
@@ -679,14 +681,24 @@ def clear_chat(
 
 
 def add_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
+    if not files_data:
+        return
+
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
+    count = 0
 
     for file_data in files_data:
         file_ref = user_ref.collection('files').document(file_data['id'])
         batch.set(file_ref, file_data)
+        count += 1
+        if count >= FILES_BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def get_chat_files(uid: str, files_id: Optional[List[str]] = None) -> List[Dict[str, Any]]:
@@ -751,14 +763,24 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
 
 
 def delete_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
+    if not files_data:
+        return
+
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
+    count = 0
 
     for file_data in files_data:
         file_ref = user_ref.collection('files').document(file_data["id"])
         batch.delete(file_ref)
+        count += 1
+        if count >= FILES_BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -940,6 +962,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
     doc_refs = [messages_ref.document(msg_id) for msg_id in message_doc_ids]
     doc_snapshots = db.get_all(doc_refs)
 
+    batch_count = 0
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Message {doc_snapshot.id} not found, skipping.")
@@ -960,8 +983,14 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
 
         update_data: Dict[str, Any] = {'data_protection_level': target_level, 'text': migrated_text}
         batch.update(doc_snapshot.reference, update_data)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
 
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
 
 
 # ============================================================================
@@ -1100,6 +1129,8 @@ def save_message(
     client_message_id: Optional[str] = None,
     message_source: str = 'desktop_chat',
     journal_revision: Optional[int] = None,
+    *,
+    firestore_client: Any = None,
 ) -> Dict[str, Any]:
     """Save a chat message for the desktop app.
 
@@ -1108,33 +1139,29 @@ def save_message(
     """
     msg_id = client_message_id or str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    requested_session_id = session_id
-    idempotency_payload_hash = _message_idempotency_payload_hash(
+    request_payload: Dict[str, Any] = dict(
         text=text,
         sender=sender,
         app_id=app_id,
-        session_id=requested_session_id,
+        session_id=session_id,
         metadata=metadata,
         content_blocks=content_blocks,
         message_source=message_source,
     )
-
-    message_ref = db.collection('users').document(uid).collection('messages').document(msg_id)
+    idempotency_payload_hash = _message_idempotency_payload_hash(**request_payload)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    revision_args: Dict[str, Any] = dict(
+        **request_payload,
+        payload_hash=idempotency_payload_hash,
+        journal_revision=journal_revision,
+        firestore_client=client,
+    )
+    message_ref = user_ref.collection('messages').document(msg_id)
     if client_message_id:
         existing_message = message_ref.get()
         if existing_message.exists:
-            existing_result = _apply_existing_message_revision(
-                message_ref,
-                text=text,
-                sender=sender,
-                app_id=app_id,
-                session_id=requested_session_id,
-                metadata=metadata,
-                content_blocks=content_blocks,
-                message_source=message_source,
-                payload_hash=idempotency_payload_hash,
-                journal_revision=journal_revision,
-            )
+            existing_result = _apply_existing_message_revision(message_ref, **revision_args)
             if existing_result is not None:
                 return _message_revision_response(msg_id, existing_result, now)
 
@@ -1166,47 +1193,42 @@ def save_message(
         doc['client_message_payload_hash'] = idempotency_payload_hash
         if journal_revision is not None:
             doc['journal_revision'] = journal_revision
-    created = True
-    if client_message_id:
-        try:
-            message_ref.create(doc)
-        except (AlreadyExists, Conflict):
-            existing_result = _apply_existing_message_revision(
-                message_ref,
-                text=text,
-                sender=sender,
-                app_id=app_id,
-                session_id=requested_session_id,
-                metadata=metadata,
-                content_blocks=content_blocks,
-                message_source=message_source,
-                payload_hash=idempotency_payload_hash,
-                journal_revision=journal_revision,
-            )
-            if existing_result is None:
-                raise ClientMessageIdPayloadConflict('client_message_id disappeared during revision arbitration')
-            return _message_revision_response(msg_id, existing_result, now)
-    else:
-        message_ref.set(doc)
+    session_ref = user_ref.collection('chat_sessions').document(session_id)
 
-    # Update session message_count and preview (skip if session was deleted).
-    # Retried client_message_id saves are idempotent and must not bump counters.
-    if session_id and created:
-        session_ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
-        if session_ref.get().exists:
-            session_ref.update(
+    @firestore_v1.transactional
+    def persist(transaction: Any) -> None:
+        # The session read fences concurrent deletion. A rejected commit cannot
+        # leave a newly created message without its session count / preview.
+        session_exists = session_ref.get(transaction=transaction).exists
+        if client_message_id:
+            transaction.create(message_ref, doc)
+        else:
+            transaction.set(message_ref, doc)
+        if session_exists:
+            transaction.update(
+                session_ref,
                 {
                     'updated_at': now,
                     'message_count': firestore.Increment(1),
                     'preview': text[:100] if text else None,
-                }
+                },
             )
+
+    try:
+        run_with_transaction_contention_retry(client.transaction, persist, operation_name='chat_message_save')
+    except (AlreadyExists, Conflict):
+        if not client_message_id:
+            raise
+        existing_result = _apply_existing_message_revision(message_ref, **revision_args)
+        if existing_result is None:
+            raise ClientMessageIdPayloadConflict('client_message_id disappeared during revision arbitration')
+        return _message_revision_response(msg_id, existing_result, now)
 
     return {
         'id': msg_id,
         'created_at': now.isoformat(),
         'session_id': session_id,
-        'created': created,
+        'created': True,
         'updated': False,
         'journal_revision': journal_revision,
     }
@@ -1224,9 +1246,11 @@ def _apply_existing_message_revision(
     message_source: str,
     payload_hash: str,
     journal_revision: Optional[int],
+    firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """Atomically arbitrate an idempotent retry or monotonic journal enrichment."""
-    transaction = db.transaction()
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    transaction = client.transaction()
 
     @firestore_v1.transactional
     def apply(write_transaction: Any) -> Optional[Dict[str, Any]]:

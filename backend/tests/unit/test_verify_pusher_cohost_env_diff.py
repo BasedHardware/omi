@@ -53,6 +53,57 @@ def test_preflight_passes_on_good_fixture(gate: SimpleNamespace, chart_fixture: 
     assert gate.validate_preflight(chart_fixture) == []
 
 
+@pytest.mark.parametrize("env", ("dev", "prod"))
+def test_shared_chat_frontend_auth_is_listen_only(gate: SimpleNamespace, env: str) -> None:
+    allowed = gate.LISTEN_ONLY_ALLOWED[env]
+    assert "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE" in allowed
+    assert "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA" in allowed
+    assert gate.validate_preflight(REPO_ROOT) == []
+
+
+def test_dev_shadow_scope_rejects_a_different_uid(gate: SimpleNamespace, chart_fixture: Path) -> None:
+    values = chart_fixture / "backend/charts/pusher/dev_omi_pusher_values.yaml"
+    replace_once(
+        values,
+        '  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST\n    value: "omi-release-probe"\n',
+        '  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST\n    value: "other-user"\n',
+    )
+    assert any(
+        'shadow scope TRANSCRIPTION_SHADOW_UID_ALLOWLIST' in error for error in gate.validate_preflight(chart_fixture)
+    )
+
+
+@pytest.mark.parametrize(
+    ('name', 'expected', 'changed'),
+    (
+        ('ENABLED', 'true', 'false'),
+        ('KILL_SWITCH', 'false', 'true'),
+        ('UID_ALLOWLIST', 'vi7SA9ckQCe4ccobWNxlbdcNdC23', 'other-user'),
+        ('PERCENT', '0', '1'),
+        ('DAILY_AUDIO_HOURS', '1', '2'),
+    ),
+)
+def test_prod_shadow_scope_rejects_value_drift(
+    gate: SimpleNamespace, chart_fixture: Path, name: str, expected: str, changed: str
+) -> None:
+    values = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    flag = f'TRANSCRIPTION_SHADOW_{name}'
+    replace_once(values, f'  - name: {flag}\n    value: "{expected}"\n', f'  - name: {flag}\n    value: "{changed}"\n')
+    assert any(f'[prod] shadow scope {flag}' in error for error in gate.validate_preflight(chart_fixture))
+
+
+def test_prod_shadow_scope_rejects_listen_enablement(gate: SimpleNamespace, chart_fixture: Path) -> None:
+    values = chart_fixture / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    replace_once(
+        values,
+        '  - name: REFERRAL_PUBLIC_BASE_URL\n',
+        '  - name: TRANSCRIPTION_SHADOW_ENABLED\n    value: "true"\n  - name: REFERRAL_PUBLIC_BASE_URL\n',
+    )
+    assert any(
+        '[prod] shadow scope TRANSCRIPTION_SHADOW_ENABLED' in error for error in gate.validate_preflight(chart_fixture)
+    )
+
+
 def test_cli_passes_on_repo_root(gate: SimpleNamespace) -> None:
     assert gate.main(["--root", str(REPO_ROOT)]) == 0
 
@@ -61,8 +112,8 @@ def test_new_listen_only_key_fails(gate: SimpleNamespace, chart_fixture: Path) -
     values = chart_fixture / "backend/charts/backend-listen/prod_omi_backend_listen_values.yaml"
     replace_once(
         values,
-        "env:\n  - name: REFERRAL_PUBLIC_BASE_URL\n",
-        "env:\n  - name: OMI_ENV_DIFF_PROBE\n    value: \"1\"\n  - name: REFERRAL_PUBLIC_BASE_URL\n",
+        "  - name: REFERRAL_PUBLIC_BASE_URL\n",
+        "  - name: OMI_ENV_DIFF_PROBE\n    value: \"1\"\n  - name: REFERRAL_PUBLIC_BASE_URL\n",
     )
 
     errors = gate.validate_preflight(chart_fixture)

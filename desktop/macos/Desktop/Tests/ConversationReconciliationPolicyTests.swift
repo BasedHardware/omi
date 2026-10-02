@@ -3,6 +3,19 @@ import XCTest
 @testable import Omi_Computer
 
 final class ConversationReconciliationPolicyTests: XCTestCase {
+  func testPendingMutationPreservesUnrecognizedVisibilityForSiriScope() {
+    let server = makeConversation(id: "hidden", visibility: "hidden")
+    var mutation = ConversationPendingMutation()
+    mutation.setTitle("Changed title")
+    let result = ConversationReconciliationPolicy.apply(mutation: mutation, to: server)
+    XCTAssertEqual(result.visibility, "hidden")
+  }
+
+  func testAudioClockCopyPreservesUnrecognizedVisibilityForSiriScope() {
+    let server = makeConversation(id: "hidden", visibility: "hidden")
+    XCTAssertEqual(server.onAudioClock(segments: [], startedAt: server.createdAt).visibility, "hidden")
+  }
+
   func testServerStatusAndSummaryWinOverStaleCache() {
     let local = makeConversation(
       id: "c1",
@@ -249,6 +262,7 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     overview: String = "Overview",
     status: ConversationStatus = .completed,
     starred: Bool = false,
+    visibility: String = "private",
     folderId: String? = nil,
     createdAt: Date = Date(timeIntervalSince1970: 1_000)
   ) -> ServerConversation {
@@ -276,6 +290,7 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
       discarded: false,
       deleted: false,
       isLocked: false,
+      visibility: visibility,
       starred: starred,
       folderId: folderId,
       inputDeviceName: nil,

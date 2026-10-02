@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
@@ -202,39 +203,64 @@ Future<http.StreamedResponse> makeRawApiCall({
   required String url,
   required String method,
   Map<String, String> headers = const {},
+  String body = '',
+  bool signOutOn401 = true,
+  Future<void>? abortTrigger,
+  Duration timeout = const Duration(minutes: 5),
 }) async {
   final requireAuthCheck = _isRequiredAuthCheck(url);
   try {
     var builtHeaders = await buildHeaders(
       requireAuthCheck: requireAuthCheck,
       fromHeaders: headers,
+      expireTerminalSession: signOutOn401,
       url: url,
       method: method,
     );
-    var request = http.Request(method, Uri.parse(url));
-    request.headers.addAll(builtHeaders);
-    var response = await HttpPoolManager.instance.sendStreaming(request);
+    var request = _buildStreamingRequest(url, builtHeaders, body, method, abortTrigger);
+    var response = await HttpPoolManager.instance.sendStreaming(request, timeout: timeout);
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
         firstResponse: response,
         statusCode: (value) => value.statusCode,
         disposeUnauthorizedResponse: _drainStreamedResponse,
-        expireTerminalSession: true,
+        expireTerminalSession: signOutOn401,
         replay: () async {
-          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers, url: url, method: method);
-          request = http.Request(method, Uri.parse(url));
-          request.headers.addAll(builtHeaders);
-          return HttpPoolManager.instance.sendStreaming(request);
+          builtHeaders = await buildHeaders(
+            requireAuthCheck: true,
+            fromHeaders: headers,
+            expireTerminalSession: signOutOn401,
+            url: url,
+            method: method,
+          );
+          request = _buildStreamingRequest(url, builtHeaders, body, method, abortTrigger);
+          return HttpPoolManager.instance.sendStreaming(request, timeout: timeout);
         },
       );
       if (response.statusCode == 401) return _authUnavailableStreamedResponse();
     }
     return response;
   } on AuthTokenUnavailableException catch (e) {
-    await _handleAuthUnavailable(e, expireTerminalSession: true);
+    await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
     Logger.debug('Authenticated raw request blocked before send: ${e.result.runtimeType}');
     return _authUnavailableStreamedResponse();
   }
+}
+
+http.Request _buildStreamingRequest(
+  String url,
+  Map<String, String> headers,
+  String body,
+  String method,
+  Future<void>? abortTrigger,
+) {
+  final request = http.AbortableRequest(method, Uri.parse(url), abortTrigger: abortTrigger);
+  request.headers.addAll(headers);
+  if (method != 'GET' && body.isNotEmpty) {
+    request.headers['Content-Type'] = 'application/json';
+    request.body = body;
+  }
+  return request;
 }
 
 Future<void> _drainStreamedResponse(http.StreamedResponse response) async {
@@ -291,10 +317,12 @@ Future<T> refreshAndReplayAfter401<T>({
   required bool expireTerminalSession,
   Future<void> Function(T response)? disposeUnauthorizedResponse,
   AuthService? authService,
+  void Function(AuthTokenResult refresh)? onAuthRefresh,
 }) async {
   final service = authService ?? AuthService.instance;
   await disposeUnauthorizedResponse?.call(firstResponse);
   final refresh = await service.refreshIdToken();
+  onAuthRefresh?.call(refresh);
   switch (refresh) {
     case AuthTokenSuccess():
       late T replayed;
@@ -342,6 +370,87 @@ Future<T> refreshAndReplayAfter401<T>({
   }
 }
 
+/// Uncaught send used by both [makeApiCall] and [executeApi]. Throws on
+/// transport/auth failure so the typed path can keep the cause; the legacy
+/// wrapper below is the only place those become null.
+///
+/// Production API, not test-only: [executeApi] (the typed ApiResult entry)
+/// calls it directly, and the typed path must preserve the thrown cause.
+Future<http.Response> sendUncaughtApiCall({
+  required String url,
+  required Map<String, String> headers,
+  required String body,
+  required String method,
+  Duration? timeout,
+  int? retries,
+  bool signOutOn401 = true,
+  ApiExecutionSeams? execution,
+  void Function(AuthTokenResult refresh)? onAuthRefresh,
+}) async {
+  if (execution != null) {
+    var builtHeaders = await execution.headers(ApiRequest(url: url, method: method, headers: headers, body: body));
+    var response = await execution.transport(ApiRequest(url: url, method: method, headers: builtHeaders, body: body));
+    if (response.statusCode == 401) {
+      response = await refreshAndReplayAfter401(
+        firstResponse: response,
+        statusCode: (value) => value.statusCode,
+        expireTerminalSession: signOutOn401,
+        authService: execution.auth,
+        onAuthRefresh: onAuthRefresh,
+        replay: () async {
+          builtHeaders = await execution.headers(ApiRequest(url: url, method: method, headers: headers, body: body));
+          return execution.transport(ApiRequest(url: url, method: method, headers: builtHeaders, body: body));
+        },
+      );
+    }
+    return response;
+  }
+
+  final bool requireAuthCheck = _isRequiredAuthCheck(url);
+  Map<String, String> builtHeaders = await buildHeaders(
+    requireAuthCheck: requireAuthCheck,
+    fromHeaders: headers,
+    expireTerminalSession: signOutOn401,
+    url: url,
+    method: method,
+  );
+
+  final effectiveTimeout = timeout ?? (method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite);
+  final effectiveRetries = retries ?? 1;
+
+  http.Response response = await HttpPoolManager.instance.send(
+    () => _buildRequest(url, builtHeaders, body, method),
+    timeout: effectiveTimeout,
+    retries: effectiveRetries,
+  );
+
+  if (requireAuthCheck && response.statusCode == 401) {
+    response = await refreshAndReplayAfter401(
+      firstResponse: response,
+      statusCode: (value) => value.statusCode,
+      expireTerminalSession: signOutOn401,
+      onAuthRefresh: onAuthRefresh,
+      replay: () async {
+        builtHeaders = await buildHeaders(
+          requireAuthCheck: true,
+          fromHeaders: headers,
+          expireTerminalSession: signOutOn401,
+          url: url,
+          method: method,
+        );
+        return HttpPoolManager.instance.send(
+          () => _buildRequest(url, builtHeaders, body, method),
+          timeout: effectiveTimeout,
+          retries: 0,
+        );
+      },
+    );
+  }
+
+  _checkClockSkewResponse(response);
+  return response;
+}
+
 Future<http.Response?> makeApiCall({
   required String url,
   required Map<String, String> headers,
@@ -352,49 +461,15 @@ Future<http.Response?> makeApiCall({
   bool signOutOn401 = true,
 }) async {
   try {
-    final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(
-      requireAuthCheck: requireAuthCheck,
-      fromHeaders: headers,
-      expireTerminalSession: signOutOn401,
+    return await sendUncaughtApiCall(
       url: url,
+      headers: headers,
+      body: body,
       method: method,
+      timeout: timeout,
+      retries: retries,
+      signOutOn401: signOutOn401,
     );
-
-    final effectiveTimeout =
-        timeout ?? (method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite);
-    final effectiveRetries = retries ?? 1;
-
-    http.Response response = await HttpPoolManager.instance.send(
-      () => _buildRequest(url, builtHeaders, body, method),
-      timeout: effectiveTimeout,
-      retries: effectiveRetries,
-    );
-
-    if (requireAuthCheck && response.statusCode == 401) {
-      response = await refreshAndReplayAfter401(
-        firstResponse: response,
-        statusCode: (value) => value.statusCode,
-        expireTerminalSession: signOutOn401,
-        replay: () async {
-          builtHeaders = await buildHeaders(
-            requireAuthCheck: true,
-            fromHeaders: headers,
-            expireTerminalSession: signOutOn401,
-            url: url,
-            method: method,
-          );
-          return HttpPoolManager.instance.send(
-            () => _buildRequest(url, builtHeaders, body, method),
-            timeout: effectiveTimeout,
-            retries: 0,
-          );
-        },
-      );
-    }
-
-    _checkClockSkewResponse(response);
-    return response;
   } on AuthTokenUnavailableException catch (e) {
     await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
     Logger.debug('Authenticated HTTP request blocked before send: ${e.result.runtimeType}');

@@ -527,3 +527,187 @@ def test_active_profile_non_string_diagnostics_succeed(config_path: Path, cli_ru
 
     result_path = cli_runner.invoke(app, ["config", "path"])
     assert result_path.exit_code == 0, result_path.output
+
+
+# -- Regression tests for malformed profile field types (Issue #13775) --
+
+
+@pytest.mark.parametrize(
+    "field,value,expected_type",
+    [
+        ("local_token", "12345", "int"),
+        ("api_key", "12345", "int"),
+        ("api_base", "12345", "int"),
+        ("auth_method", "true", "bool"),
+        ("id_token", '["token"]', "list"),
+        ("refresh_token", "12345", "int"),
+        ("local_api_url", "8080", "int"),
+    ],
+)
+def test_profile_field_invalid_string_type_records_load_error(
+    config_path: Path, field: str, value: str, expected_type: str
+) -> None:
+    """Known string fields must be strings; non-string values should set load_error instead of crashing."""
+    config_path.write_text(f"[profiles.default]\n{field} = {value}\n", encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert f"profile 'default' field '{field}' must be a string, got {expected_type}" in config.load_error
+
+
+@pytest.mark.parametrize(
+    "value,expected_type",
+    [
+        ('"never"', "str"),
+        ("true", "bool"),
+        ("[12345]", "list"),
+        ("inf", "non-finite (inf)"),
+        ("-inf", "non-finite (-inf)"),
+        ("nan", "non-finite (nan)"),
+        ("9" * 400, "overflow"),
+        ("-" + "9" * 400, "overflow"),
+    ],
+)
+def test_profile_field_invalid_expiry_type_records_load_error(
+    config_path: Path, value: str, expected_type: str
+) -> None:
+    """id_token_expires_at must be finite numeric; non-numeric or non-finite values should set load_error."""
+    config_path.write_text(f"[profiles.default]\nid_token_expires_at = {value}\n", encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert (
+        f"profile 'default' field 'id_token_expires_at' must be finite numeric, got {expected_type}"
+        in config.load_error
+    )
+
+
+def test_profile_field_oversized_expiry_records_load_error(config_path: Path) -> None:
+    """An integer expiry that tomllib parses but math.isfinite cannot convert sets load_error."""
+    config_path.write_text(
+        "[profiles.default]\nid_token_expires_at = " + "9" * 400 + "\n",
+        encoding="utf-8",
+    )
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert "profile 'default' field 'id_token_expires_at' must be finite numeric, got overflow" in config.load_error
+
+
+def test_profile_field_valid_numeric_expiry_loads_normally(config_path: Path) -> None:
+    """Numeric (int and float) id_token_expires_at should load normally without load_error."""
+    config_path.write_text(
+        '[profiles.default]\napi_key = "test_key"\nid_token_expires_at = 1726300000\n',
+        encoding="utf-8",
+    )
+    config = cfg.load()
+    assert not config.was_load_error
+    assert "default" in config.profiles
+    assert config.profiles["default"].id_token_expires_at == 1726300000
+
+    config_path.write_text(
+        '[profiles.default]\napi_key = "test_key"\nid_token_expires_at = 1726300000.5\n',
+        encoding="utf-8",
+    )
+    config_float = cfg.load()
+    assert not config_float.was_load_error
+    assert config_float.profiles["default"].id_token_expires_at == 1726300000.5
+
+
+def test_profile_invalid_field_refuses_save_overwrite(config_path: Path) -> None:
+    """A config with invalid profile field types must not be overwritten by save()."""
+    config_path.write_text("[profiles.default]\nlocal_token = 12345\n", encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+    # The file on disk is preserved intact
+    assert "local_token = 12345" in config_path.read_text(encoding="utf-8")
+
+
+def test_profile_invalid_field_config_show_and_diagnostics_succeed(config_path: Path, cli_runner) -> None:
+    """Read-only diagnostics and config show must not crash when a profile field has an invalid type."""
+    config_path.write_text("[profiles.default]\nlocal_token = 12345\n", encoding="utf-8")
+    result_show = cli_runner.invoke(app, ["--json", "config", "show"])
+    assert result_show.exit_code == 0, result_show.output
+    data = json.loads(result_show.output)
+    assert data["active_profile"] == "default"
+    assert data["profiles"] == []
+
+    result_version = cli_runner.invoke(app, ["version"])
+    assert result_version.exit_code == 0, result_version.output
+
+    result_path = cli_runner.invoke(app, ["config", "path"])
+    assert result_path.exit_code == 0, result_path.output
+
+
+# -- Tests for URL scheme and token validation in `omi config set` --
+
+
+@pytest.mark.parametrize("key", ["api_base", "local_api_url"])
+@pytest.mark.parametrize(
+    "invalid_url",
+    [
+        "not-a-url",
+        "ftp://example.com",
+        "http://",
+        "https://",
+        "javascript:alert(1)",
+        "   ",
+    ],
+)
+def test_config_set_rejects_invalid_urls(config_path: Path, cli_runner, key: str, invalid_url: str) -> None:
+    result = cli_runner.invoke(app, ["config", "set", key, invalid_url])
+    assert result.exit_code != 0
+    assert "Invalid URL" in result.output
+    # The config file should remain uncorrupted
+    config = cfg.load()
+    profile = config.get_profile("default")
+    if key == "api_base":
+        assert profile.api_base == cfg.DEFAULT_API_BASE
+    else:
+        assert profile.local_api_url is None
+
+
+@pytest.mark.parametrize(
+    "key,valid_url,expected_saved",
+    [
+        ("api_base", "https://api.staging.omi.me", "https://api.staging.omi.me"),
+        ("api_base", "https://api.staging.omi.me/", "https://api.staging.omi.me"),
+        ("local_api_url", "http://localhost:8000/", "http://localhost:8000"),
+        ("local_api_url", "http://127.0.0.1:47778", "http://127.0.0.1:47778"),
+    ],
+)
+def test_config_set_accepts_valid_urls_and_normalizes_trailing_slash(
+    config_path: Path, cli_runner, key: str, valid_url: str, expected_saved: str
+) -> None:
+    result = cli_runner.invoke(app, ["--json", "config", "set", key, valid_url])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["key"] == key
+    assert payload["value"] == expected_saved
+
+    config = cfg.load()
+    profile = config.get_profile("default")
+    if key == "api_base":
+        assert profile.api_base == expected_saved
+    else:
+        assert profile.local_api_url == expected_saved
+
+
+@pytest.mark.parametrize("empty_token", ["", "   "])
+def test_config_set_rejects_empty_or_whitespace_local_token(config_path: Path, cli_runner, empty_token: str) -> None:
+    result = cli_runner.invoke(app, ["config", "set", "local_token", empty_token])
+    assert result.exit_code != 0
+    assert "Invalid value for 'local_token'" in result.output
+    config = cfg.load()
+    assert config.get_profile("default").local_token is None

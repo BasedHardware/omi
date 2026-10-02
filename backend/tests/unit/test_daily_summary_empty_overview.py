@@ -30,7 +30,7 @@ def _drive(monkeypatch, overview):
     monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *a, **k: True)
     monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', lambda *a, **k: None)
     monkeypatch.setattr(notif.conversations_db, 'get_conversations', lambda *a, **k: [{'is_locked': False, 'id': 'c1'}])
-    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _FakeConvo())
+    monkeypatch.setattr(notif, 'deserialize_conversations', lambda items: [_FakeConvo() for _ in items])
     monkeypatch.setattr(
         notif,
         'generate_comprehensive_daily_summary',

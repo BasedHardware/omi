@@ -952,6 +952,7 @@ jobs:
                 "NEXT_PUBLIC_FIREBASE_APP_ID",
                 "NEXT_PUBLIC_FIREBASE_VAPID_KEY",
                 "NEXT_PUBLIC_MIXPANEL_TOKEN",
+                "NEXT_PUBLIC_POSTHOG_KEY",
                 "NEXT_PUBLIC_RAPIDAPI_KEY",
                 "NEXT_PUBLIC_RAPIDAPI_HOST",
                 "NEXT_PUBLIC_LINKEDIN_API_KEY",
@@ -1506,6 +1507,33 @@ class RuntimeServiceAccountPreflightTests(unittest.TestCase):
 
         self.assertFalse(http_called)
         self.assertIn("print-access-token failed", str(caught.exception))
+
+
+class RepositoryBetaRoutingConfig(unittest.TestCase):
+    """Keep the public web Beta build on the same development serving plane as other Beta clients."""
+
+    def test_web_development_build_is_beta_and_deploys_remain_manual(self) -> None:
+        contract = json.loads((ROOT / "config/public-build-contract.json").read_text(encoding="utf-8"))
+        values = json.loads((ROOT / "config/public-build-values.json").read_text(encoding="utf-8"))
+        app_inputs = {item["name"] for item in contract["targets"]["app"]["inputs"]}
+
+        self.assertIn("NEXT_PUBLIC_API_BASE_URL", app_inputs)
+        self.assertEqual(
+            values["environments"]["development"]["values"]["NEXT_PUBLIC_API_BASE_URL"],
+            "https://api.omiapi.com",
+        )
+        self.assertEqual(
+            values["environments"]["prod"]["values"]["NEXT_PUBLIC_API_BASE_URL"],
+            "https://api.omi.me",
+        )
+
+        workflow = (ROOT / ".github/workflows/gcp_app.yml").read_text(encoding="utf-8")
+        personas_workflow = (ROOT / ".github/workflows/gcp_personas.yml").read_text(encoding="utf-8")
+        self.assertNotIn("\n  push:", workflow)
+        self.assertNotIn("\n  push:", personas_workflow)
+        self.assertIn("  workflow_dispatch:\n    inputs:", workflow)
+        self.assertIn("  workflow_dispatch:\n    inputs:", personas_workflow)
+        self.assertIn("environment: ${{ github.event_name == 'workflow_dispatch'", workflow)
 
 
 if __name__ == "__main__":

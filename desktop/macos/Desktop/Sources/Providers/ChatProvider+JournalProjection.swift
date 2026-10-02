@@ -489,6 +489,7 @@ extension ChatProvider {
     if merged.adapterId.isEmpty { merged.adapterId = persisted.adapterId }
     if merged.credentialScopeLabel.isEmpty { merged.credentialScopeLabel = persisted.credentialScopeLabel }
     if merged.modelsUsed.isEmpty { merged.modelsUsed = persisted.modelsUsed }
+    if merged.providerTargets.isEmpty { merged.providerTargets = persisted.providerTargets }
     if merged.screenContext == nil { merged.screenContext = persisted.screenContext }
     return merged
   }

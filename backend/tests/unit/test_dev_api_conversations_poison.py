@@ -151,7 +151,11 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 import routers.developer as developer_module  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
-from dependencies import ApiKeyAuth, get_auth_with_conversations_read  # noqa: E402
+from dependencies import (  # noqa: E402
+    ApiKeyAuth,
+    get_auth_with_conversations_read,
+    get_uid_with_conversations_write,
+)
 
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _VALID_CATEGORY = next(iter(CategoryEnum)).value
@@ -180,6 +184,7 @@ def _build():
     app = FastAPI()
     app.include_router(developer_router)
     app.dependency_overrides[get_auth_with_conversations_read] = _read_auth
+    app.dependency_overrides[get_uid_with_conversations_write] = lambda: 'uid1'
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -224,3 +229,37 @@ def test_goals_limit_is_clamped_before_firestore():
     assert m.call_args_list[0].kwargs['limit'] == 1  # -1 -> 1
     assert m.call_args_list[1].kwargs['limit'] == 1000  # 99999 -> 1000
     assert m.call_args_list[2].kwargs['limit'] == 1  # 0 -> 1
+
+
+def test_developer_patch_rejects_blank_title():
+    # #13933: {"title": "   "} satisfied min_length=1, so the handler persisted '' to both
+    # structured.title and user_title while sibling write paths rejected blank text with 422.
+    # Blank text must now fail at the request-model boundary and never reach the Firestore update.
+    with patch.object(conversations_db, 'get_conversation', return_value=_valid('c1')), patch.object(
+        conversations_db, 'update_conversation_title'
+    ) as update_title:
+        response = _build().patch('/v1/dev/user/conversations/c1', json={'title': '   '})
+
+    assert response.status_code == 422
+    update_title.assert_not_called()
+
+
+def test_developer_patch_strips_padded_title():
+    updated = _valid('c1')
+    updated['structured']['title'] = 'New Title'
+
+    with patch.object(conversations_db, 'get_conversation', side_effect=[_valid('c1'), updated]), patch.object(
+        conversations_db, 'update_conversation_title'
+    ) as update_title, patch.object(developer_module, 'populate_folder_names', lambda *a, **k: None):
+        response = _build().patch('/v1/dev/user/conversations/c1', json={'title': '  New Title  '})
+
+    assert response.status_code == 200
+    update_title.assert_called_once_with('uid1', 'c1', 'New Title')
+
+
+def test_update_conversation_request_null_title_means_unchanged():
+    # The other half of the PATCH contract: an omitted/null title is "leave unchanged",
+    # not a rejection — the validator must pass None through.
+    request = developer_module.UpdateConversationRequest.model_validate({'title': None, 'discarded': True})
+    assert request.title is None
+    assert request.discarded is True

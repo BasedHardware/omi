@@ -5,6 +5,7 @@ import os
 
 import firebase_admin
 
+from utils.env_loader import firebase_admin_options
 from utils.other.jobs import start_job
 
 logging.basicConfig(level=logging.INFO)
@@ -16,9 +17,9 @@ def main() -> None:
     if os.environ.get('SERVICE_ACCOUNT_JSON'):
         service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
         credentials = firebase_admin.credentials.Certificate(service_account_info)
-        firebase_admin.initialize_app(credentials)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
+        firebase_admin.initialize_app(credentials, options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
     else:
-        firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
+        firebase_admin.initialize_app(options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
     logger.info('Starting job...')
     asyncio.run(start_job())

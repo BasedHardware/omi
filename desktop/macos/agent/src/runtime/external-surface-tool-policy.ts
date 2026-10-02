@@ -355,8 +355,17 @@ const MEMORY_GROUNDING_STOP_WORDS = new Set([
   "keep", "remember", "save", "store",
 ]);
 
+/**
+ * The desktop chat runtime prefixes every run input with a machine-generated
+ * clock preamble (ChatPrompts.currentTimePrompt: "# Current Time\n<iso>
+ * (<tz>)\n\n"). Authorization must judge the raw current user turn that
+ * follows it, so strip exactly that prefix and nothing else; any other
+ * leading text is treated as user text.
+ */
+const RUNTIME_CLOCK_PREAMBLE_PATTERN = /^# Current Time\n[^\n]*\n\n/;
+
 export function hasExplicitMemorySaveIntent(prompt: string): boolean {
-  const text = prompt.toLowerCase().trim();
+  const text = prompt.replace(RUNTIME_CLOCK_PREAMBLE_PATTERN, "").toLowerCase().trim();
   if (!text) return false;
 
   // Keep these patterns identical to ChatToolExecutor.isExplicitMemorySaveIntent.

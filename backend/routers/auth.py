@@ -22,6 +22,7 @@ from utils.http_client import get_auth_client
 from utils.log_sanitizer import sanitize
 from utils.metrics import AUTH_FLOW_DURATION_SECONDS, AUTH_FLOW_EVENTS
 from utils.observability.fallback import record_fallback
+from utils.product_metrics import extract_app_build
 from utils.integration_telemetry import emit_posthog_event
 from utils.referrals import REFERRAL_COOKIE_NAME, REFERRAL_PROGRAM, ReferralCodeError, referrer_uid_from_code
 import logging
@@ -288,14 +289,17 @@ def _log_auth_event(
     status_code: Optional[int] = None,
     redirect_scheme: Optional[str] = None,
     duration_seconds: Optional[float] = None,
+    request: Optional[Request] = None,
 ) -> None:
     safe_provider = provider if provider in {"apple", "google"} else "unknown"
     safe_failure_class = _failure_class(failure_class)
+    app_build = extract_app_build(request) if request is not None else 'unknown'
     AUTH_FLOW_EVENTS.labels(
         provider=safe_provider,
         stage=stage,
         outcome=outcome,
         failure_class=safe_failure_class,
+        app_build=app_build,
     ).inc()
     if duration_seconds is not None:
         AUTH_FLOW_DURATION_SECONDS.labels(provider=safe_provider, terminal_state=outcome).observe(duration_seconds)
@@ -334,6 +338,7 @@ async def auth_authorize(
         outcome="started",
         auth_flow_id=auth_flow_id,
         redirect_scheme=redirect_scheme,
+        request=request,
     )
     if provider not in ['google', 'apple']:
         _log_auth_event(
@@ -343,6 +348,7 @@ async def auth_authorize(
             auth_flow_id=auth_flow_id,
             failure_class="unsupported_provider",
             redirect_scheme=redirect_scheme,
+            request=request,
         )
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
@@ -359,6 +365,7 @@ async def auth_authorize(
             failure_class=_failure_class(exc),
             status_code=exc.status_code,
             redirect_scheme=redirect_scheme,
+            request=request,
         )
         raise
 
@@ -384,6 +391,7 @@ async def auth_authorize(
         outcome="succeeded",
         auth_flow_id=auth_flow_id,
         redirect_scheme=redirect_scheme,
+        request=request,
     )
 
     # Redirect to provider OAuth
@@ -398,6 +406,7 @@ async def auth_authorize(
         outcome="succeeded",
         auth_flow_id=auth_flow_id,
         redirect_scheme=redirect_scheme,
+        request=request,
     )
     return response
 
@@ -1235,3 +1244,76 @@ async def _verify_apple_id_token(id_token: str, client_id: str) -> Dict[str, Any
     except Exception as e:
         logger.error(f"Error verifying Apple ID token: {e}")
         raise HTTPException(status_code=400, detail="Invalid Apple ID token")
+
+
+# ---------------------------------------------------------------------------
+# Local development sign-in
+# ---------------------------------------------------------------------------
+#
+# Community builds cannot complete a real OAuth flow. Google and Apple issue
+# OAuth clients against the official bundle id, and a community build is
+# deliberately signed with a suffixed one, so the provider redirect flow in this
+# router is unreachable for them. Without this endpoint there is no way to sign
+# in to a local harness from a community build at all.
+#
+# The gate is FIREBASE_AUTH_EMULATOR_HOST, and it is structural rather than a
+# feature flag: when it is set, firebase_admin issues tokens against the local
+# Auth emulator, so a token minted here cannot authenticate against real
+# Firebase even if this code somehow ran in production. When it is unset the
+# endpoint does not exist at all -- it answers 404 rather than 403, so it never
+# advertises itself on a production deployment.
+
+_LOCAL_DEV_AUTH_EMULATOR_ENV = "FIREBASE_AUTH_EMULATOR_HOST"
+
+
+def local_dev_auth_enabled() -> bool:
+    """True only when this process is bound to a local Firebase Auth emulator."""
+
+    return bool(os.environ.get(_LOCAL_DEV_AUTH_EMULATOR_ENV, "").strip())
+
+
+@router.post("/local-dev/custom-token")
+async def local_dev_custom_token(
+    uid: str = Form("local-dev-user"),
+    email: Optional[str] = Form(None),
+):
+    """Mint a Firebase custom token against the local Auth emulator.
+
+    Local-development only. Returns the same `custom_token` shape the OAuth
+    token-exchange path returns, so the client reuses one sign-in code path.
+    """
+
+    if not local_dev_auth_enabled():
+        # 404, not 403: on a production deployment this route must be
+        # indistinguishable from one that was never registered.
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    normalized_uid = (uid or "").strip()
+    if not normalized_uid:
+        raise HTTPException(status_code=400, detail="uid must not be empty")
+
+    try:
+        await run_blocking(
+            critical_executor,
+            lambda: firebase_admin.auth.get_user(normalized_uid),
+        )
+    except Exception:
+        # First sign-in for this uid: create it in the emulator.
+        try:
+            await run_blocking(
+                critical_executor,
+                lambda: firebase_admin.auth.create_user(
+                    uid=normalized_uid,
+                    email=email or f"{normalized_uid}@local.test",
+                    email_verified=True,
+                ),
+            )
+        except Exception as e:
+            logger.error(f"local-dev auth: could not create emulator user: {sanitize(str(e))}")
+            raise HTTPException(status_code=500, detail="Could not create local development user")
+
+    custom_token: object = firebase_admin.auth.create_custom_token(normalized_uid)  # type: ignore[reportUnknownMemberType]
+    token = custom_token.decode('utf-8') if isinstance(custom_token, bytes) else cast(str, custom_token)
+
+    logger.info(f"local-dev auth: minted emulator custom token for uid {normalized_uid}")
+    return {"custom_token": token, "uid": normalized_uid, "provider": "local_dev"}

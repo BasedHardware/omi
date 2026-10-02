@@ -123,6 +123,30 @@ def test_doc_present_but_field_absent_returns_default(users, fn, field, default,
         assert func("uid") == default
 
 
+def test_is_exists_user_uses_a_projected_read_and_shared_read_boundary(users):
+    snapshot = MagicMock()
+    snapshot.exists = True
+    snapshot.to_dict.return_value = {"uid": "uid"}
+    client = MagicMock()
+    user_ref = client.collection.return_value.document.return_value
+    user_ref.get.return_value = snapshot
+
+    with patch.object(users, "db", client):
+        assert users.is_exists_user("uid") is True
+
+    user_ref.get.assert_called_once_with(field_paths=["uid"])
+
+
+def test_is_exists_user_returns_false_for_a_missing_snapshot(users):
+    snapshot = MagicMock()
+    snapshot.exists = False
+    client = MagicMock()
+    client.collection.return_value.document.return_value.get.return_value = snapshot
+
+    with patch.object(users, "db", client):
+        assert users.is_exists_user("uid") is False
+
+
 class _AdmissionSnapshot:
     def __init__(self, payload):
         self._payload = payload

@@ -1,0 +1,8 @@
+{
+  "version": "0.12.363",
+  "date": "2026-09-18",
+  "changes": [
+    "Free-tier conversation summaries now run on this Mac with Apple Intelligence when it is available",
+    "Fixed on-device conversation summaries not appearing after sync"
+  ]
+}

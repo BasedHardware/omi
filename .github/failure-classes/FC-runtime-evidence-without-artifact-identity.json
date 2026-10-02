@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-runtime-evidence-without-artifact-identity",
+  "violated_contract": "Revision-specific runtime evidence must derive source identity from the executing artifact, not from the checkout that happens to inspect it.",
+  "canonical_prevention": "Embed a versioned source revision and working-tree marker before signing, expose that receipt through runtime health, preserve an explicit unknown state for unstamped artifacts, and make verification compare the artifact receipt with the expected checkout.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/tests/test-desktop-build-identity.sh",
+    "desktop/macos/Desktop/Tests/DesktopBuildIdentityTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/run.sh",
+    "desktop/macos/scripts/*build*identity*.sh",
+    "desktop/macos/scripts/desktop-core-harness.sh",
+    "desktop/macos/Desktop/Sources/Automation/*BuildIdentity*.swift"
+  ],
+  "status": "open"
+}

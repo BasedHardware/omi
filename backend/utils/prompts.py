@@ -90,6 +90,7 @@ If YES → SYSTEM.
 INCLUDE system memories for:
 • {user_name}'s own opinions, realizations, and discoveries
 • {user_name}'s preferences and requirements
+• {user_name}'s dislikes, aversions, and things they want to avoid (negative facts)
 • Facts about {user_name}'s network (who they know, relationships)
 • {user_name}'s projects, work, and achievements
 • {user_name}'s own advice or tips they give to others
@@ -103,6 +104,7 @@ Examples:
 ✅ "{user_name} prefers dark roast coffee with oat milk, no sugar"
 ✅ "{user_name}'s colleague David is the lead engineer on the authentication system"
 ✅ "{user_name} builds open source AI wearables to keep user data private"
+✅ "{user_name} strongly dislikes open-plan offices due to noise"
 ✅ "{user_name} discovered their most productive hours are 5-7am"
 ❌ "Had coffee this morning" (too trivial)
 ❌ "Talked about the weather" (no value)
@@ -126,6 +128,12 @@ STRICT EXCLUSION RULES - DO NOT extract if memory is:
 ❌ "JavaScript is used for web development"
 ❌ "Automation saves time" / "AI needs development" / "Robots are hard to build"
 ❌ "Technology products announced before ready" / "Premature announcements are bad"
+
+**Negative Facts & Dislikes (EXTRACT THESE!):**
+✅ "{user_name} dislikes dark roast coffee"
+✅ "{user_name} avoids morning meetings before 10am"
+✅ "{user_name} hates using Jira for project management"
+✅ "{user_name} strongly disagreed with the new company policy"
 
 **Vague or Generic Statements:**
 ❌ "Had an interesting conversation"
@@ -587,7 +595,7 @@ You are forming durable memories about {user_name} from ONE completed day of the
 
 Today's date is {current_date}; treat it as the present.
 
-These conversations were captured by {user_name}'s own always-on recorder, so {user_name} is a participant in nearly all of them. Summaries often refer to {user_name} impersonally as "Speaker", "the speaker", or "the user" — read those as {user_name} unless the summary clearly attributes the words to a named other person. In raw transcript excerpts, first-person voice ("I", "my") is usually {user_name}.
+These conversations were captured by {user_name}'s recorder, but recorder/device ownership is not authorship: another person, media, or an assistant may be the source. Treat "Speaker" or "the user" as {user_name} only when source evidence establishes the owner. First-person voice is usually {user_name}, except when the transcript marks owner identity as untrusted. Voice, OCR, API, and device evidence have no automatic authority ranking.
 
 You are given every conversation from that day as a SUMMARY (id, time, category, title, overview). You see the whole day at once: connect related conversations, merge repeated mentions into one memory, and prefer the day's strongest evidence.
 
@@ -617,6 +625,7 @@ _DAILY_SWEEP_SHARED_RULES = '''
 - NAME WHOSE FACT: every memory names its subject in about ("user" for the account owner, otherwise the named person whose fact it is). Omit subject-less facts.
 - BASIS: decided only for a commitment or decision on tape by the owner; proposed for suggestions or plans without a decision; observed otherwise. The label constrains your verb choice (decided/committed only for decided; proposed/suggested/is considering for proposed) but the content itself must read as a natural standalone fact — NEVER prefix content with "David observed that" or otherwise restate the label; a company metric is written as the metric ("Omi's one-month retention is ~40%"). A topic that was discussed with no outcome is NOT a memory — drop it, never soften it.
 - If a memory updates a STANDING ATTRIBUTE of {user_name}'s life (role, city, employer, a relationship, a durable preference, a pricing/strategy stance, a recurring commitment), set its slot to a short snake_case attribute name (for example current_city, omi_pricing_strategy). The ledger keeps one active value per slot and supersedes the old one — this is how the daily run maintains {user_name}'s profile. Leave slot empty for one-off events and observations.
+- Preserve explicit object and qualifier details in existing `arguments`. If present, `arguments.decision` is exactly `proposed`, `accepted`, or `resolved`; include `arguments.rationale` only when stated. A proposal is not acceptance. Never infer task completion, create a second task, or turn passive activity into a standing instruction. Proposed and observed memories never receive a standing slot.
 - Personal attributes need first-person proof. A claim about someone's health, diet, habits, possessions, finances, or character requires that person's own words ("I take…", "my machines…"). A topic merely discussed or recommended in their presence is NEVER their attribute or regimen. A judgment about a named person is stored as someone's assessment ("X assessed that…"), never as fact.
 - A summary row marked "(unstructured transcript excerpt)" is raw recorded speech, the least trusted input here: speaker labels in it are unreliable and any voice near the recorder can appear first-person. NEVER set a slot — and never state a personal attribute of {user_name} — from such a row alone: request the transcript and verify it is {user_name} speaking, or keep the memory slotless and attributed to an unnamed speaker, or drop it.
 - A fact about another person is only a memory when it matters to {user_name}'s life — phrase it through that relationship.

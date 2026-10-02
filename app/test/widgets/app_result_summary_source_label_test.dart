@@ -6,22 +6,31 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 
 ServerConversation _conversationWithSections() {
   final structured = Structured('Sprint sync', 'Short compatibility paragraph.', emoji: '🧠');
-  structured.sections = [
-    const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday'),
-  ];
-  return ServerConversation(
-    id: 'conv-1',
-    createdAt: DateTime(2026, 7, 1, 9).toUtc(),
-    structured: structured,
-  );
+  structured.sections = [const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday')];
+  return ServerConversation(id: 'conv-1', createdAt: DateTime(2026, 7, 1, 9).toUtc(), structured: structured);
 }
 
-Future<void> _pumpSummary(WidgetTester tester, {App? app, AppResponse? response, bool asSliver = false}) async {
+Future<void> _pumpSummary(
+  WidgetTester tester, {
+  App? app,
+  AppResponse? response,
+  bool asSliver = false,
+  bool legacyApp = false,
+}) async {
   final conversation = _conversationWithSections();
+  final selection = response == null
+      ? ConversationSummarySelection.select(conversation)
+      : ConversationSummarySelection(
+          content: response.content,
+          kind: legacyApp || response.appId != null ? ConversationSummaryKind.app : ConversationSummaryKind.overview,
+          appId: response.appId,
+          resultIndex: legacyApp || response.appId != null ? 0 : null,
+        );
   await tester.pumpWidget(
     MaterialApp(
       theme: ThemeData.dark(),
@@ -32,18 +41,14 @@ Future<void> _pumpSummary(WidgetTester tester, {App? app, AppResponse? response,
             ? CustomScrollView(
                 slivers: [
                   AppResultDetailWidget(
-                    appResponse: response ?? AppResponse(conversation.structured.overview, appId: null),
+                    summarySelection: selection,
                     app: app,
                     conversation: conversation,
                     asSliver: true,
                   ),
                 ],
               )
-            : AppResultDetailWidget(
-                appResponse: response ?? AppResponse(conversation.structured.overview, appId: null),
-                app: app,
-                conversation: conversation,
-              ),
+            : AppResultDetailWidget(summarySelection: selection, app: app, conversation: conversation),
       ),
     ),
   );
@@ -68,37 +73,60 @@ App _templateApp() => App(
     );
 
 void main() {
-  // SCA-359: the summary attribution row used to render "Unknown App" for every
-  // first-party (notes v2) summary because findAppById(null) is null by design.
-  // First-party must label itself "Summary"; "Unknown App" is only for a
-  // non-null app id whose catalog lookup failed.
-  group('summary source label', () {
-    testWidgets('a first-party summary (appId == null) is labeled Summary, not Unknown App', (tester) async {
+  // The attribution row under a summary opens the app that wrote it. Omi's own summary and an app
+  // the catalog no longer knows have nowhere to open, so they show no row (the bottom pill still
+  // names the source: "Summary" / "Unknown App", SCA-359).
+  group('summary attribution row', () {
+    testWidgets('a first-party summary (appId == null) shows no row', (tester) async {
       await _pumpSummary(tester, app: null, response: AppResponse('First-party overview', appId: null));
 
-      expect(find.text('Summary'), findsOneWidget);
+      expect(find.text('Summary'), findsNothing);
       expect(find.text('Unknown App'), findsNothing);
+      expect(find.byIcon(Icons.arrow_forward_ios), findsNothing);
     });
 
-    testWidgets('the sliver attribution labels a first-party summary Summary too', (tester) async {
+    testWidgets('the sliver summary shows no row for a first-party summary either', (tester) async {
       await _pumpSummary(tester, app: null, asSliver: true);
 
-      expect(find.text('Summary'), findsOneWidget);
-      expect(find.text('Unknown App'), findsNothing);
+      expect(find.text('Summary'), findsNothing);
+      expect(find.byIcon(Icons.arrow_forward_ios), findsNothing);
     });
 
-    testWidgets('an app result whose catalog lookup failed is Unknown App', (tester) async {
+    testWidgets('an app result whose catalog lookup failed shows no row', (tester) async {
       await _pumpSummary(tester, app: null, response: AppResponse('App summary', appId: 'missing-app'));
 
-      expect(find.text('Unknown App'), findsOneWidget);
-      expect(find.text('Summary'), findsNothing);
+      expect(find.text('Unknown App'), findsNothing);
+      expect(find.byIcon(Icons.arrow_forward_ios), findsNothing);
     });
 
-    testWidgets('a resolved app result shows the app name', (tester) async {
-      await _pumpSummary(tester, app: _templateApp(), response: AppResponse('App summary', appId: 'app-1'));
+    testWidgets('an unattributed legacy app result shows no row', (tester) async {
+      await _pumpSummary(tester, response: AppResponse('Imported app output.'), legacyApp: true);
+
+      expect(find.text('Unknown App'), findsNothing);
+      expect(find.byIcon(Icons.arrow_forward_ios), findsNothing);
+    });
+
+    testWidgets('a resolved app result shows the app name and opens it', (tester) async {
+      await _pumpSummary(
+        tester,
+        app: _templateApp(),
+        response: AppResponse('App summary', appId: 'app-1'),
+      );
 
       expect(find.text('My Template'), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_forward_ios), findsOneWidget);
       expect(find.text('Unknown App'), findsNothing);
+    });
+
+    testWidgets('the sliver summary shows a resolved app too', (tester) async {
+      await _pumpSummary(
+        tester,
+        app: _templateApp(),
+        response: AppResponse('App summary', appId: 'app-1'),
+        asSliver: true,
+      );
+
+      expect(find.text('My Template'), findsOneWidget);
     });
   });
 }

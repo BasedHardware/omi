@@ -76,7 +76,8 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 # hourly caps boosted into no-ops.
 _BOOST_EXEMPT_DEFAULT = (
     "action_items:list,action_items:list_hot_client,static_map:get,"
-    "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments"
+    "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -110,6 +111,11 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "file:upload": (40, 3600),
     # STT proxy — parakeet GPU batch transcription behind the Omi auth guard
     "stt:transcribe": (60, 3600),
+    # Speaker tag prompts: each clip merges stored audio chunks; each answer may
+    # queue voice-sample extraction. A daily set holds at most a handful.
+    "speaker_tag_prompts:list": (20, 3600),
+    "speaker_tag_prompts:clip": (60, 3600),
+    "speaker_tag_prompts:answer": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
     # JIT frame metadata is cheap, but uploads carry bounded pixel bytes.
@@ -236,6 +242,18 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "dev:memories_batch": (15, 3600),
     "dev:action_items_write": (120, 3600),
     "dev:goals_write": (120, 3600),
+    # Unauthenticated URL-form (CIMD) client_id lookups on /authorize + /token:
+    # each can cost a bounded outbound metadata fetch, so the budget is
+    # per-minute and sits in front of the lookup. Keyed by the normalized
+    # client_id metadata host — the peer is the load balancer and forwarded
+    # headers are untrusted — so one abusive host cannot starve the rest.
+    # Boost-exempt: an event window must not widen an unauthenticated abuse
+    # surface.
+    "mcp:oauth_url_client": (30, 60),
+    # Fleet-wide backstop composed with the per-host bucket above: caps total
+    # unauthenticated URL-form admission when many distinct hosts attack at
+    # once, sized generously so real clients never notice it.
+    "mcp:oauth_url_client_global": (600, 60),
     # MCP REST data API
     "mcp:read": (300, 3600),
     "mcp:memories_read": (120, 3600),
@@ -248,7 +266,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # quota gate, unlike its sibling generate_prompts. Same bound as that
     # sibling until a quota-gate policy decision is made (see #12781).
     "apps:twitter_initial_message": (30, 3600),
-    # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
+    # TTS read-aloud proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),
     # Screen-frame egress adjudication — each call canonicalizes + judges up

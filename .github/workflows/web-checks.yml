@@ -66,6 +66,10 @@ jobs:
           npm run lint
           npm run lint:format -- --check
 
+      - name: Run Frontend Tests
+        if: needs.changes.outputs.has_frontend == 'true'
+        run: bash scripts/run-web-frontend-tests.sh
+
       - name: Lint Personas
         if: needs.changes.outputs.has_personas == 'true'
         working-directory: ./web/personas-open-source

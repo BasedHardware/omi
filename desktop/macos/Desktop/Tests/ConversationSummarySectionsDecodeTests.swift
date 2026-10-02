@@ -2,17 +2,10 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// **The regression that made every desktop summary look thin.**
-///
-/// The backend moved the substance of a conversation summary out of `overview` and into
-/// `structured.sections` — a list of headings, each with a markdown body — leaving `overview` a
-/// short compatibility paragraph. The generated wire DTO decoded `sections` from the day it landed;
-/// the domain `Structured` never read the field, so both desktop detail surfaces rendered the
-/// compatibility paragraph and presented it as the whole summary.
-///
+/// The structured summary payload must survive the network/domain Codable boundary. SQLite cache
+/// persistence is covered by `MeetingSummaryPersistenceTests` through `TranscriptionStorage`.
 /// These run the real `JSONDecoder`/`JSONEncoder` over the real domain type, so they fail if the
-/// field is dropped again in either direction — decode *or* the cache round trip, which is the one
-/// that silently empties an already-correct decode.
+/// field is dropped again in either direction.
 final class ConversationSummarySectionsDecodeTests: XCTestCase {
   private func decodeStructured(_ json: String) throws -> Structured {
     try JSONDecoder().decode(Structured.self, from: Data(json.utf8))
@@ -71,10 +64,9 @@ final class ConversationSummarySectionsDecodeTests: XCTestCase {
     XCTAssertEqual(structured.overview, "The whole summary, the old way.")
   }
 
-  /// `encode(to:)` is how a conversation reaches the local cache. Dropping `sections` there means a
-  /// summary that rendered correctly on first load comes back empty on the next launch — the same
-  /// user-visible symptom, one process restart later.
-  func testSectionsSurviveTheCacheRoundTrip() throws {
+  /// Domain Codable must retain sections for adapters that serialize structured data. The actual
+  /// SQLite column and record round trip are tested through production storage separately.
+  func testSectionsSurviveTheDomainCodableRoundTrip() throws {
     let original = Structured(
       title: "Title",
       overview: "Compatibility paragraph.",

@@ -504,6 +504,14 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
             emit_sync_failed(sync_context, 'not_connected')
             return {'success': False, 'error': 'not_connected', 'new_posts': 0, 'memories_created': 0}
+        if not social.is_rapid_api_configured():
+            # Unset RapidAPI credentials are a permanent condition for this
+            # deployment, not a fetch error: skip the fallback instead of
+            # burning retries per user on a guaranteed failure.
+            await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
+            logger.info(f'x_connector: RapidAPI fallback skipped for uid={uid}: RAPID_API_KEY not configured')
+            emit_sync_failed(sync_context, 'rapidapi_not_configured')
+            return {'success': False, 'error': 'rapidapi_not_configured', 'new_posts': 0, 'memories_created': 0}
         try:
             timeline = await social.get_twitter_timeline(handle)
             new_posts = [
@@ -654,7 +662,22 @@ def should_run_x_sync_job() -> bool:
 
 async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
-    a slow/failed account never blocks the others."""
+    a slow/failed account never blocks the others.
+
+    The scheduler fires every minute, so without a guard every execution in a
+    sync hour would start its own overlapping full-registry sweep. The window
+    lock admits exactly one sweep per SYNC_JOB_INTERVAL_HOURS window.
+    """
+    now = datetime.now(timezone.utc)
+    acquired = await run_blocking(
+        db_executor,
+        redis_db.try_acquire_x_sync_window_lock,
+        now.strftime('%Y-%m-%d'),
+        now.hour // SYNC_JOB_INTERVAL_HOURS,
+    )
+    if not acquired:
+        logger.info('x_connector: sync job skipped, another execution already holds this window')
+        return {'users': 0, 'synced': 0, 'new_posts': 0, 'skipped': 'window_lock'}
     try:
         uids = [d.id for d in db.collection(_REGISTRY_COLLECTION).stream()]
     except Exception as e:

@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 
 import yaml
+import pytest
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".." / ".github" / "workflows" / "jit_qa_manual_operator.yml"
 QA_CLOUD_WORKFLOW = Path(__file__).resolve().parents[2] / ".." / ".github" / "workflows" / "jit_qa_cloud_run.yml"
@@ -45,6 +46,7 @@ def test_manual_operator_uses_existing_seed_contract_without_deploying_resources
         "ensure-infrastructure-api",
         "indexes-plan",
         "indexes-apply",
+        "index-oracle",
         "prepare",
         "inspect",
         "drain-verify",
@@ -96,6 +98,25 @@ def test_sweep_verify_joins_server_run_to_real_job_and_content_free_output():
     assert "notification" not in command.casefold()
     assert '"scheduler_mutation": False' in command
     assert "poll_deadline" in command
+
+
+def test_sweep_repair_step_is_qa_fenced_and_content_free():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    step = _step("Repair one tombstoned QA sweep model invocation")
+    command = step["run"]
+    assert step["if"] == "${{ inputs.operation == 'sweep-repair' }}"
+    assert step["env"]["OMI_JIT_QA_AUTH_ONLY"] == "true"
+    assert step["env"]["OMI_JIT_QA_UID_ALLOWLIST"] == "${{ env.QA_UID }}"
+    assert step["env"]["FIRESTORE_DATABASE_ID"] == "${{ env.QA_DATABASE }}"
+    assert "jit_qa_sweep_repair.py list" in command
+    assert "jit_qa_sweep_repair.py repair" in command
+    assert '--invocation-id "$INVOCATION_ID"' in command
+    assert "sweep-repair-receipt.json" in command
+    assert "run jobs execute" not in command
+    assert '"model_calls": False' in command
+    assert '"scheduler_mutation": False' in command
+    assert "sweep-repair" in text
+    assert "SWEEP_REPAIR_QA" in text
 
 
 def test_every_workflow_shell_block_is_valid_bash():
@@ -444,3 +465,156 @@ def test_seed_bash_step_runs_with_fake_cli_and_cannot_lose_source_sha():
         assert receipt["source_sha"] == "a" * 40
         assert not (operator_dir / "operation.json").exists()
         assert [path.name for path in (operator_dir / "artifacts").iterdir()] == ["operator-receipt.json"]
+
+
+@pytest.mark.parametrize(
+    "confirmation,reference,allowed",
+    [
+        ("", "", True),
+        ("ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED", "incident:reviewed", True),
+        ("", "incident:reviewed", False),
+        ("ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED", "", False),
+        ("no_recorded_attempt", "incident:reviewed", False),
+    ],
+)
+def test_repair_attestation_workflow_admission_requires_explicit_pair(confirmation, reference, allowed):
+    # Exercise local input admission only; stop before any git/network operation.
+    admission = _step("Admit exact source and operation")["run"].split("git fetch --no-tags", 1)[0]
+    result = subprocess.run(
+        ["bash", "-c", admission],
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "GITHUB_REF": "refs/heads/main",
+            "SOURCE_SHA": "a" * 40,
+            "OPERATION": "sweep-repair",
+            "CONFIRMATION": "SWEEP_REPAIR_QA",
+            "INVOCATION_ID": "inv-1",
+            "RUN_ID": "",
+            "RESUME_EXECUTION": "",
+            "REPAIR_ATTESTATION_CONFIRMATION": confirmation,
+            "REPAIR_ATTESTATION_REFERENCE": reference,
+        },
+    )
+    assert (result.returncode == 0) is allowed, result.stderr
+
+
+def test_index_oracle_operation_is_admitted_without_run_id_or_mutation_confirmation():
+    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    options = document[True]["workflow_dispatch"]["inputs"]["operation"]["options"]
+    assert options == [
+        "bootstrap",
+        "ensure-infrastructure-api",
+        "indexes-plan",
+        "indexes-apply",
+        "index-oracle",
+        "prepare",
+        "inspect",
+        "drain-verify",
+        "sweep-verify",
+        "sweep-repair",
+        "rollback",
+        "rollforward",
+    ]
+
+    admission = _step("Admit exact source and operation")["run"]
+    assert '"$OPERATION" != index-oracle' in admission
+    assert "index-oracle:" in admission
+
+    admission_prefix = admission.split("git fetch --no-tags", 1)[0]
+    result = subprocess.run(
+        ["bash", "-c", admission_prefix],
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "GITHUB_REF": "refs/heads/main",
+            "SOURCE_SHA": "a" * 40,
+            "OPERATION": "index-oracle",
+            "CONFIRMATION": "",
+            "INVOCATION_ID": "",
+            "RUN_ID": "",
+            "RESUME_EXECUTION": "",
+            "REPAIR_ATTESTATION_CONFIRMATION": "",
+            "REPAIR_ATTESTATION_REFERENCE": "",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_index_oracle_step_is_read_only_adc_and_uploads_inside_existing_artifacts():
+    step = _step("Validate index rules against isolated QA Firestore")
+    command = step["run"]
+    assert step["if"] == "${{ inputs.operation == 'index-oracle' }}"
+    assert "firestore_query_shapes.py --export \"$oracle_dir/shapes.json\"" in command
+    assert "firestore_index_oracle.py" in command
+    assert command.index("firestore_query_shapes.py") < command.index("firestore_index_oracle.py")
+    assert '--project "$QA_PROJECT"' in command
+    assert '--database "$QA_DATABASE"' in command
+    assert '--output-dir "$oracle_dir"' in command
+    assert 'oracle_dir="$RUNNER_TEMP/jit-qa-operator/artifacts/index-oracle"' in command
+    assert "--allow-prod-read-only" not in command
+    assert "gcloud" not in command
+    assert "secrets versions access" not in command
+    assert "unset FIRESTORE_EMULATOR_HOST SERVICE_ACCOUNT_JSON FIREBASE_AUTH_CREDENTIALS_PATH" in command
+    assert "GOOGLE_APPLICATION_CREDENTIALS" not in command.split("unset", 1)[1].split("\n", 1)[0]
+
+    steps = _workflow_steps()
+    upload = next(step for step in steps if step.get("uses", "").startswith("actions/upload-artifact"))
+    assert upload["if"] == "always()"
+    assert upload["with"]["path"] == "${{ runner.temp }}/jit-qa-operator/artifacts"
+    assert "index-oracle" not in upload["with"]["path"]
+    assert steps.index(_step("Validate index rules against isolated QA Firestore")) < steps.index(
+        _step("Execute one bounded QA sweep and verify durable output")
+    )
+
+
+def test_index_oracle_step_fails_through_and_writes_inside_always_artifact_path():
+    step = _step("Validate index rules against isolated QA Firestore")
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        runner_temp = root / "runner-temp"
+        artifacts = runner_temp / "jit-qa-operator" / "artifacts"
+        artifacts.mkdir(parents=True)
+        fake_python = root / "fake-python"
+        fake_python.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "printf '%s\\n' \"$*\" >> \"$PYTHON_CALLS\"\n"
+            "if [[ ${1:-} == backend/scripts/firestore_query_shapes.py ]]; then\n"
+            "  exit 0\n"
+            "fi\n"
+            "if [[ ${1:-} == backend/scripts/firestore_index_oracle.py ]]; then\n"
+            "  exit 1\n"
+            "fi\n"
+            "echo \"unexpected python command: $*\" >&2\n"
+            "exit 2\n",
+            encoding="utf-8",
+        )
+        fake_python.chmod(0o755)
+        environment = {
+            "PATH": os.environ["PATH"],
+            "RUNNER_TEMP": str(runner_temp),
+            "QA_PYTHON": str(fake_python),
+            "QA_PROJECT": "based-hardware-dev",
+            "QA_DATABASE": "jit-qa",
+            "PYTHON_CALLS": str(root / "python-calls"),
+        }
+        result = subprocess.run(
+            ["bash", "-c", step["run"]],
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1, result.stderr
+        oracle_dir = artifacts / "index-oracle"
+        assert oracle_dir.is_dir()
+        calls = (root / "python-calls").read_text(encoding="utf-8").splitlines()
+        assert calls[0].startswith("backend/scripts/firestore_query_shapes.py --export ")
+        oracle_call = calls[1]
+        assert oracle_call.startswith("backend/scripts/firestore_index_oracle.py")
+        assert f"--export {oracle_dir}/shapes.json" in oracle_call
+        assert "--project based-hardware-dev" in oracle_call
+        assert "--database jit-qa" in oracle_call
+        assert f"--output-dir {oracle_dir}" in oracle_call

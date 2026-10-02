@@ -62,7 +62,6 @@ private class OmiNSTextView: NSTextView {
   /// See `OmiTextEditor.onPasteAttachments`.
   var onPasteAttachments: (() -> Void)?
 
-  private var handlesFileDrops: Bool { onFileDrop != nil }
   private var handlesPasteAttachments: Bool { onPasteAttachments != nil }
 
   /// AppKit disables Edit ▸ Paste — and its ⌘V key equivalent resolves through
@@ -96,11 +95,14 @@ private class OmiNSTextView: NSTextView {
   /// Handling the drag here, rather than leaving it to a SwiftUI `.onDrop` layered behind, is what
   /// makes the *whole* editor a drop target: the text view covers that layer, so without this only
   /// the few points of padding around it ever saw a file — and dropping on the text itself made
-  /// AppKit insert the file's path.
+  /// AppKit insert the file's path. That fallback is also why a host that stages no files must see
+  /// the drag **declined** here rather than handed to AppKit: an editor with no `onFileDrop` has
+  /// nothing to stage, and AppKit's own handling would write the path into the text instead.
   override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-    guard handlesFileDrops, OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
+    guard OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
       return super.draggingEntered(sender)
     }
+    guard onFileDrop != nil else { return [] }
     onFileDragTargeted?(true)
     return .copy
   }
@@ -118,30 +120,42 @@ private class OmiNSTextView: NSTextView {
   }
 
   override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-    guard handlesFileDrops, OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
+    guard OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
       return super.draggingUpdated(sender)
     }
+    guard onFileDrop != nil else { return [] }
     return .copy
   }
 
   override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-    guard let onFileDrop, OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
+    guard OmiTextEditor.dragCarriesFile(sender.draggingPasteboard) else {
       return super.performDragOperation(sender)
     }
+    // Never `super` for a file drag without a handler: that is the path that inserts the dropped
+    // file's *path* into the text. Decline instead — nothing staged, nothing inserted.
+    guard let onFileDrop else { return false }
     onFileDragTargeted?(false)
-    guard
-      let url = sender.draggingPasteboard.readObjects(
-        forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])?.first as? URL
-    else { return false }
-    onFileDrop(url)
+    let urls =
+      (sender.draggingPasteboard.readObjects(
+        forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ?? [])
+      .compactMap { $0 as? URL }
+    guard !urls.isEmpty else { return false }
+    // Every file on the drag, one callback each: hosts stage through the same capped paths as the
+    // shell's `.onDrop` (`ChatProvider.addAttachments` / `kMaxChatAttachments`), which read their
+    // authoritative store synchronously, so a multi-file drop cannot exceed the cap.
+    for url in urls {
+      onFileDrop(url)
+    }
     return true
   }
 
   /// AppKit re-registers a text view's default dragged types when it joins a window, so the
-  /// registration must be re-asserted there rather than once at construction.
+  /// registration must be re-asserted there rather than once at construction. Registered even when
+  /// the host stages no files: an unregistered view never sees file drags, so AppKit's own
+  /// path-insertion fallback would handle them instead of the explicit decline in the overrides
+  /// above.
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
-    guard handlesFileDrops else { return }
     registerForDraggedTypes([.fileURL])
   }
 
@@ -184,8 +198,9 @@ package struct OmiTextEditor: NSViewRepresentable {
   /// that is already `true` cannot ask for the caret back after AppKit gave it to something else.
   var focusRequest: Int = 0
   /// Receive files dropped anywhere on the editor. Set this and AppKit's own handling — which
-  /// inserts the dropped file's *path* — is replaced by this callback for file drags; text drags
-  /// are untouched. Leave it nil and the editor behaves exactly as AppKit intends.
+  /// inserts the dropped file's *path* — is replaced by this callback for file drags, one call per
+  /// dropped file; text drags are untouched. Leave it nil and file drags are **declined**: the
+  /// drag is never handed to AppKit, so no path is ever inserted into the text.
   var onFileDrop: ((URL) -> Void)? = nil
   /// Whether a file drag is currently over the editor, so the host can draw the same highlight it
   /// draws for the padding around it.

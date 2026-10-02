@@ -602,7 +602,7 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
         )
         for entry in releases:
             DESKTOP_UPDATE_RESOLUTION_TOTAL.labels(
-                platform=platform, channel=entry["channel"], source="legacy_forced"
+                platform=platform, channel=entry["channel"], source="legacy_forced", app_build="unknown"
             ).inc()
             DESKTOP_UPDATE_FEED_VALID.labels(platform=platform, channel=entry["channel"]).set(1)
         return releases
@@ -640,7 +640,9 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
             outcome='recovered',
             log=logger,
         )
-        DESKTOP_UPDATE_RESOLUTION_TOTAL.labels(platform=platform, channel=channel, source="legacy_fallback").inc()
+        DESKTOP_UPDATE_RESOLUTION_TOTAL.labels(
+            platform=platform, channel=channel, source="legacy_fallback", app_build="unknown"
+        ).inc()
         DESKTOP_UPDATE_FEED_VALID.labels(platform=platform, channel=channel).set(1)
 
     resolved.sort(key=lambda entry: entry["release"].get("published_at", ""), reverse=True)

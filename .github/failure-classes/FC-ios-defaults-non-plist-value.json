@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-ios-defaults-non-plist-value",
+  "violated_contract": "Every value written to iOS UserDefaults or App Group defaults must be a property-list value, including nested collection members.",
+  "canonical_prevention": "Construct persisted entries from typed known fields and omit unknown values; exercise producers through PropertyListSerialization and reject new Swift null placeholders outside reviewed JSON-only code.",
+  "canonical_prevention_artifact": [
+    "app/ios/test/omi_ble_energy_policy_test.rb",
+    "app/ios/test/check_userdefaults_plist_values.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["app/ios/"],
+  "status": "open"
+}

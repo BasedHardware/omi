@@ -39,6 +39,14 @@ curl -X POST http://localhost:8080/tools/search_papers \
   -d '{"query":"retrieval augmented generation", "limit":3}'
 ```
 
+Category-only search (any official arXiv category, e.g. `physics.acc-ph`):
+
+```bash
+curl -X POST http://localhost:8080/tools/search_papers \
+  -H "Content-Type: application/json" \
+  -d '{"category":"physics.acc-ph"}'
+```
+
 Fetch details:
 
 ```bash
@@ -46,6 +54,12 @@ curl -X POST http://localhost:8080/tools/get_paper_details \
   -H "Content-Type: application/json" \
   -d '{"paper_id":"2401.01234"}'
 ```
+
+An ID without a version requests the latest revision. To retrieve a specific
+revision, include its suffix, for example `1706.03762v1` or
+`https://arxiv.org/abs/1706.03762v1`. The requested version is preserved in
+arXiv's `id_list` parameter, as described in the
+[arXiv API manual](https://info.arxiv.org/help/api/user-manual.html#511-a-note-on-article-versions).
 
 Search an author:
 

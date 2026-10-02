@@ -187,7 +187,7 @@ def test_provider_secrets_injected_into_child_env(tmp_path: Path) -> None:
     if existing := env.get("PYTHONPATH"):
         pythonpath.append(existing)
     env["PYTHONPATH"] = os.pathsep.join(pythonpath)
-    for key in ("OPENAI_API_KEY", "DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY"):
+    for key in ("OPENAI_API_KEY", "DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "PROVIDER_MODE"):
         env.pop(key, None)
 
     cfg = config.load_config(repo, env=env, create_layout=True)
@@ -221,6 +221,7 @@ def test_parse_secrets_file_ignores_non_secret_keys(tmp_path: Path, monkeypatch:
         encoding="utf-8",
     )
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.delenv("PROVIDER_MODE", raising=False)
     cfg = config.load_config(repo, create_layout=True)
     parsed = config.parse_secrets_file(cfg)
     assert "FIREBASE_PROJECT_ID" in parsed.ignored_keys

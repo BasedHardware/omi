@@ -277,15 +277,21 @@ final class ChatJournalWritePathTests: XCTestCase {
     existing.metadata = MessageMetadata(
       adapterId: "pi-mono",
       modelsUsed: ["local-observed"],
+      providerTargets: ["local-provider"],
       screenContext: nil)
     existing.metadata?.sqlRowsReturned = 7
     var projected = ChatMessage(id: "m", text: "answer", sender: .ai)
-    projected.metadata = MessageMetadata(modelsUsed: ["gateway/upstream-9"])
+    projected.metadata = MessageMetadata(
+      modelsUsed: ["gateway/upstream-9"],
+      providerTargets: ["openai-codex"])
 
     let merged = ChatProvider.carryingLocalOnlyFields(projected, from: existing)
     XCTAssertEqual(
       merged.metadata?.modelsUsed, ["gateway/upstream-9"],
       "the replayed attribution is what the journal carries, so it wins")
+    XCTAssertEqual(
+      merged.metadata?.providerTargets, ["openai-codex"],
+      "the replayed provider target wins separately from the requested model")
     XCTAssertEqual(
       merged.metadata?.sqlRowsReturned, 7,
       "the completion evidence the journal does not persist survives the echo")

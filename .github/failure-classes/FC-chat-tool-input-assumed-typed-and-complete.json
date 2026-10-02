@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-chat-tool-input-assumed-typed-and-complete",
+  "violated_contract": "A chat tool that receives loosely-typed, human-shaped parameters (team keys or names instead of UUIDs, issue identifiers with prefixes or pasted as URLs, stringified numbers, whitespace-only status values) and GraphQL responses whose optional fields may be null must resolve and validate every input before acting: silently falling back to an arbitrary choice (teams[0]) misroutes mutations, unsanitized identifiers fail the exact lookup, and a bare property access on a null optional field crashes the handler with AttributeError/KeyError/TypeError instead of returning a clean tool error. omi-linear-app's create/get/update-status/add-comment tools shipped all of these classes at once (issue #14344).",
+  "canonical_prevention": "Resolve ambiguous targets through tiered matchers that refuse silent mutation by listing candidates, sanitize free-form identifiers through one shared helper that returns None for non-identifiers, short-circuit every optional GraphQL field with (x or {}) and (nodes or []), and pin all of it in a manifest-registered hermetic suite that drives the real handlers through dirty inputs and null-laden responses.",
+  "canonical_prevention_artifact": [
+    "plugins/omi-linear-app/test_team_disambiguation.py",
+    ".github/checks-manifest.yaml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["plugins/**"],
+  "status": "open"
+}

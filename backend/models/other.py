@@ -1,12 +1,35 @@
 from datetime import datetime
-from typing import Any, Callable, Iterable, List, Mapping, Optional
+from enum import Enum
+import math
+from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional
 
-from pydantic import BaseModel, Field
+from zoneinfo import ZoneInfo
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
+
+from models.person_confidence import person_confidence
 
 
 class SaveFcmTokenRequest(BaseModel):
     fcm_token: str
     time_zone: str
+
+
+class SyncUserTimeZoneRequest(BaseModel):
+    time_zone: str
+
+    @field_validator("time_zone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("time_zone must be a non-empty IANA timezone")
+        try:
+            ZoneInfo(stripped)
+        except Exception as exc:
+            raise ValueError("time_zone must be a valid IANA timezone") from exc
+        return stripped
 
 
 class FcmTokenResponse(BaseModel):
@@ -39,6 +62,74 @@ class CreatePerson(BaseModel):
 # field today; GCS people_profiles/ is speech-sample audio only; the app uses
 # local speaker icons; unlike app/persona logos there is no person-photo URL or
 # upload pattern to mirror. Do not invent an optional photo string yet.
+class VoiceReadiness(str, Enum):
+    ready = 'ready'
+    saved_sample_awaiting_embedding = 'saved_sample_awaiting_embedding'
+    not_learned = 'not_learned'
+    unknown = 'unknown'
+
+
+def voice_readiness(data: Mapping[str, Any]) -> VoiceReadiness:
+    """Report stored recognition evidence, never infer a queued enrollment job."""
+    samples = data.get('speech_samples')
+    version = data.get('speech_samples_version')
+    if samples is None or not isinstance(samples, list):
+        return VoiceReadiness.unknown
+    if not samples:
+        return VoiceReadiness.not_learned
+    if not isinstance(version, int) or isinstance(version, bool) or version < 3:
+        return VoiceReadiness.unknown
+    vector = data.get('speaker_embedding')
+    if vector is None or vector == []:
+        return VoiceReadiness.saved_sample_awaiting_embedding
+    if (
+        not isinstance(vector, list)
+        or not vector
+        or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in vector)
+        or not any(v != 0 for v in vector)
+    ):
+        return VoiceReadiness.unknown
+    return VoiceReadiness.ready
+
+
+def confidence_fields(
+    evidence: Any,
+    readiness: Any,
+    *,
+    conversation_count: Optional[int] = None,
+    auto_conversation_count: Optional[int] = None,
+) -> dict:
+    result = person_confidence(
+        evidence if isinstance(evidence, Mapping) else None,
+        voice_ready=readiness in (VoiceReadiness.ready, VoiceReadiness.ready.value),
+        conversation_count=conversation_count,
+        auto_conversation_count=auto_conversation_count,
+    )
+    labeled_at = evidence.get('last_labeled_at') if isinstance(evidence, Mapping) else None
+    return {
+        'confidence': result.band,
+        'confidence_reasons': [{'code': code, 'count': count} for code, count in result.reasons],
+        'labels_to_confirm': result.labels_to_confirm,
+        'last_labeled_at': labeled_at if isinstance(labeled_at, datetime) else None,
+    }
+
+
+class PersonConfidence(str, Enum):
+    """How sure Omi is about this person's voice, from the user's own answers."""
+
+    unknown = 'unknown'
+    confirmed = 'confirmed'
+    likely = 'likely'
+    unverified = 'unverified'
+
+
+class PersonConfidenceReason(BaseModel):
+    # manual_labels | card_confirms | card_picks | auto_confirmed | auto_corrected | voice_ready |
+    # needs_voice | auto_unconfirmed | not_heard | never_confirmed. Clients ignore codes they do not know.
+    code: str
+    count: int = 1
+
+
 class Person(BaseModel):
     id: str
     name: str
@@ -47,6 +138,64 @@ class Person(BaseModel):
     speech_samples: List[str] = []
     speech_sample_transcripts: Optional[List[str]] = None
     speech_samples_version: int = 3
+    voice_readiness: VoiceReadiness = VoiceReadiness.unknown
+    voice_learning_state: Literal['learned', 'pending', 'needs_more_speech', 'disabled', 'unknown'] = 'unknown'
+    voice_speech_seconds: Optional[float] = None
+    voice_needed_seconds: Optional[float] = None
+    # Pinned people are kept out of bulk clean-up and expected in conversations.
+    pinned: bool = False
+    pinned_at: Optional[datetime] = None
+    confidence: PersonConfidence = PersonConfidence.unknown
+    confidence_reasons: List[PersonConfidenceReason] = []
+    # Hand labels still needed to reach Confirmed; None when Confirmed or only a voice sample is missing.
+    labels_to_confirm: Optional[int] = None
+    last_labeled_at: Optional[datetime] = None
+    # Only filled by GET /v1/users/people?include_stats=true (newest conversations; never stored).
+    conversation_count: Optional[int] = None
+    last_heard_at: Optional[datetime] = None
+    talk_seconds: Optional[float] = None
+    # Stats only: conversations where every label for this person was automatic.
+    auto_conversation_count: Optional[int] = None
+    # The stored tally behind ``confidence``; kept for stats refresh, never serialized.
+    label_evidence: SkipJsonSchema[Optional[dict]] = Field(default=None, exclude=True)
+
+    @model_validator(mode='before')
+    @classmethod
+    def derive_voice_readiness(cls, data):
+        if isinstance(data, Mapping):
+            claimed = data.get('voice_readiness')
+            try:
+                VoiceReadiness(claimed)
+                claimed_valid = True
+            except (ValueError, TypeError):
+                claimed_valid = False
+            if not (claimed_valid and 'speaker_embedding' not in data):
+                data = {**data, 'voice_readiness': voice_readiness(data)}
+            if 'label_evidence' in data or 'confidence' not in data:
+                data = {**data, **confidence_fields(data.get('label_evidence'), data['voice_readiness'])}
+            ready = VoiceReadiness(data['voice_readiness']) == VoiceReadiness.ready
+            learning_state = data.get('voice_learning_state')
+            if ready:
+                if learning_state != 'disabled':
+                    data = {**data, 'voice_learning_state': 'learned'}
+            elif learning_state in (None, 'learned'):
+                data = {
+                    **data,
+                    'voice_learning_state': 'pending' if data.get('voice_learning_outcome') else 'unknown',
+                }
+        return data
+
+    def refresh_confidence(self) -> None:
+        """Recompute after stats arrive; stats add reasons but never move the band."""
+        fields = confidence_fields(
+            self.label_evidence,
+            self.voice_readiness,
+            conversation_count=self.conversation_count,
+            auto_conversation_count=self.auto_conversation_count,
+        )
+        self.confidence = PersonConfidence(fields['confidence'])
+        self.confidence_reasons = [PersonConfidenceReason(**reason) for reason in fields['confidence_reasons']]
+        self.labels_to_confirm = fields['labels_to_confirm']
 
     @classmethod
     def deserialize_many_safe(

@@ -10,7 +10,8 @@ final class LiveNotesMonitorTests: XCTestCase {
     let storage = FakeLiveNoteStorage()
     let monitor = LiveNotesMonitor(
       noteGeneratorFactory: { generator },
-      noteStorage: storage
+      noteStorage: storage,
+      entitlementDecision: { .allowManagedProactivity }
     )
     monitor.startSession(sessionId: 42)
     await waitForSessionLoad(storage)
@@ -37,7 +38,8 @@ final class LiveNotesMonitorTests: XCTestCase {
     let storage = FakeLiveNoteStorage()
     let monitor = LiveNotesMonitor(
       noteGeneratorFactory: { generator },
-      noteStorage: storage
+      noteStorage: storage,
+      entitlementDecision: { .allowManagedProactivity }
     )
     monitor.startSession(sessionId: 42)
     await waitForSessionLoad(storage)
@@ -60,7 +62,8 @@ final class LiveNotesMonitorTests: XCTestCase {
     let storage = FakeLiveNoteStorage()
     let monitor = LiveNotesMonitor(
       noteGeneratorFactory: { generator },
-      noteStorage: storage
+      noteStorage: storage,
+      entitlementDecision: { .allowManagedProactivity }
     )
     monitor.startSession(sessionId: 42)
     await waitForSessionLoad(storage)
@@ -84,7 +87,8 @@ final class LiveNotesMonitorTests: XCTestCase {
       createError: DatabaseError(resultCode: .SQLITE_CONSTRAINT, message: "session deleted"))
     let monitor = LiveNotesMonitor(
       noteGeneratorFactory: { generator },
-      noteStorage: storage
+      noteStorage: storage,
+      entitlementDecision: { .allowManagedProactivity }
     )
     monitor.startSession(sessionId: 42)
     await waitForSessionLoad(storage)
@@ -108,7 +112,8 @@ final class LiveNotesMonitorTests: XCTestCase {
     let storage = FakeLiveNoteStorage()
     let monitor = LiveNotesMonitor(
       noteGeneratorFactory: { generator },
-      noteStorage: storage
+      noteStorage: storage,
+      entitlementDecision: { .allowManagedProactivity }
     )
     monitor.startSession(sessionId: 42)
     await waitForSessionLoad(storage)
@@ -164,7 +169,8 @@ final class LiveNotesMonitorTests: XCTestCase {
     )
     let monitor = LiveNotesMonitor(
       noteGeneratorFactory: { generator },
-      noteStorage: storage
+      noteStorage: storage,
+      entitlementDecision: { .allowManagedProactivity }
     )
     monitor.startSession(sessionId: 42)
     await waitUntil("duplicate notes loaded") {
@@ -213,7 +219,8 @@ final class LiveNotesMonitorTests: XCTestCase {
     )
     let monitor = LiveNotesMonitor(
       noteGeneratorFactory: { FakeLiveNoteGenerator(results: []) },
-      noteStorage: storage
+      noteStorage: storage,
+      entitlementDecision: { .allowManagedProactivity }
     )
 
     monitor.startSession(sessionId: 1)
@@ -241,7 +248,8 @@ final class LiveNotesMonitorTests: XCTestCase {
     let storage = FakeLiveNoteStorage()
     let monitor = LiveNotesMonitor(
       noteGeneratorFactory: { oldGenerator },
-      noteStorage: storage
+      noteStorage: storage,
+      entitlementDecision: { .allowManagedProactivity }
     )
 
     monitor.startSession(sessionId: 1)
@@ -275,6 +283,144 @@ final class LiveNotesMonitorTests: XCTestCase {
     XCTAssertEqual(monitor.notes.map(\.sessionId), [2])
     let created = await storage.createdNotes()
     XCTAssertEqual(created.map(\.text), ["late old-session note", "new session note"])
+  }
+
+  func testGatedDecisionNeverCallsGeneratorAndKeepsManualNotesWorking() async throws {
+    let generator = FakeLiveNoteGenerator(results: [.success("should not run")])
+    let storage = FakeLiveNoteStorage()
+    let monitor = LiveNotesMonitor(
+      noteGeneratorFactory: { generator },
+      noteStorage: storage,
+      entitlementDecision: { .planGated }
+    )
+    monitor.startSession(sessionId: 42)
+    await waitForSessionLoad(storage)
+
+    monitor.handleSegmentsUpdate([segment(text: words(50), start: 0, end: 1)])
+    await waitForAsyncWorkToSettle()
+
+    let promptCount = await generator.prompts().count
+    XCTAssertEqual(promptCount, 0)
+    XCTAssertTrue(monitor.notes.isEmpty)
+    XCTAssertFalse(monitor.isGenerating)
+
+    monitor.addManualNote(text: "typed by the user")
+    await waitUntil("manual note appended while plan gated") {
+      monitor.notes.map(\.text) == ["typed by the user"]
+    }
+    XCTAssertEqual(monitor.notes.first?.isAiGenerated, false)
+  }
+
+  func testTypedPlanGatedFailureCallsGeneratorOnceAndSkipsErrorLog() async throws {
+    let generator = FakeLiveNoteGenerator(results: [
+      .failure(GeminiClient.GeminiClientError.planGated),
+      .success("should not run"),
+    ])
+    let storage = FakeLiveNoteStorage()
+    let errorLogs = TestCounter()
+    let monitor = LiveNotesMonitor(
+      noteGeneratorFactory: { generator },
+      noteStorage: storage,
+      entitlementDecision: { .allowManagedProactivity },
+      logGenerationFailure: { _, _ in errorLogs.value += 1 }
+    )
+    monitor.startSession(sessionId: 42)
+    await waitForSessionLoad(storage)
+
+    monitor.handleSegmentsUpdate([segment(text: words(50, prefix: "first"), start: 0, end: 1)])
+    await waitUntil("plan-gated generation unwound") {
+      !monitor.isGenerating
+    }
+
+    XCTAssertEqual(errorLogs.value, 0)
+    XCTAssertTrue(monitor.notes.isEmpty)
+    let firstPromptCount = await generator.prompts().count
+    XCTAssertEqual(firstPromptCount, 1)
+
+    monitor.handleSegmentsUpdate([
+      segment(text: words(50, prefix: "first"), start: 0, end: 1),
+      segment(text: words(50, prefix: "second"), start: 1, end: 2),
+    ])
+    monitor.handleSegmentsUpdate([
+      segment(text: words(50, prefix: "first"), start: 0, end: 1),
+      segment(text: words(50, prefix: "second"), start: 1, end: 2),
+      segment(text: words(50, prefix: "third"), start: 2, end: 3),
+    ])
+    await waitForAsyncWorkToSettle()
+
+    let laterPromptCount = await generator.prompts().count
+    XCTAssertEqual(laterPromptCount, 1)
+    XCTAssertEqual(errorLogs.value, 0)
+    XCTAssertTrue(monitor.notes.isEmpty)
+    XCTAssertFalse(monitor.isGenerating)
+  }
+
+  func testGenerationResumesWhenEntitlementDecisionBecomesAllowed() async throws {
+    let decision = DecisionBox(value: .planGated)
+    let generator = FakeLiveNoteGenerator(results: [.success("resumed after upgrade")])
+    let storage = FakeLiveNoteStorage()
+    let monitor = LiveNotesMonitor(
+      noteGeneratorFactory: { generator },
+      noteStorage: storage,
+      entitlementDecision: { decision.value }
+    )
+    monitor.startSession(sessionId: 42)
+    await waitForSessionLoad(storage)
+
+    monitor.handleSegmentsUpdate([segment(text: words(50, prefix: "first"), start: 0, end: 1)])
+    await waitForAsyncWorkToSettle()
+    let gatedPromptCount = await generator.prompts().count
+    XCTAssertEqual(gatedPromptCount, 0)
+
+    decision.value = .allowManagedProactivity
+    monitor.handleSegmentsUpdate([
+      segment(text: words(50, prefix: "first"), start: 0, end: 1),
+      segment(text: words(50, prefix: "second"), start: 1, end: 2),
+    ])
+    await waitUntil("generation resumed after entitlement allow") {
+      monitor.notes.map(\.text) == ["resumed after upgrade"] && !monitor.isGenerating
+    }
+    let resumedPromptCount = await generator.prompts().count
+    XCTAssertEqual(resumedPromptCount, 1)
+  }
+
+  func testNetworkErrorDoesNotLatchAndStillLogsAsError() async throws {
+    let generator = FakeLiveNoteGenerator(results: [
+      .failure(GeminiClient.GeminiClientError.networkError(URLError(.timedOut))),
+      .success("recovered after network"),
+    ])
+    let storage = FakeLiveNoteStorage()
+    let errorLogs = TestCounter()
+    let monitor = LiveNotesMonitor(
+      noteGeneratorFactory: { generator },
+      noteStorage: storage,
+      entitlementDecision: { .allowManagedProactivity },
+      logGenerationFailure: { _, _ in errorLogs.value += 1 }
+    )
+    monitor.startSession(sessionId: 42)
+    await waitForSessionLoad(storage)
+
+    monitor.handleSegmentsUpdate([segment(text: words(50, prefix: "first"), start: 0, end: 1)])
+    await waitUntil("network error unwound generation") {
+      !monitor.isGenerating
+    }
+
+    XCTAssertEqual(errorLogs.value, 1)
+    XCTAssertTrue(monitor.notes.isEmpty)
+    let networkPromptCount = await generator.prompts().count
+    XCTAssertEqual(networkPromptCount, 1)
+
+    monitor.handleSegmentsUpdate([
+      segment(text: words(50, prefix: "first"), start: 0, end: 1),
+      segment(text: words(50, prefix: "second"), start: 1, end: 2),
+    ])
+    await waitUntil("generation retried after network error") {
+      monitor.notes.map(\.text) == ["recovered after network"] && !monitor.isGenerating
+    }
+
+    let retriedPromptCount = await generator.prompts().count
+    XCTAssertEqual(retriedPromptCount, 2)
+    XCTAssertEqual(errorLogs.value, 1)
   }
 
   private func waitForSessionLoad(_ storage: FakeLiveNoteStorage) async {
@@ -474,4 +620,16 @@ private actor FakeLiveNoteStorage: LiveNoteStoring {
 private enum TestError: Error {
   case generationFailed
   case missingResult
+}
+
+private final class TestCounter: @unchecked Sendable {
+  var value = 0
+}
+
+private final class DecisionBox: @unchecked Sendable {
+  var value: SubscriptionEntitlementDecision
+
+  init(value: SubscriptionEntitlementDecision) {
+    self.value = value
+  }
 }

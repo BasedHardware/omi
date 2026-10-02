@@ -4,6 +4,8 @@ tier: manual
 description: Top navigation bar smoke — the flat destination row (Home, Activity, Tasks, Rewind, Apps), Activity's navigating chip row into the hub's other three pages and the "‹ Activity" control back off each of them, the Settings gear and Rewind all reach their real pages with no menu and nothing opening on hover
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Components/DrillInBack.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiMotion.swift
   - desktop/macos/Desktop/Sources/MainWindow/ShellClickThrough.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/Startup/UnhandledKeystrokeSink.swift
@@ -20,11 +22,13 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/ActivityBackButton.swift
   - desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
   - desktop/macos/Desktop/Sources/MainWindow/ShellSummon.swift
   - desktop/macos/Desktop/Sources/MainWindow/ActiveDisplay.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellListeningModeMenu.swift
+  # HomeStatusState (the status dots' states, including armed) lives here.
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/HomePresentationTokens.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/OmiQueryDotMark.swift
   - desktop/macos/Desktop/Sources/Theme/OmiFont.swift
   - desktop/macos/Desktop/Sources/MainWindow/EscapeKeyHandler.swift
@@ -44,6 +48,27 @@ steps:
         - Tasks
         - Rewind
         - Apps
+
+  - id: S1a
+    name: The microphone opens a mode menu and never cycles
+    do: >-
+      Note the recording mode (Settings → General → Audio Recording shows it). Click the microphone
+      icon in the top bar's right cluster (accessibility identifier shell-status-listening). Verify a
+      small menu opens under it listing Off, Always On and Only Meetings, each with a line saying what
+      it records, a checkmark on the current mode, and an "Audio Settings…" item below a divider — and
+      that the mode has NOT changed. Press Esc and verify the menu closes with the mode unchanged.
+      Reopen it, use ↓/↑ to move the highlight and Return to choose a different mode; verify the menu
+      closes and the mode changed to that one. The icon stays a microphone in every mode: Only Meetings
+      adds a small handset badge at its foot, off adds a slash. While Only Meetings waits for a call the
+      dot is a green ring with a hollow centre, not the filled green dot used while recording. Restore
+      the original mode, then open the menu and choose "Audio Settings…": Settings opens on
+      Transcription.
+    expect:
+      interactive_count: { min: 3 }
+      text_visible:
+        - Off
+        - Always On
+        - Only Meetings
 
   - id: S2
     name: Navigate to Activity and reach the hub's other three pages from its chip row

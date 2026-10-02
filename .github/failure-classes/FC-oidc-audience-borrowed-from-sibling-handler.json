@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-oidc-audience-borrowed-from-sibling-handler",
+  "violated_contract": "A Cloud Tasks OIDC audience must be the URL of the handler that receives the task. Sharing another lane's audience (SYNC_TASKS_OIDC_AUDIENCE / SYNC_TASKS_HANDLER_URL) with a different handler URL makes the receiving service reject the delivery 403 until the queue retry budget is exhausted.",
+  "canonical_prevention": "Mint and verify the token from the same handler-URL env var as the task's POST URL. Do not fall back to a sibling lane's audience. Pin it with a contract test that sets SYNC_TASKS_* to a different service than AUDIO_MERGE_HANDLER_URL and requires both enqueue and verify to use the merge handler URL.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_audio_merge_tasks.py",
+    "backend/utils/cloud_tasks.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/cloud_tasks.py",
+    "backend/routers/sync.py"
+  ],
+  "status": "open"
+}

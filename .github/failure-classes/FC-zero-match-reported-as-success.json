@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-zero-match-reported-as-success",
+  "violated_contract": "A matcher used to include or exclude work from a gate must not treat a pattern that matches zero paths as success. Matching nothing is fail-open: the class, check, or candidate disappears and the author proceeds as if the matcher had a real target.",
+  "canonical_prevention": "Fail closed when a newly added matcher hits zero tracked paths. FailureClassCliTests.test_scope_hint_matching_zero_paths_is_error drives scripts/failure-class prepare and validate with a scope_hint that matches nothing and asserts exit 1 with scope_hint_matches_nothing, not a warning or a pass.",
+  "canonical_prevention_artifact": [
+    "scripts/test_failure_class.py"
+  ],
+  "evidence_prs": [14466],
+  "scope_hints": [
+    "scripts/failure-class",
+    "scripts/test_failure_class.py"
+  ],
+  "status": "open"
+}
