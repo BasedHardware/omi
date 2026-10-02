@@ -398,6 +398,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             apiPhase == ApiViewPhase.authenticationRequired;
 
         return Scaffold(
+          // Clear, so Tasks shows the page colour of the Home shell it sits in, the same as Home.
+          backgroundColor: Colors.transparent,
           body: Stack(
             children: [
               GestureDetector(
@@ -1031,7 +1033,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               TaskCompletionMark(completed: item.completed),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(item.description, style: OmiType.subhead, maxLines: 1, overflow: TextOverflow.ellipsis),
+                child: Text(item.description, style: _rowTitleStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
             ],
           ),
@@ -1248,26 +1250,25 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         children: [
                           Text(
                             item.description,
-                            style: OmiType.body.copyWith(
+                            style: _rowTitleStyle.copyWith(
                               color: item.completed || item.isLocked ? OmiColors.textTertiary : OmiColors.textPrimary,
-                              letterSpacing: -0.35,
                               decoration: item.completed ? TextDecoration.lineThrough : null,
                               decorationColor: OmiColors.textTertiary,
                             ),
                           ),
                           if (goalTitle != null) ...[
                             const SizedBox(height: 4),
-                            Text(goalTitle, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                            Text(goalTitle, style: _rowMetaStyle),
                           ],
                           if (item.exported && item.exportPlatform != null) ...[
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Icon(Icons.check_circle_outline, size: 12, color: OmiColors.textTertiary),
+                                Icon(Icons.check_circle_outline, size: 12, color: _rowMetaStyle.color),
                                 const SizedBox(width: 4),
                                 Text(
                                   context.l10n.exportedToPlatform(taskExportPlatformLabel(item.exportPlatform!)),
-                                  style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                                  style: _rowMetaStyle,
                                 ),
                               ],
                             ),
@@ -1282,10 +1283,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       padding: const EdgeInsets.only(left: 8, right: 8),
                       child: Text(
                         dueLabel,
-                        style: OmiType.subhead.copyWith(
-                          color: category == TaskCategory.overdue && !item.completed
-                              ? OmiColors.danger
-                              : OmiColors.textTertiary,
+                        style: _rowMetaStyle.copyWith(
+                          color: category == TaskCategory.overdue && !item.completed ? OmiColors.danger : null,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
@@ -1349,6 +1348,11 @@ const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4)
 /// A section header's label ("Today", "Overdue"): sentence case, quieter than the rows.
 TextStyle get _sectionLabelStyle =>
     OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600);
+
+/// A task row's text, set like a row of Home's conversation list (ConversationListItem): the title,
+/// then its secondary lines (goal, export, due day).
+TextStyle get _rowTitleStyle => OmiType.callout.copyWith(fontWeight: FontWeight.w500);
+TextStyle get _rowMetaStyle => OmiType.footnote.copyWith(color: OmiColors.textSecondary);
 
 /// The fold mark after a collapsible section's count: down when open, right when folded.
 class _SectionChevron extends StatelessWidget {
