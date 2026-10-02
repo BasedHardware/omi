@@ -206,6 +206,10 @@ async def test_thats_me_after_failover_pools_the_owners_actual_window(monkeypatc
         data_protection_level='standard',
     )
     row = _row(phrase_pre, phrase_post)
+    row['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {sid: {'generation': 1, 'is_user': True} for sid in ['seg-post-1', 'seg-post-2']},
+    }
     monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, conversation_id: dict(row))
 
     captured = {}
@@ -219,7 +223,7 @@ async def test_thats_me_after_failover_pools_the_owners_actual_window(monkeypatc
             captured['pooled_pcm'] = handle.readframes(handle.getnframes())
         return np.ones((1, 4), dtype=np.float32)
 
-    def fake_pool_confirmation(uid, embedding, pool, *, conversation_id, expected_receipt_generation):
+    def fake_pool_confirmation(uid, embedding, pool, *, conversation_id, expected_receipt_generation, segment_ids):
         captured['pooled_embedding'] = embedding
         captured['pooled_conversation'] = conversation_id
         return 1

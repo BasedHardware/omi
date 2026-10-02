@@ -370,3 +370,12 @@ def test_next_conversation_refreshes_profiles_but_same_conversation_keeps_locked
         assert matcher.speaker_to_person[7][0] == 'person-1'
 
     asyncio.run(exercise())
+
+
+@pytest.fixture(autouse=True)
+def paid_named_speaker_entitlement(monkeypatch):
+    from utils.sync import speaker_identity
+    from routers.listen import speakers
+
+    monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: True)
+    monkeypatch.setattr(speakers, 'named_speaker_prompts_allowed', lambda uid: True)

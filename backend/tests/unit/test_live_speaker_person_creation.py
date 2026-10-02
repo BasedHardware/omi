@@ -45,9 +45,12 @@ class _Recorder:
         return None
 
 
-def _processor(recorder, *, owner_name=None, create_speakers=True, language=None):
+def _processor(recorder, *, owner_name=None, create_speakers=True, language=None, paid=True):
     async def resolve_owner_name():
         return owner_name
+
+    async def named_speakers_allowed():
+        return paid
 
     processor = object.__new__(transcripts.TranscriptProcessor)
     processor.suggested_segments = set()
@@ -65,6 +68,7 @@ def _processor(recorder, *, owner_name=None, create_speakers=True, language=None
             segment_assignments={},
             queue=asyncio.Queue(),
             resolve_owner_name=resolve_owner_name,
+            named_speakers_allowed=named_speakers_allowed,
         ),
         persistence=recorder,
         request=SimpleNamespace(uid='u1', create_speakers=create_speakers, speaker_auto_assign_enabled=False),
@@ -158,5 +162,12 @@ def test_owner_name_veto_uses_unicode_casefold(monkeypatch):
         transcripts, 'detect_speaker_introduction', lambda *a, **k: SimpleNamespace(name='STRASSE', explicit=True)
     )
     _run(_processor(recorder, owner_name='Straße'), 'synthetic introduction')
+    assert recorder.created == []
+    assert recorder.lookups == []
+
+
+def test_free_introduction_cannot_load_or_create_named_person():
+    recorder = _Recorder()
+    _run(_processor(recorder, paid=False), "My name is Sam.")
     assert recorder.created == []
     assert recorder.lookups == []

@@ -19,6 +19,7 @@ from utils.live_speaker_suggestions import reconcile_pinned_suggestion
 from utils.log_sanitizer import sanitize
 from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
+from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers
@@ -102,6 +103,8 @@ class SpeakerMatcher:
         self.tasks: set[asyncio.Task[Any]] = set()
         self._profile_conversation_id: Optional[str] = None
         self._profile_lock = asyncio.Lock()
+        self._entitlement_lock = asyncio.Lock()
+        self._named_speakers_allowed: Optional[bool] = None
         # The account owner's own first name, so hearing it in the transcript cannot
         # mint a person who is really the user. Resolved lazily by
         # resolve_owner_name(); used for display and as a veto, never as voice-match evidence.
@@ -135,6 +138,17 @@ class SpeakerMatcher:
             self.owner_name = name.strip()
         return self.owner_name
 
+    async def named_speakers_allowed(self) -> bool:
+        """One subscription read per conversation; rotation/reconnect observes plan changes."""
+        async with self._entitlement_lock:
+            if self._named_speakers_allowed is None:
+                generation = self._generation
+                allowed = await self.host.persistence.call(named_speaker_prompts_allowed, self.host.request.uid)
+                if generation != self._generation:
+                    return False
+                self._named_speakers_allowed = bool(allowed)
+            return bool(self._named_speakers_allowed)
+
     async def _load_profiles(self) -> None:
         if self.host.has_speech_profile:
             try:
@@ -164,6 +178,8 @@ class SpeakerMatcher:
             except Exception as error:
                 logger.error('Speaker ID user embedding load failed type=%s', type(error).__name__)
         try:
+            if not await self.named_speakers_allowed():
+                return
             people = await self.host.persistence.call(user_db.get_people, self.host.request.uid)
             for person in people:
                 if person.get('speech_samples'):
@@ -612,6 +628,7 @@ class SpeakerMatcher:
     def clear(self) -> None:
         self._generation += 1
         self._profile_conversation_id = None
+        self._named_speakers_allowed = None
         self._covered_audio.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()

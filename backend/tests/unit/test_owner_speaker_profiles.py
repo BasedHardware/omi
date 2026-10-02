@@ -82,3 +82,12 @@ def test_live_audio_recovery_keeps_resolved_owner_name(profile_sources, monkeypa
     asyncio.run(matcher._load_profiles())
     assert matcher.person_embeddings[speakers.USER_SELF_PERSON_ID]['name'] == 'David'
     save.assert_called_once_with('u', [1.0, 0.0])
+
+
+@pytest.fixture(autouse=True)
+def paid_named_speaker_entitlement(monkeypatch):
+    from utils.sync import speaker_identity
+    from routers.listen import speakers
+
+    monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: True)
+    monkeypatch.setattr(speakers, 'named_speaker_prompts_allowed', lambda uid: True)

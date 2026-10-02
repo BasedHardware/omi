@@ -228,9 +228,7 @@ def _build_intake_fakes() -> dict:
 def sync_module():
     """Load routers.sync + utils.stt.pre_recorded under stubbed heavy deps.
 
-    Ensures the heavy transitive imports (database/google/firebase/deepgram/native
-    audio) are faked *before* the target modules are exec'd, then evicts the
-    stub-fed modules on teardown so nothing leaks to other test files.
+    Fake dependencies before imports and evict them on teardown.
     """
     os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
     os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
@@ -238,6 +236,7 @@ def sync_module():
     import google.cloud.storage as _gcs
 
     fakes = _build_fakes()
+    fakes['utils.speaker_permissions'] = MagicMock(named_speaker_prompts_allowed=lambda uid: True)
     _intake_fakes = _build_intake_fakes()
     _orig_storage_client = getattr(_gcs, 'Client', None)
     _gcs.Client = MagicMock

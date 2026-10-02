@@ -5,6 +5,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from google.cloud import firestore
 
+from utils.owner_voice_evidence import owner_base
+
 from ._client import get_firestore_client, run_transactional
 from .conversations import decode_manual_speaker_assignments
 
@@ -159,6 +161,7 @@ def add_owner_voice_confirmation(
     *,
     conversation_id: str,
     expected_receipt_generation: Optional[int] = None,
+    segment_ids: Optional[List[str]] = None,
     firestore_client: Any = None,
 ) -> int:
     """Pool a confirmed owner clip into the owner's voiceprint in one transaction."""
@@ -182,15 +185,21 @@ def add_owner_voice_confirmation(
                 return 0
         snapshot = ref.get(transaction=transaction)
         data = snapshot.to_dict() or {}
-        current = data.get('speaker_embedding')
-        base = data.get('speaker_embedding_base')
-        pooled_at = as_utc(data.get('owner_voice_pooled_at'))
-        updated_at = as_utc(data.get('speaker_embedding_updated_at'))
-        if current and (pooled_at is None or (updated_at is not None and updated_at > pooled_at)):
-            base = current
+        base = owner_base(data)
         now = datetime.now(timezone.utc)
         confirmations = list(data.get('owner_voice_confirmations') or [])
-        confirmations.append({'embedding': list(embedding), 'conversation_id': conversation_id, 'at': now})
+        # One contribution per conversation: retries and repeated cards cannot
+        # consume the entire bounded bank or amplify a single recording.
+        confirmations = [item for item in confirmations if item.get('conversation_id') != conversation_id]
+        confirmations.append(
+            {
+                'embedding': list(embedding),
+                'conversation_id': conversation_id,
+                'segment_ids': list(segment_ids or []),
+                'generation': expected_receipt_generation,
+                'at': now,
+            }
+        )
         confirmations = confirmations[-OWNER_VOICE_CONFIRMATIONS_MAX:]
         vectors = ([list(base)] if base else []) + [list(item['embedding']) for item in confirmations]
         update: Dict[str, Any] = {

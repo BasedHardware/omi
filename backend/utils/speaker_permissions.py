@@ -1,7 +1,7 @@
 """Plan entitlements for speaker labeling, kept light for routes and services."""
 
 from database import users as users_db
-from utils.subscription import is_paid_plan
+from utils import subscription
 
 
 def named_speaker_prompts_allowed(uid: str) -> bool:
@@ -9,5 +9,5 @@ def named_speaker_prompts_allowed(uid: str) -> bool:
 
     "Is this you?" never calls this: the owner check is free for everyone.
     """
-    subscription = users_db.get_user_valid_subscription(uid, provision=False)
-    return bool(subscription and is_paid_plan(subscription.plan))
+    plan = users_db.get_user_valid_subscription(uid, provision=False)
+    return bool(plan and subscription.is_paid_plan(plan.plan))

@@ -50,6 +50,7 @@ from utils.stt.conversation_speakers import (
 )
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
+from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.voiceprints import usable_person_voiceprint
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,8 @@ def load_voiceprints_for_resolution(uid: str) -> Dict[str, np.ndarray]:
     owner = users_db.get_user_speaker_embedding(uid)
     if owner:
         prints[OWNER_IDENTITY] = np.asarray(owner, dtype=np.float32)
+    if not named_speaker_prompts_allowed(uid):
+        return prints
     for person in users_db.get_people(uid) or []:
         embedding = usable_person_voiceprint(person)
         if embedding and person.get('id'):

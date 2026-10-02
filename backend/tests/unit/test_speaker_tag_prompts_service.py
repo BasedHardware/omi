@@ -586,6 +586,10 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
         ],
     }
     clipped = []
+    conversation['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
+    }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
     monkeypatch.setattr(
         service,
@@ -602,7 +606,7 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     monkeypatch.setattr(
         service.voice_profiles_db,
         'add_owner_voice_confirmation',
-        lambda uid, embedding, pool, conversation_id, expected_receipt_generation: 1,
+        lambda uid, embedding, pool, conversation_id, expected_receipt_generation, segment_ids: 1,
     )
     assert asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a', 'b', 'c'])) == 'stored'
     assert clipped == [(5.0, 15.0)]
@@ -643,6 +647,10 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
         'transcript_segments': [{'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'text': 'hello there friend'}],
     }
     pooled = []
+    conversation['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
+    }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
     monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6))
 
@@ -655,7 +663,7 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
     monkeypatch.setattr(
         service.voice_profiles_db,
         'add_owner_voice_confirmation',
-        lambda uid, embedding, pool, conversation_id, expected_receipt_generation: pooled.append(
+        lambda uid, embedding, pool, conversation_id, expected_receipt_generation, segment_ids: pooled.append(
             (embedding, pool([embedding]))
         )
         or 1,
@@ -671,6 +679,10 @@ def test_owner_sample_rejected_by_quality_gate_is_not_pooled(monkeypatch):
         'id': 'c1',
         'language': 'en',
         'transcript_segments': [{'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'text': 'hi'}],
+    }
+    conversation['manual_speaker_assignments'] = {
+        'generation': 1,
+        'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
     }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
     monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6))
@@ -811,3 +823,11 @@ def test_ignored_voice_uses_the_merged_survivor_and_resolved_speaker(monkeypatch
     )
     service.apply_answer('u', _request(K.identify, O.unnamed, A.not_a_person, conversation_id='donor'), now=NOW)
     assert markers == [(('u', 'survivor', 8, NOW), {'assignment_generation': 7})]
+
+
+def test_free_user_can_reject_previously_served_paid_card(monkeypatch):
+    world = World(monkeypatch, paid=False)
+    service.apply_answer(
+        'u', _request(K.confirm_person, O.auto_person, A.someone_else, suggested_person_id='p1'), world.schedule, NOW
+    )
+    assert world.assignments and world.assignments[0]['person_id'] is None

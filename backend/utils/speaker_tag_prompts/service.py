@@ -56,7 +56,6 @@ from utils.executors import (
     db_executor,
     run_blocking,
     speaker_tag_verify_executor,
-    storage_executor,
     submit_with_context,
     sync_executor,
 )
@@ -64,6 +63,7 @@ from utils.speaker_identification import extract_speaker_samples
 from utils.speaker_sample import verify_and_transcribe_sample, verify_and_transcribe_sample_in_worker
 from utils.speaker_tag_prompts.clips import CLIP_SAMPLE_RATE, conversation_clip_pcm, pcm_to_wav
 from utils.speaker_learning_policy import union_seconds
+from utils.owner_voice_evidence import authorized_owner_segments
 from utils.speaker_tag_prompts.selection import (
     MAX_CLIP_SECONDS,
     MAX_GAP_SECONDS,
@@ -492,7 +492,7 @@ def apply_answer(
     answer = effective_answer(request)
     if answer not in _ALLOWED_ANSWERS[request.kind]:
         raise TagPromptInvalid(f'{answer.value} is not a valid answer for {request.kind.value}')
-    needs_named = request.kind != SpeakerTagPromptKind.owner_check or answer in _NAMED_ANSWERS
+    needs_named = answer in _NAMED_ANSWERS
     if needs_named and not named_speaker_prompts_allowed(uid):
         raise TagPromptForbidden('Naming other people needs a paid plan')
 
@@ -514,6 +514,7 @@ def apply_answer(
                     uid=uid,
                     conversation_id=request.conversation_id,
                     segment_ids=segment_ids,
+                    card_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
                 )
                 voice_sample_queued = True
     elif person_id is not None:
@@ -744,7 +745,9 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
     return best[1], best[2], best[3]
 
 
-async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: List[str]) -> str:
+async def store_owner_voice_sample(
+    uid: str, conversation_id: str, segment_ids: List[str], *, card_generation: Optional[int] = None
+) -> str:
     """Verify a "That's me" clip and pool it into the owner's voiceprint. Returns the outcome label.
 
     The outcome is attributable: beyond the Prometheus counter, one log line
@@ -760,12 +763,16 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
         if not conversation:
             outcome = 'clip_not_clean'
             return outcome
-        window = owner_clip_window(conversation, segment_ids)
+        authorized = authorized_owner_segments(conversation, segment_ids, card_generation=card_generation)
+        if set(authorized) != set(segment_ids) or not authorized:
+            outcome = 'stale_assignment'
+            return outcome
+        window = owner_clip_window(conversation, authorized)
         if window is None:
             outcome = 'clip_not_clean'
             return outcome
         start, end, text = window
-        pcm = await run_blocking(storage_executor, conversation_clip_pcm, uid, conversation, start, end)
+        pcm = await run_blocking(sync_executor, conversation_clip_pcm, uid, conversation, start, end)
         if not pcm:
             outcome = 'no_audio'
             return outcome
@@ -793,6 +800,11 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
             _pool,
             conversation_id=conversation_id,
             expected_receipt_generation=(conversation.get('manual_speaker_assignments') or {}).get('generation', 0),
+            segment_ids=[
+                s['id']
+                for s in conversation['transcript_segments']
+                if s.get('id') in authorized and s.get('start', end) < end and s.get('end', start) > start
+            ],
         )
         if not stored:
             outcome = 'stale_assignment'

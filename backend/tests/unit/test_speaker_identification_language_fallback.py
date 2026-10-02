@@ -13,6 +13,7 @@ language preference, the same source chat/memories/process_conversation use.
 """
 
 import os
+import pytest
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
@@ -65,6 +66,10 @@ def _wire_common_stubs(monkeypatch, conversation, captured):
         return "hello there friend", True, "ok"
 
     monkeypatch.setattr(speaker_identification_mod, "verify_and_transcribe_sample", fake_verify)
+
+
+async def _paid_named_speakers():
+    return True
 
 
 async def _no_owner_name():
@@ -158,6 +163,7 @@ def test_live_name_detection_receives_session_language(monkeypatch):
             speaker_to_person={},
             person_embeddings={},
             resolve_owner_name=_no_owner_name,
+            named_speakers_allowed=_paid_named_speakers,
         ),
     )
     monkeypatch.setattr(transcripts, 'detect_speaker_introduction', lambda text, language=None: seen.append(language))
@@ -165,3 +171,10 @@ def test_live_name_detection_receives_session_language(monkeypatch):
         processor._speaker_detection([TranscriptSegment(id='s', text='合成テキスト', is_user=False, start=0, end=5)], 0)
     )
     assert seen == ['ja']
+
+
+@pytest.fixture(autouse=True)
+def paid_sync_entitlement(monkeypatch):
+    from utils.sync import speaker_identity
+
+    monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: True)

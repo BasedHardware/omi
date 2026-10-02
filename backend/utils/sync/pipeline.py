@@ -1271,7 +1271,7 @@ def process_segment(
             identify_speakers_for_segments(
                 transcript_segments,
                 audio_bytes if person_embeddings_cache else None,
-                person_embeddings_cache or {},
+                person_embeddings_cache if person_embeddings_cache is not None else {},
                 uid,
                 language=language,
                 owner_reserved=owner_reserved,
