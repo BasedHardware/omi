@@ -34,6 +34,12 @@ private actor MCPKeyCreationProbe {
 }
 
 final class MemoryExportMCPKeyTests: XCTestCase {
+  // These names mirror MemoryExportService's private defaults keys.
+  private enum MemoryExportDefaultsKeyName {
+    static let mcpKey = "memoryExportMCPApiKey"
+    static let mcpKeyOwner = "memoryExportMCPApiKeyOwnerUserId"
+  }
+
   private var suiteNames: [String] = []
 
   override func tearDown() {
@@ -46,22 +52,25 @@ final class MemoryExportMCPKeyTests: XCTestCase {
 
   // Each fixture uses a disposable preferences domain and an injected mint
   // operation. No test can issue a real credential or use a signed-in session.
-  private func fixture(suspended: Bool = false) -> (UserDefaults, MemoryExportService, MCPKeyCreationProbe) {
+  private func fixture(suspended: Bool = false) throws -> (
+    UserDefaults, MemoryExportService, MCPKeyCreationProbe
+  ) {
     let suiteName = "mcp-key-tests-\(UUID().uuidString)"
     suiteNames.append(suiteName)
-    let defaults = UserDefaults(suiteName: suiteName)!
-    defaults.set("owner-a", forKey: "auth_userId")
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defaults.set("owner-a", forKey: .authUserId)
     let probe = MCPKeyCreationProbe(suspended: suspended)
     // Transfer a separate defaults instance to the service actor. The test
     // retains only its own instance of the same disposable preferences domain,
     // modelling auth writes without sharing a non-Sendable object across actors.
     let service = MemoryExportService(
-      defaults: UserDefaults(suiteName: suiteName)!, createMCPKey: { await probe.create() })
+      defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
+      createMCPKey: { await probe.create() })
     return (defaults, service, probe)
   }
 
-  func testStatusChecksDoNotCreateAKey() async {
-    let (_, service, probe) = fixture()
+  func testStatusChecksDoNotCreateAKey() async throws {
+    let (_, service, probe) = try fixture()
     let stored = await service.storedMCPKey()
     let hasStored = await service.hasStoredMCPKey
     // Obsidian status avoids local MCP config scanning and cloud grant requests.
@@ -73,7 +82,7 @@ final class MemoryExportMCPKeyTests: XCTestCase {
   }
 
   func testExplicitSetupWithoutCachedKeyCreatesExactlyOnce() async throws {
-    let (_, service, probe) = fixture()
+    let (_, service, probe) = try fixture()
     let first = try await service.mcpKeyForLocalConnectorSetup()
     let second = try await service.ensureMCPKey()
     let stored = await service.storedMCPKey()
@@ -85,9 +94,9 @@ final class MemoryExportMCPKeyTests: XCTestCase {
   }
 
   func testExplicitSetupReusesKeyForSameOwner() async throws {
-    let (defaults, service, probe) = fixture()
-    defaults.set("cached-key", forKey: "memoryExportMCPApiKey")
-    defaults.set("owner-a", forKey: "memoryExportMCPApiKeyOwnerUserId")
+    let (defaults, service, probe) = try fixture()
+    defaults.set("cached-key", forKey: MemoryExportDefaultsKeyName.mcpKey)
+    defaults.set("owner-a", forKey: MemoryExportDefaultsKeyName.mcpKeyOwner)
     let key = try await service.mcpKeyForLocalConnectorSetup()
     let hasStored = await service.hasStoredMCPKey
     let count = await probe.count
@@ -97,18 +106,18 @@ final class MemoryExportMCPKeyTests: XCTestCase {
   }
 
   func testExplicitSetupDoesNotReuseAnotherOwnersKey() async throws {
-    let (defaults, service, probe) = fixture()
-    defaults.set("other-owner-key", forKey: "memoryExportMCPApiKey")
-    defaults.set("owner-b", forKey: "memoryExportMCPApiKeyOwnerUserId")
+    let (defaults, service, probe) = try fixture()
+    defaults.set("other-owner-key", forKey: MemoryExportDefaultsKeyName.mcpKey)
+    defaults.set("owner-b", forKey: MemoryExportDefaultsKeyName.mcpKeyOwner)
     let key = try await service.mcpKeyForLocalConnectorSetup()
     let count = await probe.count
     XCTAssertEqual(key, "test-key")
     XCTAssertEqual(count, 1)
-    XCTAssertEqual(defaults.string(forKey: "memoryExportMCPApiKeyOwnerUserId"), "owner-a")
+    XCTAssertEqual(defaults.string(forKey: MemoryExportDefaultsKeyName.mcpKeyOwner), "owner-a")
   }
 
   func testConcurrentExplicitSetupsCreateOnlyOneKey() async throws {
-    let (_, service, probe) = fixture(suspended: true)
+    let (_, service, probe) = try fixture(suspended: true)
     let first = Task { try await service.mcpKeyForLocalConnectorSetup() }
     await probe.waitUntilStarted()
     let second = Task { try await service.mcpKeyForLocalConnectorSetup() }
@@ -120,11 +129,11 @@ final class MemoryExportMCPKeyTests: XCTestCase {
     XCTAssertEqual(count, 1)
   }
 
-  func testAccountSwitchDuringCreationRejectsAndDoesNotStoreKey() async {
-    let (defaults, service, probe) = fixture(suspended: true)
+  func testAccountSwitchDuringCreationRejectsAndDoesNotStoreKey() async throws {
+    let (defaults, service, probe) = try fixture(suspended: true)
     let setup = Task { try await service.mcpKeyForLocalConnectorSetup() }
     await probe.waitUntilStarted()
-    defaults.set("owner-b", forKey: "auth_userId")
+    defaults.set("owner-b", forKey: .authUserId)
     await probe.finish()
     do {
       _ = try await setup.value
@@ -132,15 +141,15 @@ final class MemoryExportMCPKeyTests: XCTestCase {
     } catch {
       XCTAssertTrue(error.localizedDescription.contains("account changed"))
     }
-    XCTAssertNil(defaults.string(forKey: "memoryExportMCPApiKey"))
-    XCTAssertNil(defaults.string(forKey: "memoryExportMCPApiKeyOwnerUserId"))
+    XCTAssertNil(defaults.string(forKey: MemoryExportDefaultsKeyName.mcpKey))
+    XCTAssertNil(defaults.string(forKey: MemoryExportDefaultsKeyName.mcpKeyOwner))
   }
 
-  func testAccountSwitchDuringExplicitRotationRejectsKey() async {
-    let (defaults, service, probe) = fixture(suspended: true)
+  func testAccountSwitchDuringExplicitRotationRejectsKey() async throws {
+    let (defaults, service, probe) = try fixture(suspended: true)
     let setup = Task { try await service.createNewMCPKey() }
     await probe.waitUntilStarted()
-    defaults.set("owner-b", forKey: "auth_userId")
+    defaults.set("owner-b", forKey: .authUserId)
     await probe.finish()
     do {
       _ = try await setup.value
@@ -148,13 +157,13 @@ final class MemoryExportMCPKeyTests: XCTestCase {
     } catch {
       XCTAssertTrue(error.localizedDescription.contains("account changed"))
     }
-    XCTAssertNil(defaults.string(forKey: "memoryExportMCPApiKey"))
+    XCTAssertNil(defaults.string(forKey: MemoryExportDefaultsKeyName.mcpKey))
   }
 
-  func testRevokedLocalKeyDoesNotRemintDuringStatusCheck() async {
-    let (defaults, service, probe) = fixture()
-    defaults.set("owner-a", forKey: "memoryExportMCPApiKeyOwnerUserId")
-    defaults.removeObject(forKey: "memoryExportMCPApiKey")
+  func testRevokedLocalKeyDoesNotRemintDuringStatusCheck() async throws {
+    let (defaults, service, probe) = try fixture()
+    defaults.set("owner-a", forKey: MemoryExportDefaultsKeyName.mcpKeyOwner)
+    defaults.removeObject(forKey: MemoryExportDefaultsKeyName.mcpKey)
     _ = await service.status(for: .obsidian)
     let stored = await service.storedMCPKey()
     let count = await probe.count
