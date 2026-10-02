@@ -4,8 +4,6 @@ import threading
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
-from google.cloud.storage.retry import DEFAULT_RETRY
-
 from utils.other import storage
 
 MAX_SPEAKER_DOWNLOADS = 32
@@ -37,6 +35,8 @@ class AudioChunkReadSession:
 
     @property
     def chunks(self):
+        from google.cloud.storage.retry import DEFAULT_RETRY
+
         if self._chunks is None:
             if not self.in_budget():
                 return []
@@ -56,6 +56,8 @@ class AudioChunkReadSession:
         return self._chunks
 
     def fetch(self, path: str) -> Optional[bytes]:
+        from google.cloud.storage.retry import DEFAULT_RETRY
+
         # Main's merger fans out. One lock serializes actual I/O and budget
         # reservations; retries consume the same count and byte allowance.
         with self.lock:
