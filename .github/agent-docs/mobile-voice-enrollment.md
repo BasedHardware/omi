@@ -52,7 +52,7 @@ and upload retries, independent memory writes, interruption, stale completion,
 and layout with large text on a small phone. Physical-device acceptance still
 requires real speech, enrollment, and memory save/readback against a dev backend.
 
-`integration_test/onboarding_header_capture.dart` is a native screenshot fixture
+`app/integration_test/onboarding_header_capture.dart` is a native screenshot fixture
 for the first prompt, using the production page and layout with inert voice I/O.
 It captures the former floating-header layout and the reserved-header layout
 without signing in or resetting app data. Images are written to
