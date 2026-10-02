@@ -569,7 +569,7 @@ async def test_chain_account_death_labels_error_class_by_typed_reason(monkeypatc
     # The connect counter must carry the typed token so a 402 reads
     # error_class=budget on the dashboard and leg-error alert; 'auth' is
     # reserved for actual authentication refusals. The account bench still
-    # arms either way, and omi_fallback_total keeps its bounded vocabulary.
+    # arms either way, while omi_fallback_total retains its legacy quota/auth labels.
     from utils.stt import live_chain
 
     monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'modulate-velma-2'])
@@ -590,7 +590,8 @@ async def test_chain_account_death_labels_error_class_by_typed_reason(monkeypatc
     assert connect_metrics.connect_error_class(failures[0]['reason']) == error_class
     assert st._soniox_circuit.state == 'open'  # account bench armed, unchanged
     assert fallbacks, 'the bounded fallback vocabulary is still recorded'
-    assert all(event['reason'] == typed_reason for event in fallbacks)
+    fallback_reason = 'quota' if error_class == 'budget' else 'auth'
+    assert all(event['reason'] == fallback_reason for event in fallbacks)
 
 
 def test_mid_session_metrics_retain_their_bounded_vocabulary():

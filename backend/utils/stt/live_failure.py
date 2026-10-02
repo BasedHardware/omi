@@ -106,6 +106,15 @@ _CIRCUIT_OPENING_REASONS = frozenset(
 _SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed', 'vad_failed'})
 
 
+def fallback_metric_reason(reason: str | None) -> str:
+    """Keep established account labels while sharing bounded source causes."""
+    if reason == PROVIDER_BUDGET_EXHAUSTED:
+        return 'quota'
+    if reason == PROVIDER_AUTH_REJECTED:
+        return 'auth'
+    return normalize_live_stt_reason(reason)
+
+
 def _segments_have_transcript(segments: object) -> bool:
     if not isinstance(segments, list):
         return False
@@ -165,7 +174,7 @@ class PendingLiveFailover:
             component=self.component,
             from_mode=self.from_mode,
             to_mode=self.to_mode,
-            reason=normalize_live_stt_reason(self.reason),
+            reason=fallback_metric_reason(self.reason),
             outcome='recovered',
             **first_text_fallback_kwargs(self.first_text_diagnostics),
             **capacity_fallback_kwargs(self.capacity_subtype, self.replay_lag_diagnostics),
@@ -177,7 +186,7 @@ class PendingLiveFailover:
         self._settled = True
         # The hop belongs to the source leg; a successor failure changes the
         # outcome, never the source cause used to reconcile health evidence.
-        reason = normalize_live_stt_reason(self.reason)
+        reason = fallback_metric_reason(self.reason)
         details: FailureFallbackKwargs = {}
         if reason == 'other':
             details['failure_subtype'] = normalize_live_stt_reason(typed_reason)

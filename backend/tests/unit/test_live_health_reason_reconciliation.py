@@ -96,10 +96,6 @@ def test_serving_death_is_attributed_once_and_reconciles_fallback(family, typed,
                 raise ConnectionError('synthetic transport symptom')
 
         leg.raw.on_send = fail_on_send
-        # Untyped send symptoms use send_failed rather than monitor connection_lost.
-        if typed is None:
-            reason = 'send_failed'
-            before = observed(leg.routing_target, outcome, reason)
         assert not leg.send(PCM)
     assert observed(leg.routing_target, outcome, reason) == before + 1
     assert leg.normalized_death_reason == reason
@@ -111,11 +107,12 @@ def test_serving_death_is_attributed_once_and_reconciles_fallback(family, typed,
         hop = live_failure.PendingLiveFailover.from_socket(leg, family, 'soniox')
         assert hop.reason == reason
         hop.to_mode = 'modulate'  # PTT's connect fallback changes the successor, not the source.
+        fallback_reason = {'provider_budget_exhausted': 'quota', 'provider_auth_rejected': 'auth'}.get(reason, reason)
         fallback = OMI_FALLBACK_TOTAL.labels(
             component='stt_live_session',
             from_mode=family,
             to_mode='modulate',
-            reason=reason,
+            reason=fallback_reason,
             outcome='recovered' if recovered else 'exhausted',
         )
         baseline = fallback._value.get()
@@ -147,6 +144,46 @@ def test_window_bounded_raw_reason_wins_even_without_typed_proxy(cause):
     leg.finish()
     assert observed(leg.routing_target, 'censored', cause) == before + 1
     assert not live_chain.health._cost_local
+
+
+def test_false_send_while_raw_socket_is_alive_is_send_failed():
+    class FalseSendSocket(ServingSocket):
+        fail_send = False
+
+        def send(self, _audio):
+            return not self.fail_send
+
+    raw = FalseSendSocket()
+    leg = serving_leg(raw)
+    raw.fail_send = True
+    before = observed(leg.routing_target, 'provider_failure', 'send_failed')
+    assert not leg.send(PCM)
+    leg.finish()
+    assert leg.normalized_death_reason == 'send_failed'
+    assert observed(leg.routing_target, 'provider_failure', 'send_failed') == before + 1
+    assert live_chain.health._cost_local[(leg.routing_target, 'all')].failures == 1
+
+
+@pytest.mark.parametrize(
+    'source_reason,metric_reason',
+    [
+        ('provider_budget_exhausted', 'quota'),
+        ('provider_auth_rejected', 'auth'),
+        ('modulate_serve_error', 'modulate_serve_error'),
+        ('connection_lost', 'connection_lost'),
+        ('first_text_deadline', 'first_text_deadline'),
+        ('capacity_full', 'capacity_full'),
+    ],
+)
+def test_pending_failover_emits_stable_fallback_reason_labels(monkeypatch, source_reason, metric_reason):
+    events = []
+    monkeypatch.setattr(live_failure, 'record_fallback', lambda **kw: events.append(kw))
+    hop = live_failure.PendingLiveFailover(
+        component='stt_live_session', from_mode='soniox', to_mode='modulate', reason=source_reason
+    )
+    hop.note_failure('send_failed')
+    assert len(events) == 1
+    assert events[0]['reason'] == metric_reason
 
 
 @pytest.mark.parametrize('text', [False, True])
@@ -252,6 +289,28 @@ async def test_real_window_publishes_cause_before_latch_and_next_send_is_censore
     leg.finish()
     assert leg.normalized_death_reason == cause
     assert observed(leg.routing_target, 'censored', cause) == baseline + 1
+    assert not live_chain.health._cost_local
+
+
+@pytest.mark.asyncio
+async def test_real_window_failure_survives_raising_send_with_one_censored_observation():
+    class RaisingWindow(WindowedParakeetSocket):
+        raise_after_fail = False
+
+        def send(self, data):
+            if self.raise_after_fail:
+                self.fail('first_text_deadline')
+                raise ConnectionError('synthetic send race')
+            return super().send(data)
+
+    raw = RaisingWindow(lambda _: None, 'http://unused.invalid', 16000, lambda: None)
+    leg = serving_leg(raw, family='parakeet')
+    baseline = observed(leg.routing_target, 'censored', 'first_text_deadline')
+    raw.raise_after_fail = True
+    assert not leg.send(PCM)
+    leg.finish()
+    assert leg.normalized_death_reason == 'first_text_deadline'
+    assert observed(leg.routing_target, 'censored', 'first_text_deadline') == baseline + 1
     assert not live_chain.health._cost_local
 
 

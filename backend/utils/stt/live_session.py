@@ -738,13 +738,21 @@ class LiveLegSocket(STTSocket):
                 try:
                     sent = self.raw.send(audio)
                 except Exception:
-                    # Socket-owned death metadata wins over this send symptom.
-                    self._record_cost_outcome(True, reason='send_failed')
+                    # A raised send is transport evidence unless the socket
+                    # already owns a more specific bounded cause.
+                    self._record_cost_outcome(True, reason='connection_lost')
                     self._dead = True
                     self.finish()
                     return False
                 if sent is not True:
-                    self._record_cost_outcome(True, reason='send_failed')
+                    # False is a send symptom only while the raw socket still
+                    # reports alive. A dead socket with unknown diagnostics is
+                    # a connection loss, and typed causes win in normalization.
+                    try:
+                        raw_dead = bool(self.raw.is_connection_dead)
+                    except Exception:
+                        raw_dead = True
+                    self._record_cost_outcome(True, reason='connection_lost' if raw_dead else 'send_failed')
                     self.finish()
                     self._dead = True
                     return False

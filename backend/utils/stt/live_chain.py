@@ -16,8 +16,7 @@ if TYPE_CHECKING:
 from config.stt_provider_policy import DEEPGRAM_PROVIDERS, provider_for_model_token, provider_for_service
 from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
-from utils.stt.live_failure import PendingLiveFailover
-from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
 from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
@@ -325,8 +324,9 @@ async def connect_configured_chain(
             if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
                 _note_connect_result(failed_provider=service.value)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
-            # Connect and serving observations use the same bounded labels.
-            fallback_reason = normalize_live_stt_reason(reason, default='other')
+            # Preserve legacy omi_fallback_total quota/auth labels while the
+            # health observation and connect counter retain precise tokens.
+            fallback_reason = fallback_metric_reason(reason)
             capacity_subtype = getattr(error, 'capacity_subtype', None) if reason == 'capacity_full' else None
             if active and target is not None and not (reason == 'auth' or account_rejection):
                 failed_targets.add(target.id)
