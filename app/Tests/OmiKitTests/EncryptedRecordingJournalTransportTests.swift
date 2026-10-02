@@ -536,7 +536,7 @@
         backendOrigin: "https://api.example.test",
         ownerKey: "capture-owner-v1:\(key)", loginGeneration: generation,
         ownershipReceipt:
-          "capture1.\(String(repeating: "b", count: 64)).\(String(repeating: "c", count: 64))")
+          "capture1.\(key).\(String(repeating: "c", count: 64))")
     }
 
     private func journalURL(root: URL, partition: String, handle: String) -> URL {
@@ -650,7 +650,7 @@
     func setOwner(_ owner: RecordingJournalOwnerContext?) { self.owner = owner }
   }
 
-  private final class SyntheticRecordingJournalVault: RecordingJournalSecureVault,
+  final class SyntheticRecordingJournalVault: RecordingJournalSecureVault,
     @unchecked Sendable
   {
     private let key = Data(repeating: 0x5a, count: 32)
@@ -690,7 +690,7 @@
     }
   }
 
-  private struct UnavailableRecordingJournalVault: RecordingJournalSecureVault {
+  struct UnavailableRecordingJournalVault: RecordingJournalSecureVault {
     func partitionIdentifier(for owner: RecordingJournalOwnerContext) throws -> String {
       _ = owner
       throw RecordingJournalSecureVaultError.unavailable
@@ -715,7 +715,11 @@
     }
   }
 
-  private actor TestRecordingJournalBackend: BackendTransport {
+  private actor TestRecordingJournalBackend: BackendTransport, RecordingJournalOwnerRequesting {
+    func requestRecordingJournal(_ request: BackendRequest,
+      owner: RecordingJournalOwnerContext) async throws -> BackendResponse {
+      try await self.request(request)
+    }
     static let handle = "123e4567-e89b-42d3-a456-426614174000"
     static let sessionID = "223e4567-e89b-42d3-a456-426614174000"
 

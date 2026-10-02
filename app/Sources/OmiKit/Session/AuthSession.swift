@@ -117,14 +117,17 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
     private let lock = NSLock()
     private var signInAttempt: Int = 0
     private var settled = true
+    private var attemptRevision: String?
+    private let urlSession: URLSession
 
     public init(
         config: AuthSessionConfig, credentials: CredentialStoring,
-        browserAuth: BrowserAuthControlling? = nil
+        browserAuth: BrowserAuthControlling? = nil, urlSession: URLSession = .shared
     ) {
         self.config = config
         self.credentials = credentials
         self.browserAuth = browserAuth
+        self.urlSession = urlSession
         self.handoffs = InvalidationStream()
         self.invalidations = InvalidationStream()
     }
@@ -137,13 +140,28 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
     /// Returns a fresh Bearer id token, or nil when no session is stored.
     /// A definitive refresh failure clears the stored session.
     public func resolveBearerToken() async -> String? {
+        #if !SKIP && canImport(Security)
+        let secure = credentials as? SecureSessionCredentialStoring
+        let snapshot: SecureSessionSnapshot?
+        do { snapshot = try secure?.secureSnapshot() } catch { return nil }
+        #endif
         guard var session = await credentials.load() else { return nil }
+        #if !SKIP && canImport(Security)
+        if let snapshot, snapshot.session != session { return nil }
+        #endif
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         if session.expiresAtMs > nowMs + 60_000, !session.idToken.isEmpty {
             return session.idToken
         }
         guard !session.refreshToken.isEmpty else {
+            #if !SKIP && canImport(Security)
+            if let secure, let snapshot {
+                do { try secure.replaceSession(nil, expecting: snapshot.revision) }
+                catch { return nil }
+            } else { await credentials.clear() }
+            #else
             await credentials.clear()
+            #endif
             invalidations.yield(())
             return nil
         }
@@ -157,7 +175,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
         request.httpBody = Data(
             "grant_type=refresh_token&refresh_token=\(encodeQueryComponent(session.refreshToken))"
                 .utf8)
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
+        guard let (data, response) = try? await urlSession.data(for: request),
             let http = response as? HTTPURLResponse, http.statusCode == 200,
             let body = JSON.parseOrNull(String(data: data, encoding: String.Encoding.utf8)),
             body.isRecord,
@@ -166,6 +184,9 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
         else {
             // Transient failures keep the session; only the caller can decide
             // to clear it through definitive handling at the transport layer.
+            #if !SKIP && canImport(Security)
+            if secure != nil { return nil }
+            #endif
             return session.idToken.isEmpty ? nil : session.idToken
         }
         let expiresIn = body["expires_in"]?.numberValue ?? 3600
@@ -175,7 +196,17 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
         session.expiresAtMs = nowMs + Int64(expiresIn * 1000)
         session.uid = userId
         session.firebaseApiKey = apiKey
+        #if !SKIP && canImport(Security)
+        if let secure, let snapshot {
+            // A refresh may update tokens only for the snapshot it started with.
+            // A concurrent owner receipt write or logout makes it retry later.
+            if let previousUID = snapshot.session?.uid, userId != previousUID { return nil }
+            do { try secure.replaceSession(session, expecting: snapshot.revision) }
+            catch { return nil }
+        } else { await credentials.store(session) }
+        #else
         await credentials.store(session)
+        #endif
         return idToken
     }
 
@@ -192,6 +223,23 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
     public func redeemCustomToken(
         _ customToken: String, pinPlane storedPlane: String?
     ) async -> Bool {
+        await redeemCustomToken(customToken, pinPlane: storedPlane, attempt: nil)
+    }
+
+    private func redeemCustomToken(
+        _ customToken: String, pinPlane storedPlane: String?, attempt: Int?
+    ) async -> Bool {
+        #if !SKIP && canImport(Security)
+        let secure = credentials as? SecureSessionCredentialStoring
+        let snapshot: SecureSessionSnapshot?
+        do { snapshot = try secure?.secureSnapshot() } catch { return false }
+        if let attempt {
+            guard lock.withLock({
+                attempt == signInAttempt && !settled
+                    && (snapshot == nil || snapshot?.revision == attemptRevision)
+            }) else { return false }
+        }
+        #endif
         var request = URLRequest(
             url: URL(
                 string:
@@ -207,7 +255,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
                 ])
             ).utf8
         )
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
+        guard let (data, response) = try? await urlSession.data(for: request),
             let http = response as? HTTPURLResponse, http.statusCode == 200,
             let body = JSON.parseOrNull(String(data: data, encoding: String.Encoding.utf8)),
             body.isRecord,
@@ -217,13 +265,32 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
             return false
         }
         let expiresIn = body["expiresIn"]?.numberValue ?? 3600
-        await credentials.store(
-            StoredSession(
+        let stored = StoredSession(
                 idToken: idToken, refreshToken: refreshToken,
                 expiresAtMs: Int64(Date().timeIntervalSince1970 * 1000)
                     + Int64(expiresIn * 1000),
                 uid: body["localId"]?.stringValue,
-                firebaseApiKey: config.firebaseApiKey))
+                firebaseApiKey: config.firebaseApiKey,
+                loginGeneration: UUID().uuidString.lowercased())
+        #if !SKIP && canImport(Security)
+        if let secure, let snapshot {
+            do {
+                try lock.withLock {
+                    if let attempt {
+                        guard attempt == signInAttempt && !settled else {
+                            throw SecureSessionError.changed
+                        }
+                    }
+                    try secure.replaceSession(stored, expecting: snapshot.revision)
+                    if let storedPlane {
+                        UserDefaults.standard.set(storedPlane, forKey: SOFTWARE_PLANE_DEFAULTS_KEY)
+                    }
+                }
+            } catch { return false }
+            return true
+        }
+        #endif
+        await credentials.store(stored)
         if let storedPlane {
             UserDefaults.standard.set(storedPlane, forKey: SOFTWARE_PLANE_DEFAULTS_KEY)
         }
@@ -233,7 +300,11 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
     // MARK: Sign-in flows
 
     public func signIn() async throws -> Bool {
-        let attempt = lock.withLock { () -> Int in
+        let attempt = try lock.withLock { () throws -> Int in
+            #if !SKIP && canImport(Security)
+            attemptRevision = try (credentials as? SecureSessionCredentialStoring)?
+                .secureSnapshot().revision
+            #endif
             signInAttempt += 1
             settled = false
             return signInAttempt
@@ -253,6 +324,14 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
     }
 
     public func signOut() async throws -> Bool {
+        await cancelSignIn()
+        #if !SKIP && canImport(Security)
+        if let secure = credentials as? SecureSessionCredentialStoring {
+            defer { invalidations.yield(()) }
+            try secure.clearSecureSession()
+            return true
+        }
+        #endif
         await credentials.clear()
         invalidations.yield(())
         return true
@@ -291,7 +370,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
                 ])
             ).utf8
         )
-        guard let (data, response) = try? await URLSession.shared.data(for: start),
+        guard let (data, response) = try? await urlSession.data(for: start),
             let http = response as? HTTPURLResponse, http.statusCode == 201,
             let body = JSON.parseOrNull(String(data: data, encoding: String.Encoding.utf8)),
             body.isRecord,
@@ -322,7 +401,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
                 ).utf8
             )
             let customToken: String?
-            if let (data, response) = try? await URLSession.shared.data(for: exchange),
+            if let (data, response) = try? await urlSession.data(for: exchange),
                 let http = response as? HTTPURLResponse
             {
                 if http.statusCode == 200,
@@ -342,7 +421,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
             }
             if let customToken, !customToken.isEmpty {
                 guard isAttemptCurrent(attempt) else { return false }
-                return await redeemCustomToken(customToken, pinPlane: "new")
+                return await redeemCustomToken(customToken, pinPlane: "new", attempt: attempt)
             }
             try await Task.sleep(nanoseconds: 1_000_000_000)
         }
@@ -392,7 +471,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
         exchange.setValue(
             "application/x-www-form-urlencoded", forHTTPHeaderField: "content-type")
         exchange.httpBody = Data(body.utf8)
-        guard let (data, response) = try? await URLSession.shared.data(for: exchange),
+        guard let (data, response) = try? await urlSession.data(for: exchange),
             let http = response as? HTTPURLResponse, http.statusCode == 200,
             let payload = JSON.parseOrNull(String(data: data, encoding: String.Encoding.utf8)),
             payload.isRecord
@@ -406,7 +485,7 @@ public final class OmiAuthSession: Authenticating, SessionProbeCapable, @uncheck
             throw AuthError.unauthorized("Omi cloud did not return a usable session")
         }
         guard isAttemptCurrent(attempt) else { return false }
-        return await redeemCustomToken(customToken, pinPlane: "old")
+        return await redeemCustomToken(customToken, pinPlane: "old", attempt: attempt)
     }
 }
 

@@ -40,7 +40,7 @@ public struct RecordingJournalOwnerContext: Sendable, Hashable {
     "omi-recording-partition-v1\n\(backendOrigin)\n\(ownerKey)\n\(loginGeneration)"
   }
 
-  fileprivate func validate() throws {
+  func validate() throws {
     guard
       let components = URLComponents(string: backendOrigin),
       components.scheme == "https" || components.scheme == "http",
@@ -49,7 +49,8 @@ public struct RecordingJournalOwnerContext: Sendable, Hashable {
       components.query == nil, components.fragment == nil,
       validHexToken(ownerKey, prefix: "capture-owner-v1:", hexCount: 64),
       isCaptureUUID(loginGeneration),
-      validReceipt(ownershipReceipt)
+      validReceipt(ownershipReceipt),
+      ownershipReceipt.split(separator: ".")[1] == ownerKey.dropFirst("capture-owner-v1:".count)
     else {
       throw EncryptedRecordingJournalError.invalidOwnerContext
     }
@@ -60,6 +61,27 @@ public struct RecordingJournalOwnerContext: Sendable, Hashable {
 /// authenticated and validated its ownership receipt against the current login.
 public protocol RecordingJournalOwnerContextProviding: Sendable {
   func currentRecordingJournalOwner() async throws -> RecordingJournalOwnerContext?
+  func freshRecordingJournalOwner() async throws -> RecordingJournalOwnerContext?
+}
+
+extension RecordingJournalOwnerContextProviding {
+  public func freshRecordingJournalOwner() async throws -> RecordingJournalOwnerContext? {
+    try await currentRecordingJournalOwner()
+  }
+}
+
+/// Authenticated transports must bind the receipt, bearer, origin and login in
+/// one request snapshot. Plain BackendTransport cannot safely replay journals.
+public protocol RecordingJournalOwnerRequesting: Sendable {
+  func requestRecordingJournal(_ request: BackendRequest,
+    owner: RecordingJournalOwnerContext) async throws -> BackendResponse
+}
+
+extension RecordingJournalOwnerContext {
+  func hasSameIdentity(as other: RecordingJournalOwnerContext) -> Bool {
+    backendOrigin == other.backendOrigin && ownerKey == other.ownerKey
+      && loginGeneration == other.loginGeneration
+  }
 }
 
 /// Required secure-vault bridge for journal encryption and owner partitioning.
@@ -718,11 +740,14 @@ private func isLowerHex(_ byte: UInt8) -> Bool {
     public func requestRecordingJournal(
       handle: String, request: BackendRequest
     ) async throws -> BackendResponse {
-      let owner = try await currentOwner()
+      let owner = try await currentOwner(fresh: true)
       let journal = try readJournal(handle: handle, owner: owner)
       try validateOwnedRequest(request, journal: journal)
-      try await requireCurrent(owner)
-      let response = try await backend.request(request)
+      guard let boundBackend = backend as? RecordingJournalOwnerRequesting else {
+        throw EncryptedRecordingJournalError.ownerUnavailable
+      }
+      let response = try await boundBackend.requestRecordingJournal(request, owner: owner)
+      try await requireCurrent(owner, fresh: true)
       guard request.path == "/v1/device-sessions", request.method == .POST,
         (200..<300).contains(response.status)
       else { return response }
@@ -760,18 +785,22 @@ private func isLowerHex(_ byte: UInt8) -> Bool {
       }
     }
 
-    private func currentOwner() async throws -> RecordingJournalOwnerContext {
+    private func currentOwner(fresh: Bool = false) async throws -> RecordingJournalOwnerContext {
       guard !retired else { throw EncryptedRecordingJournalError.retired }
-      guard let owner = try await ownerProvider.currentRecordingJournalOwner() else {
+      let resolved = fresh
+        ? try await ownerProvider.freshRecordingJournalOwner()
+        : try await ownerProvider.currentRecordingJournalOwner()
+      guard !retired else { throw EncryptedRecordingJournalError.retired }
+      guard let owner = resolved else {
         throw EncryptedRecordingJournalError.ownerUnavailable
       }
       try owner.validate()
       return owner
     }
 
-    private func requireCurrent(_ expected: RecordingJournalOwnerContext) async throws {
-      let current = try await currentOwner()
-      guard current == expected else { throw EncryptedRecordingJournalError.ownerChanged }
+    private func requireCurrent(_ expected: RecordingJournalOwnerContext, fresh: Bool = false) async throws {
+      let current = try await currentOwner(fresh: fresh)
+      guard current.hasSameIdentity(as: expected) else { throw EncryptedRecordingJournalError.ownerChanged }
     }
 
     private func partitionDirectory(_ owner: RecordingJournalOwnerContext) throws -> URL {
