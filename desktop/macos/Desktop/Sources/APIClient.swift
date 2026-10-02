@@ -527,7 +527,7 @@ actor APIClient {
   }
 
   /// Refresh auth and build a retry request. Returns nil when already retried (caller should throw).
-  private func authorizedRetryRequest(
+  func authorizedRetryRequest(
     from request: URLRequest,
     retriedAuth: Bool,
     authPolicy: RequestAuthPolicy

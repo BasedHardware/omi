@@ -12155,17 +12155,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count beszélő',
-      one: '1 beszélő',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Kapcsolja be az Omi alkalmazást a Parancsikonok → Siri menüben. Mondja ki: „$askPhrase” vagy „$questionPhrase”, majd tegye fel kérdését.';
   }
@@ -12187,6 +12176,21 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Az Omi ezen verziója már nem támogatott. Frissítsen a felvétel és a szinkronizálás folytatásához.';
+
+  @override
+  String get exportingAllData =>
+      'Az adatai exportálása folyamatban… Tartsa nyitva az Omi-t; a nagy fiókok több percet is igénybe vehetnek.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélő',
+      one: '1 beszélő',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Szinkronizált másolatok automatikus törlése';

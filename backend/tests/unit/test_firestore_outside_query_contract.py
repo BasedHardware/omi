@@ -101,7 +101,11 @@ def test_operational_profiles_are_explicit_and_exported(outside_results):
     assert (
         outside.DRIVERS['utils.memory.belief_backfill._default_item_reader'].profiles[0].name.startswith('operational-')
     )
-    assert outside.DRIVERS['services.users.data_export._iter_user_subcollection'].profiles[0].name.startswith('export-')
+    assert (
+        outside.DRIVERS['services.users.data_export_iterators.iter_user_subcollection']
+        .profiles[0]
+        .name.startswith('export-')
+    )
     assert (
         outside.DRIVERS['utils.memory.daily_memory_sweep_inventory._seed_registry']
         .profiles[0]
@@ -110,7 +114,7 @@ def test_operational_profiles_are_explicit_and_exported(outside_results):
 
 
 def test_nested_export_records_the_child_query(outside_results):
-    shapes = outside_results['services.users.data_export._iter_user_nested_subcollection'].shapes
+    shapes = outside_results['services.users.data_export_iterators.iter_user_nested_subcollection'].shapes
     assert {shape.collection_group for shape in shapes} >= {
         'goals',
         'workstreams',

@@ -12146,17 +12146,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Govornika: $count',
-      one: '1 govornik',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Uključite Omi u Prečacima → Siri. Recite „$askPhrase“ ili „$questionPhrase“, a zatim postavite pitanje.';
   }
@@ -12178,6 +12167,21 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Ova verzija Omija više nije podržana. Ažurirajte kako biste nastavili snimati i sinkronizirati.';
+
+  @override
+  String get exportingAllData =>
+      'Izvoz vaših podataka… Držite Omi otvorenim; veliki računi mogu potrajati nekoliko minuta.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Govornika: $count',
+      one: '1 govornik',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Automatski ukloni sinkronizirane kopije';

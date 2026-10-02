@@ -12206,17 +12206,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count Sprecher',
-      one: '1 Sprecher',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Aktiviere Omi unter Kurzbefehle → Siri. Sage „$askPhrase“ oder „$questionPhrase“ und stelle dann deine Frage.';
   }
@@ -12238,6 +12227,21 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Diese Version von Omi wird nicht mehr unterstützt. Aktualisieren Sie, um weiterhin aufzunehmen und zu synchronisieren.';
+
+  @override
+  String get exportingAllData =>
+      'Deine Daten werden exportiert… Lass Omi geöffnet; bei großen Konten kann das mehrere Minuten dauern.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Sprecher',
+      one: '1 Sprecher',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Synchronisierte Kopien automatisch entfernen';
