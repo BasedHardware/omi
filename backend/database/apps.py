@@ -553,7 +553,13 @@ def list_api_keys_db(app_id: str) -> List[Dict[str, Any]]:
         .order_by('created_at', direction='DESCENDING')
         .stream()
     )
-    return [{k: v for k, v in _typed_doc(doc).items() if k != 'hashed'} for doc in api_keys_ref]
+    result: List[Dict[str, Any]] = []
+    for doc in api_keys_ref:
+        item = {k: v for k, v in _typed_doc(doc).items() if k != 'hashed'}
+        if not item.get('id') and getattr(doc, 'id', None):
+            item['id'] = doc.id
+        result.append(item)
+    return result
 
 
 def delete_api_key_db(app_id: str, key_id: str) -> bool:

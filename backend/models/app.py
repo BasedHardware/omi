@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Literal, Mapping, Optional, Set
+from typing import Any, Callable, List, Literal, Mapping, Optional, Set
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -36,16 +36,71 @@ class AppReview(BaseModel):
 
     @classmethod
     def from_json(cls, json_data: Mapping[str, Any]) -> "AppReview":
+        rated_at = json_data['rated_at']
+        if isinstance(rated_at, str):
+            rated_at_val = datetime.fromisoformat(rated_at)
+        else:
+            rated_at_val = rated_at
         responded_at = json_data.get('responded_at')
+        if isinstance(responded_at, str):
+            responded_at_val = datetime.fromisoformat(responded_at)
+        else:
+            responded_at_val = responded_at
         return cls(
             uid=json_data['uid'],
-            rated_at=datetime.fromisoformat(json_data['rated_at']),
+            rated_at=rated_at_val,
             score=json_data['score'],
             review=json_data['review'],
             username=json_data.get('username'),
             response=json_data.get('response'),
-            responded_at=datetime.fromisoformat(responded_at) if isinstance(responded_at, str) else None,
+            responded_at=responded_at_val,
         )
+
+    @classmethod
+    def deserialize_safe(cls, data: Any) -> Optional["AppReview"]:
+        """Build an AppReview from a raw stored/cached review dict, returning None if
+        validation fails so malformed review documents cannot crash review endpoints."""
+        if not data or not isinstance(data, dict):
+            return None
+        try:
+            if isinstance(data.get('rated_at'), str) or isinstance(data.get('responded_at'), str):
+                return cls.from_json(data)
+            return cls(**data)
+        except Exception:
+            logger.warning('Skipping malformed app review doc: %s', data.get('uid'))
+            return None
+
+    @classmethod
+    def deserialize_many_safe(
+        cls,
+        records: Any,
+        on_error: Optional[Callable[[Mapping[str, Any], Exception], None]] = None,
+    ) -> List["AppReview"]:
+        """Build AppReview objects from raw stored/cached records, skipping any that fail
+        validation or lack review text so one malformed review cannot 500 the reviews endpoint.
+        Mirrors Person.deserialize_many_safe and Message.deserialize_many_safe."""
+        if not records:
+            return []
+        items = records.values() if isinstance(records, dict) else records
+        parsed: List["AppReview"] = []
+        for record in items:
+            if not isinstance(record, dict):
+                continue
+            if not record.get('review'):
+                continue
+            try:
+                if isinstance(record.get('rated_at'), str) or isinstance(record.get('responded_at'), str):
+                    obj = cls.from_json(record)
+                else:
+                    obj = cls(**record)
+                parsed.append(obj)
+            except Exception as exc:  # noqa: BLE001 - one bad record must not break reviews
+                if on_error is not None:
+                    on_error(record, exc)
+                else:
+                    logger.warning('Skipping malformed review doc for %s: %s', record.get('uid'), exc)
+        return parsed
+
 
 
 class AuthStep(BaseModel):
@@ -123,6 +178,44 @@ class ApiKey(BaseModel):
     hashed: str
     label: str
     created_at: Optional[datetime] = None
+
+
+class AppApiKeyResponse(BaseModel):
+    id: str
+    label: str = 'API Key'
+    created_at: Optional[datetime] = None
+    secret: Optional[str] = None
+
+    @classmethod
+    def deserialize_safe(cls, data: Any) -> Optional["AppApiKeyResponse"]:
+        """Build an AppApiKeyResponse from a raw stored dict, returning None if validation fails
+        so one malformed key document cannot 500 the API keys endpoint."""
+        if not data or not isinstance(data, dict):
+            return None
+        try:
+            doc_data = dict(data)
+            if not doc_data.get('label'):
+                doc_data['label'] = 'API Key'
+            return cls(**doc_data)
+        except ValidationError:
+            logger.warning('Skipping malformed api key doc %s: ValidationError', data.get('id'))
+            return None
+
+    @classmethod
+    def deserialize_many_safe(cls, records: Any) -> List["AppApiKeyResponse"]:
+        """Build AppApiKeyResponse objects from raw stored records, skipping any that fail
+        validation so one malformed key document cannot 500 the keys list."""
+        if not records:
+            return []
+        items = records.values() if isinstance(records, dict) else records
+        parsed: List["AppApiKeyResponse"] = []
+        for record in items:
+            if not isinstance(record, dict):
+                continue
+            key_obj = cls.deserialize_safe(record)
+            if key_obj is not None:
+                parsed.append(key_obj)
+        return parsed
 
 
 class AppBaseModel(BaseModel):
