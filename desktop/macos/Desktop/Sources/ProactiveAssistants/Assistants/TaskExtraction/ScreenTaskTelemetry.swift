@@ -23,6 +23,16 @@ final class ScreenTaskFrameMetrics: @unchecked Sendable {
   var deliveryMS: Double = 0
   var counts = ScreenTaskDeliveryCounts()
 
+  func finish(error: Error) {
+    errorClass = ScreenTaskErrorPolicy.errorClass(error)
+    if errorClass == "legacy_task_reservation_inactive" {
+      outcome = "refused"
+    } else {
+      outcome = "failed"
+      counts.failed += 1
+    }
+  }
+
   func properties(captureToTerminalMS: Double) -> [String: Any] {
     func timing(_ value: Double) -> Double { value.isFinite ? max(0, min(value, 86_400_000)) : 0 }
     return [

@@ -92,6 +92,13 @@ feature-off work does not acquire that separate gate/extraction cooldown.
 Capture still proposes pending candidates, never accepted action items. Policy
 rejection, coalescence and an unsynced outbox are not delivered suggestions.
 
+The sibling reservation policy can return HTTP 200 with `X-Omi-Error-Class=legacy_task_reservation_inactive`
+and `X-Omi-Reservation-State=inactive`. The client terminates quietly without decoding
+its synthetic `no_task_found` as inference. Terminal `outcome=refused`,
+`error_class=legacy_task_reservation_inactive`, `extractor=none`, zero delivery/failure
+counts and `pipeline=legacy_recovery` identify a refused recovery; normal legacy
+work instead keeps `pipeline=legacy`. No retry, observation or candidate is created.
+
 Every processed frame emits `Screen Task Frame Terminal` with `schema_version=2`,
 `pipeline` (`screen_task_v2`, `legacy`, `legacy_recovery`), `gate_outcome`,
 `audit_sample`, actual `extractor` (`gemini_3_8`, `legacy`, `none`), terminal

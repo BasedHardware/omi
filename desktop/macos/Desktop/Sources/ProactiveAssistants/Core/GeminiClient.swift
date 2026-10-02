@@ -218,6 +218,7 @@ actor GeminiClient {
       switch self {
       case .planGated: return "plan_or_quota"
       case .apiError(let message, let retryable):
+        if message == "legacy_task_reservation_inactive" { return "legacy_task_reservation_inactive" }
         if message.hasPrefix("HTTP 401:") { return "auth" }
         if message.hasPrefix("HTTP 402:") { return "plan_or_quota" }
         if message.hasPrefix("HTTP 429:") { return "backpressure" }
@@ -295,6 +296,7 @@ actor GeminiClient {
           || lower.contains("usage limit")
           || lower.contains("quota exceeded")
           || lower.contains("http 402")
+          || lower == "legacy_task_reservation_inactive"
       case .missingAPIKey, .planGated:
         return true
       case .networkError, .invalidResponse:
@@ -441,6 +443,14 @@ actor GeminiClient {
   static func httpError(response: URLResponse, data: Data) -> GeminiClientError? {
     guard let httpResponse = response as? HTTPURLResponse else { return nil }
     let status = httpResponse.statusCode
+    // A sibling reservation policy returns a successful no-task envelope without inference.
+    // Preserve its quiet termination while distinguishing it from a real empty extraction.
+    if status == 200,
+      httpResponse.value(forHTTPHeaderField: "X-Omi-Error-Class") == "legacy_task_reservation_inactive",
+      httpResponse.value(forHTTPHeaderField: "X-Omi-Reservation-State") == "inactive"
+    {
+      return .apiError("legacy_task_reservation_inactive", retryable: false)
+    }
     guard !(200..<300).contains(status) else { return nil }
 
     if ManagedPlanGateHTTP.isPlanGated(status: status, data: data) {

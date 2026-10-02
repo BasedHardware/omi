@@ -16,6 +16,7 @@ private final class RampState: @unchecked Sendable {
   var change: String?
   var gateError: Error?
   var extractionError: Error?
+  var legacyError: Error?
 
   func boundary(_ stage: String) {
     lock.withLock {
@@ -83,6 +84,7 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
       legacy: {
         try ScreenTaskWorkAuthority.require()
         state.append("legacy")
+        if let error = state.legacyError { throw error }
         return ScreenTaskExtraction(results: [], searchCount: 0, extractor: "legacy")
       }, fallback: { _, _ in }, now: { state.now })
   }
@@ -291,6 +293,47 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
       XCTAssertEqual(ScreenTaskErrorPolicy.errorClass(error), "auth")
     }
     XCTAssertEqual(state.sent, ["gate"])
+  }
+
+  func testHTTP200LegacyReservationRefusalIsQuietAndNeverCountedAsExtraction() async throws {
+    let url = try XCTUnwrap(URL(string: "http://local"))
+    let body = Data(
+      #"{"candidates":[{"content":{"parts":[{"functionCall":{"name":"no_task_found","args":{"context_summary":"","current_activity":""}}}]},"finishReason":"STOP"}]}"#
+        .utf8)
+    let response = try XCTUnwrap(
+      HTTPURLResponse(
+        url: url, statusCode: 200, httpVersion: nil,
+        headerFields: [
+          "X-Omi-Retryable": "false", "X-Omi-Reservation-State": "inactive",
+          "X-Omi-Error-Class": "legacy_task_reservation_inactive",
+        ]))
+    let refusal = try XCTUnwrap(GeminiClient.httpError(response: response, data: body))
+    XCTAssertFalse(refusal.shouldAutoRetry)
+    XCTAssertTrue(refusal.isExpectedProductState)
+    let normalResponse = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [:]))
+    XCTAssertNil(GeminiClient.httpError(response: normalResponse, data: body))
+    let state = RampState()
+    state.extractionError = URLError(.timedOut)
+    state.legacyError = refusal
+    let metrics = ScreenTaskFrameMetrics()
+    do {
+      _ = try await ScreenTaskPipeline().run(
+        frame: frame(), key: "owner:1:window", services: services(state), metrics: metrics)
+      XCTFail("refusal was treated as a successful extraction")
+    } catch {
+      metrics.finish(error: error)
+    }
+    XCTAssertEqual(state.sent, ["gate", "extraction", "legacy"])
+    XCTAssertEqual(metrics.pipeline, "legacy_recovery")
+    XCTAssertEqual(metrics.legacyAttempts, 1)
+    XCTAssertEqual(metrics.outcome, "refused")
+    XCTAssertEqual(metrics.errorClass, "legacy_task_reservation_inactive")
+    XCTAssertEqual(metrics.extractor, "none")
+    XCTAssertEqual(metrics.counts.pendingDelivered, 0)
+    XCTAssertEqual(metrics.counts.failed, 0)
+    let properties = metrics.properties(captureToTerminalMS: 1)
+    XCTAssertEqual(properties["outcome"] as? String, "refused")
+    XCTAssertEqual(properties["pending_delivered"] as? Int, 0)
   }
 
   func testRetryAfterDefersOnlyOriginalOwnerSession() throws {

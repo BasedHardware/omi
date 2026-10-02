@@ -74,15 +74,15 @@ extension TaskAssistant {
           metrics.errorClass = "delivery_failure"
         }
       } catch {
-        metrics.outcome = "failed"
-        metrics.errorClass = ScreenTaskErrorPolicy.errorClass(error)
-        metrics.counts.failed += 1
-        if enabled {
-          ScreenTaskLogging.failed()
-        } else if ![
-          "auth", "plan_or_quota", "backpressure", "http_terminal", "owner_revoked", "privacy_revoked", "cancelled",
-        ].contains(metrics.errorClass) {
-          logError("Task extraction error", error: error)
+        metrics.finish(error: error)
+        if metrics.outcome != "refused" {
+          if enabled {
+            ScreenTaskLogging.failed()
+          } else if ![
+            "auth", "plan_or_quota", "backpressure", "http_terminal", "owner_revoked", "privacy_revoked", "cancelled",
+          ].contains(metrics.errorClass) {
+            logError("Task extraction error", error: error)
+          }
         }
       }
     }

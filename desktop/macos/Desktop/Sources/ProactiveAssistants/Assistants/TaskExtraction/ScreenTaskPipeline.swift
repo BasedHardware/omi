@@ -135,6 +135,7 @@ actor ScreenTaskPipeline {
       metrics.fallbackReason = reason
       services.fallback("screen_task_extraction", reason)
       metrics.legacyAttempts += 1
+      metrics.pipeline = "legacy_recovery"
       let start = services.now()
       var fallback = try await ScreenTaskWorkAuthority.$validate.withValue(services.validateFrame) {
         try await services.legacy()
@@ -142,7 +143,6 @@ actor ScreenTaskPipeline {
       try services.validateFrame()
       metrics.extractionMS += (services.now() - start) * 1000
       metrics.extractor = "legacy"
-      metrics.pipeline = "legacy_recovery"
       fallback.admission = admission
       fallback.extractor = "legacy"
       return fallback
