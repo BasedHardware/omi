@@ -19,7 +19,6 @@ from pathlib import Path
 import sqlite3
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-import uuid
 
 _SQLITE_MAGIC = b"SQLite format 3\x00"
 
@@ -38,6 +37,29 @@ CREATE TABLE IF NOT EXISTS memories (
 CREATE INDEX IF NOT EXISTS memories_category ON memories (category);
 CREATE INDEX IF NOT EXISTS memories_created_at ON memories (created_at);
 CREATE INDEX IF NOT EXISTS memories_visibility ON memories (visibility);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+    id UNINDEXED,
+    content,
+    tags,
+    category
+);
+
+CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+    DELETE FROM memories_fts WHERE id = new.id;
+    INSERT INTO memories_fts(id, content, tags, category)
+    VALUES (new.id, new.content, new.tags, new.category);
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+    DELETE FROM memories_fts WHERE id = old.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+    DELETE FROM memories_fts WHERE id = old.id;
+    INSERT INTO memories_fts(id, content, tags, category)
+    VALUES (new.id, new.content, new.tags, new.category);
+END;
 """
 
 
@@ -87,19 +109,26 @@ def tags_text(value: Any) -> Optional[str]:
 
 
 def utc_stamp(value: Any) -> Optional[str]:
-    """Normalise an ISO-8601 timestamp to UTC 'YYYY-MM-DD HH:MM:SS' so SQLite date functions work."""
+    """Normalise an ISO-8601 timestamp to UTC 'YYYY-MM-DD HH:MM:SS' text.
+
+    Returns None for None/empty so SQLite NULL is used instead of a string,
+    keeping date functions (strftime, julianday) working without coercion.
+    Naive datetimes are assumed to be in UTC.
+    """
     if not isinstance(value, str) or not value:
         return None
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if parsed.tzinfo is not None:
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        else:
             parsed = parsed.astimezone(timezone.utc)
         return parsed.strftime("%Y-%m-%d %H:%M:%S")
     except (ValueError, OverflowError):
         return None
 
 
-def rows_from(source: str) -> List[Tuple[str, str, Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], str]]:
+def rows_from(source: str) -> List[Tuple[Any, ...]]:
     """Parse one file or stdin into rows ready for database insertion."""
     if source == "-":
         content = sys.stdin.buffer.read()
@@ -130,10 +159,9 @@ def rows_from(source: str) -> List[Tuple[str, str, Optional[str], Optional[str],
             raise ValueError(f"{source_label} item {idx}: each memory must be an object")
 
         item_id = item.get("id")
-        if not item_id or not str(item_id).strip():
-            clean_id = f"auto_{uuid.uuid4().hex}"
-        else:
-            clean_id = str(item_id).strip()
+        if item_id is None or not str(item_id).strip():
+            raise ValueError(f"{source_label} item {idx}: memory is missing a non-empty 'id'")
+        clean_id = str(item_id).strip()
 
         content_text = item.get("content") or ""
         app_id = item.get("app_id") or item.get("source_app")

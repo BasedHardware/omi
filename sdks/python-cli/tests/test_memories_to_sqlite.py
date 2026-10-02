@@ -102,7 +102,9 @@ class TestMemoriesToSqlite(unittest.TestCase):
 
         conn = sqlite3.connect(self.db_path)
         try:
-            rows = conn.execute("SELECT id, content, category, tags, visibility, app_id FROM memories ORDER BY id").fetchall()
+            rows = conn.execute(
+                "SELECT id, content, category, tags, visibility, app_id FROM memories ORDER BY id"
+            ).fetchall()
             self.assertEqual(len(rows), 3)
             self.assertEqual(rows[0][0], "mem_01_work")
             self.assertEqual(rows[0][2], "work")
@@ -140,13 +142,67 @@ class TestMemoriesToSqlite(unittest.TestCase):
             conn.close()
 
     def test_envelope_unwrapping(self):
-        envelope = {"memories": self.sample_memories}
-        json_file = self.tmp / "envelope.json"
-        json_file.write_text(json.dumps(envelope), encoding="utf-8")
+        for key in ("memories", "items", "data", "results"):
+            envelope = {key: self.sample_memories}
+            json_file = self.tmp / f"envelope_{key}.json"
+            json_file.write_text(json.dumps(envelope), encoding="utf-8")
+            rows = m2sql.rows_from(str(json_file))
+            self.assertEqual(len(rows), 3)
 
-        loaded, added, total = m2sql.load(str(self.db_path), [str(json_file)])
-        self.assertEqual(loaded, 3)
-        self.assertEqual(total, 3)
+        # Single bare dict object
+        bare_obj = {"id": "single_mem", "content": "Standalone memory note"}
+        json_file_bare = self.tmp / "bare.json"
+        json_file_bare.write_text(json.dumps(bare_obj), encoding="utf-8")
+        rows_bare = m2sql.rows_from(str(json_file_bare))
+        self.assertEqual(len(rows_bare), 1)
+        self.assertEqual(rows_bare[0][0], "single_mem")
+
+    def test_missing_or_empty_id_rejected(self):
+        # Missing id
+        bad_json = self.tmp / "missing_id.json"
+        bad_json.write_text(json.dumps([{"content": "No ID here"}]), encoding="utf-8")
+        with self.assertRaises(ValueError) as ctx:
+            m2sql.rows_from(str(bad_json))
+        self.assertIn("missing a non-empty 'id'", str(ctx.exception))
+
+        # Whitespace-only id
+        empty_id_json = self.tmp / "empty_id.json"
+        empty_id_json.write_text(json.dumps([{"id": "   ", "content": "Empty ID"}]), encoding="utf-8")
+        with self.assertRaises(ValueError) as ctx:
+            m2sql.rows_from(str(empty_id_json))
+        self.assertIn("missing a non-empty 'id'", str(ctx.exception))
+
+    def test_naive_timestamp_normalized_to_utc(self):
+        naive_str = "2025-01-01T10:00:00"
+        stamp = m2sql.utc_stamp(naive_str)
+        self.assertEqual(stamp, "2025-01-01 10:00:00")
+
+        offset_str = "2025-01-01T10:00:00+02:00"
+        stamp_offset = m2sql.utc_stamp(offset_str)
+        self.assertEqual(stamp_offset, "2025-01-01 08:00:00")
+
+    def test_fts5_full_text_search(self):
+        json_file = self.tmp / "fts_mems.json"
+        json_file.write_text(json.dumps(self.sample_memories), encoding="utf-8")
+        m2sql.load(str(self.db_path), [str(json_file)])
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            # Match content keyword
+            res = conn.execute(
+                "SELECT id FROM memories_fts WHERE memories_fts MATCH 'metrics'"
+            ).fetchall()
+            self.assertEqual(len(res), 1)
+            self.assertEqual(res[0][0], "mem_01_work")
+
+            # Match tag keyword
+            res_tag = conn.execute(
+                'SELECT id FROM memories_fts WHERE memories_fts MATCH \'"zero-cost"\''
+            ).fetchall()
+            self.assertEqual(len(res_tag), 1)
+            self.assertEqual(res_tag[0][0], "mem_02_learning")
+        finally:
+            conn.close()
 
     def test_stdin_ingestion(self):
         payload = json.dumps(self.sample_memories).encode("utf-8")
