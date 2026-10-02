@@ -14,9 +14,8 @@ from tests.unit.test_live_health_reason_reconciliation import ServingSocket, obs
 from tests.unit.test_stt_session_failover import FakeSocket, _receiver_with_dead_socket
 from utils.metrics import OMI_FALLBACK_TOTAL, OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL
 from utils.observability.transcription import _deployment_environment
-from utils.stt import live_chain, streaming as st
+from utils.stt import live_chain, live_failure, streaming as st
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, RECONNECT, COST_IGNORED_DEATHS
-from utils.stt.resilient_stream import ResilientAudio
 
 
 def listener(monkeypatch, *, family='modulate', language='en'):
@@ -46,6 +45,7 @@ def fallback_count(family, reason):
         and sample.labels['component'] in {'stt_selection', 'stt_live_session'}
         and sample.labels['from_mode'] == family
         and sample.labels['reason'] == reason
+        and sample.labels['to_mode'] != 'unavailable'
     )
 
 
@@ -118,15 +118,12 @@ async def test_connect_validation_serve_error_has_one_matching_selection_hop(mon
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('language', ['ko', 'ja', 'zh'])
-@pytest.mark.parametrize('reconnect', [False, True])
-async def test_connected_terminal_soniox_death_uses_terminal_metric_not_connect_exhaustion(
-    monkeypatch, language, reconnect
-):
-    monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'true' if reconnect else 'false')
+async def test_connected_terminal_soniox_death_uses_terminal_metric_not_connect_exhaustion(monkeypatch, language):
+    monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'false')
     monkeypatch.setenv('STT_SERVICE_MODELS', 'soniox')
     monkeypatch.setattr(st, 'stt_service_models', ['soniox'])
     receiver, raw = listener(monkeypatch, family='soniox', language=language)
-    receiver._resilient_audio = ResilientAudio(16000) if reconnect else None
+    receiver._resilient_audio = None
     reconnect_before = RECONNECT.labels(provider='soniox', reason='connection_lost', outcome='connected')._value.get()
     leg = receiver.stt_socket
     raw.die('connection_lost', 'ws recv closed: synthetic serving transport loss')
@@ -141,8 +138,7 @@ async def test_connected_terminal_soniox_death_uses_terminal_metric_not_connect_
     assert terminal_count('soniox') == terminal_before + 1
     assert fallback_count('soniox', 'connection_lost') == fallback_before
     assert CHAIN_EXHAUSTED._value.get() == exhausted_before
-    # Managed death causes are bounded; the existing raw 'ws ' reconnect
-    # predicate does not admit this leg. Ordinary terminal handling owns it.
+    # With reconnect disabled, ordinary terminal handling owns this leg.
     assert (
         RECONNECT.labels(provider='soniox', reason='connection_lost', outcome='connected')._value.get()
         == reconnect_before
@@ -301,13 +297,14 @@ async def test_connect_validation_cannot_restore_a_client_departure_censored_dea
 
 
 @pytest.mark.parametrize('family,reason', [('modulate', 'modulate_serve_error'), ('soniox', 'connection_lost')])
-def test_death_observed_with_connected_client_survives_later_teardown(monkeypatch, family, reason):
+def test_death_claimed_with_connected_client_survives_later_teardown(monkeypatch, family, reason):
     receiver, raw = listener(monkeypatch, family=family)
     leg = receiver.stt_socket
     before = observed(leg.routing_target, 'provider_failure', reason)
     ignored_before = ignored_count(leg.routing_target, reason)
     raw.die(reason, 'synthetic serving death')
     assert leg.is_connection_dead
+    live_failure.settle_terminal_socket(leg, family, reason)
     receiver.host.request.websocket.client_state = WebSocketState.DISCONNECTED
     receiver.host.state.active = False
     leg.mark_owner_teardown()
@@ -334,13 +331,12 @@ def test_ignored_late_death_retains_successful_text_evidence(monkeypatch, family
     assert leg.is_connection_dead
     leg.finish()
     leg.finish()
-    live_chain.health.record_connect_failure(
-        leg.routing_target, receiver.host.language, receiver.host.request.uid, reason, observed=leg.cost_observation
-    )
+    leg.leg_outcome.claim(reason, connect=True)
+    assert not leg.leg_outcome.settle()
     assert observed(leg.routing_target, 'provider_failure', reason) == failures_before
     assert observed(leg.routing_target, 'success', 'text') == successes_before + 1
-    assert ignored_count(leg.routing_target, reason) == ignored_before + 1
-    assert leg.cost_observation.recorded and leg.cost_observation.suppressed
+    assert ignored_count(leg.routing_target, reason) == ignored_before + int(not owner)
+    assert leg.leg_outcome.settled
     state = live_chain.health._cost_local[(leg.routing_target, 'all')]
     assert state.n == 1 and state.failures == 0
 
@@ -363,4 +359,4 @@ def test_owner_fence_preserves_preexisting_connected_death_but_excludes_later_de
     leg2.finish()
     assert raw2 is not raw
     assert observed(leg.routing_target, 'provider_failure', reason) == before + 1
-    assert ignored_count(leg.routing_target, reason) == ignored_before + 1
+    assert ignored_count(leg.routing_target, reason) == ignored_before

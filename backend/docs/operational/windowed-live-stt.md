@@ -29,12 +29,14 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 The first flag gates all new routing/breaker behavior, including account cooldown,
 last-resort primary admission and Soniox's own circuit configuration. With it off,
 the existing fixed order, fallback breaker behavior, and Modulate-named Soniox
-circuit env lookup remain unchanged. Dev and prod declare the same
-`parakeet-window,modulate-velma-2,soniox,dg-nova-3` order. The first token uses
-windowed TDT only for the allocated UID bucket; everyone else retains the
-Modulate → Soniox → Deepgram order. Streaming RNNT is outside this chain. Dev configuration parity
-is a prerequisite, but a live dev read must confirm the running order before
-any prod rollout.
+circuit env lookup remain unchanged. Production's configured order is
+`parakeet-window,soniox,modulate-velma-2,dg-nova-3`: healthy Soniox is the first
+static fallback during router shadow and rollback. Dev retains its separately
+configured order; never use dev to mutate health state (it shares production
+Redis). The first token uses windowed TDT only for the allocated UID bucket;
+everyone else retains the configured vendor tail. Streaming RNNT is outside
+this chain. The cost-router evidence and independent on ramp are documented in
+[live STT routing](../runbooks/live-stt-routing.md).
 Runtime env source is `_base.yaml` plus overlays; regenerate the composed manifest.
 With the flag enabled, the deployment validator accepts configured listen orders
 whose tokens are all enabled by the streaming policy. With it off, canonical

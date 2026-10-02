@@ -49,6 +49,14 @@ WINDOW_CANARY_OUTCOME = Counter(
     'Listen transcript outcome by stable window allocation arm',
     ['arm', 'outcome'],
 )
+COST_CANARY_OUTCOME = Counter(
+    'omi_stt_cost_routing_canary_outcome_total',
+    'Managed listen transcript outcome by router allocation at initialization',
+    ['arm', 'outcome'],
+)
+for _arm in ('on', 'control'):
+    for _outcome in ('transcribed', 'no_transcript', 'too_short'):
+        COST_CANARY_OUTCOME.labels(arm=_arm, outcome=_outcome)
 WINDOW_CONTEXT = Histogram(
     'omi_stt_window_context_seconds',
     'Posted TDT context duration',
@@ -128,11 +136,37 @@ COST_ALL_DEGRADED = Counter(
 )
 COST_IGNORED_DEATHS = Counter(
     'omi_stt_cost_routing_ignored_deaths_total',
-    'Accepted socket deaths first observed after client departure or owner teardown',
+    'Claimed socket deaths excluded by client departure or owner teardown',
     ['target', 'reason', 'boundary'],
 )
 COST_OBSERVATIONS = Counter(
     'omi_stt_cost_routing_observations_total', 'Classified cost health outcomes', ['target', 'outcome', 'reason']
+)
+COST_SETTLEMENTS = Counter(
+    'omi_stt_cost_routing_settlements_total',
+    'Serving decisions requiring matching health observations',
+    ['target', 'outcome', 'reason', 'path'],
+)
+COST_EVIDENCE_ERRORS = Counter(
+    'omi_stt_cost_routing_evidence_errors_total', 'Serving settlements whose health emission failed'
+)
+COST_EMISSION_ACK_ERRORS = Counter(
+    'omi_stt_cost_routing_emission_ack_errors_total',
+    'Emission acknowledgement errors only; does not validate classification, lifecycle coverage or Redis persistence',
+)
+MANAGED_LEGS_OPENED = Counter(
+    'omi_stt_managed_legs_opened_total', 'Managed connected legs handed off by the chain', ['target']
+)
+MANAGED_LEGS_SETTLED = Counter(
+    'omi_stt_managed_legs_settled_total', 'Handed-off managed legs reaching terminal settlement', ['target']
+)
+MANAGED_LEGS_OPEN = Gauge(
+    'omi_stt_managed_legs_open', 'Handed-off managed transports not yet released, independent of settlement', ['target']
+)
+COST_VOTES = Counter(
+    'omi_stt_cost_routing_votes_total',
+    'Settled evidence applied or excluded by the shared gate',
+    ['target', 'scope', 'result'],
 )
 COST_SHADOW = Counter(
     'omi_stt_cost_routing_shadow_total',

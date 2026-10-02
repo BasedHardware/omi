@@ -60,7 +60,8 @@ from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_
 from utils.stt.streaming import get_stt_service_for_language
 from utils.stt.live_failure import terminate_live_stt_backoff
 from utils.stt.live_rollout import managed_chain_enabled, window_allocation, window_selection_kwargs
-from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME
+from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME, COST_CANARY_OUTCOME
+from config.live_stt_registry import routing_on
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
@@ -351,6 +352,16 @@ class ListenSessionRuntime:
             return 'too_short'
         return 'no_transcript'
 
+    def _capture_cost_routing_arm(self) -> None:
+        self._cost_routing_arm: str | None = None
+        if managed_chain_enabled(self):
+            try:
+                self._cost_routing_arm = 'on' if routing_on(self.request.uid) else 'control'
+            except (ValueError, TypeError):
+                # Selection owns invalid-config diagnostics and static fallback.
+                # A cohort metric must never prevent that serving path running.
+                self._cost_routing_arm = 'control'
+
     def _record_session_transcript_outcome(self) -> None:
         """Emit omi_live_session_transcript_outcome_total exactly once per session.
 
@@ -385,6 +396,9 @@ class ListenSessionRuntime:
             WINDOW_CANARY_OUTCOME.labels(
                 arm='window' if window_allocation(self.request.uid) else 'control', outcome=outcome
             ).inc()
+            arm = getattr(self, '_cost_routing_arm', None)
+            if arm is not None:
+                COST_CANARY_OUTCOME.labels(arm=arm, outcome=outcome).inc()
         except Exception as error:
             logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
@@ -911,6 +925,9 @@ class ListenSessionRuntime:
             await self.asend_event(
                 MessageServiceStatusEvent(status='stt_initiating', status_text='STT Service Starting')
             )
+            # Intent-to-treat cohort: snapshot before selection, including
+            # initialization failures and fail-open sessions in the on arm.
+            self._capture_cost_routing_arm()
             if not await self.receiver.initialize_stt():
                 return
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
