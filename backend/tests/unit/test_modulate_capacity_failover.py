@@ -184,7 +184,8 @@ def test_fallback_log_and_counter_match_and_first_burst_needs_zero_sample(monkey
     assert counter.labels(**labels)._value.get() - 35 == 0  # flat subsequent scrape: increase misses the first burst
 
 
-def test_exhausted_children_have_a_zero_baseline_before_the_first_burst(monkeypatch):
+@pytest.mark.parametrize('to_mode', ['parakeet', 'unavailable'])
+def test_exhausted_children_have_a_zero_baseline_before_the_first_burst(monkeypatch, to_mode):
     registry = CollectorRegistry()
     counter = Counter(
         'omi_fallback_total', 'test', ['component', 'from_mode', 'to_mode', 'reason', 'outcome'], registry=registry
@@ -194,7 +195,7 @@ def test_exhausted_children_have_a_zero_baseline_before_the_first_burst(monkeypa
     labels = dict(
         component='stt_live_session',
         from_mode='modulate',
-        to_mode='parakeet',
+        to_mode=to_mode,
         reason='capacity_full',
         outcome='exhausted',
     )

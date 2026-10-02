@@ -317,6 +317,13 @@ def initialize_live_stt_exhausted_children() -> None:
                     outcome='exhausted',
                 )
             OMI_FALLBACK_TOTAL.labels(
+                component='stt_live_session',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=reason,
+                outcome='exhausted',
+            )
+            OMI_FALLBACK_TOTAL.labels(
                 component='stt_selection',
                 from_mode=provider,
                 to_mode='unavailable',
