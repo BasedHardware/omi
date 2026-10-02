@@ -182,13 +182,13 @@ class CostHealthMixin(ABC):
         generations: dict[str, int] | None = None,
         uid: str | None = None,
         reason: str | None = None,
-    ) -> None:
+    ) -> bool:
         if not uid or os.getenv('STT_ROUTING_MODE', 'off') == 'off':
-            return
+            return False
         witness = hashlib.sha256(('stt-evidence:' + uid).encode()).hexdigest()[:16]
         entry = next((entry for entry in registry() if entry.id == target), None)
         if entry is None:
-            return
+            return False
         self._init_cost_metrics([entry])
         reason = normalize_live_stt_reason(
             reason,
@@ -203,7 +203,7 @@ class CostHealthMixin(ABC):
             reason=reason,
         ).inc()
         if failed is None:
-            return
+            return True
         minimum_share = (
             5
             if assigned(uid, 'stt-reentry:' + target, 5)
@@ -234,6 +234,7 @@ class CostHealthMixin(ABC):
                     if not self._cost_is_fresh(now):
                         self._cost_event(target, lang, state, updated, failed, local=True)
         self.schedule(self._write_cost_result(target, language, failed, generations, witness, minimum_share))
+        return True
 
     def quarantine_target(self, target: str, seconds: float) -> None:
         def update(state: GateState) -> GateState:

@@ -145,6 +145,10 @@ COST_SETTLEMENTS = Counter(
 COST_EVIDENCE_ERRORS = Counter(
     'omi_stt_cost_routing_evidence_errors_total', 'Serving settlements whose health emission failed'
 )
+COST_RECONCILIATION_ERRORS = Counter(
+    'omi_stt_cost_routing_reconciliation_errors_total',
+    'Settlements whose paired fallback/observation emission raised or was not acknowledged',
+)
 COST_VOTES = Counter(
     'omi_stt_cost_routing_votes_total',
     'Settled evidence applied or excluded by the shared gate',

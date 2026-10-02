@@ -281,7 +281,7 @@ cost-router observation and must not be joined as though it were one.
 | Terminal decision | Fault domain | Existing fallback reason | Router observation |
 | --- | --- | --- | --- |
 | Completed text / owner end | none/client | none | success/text |
-| No text / client disconnect / our close | audio/client/us | none (normal_close if tail recovery was already attempted) | censored/no_text or normal_close |
+| No text / client disconnect / our close | audio/client/us | none | censored/no_text or normal_close |
 | Accepted provider death, with or without prior speech | provider/path | modulate_serve_error, connection_lost, send_failed, provider_5xx, provider_429, provider_rate_limited, timeout | provider_failure, same cause |
 | Connect transport/server failure | provider/path | provider_5xx or timeout | provider_failure, same cause, path=connect |
 | Quota / authentication | account/us | quota / auth | censored/provider_budget_exhausted or provider_auth_rejected (connect auth remains auth) |
@@ -309,7 +309,7 @@ an anytime-valid probability guarantee. Correcting attribution removes the
 
 Healthy-stage evidence admits at most **three classified outcomes per UID
 fingerprint per target/scope per five-minute Redis-time window**, symmetrically
-for success and failure. At most 512 salted SHA-256 prefixes and small counters
+for success and failure. At most 512 domain-separated SHA-256 prefixes and small counters
 are stored per state. A full window rejects unseen users until the next window;
 it never evicts identities and thereby restores their budget. At the measured
 ~62 sessions/5 minutes this is ample headroom; `votes_total{result="window_full"}`

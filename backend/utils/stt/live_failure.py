@@ -546,6 +546,11 @@ async def send_live_stt_audio(
         OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL.labels(provider=bounded_provider(provider), stage='buffer').inc()
 
     async def _recoverable_failure(reason: str) -> None:
+        outcome = getattr(stt_socket, 'leg_outcome', None)
+        if outcome is not None and outcome.owner_closing:
+            # The final client-tail flush may still send valid audio, but its
+            # transport errors cannot launch recovery or bench a provider.
+            return
         if attempt_failover is not None and await attempt_failover():
             return
         if session.active and not session.stt_terminal_failure:

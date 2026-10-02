@@ -12,7 +12,7 @@ from config.live_stt_registry import DEFAULT_TARGETS
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.observability.fallback import ALLOWED_REASONS
 from utils.stt import live_chain, live_cost_health, live_failure, live_session, streaming as st
-from utils.stt.live_metrics import COST_OBSERVATIONS, COST_SETTLEMENTS
+from utils.stt.live_metrics import COST_OBSERVATIONS, COST_SETTLEMENTS, COST_RECONCILIATION_ERRORS
 from utils.stt.parakeet_window import WindowedParakeetSocket
 from utils.stt.live_reason import LIVE_STT_REASONS, normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
@@ -86,6 +86,7 @@ CASES = [
 def test_serving_death_is_attributed_once_and_reconciles_fallback(
     family, typed, raw_reason, reason, outcome, observer, settlement
 ):
+    reconciliation_before = COST_RECONCILIATION_ERRORS._value.get()
     leg = serving_leg(family=family)
     before = observed(leg.routing_target, outcome, reason)
     if observer == 'monitor':
@@ -125,6 +126,7 @@ def test_serving_death_is_attributed_once_and_reconciles_fallback(
     live_failure.PendingLiveFailover.from_socket(leg, family, 'modulate').note_failure(None)
     assert fallback._value.get() == baseline + 1
     assert decision._value.get() == decision_before + 1
+    assert COST_RECONCILIATION_ERRORS._value.get() == reconciliation_before
     assert observed(leg.routing_target, outcome, reason) == before + 1
     leg.finish()
     leg.finish()

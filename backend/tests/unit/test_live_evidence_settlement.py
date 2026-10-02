@@ -15,7 +15,7 @@ from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt import live_chain, live_failure, live_health, live_session, streaming as st
 from utils.stt.live_cost_health import PREFIX
 from utils.stt.live_gate import GateState, transition
-from utils.stt.live_metrics import COST_SETTLEMENTS, COST_EVIDENCE_ERRORS
+from utils.stt.live_metrics import COST_SETTLEMENTS, COST_EVIDENCE_ERRORS, COST_RECONCILIATION_ERRORS
 from utils.stt.soniox import SafeSonioxSocket
 
 
@@ -269,3 +269,51 @@ async def test_same_provider_reconnect_settles_rejected_successor(monkeypatch, f
     new.finish()
     assert new.leg_outcome.settled
     assert observed('soniox', 'provider_failure', 'provider_5xx') == before + 1
+
+
+@pytest.mark.asyncio
+async def test_teardown_tail_send_cannot_recover_or_open_provider_circuit(monkeypatch):
+    leg = serving_leg(family='soniox')
+    leg.leg_outcome.owner_closing = True
+    leg.raw.die('connection_lost')
+    state = SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1000)
+    client = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    recovery = AsyncMock(return_value=False)
+    opened = []
+    monkeypatch.setattr(live_failure, '_open_serving_provider_circuit', lambda *args: opened.append(args))
+    assert not await live_failure.send_live_stt_audio(
+        client,
+        state,
+        stt_socket=leg,
+        audio=b'\x00\x00',
+        provider='soniox',
+        platform='ios',
+        attempt_failover=recovery,
+    )
+    recovery.assert_not_awaited()
+    client.close.assert_not_awaited()
+    assert opened == [] and not state.stt_terminal_failure
+    leg.finish()
+
+
+@pytest.mark.asyncio
+async def test_monitor_stops_before_observing_teardown_transport(monkeypatch):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
+    leg = managed_leg(receiver, ServingSocket(), family='soniox')
+    receiver.stt_socket = leg
+    leg.leg_outcome.owner_closing = True
+    leg.raw.die('connection_lost')
+    receiver._failover_stt_socket = AsyncMock(return_value=False)
+    await receiver._monitor_stt_death()
+    receiver._failover_stt_socket.assert_not_awaited()
+    assert not receiver.host.state.stt_terminal_failure
+    leg.finish()
+
+
+def test_missing_observation_ack_is_a_reconciliation_error(monkeypatch):
+    monkeypatch.setattr(live_session.health, 'record_session', lambda *args: False)
+    leg = serving_leg()
+    before = COST_RECONCILIATION_ERRORS._value.get()
+    leg.finish()
+    leg.finish()
+    assert COST_RECONCILIATION_ERRORS._value.get() == before + 1

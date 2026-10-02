@@ -12,7 +12,7 @@ import os
 from typing import Callable, Any
 
 from config.live_stt_registry import registry
-from utils.stt.live_metrics import COST_SETTLEMENTS, COST_EVIDENCE_ERRORS
+from utils.stt.live_metrics import COST_SETTLEMENTS, COST_EVIDENCE_ERRORS, COST_RECONCILIATION_ERRORS
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
 
@@ -72,9 +72,12 @@ class LiveLegOutcome:
             failed = provider_observation(outcome, reason)
             classification = 'censored' if failed is None else 'provider_failure' if failed else 'success'
             COST_SETTLEMENTS.labels(target=self.target, outcome=classification, reason=reason, path=self.path).inc()
-            self.record(self.target, self.language, outcome, self.generations, self.uid, reason)
+            acknowledged = self.record(self.target, self.language, outcome, self.generations, self.uid, reason)
+            if acknowledged is not True:
+                COST_RECONCILIATION_ERRORS.inc()
         except Exception:
             COST_EVIDENCE_ERRORS.inc()
+            COST_RECONCILIATION_ERRORS.inc()
             logger.warning('Live STT settlement evidence unavailable')
         return True
 

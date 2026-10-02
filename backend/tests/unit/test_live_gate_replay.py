@@ -56,6 +56,7 @@ def detect(rate, seed, *, warmup=500, horizon=5000):
     return horizon + 1, failures
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize('rate,limit', [(0.12, 1500), (0.16, 300)])
 def test_brownout_median_detection(rate, limit):
     # A run that has not detected by the limit cannot lower the median below it,
@@ -64,7 +65,7 @@ def test_brownout_median_detection(rate, limit):
     assert statistics.median(samples) <= limit
 
 
-@pytest.mark.parametrize('warmup', [0, 100, 1020, 20000])
+@pytest.mark.parametrize('warmup', [0, 100, 1020, pytest.param(20000, marks=pytest.mark.slow)])
 @pytest.mark.parametrize('phase', range(5))
 def test_sustained_sixty_percent_outage_within_ten_failed_sessions(warmup, phase):
     state = GateState()

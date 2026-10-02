@@ -262,7 +262,8 @@ def socket_is_finishing(socket: Any) -> bool:
             continue
         seen.add(id(current))
         try:
-            if getattr(current, '_finishing', False):
+            outcome = getattr(current, 'leg_outcome', None)
+            if getattr(current, '_finishing', False) or outcome is not None and outcome.owner_closing:
                 return True
             pending.extend((getattr(current, '_conn', None), getattr(current, 'raw', None)))
         except Exception:

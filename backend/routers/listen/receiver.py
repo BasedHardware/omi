@@ -1290,6 +1290,9 @@ class ListenReceiver(ReplayFilterMixin):
         """
         while self.host.state.active and not self.host.state.stt_terminal_failure:
             socket = self.stt_socket
+            outcome = getattr(socket, 'leg_outcome', None)
+            if outcome is not None and outcome.owner_closing:
+                return
             if socket is not None and live_stt_socket_is_dead(socket):
                 if await self._failover_stt_socket():
                     continue

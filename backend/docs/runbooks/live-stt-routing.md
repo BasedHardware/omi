@@ -25,7 +25,9 @@ expected observation count from that seam (`path=close|failover|connect`). Its
 sum over path must equal `omi_stt_cost_routing_observations_total` by
 instance/target/outcome/reason. This comparison covers exactly the managed
 router population; legacy/PTT fallback events are not extra router samples.
-It proves emission, not persistence. Redis drop counters and
+A direct acknowledgement from the observation writer feeds the single
+`omi_stt_cost_routing_reconciliation_errors_total` counter; exceptions or missing
+acknowledgements increment it. It proves emission, not persistence. Redis drop counters and
 `omi_stt_cost_routing_votes_total{target,scope,result}` prove whether classified
 evidence reached shared state (`applied|user_cap|window_full|generation|stage`).
 
@@ -83,17 +85,22 @@ its evidence must never reuse the old endpoint's identity or state.
 ## Exact PromQL
 
 Use `job="backend-listen-metrics"`, and a window containing only the new image.
-The **one-number reconciliation check** below must be zero. Use absolute counters
-for this paired invariant: separate `increase()` extrapolation and a pod's first
-scrape can create misleading differences. Investigate nonzero output by
-instance/target/outcome/reason. Missing metrics are failure of coverage, not zero.
+The **one-number reconciliation check** is the emission acknowledgement counter
+below and must be zero. Missing metrics are failure of coverage, not zero.
+The paired-counter difference is also useful by instance/target/reason, but a
+scrape reads separate collectors at slightly different instants: a transient
+difference during active settlement can be a scrape race. Require that the
+one-minute minimum paired difference is zero, and investigate any persistent
+mismatch; do not mistake `increase()` extrapolation or a first scrape for lost
+evidence.
 
 ```promql
-sum(abs(
+sum(omi_stt_cost_routing_reconciliation_errors_total{job="backend-listen-metrics"})
+min_over_time((sum(abs(
   sum by (instance, target, outcome, reason) (omi_stt_cost_routing_settlements_total{job="backend-listen-metrics"})
   -
   sum by (instance, target, outcome, reason) (omi_stt_cost_routing_observations_total{job="backend-listen-metrics"})
-))
+))))[1m:15s])
 sum(increase(omi_stt_cost_routing_evidence_errors_total{job="backend-listen-metrics"}[1h]))
 sum by (target, path, outcome, reason) (increase(omi_stt_cost_routing_settlements_total{job="backend-listen-metrics"}[1h]))
 sum by (from_mode, reason, outcome) (increase(omi_fallback_total{job="backend-listen-metrics",component="stt_live_session"}[1h]))
