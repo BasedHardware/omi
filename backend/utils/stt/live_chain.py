@@ -20,7 +20,7 @@ from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
-from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
+from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY, WINDOW_ADMISSION
 from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
     connecting_target,
@@ -35,8 +35,14 @@ from utils.stt.live_router import (
 from config.live_stt_registry import routing_on, DEFAULT_IDS, registry
 from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_metrics import COST_DECISION, COST_FAIL_OPEN
-from utils.stt.provider_resilience import EXPECTED_REJECTIONS, close_rejected_socket, fallback_socket_is_serving
+from utils.stt.provider_resilience import (
+    EXPECTED_REJECTIONS,
+    ProviderCircuitBreaker,
+    close_rejected_socket,
+    fallback_socket_is_serving,
+)
 from utils.stt.socket import STTSocket
+from utils.stt import parakeet_window as window
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_RATE_LIMITED
 
 Connect = Callable[[], Awaitable[STTSocket | None]]
@@ -87,6 +93,18 @@ class ProviderChainUnavailable(RuntimeError):
         super().__init__('Configured STT chain exhausted: providers unavailable')
 
 
+async def _allow_rescue_probe(circuit: ProviderCircuitBreaker, probes: int, deadline: float) -> bool:
+    """Wait for another bounded recovery handshake instead of exhausting a burst."""
+    while True:
+        if circuit.allow_request(max_probes=probes, force=True):
+            return True
+        if circuit.state != 'half_open' or not circuit.account_cooldown_elapsed():
+            return False
+        if asyncio.get_running_loop().time() >= deadline:
+            return False
+        await asyncio.sleep(0.01)
+
+
 async def connect_configured_chain(
     *,
     primary_service: STTService,
@@ -121,6 +139,13 @@ async def connect_configured_chain(
     routes = [(service, None) for service in candidates]
     canary = False
     capacity_targets = {}
+    try:
+        capacity_targets = {target.id: target for target in registry() if engine_matches(target, routing_models)}
+        for target in list(capacity_targets.values()):
+            if target.endpoint is None:
+                capacity_targets.setdefault(DEFAULT_IDS[target.family], target)
+    except ValueError:
+        pass  # Invalid registry still uses the configured provider admission gates.
     if mode != 'off' and routing_uid:
         try:
             canary = routing_on(routing_uid)
@@ -138,10 +163,6 @@ async def connect_configured_chain(
                 routing_models,
                 last_resorts,
             )
-            capacity_targets = {target.id: target for target in registry() if engine_matches(target, routing_models)}
-            for target in list(capacity_targets.values()):
-                if target.endpoint is None:
-                    capacity_targets.setdefault(DEFAULT_IDS[target.family], target)
             active = canary and bool(proposed)
             if canary and not proposed:
                 COST_FAIL_OPEN.labels(reason='empty_proposal').inc()
@@ -175,7 +196,6 @@ async def connect_configured_chain(
         except CostHealthUnavailable:
             COST_FAIL_OPEN.labels(reason='cache_unavailable').inc()
             active = False
-            capacity_targets = {}
             logger.debug('live_stt_cost_router cache unavailable; using configured order')
             if canary:
                 record_fallback(
@@ -188,7 +208,6 @@ async def connect_configured_chain(
         except Exception:
             COST_FAIL_OPEN.labels(reason='router_error').inc()
             active = False
-            capacity_targets = {}
             routes = [(service, None) for service in configured_candidates]
             logger.exception('live_stt_cost_router using configured order')
             record_fallback(
@@ -202,7 +221,11 @@ async def connect_configured_chain(
     # Mid-session deaths can open every pod-local circuit without proving that
     # new connects fail. Require repeated real connect failures before shedding.
     # A cooled circuit still reaches the normal half-open recovery probe.
-    eligible = [service for service in configured_candidates if callbacks.get(service) is not None]
+    eligible = [
+        service
+        for service in configured_candidates
+        if callbacks.get(service) is not None and provider_for_service(service) not in failed
+    ]
     all_benched = False
     if eligible and not active:
         circuits = [_circuit_for_primary(service) for service in eligible]
@@ -390,7 +413,7 @@ async def connect_configured_chain(
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
             elif not provider_failure:
                 on_close()
-                if canary and reason == 'capacity_full':
+                if reason == 'capacity_full':
                     identity = (
                         target.id
                         if target is not None
@@ -451,7 +474,21 @@ async def connect_configured_chain(
         if connect is None or provider_for_service(service) in failed or identity in failed_targets:
             continue
         capacity_target = target if target is not None else capacity_targets.get(identity or '')
-        if canary and capacity_target is not None and not capacity_available(capacity_target):
+        if (routing_models or {}).get(service.value) == 'parakeet-window':
+            if not window.admission.available():
+                WINDOW_ADMISSION.labels(outcome='overflow').inc()
+                capacity_blocked.add(service)
+                prior_reason, prior_capacity_subtype = 'capacity_full', 'admission'
+                record_fallback(
+                    component='stt_selection',
+                    from_mode=origin,
+                    to_mode=service.value,
+                    reason='capacity_full',
+                    outcome='degraded',
+                    capacity_subtype='admission',
+                )
+                continue
+        if capacity_target is not None and not capacity_available(capacity_target):
             capacity_blocked.add(service)
             capacity_resorts.append((service, target, capacity_target))
             COST_DECISION.labels(target=capacity_target.id, reason='capacity_skip').inc()
@@ -474,7 +511,7 @@ async def connect_configured_chain(
 
     # Capacity is advisory when it would suppress every usable route. Dial only
     # one least-recently-refused candidate; retain account/local circuit gates.
-    if canary and not attempted and capacity_resorts:
+    if not attempted and capacity_resorts:
         for service, target, capacity_target in sorted(
             capacity_resorts, key=lambda route: capacity_refused_at(route[2])
         ):
@@ -499,26 +536,12 @@ async def connect_configured_chain(
                 return result
             break  # one real escape dial, even if it is still full
 
-    # Last-resort may force a non-account bench on a non-TDT primary only.
-    # Windowed TDT shedding (capacity/5xx) must hold; account cooldown never yields.
-    if (
-        not active
-        and primary_open
-        and not attempted
-        and primary_service != STTService.parakeet
-        and primary_service not in capacity_blocked
-        and provider_for_service(primary_service) not in failed
-    ):
-        circuit = _circuit_for_primary(primary_service)
-        if circuit.allow_request(max_probes=1, force=True):
-            prior_reason = 'last_resort'
-            prior_capacity_subtype = None
-            result = await attempt(primary_service, connect_primary)
-            if result is not None:
-                return result
-    if not active and all_benched and not attempted:
-        # A spent primary must not strand a still-serving fallback whose local
-        # selection circuit opened on a mid-session death.
+    # A refusal/open window cannot consume the rescue path. Try each remaining
+    # non-TDT provider once, even if the rejected primary was windowed TDT or
+    # an earlier leg already attempted admission. Failed/account/cooled legs
+    # stay excluded; force only relaxes a non-account selection bench.
+    if not active:
+        rescue_deadline = asyncio.get_running_loop().time() + 12.0
         for service in configured_candidates:
             connect = callbacks.get(service)
             if (
@@ -531,13 +554,12 @@ async def connect_configured_chain(
             state = fleet_states.get(service.value)
             if state is not None and state.bench == 'account' and state.excluded:
                 continue
-            if _circuit_for_primary(service).allow_request(max_probes=1, force=True):
+            if await _allow_rescue_probe(_circuit_for_primary(service), probes, rescue_deadline):
                 prior_reason = 'last_resort'
                 prior_capacity_subtype = None
                 result = await attempt(service, connect)
                 if result is not None:
                     return result
-                break
     CHAIN_EXHAUSTED.inc()
     pending = PendingLiveFailover(
         component='stt_selection',
