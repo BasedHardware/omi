@@ -11,6 +11,7 @@ from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.live_cost_health import CostObservation
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, bounded_language
@@ -413,10 +414,12 @@ class LiveLegSocket(STTSocket):
         self._health_language = bounded_language(session.receiver.host.language)
         self._cost_generations = health.cost_generations(self.routing_target, self._health_language)
         self._cost_recorded = False
+        self._cost_observation: CostObservation | None = None
         self._cost_text_seen = False
         self._cost_censored_no_text = False
         self._target_death_recorded = False
         self._closing_for_health = False
+        self._closed_for_sends = False
         try:
             self._routing_active = target is not None and routing_on(
                 getattr(getattr(session.receiver.host, 'request', None), 'uid', None)
@@ -573,6 +576,14 @@ class LiveLegSocket(STTSocket):
         # First observation owns the immutable cause used by both telemetry paths.
         return self._terminal_reason or normalize_live_stt_reason(self.typed_death_reason, self.death_reason)
 
+    @property
+    def cost_observation_recorded(self) -> bool:
+        return self._cost_observation is not None and self._cost_observation.recorded
+
+    @property
+    def cost_observation(self) -> CostObservation | None:
+        return self._cost_observation
+
     def set_selection_outcome(self, pending: PendingLiveFailover) -> None:
         self._pending_selection = pending
 
@@ -675,7 +686,7 @@ class LiveLegSocket(STTSocket):
         setattr(gate, 'process_audio', process_replay_capture)
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
-        if self._closing_for_health:
+        if self._closed_for_sends:
             return False
         if self.is_connection_dead:
             return False
@@ -812,6 +823,7 @@ class LiveLegSocket(STTSocket):
         dead = self.is_connection_dead
         self._censor_early_teardown(dead)
         self._closing_for_health = True
+        self._closed_for_sends = True
         try:
             if self.is_connection_dead and self._pending_selection is not None:
                 self._pending_selection.note_failure(self.typed_death_reason)
@@ -830,18 +842,27 @@ class LiveLegSocket(STTSocket):
             self._release_open_gauge()
 
     def _record_cost_outcome(self, dead: bool, *, reason: str | None = None) -> None:
+        # A transport symptom created by owner-initiated teardown is not a
+        # serving death. Real pre-close deaths already have their latched cause.
+        if dead and self._closing_for_health and self._terminal_reason is None:
+            return
         if dead and self._terminal_reason is None:
             try:
                 self._terminal_reason = normalize_live_stt_reason(self.typed_death_reason, self.death_reason, reason)
             except Exception:
                 self._terminal_reason = normalize_live_stt_reason(reason)
-        if not self._cost_recorded and self._first_speech_at is not None and self._speech_ms_for_health >= 1000:
+        # Provider availability and actual text do not depend on VAD. Only
+        # audio/no-text evidence needs a minimum speech sample.
+        eligible = (
+            dead or self._cost_text_seen or (self._first_speech_at is not None and self._speech_ms_for_health >= 1000)
+        )
+        if not self._cost_recorded and eligible:
             self._cost_recorded = True
             outcome = 'failover' if dead else 'text' if self._cost_text_seen else 'no_text'
             if not dead and self._cost_censored_no_text and not self._cost_text_seen:
                 return
             try:
-                health.record_session(
+                self._cost_observation = health.record_session(
                     self.routing_target,
                     self._health_language,
                     outcome,
@@ -868,10 +889,17 @@ class LiveLegSocket(STTSocket):
         ):
             self._cost_censored_no_text = True
 
+    def mark_owner_teardown(self) -> None:
+        """Fence later transport symptoms while preserving final audio sends."""
+        dead = self.is_connection_dead
+        self._censor_early_teardown(dead)
+        self._closing_for_health = True
+
     async def drain_and_close(self) -> None:
         dead = self.is_connection_dead
         self._censor_early_teardown(dead)
         self._closing_for_health = True
+        self._closed_for_sends = True
         try:
             await st.drain_stt_socket(self.raw)
         finally:

@@ -1018,6 +1018,15 @@ class ListenReceiver(ReplayFilterMixin):
         self.stt_socket = None
         self.stt_sockets_multi = [None] * len(self.channel_configs)
 
+    def _mark_stt_owner_teardown(self) -> None:
+        """Fence managed-leg health before the final awaited audio flush."""
+        sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
+        for socket in sockets:
+            target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
+            mark_teardown = getattr(target, 'mark_owner_teardown', None)
+            if callable(mark_teardown):
+                mark_teardown()
+
     def _wrap_legacy_stt_socket(self, raw: Any, epoch: Optional[ProviderEpochTranslator]) -> Any:
         """Keep send accounting when VAD is disabled or fails to initialize."""
         if getattr(raw, 'manages_vad', False):
@@ -1774,6 +1783,7 @@ class ListenReceiver(ReplayFilterMixin):
                         },
                     )
             if not self.host.use_custom_stt:
+                self._mark_stt_owner_teardown()
                 await self._flush_stt_buffer(buffer, force=True)
             await self._drain_stt_sockets()
             self.host.state.active = False
