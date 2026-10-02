@@ -87,15 +87,17 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                       color: OmiColors.textSecondary,
                       onPressed: () async {
                         setReprocessing(true);
-                        var mem = await reProcessConversationServer(conversation.id);
-                        if (!context.mounted) return;
-                        if (mem != null) {
-                          setState(() {
-                            conversation = mem;
-                          });
+                        // A failed request says so and the row returns to idle; it never keeps spinning.
+                        try {
+                          final mem = await reProcessConversationServer(conversation.id);
+                          if (!context.mounted || mem == null) return;
+                          setState(() => conversation = mem);
                           context.read<ConversationProvider>().updateSyncedConversation(mem);
+                        } catch (_) {
+                          if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+                        } finally {
+                          setReprocessing(false);
                         }
-                        setReprocessing(false);
                       },
                     ))
               : null,

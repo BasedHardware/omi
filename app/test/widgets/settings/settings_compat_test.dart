@@ -15,9 +15,11 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 
-/// Settings on the screens and settings people actually use: the smallest and largest iPhones,
-/// large accessibility text, and languages whose words run long (German), use another script
-/// (Russian, Japanese, Hindi) or read right to left (Arabic). Any layout overflow fails the test.
+/// The Settings page and its six group pages on the screens and settings people actually use: the
+/// smallest and largest iPhones, large accessibility text, and languages whose words run long
+/// (German), use another script (Russian, Japanese, Hindi) or read right to left (Arabic). Any
+/// layout overflow fails the test. The pages behind the group rows (Offline Sync, Developer,
+/// Integrations, …) are rendered by the visual audit's settings scenarios instead.
 /// Also pins the Settings typeface: Instrument Sans on the Settings pages, not elsewhere.
 
 class _Device extends ChangeNotifier implements DeviceProvider {
@@ -134,7 +136,7 @@ void main() {
     ('Pro Max', _iPhoneProMax)
   ]) {
     for (final scale in [1.0, 1.5, 2.0]) {
-      testWidgets('$name at ${scale}x text: every Settings page lays out', (tester) async {
+      testWidgets('$name at ${scale}x text: Settings and its group pages lay out', (tester) async {
         await pumpSettings(tester, size: size, textScale: scale);
         await walkSettings(tester);
       });
@@ -142,7 +144,7 @@ void main() {
   }
 
   for (final locale in ['de', 'ru', 'ja', 'hi', 'ar']) {
-    testWidgets('$locale on an iPhone SE at 1.5x text: every Settings page lays out', (tester) async {
+    testWidgets('$locale on an iPhone SE at 1.5x text: Settings and its group pages lay out', (tester) async {
       await pumpSettings(tester, size: _iPhoneSE, textScale: 1.5, locale: locale);
       await walkSettings(tester);
     });

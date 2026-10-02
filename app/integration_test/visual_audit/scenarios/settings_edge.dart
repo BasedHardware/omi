@@ -179,6 +179,22 @@ class _SyncData extends InertSyncProvider {
       };
   @override
   Wal? getWalById(String id) => wals.where((w) => w.id == id).firstOrNull;
+
+  // The actions a row or the Manage Storage sheet can call: nothing syncs or deletes here.
+  @override
+  Future<void> retrySync() async {}
+  @override
+  Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {}
+  @override
+  void cancelSync() {}
+  @override
+  Future<void> deleteWal(Wal wal) async {}
+  @override
+  Future<void> deleteAllClearableWals() async {}
+  @override
+  Future<void> deleteAllPendingWals() async {}
+  @override
+  Future<void> deleteAllSyncedWals() async {}
 }
 
 /// A connected ring-buffer pendant (firmware 3.0.20+) whose storage is nearly full.
@@ -653,7 +669,8 @@ final _moreEdgeScenarios = <AuditScenario>[
     run: (a) async {
       _silencePhoneCallEvents();
       await a.pump(const PhoneCallSettingsPage(),
-          providers: [ChangeNotifierProvider<PhoneCallProvider>.value(value: _NumbersPhoneCallProvider())]);
+          // create:, so the provider (and the event subscription it opens) is disposed with the page.
+          providers: [ChangeNotifierProvider<PhoneCallProvider>(create: (_) => _NumbersPhoneCallProvider())]);
       await a.shot('Open Phone Call settings with numbers');
     },
   ),

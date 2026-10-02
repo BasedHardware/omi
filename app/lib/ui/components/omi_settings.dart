@@ -315,7 +315,11 @@ Widget _outlinedGroup(OmiSettingsGroup group) {
       if (group.footer != null)
         Padding(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
-          child: Text(group.footer!, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+          // Takes the list scale like the header's supporting line.
+          child: Builder(
+            builder: (context) => Text(group.footer!,
+                style: _scaled(context, OmiType.footnote.copyWith(color: OmiColors.textTertiary), 13)),
+          ),
         ),
     ],
   );
