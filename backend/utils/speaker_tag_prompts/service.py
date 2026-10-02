@@ -59,6 +59,7 @@ from utils.executors import (
     submit_with_context,
     sync_executor,
 )
+from utils.conversations.teaching_placement import recover_teaching_clip
 from utils.speaker_identification import extract_speaker_samples
 from utils.speaker_sample import verify_and_transcribe_sample, verify_and_transcribe_sample_in_worker
 from utils.speaker_tag_prompts.clips import CLIP_SAMPLE_RATE, conversation_clip_pcm, pcm_to_wav
@@ -786,6 +787,31 @@ async def store_owner_voice_sample(
             db_executor, users_db.get_user_language_preference, uid
         )
         _, is_valid, reason = await verify_and_transcribe_sample(wav, CLIP_SAMPLE_RATE, text, language=language)
+        if not is_valid and reason.startswith('text_mismatch'):
+            run_contributors = [
+                s
+                for s in conversation['transcript_segments']
+                if s.get('id') in authorized
+                and s.get('speaker_id_scope') == win_scope
+                and speaker_id_of(s) == win_speaker
+                and s.get('start', end) < end
+                and s.get('end', start) > start
+            ]
+            if run_contributors:
+                recovered = await recover_teaching_clip(
+                    uid,
+                    conversation,
+                    start,
+                    end,
+                    text,
+                    language,
+                    CLIP_SAMPLE_RATE,
+                    anchor_offset=start - min(float(s.get('start') or 0) for s in run_contributors),
+                )
+                if recovered is not None:
+                    pcm, _recovered_transcript = recovered
+                    wav = pcm_to_wav(pcm)
+                    is_valid = True
         if not is_valid:
             outcome = 'transient_failure' if reason.startswith('transcription_failed') else 'rejected_quality'
             return outcome
