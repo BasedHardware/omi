@@ -91,6 +91,6 @@ class ScreenTaskAdmissionResponse(BaseModel):
 
 
 @router.get('/v1/screen-task/admission', response_model=ScreenTaskAdmissionResponse)
-async def screen_task_admission(uid: str = Depends(get_current_user_uid)) -> ScreenTaskAdmissionResponse:
+def screen_task_admission(uid: str = Depends(get_current_user_uid)) -> ScreenTaskAdmissionResponse:
     # No provider work; a running client polls every 30 seconds. Failure expires its lease.
     return ScreenTaskAdmissionResponse(enabled=not screen_task_stopped())
