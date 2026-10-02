@@ -115,7 +115,12 @@ def derive_status(goal: Dict[str, Any]) -> str:
 
 
 def calc_progress_pct(goal: Dict[str, Any], is_completed: bool) -> Optional[float]:
-    """Calculate progress percentage (0.0 to 100.0+) or None if qualitative and uncompleted."""
+    """Calculate progress percentage (0.0 to 100.0+) or None if qualitative and uncompleted.
+
+    The result is clamped at 0.0 (a value below the scale's base is "no progress",
+    not negative progress) and is always finite, because json.dumps would otherwise
+    emit the non-standard NaN/Infinity tokens that strict JSONL readers reject.
+    """
     if is_completed:
         return 100.0
 
@@ -140,8 +145,17 @@ def calc_progress_pct(goal: Dict[str, Any], is_completed: bool) -> Optional[floa
         denom = max_v - base
 
     if denom is not None and denom > 0:
-        pct = round(((curr - base) / denom) * 100.0, 2)
-        return pct
+        try:
+            raw = ((curr - base) / denom) * 100.0
+        except (OverflowError, ZeroDivisionError):
+            return None
+        if math.isnan(raw):
+            return None
+        if raw <= 0.0:
+            return 0.0
+        if not math.isfinite(raw):
+            return None
+        return round(raw, 2)
 
     if target == 0.0 and curr == 0.0:
         return 100.0

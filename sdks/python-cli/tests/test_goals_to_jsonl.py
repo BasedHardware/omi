@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -133,6 +134,23 @@ class TestGoalsToJSONL(unittest.TestCase):
         # Missing target / qualitative
         goal_qual = {"title": "Learn guitar"}
         self.assertIsNone(g2jsonl.calc_progress_pct(goal_qual, False))
+
+    def test_calc_progress_pct_clamps_below_base_to_zero(self):
+        goal = {"current_value": 5, "target_value": 20, "min_value": 10}
+        self.assertEqual(g2jsonl.calc_progress_pct(goal, False), 0.0)
+
+    def test_calc_progress_pct_never_returns_non_finite(self):
+        # Finite inputs whose difference overflows to +/-inf, or whose ratio is inf.
+        overflow_up = {"current_value": 1.7e308, "target_value": 1e-300, "min_value": -1.7e308}
+        overflow_down = {"current_value": -1.7e308, "target_value": 1.7e308, "min_value": 0}
+        tiny_denominator = {"current_value": 1e308, "target_value": 5e-324}
+        for goal in (overflow_up, overflow_down, tiny_denominator):
+            pct = g2jsonl.calc_progress_pct(goal, False)
+            self.assertTrue(pct is None or math.isfinite(pct), (goal, pct))
+            self.assertTrue(pct is None or pct >= 0.0, (goal, pct))
+        # The emitted line must stay strict JSON.
+        line = json.dumps({"progress_pct": g2jsonl.calc_progress_pct(overflow_up, False)}, allow_nan=False)
+        self.assertIn("progress_pct", line)
 
     def test_unwrap_goals(self):
         for key in ("goals", "items", "data", "results"):
