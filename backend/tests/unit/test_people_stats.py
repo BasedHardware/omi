@@ -4,7 +4,11 @@ from models.other import Person
 from types import SimpleNamespace
 
 from models.transcript_segment import TranscriptSegment
-from utils.sync.speaker_identity import SpeakerIdentityDependencies, identify_speakers_for_segments
+from utils.sync.speaker_identity import (
+    PersonEmbeddingsCache,
+    SpeakerIdentityDependencies,
+    identify_speakers_for_segments,
+)
 from utils.people_stats import aggregate_people_stats, apply_people_stats, collect_people_stats
 
 
@@ -98,7 +102,7 @@ def test_sync_text_matches_are_automatic_without_changing_manual_labels():
                 id='manual', text='hello', speaker_id=speaker_id, is_user=False, person_id='p2', start=6, end=9
             ),
         ]
-        identify_speakers_for_segments(segments, None, {}, 'u', dependencies=deps)
+        identify_speakers_for_segments(segments, None, PersonEmbeddingsCache(True), 'u', dependencies=deps)
         assert segments[0].person_id == 'p1'
         assert segments[0].speaker_match_source == 'sync_text'
         assert segments[1].person_id == ('p1' if speaker_id > 0 else None)
@@ -113,10 +117,11 @@ def test_sync_text_matches_are_automatic_without_changing_manual_labels():
 #
 # A server-side limit/offset reader drops invisible rows in Python without
 # padding, so a short page there only means "some rows in this window were
-# filtered". The scan is therefore driven through the scan-and-fill reader
-# (`include_discarded=True`), which keeps reading until the page is full;
-# rows that the scan reads only to keep the offset aligned are excluded
-# during aggregation.
+# filtered". These tests pin how the scan behaves with a reader that fills
+# its pages. The production route does not use Firestore's scan-and-fill
+# branch (`include_discarded=True`): it re-reads from the newest row on every
+# page and timed the People list out, so #19908 is open until the scan has a
+# single-pass reader.
 
 
 class _ScanAndFillReader:

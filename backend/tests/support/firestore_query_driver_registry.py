@@ -2317,3 +2317,27 @@ _add(
 
 for entry in (*outside_drivers.DRIVERS.values(), *outside_drivers.COVERED_BY.values(), *outside_drivers.SKIPS.values()):
     _add(entry)
+
+
+_add(
+    DriverEntry(
+        'database.action_item_refresh.task_refs',
+        base={'user': ref_document(f'users/{UID}'), 'conversation_id': 'conv-1', 'transaction': ref_transaction()},
+    )
+)
+
+
+def _refresh_seed(client, combo, trial):
+    client.documents[f'users/{UID}/conversations/conv-1'] = {'id': 'conv-1'}
+    client.documents[f'users/{UID}/conversations/donor-1'] = {'deleted': True, 'smart_merge': {'survivor_id': 'conv-1'}}
+
+
+_add(
+    DriverEntry(
+        'database.action_item_refresh.reconcile',
+        base={'uid': UID, 'conversation_id': 'conv-1', 'items': [], 'expected_revision': None},
+        domains={'donor_id': [None, 'donor-1']},
+        setup=_refresh_seed,
+        patchers=(_redis_noop('database.action_item_refresh.bump_action_items_list_version'),),
+    )
+)

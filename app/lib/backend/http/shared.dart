@@ -640,7 +640,7 @@ Future<http.StreamedResponse> _sendMultipartWithProgress(
   );
 
   final future = HttpPoolManager.instance.sendStreaming(streamedRequest);
-  future.whenComplete(subscription.cancel);
+  future.whenComplete(subscription.cancel).ignore();
   return future;
 }
 

@@ -13,6 +13,7 @@ language preference, the same source chat/memories/process_conversation use.
 """
 
 import os
+import pytest
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
@@ -69,6 +70,10 @@ def _wire_common_stubs(monkeypatch, conversation, captured):
     monkeypatch.setattr(speaker_identification_mod, "verify_and_transcribe_sample", fake_verify)
 
 
+async def _paid_named_speakers():
+    return True
+
+
 async def _no_owner_name():
     """The listen coordinator's owner-name veto, resolved to "no owner name known"."""
     return None
@@ -106,7 +111,7 @@ def test_uses_conversation_language_without_consulting_user_preference(monkeypat
     assert captured['language'] == "de"
 
 
-def test_sync_name_detection_receives_selected_language(monkeypatch):
+def test_sync_name_detection_receives_selected_language(monkeypatch, paid_sync_entitlement):
     from utils.sync import pipeline
     from models.transcript_segment import TranscriptSegment
 
@@ -122,7 +127,7 @@ def test_sync_name_detection_receives_selected_language(monkeypatch):
     assert seen == ['pt']
 
 
-def test_sync_name_detection_log_omits_transcript_identity(monkeypatch, caplog):
+def test_sync_name_detection_log_omits_transcript_identity(monkeypatch, caplog, paid_sync_entitlement):
     import logging
     from models.transcript_segment import TranscriptSegment
     from utils.sync import pipeline
@@ -160,6 +165,7 @@ def test_live_name_detection_receives_session_language(monkeypatch):
             speaker_to_person={},
             person_embeddings={},
             resolve_owner_name=_no_owner_name,
+            named_speakers_allowed=_paid_named_speakers,
         ),
     )
     monkeypatch.setattr(transcripts, 'detect_speaker_introduction', lambda text, language=None: seen.append(language))
@@ -167,3 +173,14 @@ def test_live_name_detection_receives_session_language(monkeypatch):
         processor._speaker_detection([TranscriptSegment(id='s', text='合成テキスト', is_user=False, start=0, end=5)], 0)
     )
     assert seen == ['ja']
+
+
+# Only the sync name-detection tests need the paid entitlement; the sample-
+# extraction tests never consult the gate, and the live test carries its own
+# named_speakers_allowed stub. Keeping them off the fixture preserves their
+# default/free-plan context.
+@pytest.fixture
+def paid_sync_entitlement(monkeypatch):
+    from utils.sync import speaker_identity
+
+    monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: True)
