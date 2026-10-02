@@ -11,7 +11,7 @@ import database.mcp_api_key as mcp
 import database.redis_db as redis_db
 from database.api_key_metadata import ApiKeyAuthRepair, ApiKeyRevocationUnavailableError
 from tests.unit.test_api_key_listability_contract import _Firestore, _Query, _mcp_grant_keys
-from tests.unit.test_api_key_revocation_race_fakes import AtomicKeyBatch, RedisStore
+from tests.unit.fixtures.api_key_revocation_fakes import AtomicKeyBatch, RedisStore
 
 
 @pytest.fixture(params=["dev", "mcp"])

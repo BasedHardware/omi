@@ -5,7 +5,9 @@ import pytest
 
 import database.mcp_api_key as mcp_api_key_db
 import database.api_key_cache as api_key_cache
-from tests.unit.test_api_key_revocation_race_fakes import AtomicKeyBatch, RedisStore
+from database.api_key_metadata import ApiKeyCacheReadMode, ApiKeyCacheReadResult, ApiKeyValidationError
+from tests.unit.fixtures.api_key_revocation_fakes import AtomicKeyBatch, RedisStore
+import scripts.backfill_mcp_key_full_access as backfill_mcp_keys
 
 
 @pytest.fixture(autouse=True)
@@ -13,10 +15,6 @@ def _local_revocation_store(monkeypatch):
     store = RedisStore()
     monkeypatch.setattr(api_key_cache, "_redis", lambda: store)
     return store
-
-
-from database.api_key_metadata import ApiKeyCacheReadMode, ApiKeyCacheReadResult, ApiKeyValidationError
-import scripts.backfill_mcp_key_full_access as backfill_mcp_keys
 
 
 class _DocSnapshot:

@@ -12,11 +12,43 @@ from scripts import export_openapi
 
 @pytest.fixture
 def boundary(monkeypatch):
+    """Hermetic dependency boundary with full teardown.
+
+    install_hermetic_dependency_patches() reassigns attributes on real
+    modules (dotenv, google.auth, firebase_admin, google.cloud clients,
+    redis client constructors). Pre-registering every patched target with
+    monkeypatch snapshots the originals first, so pytest's fixture teardown
+    restores them even though the installer assigns the attributes directly.
+    Without this, the patches leak into the rest of the session's files.
+    """
+    import dotenv
+    import firebase_admin
+    import google.auth
+    from google.cloud import firestore as firestore_client
+    from google.cloud import storage as storage_client
+    import redis as redis_pkg
+
+    # Snapshot the exact attributes the installer overwrites, including the
+    # dunder inits it swaps on the redis client classes.
+    monkeypatch.setattr(dotenv, "load_dotenv", dotenv.load_dotenv)
+    monkeypatch.setattr(dotenv, "dotenv_values", dotenv.dotenv_values)
+    monkeypatch.setattr(google.auth, "default", google.auth.default)
+    monkeypatch.setattr(firestore_client.Client, "__init__", firestore_client.Client.__init__)
+    monkeypatch.setattr(redis_pkg.Redis, "__init__", redis_pkg.Redis.__init__)
+    monkeypatch.setattr(redis_pkg.StrictRedis, "__init__", redis_pkg.StrictRedis.__init__)
+    monkeypatch.setattr(redis_pkg.Redis, "from_url", redis_pkg.Redis.from_url)
+    monkeypatch.setattr(redis_pkg.StrictRedis, "from_url", redis_pkg.StrictRedis.from_url)
+    monkeypatch.setattr(redis_pkg, "from_url", redis_pkg.from_url)
+    monkeypatch.setattr(storage_client, "Client", storage_client.Client)
+    monkeypatch.setattr(firebase_admin, "initialize_app", firebase_admin.initialize_app)
+    monkeypatch.setattr(firebase_admin, "get_app", firebase_admin.get_app)
+
     original_env = dict(os.environ)
     monkeypatch.syspath_prepend(str(export_openapi.E2E_DIR))
     export_openapi.configure_hermetic_environment()
+    attempts: list[str] = []
     try:
-        with export_openapi.record_and_block_outbound_network():
+        with export_openapi.record_and_block_outbound_network() as attempts:
             export_openapi.install_hermetic_dependency_patches()
             from routers import developer_key
             from utils.other import endpoints
@@ -25,6 +57,9 @@ def boundary(monkeypatch):
             app = FastAPI()
             app.include_router(developer_key.router)
             yield app, developer_key
+            # The hermetic-network contract this file advertises: no test in
+            # it may attempt an outbound connection.
+            assert not attempts, f"hermetic boundary saw outbound attempts: {attempts}"
     finally:
         os.environ.clear()
         os.environ.update(original_env)

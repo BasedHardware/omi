@@ -43,7 +43,7 @@ from fastapi import HTTPException
 
 import database.mcp_api_key as mcp_api_key_db
 import database.api_key_cache as api_key_cache
-from tests.unit.test_api_key_revocation_race_fakes import AtomicKeyBatch, RedisStore
+from tests.unit.fixtures.api_key_revocation_fakes import AtomicKeyBatch, RedisStore
 
 
 @pytest.fixture(autouse=True)
