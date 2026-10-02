@@ -1617,14 +1617,20 @@ async def test_saturated_old_reservation_overflows_directly_to_a_cheaper_model(m
 
 
 @pytest.mark.asyncio
-async def test_a_successful_target_dedicated_request_promotes_the_reservation(monkeypatch):
-    client = _ScriptedClient([_ok_response])
+@pytest.mark.parametrize("status,ready", [(200, True), (302, False)])
+async def test_only_successful_target_dedicated_requests_promote_the_reservation(monkeypatch, status, ready):
+    def reply(url):
+        response = _ok_response(url)
+        response.status_code = status
+        return response
+
+    client = _ScriptedClient([reply])
     routed = _install_proxy_doubles(monkeypatch, client)
     target = desktop_proxy.VERTEX_PT_TARGET_MODEL
     response = await desktop_proxy._proxy(make_request(), f"models/{target}:generateContent", False, "user")
-    assert response.status_code == 200
+    assert response.status_code == status
     assert routed == [(target, "")]
-    assert desktop_proxy._pt_target_is_ready() is True
+    assert desktop_proxy._pt_target_is_ready() is ready
     assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
 
 

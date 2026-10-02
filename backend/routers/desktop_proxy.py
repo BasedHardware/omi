@@ -1132,8 +1132,6 @@ async def _stream_provider(
             # The body carries the difference between 'reservation full' and
             # ordinary rate limiting, and a streamed error body is not read yet.
             await upstream.aread()
-            unavailable = ptr.is_model_unavailable(upstream.status_code, upstream.text)
-            exhausted = _overflow_triggered(upstream.status_code, upstream.text)
             # This dispatch is over; record it before recovery routing can fail.
             telemetry.record_attempt('error', _attempt_error_class(upstream.status_code, upstream.text))
             if not pending and query is not None:
@@ -1496,6 +1494,7 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
                 if (
                     model == ptr.PT_MODEL_TARGET
                     and route.headers.get(ptr.REQUEST_TYPE_HEADER) == ptr.REQUEST_TYPE_DEDICATED
+                    and 200 <= response.status_code < 300
                 ):
                     _record_pt_target_observation(True)
             recovery = _recovery_plan(
