@@ -256,15 +256,16 @@ Capacity is explicitly selected with `X-Vertex-AI-LLM-Request-Type`
    deadline. Streaming probe output is bounded and buffered until success, so
    partial output and ambiguous promotion cannot escape. This budget applies
    to gateway capacity discovery, not requests on an already confirmed order.
-2. A successful dedicated target response or a capacity-exhausted dedicated
-   429 latches `_pt_target_ready`: exhausted capacity proves the order exists.
-   The casefolded absent-order matcher takes precedence over exhaustion; a
-   no-order 429 clears readiness, retries shared and retains the 600-second
-   probe TTL. Successful shared requests, generic 429s, 401s and 5xx responses
-   prove nothing about an order. A full target order spills this request to
-   **gemini-3.8-flash shared**, at the same model/list price as its origin,
+2. Only a successful dedicated target response promotes: HTTP 2xx, with
+   `usageMetadata.trafficType` equal to `PROVISIONED_THROUGHPUT` when present.
+   Streaming observes the completed response's final traffic metadata. No 429
+   of any wording, other HTTP error, timeout or connection failure promotes;
+   errors never prove that an order exists. Before promotion, any failed
+   dedicated target probe retries the same model shared and retains the
+   600-second probe TTL. After promotion, any dedicated target 429 leaves the
+   target promoted and spills this request to **gemini-3.8-flash shared**, at the same model/list price as its origin,
    rather than a cheaper rung: this lane's value is its extraction precision.
-   This gateway target rule also applies after promotion; existing models keep
+   Existing models keep
    their original overflow ladder, deadlines and HTTP status handling (<400
    accepts the body). Only target discovery probes require a 2xx response. Both streaming and nonstreaming providers observe
    the actual model and capacity. The latch is process-local, so rollout is
@@ -278,6 +279,16 @@ Capacity is explicitly selected with `X-Vertex-AI-LLM-Request-Type`
    reachability, live-reservation exclusion, and the lane's starting price
    ceiling. Old 2.5 overflow never probes the more expensive target. Price
    ceilings also apply to operator overrides and cross-family fallbacks.
+
+On 2026-10-02, a live dedicated `gemini-3.8-flash` request on `locations/us`,
+with no target order in existence, returned HTTP 429 / `RESOURCE_EXHAUSTED`:
+
+> Too many requests. Exceeded the provisioned throughput. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.
+
+The existing exhaustion matcher matches this absent-order response. It remains
+useful for legacy overflow routing, but must never authorize promotion. The live
+gateway smoke verified a bounded dedicated 429 followed by same-model US shared
+200 `ON_DEMAND`, no promotion, and a single shared attempt inside the probe TTL.
 
 Before migration 3.8 PayGo is incremental alongside the existing fixed fee.
 After migration old-client 2.5 PayGo becomes incremental at $0.30/$2.50 per

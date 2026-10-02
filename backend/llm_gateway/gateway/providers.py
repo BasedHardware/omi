@@ -499,7 +499,6 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                         async for chunk in chunks:
                             yield chunk
                 if probe:
-                    self._observe_attempt(model, capacity, 200, b'')
                     self._record_model_available(model)
                     for chunk in buffered:
                         yield chunk
@@ -546,6 +545,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         headers = _vertex_headers(await self._vertex_access_token(), capacity)
         decoder = SSEEventDecoder()
         received = 0
+        traffic_type = 'PROVISIONED_THROUGHPUT'
         async with self._http_client.stream(
             'POST',
             endpoint,
@@ -568,6 +568,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     if not data or data == '[DONE]':
                         continue
                     parsed = _parse_limited_json_response(data.encode('utf-8'))
+                    usage_metadata = parsed.get('usageMetadata', {})
+                    if isinstance(usage_metadata, Mapping) and 'trafficType' in usage_metadata:
+                        traffic_type = usage_metadata['trafficType']
                     translated, _ = _vertex_to_openai_stream_chunk(
                         parsed,
                         requested_model=requested_model,
@@ -575,6 +578,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     )
                     if translated is not None:
                         yield translated
+        self._observe_attempt(model, capacity, response.status_code, b'', traffic_type=traffic_type)
 
     async def create_embedding(
         self,
@@ -680,7 +684,6 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     attempts = [(model, ptr.REQUEST_TYPE_SHARED)]
                     continue
                 raise
-            self._observe_attempt(model, capacity, 200, b'')
             self._record_model_available(model)
             assert parsed is not None
             return parsed
@@ -720,9 +723,17 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                         error_preview,
                         response.headers.get('retry-after'),
                     )
-                return _parse_limited_json_response(
+                parsed = _parse_limited_json_response(
                     await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 )
+            usage_metadata = parsed.get('usageMetadata', {})
+            traffic_type = (
+                usage_metadata.get('trafficType', 'PROVISIONED_THROUGHPUT')
+                if isinstance(usage_metadata, Mapping)
+                else None
+            )
+            self._observe_attempt(model, capacity, response.status_code, b'', traffic_type=traffic_type)
+            return parsed
         except _VertexHttpError:
             raise
         except ProviderFailure:

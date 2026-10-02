@@ -91,7 +91,7 @@ class VertexPTPolicyMixin:
     ) -> list[tuple[str, str]]:
         message = _bounded_error_text(preview)
         if served_model == ptr.PT_MODEL_TARGET and capacity == ptr.REQUEST_TYPE_DEDICATED:
-            if self._is_target_probe(served_model, capacity) or self._overflow_triggered(status_code, message):
+            if self._is_target_probe(served_model, capacity) or status_code == 429:
                 # Preserve the target lane's precision on absent/full dedicated capacity.
                 return [(served_model, ptr.REQUEST_TYPE_SHARED)]
         if ptr.is_model_unavailable(status_code, message):
@@ -104,18 +104,22 @@ class VertexPTPolicyMixin:
             return self._overflow_plan(served_model, origin_model=origin_model)
         return []
 
-    def _observe_attempt(self, model: str, capacity: str, status_code: int, preview: bytes) -> None:
+    def _observe_attempt(
+        self,
+        model: str,
+        capacity: str,
+        status_code: int,
+        preview: bytes,
+        *,
+        traffic_type: str | None = 'PROVISIONED_THROUGHPUT',
+    ) -> None:
         """Latch PT-target probe outcomes from a dedicated attempt."""
         if model != ptr.PT_MODEL_TARGET or capacity != ptr.REQUEST_TYPE_DEDICATED:
             return
-        message = _bounded_error_text(preview)
-        if ptr.is_provisioned_capacity_absent(status_code, message):
-            self._record_pt_target_observation(False)
-        elif 200 <= status_code < 300 or ptr.is_provisioned_capacity_exhausted(status_code, message):
-            # A full dedicated order proves the order exists, even without output.
+        if 200 <= status_code < 300 and traffic_type == 'PROVISIONED_THROUGHPUT':
             self._record_pt_target_observation(True)
         else:
-            # A 401/5xx/generic quota failure proves nothing about the order.
+            # No error proves an order exists or revokes a successful observation.
             self._pt_target_probed_at = self._now()
 
     def _overflow_triggered(self, status_code: int, message: str) -> bool:

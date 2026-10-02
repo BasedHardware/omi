@@ -91,7 +91,11 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
         )
 
         async def call():
-            request = {'messages': [{'role': 'user', 'content': 'synthetic parity input'}]}
+            request = {
+                'messages': [{'role': 'user', 'content': 'synthetic parity input'}],
+                'max_tokens': 64,
+                'google': {'thinking_config': {'thinking_budget': 0}},
+            }
             if stream:
                 chunks = [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
                 assert b'"ok"' in b''.join(chunks) and chunks[-1] == b'data: [DONE]\n\n'
@@ -120,3 +124,149 @@ async def test_existing_models_keep_main_attempts_deadlines_headers_and_errors(
         assert request.headers['content-type'] == 'application/json'
         assert request.headers[ptr.REQUEST_TYPE_HEADER] == request_type
         assert request.extensions['timeout'] == dict(connect=timeout, read=timeout, write=timeout, pool=timeout)
+        # Literal origin/main wire body, including the Pro remap and overflow.
+        # Do not derive this expectation using the helper under test.
+        assert json.loads(request.content) == {
+            'contents': [{'role': 'user', 'parts': [{'text': 'synthetic parity input'}]}],
+            'generationConfig': {'maxOutputTokens': 64, 'thinkingConfig': {'thinkingBudget': 0}},
+        }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stream', [False, True])
+@pytest.mark.parametrize('ready', [False, True])
+@pytest.mark.parametrize('probed_at', [None, 17.0])
+async def test_non_target_traffic_leaves_cross_request_target_promotion_state_untouched(
+    monkeypatch, stream, ready, probed_at
+):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
+    seen = []
+    status = 200
+
+    def handler(request):
+        seen.append(request)
+        body = (
+            {'candidates': [{'content': {'parts': [{'text': 'ok'}]}, 'finishReason': 'STOP'}]}
+            if status == 200
+            else {'error': {'message': 'synthetic unclassified error'}}
+        )
+        content = json.dumps(body)
+        if stream and status == 200:
+            content = 'data: ' + content + '\n\n'
+        return httpx.Response(status, content=content)
+
+    async def token():
+        return 'synthetic-token'
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=token, now=lambda: 100.0)
+        provider._pt_target_ready = ready
+        provider._pt_target_probed_at = probed_at
+        for anchor, status in [
+            ('gemini-2.5-flash', 200),
+            ('gemini-2.5-flash', 401),
+            ('gemini-2.5-flash', 500),
+            ('gemini-2.5-flash', 429),
+            ('gemini-2.5-flash-lite', 200),
+            ('gemini-2.5-pro', 200),
+        ]:
+            kwargs = dict(
+                provider_ref=ProviderRef(provider='gemini', model=anchor),
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                timeout_ms=60000,
+            )
+            request = {'messages': [{'role': 'user', 'content': 'synthetic parity input'}]}
+
+            async def call():
+                if stream:
+                    return [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
+                return await provider.create_chat_completion(request, **kwargs)
+
+            if status >= 400:
+                with pytest.raises(ProviderFailure):
+                    await call()
+            else:
+                await call()
+            assert provider._pt_target_ready is ready
+            assert provider._pt_target_probed_at == probed_at
+        assert len(seen) == 6
+        assert all(ptr.PT_MODEL_TARGET not in str(request.url) for request in seen)
+        assert [request.headers[ptr.REQUEST_TYPE_HEADER] for request in seen[:4]] == [
+            'shared' if ready else 'dedicated'
+        ] * 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', [200, 302, 400, 401, 429, 500])
+async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missing_usage(monkeypatch, status):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    monkeypatch.setenv(ptr.REGIONAL_LOCATION_ENV, 'us-central1')
+    monkeypatch.setenv('LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS', 'false')
+    monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(
+            status,
+            json=(
+                {'error': {'message': 'synthetic error'}}
+                if status >= 400
+                else {
+                    'predictions': [{'embeddings': {'values': [0.1, 0.2]}}],
+                    'metadata': {'billableCharacterCount': 22},
+                }
+            ),
+            headers={'retry-after': '7'},
+        )
+
+    async def token():
+        return 'synthetic-token'
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=token)
+        kwargs = dict(
+            provider_ref=ProviderRef(provider='gemini', model='gemini-embedding-001'),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=60000,
+        )
+        request = {'input': 'synthetic parity input', 'task_type': 'RETRIEVAL_QUERY'}
+        if status >= 400:
+            with pytest.raises(ProviderFailure) as raised:
+                await provider.create_embedding(request, **kwargs)
+            assert (
+                raised.value.failure_class
+                == {
+                    400: FailureClass.PROVIDER_INVALID_REQUEST,
+                    401: FailureClass.INVALID_CONFIG,
+                    429: FailureClass.PROVIDER_429_OMI_PAID,
+                    500: FailureClass.PROVIDER_5XX_OMI_PAID,
+                }[status]
+            )
+            assert str(raised.value) == 'provider request failed'
+            assert raised.value.retry_after_seconds == (7 if status == 429 else None)
+        else:
+            response = await provider.create_embedding(request, **kwargs)
+            assert response.response == {
+                'object': 'list',
+                'data': [{'object': 'embedding', 'embedding': [0.1, 0.2], 'index': 0}],
+                'model': 'gemini-embedding-001',
+            }
+            assert response.accounting.usage is None
+        assert provider._pt_target_ready is False
+        assert provider._pt_target_probed_at is None
+    assert len(seen) == 1
+    outgoing = seen[0]
+    assert str(outgoing.url) == (
+        'https://us-central1-aiplatform.googleapis.com/v1/projects/synthetic-project'
+        '/locations/us-central1/publishers/google/models/gemini-embedding-001:predict'
+    )
+    assert outgoing.method == 'POST'
+    assert outgoing.headers['authorization'] == 'Bearer synthetic-token'
+    assert outgoing.headers['content-type'] == 'application/json'
+    assert outgoing.headers[ptr.REQUEST_TYPE_HEADER] == 'shared'
+    assert outgoing.extensions['timeout'] == dict(connect=60.0, read=60.0, write=60.0, pool=60.0)
+    assert json.loads(outgoing.content) == {
+        'instances': [{'content': 'synthetic parity input', 'task_type': 'RETRIEVAL_QUERY'}]
+    }

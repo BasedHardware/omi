@@ -294,27 +294,39 @@ async def test_direct_kill_switch_uses_same_declared_location_and_old_client_cap
     )
 
 
+# Captured from a real dedicated gemini-3.8-flash request on locations/us,
+# 2026-10-02, while no target order exists. This is a Google error, not user data.
+ABSENT_TARGET_ORDER_RESPONSE = {
+    'error': {
+        'code': 429,
+        'message': (
+            'Too many requests. Exceeded the provisioned throughput. Please refer to '
+            'https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.'
+        ),
+        'status': 'RESOURCE_EXHAUSTED',
+    }
+}
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('stream', [False, True])
-@pytest.mark.parametrize('ready', [False, True])
-@pytest.mark.parametrize('absent', [False, True])
-async def test_target_absent_order_keeps_probe_ttl_but_full_order_promotes_and_spills_same_model(
-    monkeypatch, stream, ready, absent
-):
+@pytest.mark.parametrize('failure', ['observed_absent', 'legacy_absent', 429, 500, 'timeout'])
+async def test_any_failed_target_probe_retries_same_model_without_promotion_and_keeps_ttl(monkeypatch, stream, failure):
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     seen = []
     now = [100.0]
-    message = (
-        'NO PROVISIONED THROUGHPUT ORDER CONFIGURED'
-        if absent
-        else 'Provisioned Throughput dedicated capacity exhausted'
-    )
 
     def handler(request):
         seen.append(request)
         now[0] += 0.125
         if len(seen) == 1:
-            return httpx.Response(429, json={'error': {'message': message}})
+            if failure == 'timeout':
+                raise httpx.ReadTimeout('synthetic timeout', request=request)
+            if failure == 'observed_absent':
+                return httpx.Response(429, json=ABSENT_TARGET_ORDER_RESPONSE)
+            if failure == 'legacy_absent':
+                return httpx.Response(429, json={'error': {'message': 'NO PROVISIONED THROUGHPUT ORDER CONFIGURED'}})
+            return httpx.Response(failure, json={'error': {'message': 'synthetic unclassified failure'}})
         return (
             httpx.Response(200, text='data: ' + json.dumps(_response()) + '\n\n')
             if stream
@@ -323,7 +335,6 @@ async def test_target_absent_order_keeps_probe_ttl_but_full_order_promotes_and_s
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token, now=lambda: now[0])
-        provider._pt_target_ready = ready
         kwargs = dict(
             provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
             credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
@@ -336,27 +347,101 @@ async def test_target_absent_order_keeps_probe_ttl_but_full_order_promotes_and_s
             assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
                 'content'
             ] == 'ok'
-        assert provider._pt_target_ready == (not absent)
+        assert not provider._pt_target_ready
         assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
         assert all(f'/models/{ptr.PT_MODEL_TARGET}:' in str(r.url) for r in seen)
-        assert seen[0].extensions['timeout']['read'] == (1.0 if ready else 0.25)
+        assert seen[0].extensions['timeout']['read'] == 0.25
         assert seen[1].extensions['timeout']['read'] == 0.875
+        assert provider._attempt_plan(ptr.PT_MODEL_CURRENT) == [(ptr.PT_MODEL_CURRENT, 'dedicated')]
+        probe_at = provider._pt_target_probed_at
+        assert probe_at is not None
+        now[0] = probe_at + 599
+        assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [(ptr.PT_MODEL_TARGET, 'shared')]
+        now[0] = probe_at + 600
         assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [
-            (ptr.PT_MODEL_TARGET, 'shared' if absent else 'dedicated')
+            (ptr.PT_MODEL_TARGET, 'dedicated'),
+            (ptr.PT_MODEL_TARGET, 'shared'),
         ]
-        assert provider._attempt_plan(ptr.PT_MODEL_CURRENT) == [
-            (ptr.PT_MODEL_CURRENT, 'dedicated' if absent else 'shared')
-        ]
-        if absent:
-            probe_at = provider._pt_target_probed_at
-            assert probe_at is not None
-            now[0] = probe_at + 599
-            assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [(ptr.PT_MODEL_TARGET, 'shared')]
-            now[0] = probe_at + 600
-            assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [
-                (ptr.PT_MODEL_TARGET, 'dedicated'),
-                (ptr.PT_MODEL_TARGET, 'shared'),
-            ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stream', [False, True])
+@pytest.mark.parametrize('status', [200, 201])
+@pytest.mark.parametrize('traffic', ['missing', 'PROVISIONED_THROUGHPUT', 'ON_DEMAND', None])
+async def test_only_successful_dedicated_target_response_with_valid_traffic_promotes(
+    monkeypatch, stream, status, traffic
+):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        result = _response()
+        if traffic != 'missing':
+            result['usageMetadata'] = {'trafficType': traffic}
+        if stream:
+            # A final ON_DEMAND/null block must override earlier PT metadata.
+            earlier = {'usageMetadata': {'trafficType': 'PROVISIONED_THROUGHPUT'}}
+            return httpx.Response(
+                status, text='data: ' + json.dumps(earlier) + '\n\n' + 'data: ' + json.dumps(result) + '\n\n'
+            )
+        return httpx.Response(status, json=result)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
+        kwargs = dict(
+            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=1000,
+        )
+        request = {'messages': [{'role': 'user', 'content': 'test'}]}
+        if stream:
+            assert [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
+        else:
+            await provider.create_chat_completion(request, **kwargs)
+        assert provider._pt_target_ready == (traffic in {'missing', 'PROVISIONED_THROUGHPUT'})
+    assert len(seen) == 1 and seen[0].headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stream', [False, True])
+@pytest.mark.parametrize('error', [ABSENT_TARGET_ORDER_RESPONSE, {'error': {'message': 'generic quota exceeded'}}])
+async def test_after_successful_promotion_any_target_429_spills_same_model_and_stays_promoted(
+    monkeypatch, stream, error
+):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        if len(seen) == 2:
+            return httpx.Response(429, json=error)
+        result = _response()
+        result['usageMetadata'] = {'trafficType': 'PROVISIONED_THROUGHPUT' if len(seen) == 1 else 'ON_DEMAND'}
+        return (
+            httpx.Response(200, text='data: ' + json.dumps(result) + '\n\n')
+            if stream
+            else httpx.Response(200, json=result)
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = VertexGeminiProvider(http_client=client, access_token_supplier=_token)
+        kwargs = dict(
+            provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_TARGET),
+            credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+            timeout_ms=1000,
+        )
+        for _ in range(2):
+            request = {'messages': [{'role': 'user', 'content': 'test'}]}
+            if stream:
+                assert [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
+            else:
+                await provider.create_chat_completion(request, **kwargs)
+            assert provider._pt_target_ready
+        assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [(ptr.PT_MODEL_TARGET, 'dedicated')]
+        assert provider._attempt_plan(ptr.PT_MODEL_CURRENT) == [(ptr.PT_MODEL_CURRENT, 'shared')]
+    assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'dedicated', 'shared']
+    assert all(f'/models/{ptr.PT_MODEL_TARGET}:' in str(r.url) for r in seen)
 
 
 @pytest.mark.asyncio
