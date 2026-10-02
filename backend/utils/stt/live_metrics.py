@@ -109,8 +109,24 @@ COST_DECISION = Counter(
     'omi_stt_cost_routing_decisions_total', 'Cost routing selections and skips', ['target', 'reason']
 )
 COST_BENCH = Gauge('omi_stt_cost_routing_benched', 'Fleet target health bench', ['target'])
-COST_STAGE = Gauge('omi_stt_cost_routing_stage', 'Global fleet target recovery stage: 0, 5, 25, 100', ['target'])
-COST_EVENTS = Counter('omi_stt_cost_routing_events_total', 'Fleet health transitions', ['target', 'event'])
+COST_STAGE = Gauge(
+    'omi_stt_cost_routing_stage', 'Pod view of global target stage: 0, 5, 25, 100; NaN unknown', ['target']
+)
+COST_SNAPSHOT_AT = Gauge(
+    'omi_stt_cost_routing_snapshot_timestamp_seconds', 'Last complete Redis cost snapshot on this pod'
+)
+COST_STATE_KNOWN = Gauge(
+    'omi_stt_cost_routing_state_known', 'Whether this pod has evidence about global target health', ['target']
+)
+COST_EVENTS = Counter(
+    'omi_stt_cost_routing_events_total', 'CAS health transitions by state scope', ['target', 'event', 'scope']
+)
+COST_ALL_DEGRADED = Counter(
+    'omi_stt_cost_routing_all_degraded_total', 'Selections with every eligible target unhealthy', ['target']
+)
+COST_OBSERVATIONS = Counter(
+    'omi_stt_cost_routing_observations_total', 'Classified cost health outcomes', ['target', 'outcome']
+)
 COST_SHADOW = Counter(
     'omi_stt_cost_routing_shadow_total',
     'Proposed vs static primary',

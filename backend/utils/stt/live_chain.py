@@ -18,7 +18,7 @@ from utils.observability.fallback import capacity_fallback_kwargs, record_fallba
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_failure import PendingLiveFailover, fallback_reason_for_typed_death
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
-from utils.stt.live_health import health, mode as routing_mode
+from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
     connecting_target,
     propose,
@@ -307,6 +307,20 @@ async def connect_configured_chain(
                     routing_models=routing_models,
                 )
             reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
+            health.record_connect_failure(
+                (
+                    target.id
+                    if target is not None
+                    else (
+                        (routing_models or {}).get('parakeet') or 'parakeet'
+                        if service.value == 'parakeet'
+                        else DEFAULT_IDS.get(service.value, service.value)
+                    )
+                ),
+                bounded_language(routing_language),
+                routing_uid,
+                reason,
+            )
             if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
                 _note_connect_result(failed_provider=service.value)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS

@@ -21,8 +21,9 @@ protocol; a genuinely new protocol first needs an adapter.
 The connection path reads cached memory. Redis state is refreshed off connect
 with a 75 ms deadline and eight bounded result-write slots. Redis faults retain
 known benches and use local evidence; pods do not independently reopen cost
-gate trials. Successful speech legs count at completion, failed/no-text legs
-as soon as known. First-text `text`/`no_text` metrics remain diagnostic and are
+gate trials. Completed text counts at close and attributable provider deaths as soon as
+known. Plain no-text/deadline-only outcomes are censored and cannot advance
+health or recovery. Connect failures have their own classified target outcome. First-text `text`/`no_text` metrics remain diagnostic and are
 not double-counted into the cost health test. The static-path legacy score and
 account state remains available for local resilience; it does not rank the
 active policy. Fleet deadlines use Redis server time; opposite +/-60-second
@@ -32,8 +33,12 @@ keeps routing usable, and pending local benches reconcile before re-entry.
 Window candidates must match the session's actual engine choice, language
 eligibility and hosted endpoint. Mismatches and empty proposals restore the
 configured chain and increment `omi_stt_cost_routing_fail_open_total`.
-Configured unregistered services remain at the tail, followed by benched
-targets as last resorts. Capacity signals and five-second local capacity
+Configured unregistered services remain at the tail, followed by health-skipped
+trial/bench targets as last resorts. Health stages cannot empty an eligible
+chain: all-degraded candidates are ordered by stage, observed error rate, then
+cost. The terminal target has no health/trial share limit unless a cheaper
+fully healthy candidate can serve this UID. Explicit ramp, engine/capability
+and account exclusions remain hard. Read the all-degraded counter before on. Capacity signals and five-second local capacity
 cooldowns exclude terminal legs and configured-default aliases when an
 alternative remains. If all remaining candidates are capacity-blocked, dial
 one least-recently-refused candidate through its normal account/circuit and
@@ -46,24 +51,36 @@ last-resort forcing respects it; the one-attempt escape above is the only
 capacity exception in the on cohort. Ordinary mid-session deaths exclude only the target;
 quota/auth failures exclude its whole family.
 
-The gate is a calibrated Page CUSUM, not an anytime-valid probability test.
-At 3%/5%/7.5% baselines, 200 x 20k-session replays observe 0/1/24 false benches
-per four million sessions. At 60% outage, median/p95 detection is 8/10 failed
-sessions; 16% and 12% median detection is 264.5 and 972.5 sessions. A 10%
-brownout has no prompt-bench SLA. Sparse languages can bench with two users,
-sixteen recent failures and stronger score evidence; promotion at 30/60
-passing sessions needs no distinct-user floor. Trial promotion judges the
-failing-user fraction: each fingerprint has one majority-outcome vote across
-all its current-window speech sessions. At most its first three sessions
-contribute sequential evidence. Failed trial boundaries need the same breadth
-protection as fleet benches. Held windows reset votes/evidence at 120/240
-sessions in stages 5/25. With two always-failing users and at least 23
-always-passing users observed in **each** window (>=92% healthy users),
-recovery reaches 100% within **360 completed trial sessions**; representative
-30/60-session prefixes reduce this to 90. No finite bound exists if healthy
-users never appear in the sticky trial cohort. Broad failures still reject.
-The v3 namespace starts fresh shadow evidence for the new vote schema; warm
-it before increasing on-percent.
+The gate is an 8% Page CUSUM on **provider availability errors**, not an
+anytime-valid probability test or a no-text quality gate. Errors are typed
+serve/death/connect failures (`modulate_serve_error`, `connection_lost`,
+`send_failed`, `provider_5xx`, `provider_429`, `provider_rate_limited`, `timeout`).
+Completed text is passing evidence; plain no-text, first-text deadline/empty
+streak, client/VAD, account/config/capacity and idle/rotation are censored.
+Legacy transcript and deadline SLIs remain essential: this loses automatic
+health-gate detection of a recognizer that connects but silently emits no words.
+No successor/content join is performed. Shadow serving and diagnostics remain
+unchanged; active routing no longer opens a local serve breaker for plain
+no-text. Account and genuine provider breakers retain their fast protection.
+
+At 5%/7%/10% no-text with zero provider errors, replays observe zero false
+benches per 400k sessions at each floor. Conditional on that classification,
+the probability is zero: no-text cannot raise a score. With a 10% censored
+noise floor, 200 seeded runs detect 100% errors in 8/8 median/p95 sessions,
+60% errors in 13/19 sessions (8/9 failures), and a 40% Modulate brownout in
+22/47 sessions (9/15 failures). Wall time depends on observed classified
+traffic and completion/cache delay. Sparse language breadth protection remains.
+
+Promotion needs 30/60 **classified** trial outcomes and a passing user-vote
+fraction; each user gets one majority-outcome vote and only the first three
+outcomes contribute sequential evidence. Broad trial failures reject; held
+windows reset at 120/240. Two always-failing users and 23 always-passing users
+observed in each window (>=92% healthy observed users) promote within 360
+classified outcomes. Censored noise does not advance this bound; healthy
+users absent from the sticky cohort cannot establish recovery.
+
+The v4 namespace starts fresh provider-error evidence. Do not reinterpret v3
+no-text history, or raise on-percent until the new shadow data is warm.
 
 At 17.9k eligible sessions/day and 61% Modulate disruption, the delayed-result
 trial replay averages 75.46 disruptions/day (p95 80; worst seeded run 83),
@@ -85,7 +102,7 @@ sum by (kind) (rate(omi_stt_fleet_health_write_dropped_total{job="backend-listen
 sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[5m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[5m])), 1)
 ```
 
-Cost state uses `omi:live-stt:cost-v3:<target>:<bounded-language>` (and `all`)
+Cost state uses `omi:live-stt:cost-v4:<target>:<bounded-language>` (and `all`)
 with atomic compare-and-set updates and trial-start leases. A full result-write
 pool, deadline or CAS contention can drop a fleet sample and increments
 `omi_stt_fleet_health_write_dropped_total`; local evidence still advances.
@@ -94,14 +111,18 @@ show `omi_stt_cost_routing_decisions_total`, `omi_stt_cost_routing_shadow_total`
 `omi_stt_cost_routing_benched`, `omi_stt_cost_routing_stage`, and
 `omi_stt_cost_routing_events_total`, and `omi_stt_cost_routing_fail_open_total`.
 Transition logs include counts, failure rate and CUSUM score.
-The bench/stage gauges show **global** target state from each pod's cache.
-The event counter records global CAS transitions once at the writer; language
-and Redis-down local transitions remain in logs. Transition `n/failures/rate`
-are raw sessions, while promotion uses user votes. Shadow comparison labels
-are registry IDs (at most 16) plus fixed `unregistered`/`unavailable` values;
-no UID, endpoint, content or language is added to these metrics. The new
-shadow label schema replaces `{agreement,target}`. Drain old pods before
-using the new pair query.
+The bench/stage gauges are **pod views of global target state**, including
+local fallback during Redis faults. Every refresh observes all registry global
+keys and republishes, even on idle/ineligible pods; unknown is NaN with
+`omi_stt_cost_routing_state_known=0`. The snapshot timestamp is Redis server
+time. Require fresh, known, converged views before interpreting min/max.
+Counters record CAS transitions once at the writer with `scope=global|language`;
+local Redis-down transitions remain logs. Target/event/scope series are
+initialised at zero before traffic so first post-scrape transitions are counted.
+Increments before a pod's first scrape cannot be recovered by `increase()`.
+Transition rates are classified outcomes; promotion uses user votes.
+Shadow labels remain at most 16 registry IDs plus fixed sentinels; no UID or
+content. Drain old pods before using v4 event-scope and freshness queries.
 
 The `omi-modulate-failing-soniox` Telegram rule names the active spend lever.
 The existing `Omi - Services Alerting (Telegram)` Grafana contact point must
@@ -110,35 +131,83 @@ evaluation after deployment; committed JSON alone is not delivery evidence.
 
 ## Exact router rollout queries
 
-Global gate stage (0 benched, 5 or 25 trial, 100 fully available), using the
-most restrictive pod cache during refresh lag:
+Global-state pod stage (0 benched, 5/25 trial, 100 available), filtering to
+recent snapshots. Unknown NaN is not evidence of health:
 
 ```promql
-min by (target) (omi_stt_cost_routing_stage{job="backend-listen-metrics"})
+min by (target) (omi_stt_cost_routing_stage{job="backend-listen-metrics"} and on (job, instance) (time() - omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"} < 15))
+max by (target) (omi_stt_cost_routing_stage{job="backend-listen-metrics"} and on (job, instance) (time() - omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"} < 15))
+min by (target) (omi_stt_cost_routing_state_known{job="backend-listen-metrics"})
+max(time() - omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"})
 ```
 
-Global transitions per target over the last hour. `bench` enters 0, `stage`
-starts 5 or advances to 25, and `unbench` returns to 100:
+Global and language transitions over the last hour, with separate scopes:
 
 ```promql
-sum by (target, event) (increase(omi_stt_cost_routing_events_total{job="backend-listen-metrics",event=~"bench|unbench|stage"}[1h]))
+sum by (target, event, scope) (increase(omi_stt_cost_routing_events_total{job="backend-listen-metrics",event=~"bench|unbench|stage"}[1h]))
 ```
 
-Shadow agreement/disagreement rate by actual static and proposed primary:
+Static/proposed primary shares and pair agreement:
 
 ```promql
+sum by (static_primary) (rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h])) / scalar(sum(rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h])))
+sum by (proposed_primary) (rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h])) / scalar(sum(rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h])))
 sum by (agreement, static_primary, proposed_primary) (rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[15m]))
 ```
 
-Counts for the same pairs over an hour:
+Audio-independent provider-error fraction, plus censored observations:
 
 ```promql
-sum by (agreement, static_primary, proposed_primary) (increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h]))
+sum by (target) (rate(omi_stt_cost_routing_observations_total{job="backend-listen-metrics",outcome="provider_failure"}[1h])) / clamp_min(sum by (target) (rate(omi_stt_cost_routing_observations_total{job="backend-listen-metrics",outcome=~"success|provider_failure"}[1h])), 1e-9)
+sum by (target, outcome) (increase(omi_stt_cost_routing_observations_total{job="backend-listen-metrics"}[1h]))
 ```
 
-These comparisons are computed in shadow and on modes; verify the runtime
-mode before interpreting them as shadow-only rollout evidence. A missing
-stage series is missing evidence, not stage 100.
+Unavailable proposals, degraded-only selection, dropped samples and errors:
+
+```promql
+sum(increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics",proposed_primary="unavailable"}[8h])) or vector(0)
+sum by (target) (increase(omi_stt_cost_routing_all_degraded_total{job="backend-listen-metrics"}[8h])) or vector(0)
+sum by (reason) (increase(omi_stt_cost_routing_fail_open_total{job="backend-listen-metrics"}[8h]))
+sum by (kind) (increase(omi_stt_fleet_health_write_dropped_total{job="backend-listen-metrics"}[8h]))
+sum(increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[8h]))
+```
+
+A zero unavailable delta needs positive traffic coverage and no proposal errors;
+check absolute counters/logs too during pod startup because first increments
+before the first scrape can be invisible. These comparisons run in shadow and
+on; verify runtime mode before calling them shadow qualification.
+
+## Shadow go/no-go before on
+
+Keep `shadow`/on-percent `0` for at least a full 24h traffic/language cycle after
+the v4 rollout. Do not increase the router percentage until all checks pass:
+
+- Positive observation/proposal coverage for all configured targets; snapshot
+  age <15s, known state, and converged pod min/max. No sustained write drops,
+  Redis/cache errors, or unexplained language-specific bench transitions.
+- **Zero unavailable proposals and zero all-degraded selections.** A capable,
+  ramp-admitted, account-available target must keep a chain. Missing/withdrawn
+  targets, account denial or malformed config must be understood first.
+- **Soniox and Parakeet at global 100**, without noise-driven language benches;
+  **Modulate benched or in bounded 5% re-entry**, never promoted on this error
+  rate. Its stage may legitimately cycle 0/5 as backoff runs.
+- Proposed Parakeet share matches its eligible 25% sticky cohort, without a
+  health-driven reduction to 5%; no proposals divert a capable, admitted
+  healthy Parakeet session to a more expensive target. Compare target shares
+  and pair disagreement with static selection, accounting for language,
+  actual window/RNNT engine eligibility, cohort repetition and capacity.
+- Provider-error fractions for healthy targets stay around the observed
+  0.3–1%, and no-text floors no longer affect benches. Headline conversation
+  transcript success and first-text latency do not regress. Deadline/empty
+  failures rescued by another provider deserve investigation even though
+  they are censored by this gate.
+
+The local aggregate replay is diagnostic evidence: it keeps Soniox/Parakeet at
+100, Modulate in 0/5, and proposals nonempty. It cannot reconstruct real UID,
+cohort, language-failure or successor joins. After passing the checklist, the
+coordinator can ramp on 5 → 25 → 100 with a dwell at each step and the same
+checks; shadow/off or on-percent zero is the kill switch. This PR does not
+perform that rollout.
 
 ## Soniox runway
 
