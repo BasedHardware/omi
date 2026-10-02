@@ -9,25 +9,20 @@ streams AI responses.
 import logging
 from typing import Any, Callable, List, cast
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel, Field
-
 import database.chat as chat_db
 import database.llm_usage as llm_usage_db
 from database.users import set_chat_message_rating_score
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from models.chat import Message
+from models.chat_session import (ChatSessionResponse, DeleteMessagesResponse,
+                                 GenerateTitleResponse, InitialMessageResponse,
+                                 SaveMessageResponse)
 from models.feedback import MAX_COMMENT_LENGTH, FeedbackReason, FeedbackSurface
-from utils.feedback import record_chat_message_feedback
-from models.chat_session import (
-    ChatSessionResponse,
-    DeleteMessagesResponse,
-    GenerateTitleResponse,
-    InitialMessageResponse,
-    SaveMessageResponse,
-)
 from models.shared import StatusResponse
+from pydantic import BaseModel, Field
 from utils.chat import initial_message_util
 from utils.chat_rating_triage import extract_rating_triage_fields
+from utils.feedback import record_chat_message_feedback
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.other import endpoints as auth
@@ -255,7 +250,7 @@ def reconcile_messages(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     try:
-        messages, next_cursor, has_more = chat_db.get_messages_reconcile_page(
+        raw_messages, next_cursor, has_more = chat_db.get_messages_reconcile_page(
             uid,
             app_id=app_id,
             chat_session_id=session_id,
@@ -264,6 +259,17 @@ def reconcile_messages(
         )
     except chat_db.MessageReconcileCursorError as exc:
         raise HTTPException(status_code=400, detail='invalid message reconciliation cursor') from exc
+    # One malformed/legacy stored row must not 500 the whole desktop journal page —
+    # same guard as GET /v2/desktop/messages above.
+    messages = Message.deserialize_many_safe(
+        raw_messages,
+        on_error=lambda record, exc: logger.warning(
+            'Skipping malformed desktop chat message %s during reconciliation for uid=%s: %s',
+            record.get('id') if isinstance(record, dict) else None,
+            uid,
+            type(exc).__name__,
+        ),
+    )
     return {
         'messages': messages,
         'next_cursor': next_cursor,
