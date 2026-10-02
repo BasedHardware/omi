@@ -75,7 +75,8 @@ async def test_capacity_refusal_reaches_serving_benched_soniox(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('revision', ['6a26acc', 'afa7800', '0ba6edb'])
-async def test_historical_open_window_and_soniox_exhaust_with_failed_modulate(revision):
+@pytest.mark.parametrize('previous_soniox', [False, True])
+async def test_historical_open_window_and_soniox_exhaust_with_failed_modulate(revision, previous_soniox):
     source = subprocess.run(
         ['git', 'show', f'{revision}:backend/utils/stt/live_chain.py'],
         capture_output=True,
@@ -86,14 +87,16 @@ async def test_historical_open_window_and_soniox_exhaust_with_failed_modulate(re
     namespace = {'__name__': f'historical_chain_{revision}'}
     exec(compile(source, f'{revision}/live_chain.py', 'exec'), namespace)
     st._parakeet_circuit.record_serve_failure()
-    st._soniox_circuit.record_serve_failure()
+    if not previous_soniox:
+        st._soniox_circuit.record_serve_failure()
+    failed = {'modulate', 'soniox'} if previous_soniox else {'modulate'}
     para, son = AsyncMock(), AsyncMock(return_value=Replacement(lambda _: None))
     with pytest.raises(RuntimeError, match='Configured STT chain exhausted'):
         await namespace['connect_configured_chain'](
             primary_service=st.STTService.parakeet,
             connect_primary=para,
             callbacks={st.STTService.modulate: AsyncMock(), st.STTService.soniox: son},
-            failed={'modulate'},
+            failed=failed,
             models=st.stt_service_models,
         )
     para.assert_not_awaited()
@@ -201,12 +204,17 @@ def test_exhausted_children_have_a_zero_baseline_before_the_first_burst(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_window_origin_modulate_ring_pressure_replays_exactly_once_on_soniox(monkeypatch):
+@pytest.mark.parametrize('previous_soniox', [False, True])
+async def test_window_origin_modulate_ring_pressure_replays_exactly_once_on_soniox(monkeypatch, previous_soniox):
     actual, _, _, legs, capture = await setup_chain(monkeypatch)
     try:
         assert await actual._failover_stt_socket()
         assert actual.host.stt_service == st.STTService.modulate
-        st._soniox_circuit.record_serve_failure()
+        if previous_soniox:
+            actual._stt_failed_providers.add('soniox')
+            actual._stt_failed_reasons['soniox'] = 'connection_lost'
+        else:
+            st._soniox_circuit.record_serve_failure()
         ring = actual._window_ring()
         ring.ring_seconds = len(capture) / (2 * 16000)
         next_audio = b'\x01\x00' * 640
