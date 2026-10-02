@@ -25,7 +25,7 @@ def iter_audio_chunk_pcm(
     chunks only (legacy batch interiors lost their timestamps), newest-first
     search, and a download-attempt cap. Other callers keep their existing policy.
     """
-    bucket = storage._get_storage_client().bucket(storage.private_cloud_sync_bucket)
+    bucket = storage.get_private_cloud_sync_bucket()
     chunks = storage.list_audio_chunks(uid, conversation_id)
     indexes = range(len(chunks) - 1, -1, -1) if newest_first else range(len(chunks))
     downloads = 0
@@ -41,6 +41,6 @@ def iter_audio_chunk_pcm(
         if max_downloads is not None and downloads >= max_downloads:
             break
         downloads += 1
-        pcm = storage._download_and_decode_chunk_blob(bucket, chunk['path'], uid, sample_rate)
+        pcm = storage.download_and_decode_chunk_blob(bucket, chunk['path'], uid, sample_rate)
         if pcm:
             yield chunk['timestamp'], pcm

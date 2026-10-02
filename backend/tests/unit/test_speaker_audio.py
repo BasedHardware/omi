@@ -29,7 +29,7 @@ def blobs(monkeypatch):
         reads.append(path)
         return next(entry['pcm'] for entry in entries if entry['path'] == path)
 
-    monkeypatch.setattr(storage, '_download_and_decode_chunk_blob', decode)
+    monkeypatch.setattr(storage, 'download_and_decode_chunk_blob', decode)
 
     def add(start, end, *, missing=False, batch=False):
         path = f'synthetic/{start}-{end}.batch.bin' if batch else f'synthetic/{start}.bin'

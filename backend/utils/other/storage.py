@@ -1022,7 +1022,7 @@ def _align_pcm16_frames(pcm_data: bytes, source: str) -> bytes:
     return pcm_data[:-remainder]
 
 
-def _download_and_decode_chunk_blob(bucket: Any, path: str, uid: str, sample_rate: int) -> bytes | None:
+def download_and_decode_chunk_blob(bucket: Any, path: str, uid: str, sample_rate: int) -> bytes | None:
     """Download one stored chunk blob (single or batch) and decode/decrypt it by extension to PCM16."""
     ext = _get_extension_for_path(path)
     encrypted = ext in ('opus.enc', 'enc', 'batch.enc')
@@ -1111,7 +1111,7 @@ def download_audio_chunks_and_merge(
             single_chunk_timestamps.append(chunk['timestamp'])
 
     def _download_and_decode_blob(path: str) -> bytes | None:
-        return _download_and_decode_chunk_blob(bucket, path, uid, sample_rate)
+        return download_and_decode_chunk_blob(bucket, path, uid, sample_rate)
 
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
         """Download a single-chunk blob by trying extensions in priority order."""
