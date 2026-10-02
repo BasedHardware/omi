@@ -5,8 +5,10 @@ from datetime import datetime, timezone
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -155,10 +157,17 @@ class TestGoalsToCSV(unittest.TestCase):
         self.assertEqual(len(active_rows), 3)
         self.assertTrue(all(r["status"] == "active" for r in active_rows))
 
-        # Completed filter (achieved or inactive)
+        # Completed filter (achieved goals)
         completed_rows = g2csv.build_rows(goals_dict, status_filter="completed")
-        self.assertEqual(len(completed_rows), 2)
-        self.assertTrue(all(r["status"] == "completed" for r in completed_rows))
+        self.assertEqual(len(completed_rows), 1)
+        self.assertEqual(completed_rows[0]["id"], "goal_01")
+        self.assertEqual(completed_rows[0]["status"], "completed")
+
+        # Inactive filter (inactive goals)
+        inactive_rows = g2csv.build_rows(goals_dict, status_filter="inactive")
+        self.assertEqual(len(inactive_rows), 1)
+        self.assertEqual(inactive_rows[0]["id"], "goal_05")
+        self.assertEqual(inactive_rows[0]["status"], "inactive")
 
         # Type filter
         scale_rows = g2csv.build_rows(goals_dict, type_filter="scale")
@@ -194,6 +203,7 @@ class TestGoalsToCSV(unittest.TestCase):
         count = g2csv.convert([str(src)], destination=str(dest))
         self.assertEqual(count, 5)
         self.assertTrue(dest.exists())
+        orig_content = dest.read_bytes()
 
         # Second call without overwrite must fail
         with self.assertRaises(FileExistsError):
@@ -202,6 +212,26 @@ class TestGoalsToCSV(unittest.TestCase):
         # Overwrite=True succeeds
         count2 = g2csv.convert([str(src)], destination=str(dest), overwrite=True)
         self.assertEqual(count2, 5)
+
+        # No leftover .tmp_goals_csv_* files exist after successful replace
+        tmp_files = list(self.tmp.glob(".tmp_goals_csv_*"))
+        self.assertEqual(tmp_files, [])
+
+        # Failing tmp write in overwrite mode cleans up temporary file and leaves destination intact
+        real_open = Path.open
+
+        def failing_tmp_open(self_path, *args, **kwargs):
+            handle = real_open(self_path, *args, **kwargs)
+            if ".tmp_goals_csv_" in self_path.name:
+                handle.write = unittest.mock.Mock(side_effect=OSError("Disk write failed"))
+            return handle
+
+        with patch.object(Path, "open", autospec=True, side_effect=failing_tmp_open):
+            with self.assertRaises(OSError):
+                g2csv.convert([str(src)], destination=str(dest), overwrite=True)
+
+        self.assertEqual(dest.read_bytes(), orig_content)
+        self.assertEqual(list(self.tmp.glob(".tmp_goals_csv_*")), [])
 
     def test_failed_write_cleans_up_destination(self):
         src = self.tmp / "input_err.json"
@@ -239,6 +269,19 @@ class TestGoalsToCSV(unittest.TestCase):
         with patch("sys.stdin.buffer.read", return_value=payload):
             loaded = g2csv.load(["-"])
             self.assertEqual(len(loaded), 5)
+
+    def test_main_broken_pipe_error(self):
+        src = self.tmp / "cli_pipe.json"
+        src.write_text(json.dumps(self.sample_goals), encoding="utf-8")
+
+        orig_fd = os.dup(sys.stdout.fileno())
+        try:
+            with patch("sys.stdout.buffer.write", side_effect=BrokenPipeError):
+                ret = g2csv.main([str(src), "-o", "-"])
+                self.assertEqual(ret, 1)
+        finally:
+            os.dup2(orig_fd, sys.stdout.fileno())
+            os.close(orig_fd)
 
 
 if __name__ == "__main__":
