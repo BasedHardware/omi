@@ -28,6 +28,10 @@ extension APIClient {
     let data = try JSONEncoder().encode(body)
     let response: OmiAPI.ScreenTaskGateResponse = try await screenTaskRequest(
       path: "v1/screen-task/gate", body: data, authorization: authorization, timeout: 4)
+    guard ["passed", "rejected", "fail_open"].contains(response.gateOutcome),
+      response.shouldExtract == (response.gateOutcome != "rejected" || response.auditSample),
+      !response.auditSample || response.gateOutcome == "rejected"
+    else { throw APIError.invalidResponse }
     return ScreenTaskAdmission(
       shouldExtract: response.shouldExtract, gateOutcome: response.gateOutcome, auditSample: response.auditSample)
   }
