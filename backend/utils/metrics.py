@@ -25,6 +25,11 @@ SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
 SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
     'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
 )
+SCREEN_TASK_BUILD_FLOOR_REFUSALS_TOTAL = Counter(
+    'omi_screen_task_build_floor_refusals_total',
+    'Screen-task requests refused because an identified macOS build is below the floor',
+    ['surface'],
+)
 
 OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
     'omi_listen_stt_unavailable_total',

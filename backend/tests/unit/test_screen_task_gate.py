@@ -183,6 +183,117 @@ def test_gate_budget_fails_closed_on_redis_and_never_obeys_shadow(monkeypatch):
     assert caught.value.headers['Retry-After'] == '65'
 
 
+def _gate_app():
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.get_current_user_uid] = lambda: 'synthetic-user'
+    return app
+
+
+def _serve_gate(monkeypatch):
+    monkeypatch.setattr(route, 'is_desktop_trial_paywalled', lambda *a: False)
+    monkeypatch.setattr(route, 'decide_screen_task', lambda *a: gate.ScreenTaskGateDecision(False, 'rejected'))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'headers,refused',
+    [
+        ({'user-agent': 'Omi/12433 CFNetwork/1.0 Darwin/1.0'}, True),
+        ({'user-agent': 'Omi/12434 CFNetwork/1.0 Darwin/1.0'}, True),
+        ({'user-agent': 'Omi%20Beta/12433 CFNetwork/1.0 Darwin/1.0'}, True),
+        ({'user-agent': 'Omi%20Beta/12434 CFNetwork/1.0 Darwin/1.0'}, True),
+        ({'user-agent': 'Omi/12435 CFNetwork/1.0 Darwin/1.0'}, False),
+        ({'user-agent': 'Omi%20Beta/12435 CFNetwork/1.0 Darwin/1.0'}, False),
+        ({'user-agent': 'Omi/13000 CFNetwork/1.0 Darwin/1.0'}, False),
+        ({'x-app-platform': 'macos', 'x-app-build': '12433', 'x-app-version': '0.12.433'}, True),
+        ({'x-app-platform': 'macos', 'x-app-build': '12434', 'x-app-version': '0.12.434'}, True),
+        ({'x-app-platform': 'macos', 'x-app-build': '12435', 'x-app-version': '0.12.435'}, False),
+        ({}, False),
+        ({'user-agent': 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36'}, False),
+        ({'user-agent': 'Omi-windows/12433'}, False),
+        ({'x-app-platform': 'windows', 'user-agent': 'Omi/12433 CFNetwork/1.0 Darwin/1.0'}, False),
+        ({'user-agent': 'Omi/not-a-build CFNetwork/1.0 Darwin/1.0'}, False),
+        (
+            {
+                'user-agent': 'Omi/12435 CFNetwork/1.0 Darwin/1.0',
+                'x-app-platform': 'macos',
+                'x-app-build': '12433',
+                'x-app-version': '0.12.433',
+            },
+            False,
+        ),
+    ],
+)
+async def test_build_floor_refuses_only_identified_old_macos_on_gate_and_admission(monkeypatch, headers, refused):
+    monkeypatch.delenv('SCREEN_TASK_MIN_MACOS_BUILD', raising=False)
+    if refused:
+        monkeypatch.setattr(route, 'check_screen_task_limit', lambda *a: pytest.fail('refused build was admitted'))
+        monkeypatch.setattr(route, 'decide_screen_task', lambda *a: pytest.fail('refused build called the provider'))
+        monkeypatch.setattr(route, 'authorize_managed_compute', lambda *a: pytest.fail('refused build resolved a plan'))
+    else:
+        _serve_gate(monkeypatch)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(_gate_app()), base_url='http://local') as client:
+        gated = await client.post('/v1/screen-task/gate', json={'ocr_text': 'synthetic'}, headers=headers)
+        admitted = await client.get('/v1/screen-task/admission', headers=headers)
+    if refused:
+        assert gated.status_code == 409
+        assert gated.json()['detail']['error'] == 'screen_task_build_below_floor'
+        assert gated.headers['X-Omi-Retryable'] == 'false'
+        assert admitted.status_code == 409
+        assert admitted.json()['detail']['error'] == 'screen_task_build_below_floor'
+        assert admitted.headers['X-Omi-Retryable'] == 'false'
+    else:
+        assert gated.status_code == 200
+        assert gated.json()['gate_outcome'] == 'rejected'
+        assert admitted.status_code == 200
+        assert admitted.json() == {'enabled': True, 'lease_seconds': 55}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('value', ['nope', '', '0', '-1', '12435.0', 'true', '2147483648'])
+async def test_invalid_build_floor_keeps_the_default(monkeypatch, value):
+    monkeypatch.setenv('SCREEN_TASK_MIN_MACOS_BUILD', value)
+    monkeypatch.setattr(route, 'decide_screen_task', lambda *a: pytest.fail('invalid floor admitted 12434'))
+    headers = {'user-agent': 'Omi/12434 CFNetwork/1.0 Darwin/1.0'}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(_gate_app()), base_url='http://local') as client:
+        result = await client.post('/v1/screen-task/gate', json={'ocr_text': 'synthetic'}, headers=headers)
+    assert result.status_code == 409
+    assert result.json()['detail']['error'] == 'screen_task_build_below_floor'
+
+
+@pytest.mark.asyncio
+async def test_build_floor_override_is_read_per_request(monkeypatch):
+    headers = {'user-agent': 'Omi/12434 CFNetwork/1.0 Darwin/1.0'}
+    _serve_gate(monkeypatch)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(_gate_app()), base_url='http://local') as client:
+        monkeypatch.setenv('SCREEN_TASK_MIN_MACOS_BUILD', '12434')
+        served = await client.post('/v1/screen-task/gate', json={'ocr_text': 'synthetic'}, headers=headers)
+        monkeypatch.setenv('SCREEN_TASK_MIN_MACOS_BUILD', '13000')
+        refused = await client.get('/v1/screen-task/admission', headers=headers)
+    assert served.status_code == 200
+    assert refused.status_code == 409
+    assert refused.json()['detail']['error'] == 'screen_task_build_below_floor'
+
+
+@pytest.mark.asyncio
+async def test_build_floor_refusal_log_and_counter_are_bounded(monkeypatch, caplog):
+    from utils.metrics import SCREEN_TASK_BUILD_FLOOR_REFUSALS_TOTAL
+
+    monkeypatch.delenv('SCREEN_TASK_MIN_MACOS_BUILD', raising=False)
+    counter = SCREEN_TASK_BUILD_FLOOR_REFUSALS_TOTAL.labels(surface='gate')
+    before = counter._value.get()
+    headers = {'user-agent': 'Omi/12433 CFNetwork/9.9 Darwin/9.9'}
+    with caplog.at_level(logging.INFO, logger='utils.llm.screen_task_admission'):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(_gate_app()), base_url='http://local') as client:
+            result = await client.post('/v1/screen-task/gate', json={'ocr_text': 'PRIVATE_SENTINEL'}, headers=headers)
+    assert result.status_code == 409
+    assert counter._value.get() == before + 1
+    assert 'reason=build_below_floor' in caplog.text
+    assert 'surface=gate' in caplog.text
+    assert 'CFNetwork' not in caplog.text and 'PRIVATE_SENTINEL' not in caplog.text and '12433' not in caplog.text
+
+
 def test_gate_daily_budget_admits_full_day_at_messaging_cadence_and_retains_burst(monkeypatch):
     from database import redis_db
 
