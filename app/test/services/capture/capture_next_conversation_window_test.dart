@@ -176,6 +176,21 @@ void main() {
     expect(world.uploads.attempts, isEmpty, reason: 'audio the server already transcribed is not uploaded again');
   });
 
+  test('pendant: Process now opens the window the next conversation needs', () async {
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+    await world.controller.forceProcessingCurrentConversation();
+    await settleFiles();
+    expect(world.controller.activeCaptureSessionId, isNotNull,
+        reason: 'the pendant streams on into the next conversation');
+
+    final start = world.clock.now();
+    final startSeconds = start.millisecondsSinceEpoch ~/ 1000;
+    await streamPendant(link, 140);
+    await serverCloses(conversation('c2', start, 140));
+    await walsReach('the next conversation released', (wals) => wals.every((wal) => wal.timerStart < startSeconds));
+  });
+
   test('phone mic: a conversation closed during a call opens the window the resumed audio needs', () async {
     final origin = world.clock.now();
     await world.startLiveCapture();

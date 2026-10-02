@@ -194,6 +194,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   int? _sessionGeolocationSetAt;
   String? _activeRecordingSessionId;
   String? _conversationStampRecordingId;
+  int? _conversationStampBeforeSeconds;
 
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
@@ -202,9 +203,14 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   /// Recording id captured before a flush. [stampConversationId] keeps its
   /// original signature so session spies do not have to learn a new argument.
-  void prepareConversationStamp(String? recordingSessionId) {
+  ///
+  /// [beforeSeconds] is when the conversation closed. A recording can go on into
+  /// the next conversation, so the stamp leaves a WAL that starts at or after it
+  /// for that one.
+  void prepareConversationStamp(String? recordingSessionId, {int? beforeSeconds}) {
     final trimmed = recordingSessionId?.trim();
     _conversationStampRecordingId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    _conversationStampBeforeSeconds = beforeSeconds;
   }
 
   bool _isCancelled = false;
@@ -930,8 +936,11 @@ class LocalWalSyncImpl implements LocalWalSync {
     _conversationStampRecordingId = null;
     final matchRecording = recordingId != null && recordingId.isNotEmpty;
     int stamped = 0;
+    final before = _conversationStampBeforeSeconds;
+    _conversationStampBeforeSeconds = null;
     for (final wal in _wals) {
       if (wal.status != WalStatus.miss || wal.conversationId != null) continue;
+      if (before != null && wal.timerStart >= before) continue;
       final walRecording = wal.recordingSessionId;
       final foreignRecording = walRecording != null && walRecording.isNotEmpty && walRecording != recordingId;
       if (foreignRecording) continue;

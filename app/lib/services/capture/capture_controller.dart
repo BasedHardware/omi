@@ -877,14 +877,15 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  /// The socket outlives a conversation the server closes, and the session start is set only when a
-  /// socket opens. Restart the window now, so the next conversation's audio is stamped and confirmed
-  /// like the first one's instead of staying unstamped and being uploaded again later.
-  void _startNextConversationWindow() {
+  /// The socket outlives a conversation that closes, on silence or with Process now, and the session
+  /// start is set only when a socket opens. Restart the window at the close, so the next conversation's
+  /// audio is stamped and confirmed like the first one's instead of staying unstamped and being
+  /// uploaded again later.
+  void _startNextConversationWindow(int startSeconds) {
     if (_socket == null) return;
     // A stopped capture sends nothing more. A paused or interrupted one resumes on this socket.
     if (recordingState == RecordingState.stop || recordingState == RecordingState.error) return;
-    _sessionStartSeconds = _now().millisecondsSinceEpoch ~/ 1000;
+    _sessionStartSeconds = startSeconds;
   }
 
   void _endOfflineSession() {
@@ -3155,10 +3156,11 @@ class CaptureController extends ChangeNotifier
 
       // Force-drain tail buffer, stamp WALs with conversation ID, then clear state.
       // Store the future so the coordinated transfer wake waits for the stamp.
-      _pendingFinalizeAndStamp = _finalizeAndStampSession(_sessionStartSeconds, event.memory.id);
+      final closedAt = _nowSeconds;
+      _pendingFinalizeAndStamp = _finalizeAndStampSession(_sessionStartSeconds, event.memory.id, closedAt);
 
       _resetStateVariables();
-      _startNextConversationWindow();
+      _startNextConversationWindow(closedAt);
 
       // Start 30s fallback timer in case ConversationEvent never arrives (WS disconnect)
       _autoSyncFallbackTimer?.cancel();
@@ -3275,6 +3277,7 @@ class CaptureController extends ChangeNotifier
   Future<void> forceProcessingCurrentConversation() async {
     final sessionStart = _sessionStartSeconds;
     final recordingSessionId = activeRecordingId;
+    final closedAt = _nowSeconds;
 
     final phoneSync = _wal.getSyncs().phone;
     // Show the Conversations-tab skeleton before the WAL drain. Awaiting
@@ -3286,6 +3289,7 @@ class CaptureController extends ChangeNotifier
     _clearSessionLocation();
 
     _resetStateVariables();
+    _startNextConversationWindow(closedAt);
     final process = _processInProgressConversationOverride ?? processInProgressConversation;
     final request = process();
     _processInFlight = request.then((_) {}, onError: (_) {});
@@ -3297,7 +3301,7 @@ class CaptureController extends ChangeNotifier
       );
       if (sessionStart > 0 && conversationId != null) {
         if (phoneSync is LocalWalSyncImpl) {
-          phoneSync.prepareConversationStamp(recordingSessionId);
+          phoneSync.prepareConversationStamp(recordingSessionId, beforeSeconds: closedAt);
         }
         await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
@@ -3315,7 +3319,8 @@ class CaptureController extends ChangeNotifier
     phone.setActiveRecordingSessionId(activeRecordingId);
   }
 
-  Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId) async {
+  /// [closedAt] fences the stamp to the audio recorded before the conversation closed.
+  Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId, int closedAt) async {
     final ownerToken = _sessionOwner?.token;
     final locationGeneration = _sessionGeolocationGeneration;
     // Capture before the flush. A device update can roll the session while
@@ -3326,7 +3331,7 @@ class CaptureController extends ChangeNotifier
       await phoneSync.finalizeCurrentSession();
       if (sessionStartSeconds > 0) {
         if (phoneSync is LocalWalSyncImpl) {
-          phoneSync.prepareConversationStamp(recordingSessionId);
+          phoneSync.prepareConversationStamp(recordingSessionId, beforeSeconds: closedAt);
         }
         await phoneSync.stampConversationId(sessionStartSeconds, conversationId);
       }
