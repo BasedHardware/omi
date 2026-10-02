@@ -75,7 +75,11 @@ class PendantDroppedSheet extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
-                  Text(status, style: secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                  // Changes in place while the sheet is open, so a screen reader announces it.
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(status, style: secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                  ),
                 ]),
               ),
               if (reconnecting && !connected) const OmiSpinner(size: OmiSpinnerSize.small),
