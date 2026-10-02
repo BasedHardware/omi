@@ -65,6 +65,7 @@ def world(monkeypatch):
         lambda uid, cid: deepcopy(store.rows.get(('users', uid, 'conversations', cid))),
     )
     pcm = np.full(16000 * 10, 1000, dtype=np.int16).tobytes()
+    monkeypatch.setattr(speaker_audio.storage, 'download_audio_chunks_and_merge', lambda *a, **k: pcm)
     monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', lambda *a, **k: iter([(1700000000.0, pcm)]))
     monkeypatch.setattr(
         speaker_audio.storage,

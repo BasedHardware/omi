@@ -151,6 +151,10 @@ def legacy_speaker_clip_pcm(
             if not session.in_budget():
                 record('missing', 'download_limit')
                 return None
+            baseline = main_clip(session.fetch)
+            if baseline is None or len(baseline) < needed * 2 or not session.in_budget():
+                record('missing', session.reason)
+                return None
             record('covered', 'complete')
             return bytes(result)
     outcome = 'gap' if uncovered[0][0] > 0 and uncovered[-1][1] < needed else 'missing'

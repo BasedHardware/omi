@@ -8,8 +8,8 @@ same frame as transcript segments.
 For audio-timeline v2 conversations the clip window must be *covered*: the
 union of validated ``chunk_spans`` must contain it (1 ms tolerance). A known
 uncovered window returns None — never a clip of the wrong audio. Legacy
-conversations use blob timestamps with rounding tolerance. Unverified batches
-retain main timing behavior; text verification still guards original clock drift.
+conversations use strict authoritative spans or main timing behavior for
+uncertain chunks/batches; text verification still guards original clock drift.
 """
 
 from datetime import datetime, timezone

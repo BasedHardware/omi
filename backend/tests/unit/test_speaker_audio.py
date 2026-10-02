@@ -456,3 +456,21 @@ def test_transient_failure_is_not_negative_cached(memory_bucket, monkeypatch):
     assert blob.name not in session.cache
     monkeypatch.setattr(blob, 'download_as_bytes', download)
     assert session.fetch(blob.name) == data
+
+
+def test_authoritative_placement_never_recovers_main_rejected_window(memory_bucket):
+    # Metadata places a blob far after its legacy manifest timestamp. Main's
+    # absolute trim rejects it; strict placement alone would otherwise recover it.
+    data = memory_bucket.add(ORIGIN, 10, span=True)
+    blob = next(iter(memory_bucket.objects.values()))
+    blob.metadata = storage.span_blob_metadata({'start': ORIGIN + 100, 'samples': len(data) // 2, 'sample_rate': 16000})
+    assert (
+        speaker_audio.legacy_speaker_clip_pcm(
+            'synthetic-user',
+            'synthetic',
+            ORIGIN + 100,
+            ORIGIN + 110,
+            timestamps=[ORIGIN],
+        )
+        is None
+    )

@@ -106,7 +106,9 @@ def world(monkeypatch):
         download_calls.append(list(timestamps))
         return pcm_for(pcm_seconds[0])
 
+    real_merge = storage.download_audio_chunks_and_merge
     monkeypatch.setattr(teaching, 'download_audio_chunks_and_merge', fake_download)
+    monkeypatch.setattr(storage, 'download_audio_chunks_and_merge', lambda *a, **k: pcm_for(pcm_seconds[0]))
 
     def fake_chunks(uid, conversation_id, wanted, sample_rate, **kwargs):
         conv = store.rows.get(CONV_PATH) or {}
@@ -181,6 +183,7 @@ def world(monkeypatch):
     monkeypatch.setattr(teaching, 'verify_and_transcribe_sample', recording_verify)
     return SimpleNamespace(
         real_listing=real_listing,
+        real_merge=real_merge,
         store=store,
         uploads=uploads,
         deleted=deleted,
@@ -332,6 +335,7 @@ def test_pools_three_authoritative_short_chunks(world, monkeypatch):
 
 def test_real_reader_pools_rounded_short_chunks_once(world, memory_bucket, monkeypatch):
     monkeypatch.setattr(storage, 'list_audio_chunks', world.real_listing)
+    monkeypatch.setattr(storage, 'download_audio_chunks_and_merge', world.real_merge)
     monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', audio_chunks.iter_audio_chunk_pcm)
     offsets = [0.1234, 10.1234, 20.1234]
     for offset in offsets:
@@ -353,6 +357,7 @@ def test_real_reader_pools_rounded_short_chunks_once(world, memory_bucket, monke
 @pytest.mark.parametrize('chunk_seconds', [10, 60])
 def test_rounded_complete_ten_seconds_keeps_teaching_floor(world, memory_bucket, monkeypatch, offset, chunk_seconds):
     monkeypatch.setattr(storage, 'list_audio_chunks', world.real_listing)
+    monkeypatch.setattr(storage, 'download_audio_chunks_and_merge', world.real_merge)
     monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', audio_chunks.iter_audio_chunk_pcm)
     data = memory_bucket.add(STARTED_AT + offset, chunk_seconds, uid=UID, conversation_id=CONV)
     set_conversation(
@@ -365,6 +370,7 @@ def test_rounded_complete_ten_seconds_keeps_teaching_floor(world, memory_bucket,
 @pytest.mark.parametrize('protection', ['standard', 'enhanced'])
 def test_real_live_batches_still_teach(world, memory_bucket, monkeypatch, protection):
     monkeypatch.setattr(storage, 'list_audio_chunks', world.real_listing)
+    monkeypatch.setattr(storage, 'download_audio_chunks_and_merge', world.real_merge)
     monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', audio_chunks.iter_audio_chunk_pcm)
     parts = [{'timestamp': STARTED_AT + offset, 'data': pcm_for(5)} for offset in (0, 5)]
     storage.upload_audio_chunks_batch(parts, UID, CONV, data_protection_level=protection)
@@ -807,6 +813,7 @@ def test_model_derives_learning_state_from_readiness():
 @pytest.mark.parametrize('enhanced', [False, True])
 def test_rounded_two_chunk_exact_floor_teaches_main_samples(world, memory_bucket, monkeypatch, enhanced):
     monkeypatch.setattr(storage, 'list_audio_chunks', world.real_listing)
+    monkeypatch.setattr(storage, 'download_audio_chunks_and_merge', world.real_merge)
     monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', audio_chunks.iter_audio_chunk_pcm)
     offset = 0.1234
     start = STARTED_AT + offset
