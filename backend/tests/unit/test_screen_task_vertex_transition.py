@@ -5,6 +5,7 @@ import json
 
 import httpx
 import pytest
+from config.vertex_reservations import State
 
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.auth import ServiceCaller
@@ -21,7 +22,10 @@ async def _token():
 
 
 def _response():
-    return {'candidates': [{'content': {'parts': [{'text': 'ok'}]}, 'finishReason': 'STOP'}]}
+    return {
+        'candidates': [{'content': {'parts': [{'text': 'ok'}]}, 'finishReason': 'STOP'}],
+        'usageMetadata': {'trafficType': 'PROVISIONED_THROUGHPUT'},
+    }
 
 
 @pytest.mark.asyncio
@@ -44,8 +48,8 @@ async def test_target_probes_declared_order_location_then_promotes_without_a_dep
             credentials=credentials,
             timeout_ms=1000,
         )
-        assert provider._pt_target_ready
-        assert provider._provisioned_model() == ptr.PT_MODEL_TARGET
+        assert provider._reservation_active(ptr.PT_MODEL_TARGET)
+        assert ptr.PT_MODEL_TARGET in provider._protected_models()
         await provider.create_chat_completion(
             {'messages': [{'role': 'user', 'content': 'test'}]},
             provider_ref=ProviderRef(provider='gemini', model=ptr.PT_MODEL_CURRENT),
@@ -56,7 +60,7 @@ async def test_target_probes_declared_order_location_then_promotes_without_a_dep
     assert seen[0].headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
     assert json.loads(seen[0].content)['generationConfig']['thinkingConfig'] == {'thinkingLevel': 'low'}
     assert ptr.PT_MODEL_CURRENT in str(seen[1].url) and '/locations/us-central1/' in str(seen[1].url)
-    assert seen[1].headers[ptr.REQUEST_TYPE_HEADER] == 'shared'
+    assert seen[1].headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'  # target success alone cannot revoke old capacity
 
 
 @pytest.mark.asyncio
@@ -78,7 +82,7 @@ async def test_absent_order_retries_same_target_on_us_paygo_without_touching_cur
             credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
             timeout_ms=1000,
         )
-        assert not provider._pt_target_ready
+        assert not provider._reservation_active(ptr.PT_MODEL_TARGET)
         assert provider._attempt_plan(ptr.PT_MODEL_CURRENT) == [(ptr.PT_MODEL_CURRENT, 'dedicated')]
     assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
     assert all('/locations/us/' in str(r.url) for r in seen)
@@ -86,9 +90,9 @@ async def test_absent_order_retries_same_target_on_us_paygo_without_touching_cur
 
 def test_old_client_list_price_is_never_promoted_and_overflow_is_capped():
     for ready in [False, True]:
-        pt = ptr.resolve_pt_model(target_dedicated_ready=ready)
-        assert ptr.desktop_serving_model(ptr.PT_MODEL_CURRENT, target_dedicated_ready=ready) == ptr.PT_MODEL_CURRENT
-        assert ptr.desktop_serving_model('gemini-2.5-pro', target_dedicated_ready=ready) == 'gemini-3.1-flash-lite'
+        pt = ptr.PT_MODEL_TARGET if ready else ptr.PT_MODEL_CURRENT
+        assert ptr.desktop_serving_model(ptr.PT_MODEL_CURRENT) == ptr.PT_MODEL_CURRENT
+        assert ptr.desktop_serving_model('gemini-2.5-pro') == 'gemini-3.1-flash-lite'
         for origin in [ptr.PT_MODEL_CURRENT, ptr.PT_MODEL_TARGET, 'gemini-2.5-flash-lite']:
             for candidate in ptr.resolve_overflow_ladder(pt_model=pt, origin_model=origin):
                 assert candidate != pt and ptr.model_within_origin_price(candidate, origin)
@@ -166,8 +170,8 @@ async def test_any_dedicated_probe_failure_retries_shared_and_never_promotes(mon
             assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
                 'content'
             ] == 'ok'
-        assert not provider._pt_target_ready
-        assert provider._provisioned_model() == ptr.PT_MODEL_CURRENT
+        assert not provider._reservation_active(ptr.PT_MODEL_TARGET)
+        assert provider._protected_models() == {ptr.PT_MODEL_CURRENT}
         assert ptr.PT_MODEL_TARGET not in provider._model_unavailable_at
     assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
 
@@ -217,7 +221,7 @@ async def test_probe_deadline_cancels_stalled_body_and_leaves_shared_request_bud
                 assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
                     'content'
                 ] == 'ok'
-        assert cancelled == [True] and not provider._pt_target_ready
+        assert cancelled == [True] and not provider._reservation_active(ptr.PT_MODEL_TARGET)
     assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
     assert 0 < seen[0].extensions['timeout']['read'] <= 0.05
     assert 0 < seen[1].extensions['timeout']['read'] <= 0.16
@@ -249,16 +253,16 @@ async def test_streaming_absent_regional_order_retries_us_shared_then_next_probe
                 request, provider_ref=ref, credentials=credentials, timeout_ms=1000
             )
         ]
-        assert chunks and not provider._pt_target_ready
+        assert chunks and not provider._reservation_active(ptr.PT_MODEL_TARGET)
         assert ptr.PT_MODEL_TARGET not in provider._model_unavailable_at
-        provider._pt_target_probed_at = None
+        provider._pt_probed_at.clear()
         chunks = [
             chunk
             async for chunk in provider.stream_chat_completion(
                 request, provider_ref=ref, credentials=credentials, timeout_ms=1000
             )
         ]
-        assert chunks and provider._pt_target_ready
+        assert chunks and provider._reservation_active(ptr.PT_MODEL_TARGET)
     assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared', 'dedicated']
     assert '/locations/us-central1/' in str(seen[0].url)
     assert '/locations/us/' in str(seen[1].url)
@@ -271,8 +275,8 @@ async def test_direct_kill_switch_uses_same_declared_location_and_old_client_cap
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     monkeypatch.setenv(ptr.PT_TARGET_LOCATION_ENV, location)
     monkeypatch.setattr(proxy._vertex_tokens, 'get_access_token', _token)
-    monkeypatch.setattr(proxy, '_pt_target_ready', False)
-    monkeypatch.setattr(proxy, '_pt_target_probed_at', None)
+    proxy._reservation_snapshot.set({})
+    proxy._pt_probed_at.clear()
     monkeypatch.setattr(proxy, 'get_byok_key', lambda name: None)
     route = await proxy._upstream(
         f'models/{ptr.PT_MODEL_TARGET}:generateContent', ptr.PT_MODEL_TARGET, 'generateContent', {}
@@ -282,7 +286,7 @@ async def test_direct_kill_switch_uses_same_declared_location_and_old_client_cap
     assert proxy._recovery_plan(
         ptr.PT_MODEL_TARGET, 429, 'No provisioned throughput order configured', capacity='dedicated'
     )[0] == (ptr.PT_MODEL_TARGET, 'shared')
-    proxy._record_pt_target_observation(True)
+    proxy._reservation_snapshot.set({proxy.VERTEX_PT_TARGET_MODEL: State.ACTIVE, proxy.VERTEX_PT_MODEL: State.INACTIVE})
     old = await proxy._upstream(
         f'models/{ptr.PT_MODEL_CURRENT}:generateContent', ptr.PT_MODEL_CURRENT, 'generateContent', {}
     )
@@ -347,13 +351,13 @@ async def test_any_failed_target_probe_retries_same_model_without_promotion_and_
             assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
                 'content'
             ] == 'ok'
-        assert not provider._pt_target_ready
+        assert not provider._reservation_active(ptr.PT_MODEL_TARGET)
         assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']
         assert all(f'/models/{ptr.PT_MODEL_TARGET}:' in str(r.url) for r in seen)
         assert seen[0].extensions['timeout']['read'] == 0.25
         assert seen[1].extensions['timeout']['read'] == 0.875
         assert provider._attempt_plan(ptr.PT_MODEL_CURRENT) == [(ptr.PT_MODEL_CURRENT, 'dedicated')]
-        probe_at = provider._pt_target_probed_at
+        probe_at = provider._pt_probed_at.get(ptr.PT_MODEL_TARGET)
         assert probe_at is not None
         now[0] = probe_at + 599
         assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [(ptr.PT_MODEL_TARGET, 'shared')]
@@ -377,6 +381,7 @@ async def test_only_successful_dedicated_target_response_with_valid_traffic_prom
     def handler(request):
         seen.append(request)
         result = _response()
+        result.pop('usageMetadata', None)
         if traffic != 'missing':
             result['usageMetadata'] = {'trafficType': traffic}
         if stream:
@@ -399,7 +404,9 @@ async def test_only_successful_dedicated_target_response_with_valid_traffic_prom
             assert [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
         else:
             await provider.create_chat_completion(request, **kwargs)
-        assert provider._pt_target_ready == (traffic in {'missing', 'PROVISIONED_THROUGHPUT'})
+        assert provider._reservation_active(ptr.PT_MODEL_TARGET) == (
+            traffic == 'PROVISIONED_THROUGHPUT' or (stream and traffic == 'missing')
+        )
     assert len(seen) == 1 and seen[0].headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
 
 
@@ -437,9 +444,9 @@ async def test_after_successful_promotion_any_target_429_spills_same_model_and_s
                 assert [chunk async for chunk in provider.stream_chat_completion(request, **kwargs)]
             else:
                 await provider.create_chat_completion(request, **kwargs)
-            assert provider._pt_target_ready
+            assert provider._reservation_active(ptr.PT_MODEL_TARGET)
         assert provider._attempt_plan(ptr.PT_MODEL_TARGET) == [(ptr.PT_MODEL_TARGET, 'dedicated')]
-        assert provider._attempt_plan(ptr.PT_MODEL_CURRENT) == [(ptr.PT_MODEL_CURRENT, 'shared')]
+        assert provider._attempt_plan(ptr.PT_MODEL_CURRENT) == [(ptr.PT_MODEL_CURRENT, 'dedicated')]
     assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'dedicated', 'shared']
     assert all(f'/models/{ptr.PT_MODEL_TARGET}:' in str(r.url) for r in seen)
 
@@ -472,5 +479,5 @@ async def test_only_target_probe_rejects_3xx_while_shared_target_accepts_its_bod
             assert (await provider.create_chat_completion(request, **kwargs)).response['choices'][0]['message'][
                 'content'
             ] == 'ok'
-        assert not provider._pt_target_ready
+        assert not provider._reservation_active(ptr.PT_MODEL_TARGET)
     assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == ['dedicated', 'shared']

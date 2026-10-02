@@ -5,9 +5,11 @@ including origin/main's acceptance of a valid body on a 3xx response.
 """
 
 import json
+import time
 
 import httpx
 import pytest
+from config.vertex_reservations import State
 
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
@@ -161,8 +163,9 @@ async def test_non_target_traffic_leaves_cross_request_target_promotion_state_un
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         provider = VertexGeminiProvider(http_client=client, access_token_supplier=token, now=lambda: 100.0)
-        provider._pt_target_ready = ready
-        provider._pt_target_probed_at = probed_at
+        provider._reservation_states = {ptr.PT_MODEL_TARGET: State.ACTIVE} if ready else {}
+        provider._reservations._positive = {m: time.monotonic() for m in provider._reservation_states}
+        provider._pt_probed_at = {ptr.PT_MODEL_TARGET: probed_at} if probed_at is not None else {}
         for anchor, status in [
             ('gemini-2.5-flash', 200),
             ('gemini-2.5-flash', 401),
@@ -188,12 +191,12 @@ async def test_non_target_traffic_leaves_cross_request_target_promotion_state_un
                     await call()
             else:
                 await call()
-            assert provider._pt_target_ready is ready
-            assert provider._pt_target_probed_at == probed_at
+            assert provider._reservation_active(ptr.PT_MODEL_TARGET) is ready
+            assert provider._pt_probed_at.get(ptr.PT_MODEL_TARGET) == probed_at
         assert len(seen) == 6
         assert all(ptr.PT_MODEL_TARGET not in str(request.url) for request in seen)
         assert [request.headers[ptr.REQUEST_TYPE_HEADER] for request in seen[:4]] == [
-            'shared' if ready else 'dedicated'
+            'dedicated'  # observing the successor alone cannot deactivate the old order
         ] * 4
 
 
@@ -254,8 +257,8 @@ async def test_embedding_embed_content_keeps_main_wire_deadline_errors_and_missi
                 'model': 'gemini-embedding-001',
             }
             assert response.accounting.usage is None
-        assert provider._pt_target_ready is False
-        assert provider._pt_target_probed_at is None
+        assert provider._reservation_active(ptr.PT_MODEL_TARGET) is False
+        assert provider._pt_probed_at.get(ptr.PT_MODEL_TARGET) is None
     assert len(seen) == 1
     outgoing = seen[0]
     assert str(outgoing.url) == (

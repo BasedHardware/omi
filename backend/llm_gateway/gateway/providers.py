@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextvars import ContextVar
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -50,6 +51,9 @@ from llm_gateway.gateway.vertex_wire import (  # noqa: F401 — re-exported wire
 )
 from llm_gateway.gateway.sse import SSEEventDecoder
 from utils.executors import critical_executor, run_blocking
+from utils.llm.vertex_reservation_state import ReservationState
+from utils.llm.vertex_reservation_probe import probe_reservation
+from config.vertex_reservations import State
 from utils.llm import vertex_pt_routing as ptr
 from utils.log_sanitizer import sanitize
 
@@ -425,12 +429,12 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         # (`monotonic() < expiry.timestamp()` stays true forever).
         token_supplier = VertexAccessTokenSupplier()
         self._access_token_supplier = access_token_supplier or token_supplier.get_access_token
-        # PT promotion latch and learned reachability, moved from the desktop
-        # proxy: positive observations latch for the process, negative ones
-        # expire on the probe TTL, and nothing is probed at startup — traffic
-        # teaches both tables (see backend/docs/vertex-pt-flash.md).
-        self._pt_target_ready = False
-        self._pt_target_probed_at: float | None = None
+        # Capacity evidence is shared; each concurrent request gets its own snapshot.
+        self._reservation_state_context: ContextVar[dict[str, State]] = ContextVar(
+            'gateway_vertex_reservations', default={}
+        )
+        self._reservations = ReservationState()
+        self._pt_probed_at: dict[str, float] = {}
         self._model_unavailable_at: dict[str, float] = {}
 
     async def create_chat_completion(
@@ -472,13 +476,14 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         origin_model = ptr.overflow_origin_from_request(request)
         payload = _vertex_request(request)
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
+        await self._refresh_reservations()
         attempts = self._attempt_plan(provider_ref.model, origin_model=origin_model)
         while attempts:
             model, capacity = attempts.pop(0)
             remaining_ms = int((deadline - self._now()) * 1000)
             if remaining_ms <= 0:
                 raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
-            probe = self._is_target_probe(model, capacity)
+            probe = self._is_capacity_probe(model, capacity)
             attempt_ms = self._pt_probe_timeout_ms(remaining_ms) if probe else remaining_ms
             buffered: list[bytes] = []
             try:
@@ -545,7 +550,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         headers = _vertex_headers(await self._vertex_access_token(), capacity)
         decoder = SSEEventDecoder()
         received = 0
-        traffic_type = 'PROVISIONED_THROUGHPUT'
+        traffic_type = None
         async with self._http_client.stream(
             'POST',
             endpoint,
@@ -579,6 +584,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     if translated is not None:
                         yield translated
         self._observe_attempt(model, capacity, response.status_code, b'', traffic_type=traffic_type)
+        await self._reservations.record(model, capacity, response.status_code, traffic_type)
 
     async def create_embedding(
         self,
@@ -641,6 +647,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
     ) -> Mapping[str, Any]:
         """Run generateContent through the PT ladder: pin, overflow, fallback."""
         deadline = self._now() + max(timeout_ms, 0) / 1000.0
+        await self._refresh_reservations()
         attempts = self._attempt_plan(anchor, origin_model=origin_model)
         last_error: _VertexHttpError | None = None
         parsed: Mapping[str, Any] | None = None
@@ -649,7 +656,7 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             remaining_ms = int((deadline - self._now()) * 1000)
             if remaining_ms <= 0:
                 raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
-            probe = self._is_target_probe(model, capacity)
+            probe = self._is_capacity_probe(model, capacity)
             attempt_ms = self._pt_probe_timeout_ms(remaining_ms) if probe else remaining_ms
             try:
                 async with asyncio.timeout(attempt_ms / 1000.0 if probe else None):
@@ -727,12 +734,9 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
                     await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 )
             usage_metadata = parsed.get('usageMetadata', {})
-            traffic_type = (
-                usage_metadata.get('trafficType', 'PROVISIONED_THROUGHPUT')
-                if isinstance(usage_metadata, Mapping)
-                else None
-            )
+            traffic_type = usage_metadata.get('trafficType') if isinstance(usage_metadata, Mapping) else None
             self._observe_attempt(model, capacity, response.status_code, b'', traffic_type=traffic_type)
+            await self._reservations.record(model, capacity, response.status_code, traffic_type)
             return parsed
         except _VertexHttpError:
             raise
@@ -742,6 +746,12 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
             raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
         except httpx.HTTPError as exc:
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+    async def _refresh_reservations(self):
+        async def probe(model: str, location: str) -> str:
+            return await probe_reservation(self._http_client, self._vertex_access_token, model, location)
+
+        self._reservation_states = await self._reservations.refresh(probe)
 
     async def _vertex_access_token(self) -> str:
         try:

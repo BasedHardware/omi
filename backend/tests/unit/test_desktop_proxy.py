@@ -8,6 +8,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from config.vertex_reservations import State
 from fastapi import HTTPException
 from starlette.requests import Request
 
@@ -1325,12 +1326,14 @@ def _reset_pt_promotion_state():
     """Observed capacity and learned reachability are module state; never leak
     them between tests. Reachability is a per-model table now, so clearing one
     target field is no longer enough."""
-    desktop_proxy._pt_target_ready = False
-    desktop_proxy._pt_target_probed_at = None
+    desktop_proxy._reservation_snapshot.set({})
+    desktop_proxy.reservation_state._positive.clear()
+    desktop_proxy._pt_probed_at.clear()
     desktop_proxy._model_unavailable_at.clear()
     yield
-    desktop_proxy._pt_target_ready = False
-    desktop_proxy._pt_target_probed_at = None
+    desktop_proxy._reservation_snapshot.set({})
+    desktop_proxy.reservation_state._positive.clear()
+    desktop_proxy._pt_probed_at.clear()
     desktop_proxy._model_unavailable_at.clear()
 
 
@@ -1367,13 +1370,17 @@ def test_flash_stays_on_the_current_reservation_until_target_capacity_exists(mon
 
 def test_old_flash_keeps_its_model_once_the_target_reservation_is_observed(monkeypatch):
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
-    desktop_proxy._record_pt_target_observation(True)
+    desktop_proxy._reservation_snapshot.set(
+        {desktop_proxy.VERTEX_PT_TARGET_MODEL: State.ACTIVE, desktop_proxy.VERTEX_PT_MODEL: State.INACTIVE}
+    )
     assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
 
 
 def test_operator_override_pins_the_reservation_back(monkeypatch):
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
-    desktop_proxy._record_pt_target_observation(True)
+    desktop_proxy._reservation_snapshot.set(
+        {desktop_proxy.VERTEX_PT_TARGET_MODEL: State.ACTIVE, desktop_proxy.VERTEX_PT_MODEL: State.INACTIVE}
+    )
     monkeypatch.setenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, "gemini-2.5-flash")
     assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
 
@@ -1457,8 +1464,13 @@ async def test_gateway_and_desktop_kill_switch_overflow_agree(monkeypatch):
         assert capped_desktop == capped_gateway == [("gemini-2.5-flash-lite", "shared")]
         assert all("gemini-3.1" not in model for model, _capacity in capped_desktop)
 
-        desktop_proxy._record_pt_target_observation(True)
-        provider._pt_target_ready = True
+        desktop_proxy._reservation_snapshot.set(
+            {desktop_proxy.VERTEX_PT_TARGET_MODEL: State.ACTIVE, desktop_proxy.VERTEX_PT_MODEL: State.INACTIVE}
+        )
+        provider._reservation_states = {
+            desktop_proxy.VERTEX_PT_TARGET_MODEL: State.ACTIVE,
+            desktop_proxy.VERTEX_PT_MODEL: State.INACTIVE,
+        }
         promoted_desktop = desktop_proxy._overflow_plan(desktop_proxy.VERTEX_PT_TARGET_MODEL, origin_model=origin)
         promoted_gateway = provider._overflow_plan(desktop_proxy.VERTEX_PT_TARGET_MODEL, origin_model=origin)
         assert promoted_desktop == promoted_gateway == [("gemini-2.5-flash-lite", "shared")]
@@ -1490,12 +1502,14 @@ def test_pro_falls_back_when_the_target_is_unreachable(monkeypatch):
     )
 
 
-def test_an_unavailable_target_cannot_be_considered_a_live_reservation():
+def test_reachability_failure_does_not_revoke_reservation_evidence():
     """A model that cannot be reached cannot be holding prepaid capacity."""
-    desktop_proxy._record_pt_target_observation(True)
-    assert desktop_proxy._pt_target_is_ready() is True
+    desktop_proxy._reservation_snapshot.set(
+        {desktop_proxy.VERTEX_PT_TARGET_MODEL: State.ACTIVE, desktop_proxy.VERTEX_PT_MODEL: State.INACTIVE}
+    )
+    assert (desktop_proxy._reservation_states().get(desktop_proxy.VERTEX_PT_TARGET_MODEL) == State.ACTIVE) is True
     desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
-    assert desktop_proxy._pt_target_is_ready() is False
+    assert (desktop_proxy._reservation_states().get(desktop_proxy.VERTEX_PT_TARGET_MODEL) == State.ACTIVE) is True
 
 
 def test_model_unavailability_is_distinguished_from_capacity_conditions():
@@ -1556,7 +1570,14 @@ def _ok_response(url: str) -> httpx.Response:
     return httpx.Response(
         200,
         request=httpx.Request("POST", url),
-        json={"usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15}},
+        json={
+            "usageMetadata": {
+                "promptTokenCount": 10,
+                "candidatesTokenCount": 5,
+                "totalTokenCount": 15,
+                "trafficType": "PROVISIONED_THROUGHPUT",
+            }
+        },
     )
 
 
@@ -1613,7 +1634,7 @@ async def test_saturated_old_reservation_overflows_directly_to_a_cheaper_model(m
     response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
     assert response.status_code == 200
     assert routed == [("gemini-2.5-flash", ""), ("gemini-3.1-flash-lite", "shared")]
-    assert desktop_proxy._pt_target_is_ready() is False
+    assert (desktop_proxy._reservation_states().get(desktop_proxy.VERTEX_PT_TARGET_MODEL) == State.ACTIVE) is False
 
 
 @pytest.mark.asyncio
@@ -1630,7 +1651,7 @@ async def test_only_successful_target_dedicated_requests_promote_the_reservation
     response = await desktop_proxy._proxy(make_request(), f"models/{target}:generateContent", False, "user")
     assert response.status_code == status
     assert routed == [(target, "")]
-    assert desktop_proxy._pt_target_is_ready() is ready
+    assert (desktop_proxy._reservation_states().get(desktop_proxy.VERTEX_PT_TARGET_MODEL) == State.ACTIVE) is ready
     assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
 
 
@@ -1790,11 +1811,11 @@ def test_a_new_instance_probes_immediately_regardless_of_uptime(monkeypatch):
     would suppress the first probe for the first 10 minutes of every new
     instance's life, which is most of a Cloud Run instance's life."""
     monkeypatch.setattr(desktop_proxy.time, "monotonic", lambda: 1.0)
-    desktop_proxy._pt_target_probed_at = None
-    assert desktop_proxy._pt_probe_due() is True
+    desktop_proxy._pt_probed_at.clear()
+    assert desktop_proxy._pt_probe_due(desktop_proxy.VERTEX_PT_TARGET_MODEL) is True
 
-    desktop_proxy._record_pt_target_observation(False)
-    assert desktop_proxy._pt_probe_due() is False
+    desktop_proxy._pt_probed_at[desktop_proxy.VERTEX_PT_TARGET_MODEL] = desktop_proxy.time.monotonic()
+    assert desktop_proxy._pt_probe_due(desktop_proxy.VERTEX_PT_TARGET_MODEL) is False
 
 
 def _model_not_found_response(url: str) -> httpx.Response:
@@ -2028,7 +2049,9 @@ def test_a_terminal_model_has_no_recovery_plan(monkeypatch):
 async def test_a_404_on_any_model_falls_back_and_latches_it(monkeypatch):
     client = _ScriptedClient([_model_not_found_response, _ok_response, _ok_response])
     routed = _install_proxy_doubles(monkeypatch, client)
-    desktop_proxy._record_pt_target_observation(True)
+    desktop_proxy._reservation_snapshot.set(
+        {desktop_proxy.VERTEX_PT_TARGET_MODEL: State.ACTIVE, desktop_proxy.VERTEX_PT_MODEL: State.INACTIVE}
+    )
     response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
     assert response.status_code == 200
     assert routed == [("gemini-2.5-flash", ""), ("gemini-3.1-flash-lite", "shared")]
@@ -2135,7 +2158,9 @@ def test_server_paid_traffic_never_dispatches_gemini_2_5_pro(monkeypatch, target
     """
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
     if reservation_promoted:
-        desktop_proxy._record_pt_target_observation(True)
+        desktop_proxy._reservation_snapshot.set(
+            {desktop_proxy.VERTEX_PT_TARGET_MODEL: State.ACTIVE, desktop_proxy.VERTEX_PT_MODEL: State.INACTIVE}
+        )
     if not target_reachable:
         desktop_proxy._record_model_unavailable("gemini-3.1-flash-lite")
 
