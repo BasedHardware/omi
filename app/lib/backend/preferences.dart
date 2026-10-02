@@ -19,6 +19,7 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/startup/boot_journal.dart';
+import 'package:omi/startup/boot_recovery.dart';
 import 'package:omi/env/physical_qualification.dart';
 
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
@@ -85,7 +86,9 @@ class SharedPreferencesUtil {
 
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
+    final hadStoredAppearance = _preferences!.containsKey(appearanceModeKey);
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
+    await _migrateAppearanceDefault(hadStoredAppearance: hadStoredAppearance);
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
     await _loadCapturePolicy();
     await _reconcileNativeCapturePolicy();
@@ -110,6 +113,32 @@ class SharedPreferencesUtil {
       _authTokenCache = _instance.getString('authToken');
     }
     await _syncNativeAuthToken(_authTokenCache);
+  }
+
+  /// Pin the default once, before this launch creates other preferences. Existing
+  /// installs without a choice keep System; fresh installs keep Light even after
+  /// onboarding. A quarantined appearance value retains the Light error fallback.
+  static Future<void> _migrateAppearanceDefault({required bool hadStoredAppearance}) async {
+    final prefs = _preferences!;
+    if (prefs.containsKey(appearanceModeKey)) return;
+
+    final lastVersion = prefs.get('lastKnownAppVersion');
+    final bootSchema = prefs.get(BootRecovery.schemaKey);
+    final existingInstall = prefs.get('onboardingCompleted') == true ||
+        (lastVersion is String && lastVersion.trim().isNotEmpty) ||
+        (bootSchema is int && bootSchema > 0);
+    final mode = !hadStoredAppearance && existingInstall ? 'system' : 'light';
+
+    // SharedPreferences caches the choice before writing, so this boot can still
+    // render it if storage fails. With no durable key, the next process retries.
+    try {
+      if (!await prefs.setString(appearanceModeKey, mode)) {
+        Logger.debug('Appearance default migration could not be persisted');
+      }
+    } catch (e, stack) {
+      Logger.debug('Appearance default migration failed: $e');
+      Logger.debug('Stack: $stack');
+    }
   }
 
   static Future<void> _quarantineBootSettings() async {
