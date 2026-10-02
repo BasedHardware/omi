@@ -28,8 +28,13 @@ def baseline_counts():
     assert counts[0.075] <= 32
 
 
+# The fast lane keeps a 10-seed sample; the full 200-seed sweep (4M sessions per
+# rate, ~5 minutes on a CI runner) runs in the slow guardrail lane.
+_BASELINE_SEEDS = [seed if seed < 10 else pytest.param(seed, marks=pytest.mark.slow) for seed in range(200)]
+
+
 @pytest.mark.parametrize('rate', [0.03, 0.05, 0.075])
-@pytest.mark.parametrize('seed', range(200))
+@pytest.mark.parametrize('seed', _BASELINE_SEEDS)
 def test_twenty_thousand_session_baseline(rate, seed, baseline_counts):
     rng, state = random.Random(seed), GateState()
     for n in range(20000):
@@ -54,7 +59,7 @@ def detect(rate, seed, *, warmup=500, horizon=5000):
     return horizon + 1, failures
 
 
-@pytest.mark.parametrize('rate,limit', [(0.12, 1500), (0.16, 300)])
+@pytest.mark.parametrize('rate,limit', [pytest.param(0.12, 1500, marks=pytest.mark.slow), (0.16, 300)])
 def test_brownout_median_detection(rate, limit):
     # A run that has not detected by the limit cannot lower the median below it,
     # so stopping there proves the same bound without running undetected seeds on.
@@ -104,7 +109,9 @@ def trial_day(seed, rate=0.61, sessions=17900, *, outcome_delay=30, cache_delay=
     return trials, disruptions
 
 
-@pytest.mark.parametrize('seed', range(100))
+@pytest.mark.parametrize(
+    'seed', [seed if seed < 10 else pytest.param(seed, marks=pytest.mark.slow) for seed in range(100)]
+)
 def test_chronic_modulate_daily_trial_disruption_budget(seed):
     trials, disruptions = trial_day(seed)
     assert disruptions + 10 < 100  # include an initial hard-outage detection allowance
