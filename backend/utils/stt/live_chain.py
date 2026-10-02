@@ -307,6 +307,9 @@ async def connect_configured_chain(
                     routing_models=routing_models,
                 )
             reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
+            # Count the accepted socket once, but retain fresh connect evidence
+            # if its session-generation fence excluded a newer gate epoch.
+            observed = getattr(socket, 'cost_observation', None)
             health.record_connect_failure(
                 (
                     target.id
@@ -319,7 +322,8 @@ async def connect_configured_chain(
                 ),
                 bounded_language(routing_language),
                 routing_uid,
-                reason,
+                getattr(socket, 'normalized_death_reason', reason) if observed is not None else reason,
+                observed=observed,
             )
             if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
                 _note_connect_result(failed_provider=service.value)
