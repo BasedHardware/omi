@@ -111,6 +111,14 @@ def test_discarded_conversation_does_not_cover_an_event():
     assert [row.event_id for row in rows] == ['evt-after-scrap']
 
 
+def test_a_meeting_later_today_is_not_listed_as_not_captured():
+    later = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    rows, _, _ = _run_gaps([_event(later, later + timedelta(minutes=30), event_id='evt-later')], [])
+
+    assert rows == []
+
+
 def test_the_conversation_read_is_bounded_and_unindexed():
     """include_discarded=True keeps the read a single-field range (no composite index);
     the window is padded one day so an edge event's earlier conversation still counts."""

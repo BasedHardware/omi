@@ -44,7 +44,8 @@ path were removed. Calendar write-back now happens only through explicit user ac
 
 `GET /v1/calendar/capture-gaps?start=&end=` (`backend/routers/google_calendar.py`, auth required)
 returns **confirmed**, timed (≤ `MAX_CAPTURE_GAP_EVENT_SECONDS` = 8h; all-day blocks exceed
-it) events in the window with **no overlapping non-discarded conversation**. Rows carry
+it) events in the window that **have ended** and have **no overlapping non-discarded
+conversation**; a meeting still running or later today can still be recorded. Rows carry
 `event_id`, `title`, `start_time`, `end_time`, `status`, `coverage='not_captured'`. The pure
 selection is `select_capture_gaps`; it never creates conversations. Coverage uses the same
 10s overlap floor. The conversation read is a single-field Firestore range

@@ -326,6 +326,18 @@ class TestSelectCaptureGaps:
 
         assert cl.select_capture_gaps([declined, cancelled, tentative, all_day, overlong], []) == []
 
+    def test_a_meeting_counts_only_once_it_has_ended(self):
+        """Later today or still running, it can still be recorded, so it is not a gap yet."""
+        ended = _event(WINDOW_START - timedelta(minutes=30), WINDOW_START, event_id='evt-ended')
+        running = _event(
+            WINDOW_START - timedelta(minutes=10), WINDOW_START + timedelta(minutes=20), event_id='evt-running'
+        )
+        later = _event(WINDOW_START + timedelta(hours=2), WINDOW_START + timedelta(hours=3), event_id='evt-later')
+
+        rows = cl.select_capture_gaps([ended, running, later], [], now=WINDOW_START)
+
+        assert [row['event_id'] for row in rows] == ['evt-ended']
+
     def test_rows_never_fabricate_conversations(self):
         event = _event(WINDOW_START, WINDOW_START + timedelta(minutes=30))
 

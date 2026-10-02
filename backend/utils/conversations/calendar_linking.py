@@ -129,6 +129,8 @@ def select_overlapping_calendar_event(
 def select_capture_gaps(
     events: List[Dict[str, Any]],
     conversations: List[Dict[str, Any]],
+    *,
+    now: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
     """Confirmed, timed calendar events with no overlapping kept conversation.
 
@@ -139,7 +141,10 @@ def select_capture_gaps(
     blocks parse to midnight bounds and exceed the ceiling), and no
     non-discarded conversation overlaps it by at least ``MIN_OVERLAP_SECONDS``
     — the same floor the linker applies, so a sub-10s blip is not "capture".
+    It must also have ended by ``now`` (the current time unless given): a
+    meeting still running or later today can still be recorded.
     """
+    cutoff = _as_utc(now) or datetime.now(timezone.utc)
     conversation_windows: List[tuple[datetime, datetime]] = []
     for conversation in conversations:
         if conversation.get('discarded'):
@@ -161,6 +166,8 @@ def select_capture_gaps(
             continue
         event_duration = (event_end - event_start).total_seconds()
         if event_duration <= 0 or event_duration > MAX_CAPTURE_GAP_EVENT_SECONDS:
+            continue
+        if event_end > cutoff:
             continue
         covered = any(
             (min(event_end, window_end) - max(event_start, window_start)).total_seconds() >= MIN_OVERLAP_SECONDS
