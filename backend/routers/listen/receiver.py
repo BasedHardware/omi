@@ -63,6 +63,7 @@ from utils.stt.live_failure import (
     terminate_live_stt_backoff,
 )
 from utils.stt.live_chain import ProviderChainUnavailable
+from utils.stt.live_recovery import allow_healthy_soniox_rescue
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_router import note_failed_route
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
@@ -212,6 +213,10 @@ class ListenReceiver(ReplayFilterMixin):
         # (callback factory, sample rate): each rebuild mints fresh epoch callbacks.
         self._stt_rebuild: Optional[Tuple[Any, int]] = None
         self._stt_failover_lock = asyncio.Lock()
+        self._stt_recovery_exhausted = False
+        self._stt_rebuild_attempts = 0
+        self._stt_failed_reasons: dict[str, str] = {}
+        self._stt_rescue_retries: set[str] = set()
         self._pending_live_failover: Optional[PendingLiveFailover] = None
         self._resilient_audio: ResilientAudio | None = None
         self._window_replay_audio: ResilientAudio | None = None
@@ -1161,6 +1166,8 @@ class ListenReceiver(ReplayFilterMixin):
     async def _failover_stt_socket(self) -> bool:
         """Serialize monitor/send-path failover so only one replacement is adopted."""
         async with self._stt_failover_lock:
+            if self._stt_recovery_exhausted:
+                return False
             # Soniox drain_and_close() sets this before its final flush.  Treat a
             # finishing socket as receiver teardown even if its dead latch was
             # already set; opening a replacement here races the zero-audio close.
@@ -1170,7 +1177,9 @@ class ListenReceiver(ReplayFilterMixin):
                 return True
             if await self._reconnect_stt_socket_locked():
                 return True
-            return await self._rebuild_stt_socket_locked()
+            recovered = await self._rebuild_stt_socket_locked()
+            self._stt_recovery_exhausted = not recovered
+            return recovered
 
     async def _reconnect_stt_socket_locked(self) -> bool:
         return await reconnect_live_stt_socket(self)
@@ -1184,10 +1193,14 @@ class ListenReceiver(ReplayFilterMixin):
 
         dead_provider = provider_for_service(self.host.stt_service)
         failures = note_failed_route(self, dead_provider)
-        if failures > (3 if managed_chain_enabled(self.host) else MAX_STT_FAILOVERS):
+        self._stt_rebuild_attempts += 1
+        if dead_provider:
+            self._stt_failed_reasons[dead_provider] = live_stt_terminal_reason(self.stt_socket, 'connection_lost')
+        if max(failures, self._stt_rebuild_attempts) > (3 if managed_chain_enabled(self.host) else MAX_STT_FAILOVERS):
             self._settle_pending_live_failover_failure()
             return False
         note_typed_provider_death(self.stt_socket, dead_provider)
+        allow_healthy_soniox_rescue(self)
         service, language, model = get_stt_service_for_language(
             self.host.language,
             multi_lang_enabled=self.host.multi_lang_enabled,
@@ -1390,7 +1403,8 @@ class ListenReceiver(ReplayFilterMixin):
             if ring_action == 'failover':
                 if await self._failover_stt_socket():
                     continue
-                return
+                # Fall through to the idempotent terminal send path. The
+                # recovery latch prevents it from rebuilding the same chain.
             sent = await flush_live_stt_buffer(
                 request.websocket,
                 self.host.state,

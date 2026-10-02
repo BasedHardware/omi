@@ -199,6 +199,8 @@ class PendingLiveFailover:
             to_mode=self.to_mode,
             reason=reason,
             outcome='degraded' if continuing else 'exhausted',
+            **first_text_fallback_kwargs(self.first_text_diagnostics),
+            **capacity_fallback_kwargs(self.capacity_subtype, self.replay_lag_diagnostics),
             **details,
         )
 

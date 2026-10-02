@@ -380,7 +380,10 @@ failover for existing fair-use/usage flushes; periodic metering does not double-
 
 ## Chain and alerts
 
-Each configured provider is attempted once per session, including failed connects.
+Each configured provider is attempted once per session, including failed connects,
+except for one bounded Soniox re-entry after a known transient transport loss
+when its circuit is closed and no untried Deepgram rescue remains. Managed
+rebuild attempts are independently bounded to three, including that re-entry.
 Account failures (Deepgram 401/402/403; typed Soniox account errors) use the longer
 cooldown and a single recovery probe even when other circuits allow N probes.
 `force=True` never bypasses an account-state cooldown. Last-resort never re-dials
@@ -391,6 +394,15 @@ If every other non-TDT leg is absent/open, one bounded primary probe can bypass 
 non-account bench. The flag-enabled preflight therefore leaves admission to the
 chain. The old path retains its two-failover limit; the managed chain allows three
 hops across four providers.
+
+Full local window admission is checked before constructing the window socket,
+including static/shadow serving. Capacity refusals also engage the existing
+five-second target cooldown in shadow. A refused window does not consume a
+remaining non-account rescue provider's attempt. That rescue may relax its
+selection bench while retaining the half-open probe limit and all account
+protections; an occupied probe has a twelve-second bounded wait. Exhaustion
+is latched per receiver, and ring-pressure exhaustion closes through the
+ordinary terminal send path rather than repeating rebuilds per packet.
 
 Metrics: `omi_stt_chain_exhausted_total` increments once per terminal chain;
 `omi_stt_leg_attempts_total{to_mode,outcome}` counts successful and failed actual
