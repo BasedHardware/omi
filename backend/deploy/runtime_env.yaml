@@ -2359,10 +2359,6 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
-          SERVICE_ACCOUNT_JSON:
-            secret:
-              name: prod-omi-backend-secrets
-              key: SERVICE_ACCOUNT_JSON
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
