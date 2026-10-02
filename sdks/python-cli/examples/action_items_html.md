@@ -31,6 +31,7 @@ Usage:
 
     # With local timezone offset and custom title
     python action_items_to_html.py --utc-offset +09:00 --title "Sprint Tasks" tasks.html week1.json week2.json
+    python action_items_to_html.py --utc-offset=-05:00 tasks.html tasks.json
 
     # From stdin pipeline
     omi --json action-item list --limit 200 | python action_items_to_html.py tasks.html -
@@ -43,9 +44,12 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from html import escape
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 from typing import Any, Dict, List, Optional, Tuple
+import uuid
 
 COLUMNS = ("Status", "Due", "Description", "Created", "Conversation", "ID")
 
@@ -133,11 +137,11 @@ def parse_time(value: Any) -> Optional[datetime]:
         return None
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (ValueError, OverflowError):
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
 
 
 def parse_offset(value: str) -> timedelta:
@@ -184,9 +188,13 @@ def load(sources: List[str]) -> Dict[str, Dict[str, Any]]:
             if not isinstance(item, dict):
                 raise ValueError(f"{source_label} item {idx}: each action item must be an object")
             item_id = item.get("id")
-            if not isinstance(item_id, str) or not item_id.strip():
-                item_id = f"item_{len(items_by_id) + 1}"
-            items_by_id[item_id] = item
+            if isinstance(item_id, str) and item_id.strip():
+                clean_id = item_id.strip()
+            else:
+                clean_id = f"auto_{uuid.uuid4().hex}"
+                while clean_id in items_by_id:
+                    clean_id = f"auto_{uuid.uuid4().hex}"
+            items_by_id[clean_id] = item
     return items_by_id
 
 
@@ -350,20 +358,27 @@ def convert(
     items = load(sources)
     html_content = report(items, offset, offset_label, title=title, now=now).encode("utf-8")
     output_path = Path(destination)
+    parent_dir = output_path.parent
+    parent_dir.mkdir(parents=True, exist_ok=True)
 
-    mode = "wb" if overwrite else "xb"
-    try:
-        output = output_path.open(mode)
-    except FileExistsError:
-        raise FileExistsError(f"Refusing to overwrite existing {output_path} (use --overwrite to replace)") from None
-
-    try:
-        with output:
-            output.write(html_content)
-    except OSError:
-        if not overwrite:
-            output_path.unlink(missing_ok=True)
-        raise
+    if not overwrite:
+        try:
+            with output_path.open("xb") as output:
+                output.write(html_content)
+        except FileExistsError:
+            raise FileExistsError(f"Refusing to overwrite existing {output_path} (use --overwrite to replace)") from None
+    else:
+        # Atomic write to temporary file in same directory, then replace destination
+        with tempfile.NamedTemporaryFile("wb", dir=parent_dir, delete=False, prefix=".tmp_report_") as tmp_file:
+            tmp_path = Path(tmp_file.name)
+            try:
+                tmp_file.write(html_content)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
+            except BaseException:
+                tmp_path.unlink(missing_ok=True)
+                raise
+        tmp_path.replace(output_path)
     return len(items)
 
 
@@ -373,7 +388,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument("output", help="Destination HTML file path")
     parser.add_argument("inputs", nargs="+", help="One or more action items JSON export files, or '-' for stdin")
-    parser.add_argument("--utc-offset", default="", help="Local UTC offset, e.g. +09:00 or -05:00")
+    parser.add_argument("--utc-offset", default="", help="Local UTC offset, e.g. +09:00 or --utc-offset=-05:00")
     parser.add_argument("--title", default="Omi Action Items Report", help="Report document title")
     parser.add_argument("--overwrite", action="store_true", help="Allow overwriting existing destination file")
 

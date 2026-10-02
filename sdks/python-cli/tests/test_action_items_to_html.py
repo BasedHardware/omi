@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 script_path = Path(__file__).resolve().parent.parent / "examples" / "action_items_to_html.py"
 spec = importlib.util.spec_from_file_location("action_items_to_html", script_path)
@@ -195,6 +197,48 @@ class TestActionItemsToHtml(unittest.TestCase):
         self.assertTrue(dest.exists())
         content = dest.read_text(encoding="utf-8")
         self.assertIn("CLI Test", content)
+
+    def test_parse_time_robustness(self):
+        # Aware UTC ISO
+        t1 = ai2html.parse_time("2026-10-02T12:00:00Z")
+        self.assertEqual(t1, datetime(2026, 10, 2, 12, 0, 0, tzinfo=timezone.utc))
+
+        # With offset converted to UTC
+        t2 = ai2html.parse_time("2026-10-02T14:00:00+02:00")
+        self.assertEqual(t2, datetime(2026, 10, 2, 12, 0, 0, tzinfo=timezone.utc))
+
+        # Naive ISO string assumed UTC
+        t3 = ai2html.parse_time("2026-10-02T12:00:00")
+        self.assertEqual(t3, datetime(2026, 10, 2, 12, 0, 0, tzinfo=timezone.utc))
+
+        # Invalid or non-string inputs
+        self.assertIsNone(ai2html.parse_time("invalid-date"))
+        self.assertIsNone(ai2html.parse_time(""))
+        self.assertIsNone(ai2html.parse_time(None))
+        self.assertIsNone(ai2html.parse_time(12345))
+
+        # Boundary timestamp causing OverflowError in astimezone
+        self.assertIsNone(ai2html.parse_time("9999-12-31T23:59:59-14:00"))
+
+    def test_load_stdin_source(self):
+        payload = json.dumps(self.sample_items).encode("utf-8")
+        with patch("sys.stdin.buffer.read", return_value=payload):
+            loaded = ai2html.load(["-"])
+            self.assertEqual(len(loaded), 4)
+            self.assertIn("act_01_overdue", loaded)
+            self.assertIn("act_04_completed", loaded)
+
+    def test_load_synthetic_id_allocation(self):
+        f = self.tmp / "no_ids.json"
+        items_without_id = [
+            {"description": "Task A", "completed": False},
+            {"description": "Task B", "completed": True},
+            {"id": "auto_existing", "description": "Existing task", "completed": False},
+        ]
+        f.write_text(json.dumps(items_without_id), encoding="utf-8")
+        loaded = ai2html.load([str(f)])
+        self.assertEqual(len(loaded), 3)
+        self.assertIn("auto_existing", loaded)
 
 
 if __name__ == "__main__":
