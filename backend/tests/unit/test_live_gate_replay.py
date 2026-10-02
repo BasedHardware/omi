@@ -59,7 +59,7 @@ def detect(rate, seed, *, warmup=500, horizon=5000):
     return horizon + 1, failures
 
 
-@pytest.mark.parametrize('rate,limit', [(0.12, 1500), (0.16, 300)])
+@pytest.mark.parametrize('rate,limit', [pytest.param(0.12, 1500, marks=pytest.mark.slow), (0.16, 300)])
 def test_brownout_median_detection(rate, limit):
     # A run that has not detected by the limit cannot lower the median below it,
     # so stopping there proves the same bound without running undetected seeds on.
