@@ -98,4 +98,28 @@ struct OmiBleReconnectDiagnostics {
         guard hadConnection else { return nil }
         return (timestamp, max(0, atMs - timestamp))
     }
+
+    func retainedHistory<T>(
+        _ history: [T], nowMs: Int64, retentionMs: Int64, limit: Int, timestampOf: (T) -> Int64
+    ) -> [T] {
+        let recent = history.filter { timestampOf($0) >= nowMs - retentionMs }
+        // Keep one unresolved outage through count truncation, while respecting
+        // both age retention and the ring's total entry limit.
+        if limit > 0, let pending = recent.lastIndex(where: { timestampOf($0) == pendingTimestampMs }),
+           pending < recent.count - limit {
+            return [recent[pending]] + recent.suffix(limit - 1)
+        }
+        return Array(recent.suffix(limit))
+    }
+
+    mutating func backfilledHistory<T>(
+        _ history: [T], nowMs: Int64, hadConnection: Bool,
+        timestampOf: (T) -> Int64, withDuration: (T, Int64) -> T
+    ) -> [T]? {
+        guard let recovery = recovered(atMs: nowMs, hadConnection: hadConnection),
+              let index = history.lastIndex(where: { timestampOf($0) == recovery.eventTimestampMs }) else { return nil }
+        var result = history
+        result[index] = withDuration(history[index], recovery.durationMs)
+        return result
+    }
 }

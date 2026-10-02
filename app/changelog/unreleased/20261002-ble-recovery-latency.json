@@ -1,1 +1,1 @@
-{"change":"Bluetooth diagnostics now keep the full reconnect time when several connection attempts fail before your device reconnects."}
+{"change":"Bluetooth diagnostics now show how long your device was disconnected, even after many failed reconnect attempts."}

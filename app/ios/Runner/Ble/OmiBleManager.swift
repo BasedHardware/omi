@@ -770,18 +770,17 @@ final class OmiBleManager: NSObject {
             "rssiTrend": trend,
         ]
         history.append(event)
-        history.removeAll { ($0["timestamp"] as? Int64 ?? 0) < now - Self.disconnectRetentionMs }
-
-        if history.count > OmiBleManager.maxDisconnectHistory {
-            history = Array(history.suffix(OmiBleManager.maxDisconnectHistory))
-        }
+        var recovery = reconnectDiagnostics[uuid, default: OmiBleReconnectDiagnostics()]
+        recovery.recordEvent(timestampMs: now, eventType: eventType, isManual: isManual)
+        reconnectDiagnostics[uuid] = recovery
+        history = recovery.retainedHistory(
+            history, nowMs: now, retentionMs: Self.disconnectRetentionMs, limit: Self.maxDisconnectHistory,
+            timestampOf: { $0["timestamp"] as? Int64 ?? 0 }
+        )
 
         persistPropertyListRecords(history, forKey: key, in: defaults)
         logBle(uuid: uuid, event: eventType, detail: event["reason"] as? String ?? "unknown")
 
-        reconnectDiagnostics[uuid, default: OmiBleReconnectDiagnostics()].recordEvent(
-            timestampMs: now, eventType: eventType, isManual: isManual
-        )
         if !isManual {
             if eventType == "disconnect" { pendingAudioRecovery[uuid] = now }
         }
@@ -790,24 +789,19 @@ final class OmiBleManager: NSObject {
     /// On successful didConnect, attribute the recovery interval to the event
     /// that started it, even when later connection attempts failed.
     private func backfillTimeToReconnect(uuid: String) {
-        guard var pending = reconnectDiagnostics.removeValue(forKey: uuid),
-              let recovery = pending.recovered(
-                  atMs: CheckedIntegerConversion.epochMs(), hadConnection: everConnected.contains(uuid)
-              ) else { return }
+        guard var pending = reconnectDiagnostics.removeValue(forKey: uuid) else { return }
         let defaults = UserDefaults.standard
         let key = OmiBleManager.historyKey(uuid)
-        guard var history = defaults.array(forKey: key) as? [[String: Any]] else { return }
-
-        // Walk backwards to the original event, before any failed retries.
-        for i in stride(from: history.count - 1, through: 0, by: -1) {
-            if let ts = history[i]["timestamp"] as? Int64, ts == recovery.eventTimestampMs {
-                var event = history[i]
-                event["timeToReconnectMs"] = recovery.durationMs
-                history[i] = event
-                persistPropertyListRecords(history, forKey: key, in: defaults)
-                return
+        let history = defaults.array(forKey: key) as? [[String: Any]] ?? []
+        if let updated = pending.backfilledHistory(
+            history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: everConnected.contains(uuid),
+            timestampOf: { $0["timestamp"] as? Int64 ?? 0 },
+            withDuration: { event, duration in
+                var updated = event
+                updated["timeToReconnectMs"] = duration
+                return updated
             }
-        }
+        ) { persistPropertyListRecords(updated, forKey: key, in: defaults) }
     }
 
     private func incrementReconnectionCount(uuid: String) {
