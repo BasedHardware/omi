@@ -71,7 +71,9 @@ void main() {
 
     test('light glass is dark glass in light grey: as see-through, no shadow', () {
       final light = OmiColors.glass;
-      expect(light, const Color(0x80D1D1D6));
+      expect(light, const Color(0x80E5E5EF));
+      expect(Color.alphaBlend(light, OmiColors.canvas), isSameColorAs(OmiColors.canvasCard, threshold: 0.01),
+          reason: 'over the white page, the card grey');
       expect(OmiGlass.fill(const CircleBorder()).shadows, isNull);
 
       OmiColors.active = OmiPalette.dark;

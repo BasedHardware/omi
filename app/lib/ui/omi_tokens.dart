@@ -140,8 +140,9 @@ class OmiPalette {
     dangerSurface: Color(0x26FF3B30),
     canvas: Color(0xFFFFFFFF),
     canvasCard: Color(0xFFF2F2F7),
-    // Dark's glass in light grey: as see-through, with the same lit top edge.
-    glass: Color(0x80D1D1D6),
+    // Dark's glass in light grey: as see-through, with the same lit top edge. Over the white page it
+    // comes out the card grey, as dark's does over black.
+    glass: Color(0x80E5E5EF),
     glassEdge: Color(0xF2FFFFFF),
     glassRim: Color(0x0F000000),
     deviceTile: Color(0xFFFAF8F4),
