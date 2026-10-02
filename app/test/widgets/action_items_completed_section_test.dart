@@ -41,6 +41,12 @@ Future<ActionItemsResponse?> _items({
         ActionItemWithMetadata(
             id: 'done2', description: 'Pay the invoice', completed: true, completedAt: DateTime(2026, 10, 2)),
         ActionItemWithMetadata(
+            id: 'done-locked',
+            description: 'A done task behind the…',
+            completed: true,
+            isLocked: true,
+            completedAt: DateTime(2026, 9, 30)),
+        ActionItemWithMetadata(
             id: 'locked',
             description: 'An older task behind the…',
             completed: false,
@@ -73,11 +79,48 @@ void main() {
     return (provider, completions);
   }
 
+  /// Like [pumpPage], with the providers above the navigator the way the app has them, so a pushed
+  /// route (the task page, the plan page) can read them too.
+  Future<(ActionItemsProvider, List<bool>)> pumpApp(WidgetTester tester, {Duration updateDelay = Duration.zero}) async {
+    final completions = <bool>[];
+    final provider = ActionItemsProvider(
+      getActionItems: _items,
+      updateActionItemRequest: (id, {description, completed, dueAt}) async {
+        await Future<void>.delayed(updateDelay);
+        if (completed != null) completions.add(completed);
+        return ActionItemWithMetadata(id: id, description: id, completed: completed ?? false);
+      },
+    );
+    addTearDown(provider.dispose);
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ActionItemsProvider>.value(value: provider),
+        ChangeNotifierProvider<GoalsProvider>(create: (_) => GoalsProvider()),
+        ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => TaskIntegrationProvider()),
+        // The plan page needs an inert UsageProvider.
+        ChangeNotifierProvider<UsageProvider>(
+          create: (_) => UsageProvider(
+            deviceTimeZone: () async => 'UTC',
+            usageRequest: ({required period, required timeZone}) async => null,
+          ),
+        ),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: [Locale('en')],
+        home: Scaffold(body: ActionItemsPage()),
+      ),
+    ));
+    await provider.ensureLoaded();
+    await tester.pumpAndSettle();
+    return (provider, completions);
+  }
+
   testWidgets('completed tasks sit folded at the bottom of the list, newest first, with Clear', (tester) async {
     final (_, completions) = await pumpPage(tester);
 
     expect(find.text('Completed'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
     expect(find.text('Pay the invoice'), findsNothing);
     expect(find.text('Clear'), findsNothing);
 
@@ -108,30 +151,7 @@ void main() {
   });
 
   testWidgets('tapping a paywalled task goes to the plan page, with no task menu or page', (tester) async {
-    final provider = ActionItemsProvider(getActionItems: _items);
-    addTearDown(provider.dispose);
-    // The shared harness has no UsageProvider; the plan page needs an inert one.
-    // Providers above the navigator: the plan page is pushed as a route, so it must find them too.
-    await tester.pumpWidget(MultiProvider(
-      providers: [
-        ChangeNotifierProvider<ActionItemsProvider>.value(value: provider),
-        ChangeNotifierProvider<GoalsProvider>(create: (_) => GoalsProvider()),
-        ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => TaskIntegrationProvider()),
-        ChangeNotifierProvider<UsageProvider>(
-          create: (_) => UsageProvider(
-            deviceTimeZone: () async => 'UTC',
-            usageRequest: ({required period, required timeZone}) async => null,
-          ),
-        ),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: [Locale('en')],
-        home: Scaffold(body: ActionItemsPage()),
-      ),
-    ));
-    await provider.ensureLoaded();
-    await tester.pumpAndSettle();
+    await pumpApp(tester);
 
     await tester.tap(find.text('An older task behind the…'));
     // The plan page animates while it loads, so settle by time rather than by quiescence.
@@ -143,6 +163,40 @@ void main() {
     // Tear the route down so its timers don't outlive the test.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('a paywalled done task shows a lock and holding it opens no menu', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('Completed'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('A done task behind the…'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline), findsNWidgets(2));
+    // Holding it ends like a tap on any locked row: the plan page, never the task menu.
+    await tester.longPress(find.text('A done task behind the…'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Delete Task'), findsNothing);
+    expect(find.text('Mark Incomplete'), findsNothing);
+    expect(find.byType(UsagePage), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('selecting a done task never selects the rows under it', (tester) async {
+    final (provider, _) = await pumpPage(tester);
+    await tester.tap(find.text('Completed'));
+    await tester.pumpAndSettle();
+    provider.startSelection();
+    await tester.pumpAndSettle();
+
+    // Newest first puts the indented 'Reply to the review' right under 'Pay the invoice', which is
+    // not its parent; a hierarchy cascade would take it along.
+    await tester.tap(find.text('Pay the invoice'));
+    await tester.pumpAndSettle();
+    expect(provider.isItemSelected('done2'), isTrue);
+    expect(provider.isItemSelected('done1'), isFalse);
+    expect(provider.selectedCount, 1);
   });
 
   testWidgets('holding a done task offers Mark Incomplete and Delete Task', (tester) async {
@@ -169,6 +223,22 @@ void main() {
     expect(tappable('Open conversation'), isTrue);
     expect(tappable('Mark Complete'), isTrue);
     handle.dispose();
+  });
+
+  testWidgets('the page sends one completion toggle at a time', (tester) async {
+    // A slow server: the second tap lands while the first toggle is still in flight.
+    final (_, completions) = await pumpApp(tester, updateDelay: const Duration(milliseconds: 300));
+    await tester.tap(find.text('Draft the update'));
+    await tester.pumpAndSettle();
+
+    final toggle = find.byKey(const Key('task_completed_toggle'));
+    await tester.tap(toggle);
+    await tester.pump();
+    await tester.tap(toggle);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(completions, [true]);
+    expect(find.text('Completed'), findsOneWidget);
   });
 
   testWidgets('tapping a task opens its page with the conversation line, and Save wakes up on an edit', (tester) async {
