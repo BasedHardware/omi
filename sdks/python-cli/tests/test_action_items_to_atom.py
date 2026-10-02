@@ -3,8 +3,10 @@
 from datetime import datetime, timezone
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -79,11 +81,17 @@ class TestActionItemsToAtom(unittest.TestCase):
         # Control codes like \x07 (bell) and \x00 must be dropped
         sanitized = ai2atom.xml_text("Hello\x00World\x07!")
         self.assertEqual(sanitized, "HelloWorld!")
+        # Forbidden noncharacters U+FFFE and U+FFFF must be dropped
+        nonchars = ai2atom.xml_text("Test\ufffeand\uffffdone")
+        self.assertEqual(nonchars, "Testanddone")
 
     def test_parse_time_and_rfc3339(self):
         dt = ai2atom.parse_time("2026-10-02T12:00:00Z")
         self.assertEqual(dt, datetime(2026, 10, 2, 12, 0, 0, tzinfo=timezone.utc))
         self.assertEqual(ai2atom.rfc3339(dt), "2026-10-02T12:00:00Z")
+
+        dt_micro = datetime(2026, 10, 2, 12, 0, 0, 123456, tzinfo=timezone.utc)
+        self.assertEqual(ai2atom.rfc3339(dt_micro), "2026-10-02T12:00:00.123456Z")
 
         dt_offset = ai2atom.parse_time("2026-10-02T14:00:00+02:00")
         self.assertEqual(dt_offset, datetime(2026, 10, 2, 12, 0, 0, tzinfo=timezone.utc))
@@ -140,9 +148,23 @@ class TestActionItemsToAtom(unittest.TestCase):
         self.assertTrue(completed_entries[0]["title"].startswith("[DONE]"))
 
     def test_build_feed_valid_xml(self):
-        items_dict = {it["id"]: it for it in self.sample_items}
+        sample = list(self.sample_items)
+        sample.append({
+            "id": "act_escape_01",
+            "description": "Fix <script> & 'alert' in User > Profile",
+            "completed": False,
+            "due_at": "2026-10-05T12:00:00Z",
+            "created_at": "2026-10-01T12:00:00Z",
+        })
+        items_dict = {it["id"]: it for it in sample}
         entries = ai2atom.build_entries(items_dict, status_filter="all")
-        xml_string = ai2atom.build_feed(entries, feed_title="My Test Tasks")
+        xml_string = ai2atom.build_feed(entries, feed_title="My Test <Tasks> & Feeds")
+
+        # Verify XML escaping in raw output
+        self.assertIn("&lt;script&gt;", xml_string)
+        self.assertIn("&amp;", xml_string)
+        self.assertIn("&gt; Profile", xml_string)
+        self.assertIn("My Test &lt;Tasks&gt; &amp; Feeds", xml_string)
 
         # Must parse as valid XML
         root = ET.fromstring(xml_string)
@@ -150,10 +172,10 @@ class TestActionItemsToAtom(unittest.TestCase):
 
         title_elem = root.find("atom:title", ATOM_NS)
         self.assertIsNotNone(title_elem)
-        self.assertEqual(title_elem.text, "My Test Tasks")
+        self.assertEqual(title_elem.text, "My Test <Tasks> & Feeds")
 
         entry_elems = root.findall("atom:entry", ATOM_NS)
-        self.assertEqual(len(entry_elems), 4)
+        self.assertEqual(len(entry_elems), 5)
 
         # Check first entry
         first_entry = entry_elems[0]
@@ -179,6 +201,7 @@ class TestActionItemsToAtom(unittest.TestCase):
         count = ai2atom.convert([str(src)], destination=str(dest))
         self.assertEqual(count, 4)
         self.assertTrue(dest.exists())
+        orig_content = dest.read_bytes()
 
         # Second call without overwrite must fail
         with self.assertRaises(FileExistsError):
@@ -187,6 +210,26 @@ class TestActionItemsToAtom(unittest.TestCase):
         # Overwrite=True succeeds
         count2 = ai2atom.convert([str(src)], destination=str(dest), overwrite=True)
         self.assertEqual(count2, 4)
+
+        # No leftover .tmp_action_items_atom_* files exist after successful replace
+        tmp_files = list(self.tmp.glob(".tmp_action_items_atom_*"))
+        self.assertEqual(tmp_files, [])
+
+        # Failing tmp write in overwrite mode cleans up temporary file and leaves destination intact
+        real_open = Path.open
+
+        def failing_tmp_open(self_path, *args, **kwargs):
+            handle = real_open(self_path, *args, **kwargs)
+            if ".tmp_action_items_atom_" in self_path.name:
+                handle.write = unittest.mock.Mock(side_effect=OSError("Disk write failed"))
+            return handle
+
+        with patch.object(Path, "open", autospec=True, side_effect=failing_tmp_open):
+            with self.assertRaises(OSError):
+                ai2atom.convert([str(src)], destination=str(dest), overwrite=True)
+
+        self.assertEqual(dest.read_bytes(), orig_content)
+        self.assertEqual(list(self.tmp.glob(".tmp_action_items_atom_*")), [])
 
     def test_failed_write_cleans_up_destination(self):
         src = self.tmp / "input_err.json"
@@ -224,6 +267,19 @@ class TestActionItemsToAtom(unittest.TestCase):
         with patch("sys.stdin.buffer.read", return_value=payload):
             loaded = ai2atom.load(["-"])
             self.assertEqual(len(loaded), 4)
+
+    def test_main_broken_pipe_error(self):
+        src = self.tmp / "cli_pipe.json"
+        src.write_text(json.dumps(self.sample_items), encoding="utf-8")
+
+        orig_fd = os.dup(sys.stdout.fileno())
+        try:
+            with patch("sys.stdout.buffer.write", side_effect=BrokenPipeError):
+                ret = ai2atom.main([str(src), "-o", "-"])
+                self.assertEqual(ret, 1)
+        finally:
+            os.dup2(orig_fd, sys.stdout.fileno())
+            os.close(orig_fd)
 
 
 if __name__ == "__main__":
