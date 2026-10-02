@@ -8,7 +8,7 @@ import os
 import asyncio
 
 import pytz
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -29,6 +29,7 @@ from services.users.data_export_response import DataExportStreamingResponse
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
+from database.conversation_scan import conversation_scan_budget, people_stats_scan
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -139,12 +140,14 @@ from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
+from utils.other.list_budget import finish_list_budget
 from utils.other.storage import (
     delete_all_conversation_recordings,
     get_speech_sample_signed_urls,
     delete_user_person_speech_samples,
     delete_user_person_speech_sample,
 )
+from utils.people_stats import apply_people_stats, collect_people_stats
 from utils.webhooks import button_event_webhook, webhook_first_time_setup
 from utils.byok import (
     get_byok_key,
@@ -655,22 +658,17 @@ def get_all_people(
     include_speech_samples: bool = True,
     include_stats: bool = False,
     uid: str = Depends(auth.get_current_user_uid),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     logger.info(f'get_all_people {include_speech_samples}')
+    budget = conversation_scan_budget(request, route='people-stats') if include_stats else None
     people = Person.deserialize_many_safe(get_people(uid))
     if include_stats and people:
-        from utils.people_stats import apply_people_stats, collect_people_stats
-
-        stats = collect_people_stats(
-            # Must stay on the server-side limit/offset branch. The scan-and-fill
-            # branch (include_discarded=True) restarts its stream from the newest
-            # row on every page and skips `offset` rows in Python, so this
-            # ten-page scan read up to 5,500 full conversations per request and
-            # timed out at 30 s for about 30% of callers. The cost of this branch
-            # is that a tombstone inside the window can end the scan early (#19908).
-            lambda limit, offset: conversations_db.get_conversations_without_photos(uid, limit=limit, offset=offset)
-        )
+        stats = collect_people_stats(people_stats_scan(uid, budget=budget))
         apply_people_stats(people, stats)
+    if budget is not None:
+        finish_list_budget(response, budget)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):

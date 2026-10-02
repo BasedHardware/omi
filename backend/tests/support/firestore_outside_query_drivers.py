@@ -675,6 +675,7 @@ COVERED_BY['utils.other.list_budget.budgeted_stream_list'] = CoveredByEntry(
 _driver(
     'utils.other.list_budget.budgeted_stream_iter',
     base={'query': ref_collection(f'users/{UID}/memory_items'), 'budget': None},
+    neutrals={'retry': (None, 'optional retry override; forwarded to stream, no filter effect')},
     profile='request-budgeted-iterator',
 )
 
