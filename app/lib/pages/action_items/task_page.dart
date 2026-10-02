@@ -10,8 +10,10 @@ import 'package:omi/pages/action_items/task_delete_undo.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart' show DateTimePickerSheet;
 import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/conversation_link_blocks.dart' show openChatBlockConversation;
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -29,8 +31,7 @@ Future<void> openTaskPage(BuildContext context, ActionItemWithMetadata item) {
 
 /// One task, full screen: the conversation page's chrome (X, a Save pill that wakes up when
 /// something changed), the text as a large editable title, a line back to the conversation it was
-/// heard in, then Due (with the quick chips) and Mark Complete in one card and Delete in another.
-/// Exporting lives in Task Integrations (the list's ⋯ menu), not here.
+/// heard in, then Due (with the quick chips) and Mark Complete in one card and Export / Delete in another.
 ///
 /// Text and due date save on Save; completion saves the moment it is tapped, like the list's ring.
 /// Leaving with unsaved edits asks first (docs/ux-contract.md §2). Delete is immediate with Undo.
@@ -157,6 +158,23 @@ class _TaskPageState extends State<TaskPage> {
     return '$day · ${dates.time(date)}';
   }
 
+  /// One task to the connected task app, the way the list's long-press menu does it.
+  Future<void> _export() async {
+    OmiHaptics.light();
+    final integrations = context.read<TaskIntegrationProvider>();
+    final connected = TaskIntegrationApp.values.where(integrations.isAppConnected).toList(growable: false);
+    if (connected.isEmpty) {
+      OmiFeedback.error(
+        context,
+        context.l10n.connectTaskAppToExport,
+        actionLabel: context.l10n.connectAction,
+        onAction: () => routeToPage(context, const TaskIntegrationsPage()),
+      );
+      return;
+    }
+    await context.read<ActionItemsProvider>().exportItems(context, [widget.item], connected.first);
+  }
+
   void _delete() {
     final provider = context.read<ActionItemsProvider>();
     unawaited(deleteTaskWithUndo(context, provider, widget.item));
@@ -279,6 +297,12 @@ class _TaskPageState extends State<TaskPage> {
                     const SizedBox(height: 16),
                     _Card(
                       children: [
+                        _CardRow(
+                          leading: const Icon(Icons.ios_share_rounded, size: 22),
+                          title: l10n.exportButton,
+                          onTap: _saving ? null : _export,
+                          showChevron: false,
+                        ),
                         _CardRow(
                           leading: const Icon(Icons.delete_outline, size: 22),
                           title: l10n.deleteActionItem,
