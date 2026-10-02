@@ -279,6 +279,57 @@ class TestConversationsToHTML(unittest.TestCase):
             loaded = c2html.load(["-"])
             self.assertEqual(len(loaded), 3)
 
+    def test_main_overwrite_refusal(self):
+        src = self.tmp / "cli_refuse_src.json"
+        dest = self.tmp / "cli_refuse_dest.html"
+        src.write_text(json.dumps(self.sample_convs), encoding="utf-8")
+        dest.write_text("existing content", encoding="utf-8")
+
+        with self.assertRaises(SystemExit) as ctx:
+            c2html.main([str(src), "-o", str(dest)])
+        self.assertIn("Refusing to overwrite", str(ctx.exception))
+        self.assertEqual(dest.read_text(encoding="utf-8"), "existing content")
+
+    def test_main_invalid_utc_offset(self):
+        src = self.tmp / "cli_bad_offset.json"
+        dest = self.tmp / "cli_bad_offset.html"
+        src.write_text(json.dumps(self.sample_convs), encoding="utf-8")
+
+        with self.assertRaises(SystemExit) as ctx:
+            c2html.main([str(src), "-o", str(dest), "--utc-offset", "invalid"])
+        self.assertIn("UTC offset must match", str(ctx.exception))
+
+    def test_main_negative_utc_offset_forms(self):
+        src = self.tmp / "cli_neg_offset.json"
+        dest1 = self.tmp / "cli_neg_offset_1.html"
+        dest2 = self.tmp / "cli_neg_offset_2.html"
+        src.write_text(json.dumps(self.sample_convs), encoding="utf-8")
+
+        ret1 = c2html.main([str(src), "-o", str(dest1), "--utc-offset=-05:00"])
+        self.assertEqual(ret1, 0)
+        self.assertTrue(dest1.exists())
+
+        ret2 = c2html.main([str(src), "-o", str(dest2), "--utc-offset", "-05:00"])
+        self.assertEqual(ret2, 0)
+        self.assertTrue(dest2.exists())
+
+    def test_conversation_id_lone_surrogate_sanitization(self):
+        surrogate_data = [{
+            "id": "conv_\ud800_test",
+            "title": "Surrogate Test",
+            "category": "work",
+            "started_at": "2026-10-01T12:00:00Z",
+            "finished_at": "2026-10-01T12:30:00Z",
+        }]
+        src = self.tmp / "surrogate_id.json"
+        dest = self.tmp / "surrogate_id.html"
+        src.write_text(json.dumps(surrogate_data), encoding="utf-8")
+
+        ret = c2html.main([str(src), "-o", str(dest)])
+        self.assertEqual(ret, 0)
+        self.assertTrue(dest.exists())
+        self.assertIn("conv__test", dest.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

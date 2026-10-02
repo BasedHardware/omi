@@ -55,7 +55,7 @@ python conversations_to_html.py week.json -o ~/Reports/week.html
 Adjust clock times and daily section boundaries to your local timezone (e.g. Tokyo `+09:00` or New York `-05:00`):
 
 ```sh
-python conversations_to_html.py week.json --utc-offset +09:00 -o ~/Reports/week_jst.html
+python conversations_to_html.py week.json --utc-offset=-05:00 -o ~/Reports/week_est.html
 ```
 
 ### 4. Custom Report Title
@@ -74,7 +74,7 @@ python conversations_to_html.py week.json --title "Q3 Client Discovery Sessions"
 | :--- | :--- | :--- | :--- |
 | `inputs` | Positional | One or more JSON export files, or `-` for stdin | *(Required)* |
 | `--output` | `-o` | Destination HTML report file path | `stdout` |
-| `--utc-offset` | `--utc-offset` | UTC timezone offset (e.g. `+09:00` or `-05:00`) | `+00:00` |
+| `--utc-offset` | `--utc-offset` | UTC offset (e.g. `+09:00` or `--utc-offset=-05:00`) | `+00:00` |
 | `--title` | `--title` | Custom report document title and heading | `"Omi Conversation Report"` |
 | `--overwrite` | `--overwrite` | Allow overwriting existing destination files | `False` |
 

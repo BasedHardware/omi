@@ -192,12 +192,14 @@ def load(sources: Sequence[str]) -> Dict[str, Dict[str, Any]]:
             if not isinstance(item, dict):
                 raise ValueError(f"{source_label} item {idx}: each conversation must be an object")
             item_id = item.get("id")
-            if item_id is not None and str(item_id).strip():
-                clean_id = str(item_id).strip()
+            sanitized_id = text(item_id).strip()
+            if sanitized_id:
+                clean_id = sanitized_id
             else:
                 clean_id = f"auto_{uuid.uuid4().hex}"
                 while clean_id in conversations_by_id:
                     clean_id = f"auto_{uuid.uuid4().hex}"
+            item["id"] = clean_id
             conversations_by_id[clean_id] = item
     return conversations_by_id
 
@@ -428,7 +430,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--utc-offset",
         default="+00:00",
-        help="UTC timezone offset for clock times and day groupings, e.g. +09:00 or -05:00 (default: +00:00)",
+        help="UTC timezone offset, e.g. +09:00 or --utc-offset=-05:00 (default: +00:00)",
     )
     parser.add_argument(
         "--title",
@@ -441,7 +443,23 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Allow overwriting existing destination file",
     )
 
-    args = parser.parse_args(argv)
+    if argv is None:
+        raw_argv = sys.argv[1:]
+    else:
+        raw_argv = list(argv)
+
+    # Normalize '--utc-offset -05:00' to '--utc-offset=-05:00' so negative offsets parse reliably
+    norm_argv = []
+    i = 0
+    while i < len(raw_argv):
+        if raw_argv[i] == "--utc-offset" and i + 1 < len(raw_argv) and raw_argv[i + 1].startswith("-"):
+            norm_argv.append(f"{raw_argv[i]}={raw_argv[i + 1]}")
+            i += 2
+        else:
+            norm_argv.append(raw_argv[i])
+            i += 1
+
+    args = parser.parse_args(norm_argv)
 
     try:
         count = convert(
