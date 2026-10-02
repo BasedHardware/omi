@@ -45,13 +45,16 @@ def is_completed(value: Any) -> bool:
 
 
 def xml_text(value: Any) -> str:
-    """Render a field as XML-safe text, dropping C0 control codes and lone surrogates."""
+    """Render a field as XML-safe text, dropping C0 control codes, surrogates, and noncharacters."""
     if value is None:
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
     collapsed = " ".join(value.split())
-    return "".join(ch for ch in collapsed if ch >= " " and not "\ud800" <= ch <= "\udfff")
+    return "".join(
+        ch for ch in collapsed
+        if ch >= " " and not ("\ud800" <= ch <= "\udfff") and ch not in ("\ufffe", "\uffff")
+    )
 
 
 def parse_time(value: Any) -> Optional[datetime]:
@@ -71,6 +74,8 @@ def parse_time(value: Any) -> Optional[datetime]:
 
 def rfc3339(moment: datetime) -> str:
     """Atom timestamps must follow RFC 3339 formatted in UTC."""
+    if moment.microsecond:
+        return moment.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -173,11 +178,12 @@ def build_feed(rows: List[Dict[str, Any]], feed_title: str = FEED_TITLE) -> str:
     """Format entries into a valid RFC 4287 Atom XML document."""
     stamps = [rfc3339(row["updated"]) for row in rows if row.get("updated") is not None]
     feed_updated = max(stamps) if stamps else EPOCH
+    clean_title = xml_text(feed_title).strip() or FEED_TITLE
 
     parts = [
         '<?xml version="1.0" encoding="utf-8"?>',
         '<feed xmlns="http://www.w3.org/2005/Atom">',
-        f"  <title>{escape(feed_title)}</title>",
+        f"  <title>{escape(clean_title)}</title>",
         f"  <id>{FEED_ID}</id>",
         f"  <updated>{feed_updated}</updated>",
         "  <author>",
@@ -292,6 +298,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     except BrokenPipeError:
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
+        os.close(devnull)
         return 1
     except (OSError, ValueError) as exc:
         sys.exit(f"Atom feed generation failed: {exc}")
