@@ -26,6 +26,7 @@ from utils.conversations.transcript_hash import (
 from utils.observability.speaker_identification import record_speaker_review
 from models.person_confidence import SOURCE_MANUAL
 from utils.person_evidence import person_updates_for_assignment
+from utils.owner_voice_evidence import retract_owner_contributions
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
     LiveTranscriptMerge,
@@ -2633,9 +2634,7 @@ def assign_conversation_speaker(
         ref = collection.document(current_id)
         if raw.get('is_locked'):
             raise PermissionError('Conversation is locked')
-        # A donor's numeric speaker IDs may have been reassigned on bridge.
-        # Carry its stable segment identities across instead of applying the
-        # number to a different voice in the surviving conversation.
+        # Bridge donors use stable segment IDs, never reassigned speaker numbers.
         if source_segments is not None:
             selected_segment_ids = donor_selected_ids(
                 source_segments,
@@ -2668,8 +2667,7 @@ def assign_conversation_speaker(
             use_for_speech_training=use_for_speech_training,
             rejection=rejection,
         )
-        # Read every person before any write; corrections fence in-flight profiles and
-        # record label evidence in the same transaction as the label, not in a later task.
+        # Read before writes; fence profiles and evidence atomically with the label.
         relabeled = [s for i, s in enumerate(before) if segments[i]['id'] in resolved]
         rejected_person_id = (rejection or {}).get('person_id')
         user_doc = user_ref.get(transaction=transaction).to_dict() or {}
@@ -2685,6 +2683,8 @@ def assign_conversation_speaker(
         updates, removed = person_updates_for_assignment(
             *evidence, receipt, segments, rejected_person_id=rejected_person_id, save_other_voice_profiles=save_other
         )
+        if owner_update := retract_owner_contributions(user_doc, (current_id, *seen), resolved, now):
+            transaction.update(user_ref, owner_update)
         for pid, update in updates.items():
             transaction.update(people[pid][0], update)
         payload = _prepare_conversation_for_write(

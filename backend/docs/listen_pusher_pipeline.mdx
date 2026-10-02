@@ -1994,19 +1994,18 @@ recording, not just one buffer length). Flipping it mid-session can mismatch
 the retained ring-buffer spans for up to the buffer's duration; it is an
 emergency lever, not a toggle.
 
-Every early return before a live speaker-ID match decision — in
-`speakers._match_unmapped` and in the callers that drop a queued detection —
-emits exactly one bounded reason as the `omi_speaker_id_match_exits_total`
-counter (label = reason only) plus one log line:
-`window_outside_buffer` (the post-failover signature), `too_short`, `no_pcm`,
-`stale_generation`, `already_mapped`. Pending evidence accumulation is not a
-drop (it logs and decides on the next clip). `speaker_id_evidence` /
-`speaker_id_decision` / the exit line carry `session=<recording session id>`
-— never uid, never transcript content — so one user's report is attributable
-without replaying the saved conversation. "That's me" outcomes are likewise attributable:
-`store_owner_voice_sample` logs one `owner sample outcome=… conversation=<id>` line next to the counter.
-Owner confirmation publication reads the current conversation receipt in the pooling transaction:
-a deleted/missing conversation or changed receipt generation drops the attempt as `stale_assignment`.
+Live matching records bounded exits in `omi_speaker_id_match_exits_total` and evidence/decision logs;
+owner learning records `omi_speaker_tag_prompt_voice_samples_total`, including `stale_assignment`.
+Automatic non-owner naming (voiceprints and introductions) requires `named_speaker_prompts_allowed`.
+Live checks once per conversation (upgrade/downgrade observed at rotation/reconnect); sync/shadow
+reuse one batch snapshot, even with zero prints. Processing/history check once per request.
+Free users load only the owner print. Owner recognition, manual edits, rejection-only card answers,
+same-stream receipt carry, and teaching from free manual tags remain available on every plan.
+Owner teaching requires current receipt consent; a card grants teaching only to its exact generation.
+Corrections retract intersecting owner contributions and rebuild from the base and remaining sources;
+legacy provenance retracts at conversation granularity. Retries retain one contribution per conversation.
+Owner and person publication fence source existence and generation; person publication rechecks consent.
+Owner clip coordination uses `sync_executor`; history competes against all usable prints, including owner.
 
 Provider segment IDs are normalized once at `TranscriptProcessor.enqueue`
 admission: a raw segment arriving with a missing or empty `id` is minted a
