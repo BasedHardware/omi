@@ -3976,9 +3976,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Даступна новая версія';
-
-  @override
   String get no => 'Не';
 
   @override
@@ -5065,8 +5062,7 @@ class AppLocalizationsBe extends AppLocalizations {
       'Працягваючы, вашы размовы, запісы і асабістая інфармацыя будуць надзейна захоўвацца на нашых серверах. Вашы аўдыязапісы і транскрыпцыі апрацоўваюцца староннімі сэрвісамі ШІ (уключаючы Deepgram для транскрыпцыі і OpenAI для аналізу), каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі праграмы.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Задачы з вашых разговораў пояўляцца тут.\nТапніце + каб стварыць адну ручнічна.';
+  String get tasksEmptyStateMessage => 'Пачніце размову, каб стварыць задачу.';
 
   @override
   String get clearChatAction => 'Очыстіць Чат';
@@ -12142,5 +12138,121 @@ class AppLocalizationsBe extends AppLocalizations {
       one: 'Пазначце яго яшчэ ў 1 размове.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Уключыце Omi ў Камандах → Siri. Скажыце «$askPhrase» або «$questionPhrase», а затым задайце сваё пытанне.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Также можно сказать «$searchPhrase for what I did today».';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Даступнае абнаўленне';
+
+  @override
+  String get updateAvailableMessage => 'Новая версія Omi гатовая: з выпраўленнямі і паляпшэннямі.';
+
+  @override
+  String get updateRequiredTitle => 'Патрабуецца абнаўленне';
+
+  @override
+  String get updateRequiredMessage =>
+      'Гэтая версія Omi больш не падтрымліваецца. Абнавіце, каб працягваць запіс і сінхранізацыю.';
+
+  @override
+  String get exportingAllData =>
+      'Экспарт вашых даных… Не закрывайце Omi; вялікія ўліковыя запісы могуць патрабаваць некалькі хвілін.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удзельнікаў: $count',
+      one: '1 удзельнік',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Аўтаматычна выдаляць сінхранізаваныя копіі';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Сінхранізаваныя копіі выдаляюцца праз $days дзён';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Выдаляе лакальныя копіі праз $days дзён пасля сінхранізацыі. Воблачныя копіі захоўваюцца.';
+  }
+
+  @override
+  String get localCopiesSection => 'Лакальныя копіі';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Пазначана радкоў: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Голас запомнены',
+        'pending': 'Вывучэнне голасу…',
+        'disabled': 'Захаванне голасу выключана',
+        'other': 'Голас яшчэ не вывучаны',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi пазнае $name наступным разам.',
+        'pending': 'Гэта зойме некалькі секунд.',
+        'disabled': 'Уключыце захаванне галасоў у Наладах, каб Omi мог пазнаваць $name.',
+        'other': 'Omi патрэбна больш выразнай мовы ад $name, і ён будзе працягваць спробы.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Ранейшыя размовы з гэтым голасам: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Магчыма',
+        'soundsLike': 'Падобна на $name',
+        'notPerson': 'Не $name',
+        'carried': 'Усё яшчэ $name. Перанесена з вашай апошняй размовы.',
+        'change': 'Змяніць',
+        'alsoTitle': 'Гэта таксама $name?',
+        'alsoBody': 'Omi знайшоў такі ж голас у ранейшых размовах.',
+        'confirmed': 'Вы пацвердзілі гэту пазнаку',
+        'other': 'Праглядзець',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration гэтага голасу';
   }
 }

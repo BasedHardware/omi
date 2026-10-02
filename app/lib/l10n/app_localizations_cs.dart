@@ -3965,9 +3965,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'K dispozici je nová verze';
-
-  @override
   String get no => 'Ne';
 
   @override
@@ -5045,7 +5042,7 @@ class AppLocalizationsCs extends AppLocalizations {
       'Pokračováním budou vaše konverzace, nahrávky a osobní údaje bezpečně uloženy na našich serverech. Vaše audio nahrávky a přepisy jsou zpracovávány AI službami třetích stran (včetně Deepgram pro přepis a OpenAI pro analýzu), aby vám poskytly poznatky založené na AI a umožnily všechny funkce aplikace.';
 
   @override
-  String get tasksEmptyStateMessage => 'Úkoly z vašich konverzací se zobrazí zde.\nKlepněte na + pro ruční vytvoření.';
+  String get tasksEmptyStateMessage => 'Začněte konverzaci a vytvořte úkol.';
 
   @override
   String get clearChatAction => 'Vymazat chat';
@@ -12108,5 +12105,121 @@ class AppLocalizationsCs extends AppLocalizations {
       one: 'Označte je ještě v 1 konverzaci.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Zapněte Omi v Zkratkách → Siri. Řekněte „$askPhrase“ nebo „$questionPhrase“ a pak položte svou otázku.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Můžete také říct „$searchPhrase for what I did today“.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Je k dispozici aktualizace';
+
+  @override
+  String get updateAvailableMessage => 'Nová verze Omi je připravená, s opravami a vylepšeními.';
+
+  @override
+  String get updateRequiredTitle => 'Vyžaduje se aktualizace';
+
+  @override
+  String get updateRequiredMessage =>
+      'Tato verze Omi už není podporovaná. Aktualizujte ji, abyste mohli dál nahrávat a synchronizovat.';
+
+  @override
+  String get exportingAllData =>
+      'Exportují se vaše data… Nechejte Omi otevřené; u velkých účtů to může trvat několik minut.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Mluvčí: $count',
+      one: '1 mluvčí',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Automaticky odstranit synchronizované kopie';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Synchronizované kopie se odstraní po $days dnech';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Odstraní místní kopie $days dní po synchronizaci. Cloudové kopie zůstávají zachovány.';
+  }
+
+  @override
+  String get localCopiesSection => 'Místní kopie';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Označené řádky: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Hlas naučen',
+        'pending': 'Učení hlasu…',
+        'disabled': 'Ukládání hlasu je vypnuté',
+        'other': 'Hlas zatím není naučen',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi příště pozná osobu $name.',
+        'pending': 'Potrvá to několik sekund.',
+        'disabled': 'Zapněte v Nastavení ukládání hlasů, aby Omi mohl poznat osobu $name.',
+        'other': 'Omi potřebuje více zřetelné řeči od osoby $name a bude to zkoušet dál.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Dřívější rozhovory s tímto hlasem: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Pravděpodobně',
+        'soundsLike': 'Zní jako $name',
+        'notPerson': 'Není $name',
+        'carried': 'Stále $name. Převzato z vaší poslední konverzace.',
+        'change': 'Změnit',
+        'alsoTitle': 'Je to také $name?',
+        'alsoBody': 'Omi našel stejný hlas v dřívějších rozhovorech.',
+        'confirmed': 'Tento štítek jste potvrdili',
+        'other': 'Zkontrolovat',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration tohoto hlasu';
   }
 }

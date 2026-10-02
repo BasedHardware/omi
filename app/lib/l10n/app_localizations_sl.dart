@@ -3975,9 +3975,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Nova različica dostopna';
-
-  @override
   String get no => 'Ne';
 
   @override
@@ -5063,8 +5060,7 @@ class AppLocalizationsSl extends AppLocalizations {
       'Z nadaljevanjem bodo vaši pogovori, posnetki in osebni podatki varno shranjeni na naših strežnikih. Vaši zvočni posnetki in prepisi se obdelujejo s storitvami umetne inteligence tretjih oseb (vključno z Deepgram za prepis in OpenAI za analizo), da vam zagotovimo vpoglede, ki jih poganja umetna inteligenca, in omogočimo vse funkcije aplikacije.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Naloge iz vaših pogovorov se bodo prikazale tukaj.\nTapnite + za ročno ustvarjanje.';
+  String get tasksEmptyStateMessage => 'Začnite pogovor, da ustvarite nalogo.';
 
   @override
   String get clearChatAction => 'Počistite klepet';
@@ -12141,5 +12137,121 @@ class AppLocalizationsSl extends AppLocalizations {
       one: 'Označite jih še v 1 pogovoru.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Vklopite Omi v Bližnjice → Siri. Recite «$askPhrase» ali «$questionPhrase» in nato postavite svoje vprašanje.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Lahko rečete tudi «$searchPhrase for what I did today».';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Na voljo je posodobitev';
+
+  @override
+  String get updateAvailableMessage => 'Nova različica aplikacije Omi je pripravljena, s popravki in izboljšavami.';
+
+  @override
+  String get updateRequiredTitle => 'Potrebna je posodobitev';
+
+  @override
+  String get updateRequiredMessage =>
+      'Ta različica aplikacije Omi ni več podprta. Posodobite jo, da boste lahko še naprej snemali in sinhronizirali.';
+
+  @override
+  String get exportingAllData =>
+      'Izvažanje vaših podatkov… Omi naj ostane odprt; pri velikih računih lahko traja nekaj minut.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Govorci: $count',
+      one: '1 govorec',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Samodejno odstrani sinhronizirane kopije';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Sinhronizirane kopije se izbrišejo po $days dneh';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Izbriše lokalne kopije $days dni po sinhronizaciji. Oblačne kopije ostanejo ohranjene.';
+  }
+
+  @override
+  String get localCopiesSection => 'Lokalne kopije';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Označene vrstice: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Glas je naučen',
+        'pending': 'Učenje glasu…',
+        'disabled': 'Shranjevanje glasu je izklopljeno',
+        'other': 'Glas še ni naučen',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi bo osebo $name prepoznal prihodnjič.',
+        'pending': 'To traja nekaj sekund.',
+        'disabled': 'V nastavitvah vklopite shranjevanje glasov, da bo Omi lahko prepoznal osebo $name.',
+        'other': 'Omi potrebuje več jasnega govora osebe $name in bo poskušal še naprej.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Prejšnji pogovori s tem glasom: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Verjetno',
+        'soundsLike': 'Zveni kot $name',
+        'notPerson': 'Ni $name',
+        'carried': 'Še vedno $name. Preneseno iz vašega zadnjega pogovora.',
+        'change': 'Spremeni',
+        'alsoTitle': 'Je to tudi $name?',
+        'alsoBody': 'Omi je našel isti glas v prejšnjih pogovorih.',
+        'confirmed': 'Potrdili ste to oznako',
+        'other': 'Preglej',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration tega glasu';
   }
 }

@@ -4422,10 +4422,6 @@
             }
         }
     },
-    "newVersionAvailable": "Nova verzija dostupna",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "Ne",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5930,7 +5926,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Zadaci iz vaših razgovora će se pojavljati ovdje.\nDodirnite + da biste ručno kreirali jedan.",
+    "tasksEmptyStateMessage": "Započnite razgovor da biste stvorili zadatak.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11325,5 +11321,23 @@
     "speakerSuggestionAppliesToSpeaker": "Primjenjuje se na sve retke ovog govornika",
     "collapseAction": "Sažmi",
     "speakerTagPromptNotMeAction": "Nisam ja",
-    "confidenceNextLabels": "{count, plural, =1{Označite ih u još 1 razgovoru.} other{Označite ih u još {count} razgovora.}}"
+    "confidenceNextLabels": "{count, plural, =1{Označite ih u još 1 razgovoru.} other{Označite ih u još {count} razgovora.}}",
+    "siriShortcutsSetupHint": "Uključite Omi u Prečacima → Siri. Recite „{askPhrase}“ ili „{questionPhrase}“, a zatim postavite pitanje.",
+    "siriShortcutsSearchHint": " Možete reći i „{searchPhrase} for what I did today“.",
+    "updateAvailableTitle": "Dostupno je ažuriranje",
+    "updateAvailableMessage": "Nova verzija Omija je spremna, s ispravcima i poboljšanjima.",
+    "updateRequiredTitle": "Potrebno je ažuriranje",
+    "updateRequiredMessage": "Ova verzija Omija više nije podržana. Ažurirajte kako biste nastavili snimati i sinkronizirati.",
+    "exportingAllData": "Izvoz vaših podataka… Držite Omi otvorenim; veliki računi mogu potrajati nekoliko minuta.",
+    "transcriptSpeakerCount": "{count, plural, =1{1 govornik} other{Govornika: {count}}}",
+    "autoRemoveSyncedCopiesTitle": "Automatski ukloni sinkronizirane kopije",
+    "autoRemoveSyncedCopiesDays": "Sinkronizirane kopije brišu se nakon {days} dana",
+    "autoRemoveSyncedCopiesDescription": "Briše lokalne kopije {days} dana nakon sinkronizacije. Oblačne kopije se zadržavaju.",
+    "localCopiesSection": "Lokalne kopije",
+    "speakerLabelLinesLabeled": "Označeni retci: {count}",
+    "speakerLabelVoiceStatus": "{state, select, learned{Glas je naučen} pending{Učenje glasa…} disabled{Spremanje glasa je isključeno} other{Glas još nije naučen}}",
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi će prepoznati osobu {name} sljedeći put.} pending{To traje nekoliko sekundi.} disabled{Uključite spremanje glasova u postavkama kako bi Omi mogao prepoznati osobu {name}.} other{Omi treba više jasnog govora osobe {name} i nastavit će pokušavati.}}",
+    "speakerLabelEarlierMatches": "Raniji razgovori s ovim glasom: {count}",
+    "speakerLabelText": "{part, select, likely{Vjerojatno} soundsLike{Zvuči kao {name}} notPerson{Nije {name}} carried{I dalje {name}. Preneseno iz vašeg zadnjeg razgovora.} change{Promijeni} alsoTitle{Je li ovo također {name}?} alsoBody{Omi je pronašao isti glas u ranijim razgovorima.} confirmed{Potvrdili ste ovu oznaku} other{Pregledaj}}",
+    "speakerLabelTalkTime": "{duration} ovog glasa"
 }

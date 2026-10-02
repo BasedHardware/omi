@@ -34,6 +34,12 @@ void main() {
       expect(link.query['draft'], 'What is A&B = C+D #100%? 😀');
     });
 
+    test('decodes an encoded Spotlight entity id as one route segment', () {
+      final link = HomeDeepLink.parse('/conversation/a%2Fb%20c')!;
+      expect(link.alias, 'conversation');
+      expect(link.id, 'a/b c');
+    });
+
     test('accepts a route without a leading slash and ignores empty segments', () {
       final link = HomeDeepLink.parse('apps//xyz')!;
       expect(link.alias, 'apps');
@@ -97,6 +103,15 @@ void main() {
     tearDown(() {
       // Nothing registered leaks into the next test.
       HomeNavigation.unregister(_record);
+      HomeNavigation.onHomeMounted = null;
+    });
+
+    test('Home registration triggers pending-route retry', () async {
+      var retries = 0;
+      HomeNavigation.onHomeMounted = () => retries++;
+      HomeNavigation.register(_record);
+      await Future<void>.delayed(Duration.zero);
+      expect(retries, 1);
     });
 
     testWidgets('openRoute pops to the existing Home and lets it open the page', (tester) async {
@@ -126,6 +141,34 @@ void main() {
         );
         expect(opened, isFalse);
       });
+    });
+
+    testWidgets('openRoute waits for its owner and drops a route if ownership never matches', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: Text('home')));
+      _opened.clear();
+      HomeNavigation.register(_record);
+      var ownerMatches = false;
+      await tester.runAsync(() async {
+        final pending = HomeNavigation.openRoute(
+          '/conversation/owner-a',
+          canOpen: () => ownerMatches,
+          timeout: const Duration(milliseconds: 150),
+          pollInterval: const Duration(milliseconds: 10),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        ownerMatches = true;
+        expect(await pending, isTrue);
+        ownerMatches = false;
+        expect(
+            await HomeNavigation.openRoute(
+              '/conversation/owner-a',
+              canOpen: () => ownerMatches,
+              timeout: const Duration(milliseconds: 60),
+              pollInterval: const Duration(milliseconds: 10),
+            ),
+            isFalse);
+      });
+      expect(_opened, ['/conversation/owner-a']);
     });
   });
 
@@ -161,6 +204,17 @@ void main() {
         onTaskOpened: (item) => opened.add(item.id));
 
     expect(requested, ['task-150']);
+    expect(opened, ['task-150']);
+
+    var ownerMatches = true;
+    await openHomeDeepLink(context, const HomeDeepLink('task', id: 'task-150'),
+        openSettings: () async {},
+        canOpen: () => ownerMatches,
+        taskById: (id) async {
+          ownerMatches = false; // Account switched while the item was loading.
+          return task;
+        },
+        onTaskOpened: (item) => opened.add(item.id));
     expect(opened, ['task-150']);
   });
 
@@ -271,4 +325,4 @@ void main() {
 
 final List<String> _opened = [];
 
-Future<void> _record(String route) async => _opened.add(route);
+Future<void> _record(String route, {bool Function()? canOpen}) async => _opened.add(route);

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -350,7 +350,7 @@ def test_export_all_user_data_keeps_streaming_headers(monkeypatch):
 
     assert response.media_type == 'application/json'
     assert response.headers['content-disposition'] == 'attachment; filename="omi-export.json"'
-    iter_export.assert_called_once_with('uid1')
+    iter_export.assert_called_once_with('uid1', read_context=ANY)
 
     async def _consume():
         parts = []

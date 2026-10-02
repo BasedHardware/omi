@@ -3936,9 +3936,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'إصدار جديد متاح';
-
-  @override
   String get no => 'لا';
 
   @override
@@ -5011,7 +5008,7 @@ class AppLocalizationsAr extends AppLocalizations {
       'بالمتابعة، سيتم تخزين محادثاتك وتسجيلاتك ومعلوماتك الشخصية بشكل آمن على خوادمنا. تتم معالجة تسجيلاتك الصوتية ونصوصك بواسطة خدمات ذكاء اصطناعي تابعة لجهات خارجية (بما في ذلك Deepgram للنسخ و OpenAI للتحليل) لتزويدك برؤى مدعومة بالذكاء الاصطناعي وتمكين جميع ميزات التطبيق.';
 
   @override
-  String get tasksEmptyStateMessage => 'ستظهر المهام من محادثاتك هنا.\nاضغط على + لإنشاء مهمة يدويًا.';
+  String get tasksEmptyStateMessage => 'ابدأ محادثة لإنشاء مهمة.';
 
   @override
   String get clearChatAction => 'مسح المحادثة';
@@ -12038,5 +12035,119 @@ class AppLocalizationsAr extends AppLocalizations {
       one: 'قم بوسم هذا الشخص في محادثة واحدة أخرى.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'شغّل Omi في الاختصارات ← Siri. قل “$askPhrase” أو “$questionPhrase” ثم اطرح سؤالك.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' يمكنك أيضًا قول “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'يتوفر تحديث';
+
+  @override
+  String get updateAvailableMessage => 'إصدار جديد من Omi جاهز، مع إصلاحات وتحسينات.';
+
+  @override
+  String get updateRequiredTitle => 'التحديث مطلوب';
+
+  @override
+  String get updateRequiredMessage => 'لم يعد هذا الإصدار من Omi مدعومًا. حدّث التطبيق لمواصلة التسجيل والمزامنة.';
+
+  @override
+  String get exportingAllData => 'جارٍ تصدير بياناتك… أبقِ Omi مفتوحًا؛ فالحسابات الكبيرة قد تستغرق عدة دقائق.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count متحدثين',
+      one: 'متحدث واحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'إزالة النسخ المتزامنة تلقائيًا';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'يتم حذف النسخ المتزامنة بعد $days يومًا';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'يحذف النسخ المحلية بعد $days يومًا من المزامنة. تبقى النسخ السحابية محفوظة.';
+  }
+
+  @override
+  String get localCopiesSection => 'النسخ المحلية';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'الأسطر الموسومة: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'تم تعلّم الصوت',
+        'pending': 'جارٍ تعلّم الصوت…',
+        'disabled': 'حفظ الصوت متوقف',
+        'other': 'لم يتم تعلّم الصوت بعد',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'سيتعرّف Omi على $name في المرة القادمة.',
+        'pending': 'يستغرق هذا بضع ثوانٍ.',
+        'disabled': 'فعّل حفظ الأصوات في الإعدادات ليتمكن Omi من التعرّف على $name.',
+        'other': 'يحتاج Omi إلى مزيد من الكلام الواضح من $name وسيواصل المحاولة.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'المحادثات السابقة بهذا الصوت: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'محتمل',
+        'soundsLike': 'يشبه صوت $name',
+        'notPerson': 'ليس $name',
+        'carried': 'لا يزال $name. تم نقله من محادثتك الأخيرة.',
+        'change': 'تغيير',
+        'alsoTitle': 'هل هذا أيضًا $name؟',
+        'alsoBody': 'عثر Omi على الصوت نفسه في محادثات سابقة.',
+        'confirmed': 'لقد أكدت هذه التسمية',
+        'other': 'مراجعة',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration من هذا الصوت';
   }
 }

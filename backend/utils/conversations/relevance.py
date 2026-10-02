@@ -190,7 +190,28 @@ def decide_relevance(
         return replace(decision, model_tier_reached=True, arm=arm if record_arm or arm != 'nano' else None)
 
     if arm == 'keep_all':
-        return model_decision(keep('policy', 'keep_all_arm'))
+        # Keep regardless, but still ask nano (as the control path would) so the
+        # record carries the verdict nano would have acted on: the counterfactual.
+        failed = False
+
+        def on_keep_all_error(_error: Exception) -> None:
+            nonlocal failed
+            failed = True
+
+        adjacent_kept = neighbor()
+        would_discard = model_discards(on_keep_all_error, adjacent_kept)
+        decision = model_decision(keep('policy', 'keep_all_arm'))
+        if failed:
+            return decision
+        return replace(
+            decision,
+            nano_verdict='discard' if would_discard else 'keep',
+            nano_reason=(
+                'neighbor_fragment'
+                if would_discard and adjacent_kept
+                else 'model_discard' if would_discard else 'model_keep'
+            ),
+        )
 
     if jev_discard_probability is not None:
         p_discard = jev_discard_probability()

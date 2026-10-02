@@ -1193,6 +1193,7 @@ def _load_sync_router_for_fast_path():
         'utils.sync.capture_manifest',
         'utils.speaker_assignment',
         'utils.speaker_identification',
+        'utils.speaker_learning_jobs',
         'utils.stt.speaker_embedding',
         'python_multipart',
         'python_multipart.multipart',

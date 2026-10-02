@@ -886,12 +886,14 @@ extension PostHogManager {
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
 
-  func taskExtracted(taskCount: Int) {
-    track(
-      "Task Extracted",
-      properties: [
-        "task_count": taskCount
-      ])
+  func taskExtracted(taskCount: Int, gateOutcome: String? = nil, auditSample: Bool = false, candidateCount: Int = 0) {
+    var properties: [String: Any] = ["task_count": taskCount]
+    if let gateOutcome {
+      properties["gate_outcome"] = ["passed", "rejected", "fail_open"].contains(gateOutcome) ? gateOutcome : "none"
+      properties["audit_sample"] = auditSample
+      properties["extracted_candidate_count"] = max(0, min(candidateCount, 8))
+    }
+    track("Task Extracted", properties: properties)
   }
 
   func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {

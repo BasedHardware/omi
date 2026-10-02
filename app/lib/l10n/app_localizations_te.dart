@@ -3989,9 +3989,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'కొత్త సంస్కరణ లభ్యమైంది';
-
-  @override
   String get no => 'లేదు';
 
   @override
@@ -5081,7 +5078,7 @@ class AppLocalizationsTe extends AppLocalizations {
       'కొనసాగించడం ద్వారా, మీ సంభాషణలు, రికార్డింగ్‌లు మరియు వ్యక్తిగత సమాచారం మా సర్వర్‌లలో సురక్షితంగా నిల్వ చేయబడతాయి. మీ ఆడియో రికార్డింగ్‌లు మరియు ట్రాన్‌స్క్రిప్ట్‌లు థర్డ్-పార్టీ AI సేవల ద్వారా ప్రాసెస్ చేయబడతాయి (ట్రాన్‌స్క్రిప్షన్ కోసం Deepgram మరియు విశ్లేషణ కోసం OpenAI సహా) AI-ఆధారిత అంతర్దృష్టులను అందించడానికి మరియు అన్ని యాప్ ఫీచర్‌లను ప్రారంభించడానికి.';
 
   @override
-  String get tasksEmptyStateMessage => 'మీ సంభాషణల నుండి చర్యలు ఇక్కడ కనిపిస్తాయి.\n+ నిర్ణయం చేయడానికి ట్యాప్ చేయండి.';
+  String get tasksEmptyStateMessage => 'పనిని సృష్టించడానికి సంభాషణను ప్రారంభించండి.';
 
   @override
   String get clearChatAction => 'చాట్‌ను క్లియర్ చేయండి';
@@ -12160,5 +12157,121 @@ class AppLocalizationsTe extends AppLocalizations {
       one: 'ఇంకా 1 సంభాషణలో వారికి లేబుల్ చేయండి.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'షార్ట్‌కట్స్ → Siri లో Omi ని ఆన్ చేయండి. “$askPhrase” లేదా “$questionPhrase” అని చెప్పి, ఆపై మీ ప్రశ్న అడగండి.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' మీరు “$searchPhrase for what I did today” అని కూడా చెప్పవచ్చు.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'అప్‌డేట్ అందుబాటులో ఉంది';
+
+  @override
+  String get updateAvailableMessage => 'Omi కొత్త వెర్షన్ సిద్ధంగా ఉంది, సవరణలు మరియు మెరుగుదలలతో.';
+
+  @override
+  String get updateRequiredTitle => 'అప్‌డేట్ అవసరం';
+
+  @override
+  String get updateRequiredMessage =>
+      'Omi యొక్క ఈ వెర్షన్‌కు ఇకపై మద్దతు లేదు. రికార్డింగ్ మరియు సింక్ కొనసాగించడానికి అప్‌డేట్ చేయండి.';
+
+  @override
+  String get exportingAllData =>
+      'మీ డేటా ఎగుమతి అవుతోంది… Omi ను తెరిచే ఉంచండి; పెద్ద ఖాతాలకు కొన్ని నిమిషాలు పట్టవచ్చు.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count వక్తలు',
+      one: '1 వక్త',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'సింక్ చేసిన కాపీలను స్వయంచాలకంగా తొలగించు';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'సింక్ చేసిన కాపీలు $days రోజుల తర్వాత తొలగించబడతాయి';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'సింక్ అయిన $days రోజుల తర్వాత స్థానిక కాపీలను తొలగిస్తుంది. క్లౌడ్ కాపీలు ఉంచబడతాయి.';
+  }
+
+  @override
+  String get localCopiesSection => 'స్థానిక కాపీలు';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'లేబుల్ వేసిన లైన్లు: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'వాయిస్ నేర్చుకుంది',
+        'pending': 'వాయిస్‌ను నేర్చుకుంటోంది…',
+        'disabled': 'వాయిస్ సేవింగ్ ఆఫ్‌లో ఉంది',
+        'other': 'వాయిస్ ఇంకా నేర్చుకోలేదు',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi వచ్చే సారి $name ను గుర్తిస్తుంది.',
+        'pending': 'దీనికి కొన్ని సెకన్లు పడుతుంది.',
+        'disabled': 'Omi $name ను గుర్తించేందుకు సెట్టింగ్‌లలో వాయిస్ సేవింగ్ ఆన్ చేయండి.',
+        'other': 'Omi కి $name యొక్క మరింత స్పష్టమైన మాట అవసరం, అది ప్రయత్నిస్తూనే ఉంటుంది.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'ఈ వాయిస్‌తో మునుపటి సంభాషణలు: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'అవకాశం',
+        'soundsLike': '$name లాగా వినిపిస్తోంది',
+        'notPerson': '$name కాదు',
+        'carried': 'ఇప్పటికీ $name. మీ చివరి సంభాషణ నుండి కొనసాగింది.',
+        'change': 'మార్చండి',
+        'alsoTitle': 'ఇది కూడా $name యేనా?',
+        'alsoBody': 'Omi మునుపటి సంభాషణల్లో ఇదే వాయిస్‌ను కనుగొంది.',
+        'confirmed': 'మీరు ఈ లేబుల్‌ను నిర్ధారించారు',
+        'other': 'సమీక్షించండి',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'ఈ వాయిస్ యొక్క $duration';
   }
 }

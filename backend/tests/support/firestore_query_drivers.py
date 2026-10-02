@@ -11,12 +11,15 @@ every terminal query shape.
 from __future__ import annotations
 
 import ast
+import asyncio
 import copy
 import datetime as datetime_module
+import functools
 import hashlib
 import importlib
 import inspect
 import itertools
+import os
 import re
 import socket
 import sys
@@ -25,7 +28,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 from testing.hermetic_network import block_outbound_network
 from tests.support.firestore_shape_recorder import (
@@ -229,7 +232,7 @@ def _freeze_module_clocks() -> Iterator[None]:
     with ExitStack() as stack:
         for module in list(sys.modules.values()):
             name = getattr(module, '__name__', '') or ''
-            if name != 'database' and not name.startswith('database.'):
+            if name != 'database' and not name.startswith(('database.', 'utils.', 'routers.', 'services.', 'jobs.')):
                 continue
             for attr in ('datetime', 'date'):
                 bound = module.__dict__.get(attr)
@@ -288,6 +291,7 @@ def noop_true(*args: Any, **kwargs: Any) -> bool:
 class CallerProfile:
     name: str
     domains: dict[str, list[Any]]
+    serving: bool = True
 
 
 @dataclass
@@ -399,7 +403,11 @@ def run_driver(entry: DriverEntry, client: RecordingFirestore | None = None) -> 
         for profile in entry.profiles:
             result = run_driver(replace(entry, domains={**entry.domains, **profile.domains}, profiles=()), client)
             shapes.extend(
-                replace(shape, parameter_combo={**shape.parameter_combo, 'caller_profile': profile.name})
+                replace(
+                    shape,
+                    parameter_combo={**shape.parameter_combo, 'caller_profile': profile.name},
+                    serving=profile.serving,
+                )
                 for shape in result.shapes
             )
             errors.extend(
@@ -427,6 +435,7 @@ def run_driver(entry: DriverEntry, client: RecordingFirestore | None = None) -> 
         patch_stack.enter_context(_freeze_module_clocks())
         for patcher in entry.patchers:
             patch_stack.enter_context(patcher(client))
+        fn = import_function(entry.function)
 
         unclassified: list[str] = []
         for name, param in signature.parameters.items():
@@ -484,6 +493,8 @@ def run_driver(entry: DriverEntry, client: RecordingFirestore | None = None) -> 
                 with client.recording_context(entry.function, combo):
                     try:
                         result = fn(**kwargs)
+                        if inspect.isawaitable(result):
+                            result = asyncio.run(result)
                         if inspect.isgenerator(result) or isinstance(result, Iterator):
                             list(result)
                     except Exception as error:
@@ -605,6 +616,124 @@ def discover_query_functions(database_root: str | Path) -> list[dict[str, Any]]:
     return rows
 
 
+def discover_target_references(
+    root: str | Path,
+    targets: frozenset[str],
+    modules: frozenset[str] = frozenset(),
+    exclude_dirs: frozenset[str] = frozenset({'tests', 'testing', 'scripts', '__pycache__'}),
+) -> dict[str, dict[str, Any]]:
+    """Statically find references to ``targets`` (dotted callables) or ``modules``.
+
+    Sentinel only — detection, never shape construction. Walks ``*.py`` under
+    ``root`` (skipping ``exclude_dirs`` and dot-directories), resolves imports
+    and name aliases, and keys each hit ``relative/path.py:owner:resolved``.
+    Plain module references (attribute access or name use) resolve to the
+    module itself so ``module.func()`` wrappers are caught too.
+    """
+    root = Path(root)
+    found: dict[str, dict[str, Any]] = {}
+    needles = {t.rsplit('.', 1)[-1] for t in targets} | {m.rsplit('.', 1)[-1] for m in modules}
+    paths: list[Path] = []
+    for directory, folders, files in os.walk(root):
+        folders[:] = sorted(name for name in folders if name not in exclude_dirs and not name.startswith('.'))
+        paths.extend(Path(directory) / name for name in files if name.endswith('.py'))
+    for path in sorted(paths):
+        relative = path.relative_to(root)
+        module_dotted = relative.with_suffix('').as_posix().replace('/', '.')
+        source = path.read_text()
+        if not any(re.search(rf'\b{re.escape(needle)}\b', source) for needle in needles):
+            continue
+        tree = ast.parse(source)
+        imports: dict[str, str] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports[alias.asname or alias.name.split('.')[0]] = (
+                        alias.name if alias.asname else alias.name.split('.')[0]
+                    )
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                for alias in node.names:
+                    imports[alias.asname or alias.name] = f'{node.module}.{alias.name}'
+
+        def resolve(node):
+            if isinstance(node, ast.Name):
+                return imports.get(node.id, node.id)
+            if isinstance(node, ast.Attribute):
+                base = resolve(node.value)
+                return f'{base}.{node.attr}' if base else ''
+            return ''
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and resolve(node.value) in targets | modules:
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        imports[target.id] = resolve(node.value)
+
+        def visit(node, owners=()):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                owners = (*owners, node)
+            if isinstance(node, (ast.Call, ast.Name, ast.Attribute)):
+                references = []
+                if isinstance(node, ast.Call):
+                    references = [node.func, *node.args, *(kw.value for kw in node.keywords)]
+                else:
+                    references = [node]
+                for reference in references:
+                    resolved = resolve(reference)
+                    if resolved in targets or resolved in modules:
+                        qualified = resolved
+                    elif f'{module_dotted}.{resolved}' in targets | modules:
+                        qualified = f'{module_dotted}.{resolved}'
+                    else:
+                        continue
+                    owner_name = '.'.join(item.name for item in owners) or '<module>'
+                    key = f'{relative.as_posix()}:{owner_name}:{qualified}'
+                    record = found.setdefault(key, {'target': qualified, 'references': 0})
+                    record['references'] += 1
+            for child in ast.iter_child_nodes(node):
+                visit(child, owners)
+
+        visit(tree)
+    return found
+
+
+def discover_textual_registrations(paths: Iterable[str | Path], needles: Iterable[str]) -> dict[str, list[str]]:
+    """Textual scan of non-Python inventories (workflows, charts, image manifests).
+
+    Returns ``{path: [needle, ...]}`` for every file containing a needle —
+    entrypoint scripts registered by name rather than imported as a module.
+    """
+    found: dict[str, list[str]] = {}
+    for candidate in paths:
+        candidate = Path(candidate)
+        files = [candidate] if candidate.is_file() else sorted(p for p in candidate.rglob('*') if p.is_file())
+        for path in files:
+            try:
+                text = path.read_text()
+            except (UnicodeDecodeError, OSError):
+                continue
+            hits = [needle for needle in needles if needle in text]
+            if hits:
+                found[str(path)] = hits
+    return found
+
+
+@functools.lru_cache(maxsize=256)
+def _source_function_nodes(path: str, mtime_ns: int, size: int) -> dict[str, ast.AST]:
+    """Parse and index a stable source snapshot once for repeated digest checks."""
+    del mtime_ns, size  # Included in the cache key to invalidate edited files.
+    tree = ast.parse(Path(path).read_text())
+    candidates: dict[str, ast.AST] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            candidates[node.name] = node
+        elif isinstance(node, ast.ClassDef):
+            for member in node.body:
+                if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    candidates[f'{node.name}.{member.name}'] = member
+    return candidates
+
+
 def function_body_digest(dotted: str, database_root: str | Path | None = None) -> str:
     """SHA-256 of the normalized AST dump of the whole function node.
 
@@ -621,15 +750,8 @@ def function_body_digest(dotted: str, database_root: str | Path | None = None) -
         path = root / (module_rel + '.py')
         if path.exists():
             break
-    tree = ast.parse(path.read_text())
-    candidates: dict[str, ast.AST] = {}
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            candidates[node.name] = node
-        elif isinstance(node, ast.ClassDef):
-            for member in node.body:
-                if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    candidates[f'{node.name}.{member.name}'] = member
+    stat = path.stat()
+    candidates = _source_function_nodes(str(path.resolve()), stat.st_mtime_ns, stat.st_size)
     node = candidates[attr_path]
     dump = ast.dump(node, annotate_fields=False, include_attributes=False)
     return hashlib.sha256(dump.encode('utf-8')).hexdigest()

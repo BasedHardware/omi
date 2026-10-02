@@ -3969,9 +3969,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Uus versioon saadaval';
-
-  @override
   String get no => 'Ei';
 
   @override
@@ -5053,7 +5050,7 @@ class AppLocalizationsEt extends AppLocalizations {
       'Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.';
 
   @override
-  String get tasksEmptyStateMessage => 'Teie vestlustest pärit ülesanded ilmuvad siia.\nPuudutage + käsitsi loomiseks.';
+  String get tasksEmptyStateMessage => 'Ülesande loomiseks alusta vestlust.';
 
   @override
   String get clearChatAction => 'Tühjenda vestlus';
@@ -12107,5 +12104,121 @@ class AppLocalizationsEt extends AppLocalizations {
       one: 'Märgi nad veel 1 vestluses.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Lülitage Omi sisse jaotises Otseteed → Siri. Ütlege „$askPhrase“ või „$questionPhrase“ ja seejärel esitage oma küsimus.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Saate öelda ka „$searchPhrase for what I did today“.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Värskendus on saadaval';
+
+  @override
+  String get updateAvailableMessage => 'Omi uus versioon on valmis – parandused ja täiustused.';
+
+  @override
+  String get updateRequiredTitle => 'Värskendus on vajalik';
+
+  @override
+  String get updateRequiredMessage =>
+      'Seda Omi versiooni enam ei toetata. Värskenda, et jätkata salvestamist ja sünkroonimist.';
+
+  @override
+  String get exportingAllData =>
+      'Teie andmete eksportimine… Hoidke Omi avatud; suurte kontode puhul võib see võtta mitu minutit.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kõnelejat',
+      one: '1 kõneleja',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Sünkroonitud koopiate automaatne eemaldamine';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Sünkroonitud koopiad kustutatakse pärast $days päeva';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Kustutab kohalikud koopiad $days päeva pärast sünkroonimist. Pilvekoopiad jäävad alles.';
+  }
+
+  @override
+  String get localCopiesSection => 'Kohalikud koopiad';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Märgitud ridu: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Hääl õpitud',
+        'pending': 'Häält õpitakse…',
+        'disabled': 'Hääle salvestamine on välja lülitatud',
+        'other': 'Häält pole veel õpitud',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi tunneb $name järgmisel korral ära.',
+        'pending': 'See võtab mõne sekundi.',
+        'disabled': 'Lülita seadetes sisse häälte salvestamine, et Omi saaks $name ära tunda.',
+        'other': 'Omi vajab inimeselt $name rohkem selget kõnet ja proovib edasi.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Varasemad vestlused selle häälega: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Tõenäoline',
+        'soundsLike': 'Kõlab nagu $name',
+        'notPerson': 'Pole $name',
+        'carried': 'Endiselt $name. Üle võetud sinu viimasest vestlusest.',
+        'change': 'Muuda',
+        'alsoTitle': 'Kas see on ka $name?',
+        'alsoBody': 'Omi leidis sama hääle varasematest vestlustest.',
+        'confirmed': 'Kinnitasid selle sildi',
+        'other': 'Vaata üle',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration sellest häälest';
   }
 }

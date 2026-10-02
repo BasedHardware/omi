@@ -3956,9 +3956,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Ny version tilgængelig';
-
-  @override
   String get no => 'Nej';
 
   @override
@@ -5042,7 +5039,7 @@ class AppLocalizationsDa extends AppLocalizations {
       'Ved at fortsætte vil dine samtaler, optagelser og personlige oplysninger blive sikkert gemt på vores servere. Dine lydoptagelser og udskrifter behandles af tredjeparts AI-tjenester (herunder Deepgram til transskription og OpenAI til analyse) for at give dig AI-drevne indsigter og aktivere alle appfunktioner.';
 
   @override
-  String get tasksEmptyStateMessage => 'Opgaver fra dine samtaler vises her.\nTryk på + for at oprette en manuelt.';
+  String get tasksEmptyStateMessage => 'Start en samtale for at oprette en opgave.';
 
   @override
   String get clearChatAction => 'Ryd chat';
@@ -12096,5 +12093,120 @@ class AppLocalizationsDa extends AppLocalizations {
       one: 'Mærk dem i 1 samtale mere.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Slå Omi til i Genveje → Siri. Sig »$askPhrase« eller »$questionPhrase«, og stil derefter dit spørgsmål.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Du kan også sige »$searchPhrase for what I did today«.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Opdatering tilgængelig';
+
+  @override
+  String get updateAvailableMessage => 'En ny version af Omi er klar med rettelser og forbedringer.';
+
+  @override
+  String get updateRequiredTitle => 'Opdatering påkrævet';
+
+  @override
+  String get updateRequiredMessage =>
+      'Denne version af Omi understøttes ikke længere. Opdater for at fortsætte med at optage og synkronisere.';
+
+  @override
+  String get exportingAllData => 'Eksporterer dine data… Hold Omi åben; store konti kan tage flere minutter.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count talere',
+      one: '1 taler',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Fjern synkroniserede kopier automatisk';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Synkroniserede kopier slettes efter $days dage';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Sletter lokale kopier $days dage efter synkronisering. Cloudkopier gemmes.';
+  }
+
+  @override
+  String get localCopiesSection => 'Lokale kopier';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Mærkede linjer: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Stemme lært',
+        'pending': 'Lærer stemmen…',
+        'disabled': 'Lagring af stemmer er slået fra',
+        'other': 'Stemmen er ikke lært endnu',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi genkender $name næste gang.',
+        'pending': 'Det tager et par sekunder.',
+        'disabled': 'Slå lagring af stemmer til i Indstillinger, så Omi kan genkende $name.',
+        'other': 'Omi har brug for mere tydelig tale fra $name og bliver ved med at prøve.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Tidligere samtaler med denne stemme: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Sandsynlig',
+        'soundsLike': 'Lyder som $name',
+        'notPerson': 'Ikke $name',
+        'carried': 'Stadig $name. Overført fra din seneste samtale.',
+        'change': 'Skift',
+        'alsoTitle': 'Er det også $name?',
+        'alsoBody': 'Omi fandt den samme stemme i tidligere samtaler.',
+        'confirmed': 'Du har bekræftet denne etiket',
+        'other': 'Gennemgå',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration af denne stemme';
   }
 }

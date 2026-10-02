@@ -16,12 +16,14 @@ from utils.stt.outcomes import (
     failure_from_exception,
 )
 from utils.observability.fallback import (
+    FailureFallbackKwargs,
     FirstTextDeadlineDiagnostics,
     ReplayLagDiagnostics,
     capacity_fallback_kwargs,
     first_text_fallback_kwargs,
     record_fallback,
 )
+from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS, normalize_live_stt_reason
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -40,29 +42,7 @@ LIVE_STT_FAILURE_CLOSE_REASON = 'transcription_service_unavailable'
 # forever (#12459, #12469).
 MAX_STT_FAILOVERS = 2
 
-_KNOWN_FAILURE_REASONS = frozenset(
-    {
-        'initialization_failed',
-        'connection_lost',
-        'send_failed',
-        'socket_unavailable',
-        # Typed in-stream provider rejections. Soniox answers typed error
-        # codes (utils.stt.soniox); Modulate/Velma answers free-text frames
-        # that the socket bounds to MODULATE_DEATH_SERVE_ERROR when the
-        # provider failed to serve the stream it had accepted
-        # (utils.stt.streaming.modulate_death_reason).
-        'modulate_serve_error',
-        *ACCOUNT_REJECTION_REASONS,
-        PROVIDER_RATE_LIMITED,
-        'soniox_idle_timeout',
-        'soniox_rotation',
-        'provider_5xx',
-        'capacity_full',
-        'first_text_deadline',
-        'empty_streak',
-        'soniox_invalid_hint',
-    }
-)
+_KNOWN_FAILURE_REASONS = LIVE_STT_FAILURE_REASONS
 _FAILURE_PHASE_BY_REASON = {
     'initialization_failed': 'initialization',
     'connection_lost': 'connection',
@@ -85,6 +65,10 @@ _FAILURE_PHASE_BY_REASON = {
     # the session died at session setup, before any audio flowed.
     'soniox_invalid_hint': 'initialization',
 }
+# Diagnostic reasons without a legacy phase are connection-scoped.
+for _reason in LIVE_STT_FAILURE_REASONS:
+    _FAILURE_PHASE_BY_REASON.setdefault(_reason, 'connection')
+
 _CIRCUIT_OPENING_REASONS = frozenset(
     {
         # 402 organization_balance_exhausted / organization_monthly_budget_exhausted:
@@ -118,17 +102,17 @@ _CIRCUIT_OPENING_REASONS = frozenset(
 # audio. ``initialization_failed`` happens at connect time, where the selection
 # helper's threshold logic already sees it, and ``socket_unavailable`` is local
 # state (no socket exists), not provider behavior.
-_SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed'})
+# Preserve legacy terminal VAD circuit protection; fleet evidence censors it.
+_SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed', 'vad_failed'})
 
 
-def fallback_reason_for_typed_death(typed_reason: str | None) -> str:
-    """Map a bounded death reason onto ``record_fallback``'s closed reason set."""
-
-    if typed_reason == PROVIDER_BUDGET_EXHAUSTED:
+def fallback_metric_reason(reason: str | None) -> str:
+    """Keep established account labels while sharing bounded source causes."""
+    if reason == PROVIDER_BUDGET_EXHAUSTED:
         return 'quota'
-    if typed_reason == PROVIDER_AUTH_REJECTED:
+    if reason == PROVIDER_AUTH_REJECTED:
         return 'auth'
-    return 'other'
+    return normalize_live_stt_reason(reason)
 
 
 def _segments_have_transcript(segments: object) -> bool:
@@ -154,16 +138,21 @@ class PendingLiveFailover:
         from_mode: str,
         to_mode: str,
         component: str = 'stt_live_session',
-        reason: str = 'connection_lost',
+        reason: str,
         capacity_subtype: str | None = None,
     ) -> None:
-        self.component, self.reason = component, reason
+        self.component, self.reason = component, normalize_live_stt_reason(reason)
         self.capacity_subtype = capacity_subtype
         self.replay_lag_diagnostics: ReplayLagDiagnostics | None = None
         self.first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None
         self.from_mode = from_mode
         self.to_mode = to_mode
         self._settled = False
+
+    @classmethod
+    def from_socket(cls, source: object, from_mode: str, to_mode: str) -> 'PendingLiveFailover':
+        """Capture the source cause before a successor can change the hop."""
+        return cls(from_mode=from_mode, to_mode=to_mode, reason=live_stt_terminal_reason(source, 'connection_lost'))
 
     @property
     def settled(self) -> bool:
@@ -185,22 +174,29 @@ class PendingLiveFailover:
             component=self.component,
             from_mode=self.from_mode,
             to_mode=self.to_mode,
-            reason=self.reason,
+            reason=fallback_metric_reason(self.reason),
             outcome='recovered',
             **first_text_fallback_kwargs(self.first_text_diagnostics),
             **capacity_fallback_kwargs(self.capacity_subtype, self.replay_lag_diagnostics),
         )
 
-    def note_failure(self, typed_reason: str | None) -> None:
+    def note_failure(self, typed_reason: str | None, *, continuing: bool = False) -> None:
         if self._settled:
             return
         self._settled = True
+        # The hop belongs to the source leg; a successor failure changes the
+        # outcome, never the source cause used to reconcile health evidence.
+        reason = fallback_metric_reason(self.reason)
+        details: FailureFallbackKwargs = {}
+        if reason == 'other':
+            details['failure_subtype'] = normalize_live_stt_reason(typed_reason)
         record_fallback(
             component=self.component,
             from_mode=self.from_mode,
             to_mode=self.to_mode,
-            reason=fallback_reason_for_typed_death(typed_reason),
-            outcome='exhausted',
+            reason=reason,
+            outcome='degraded' if continuing else 'exhausted',
+            **details,
         )
 
 
@@ -278,10 +274,6 @@ def live_stt_initialization_failure(error: BaseException, provider: str | None) 
     return failure
 
 
-def _bounded_reason(reason: str) -> str:
-    return reason if reason in _KNOWN_FAILURE_REASONS else 'connection_lost'
-
-
 def live_stt_socket_is_dead(stt_socket: Any) -> bool:
     """Treat a broken or unreadable provider death latch as terminal."""
 
@@ -302,11 +294,16 @@ def live_stt_terminal_reason(stt_socket: Any, fallback: str) -> str:
     a named provider rejection back to generic connection loss.
     """
 
+    # Managed legs latch exactly the cause used by their health observation.
     try:
+        normalized = getattr(stt_socket, 'normalized_death_reason', None)
+        if normalized is not None:
+            return normalize_live_stt_reason(normalized, fallback)
         typed = getattr(stt_socket, 'typed_death_reason', None)
+        raw = getattr(stt_socket, 'death_reason', None)
     except Exception:
-        return fallback
-    return typed if typed in _KNOWN_FAILURE_REASONS else fallback
+        return normalize_live_stt_reason(fallback)
+    return normalize_live_stt_reason(typed, raw, fallback)
 
 
 def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
@@ -331,6 +328,12 @@ def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
         return False
     if typed not in _CIRCUIT_OPENING_REASONS:
         return False
+    try:
+        target_death = getattr(stt_socket, 'record_target_death', None)
+        if callable(target_death) and target_death(typed):
+            return True
+    except Exception as error:
+        logger.warning('Unable to record target circuit after provider death error_type=%s', type(error).__name__)
     return _open_serving_provider_circuit(typed, provider)
 
 
@@ -380,7 +383,7 @@ async def terminate_live_stt_session(
 
     session.stt_terminal_failure = True
     session.close_code = LIVE_STT_FAILURE_CLOSE_CODE
-    bounded_reason = _bounded_reason(reason)
+    bounded_reason = normalize_live_stt_reason(reason)
     if bounded_reason in _SERVE_FAILURE_REASONS or bounded_reason in _CIRCUIT_OPENING_REASONS:
         # A provider that died while serving audio is terminal evidence for
         # this session, but selection only learns from connect-time outcomes:

@@ -24,7 +24,8 @@ from database import (
 )
 from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
-from services.users.data_export import iter_user_data_export
+from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
+from services.users.data_export_response import DataExportStreamingResponse
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
@@ -122,6 +123,7 @@ from utils.cloud_tasks import (
     verify_account_deletion_cloud_tasks_oidc,
 )
 from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
+from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
@@ -228,6 +230,7 @@ class UserDataExportResponse(BaseModel):
     action_items: List[Dict[str, Any]] = Field(default_factory=list)
     task_data: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict)
     chat_messages: List[Dict[str, Any]] = Field(default_factory=list)
+    export_complete: Optional[bool] = None
 
 
 class StoreRecordingPermissionResponse(BaseModel):
@@ -432,6 +435,17 @@ def set_user_webhook_endpoint(
     wtype: WebhookType, data: SetUserWebhookUrlRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     url = data.url
+    # Reject a non-public target at configuration time, so an internal/loopback/metadata address
+    # is a 400 here rather than an SSRF from the backend's network position at delivery time.
+    target = webhook_url_from_setting(wtype, url)
+    if target:
+        try:
+            safe_request_target(target)
+        except (UnsafeWebhookURLError, ValueError):
+            # UnsafeWebhookURLError: non-public/unresolvable target. ValueError: the shared URL
+            # validator raises it for a malformed URL (e.g. an invalid IPv6 literal) — both are a
+            # bad configuration, so answer 400 rather than letting it escape as a 500.
+            raise HTTPException(status_code=400, detail='Webhook URL must be a valid public http(s) address')
     set_user_webhook_db(uid, wtype, url)
     if not webhook_url_from_setting(wtype, url):
         disable_user_webhook_db(uid, wtype)
@@ -2257,15 +2271,39 @@ def get_llm_top_features(
 # response_model omitted: this streams a chunked JSON document via StreamingResponse (not a single JSON object);
 # the responses= override documents the streamed shape in OpenAPI without enforcing response_model validation.
 @router.get('/v1/users/export', tags=['v1'], responses={200: {'model': UserDataExportResponse}})
-def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
-    """Export all user data for GDPR/CCPA compliance from a disk-backed spool."""
+def export_all_user_data(
+    stream: Annotated[
+        bool,
+        Query(
+            description=(
+                'Stream the export lazily instead of spooling it server-side before headers. '
+                'When true, clients MUST verify the body ends with the "export_complete": true '
+                'completion suffix; a truncated body is a failed export even after HTTP 200.'
+            )
+        ),
+    ] = False,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Export all user data for GDPR/CCPA compliance."""
+    headers = {
+        'Content-Disposition': 'attachment; filename="omi-export.json"',
+        'Cache-Control': 'private, no-store',
+    }
+    if stream:
+        headers['X-Accel-Buffering'] = 'no'
+        return DataExportStreamingResponse(
+            uid,
+            iterator_factory=iter_user_data_export_streaming,
+            media_type='application/json',
+            headers=headers,
+        )
     # Iterator construction eagerly validates and spools the complete export,
     # including retained image bytes, before HTTP 200 and headers are committed.
-    export_stream = iter_user_data_export(uid)
-    return StreamingResponse(
-        export_stream,
+    return DataExportStreamingResponse(
+        uid,
+        iterator_factory=iter_user_data_export,
         media_type='application/json',
-        headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
+        headers=headers,
     )
 
 

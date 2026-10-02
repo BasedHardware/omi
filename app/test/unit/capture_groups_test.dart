@@ -169,6 +169,14 @@ void main() {
       expect(label(const [], 4), '<hidden>', reason: 'nobody named: the chip hides');
     });
 
+    test('avatars show two initials, then one circle counting everyone else', () {
+      expect(ConversationDetailMeta.avatars(['You'], 1), ['Y', '1']);
+      expect(ConversationDetailMeta.avatars(['You'], 0), ['Y']);
+      expect(ConversationDetailMeta.avatars(['You', 'dana', 'Ali'], 2), ['Y', 'D', '3']);
+      expect(ConversationDetailMeta.avatars(['You'], 0, uncounted: true), ['Y', '+']);
+      expect(ConversationDetailMeta.avatars(const [], 4), ['4'], reason: 'the chip itself hides when nobody is named');
+    });
+
     test('participants put the owner first, name people by first appearance, and count the unnamed', () {
       final people = ConversationDetailMeta.participants(
         [

@@ -3973,9 +3973,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Pieejama jauna versija';
-
-  @override
   String get no => 'Nē';
 
   @override
@@ -5060,8 +5057,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros. Jūsu audio ieraksti un transkripcijas tiek apstrādātas ar trešo pušu AI pakalpojumiem (ieskaitot Deepgram transkripcijai un OpenAI analīzei), lai sniegtu jums AI vadītus ieskatus un iespējotu visas lietotnes funkcijas.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Uzdevumi no jūsu sarunām parādīsies šeit.\nPieskarieties +, lai izveidotu manuāli.';
+  String get tasksEmptyStateMessage => 'Sāciet sarunu, lai izveidotu uzdevumu.';
 
   @override
   String get clearChatAction => 'Notīrīt tērzēšanu';
@@ -12136,5 +12132,121 @@ class AppLocalizationsLv extends AppLocalizations {
       one: 'Atzīmējiet viņus vēl 1 sarunā.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Ieslēdziet Omi sadaļā Saīsnes → Siri. Sakiet „$askPhrase“ vai „$questionPhrase“ un pēc tam uzdodiet savu jautājumu.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Varat arī teikt „$searchPhrase for what I did today“.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Pieejams atjauninājums';
+
+  @override
+  String get updateAvailableMessage => 'Jaunā Omi versija ir gatava – ar labojumiem un uzlabojumiem.';
+
+  @override
+  String get updateRequiredTitle => 'Nepieciešams atjauninājums';
+
+  @override
+  String get updateRequiredMessage =>
+      'Šī Omi versija vairs netiek atbalstīta. Atjauniniet, lai turpinātu ierakstīt un sinhronizēt.';
+
+  @override
+  String get exportingAllData =>
+      'Notiek jūsu datu eksports… Turiet Omi atvērtu; lieliem kontiem tas var ilgt vairākas minūtes.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Runātāji: $count',
+      one: '1 runātājs',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Automātiski noņemt sinhronizētās kopijas';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Sinhronizētās kopijas tiek dzēstas pēc $days dienām';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Dzēš vietējās kopijas $days dienas pēc sinhronizācijas. Mākoņa kopijas tiek saglabātas.';
+  }
+
+  @override
+  String get localCopiesSection => 'Vietējās kopijas';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Atzīmētās rindas: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Balss apgūta',
+        'pending': 'Apgūst balsi…',
+        'disabled': 'Balss saglabāšana ir izslēgta',
+        'other': 'Balss vēl nav apgūta',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi nākamreiz atpazīs $name.',
+        'pending': 'Tas aizņem dažas sekundes.',
+        'disabled': 'Ieslēdziet balsu saglabāšanu iestatījumos, lai Omi varētu atpazīt $name.',
+        'other': 'Omi vajag vairāk skaidras $name runas, un tas turpinās mēģināt.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Iepriekšējās sarunas ar šo balsi: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Iespējams',
+        'soundsLike': 'Izklausās pēc $name',
+        'notPerson': 'Nav $name',
+        'carried': 'Joprojām $name. Pārnests no jūsu pēdējās sarunas.',
+        'change': 'Mainīt',
+        'alsoTitle': 'Vai šī ir arī $name?',
+        'alsoBody': 'Omi atrada to pašu balsi iepriekšējās sarunās.',
+        'confirmed': 'Jūs apstiprinājāt šo birku',
+        'other': 'Pārskatīt',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration no šīs balss';
   }
 }

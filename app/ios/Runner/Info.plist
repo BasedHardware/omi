@@ -34,6 +34,19 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Omi AI</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>oh me A I</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Omi app</string>
+		</dict>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>$(BUNDLE_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>

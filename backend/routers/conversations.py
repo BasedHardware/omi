@@ -13,7 +13,7 @@ import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files, delete_speech_profile_blob
+from utils.other.storage import delete_conversation_audio_files
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -90,8 +90,7 @@ from utils.conversations.search import (
     search_conversations,
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
-from utils.manual_speaker_assignments import teaching_segment_ids
-from utils.speaker_identification import extract_speaker_samples
+from utils.speaker_assignment_teaching import commit_manual_assignment
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -1534,7 +1533,7 @@ def _assign_manual_speaker(
     is_user = assign_type == 'is_user' and str(value).lower() in {'true', '1'}
     person_id = value if assign_type == 'person_id' else None
     try:
-        raw, resolved, removed, before = conversations_db.assign_conversation_speaker(
+        raw, resolved, removed, before = commit_manual_assignment(
             uid,
             conversation_id,
             person_id=person_id,
@@ -1543,6 +1542,8 @@ def _assign_manual_speaker(
             speaker_id=speaker_id,
             segment_index=segment_index,
             use_for_speech_training=use_for_speech_training,
+            rejection={'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None,
+            background_tasks=background_tasks,
         )
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -1553,17 +1554,6 @@ def _assign_manual_speaker(
     conversation = deserialize_conversation(raw)
     resolved_conversation_id = raw.get('id') or conversation_id
     _drop_display_projection(conversation)
-    if background_tasks is not None:
-        for path in removed:
-            background_tasks.add_task(delete_speech_profile_blob, path)
-        if person_id and use_for_speech_training:
-            background_tasks.add_task(
-                extract_speaker_samples,
-                uid=uid,
-                person_id=person_id,
-                conversation_id=resolved_conversation_id,
-                segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
-            )
     _emit_speaker_identity_confirmed(
         uid=uid,
         conversation_id=resolved_conversation_id,

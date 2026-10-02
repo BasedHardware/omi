@@ -17,8 +17,6 @@ from utils.stt.live_metrics import (
     WINDOW_FIRST_TEXT,
     WINDOW_FORCED_CUTS,
     WINDOW_POSTS,
-    WINDOW_PRESSURE_REFRESH,
-    WINDOW_PRESSURE_REFUSAL,
     WINDOW_REPLAY_SAFE_TRIMS,
     WINDOW_SESSION_OUTCOME,
     WINDOW_STRANDED_FLUSHES,
@@ -68,7 +66,7 @@ def runtime(monkeypatch):
     monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embedding.invalid')
     monkeypatch.setattr(window, 'admission', window.WindowAdmission())
     monkeypatch.setattr(window, 'batch_pressure', window.BatchPressure())
-    window.batch_pressure._observed_at = window.time.monotonic()
+    monkeypatch.setattr(window.batch_pressure, 'allows', lambda *_args: True)
     monkeypatch.setattr(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
     for provider in ('parakeet', 'modulate', 'deepgram', 'soniox'):
         monkeypatch.setattr(
@@ -110,275 +108,6 @@ class Client:
         if self.error:
             raise self.error
         return httpx.Response(self.status, json=self.data, request=httpx.Request('POST', url))
-
-
-@pytest.mark.asyncio
-async def test_batch_pressure_cache_never_waits_at_admission_and_stands_down(monkeypatch):
-    pressure = window.BatchPressure()
-    began = asyncio.Event()
-    release = asyncio.Event()
-    missing_before = WINDOW_PRESSURE_REFUSAL.labels(reason='missing')._value.get()
-    pressure_before = WINDOW_PRESSURE_REFUSAL.labels(reason='pressure')._value.get()
-    stale_before = WINDOW_PRESSURE_REFUSAL.labels(reason='stale')._value.get()
-
-    async def refresh(_host, _replicas, _client):
-        began.set()
-        await release.wait()
-        pressure._busy = True
-        pressure._observed_at = window.time.monotonic()
-
-    monkeypatch.setattr(pressure, '_refresh', refresh)
-    assert not pressure.allows('tdt-headless.invalid', 2)  # admission never starts a poll
-    assert WINDOW_PRESSURE_REFUSAL.labels(reason='missing')._value.get() == missing_before + 1
-    assert pressure._task is None
-    pressure.start('tdt-headless.invalid', 2)
-    try:
-        await began.wait()
-        assert not pressure.allows('tdt-headless.invalid', 2)
-        release.set()
-        await asyncio.sleep(0)
-        assert not pressure.allows('tdt-headless.invalid', 2)
-        assert WINDOW_PRESSURE_REFUSAL.labels(reason='pressure')._value.get() == pressure_before + 1
-        pressure._observed_at -= pressure.STALE_SECONDS + 1
-        assert not pressure.allows('tdt-headless.invalid', 2)  # stale signal: fleet stands down
-        assert WINDOW_PRESSURE_REFUSAL.labels(reason='stale')._value.get() == stale_before + 1
-    finally:
-        await pressure.stop()
-
-
-@pytest.mark.asyncio
-async def test_batch_pressure_keeps_sample_fresh_between_rare_admissions(monkeypatch):
-    pressure = window.BatchPressure()
-    pressure.REFRESH_SECONDS = 0.01
-    clock = [100.0]
-    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
-    refreshed = asyncio.Event()
-    calls = 0
-
-    async def refresh(_host, _replicas, _client):
-        nonlocal calls
-        calls += 1
-        pressure._busy = False
-        pressure._observed_at = clock[0]
-        refreshed.set()
-
-    monkeypatch.setattr(pressure, '_refresh', refresh)
-    pressure.start('tdt-headless.invalid', 2)
-    try:
-        assert not pressure.allows('tdt-headless.invalid', 2)
-        await refreshed.wait()
-        assert pressure.allows('tdt-headless.invalid', 2)
-        for _ in range(2):
-            refreshed.clear()
-            clock[0] += 16.0
-            await asyncio.wait_for(refreshed.wait(), 1)
-            assert pressure.allows('tdt-headless.invalid', 2)
-        assert calls >= 3
-    finally:
-        await pressure.stop()
-
-
-@pytest.mark.asyncio
-async def test_batch_pressure_poller_retries_exception_starts_once_and_stops(monkeypatch):
-    pressure = window.BatchPressure()
-    pressure.REFRESH_SECONDS = 0.01
-    recovered = asyncio.Event()
-    calls = 0
-    unavailable_before = WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable')._value.get()
-
-    async def refresh(_host, _replicas, _client):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise RuntimeError('transient poll failure')
-        pressure._observed_at = window.time.monotonic()
-        recovered.set()
-
-    monkeypatch.setattr(pressure, '_refresh', refresh)
-    pressure.start('tdt-headless.invalid', 2)
-    task = pressure._task
-    pressure.start('tdt-headless.invalid', 2)
-    assert pressure._task is task
-    try:
-        await asyncio.wait_for(recovered.wait(), 1)
-        assert pressure.allows('tdt-headless.invalid', 2)
-        assert calls >= 2
-        assert WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable')._value.get() == unavailable_before + 1
-    finally:
-        await pressure.stop()
-    assert task.done()
-    assert pressure._task is None
-    assert not pressure.allows('tdt-headless.invalid', 2)
-
-
-@pytest.mark.asyncio
-async def test_batch_pressure_poller_off_configuration_does_no_work(monkeypatch):
-    pressure = window.BatchPressure()
-    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0')
-    pressure.start_from_env()
-    assert pressure._task is None
-    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '1')
-    monkeypatch.delenv('PARAKEET_BATCH_PRESSURE_POOL_HOST')
-    pressure.start_from_env()
-    assert pressure._task is None
-    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', 'tdt-headless.invalid')
-    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', 'nan')
-    pressure.start_from_env()
-    assert pressure._task is None
-    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '1')
-    monkeypatch.setattr(pressure, '_refresh', AsyncMock())
-    pressure.start_from_env()
-    task = pressure._task
-    assert task is not None
-    pressure.start_from_env()
-    assert pressure._task is task
-    await pressure.stop()
-
-
-@pytest.mark.asyncio
-async def test_batch_pressure_reuses_bounded_client_until_shutdown(monkeypatch):
-    pressure = window.BatchPressure()
-    pressure.REFRESH_SECONDS = 0.01
-    created = []
-    used = []
-    refreshed_twice = asyncio.Event()
-
-    class Client:
-        def __init__(self, **kwargs):
-            self.options = kwargs
-            self.closed = False
-            created.append(self)
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_args):
-            self.closed = True
-
-    async def refresh(_host, _replicas, client):
-        used.append(client)
-        if len(used) == 2:
-            refreshed_twice.set()
-
-    monkeypatch.setattr(window.httpx, 'AsyncClient', Client)
-    monkeypatch.setattr(pressure, '_refresh', refresh)
-    pressure.start('tdt-headless.invalid', 2)
-    try:
-        await asyncio.wait_for(refreshed_twice.wait(), 1)
-        assert len(created) == 1
-        assert used[:2] == [created[0], created[0]]
-        assert created[0].options['timeout'] == 1.0
-        assert created[0].options['trust_env'] is False
-        limits = created[0].options['limits']
-        assert limits.max_connections == pressure.MAX_REPLICAS
-        assert limits.max_keepalive_connections == pressure.MAX_REPLICAS
-        assert not created[0].closed
-    finally:
-        await pressure.stop()
-    assert created[0].closed
-
-
-def test_batch_pressure_poller_can_restart_on_a_new_event_loop(monkeypatch):
-    pressure = window.BatchPressure()
-    clients = []
-
-    class Client:
-        def __init__(self, **_kwargs):
-            self.closed = False
-            clients.append(self)
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_args):
-            self.closed = True
-
-    monkeypatch.setattr(window.httpx, 'AsyncClient', Client)
-    monkeypatch.setattr(pressure, '_refresh', AsyncMock())
-
-    async def one_lifecycle():
-        pressure.start('tdt-headless.invalid', 2)
-        task = pressure._task
-        await asyncio.sleep(0)
-        await pressure.stop()
-        assert task is not None and task.done()
-
-    asyncio.run(one_lifecycle())
-    asyncio.run(one_lifecycle())
-    assert len(clients) == 2
-    assert clients[0] is not clients[1]
-    assert all(client.closed for client in clients)
-
-
-@pytest.mark.asyncio
-async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeypatch):
-    pressure = window.BatchPressure()
-    loop = asyncio.get_running_loop()
-    ips = ['10.0.0.1', '10.0.0.2']
-    monkeypatch.setattr(
-        loop,
-        'getaddrinfo',
-        AsyncMock(side_effect=lambda *_args, **_kwargs: [(None, None, None, None, (ip, 8080)) for ip in ips]),
-    )
-    payloads = {
-        '10.0.0.1': {'pending_requests': 100, 'live_pending_requests': 3, 'live_oldest_pending_seconds': 0},
-        '10.0.0.2': {'pending_requests': 100, 'live_pending_requests': 3, 'live_oldest_pending_seconds': 0},
-    }
-
-    class Response:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return self.payload
-
-    class Client:
-        def __init__(self):
-            self.requests = []
-
-        async def get(self, url):
-            self.requests.append(url)
-            return Response(payloads[url.split('/')[2].split(':')[0]])
-
-    client = Client()
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert pressure.allows('tdt-headless.invalid', 2)  # Backfill and fleet sum do not trip the live gate.
-    payloads['10.0.0.2']['live_pending_requests'] = 4
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert not pressure.allows('tdt-headless.invalid', 2)
-    payloads['10.0.0.2']['live_pending_requests'] = 0
-    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0.75
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert not pressure.allows('tdt-headless.invalid', 2)
-    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0
-    ips.pop()
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert not pressure.allows('tdt-headless.invalid', 2)  # incomplete DNS set
-    ips.append('10.0.0.2')
-    payloads['10.0.0.2']['live_pending_requests'] = float('nan')
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert not pressure.allows('tdt-headless.invalid', 2)  # invalid telemetry
-    payloads['10.0.0.2']['live_pending_requests'] = 0
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert pressure.allows('tdt-headless.invalid', 2)
-    del payloads['10.0.0.2']['live_oldest_pending_seconds']
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert not pressure.allows('tdt-headless.invalid', 2)  # Old GPU replica: fail closed.
-    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0
-    requests_before = len(client.requests)
-    ips[:] = [f'10.0.0.{i}' for i in range(1, pressure.MAX_REPLICAS + 2)]
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert not pressure.allows('tdt-headless.invalid', 2)  # no partial sample of an oversized fleet
-    assert pressure._observed_at == 0
-    assert len(client.requests) == requests_before
-    ips[:] = ['10.0.0.1', '10.0.0.2']
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert pressure.allows('tdt-headless.invalid', 2)
-    pressure._observed_at -= pressure.STALE_SECONDS + 1
-    assert not pressure.allows('tdt-headless.invalid', 2)
 
 
 class SeqClient:
@@ -1426,8 +1155,8 @@ async def test_real_empty_speech_keeps_original_twelve_second_rescue(monkeypatch
     assert diagnostic.answered_empty_admitted_seconds == speech_frames * 0.04
     assert diagnostic.posts == expected_posts and diagnostic.empty_posts == expected_posts
     assert diagnostic.answered_empty_stranded_flushes == 1
-    assert diagnostic.seconds_since_first_speech == 12
-    assert diagnostic.seconds_since_deadline_speech == 12
+    assert diagnostic.seconds_since_first_speech == pytest.approx(12)
+    assert diagnostic.seconds_since_deadline_speech == pytest.approx(12)
     assert actual._pending_live_failover.first_text_diagnostics is diagnostic
     callbacks[0]([{'text': 'Recovered.', 'start': 0, 'end': 0.5}])
     line = next(

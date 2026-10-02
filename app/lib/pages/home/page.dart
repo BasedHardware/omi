@@ -483,15 +483,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   /// Opens a link inside this shell (notification taps, quick actions, app links): its tab first,
   /// then its page — never a second Home (nav #3, #18).
-  Future<void> _openRoute(String route) async {
+  Future<void> _openRoute(String route, {bool Function()? canOpen}) async {
     final link = HomeDeepLink.parse(route);
-    if (link == null || !mounted) return;
+    if (link == null || !mounted || (canOpen != null && !canOpen())) return;
     final tab = link.tabIndex;
     if (tab != null) {
       _ensurePageInitialized(tab);
       context.read<HomeProvider>().setIndex(tab);
     }
-    await openHomeDeepLink(context, link, openSettings: _openSettings, openSearch: _openSearch);
+    await openHomeDeepLink(context, link, openSettings: _openSettings, openSearch: _openSearch, canOpen: canOpen);
   }
 
   /// Opens the search overlay over the shell, optionally with a query already typed (a `/search`
@@ -830,7 +830,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _openChat({bool voice = false}) {
     OmiHaptics.selection();
     PlatformManager.instance.analytics.bottomNavigationTabClicked(voice ? 'Chat Voice' : 'Chat');
-    openChatSheet(context, ChatPage(isPivotBottom: false, startFresh: true, autoStartVoice: voice));
+    openChatSheet(context, ChatPage(isPivotBottom: false, autoStartVoice: voice));
   }
 
   Widget _buildChatBar(BuildContext context) {

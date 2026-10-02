@@ -254,6 +254,33 @@ OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
 for _reason in ('window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'):
     OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
 
+OMI_PERSON_VOICE_LEARNING_TOTAL = Counter(
+    'omi_person_voice_learning_total',
+    'Person voice-learning attempts by bounded outcome',
+    ['outcome'],
+)
+for _outcome in (
+    'stored',
+    'disabled',
+    'person_missing',
+    'conversation_missing',
+    'no_audio',
+    'no_chunks',
+    'no_authorized_segments',
+    'contaminated',
+    'insufficient_speech',
+    'uncovered_audio',
+    'transcription_failed',
+    'insufficient_words',
+    'multi_speaker',
+    'text_mismatch',
+    'embedding_failed',
+    'stale_assignment',
+    'timeout',
+    'error',
+):
+    OMI_PERSON_VOICE_LEARNING_TOTAL.labels(outcome=_outcome)
+
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
 for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
@@ -439,6 +466,7 @@ JEV_DECISION_LABELS = {
         {
             'conversation_relevance',
             'memory_owner',
+            'screen_task',
             'capture_same_scene',
             'capture_resummary',
             'conversation_smart_merge',
@@ -643,6 +671,43 @@ def record_conversation_smart_merge_refresh(outcome: str) -> None:
     try:
         CONVERSATION_SMART_MERGE_REFRESH_TOTAL.labels(
             outcome=outcome if outcome in CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES else 'other'
+        ).inc()
+    except Exception:
+        pass
+
+
+# False-merge measurement (database/smart_merge_audit.py, utils/conversations/smart_merge_audit.py).
+CONVERSATION_SMART_MERGE_AUDIT_OUTCOMES = frozenset(
+    {'written', 'disabled', 'skipped_gate', 'skipped_invalid', 'skipped_error', 'unknown'}
+)
+CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS = frozenset({'lt_1h', 'lt_24h', 'lt_7d', 'gte_7d', 'unknown'})
+CONVERSATION_SMART_MERGE_AUDIT_TOTAL = Counter(
+    'omi_conversation_smart_merge_audit_total',
+    'Audit siblings for committed smart-merge absorbs by outcome. Never labeled by uid.',
+    ['outcome'],
+)
+CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL = Counter(
+    'omi_conversation_smart_merge_survivor_deleted_total',
+    'Purged smart-merge survivors by age since their last merge. Never labeled by uid.',
+    ['age_bucket'],
+)
+
+
+def record_conversation_smart_merge_audit(outcome: str) -> None:
+    """Never raises: observability must not change a finalization outcome."""
+    try:
+        CONVERSATION_SMART_MERGE_AUDIT_TOTAL.labels(
+            outcome=outcome if outcome in CONVERSATION_SMART_MERGE_AUDIT_OUTCOMES else 'other'
+        ).inc()
+    except Exception:
+        pass
+
+
+def record_conversation_smart_merge_survivor_deleted(age_bucket: str) -> None:
+    """Never raises: observability must not change a deletion outcome."""
+    try:
+        CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL.labels(
+            age_bucket=age_bucket if age_bucket in CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS else 'other'
         ).inc()
     except Exception:
         pass
