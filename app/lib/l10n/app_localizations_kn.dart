@@ -3982,9 +3982,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'ಹೊಸ ಆವೃತ್ತಿ ಲಭ್ಯವಿದೆ';
-
-  @override
   String get no => 'ಇಲ್ಲ';
 
   @override
@@ -5073,8 +5070,7 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಮುಂದುವರಿಯುವ ಮೂಲಕ, ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ವೈಯಕ್ತಿಕ ಮಾಹಿತಿಯನ್ನು ನಮ್ಮ ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ. ನಿಮ್ಮ ಆಡಿಯೋ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್‌ಗಳನ್ನು ಮೂರನೇ ವ್ಯಕ್ತಿಯ AI ಸೇವೆಗಳಿಂದ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ (ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್‌ಗಾಗಿ Deepgram ಮತ್ತು ವಿಶ್ಲೇಷಣೆಗಾಗಿ OpenAI ಸೇರಿದಂತೆ) AI-ಚಾಲಿತ ಒಳನೋಟಗಳನ್ನು ಒದಗಿಸಲು ಮತ್ತು ಎಲ್ಲಾ ಅಪ್ಲಿಕೇಶನ್ ವೈಶಿಷ್ಟ್ಯಗಳನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.';
+  String get tasksEmptyStateMessage => 'ಕಾರ್ಯವನ್ನು ರಚಿಸಲು ಸಂಭಾಷಣೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿ.';
 
   @override
   String get clearChatAction => 'ಚ್ಯಾಟ್ ತೀಕ್ಷ್ಣ ಮಾಡಿ';
@@ -12148,5 +12144,117 @@ class AppLocalizationsKn extends AppLocalizations {
       one: 'ಇನ್ನೂ 1 ಸಂಭಾಷಣೆಯಲ್ಲಿ ಅವರಿಗೆ ಲೇಬಲ್ ಮಾಡಿ.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಭಾಷಣಕಾರರು',
+      one: '1 ಭಾಷಣಕಾರ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'ಶಾರ್ಟ್‌ಕಟ್‌ಗಳು → Siri ನಲ್ಲಿ Omi ಆನ್ ಮಾಡಿ. “$askPhrase” ಅಥವಾ “$questionPhrase” ಎಂದು ಹೇಳಿ, ನಂತರ ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಕೇಳಿ.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' ನೀವು “$searchPhrase for what I did today” ಎಂದು ಸಹ ಹೇಳಬಹುದು.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'ಅಪ್‌ಡೇಟ್ ಲಭ್ಯವಿದೆ';
+
+  @override
+  String get updateAvailableMessage => 'Omi ನ ಹೊಸ ಆವೃತ್ತಿ ಸಿದ್ಧವಾಗಿದೆ, ಸರಿಪಡಿಸುವಿಕೆಗಳು ಮತ್ತು ಸುಧಾರಣೆಗಳೊಂದಿಗೆ.';
+
+  @override
+  String get updateRequiredTitle => 'ಅಪ್‌ಡೇಟ್ ಅಗತ್ಯವಿದೆ';
+
+  @override
+  String get updateRequiredMessage =>
+      'Omi ನ ಈ ಆವೃತ್ತಿಗೆ ಇನ್ನು ಬೆಂಬಲವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಸಿಂಕ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಡೇಟ್ ಮಾಡಿ.';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'ಸಿಂಕ್ ಆದ ಪ್ರತಿಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ತೆಗೆದುಹಾಕಿ';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'ಸಿಂಕ್ ಆದ ಪ್ರತಿಗಳು $days ದಿನಗಳ ನಂತರ ಅಳಿಸಲ್ಪಡುತ್ತವೆ';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'ಸಿಂಕ್ ಆದ $days ದಿನಗಳ ನಂತರ ಸ್ಥಳೀಯ ಪ್ರತಿಗಳನ್ನು ಅಳಿಸುತ್ತದೆ. ಕ್ಲೌಡ್ ಪ್ರತಿಗಳನ್ನು ಇರಿಸಲಾಗುತ್ತದೆ.';
+  }
+
+  @override
+  String get localCopiesSection => 'ಸ್ಥಳೀಯ ಪ್ರತಿಗಳು';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'ಲೇಬಲ್ ಹಾಕಿದ ಸಾಲುಗಳು: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'ಧ್ವನಿಯನ್ನು ಕಲಿತಿದೆ',
+        'pending': 'ಧ್ವನಿಯನ್ನು ಕಲಿಯಲಾಗುತ್ತಿದೆ…',
+        'disabled': 'ಧ್ವನಿ ಉಳಿಸುವಿಕೆ ಆಫ್ ಆಗಿದೆ',
+        'other': 'ಧ್ವನಿಯನ್ನು ಇನ್ನೂ ಕಲಿತಿಲ್ಲ',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi ಮುಂದಿನ ಬಾರಿ $name ಅವರನ್ನು ಗುರುತಿಸುತ್ತದೆ.',
+        'pending': 'ಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕು.',
+        'disabled': 'Omi $name ಅವರನ್ನು ಗುರುತಿಸಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಧ್ವನಿ ಉಳಿಸುವಿಕೆಯನ್ನು ಆನ್ ಮಾಡಿ.',
+        'other': 'Omi ಗೆ $name ಅವರ ಇನ್ನಷ್ಟು ಸ್ಪಷ್ಟ ಮಾತು ಬೇಕು, ಮತ್ತು ಅದು ಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'ಈ ಧ್ವನಿಯೊಂದಿಗೆ ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳು: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'ಸಂಭವನೀಯ',
+        'soundsLike': '$name ಅವರಂತೆ ಕೇಳಿಸುತ್ತದೆ',
+        'notPerson': '$name ಅಲ್ಲ',
+        'carried': 'ಇನ್ನೂ $name. ನಿಮ್ಮ ಕೊನೆಯ ಸಂಭಾಷಣೆಯಿಂದ ಮುಂದುವರಿದಿದೆ.',
+        'change': 'ಬದಲಿಸಿ',
+        'alsoTitle': 'ಇದು ಕೂಡ $name ಅವರೇ?',
+        'alsoBody': 'Omi ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಇದೇ ಧ್ವನಿಯನ್ನು ಕಂಡುಕೊಂಡಿದೆ.',
+        'confirmed': 'ನೀವು ಈ ಲೇಬಲ್ ಅನ್ನು ದೃಢಪಡಿಸಿದ್ದೀರಿ',
+        'other': 'ಪರಿಶೀಲಿಸಿ',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'ಈ ಧ್ವನಿಯ $duration';
   }
 }

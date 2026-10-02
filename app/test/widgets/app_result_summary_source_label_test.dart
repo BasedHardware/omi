@@ -73,40 +73,40 @@ App _templateApp() => App(
     );
 
 void main() {
-  // SCA-359: the summary attribution row used to render "Unknown App" for every
-  // first-party (notes v2) summary because findAppById(null) is null by design.
-  // First-party must label itself "Summary"; "Unknown App" is only for a
-  // non-null app id whose catalog lookup failed.
-  group('summary source label', () {
-    testWidgets('a first-party summary (appId == null) is labeled Summary, not Unknown App', (tester) async {
+  // The attribution row under a summary opens the app that wrote it. Omi's own summary and an app
+  // the catalog no longer knows have nowhere to open, so they show no row (the bottom pill still
+  // names the source: "Summary" / "Unknown App", SCA-359).
+  group('summary attribution row', () {
+    testWidgets('a first-party summary (appId == null) shows no row', (tester) async {
       await _pumpSummary(tester, app: null, response: AppResponse('First-party overview', appId: null));
 
-      expect(find.text('Summary'), findsOneWidget);
+      expect(find.text('Summary'), findsNothing);
       expect(find.text('Unknown App'), findsNothing);
+      expect(find.byIcon(Icons.arrow_forward_ios), findsNothing);
     });
 
-    testWidgets('the sliver attribution labels a first-party summary Summary too', (tester) async {
+    testWidgets('the sliver summary shows no row for a first-party summary either', (tester) async {
       await _pumpSummary(tester, app: null, asSliver: true);
 
-      expect(find.text('Summary'), findsOneWidget);
-      expect(find.text('Unknown App'), findsNothing);
+      expect(find.text('Summary'), findsNothing);
+      expect(find.byIcon(Icons.arrow_forward_ios), findsNothing);
     });
 
-    testWidgets('an app result whose catalog lookup failed is Unknown App', (tester) async {
+    testWidgets('an app result whose catalog lookup failed shows no row', (tester) async {
       await _pumpSummary(tester, app: null, response: AppResponse('App summary', appId: 'missing-app'));
 
-      expect(find.text('Unknown App'), findsOneWidget);
-      expect(find.text('Summary'), findsNothing);
+      expect(find.text('Unknown App'), findsNothing);
+      expect(find.byIcon(Icons.arrow_forward_ios), findsNothing);
     });
 
-    testWidgets('an unattributed legacy app result is still Unknown App', (tester) async {
+    testWidgets('an unattributed legacy app result shows no row', (tester) async {
       await _pumpSummary(tester, response: AppResponse('Imported app output.'), legacyApp: true);
 
-      expect(find.text('Unknown App'), findsOneWidget);
-      expect(find.text('Summary'), findsNothing);
+      expect(find.text('Unknown App'), findsNothing);
+      expect(find.byIcon(Icons.arrow_forward_ios), findsNothing);
     });
 
-    testWidgets('a resolved app result shows the app name', (tester) async {
+    testWidgets('a resolved app result shows the app name and opens it', (tester) async {
       await _pumpSummary(
         tester,
         app: _templateApp(),
@@ -114,7 +114,19 @@ void main() {
       );
 
       expect(find.text('My Template'), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_forward_ios), findsOneWidget);
       expect(find.text('Unknown App'), findsNothing);
+    });
+
+    testWidgets('the sliver summary shows a resolved app too', (tester) async {
+      await _pumpSummary(
+        tester,
+        app: _templateApp(),
+        response: AppResponse('App summary', appId: 'app-1'),
+        asSliver: true,
+      );
+
+      expect(find.text('My Template'), findsOneWidget);
     });
   });
 }

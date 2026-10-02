@@ -1,4 +1,5 @@
 import copy
+import re
 from pathlib import Path
 
 import pytest
@@ -9,53 +10,83 @@ from scripts import jit_qa_firestore_index_operator as operator
 # Every registry composite is selected; the count follows the registry so a new
 # production query requirement is provisioned on the isolated QA database too.
 _REGISTRY_COUNT = len(registry.INDEX_REQUIREMENTS)
+_FIELD_COUNT = len(registry.FIELD_INDEX_REQUIREMENTS)
 
 _UNSET = object()
 
+_FIELD_REQUIREMENTS = {
+    (requirement.collection_group, requirement.field_path): requirement
+    for requirement in registry.FIELD_INDEX_REQUIREMENTS
+}
 
-def _field_api_request(*, ready: bool = False, api_scope: object = _UNSET):
-    indexes = [
+
+def _default_indexes(field_path):
+    return [
         {
-            "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/conversations/fields/status/indexes/asc",
-            "queryScope": "COLLECTION",
-            "fields": [{"fieldPath": "status", "order": "ASCENDING"}],
-            "state": "READY",
+            'queryScope': 'COLLECTION',
+            'fields': [{'fieldPath': field_path, 'order': 'ASCENDING'}],
+            'state': 'READY',
         },
         {
-            "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/conversations/fields/status/indexes/desc",
-            "queryScope": "COLLECTION",
-            "fields": [{"fieldPath": "status", "order": "DESCENDING"}],
-            "state": "READY",
+            'queryScope': 'COLLECTION',
+            'fields': [{'fieldPath': field_path, 'order': 'DESCENDING'}],
+            'state': 'READY',
+        },
+        {
+            'queryScope': 'COLLECTION',
+            'fields': [{'fieldPath': field_path, 'arrayConfig': 'CONTAINS'}],
+            'state': 'READY',
         },
     ]
-    if ready:
-        indexes.append(
-            {
-                "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/conversations/fields/status/indexes/group",
-                "queryScope": "COLLECTION_GROUP",
-                "fields": [{"fieldPath": "status", "order": "ASCENDING"}],
-                "state": "READY",
-            }
-        )
-    if api_scope is not _UNSET:
-        for index in indexes:
-            index["apiScope"] = api_scope
+
+
+def _required_index(requirement, mode, *, state='READY'):
+    field = {'fieldPath': requirement.field_path}
+    if mode == 'CONTAINS':
+        field['arrayConfig'] = 'CONTAINS'
+    else:
+        field['order'] = mode
+    return {'queryScope': 'COLLECTION_GROUP', 'fields': [field], 'state': state}
+
+
+def _field_api_request(*, ready: bool = False, api_scope: object = _UNSET):
+    """Fake the Admin REST field endpoints for every declared requirement."""
+
     calls = []
+    applied = set()
 
     def request(method, url, payload):
         calls.append((method, url, payload))
-        if method == "PATCH":
-            indexes[:] = [{**index, "state": "READY"} for index in payload["indexConfig"]["indexes"]]
-            return {"name": "projects/based-hardware-dev/databases/jit-qa/operations/field-update"}
-        if url.endswith("/operations/field-update"):
-            return {"done": True}
+        if 'operations/' in url:
+            return {'done': True}
+        match = re.search(r'collectionGroups/([^/]+)/fields/([^/?]+)', url)
+        assert match, url
+        key = (match.group(1), match.group(2))
+        requirement = _FIELD_REQUIREMENTS[key]
+        if method == 'PATCH':
+            applied.add(key)
+            return {'name': 'projects/based-hardware-dev/databases/jit-qa/operations/field-update'}
+        indexes = _default_indexes(requirement.field_path)
+        if ready or key in applied:
+            indexes += [_required_index(requirement, mode) for mode in requirement.collection_group_modes]
+        if api_scope is not _UNSET:
+            for index in indexes:
+                index['apiScope'] = api_scope
         return {
-            "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/conversations/fields/status",
-            "indexConfig": {"usesAncestorConfig": False, "indexes": indexes},
+            'name': f'projects/based-hardware-dev/databases/jit-qa/collectionGroups/{key[0]}/fields/{key[1]}',
+            'indexConfig': {'usesAncestorConfig': False, 'indexes': indexes},
         }
 
     request.calls = calls
     return request
+
+
+def _status_requirement():
+    return next(
+        requirement
+        for requirement in operator.TARGET_FIELD_REQUIREMENTS
+        if (requirement.collection_group, requirement.field_path) == ('conversations', 'status')
+    )
 
 
 def test_selected_manifest_is_canonical_and_contains_every_registry_composite():
@@ -73,6 +104,11 @@ def test_selected_manifest_is_canonical_and_contains_every_registry_composite():
         )
         for entry in manifest["indexes"]
     } == signatures
+
+
+def test_field_targets_are_the_registry_field_requirements():
+    assert operator.TARGET_FIELD_REQUIREMENTS is registry.FIELD_INDEX_REQUIREMENTS
+    assert _FIELD_COUNT == 16
 
 
 def test_plan_reads_only_fixed_named_database_and_reports_all_required_indexes(monkeypatch):
@@ -95,8 +131,8 @@ def test_plan_reads_only_fixed_named_database_and_reports_all_required_indexes(m
     ]
     assert result["manifest_validated"] is True
     assert result["selected_index_count"] == _REGISTRY_COUNT
-    assert result["selected_field_index_count"] == 1
-    assert result["missing_count"] == _REGISTRY_COUNT + 1
+    assert result["selected_field_index_count"] == _FIELD_COUNT
+    assert result["missing_count"] == _REGISTRY_COUNT + _FIELD_COUNT
     assert {entry["state"] for entry in result["indexes"]} == {"MISSING"}
     assert {entry["identifier"] for entry in result["indexes"]} == {
         requirement.identifier for requirement in registry.INDEX_REQUIREMENTS
@@ -106,16 +142,10 @@ def test_plan_reads_only_fixed_named_database_and_reports_all_required_indexes(m
         "action_items_completed_created_newest_first",
         "memory_items_canonical_atlas_read",
     } <= {entry["identifier"] for entry in result["indexes"]}
-    assert result["field_indexes"] == [
-        {
-            "identifier": "conversations_status_collection_group_ascending",
-            "collection_group": "conversations",
-            "field_path": "status",
-            "query_scope": "COLLECTION_GROUP",
-            "order": "ASCENDING",
-            "state": "MISSING",
-        }
-    ]
+    assert {entry["identifier"] for entry in result["field_indexes"]} == {
+        requirement.identifier for requirement in registry.FIELD_INDEX_REQUIREMENTS
+    }
+    assert {entry["state"] for entry in result["field_indexes"]} == {"MISSING"}
 
 
 def test_plan_rejects_non_qa_targets():
@@ -158,10 +188,11 @@ def test_apply_requires_confirmation_and_delegates_only_selected_signatures(monk
         timeout_seconds=1,
         poll_interval_seconds=1,
         field_api_request=field_api,
+        sleep=lambda _seconds: None,
     )
     assert result["schema_version"] == "omi.jit.qa.firestore-index-apply.v1"
     assert result["created_index_count"] == _REGISTRY_COUNT
-    assert result["created_field_index_count"] == 1
+    assert result["created_field_index_count"] == _FIELD_COUNT
     assert calls[0][0] == "provision"
     assert calls[1][0] == "wait"
     assert calls[0][1]["project"] == operator.PROJECT
@@ -174,8 +205,8 @@ def test_apply_cli_keeps_reconciler_progress_out_of_json_receipt(monkeypatch, ca
     import json
 
     signatures = operator._target_signatures()
-    field_api = _field_api_request()
-    monkeypatch.setattr(operator, "_field_api_request", field_api)
+    field_api = _field_api_request(ready=True)
+    monkeypatch.setattr(operator.field_indexes, "field_api_request", field_api)
     monkeypatch.setattr(operator.reconciler, "provision_missing_indexes", lambda **kwargs: signatures)
     # Exercise the actual wait function and its READY progress print.
     monkeypatch.setattr(operator.reconciler, "list_live_indexes", lambda **kwargs: [])
@@ -202,88 +233,17 @@ def test_apply_cli_keeps_reconciler_progress_out_of_json_receipt(monkeypatch, ca
     receipt = json.loads(captured.out)
     assert receipt["missing_count"] == 0
     assert receipt["created_index_count"] == _REGISTRY_COUNT
-    assert receipt["created_field_index_count"] == 1
+    assert receipt["created_field_index_count"] == 0
     assert "READY" in captured.err
 
 
 def test_field_patch_preserves_collection_scope_defaults_and_adds_only_group_ascending():
     field_api = _field_api_request()
-    changed = operator._apply_field_target(
+    changed = operator._apply_field_requirement(
         project=operator.PROJECT,
         database=operator.DATABASE,
-        target=operator.TARGET_FIELD_INDEXES[0],
+        requirement=_status_requirement(),
         field_api_request=field_api,
-        timeout_seconds=1,
-        poll_interval_seconds=1,
-        sleep=lambda _seconds: None,
-        monotonic=lambda: 0,
-    )
-
-    assert changed is True
-    patch = next(payload for method, _url, payload in field_api.calls if method == "PATCH")
-    assert patch["indexConfig"]["indexes"] == [
-        {
-            "queryScope": "COLLECTION",
-            "fields": [{"fieldPath": "status", "order": "ASCENDING"}],
-        },
-        {
-            "queryScope": "COLLECTION",
-            "fields": [{"fieldPath": "status", "order": "DESCENDING"}],
-        },
-        {
-            "queryScope": "COLLECTION_GROUP",
-            "fields": [{"fieldPath": "status", "order": "ASCENDING"}],
-        },
-    ]
-
-
-def test_field_patch_resolves_live_inherited_defaults_before_writing_group_index():
-    field_api = _field_api_request()
-    inherited_indexes = [
-        {
-            "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/__default__/fields/*",
-            "queryScope": "COLLECTION",
-            "fields": [{"fieldPath": "*", "order": "ASCENDING"}],
-            "state": "READY",
-        },
-        {
-            "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/__default__/fields/*",
-            "queryScope": "COLLECTION",
-            "fields": [{"fieldPath": "*", "order": "DESCENDING"}],
-            "state": "READY",
-        },
-        {
-            "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/__default__/fields/*",
-            "queryScope": "COLLECTION",
-            "fields": [{"fieldPath": "*", "arrayConfig": "CONTAINS"}],
-            "state": "READY",
-        },
-    ]
-    ancestor = "projects/based-hardware-dev/databases/jit-qa/" "collectionGroups/__default__/fields/*"
-    patched = False
-
-    def inherited_request(method, url, payload):
-        nonlocal patched
-        if method == "PATCH":
-            patched = True
-            return field_api(method, url, payload)
-        if method == "GET" and url.endswith("/fields/status") and not patched:
-            return {
-                "indexConfig": {
-                    "usesAncestorConfig": True,
-                    "ancestorField": ancestor,
-                    "indexes": inherited_indexes,
-                }
-            }
-        if method == "GET" and url.endswith("/collectionGroups/__default__/fields/*"):
-            return {"indexConfig": {"usesAncestorConfig": False, "indexes": inherited_indexes}}
-        return field_api(method, url, payload)
-
-    changed = operator._apply_field_target(
-        project=operator.PROJECT,
-        database=operator.DATABASE,
-        target=operator.TARGET_FIELD_INDEXES[0],
-        field_api_request=inherited_request,
         timeout_seconds=1,
         poll_interval_seconds=1,
         sleep=lambda _seconds: None,
@@ -312,12 +272,148 @@ def test_field_patch_resolves_live_inherited_defaults_before_writing_group_index
     ]
 
 
-def test_field_target_is_idempotent_when_collection_group_index_is_present():
-    field_api = _field_api_request(ready=True)
-    changed = operator._apply_field_target(
+def test_field_patch_batches_both_declared_modes_for_one_field():
+    requirement = next(
+        item
+        for item in operator.TARGET_FIELD_REQUIREMENTS
+        if (item.collection_group, item.field_path) == ('fair_use_events', 'case_ref')
+    )
+    field_api = _field_api_request()
+
+    changed = operator._apply_field_requirement(
         project=operator.PROJECT,
         database=operator.DATABASE,
-        target=operator.TARGET_FIELD_INDEXES[0],
+        requirement=requirement,
+        field_api_request=field_api,
+        timeout_seconds=1,
+        poll_interval_seconds=1,
+        sleep=lambda _seconds: None,
+        monotonic=lambda: 0,
+    )
+
+    assert changed is True
+    patches = [payload for method, _url, payload in field_api.calls if method == "PATCH"]
+    assert len(patches) == 1
+    modes = {
+        (index['queryScope'], index['fields'][0].get('order') or index['fields'][0].get('arrayConfig'))
+        for index in patches[0]['indexConfig']['indexes']
+    }
+    assert {('COLLECTION_GROUP', 'ASCENDING'), ('COLLECTION_GROUP', 'DESCENDING')} <= modes
+
+
+def test_field_patch_supports_array_contains_mode():
+    requirement = next(item for item in operator.TARGET_FIELD_REQUIREMENTS if item.collection_group == 'memories')
+    field_api = _field_api_request()
+
+    changed = operator._apply_field_requirement(
+        project=operator.PROJECT,
+        database=operator.DATABASE,
+        requirement=requirement,
+        field_api_request=field_api,
+        timeout_seconds=1,
+        poll_interval_seconds=1,
+        sleep=lambda _seconds: None,
+        monotonic=lambda: 0,
+    )
+
+    assert changed is True
+    patch = next(payload for method, _url, payload in field_api.calls if method == "PATCH")
+    assert {
+        'queryScope': 'COLLECTION_GROUP',
+        'fields': [{'fieldPath': 'tags', 'arrayConfig': 'CONTAINS'}],
+    } in patch[
+        'indexConfig'
+    ]['indexes']
+
+
+def test_field_patch_resolves_live_inherited_defaults_before_writing_group_index():
+    inherited_indexes = [
+        {
+            "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/__default__/fields/*",
+            "queryScope": "COLLECTION",
+            "fields": [{"fieldPath": "*", "order": "ASCENDING"}],
+            "state": "READY",
+        },
+        {
+            "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/__default__/fields/*",
+            "queryScope": "COLLECTION",
+            "fields": [{"fieldPath": "*", "order": "DESCENDING"}],
+            "state": "READY",
+        },
+        {
+            "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/__default__/fields/*",
+            "queryScope": "COLLECTION",
+            "fields": [{"fieldPath": "*", "arrayConfig": "CONTAINS"}],
+            "state": "READY",
+        },
+    ]
+    ancestor = "projects/based-hardware-dev/databases/jit-qa/" "collectionGroups/__default__/fields/*"
+    patched = None
+
+    def inherited_request(method, url, payload):
+        nonlocal patched
+        if method == "PATCH":
+            patched = payload
+            return {"name": "projects/based-hardware-dev/databases/jit-qa/operations/field-update"}
+        if 'operations/' in url:
+            return {"done": True}
+        if method == "GET" and url.endswith("/fields/status"):
+            if patched is not None:
+                indexes = [{**index, "state": "READY"} for index in patched["indexConfig"]["indexes"]]
+                return {
+                    "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/conversations/fields/status",
+                    "indexConfig": {"usesAncestorConfig": False, "indexes": indexes},
+                }
+            return {
+                "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/conversations/fields/status",
+                "indexConfig": {
+                    "usesAncestorConfig": True,
+                    "ancestorField": ancestor,
+                    "indexes": inherited_indexes,
+                },
+            }
+        if method == "GET" and url.endswith("/collectionGroups/__default__/fields/*"):
+            return {"name": ancestor, "indexConfig": {"usesAncestorConfig": False, "indexes": inherited_indexes}}
+        raise AssertionError(f"unexpected request {method} {url}")
+
+    changed = operator._apply_field_requirement(
+        project=operator.PROJECT,
+        database=operator.DATABASE,
+        requirement=_status_requirement(),
+        field_api_request=inherited_request,
+        timeout_seconds=1,
+        poll_interval_seconds=1,
+        sleep=lambda _seconds: None,
+        monotonic=lambda: 0,
+    )
+
+    assert changed is True
+    assert patched["indexConfig"]["indexes"] == [
+        {
+            "queryScope": "COLLECTION",
+            "fields": [{"fieldPath": "status", "order": "ASCENDING"}],
+        },
+        {
+            "queryScope": "COLLECTION",
+            "fields": [{"fieldPath": "status", "order": "DESCENDING"}],
+        },
+        {
+            "queryScope": "COLLECTION",
+            "fields": [{"fieldPath": "status", "arrayConfig": "CONTAINS"}],
+        },
+        {
+            "queryScope": "COLLECTION_GROUP",
+            "fields": [{"fieldPath": "status", "order": "ASCENDING"}],
+        },
+    ]
+
+
+def test_field_target_is_idempotent_when_collection_group_index_is_present():
+    field_api = _field_api_request(ready=True)
+    changed = operator._apply_field_requirement(
+        project=operator.PROJECT,
+        database=operator.DATABASE,
+        requirement=_status_requirement(),
         field_api_request=field_api,
         timeout_seconds=1,
         poll_interval_seconds=1,
@@ -332,10 +428,10 @@ def test_field_target_is_idempotent_when_collection_group_index_is_present():
 def test_field_target_accepts_explicit_any_api_scope():
     field_api = _field_api_request(ready=True, api_scope="ANY_API")
 
-    changed = operator._apply_field_target(
+    changed = operator._apply_field_requirement(
         project=operator.PROJECT,
         database=operator.DATABASE,
-        target=operator.TARGET_FIELD_INDEXES[0],
+        requirement=_status_requirement(),
         field_api_request=field_api,
         timeout_seconds=1,
         poll_interval_seconds=1,
@@ -350,10 +446,10 @@ def test_field_target_rejects_non_any_api_scope_on_target():
     field_api = _field_api_request(ready=True, api_scope="DATASTORE_MODE_API")
 
     with pytest.raises(operator.IndexOperatorError, match="apiScope must be ANY_API"):
-        operator._field_target_state(
+        operator._field_requirement_state(
             project=operator.PROJECT,
             database=operator.DATABASE,
-            target=operator.TARGET_FIELD_INDEXES[0],
+            requirement=_status_requirement(),
             field_api_request=field_api,
         )
 
@@ -363,10 +459,10 @@ def test_field_target_rejects_invalid_api_scope_on_preserved_index(api_scope):
     field_api = _field_api_request(api_scope=api_scope)
 
     with pytest.raises(operator.IndexOperatorError, match="apiScope must be ANY_API"):
-        operator._field_target_state(
+        operator._field_requirement_state(
             project=operator.PROJECT,
             database=operator.DATABASE,
-            target=operator.TARGET_FIELD_INDEXES[0],
+            requirement=_status_requirement(),
             field_api_request=field_api,
         )
 
@@ -379,18 +475,10 @@ def test_field_target_waits_for_existing_creating_index_without_repatching():
         nonlocal creating
         if method == "PATCH":
             raise AssertionError("existing CREATING index must not be patched again")
-        if url.endswith("/operations/field-update"):
+        if 'operations/' in url:
             return {"done": True}
         response = copy.deepcopy(field_api(method, url, payload))
         if url.endswith("/fields/status"):
-            response["indexConfig"]["indexes"] = [
-                index
-                for index in response["indexConfig"]["indexes"]
-                if not (
-                    index.get("queryScope") == "COLLECTION_GROUP"
-                    and index.get("fields") == [{"fieldPath": "status", "order": "ASCENDING"}]
-                )
-            ]
             response["indexConfig"]["indexes"].append(
                 {
                     "queryScope": "COLLECTION_GROUP",
@@ -401,10 +489,10 @@ def test_field_target_waits_for_existing_creating_index_without_repatching():
             creating = False
         return response
 
-    changed = operator._apply_field_target(
+    changed = operator._apply_field_requirement(
         project=operator.PROJECT,
         database=operator.DATABASE,
-        target=operator.TARGET_FIELD_INDEXES[0],
+        requirement=_status_requirement(),
         field_api_request=request,
         timeout_seconds=1,
         poll_interval_seconds=1,
@@ -415,7 +503,7 @@ def test_field_target_waits_for_existing_creating_index_without_repatching():
     assert changed is False
 
 
-def test_field_target_waits_for_preserved_creating_index_even_when_target_is_ready():
+def test_field_target_reports_ready_when_only_an_unrelated_index_is_creating():
     field_api = _field_api_request(ready=True)
 
     def request(method, url, payload):
@@ -424,14 +512,14 @@ def test_field_target_waits_for_preserved_creating_index_even_when_target_is_rea
             response["indexConfig"]["indexes"][0]["state"] = "CREATING"
         return response
 
-    state, patch = operator._field_target_state(
+    state, patch = operator._field_requirement_state(
         project=operator.PROJECT,
         database=operator.DATABASE,
-        target=operator.TARGET_FIELD_INDEXES[0],
+        requirement=_status_requirement(),
         field_api_request=request,
     )
 
-    assert (state, patch) == ("CREATING", None)
+    assert (state, patch) == ("READY", None)
 
 
 @pytest.mark.parametrize("replacement", ["NEEDS_REPAIR", None])
@@ -448,10 +536,10 @@ def test_field_target_fails_closed_for_preserved_nonready_or_missing_state(repla
         return response
 
     with pytest.raises(operator.IndexOperatorError, match="needs repair|state is missing"):
-        operator._field_target_state(
+        operator._field_requirement_state(
             project=operator.PROJECT,
             database=operator.DATABASE,
-            target=operator.TARGET_FIELD_INDEXES[0],
+            requirement=_status_requirement(),
             field_api_request=request,
         )
 
@@ -473,22 +561,25 @@ def test_field_target_rejects_needs_repair_state():
         return response
 
     with pytest.raises(operator.IndexOperatorError, match="needs repair"):
-        operator._field_target_state(
+        operator._field_requirement_state(
             project=operator.PROJECT,
             database=operator.DATABASE,
-            target=operator.TARGET_FIELD_INDEXES[0],
+            requirement=_status_requirement(),
             field_api_request=request,
         )
 
 
 def test_field_target_fails_closed_when_inherited_defaults_are_not_exposed():
     def missing_ancestor(_method, _url, _payload):
-        return {"indexConfig": {"usesAncestorConfig": True}}
+        return {
+            "name": "projects/based-hardware-dev/databases/jit-qa/collectionGroups/conversations/fields/status",
+            "indexConfig": {"usesAncestorConfig": True},
+        }
 
     with pytest.raises(operator.IndexOperatorError, match="ancestorField"):
-        operator._field_target_state(
+        operator._field_requirement_state(
             project=operator.PROJECT,
             database=operator.DATABASE,
-            target=operator.TARGET_FIELD_INDEXES[0],
+            requirement=_status_requirement(),
             field_api_request=missing_ancestor,
         )

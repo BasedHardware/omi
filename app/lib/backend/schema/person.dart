@@ -65,6 +65,14 @@ class Person {
   final int? labelsToConfirm;
   final DateTime? lastLabeledAt;
 
+  /// `learned`, `pending`, `needs_more_speech`, `disabled` or `unknown`: what teaching this
+  /// person's voice came to, from the server.
+  final String voiceLearningState;
+
+  /// Clear speech of this person Omi has to learn from, and how much more it needs.
+  final double? voiceSpeechSeconds;
+  final double? voiceNeededSeconds;
+
   Person({
     required this.id,
     required this.name,
@@ -85,6 +93,9 @@ class Person {
     this.confidenceReasons = const [],
     this.labelsToConfirm,
     this.lastLabeledAt,
+    this.voiceLearningState = 'unknown',
+    this.voiceSpeechSeconds,
+    this.voiceNeededSeconds,
   });
 
   Person copyWith({
@@ -114,6 +125,9 @@ class Person {
       confidenceReasons: confidenceReasons,
       labelsToConfirm: labelsToConfirm,
       lastLabeledAt: lastLabeledAt,
+      voiceLearningState: voiceLearningState,
+      voiceSpeechSeconds: voiceSpeechSeconds,
+      voiceNeededSeconds: voiceNeededSeconds,
     );
   }
 
@@ -153,6 +167,9 @@ class Person {
       confidenceReasons: generated.confidenceReasons,
       labelsToConfirm: generated.labelsToConfirm,
       lastLabeledAt: generated.lastLabeledAt,
+      voiceLearningState: generated.voiceLearningState,
+      voiceSpeechSeconds: generated.voiceSpeechSeconds,
+      voiceNeededSeconds: generated.voiceNeededSeconds,
       colorIdx: colorIdx ?? generated.id.hashCode % speakerColors.length,
     );
   }
@@ -177,6 +194,9 @@ class Person {
       confidenceReasons: confidenceReasons,
       labelsToConfirm: labelsToConfirm,
       lastLabeledAt: lastLabeledAt,
+      voiceLearningState: voiceLearningState,
+      voiceSpeechSeconds: voiceSpeechSeconds,
+      voiceNeededSeconds: voiceNeededSeconds,
     );
   }
 

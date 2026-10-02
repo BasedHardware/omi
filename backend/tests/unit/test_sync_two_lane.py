@@ -360,8 +360,13 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert '--cpu=2' in action
     assert '--memory=8Gi' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
+    # backend-sync is instance-billed and ran pinned at its old max of 25 in the
+    # evening peak; the cap is owned by code so a deploy cannot drift it back.
+    stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
+    sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
+    assert '--max-instances=40' in sync_step
     assert 'gcloud tasks queues create sync-backfill' in action
-    assert '--max-concurrent-dispatches=30' in action
+    assert '--max-concurrent-dispatches=36' in action
     assert '--max-dispatches-per-second=10' in action
     assert '--max-backoff=60s' in action
     assert 'collection-group=sync_content_ledger' in action
@@ -401,7 +406,7 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
 
     run = queue['run']
     for flag in (
-        '--max-concurrent-dispatches=30',
+        '--max-concurrent-dispatches=36',
         '--max-dispatches-per-second=10',
         '--min-backoff=5s',
         '--max-backoff=60s',

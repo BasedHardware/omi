@@ -295,6 +295,26 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertEqual(outputs["has_app_codegen"], "true")
         self.assertEqual(outputs["has_app_l10n"], "true")
 
+    def test_unrelated_detect_changes_routing_does_not_wake_flutter_regeneration(self) -> None:
+        path = ".github/actions/detect-changes/action.yml"
+        base = "has_admin=$(echo $FILES | grep -q '^web/admin/' && echo true)\nhas_dart=$FILES\nhas_arb=$FILES\n"
+        current = base.replace("^web/admin/", "^web/admin/|^firestore.indexes.json$")
+
+        plan = self.plan([path], contents={path: current}, base_contents={path: base})
+
+        self.assertFalse(plan.includes("flutter-codegen"))
+        self.assertFalse(plan.includes("flutter-l10n"))
+
+    def test_flutter_routing_definition_change_wakes_flutter_regeneration(self) -> None:
+        path = ".github/actions/detect-changes/action.yml"
+        base = "has_dart=$(echo $FILES | grep -q '\\.dart$')\nhas_arb=$FILES\n"
+        current = base.replace("\\.dart$", "\\.(dart|g.dart)$")
+
+        plan = self.plan([path], contents={path: current}, base_contents={path: base})
+
+        self.assertTrue(plan.includes("flutter-codegen"))
+        self.assertTrue(plan.includes("flutter-l10n"))
+
     def test_real_generator_inputs_still_wake_flutter_regeneration(self) -> None:
         codegen = self.plan(["app/build.yaml"])
         self.assertTrue(codegen.includes("flutter-codegen"))

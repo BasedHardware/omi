@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 import math
-from typing import Any, Callable, Iterable, List, Mapping, Optional
+from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional
 
 from zoneinfo import ZoneInfo
 
@@ -139,6 +139,9 @@ class Person(BaseModel):
     speech_sample_transcripts: Optional[List[str]] = None
     speech_samples_version: int = 3
     voice_readiness: VoiceReadiness = VoiceReadiness.unknown
+    voice_learning_state: Literal['learned', 'pending', 'needs_more_speech', 'disabled', 'unknown'] = 'unknown'
+    voice_speech_seconds: Optional[float] = None
+    voice_needed_seconds: Optional[float] = None
     # Pinned people are kept out of bulk clean-up and expected in conversations.
     pinned: bool = False
     pinned_at: Optional[datetime] = None
@@ -170,6 +173,16 @@ class Person(BaseModel):
                 data = {**data, 'voice_readiness': voice_readiness(data)}
             if 'label_evidence' in data or 'confidence' not in data:
                 data = {**data, **confidence_fields(data.get('label_evidence'), data['voice_readiness'])}
+            ready = VoiceReadiness(data['voice_readiness']) == VoiceReadiness.ready
+            learning_state = data.get('voice_learning_state')
+            if ready:
+                if learning_state != 'disabled':
+                    data = {**data, 'voice_learning_state': 'learned'}
+            elif learning_state in (None, 'learned'):
+                data = {
+                    **data,
+                    'voice_learning_state': 'pending' if data.get('voice_learning_outcome') else 'unknown',
+                }
         return data
 
     def refresh_confidence(self) -> None:

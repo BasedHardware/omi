@@ -109,8 +109,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod.get_firestore_client = lambda: client_mod.db
     client_mod.get_data_plane_firestore_client = lambda: client_mod.db
     client_mod.document_id_from_seed = lambda seed: 'seed-id'
+    client_mod.run_transactional = MagicMock()
     add('database._client', client_mod)
-
     vector_db = add('database.vector_db', AutoMockModule('database.vector_db'))
     for attr in (
         'find_similar_memories',
@@ -310,8 +310,8 @@ def _add_conversations_fakes(fakes: dict[str, ModuleType]) -> None:
     endpoints.get_current_user_uid = _fake_get_current_user_uid
     endpoints.with_rate_limit = _fake_with_rate_limit
     endpoints.get_user = MagicMock()
+    endpoints.timeit = lambda fn: fn
     add('utils.other.endpoints', endpoints)
-
     request_validation = ModuleType('utils.request_validation')
     request_validation.NonNegativeOffset = int
     request_validation.PositiveLimit = int

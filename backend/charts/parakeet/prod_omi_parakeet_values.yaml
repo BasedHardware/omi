@@ -187,7 +187,8 @@ prometheus-adapter:
 autoscaling:
   enabled: true
   minReplicas: 3
-  maxReplicas: 6
+  # 7 = the two L4 pools' combined node ceiling (parakeet-pool 4 + parakeet-pool-b 3).
+  maxReplicas: 7
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
@@ -201,8 +202,11 @@ autoscaling:
       - type: Pods
         value: 1
         periodSeconds: 600
-  requestsPerPod: 20
-  targetGPUUtilization: 70
+  # Live window admission refuses new sessions at ~3 active requests per pod and ~27% GPU
+  # (measured 2026-10-01 evening peak: 6.7% refusals while the old 20 / 70 targets never
+  # fired). Scale before the live gate refuses, not after.
+  requestsPerPod: 2
+  targetGPUUtilization: 35
 
 # Additional volumes on the output Deployment definition.
 volumes: []

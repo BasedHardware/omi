@@ -277,6 +277,10 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  await PhysicalQualification.startupStage(
+    'autoremove_default',
+    SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,
+  );
   SiriIntegration.instance.installEvents();
 
   // TestFlight remains a distribution/telemetry signal; production-family
@@ -446,11 +450,7 @@ Future<void> _start({bool forceFull = false}) async {
     });
   }
   runApp(const MyApp());
-  unawaited(
-    SiriIntegration.instance.takePendingRoute().then((route) {
-      if (route != null) SiriIntegration.instance.openRoute(route);
-    }),
-  );
+  unawaited(SiriIntegration.instance.deliverPendingRoute());
   if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
 }
 

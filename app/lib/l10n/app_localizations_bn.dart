@@ -3970,9 +3970,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'নতুন সংস্করণ উপলব্ধ';
-
-  @override
   String get no => 'না';
 
   @override
@@ -5058,8 +5055,7 @@ class AppLocalizationsBn extends AppLocalizations {
       'চালিয়ে যাওয়ার মাধ্যমে, আপনার কথোপকথন, রেকর্ডিং এবং ব্যক্তিগত তথ্য আমাদের সার্ভারে নিরাপদে সংরক্ষণ করা হবে। আপনার অডিও রেকর্ডিং এবং ট্রান্সক্রিপ্ট তৃতীয় পক্ষের AI পরিষেবা দ্বারা প্রক্রিয়া করা হয় (ট্রান্সক্রিপশনের জন্য Deepgram এবং বিশ্লেষণের জন্য OpenAI সহ) যাতে আপনাকে AI-চালিত অন্তর্দৃষ্টি প্রদান করা যায় এবং সমস্ত অ্যাপ বৈশিষ্ট্য সক্ষম করা যায়।';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'আপনার কথোপকথন থেকে কাজগুলি এখানে উপস্থিত হবে।\nম্যানুয়ালি একটি তৈরি করতে + ট্যাপ করুন।';
+  String get tasksEmptyStateMessage => 'একটি কাজ তৈরি করতে কথোপকথন শুরু করুন।';
 
   @override
   String get clearChatAction => 'চ্যাট সাফ করুন';
@@ -12110,5 +12106,116 @@ class AppLocalizationsBn extends AppLocalizations {
       one: 'আরও 1টি কথোপকথনে তাদের লেবেল করুন।',
     );
     return '$_temp0';
+  }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জন বক্তা',
+      one: '১ জন বক্তা',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'শর্টকাট → Siri-তে Omi চালু করুন। “$askPhrase” বা “$questionPhrase” বলুন, তারপর আপনার প্রশ্ন করুন।';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' আপনি “$searchPhrase for what I did today”-ও বলতে পারেন।';
+  }
+
+  @override
+  String get updateAvailableTitle => 'আপডেট উপলব্ধ';
+
+  @override
+  String get updateAvailableMessage => 'Omi-এর নতুন সংস্করণ প্রস্তুত, সংশোধন ও উন্নতিসহ।';
+
+  @override
+  String get updateRequiredTitle => 'আপডেট প্রয়োজন';
+
+  @override
+  String get updateRequiredMessage => 'Omi-এর এই সংস্করণ আর সমর্থিত নয়। রেকর্ডিং ও সিঙ্ক চালিয়ে যেতে আপডেট করুন।';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'সিঙ্ক করা কপি স্বয়ংক্রিয়ভাবে সরান';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '$days দিন পরে সিঙ্ক করা কপি মুছে যায়';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'সিঙ্কের $days দিন পরে লোকাল কপি মুছে যায়। ক্লাউড কপি রাখা হয়।';
+  }
+
+  @override
+  String get localCopiesSection => 'লোকাল কপি';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'লেবেল করা লাইন: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'ভয়েস শেখা হয়েছে',
+        'pending': 'ভয়েস শেখা হচ্ছে…',
+        'disabled': 'ভয়েস সংরক্ষণ বন্ধ আছে',
+        'other': 'ভয়েস এখনও শেখা হয়নি',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi পরের বার $name-কে চিনতে পারবে।',
+        'pending': 'এতে কয়েক সেকেন্ড লাগবে।',
+        'disabled': 'Omi যাতে $name-কে চিনতে পারে, সেজন্য সেটিংসে ভয়েস সংরক্ষণ চালু করুন।',
+        'other': 'Omi-র $name-এর আরও স্পষ্ট কথা দরকার এবং সে চেষ্টা চালিয়ে যাবে।',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'এই ভয়েসের আগের কথোপকথন: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'সম্ভাব্য',
+        'soundsLike': '$name-এর মতো শোনাচ্ছে',
+        'notPerson': '$name নয়',
+        'carried': 'এখনও $name। আপনার আগের কথোপকথন থেকে নেওয়া হয়েছে।',
+        'change': 'পরিবর্তন',
+        'alsoTitle': 'এটিও কি $name?',
+        'alsoBody': 'Omi আগের কথোপকথনগুলোতে একই ভয়েস খুঁজে পেয়েছে।',
+        'confirmed': 'আপনি এই লেবেল নিশ্চিত করেছেন',
+        'other': 'পর্যালোচনা',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'এই ভয়েসের $duration';
   }
 }

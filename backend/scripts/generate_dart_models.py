@@ -85,6 +85,7 @@ SCHEMA_GROUPS = {
             'SyncJobStartResponse',
             'SyncRecoveryWindowExceededResponse',
             'SyncJobStatusResponse',
+            'RejectSpeakerRequest',
             'SyncCaptureManifestFile',
             'SyncCaptureManifestRequest',
             'SyncCaptureManifestResponse',
@@ -221,7 +222,7 @@ SCHEMA_GROUPS = {
     },
     'people': {
         'output': DEFAULT_OUTPUT_DIR / 'people_wire.g.dart',
-        'schemas': ('Person', 'PersonConfidenceReason'),
+        'schemas': ('Person', 'PersonConfidenceReason', 'VoiceMatch', 'VoiceMatchesResponse'),
     },
     'speaker_tag_prompts': {
         'output': DEFAULT_OUTPUT_DIR / 'speaker_tag_prompts_wire.g.dart',

@@ -65,8 +65,29 @@ def test_expected_exemptions_are_the_manifest_empty_index_overrides():
     ],
 )
 def test_reconciler_rejects_overrides_that_are_not_index_exemptions(override):
-    with pytest.raises(ValueError, match='only supports ttl=false with indexes='):
+    with pytest.raises(ValueError, match='ttl=false|collection-group'):
         field_reconciler.expected_field_exemptions({'fieldOverrides': [override]})
+
+
+def test_reconciler_skips_additive_overrides_and_returns_only_exemptions():
+    manifest = {
+        'fieldOverrides': [
+            {
+                'collectionGroup': 'conversations',
+                'fieldPath': 'status',
+                'ttl': False,
+                'indexes': [
+                    {'queryScope': 'COLLECTION', 'order': 'ASCENDING'},
+                    {'queryScope': 'COLLECTION_GROUP', 'order': 'ASCENDING'},
+                ],
+            },
+            {'collectionGroup': 'conversations', 'fieldPath': 'raw', 'ttl': False, 'indexes': []},
+        ]
+    }
+
+    assert field_reconciler.expected_field_exemptions(manifest) == (
+        field_reconciler.FieldExemption('conversations', 'raw'),
+    )
 
 
 def test_check_only_fails_when_declared_savings_are_not_serving(monkeypatch):

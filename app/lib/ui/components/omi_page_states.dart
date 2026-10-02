@@ -42,8 +42,16 @@ class OmiLoadingState extends StatelessWidget {
 /// `FaIcon(FontAwesomeIcons.key)` when the screen's other controls use FontAwesome. Exactly one of
 /// the two is given; either way it is drawn 40pt in [OmiColors.textTertiary].
 class OmiEmptyState extends StatelessWidget {
-  const OmiEmptyState({super.key, this.icon, this.glyph, required this.title, this.message, this.action})
-      : assert((icon == null) != (glyph == null), 'Give OmiEmptyState exactly one of icon or glyph');
+  const OmiEmptyState({
+    super.key,
+    this.icon,
+    this.glyph,
+    required this.title,
+    this.titleLayoutReference,
+    this.message,
+    this.messageLayoutReference,
+    this.action,
+  }) : assert((icon == null) != (glyph == null), 'Give OmiEmptyState exactly one of icon or glyph');
 
   final IconData? icon;
 
@@ -51,12 +59,27 @@ class OmiEmptyState extends StatelessWidget {
   final Widget? glyph;
 
   final String title;
+
+  /// Another tab’s title used only to reserve matching space when either wraps.
+  final String? titleLayoutReference;
   final String? message;
+
+  /// Reserves space for another tab’s guidance to keep headings aligned when
+  /// the messages wrap differently, including when this state has no message.
+  /// Only [message] is displayed or announced.
+  final String? messageLayoutReference;
   final Widget? action;
 
   @override
   Widget build(BuildContext context) {
-    return _StateLayout(glyph: glyph ?? Icon(icon), title: title, message: message, action: action);
+    return _StateLayout(
+      glyph: glyph ?? Icon(icon),
+      title: title,
+      titleLayoutReference: titleLayoutReference,
+      message: message,
+      messageLayoutReference: messageLayoutReference,
+      action: action,
+    );
   }
 }
 
@@ -93,15 +116,24 @@ class OmiErrorState extends StatelessWidget {
 }
 
 class _StateLayout extends StatelessWidget {
-  const _StateLayout({required this.glyph, this.title, this.message, this.action});
+  const _StateLayout(
+      {required this.glyph,
+      this.title,
+      this.titleLayoutReference,
+      this.message,
+      this.messageLayoutReference,
+      this.action});
 
   final Widget glyph;
   final String? title;
+  final String? titleLayoutReference;
   final String? message;
+  final String? messageLayoutReference;
   final Widget? action;
 
   @override
   Widget build(BuildContext context) {
+    final messageStyle = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxl, vertical: OmiSpacing.xl),
@@ -118,16 +150,33 @@ class _StateLayout extends StatelessWidget {
               const SizedBox(height: OmiSpacing.md),
               Semantics(
                 header: true,
-                child: Text(title!, textAlign: TextAlign.center, style: OmiType.headline),
+                child: titleLayoutReference == null
+                    ? Text(title!, textAlign: TextAlign.center, style: OmiType.headline)
+                    : IndexedStack(
+                        index: 0,
+                        alignment: Alignment.topCenter,
+                        children: [
+                          Text(title!, textAlign: TextAlign.center, style: OmiType.headline),
+                          Text(titleLayoutReference!, textAlign: TextAlign.center, style: OmiType.headline),
+                        ],
+                      ),
               ),
             ],
-            if (message != null) ...[
+            if (message != null || messageLayoutReference != null) ...[
               SizedBox(height: title != null ? OmiSpacing.xs : OmiSpacing.md),
-              Text(
-                message!,
-                textAlign: TextAlign.center,
-                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-              ),
+              if (messageLayoutReference == null)
+                Text(message!, textAlign: TextAlign.center, style: messageStyle)
+              else
+                // IndexedStack sizes to either localized message but only paints
+                // and exposes semantics for the current tab's guidance.
+                IndexedStack(
+                  index: message == null ? null : 0,
+                  alignment: Alignment.topCenter,
+                  children: [
+                    if (message != null) Text(message!, textAlign: TextAlign.center, style: messageStyle),
+                    Text(messageLayoutReference!, textAlign: TextAlign.center, style: messageStyle),
+                  ],
+                ),
             ],
             if (action != null) ...[
               const SizedBox(height: OmiSpacing.lg),

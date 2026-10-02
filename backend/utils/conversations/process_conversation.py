@@ -475,11 +475,13 @@ def _get_structured(
                 if calendar_data:
                     calendar_context = CalendarMeetingContext(**calendar_data)
 
-        if (
+        # Source records provenance; segment uploads can carry integration labels
+        # without the text-only fields of an external-integration create request.
+        if isinstance(conversation, ExternalIntegrationCreateConversation) and (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
         ):
-            ext_conv = cast(ExternalIntegrationCreateConversation, conversation)
+            ext_conv = conversation
             started_at = cast(datetime, ext_conv.started_at)
             if ext_conv.text_source == ExternalIntegrationConversationSource.audio:
                 if _conversation_notes_v2_enabled():
@@ -626,7 +628,7 @@ def _get_structured(
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).
-        arm = relevance_arm(uid)
+        arm = relevance_arm(uid, prompt_conversation_id)
         jev_discard: Optional[Callable[[], Optional[float]]] = None
         jev_transcript = relevance_transcript(segments)
         if arm == 'jev' and not has_described_photos and not has_wake_word_marker:

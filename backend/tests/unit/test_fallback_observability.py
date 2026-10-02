@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from utils.observability import fallback as fallback_mod
+from utils.stt.live_failure import PendingLiveFailover
 
 
 class FakeCounterChild:
@@ -20,6 +23,59 @@ class FakeCounter:
 
     def labels(self, **labels):
         return FakeCounterChild(self, labels)
+
+
+@pytest.mark.parametrize(
+    'typed,subtype',
+    [
+        ('modulate_serve_error', 'modulate_serve_error'),
+        ('connection_lost', 'connection_lost'),
+        ('send_failed', 'send_failed'),
+        (None, 'untyped'),
+        ('unbounded vendor message', 'untyped'),
+    ],
+)
+def test_failed_live_hop_logs_bounded_typed_subtype_without_new_metric_labels(monkeypatch, caplog, typed, subtype):
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    pending = PendingLiveFailover(from_mode='parakeet', to_mode='modulate')
+    with caplog.at_level(logging.WARNING, logger=fallback_mod.logger.name):
+        pending.note_failure(typed)
+        pending.note_failure(typed)
+    assert counter.increments == [
+        (
+            {
+                'component': 'stt_live_session',
+                'from_mode': 'parakeet',
+                'to_mode': 'modulate',
+                'reason': 'other',
+                'outcome': 'exhausted',
+            },
+            1.0,
+        )
+    ]
+    assert len(caplog.records) == 1
+    assert caplog.records[0].message == (
+        'omi_fallback_event component=stt_live_session from=parakeet to=modulate '
+        f'reason=other outcome=exhausted subtype={subtype}'
+    )
+
+
+def test_unknown_stt_subtype_is_bucketed_in_log(monkeypatch, caplog):
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    with caplog.at_level(logging.WARNING, logger=fallback_mod.logger.name):
+        fallback_mod.record_fallback(
+            component='stt_live_session',
+            from_mode='parakeet',
+            to_mode='modulate',
+            reason='other',
+            outcome='exhausted',
+            failure_subtype='unbounded vendor message',
+        )
+    assert len(caplog.records) == 1
+    assert caplog.records[0].message.endswith(' subtype=unknown')
+    assert 'unbounded' not in caplog.records[0].message
 
 
 def test_record_fallback_increments_metric_and_logs_same_fields(monkeypatch, caplog):

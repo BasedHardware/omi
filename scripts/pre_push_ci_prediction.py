@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import subprocess
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -255,11 +256,28 @@ def _is_app_l10n_input(path: str) -> bool:
     return (path.startswith("app/lib/l10n/") and path.endswith(".arb")) or path == "app/l10n.yaml"
 
 
-def _defines_flutter_generation(path: str) -> bool:
+def _defines_flutter_generation(
+    path: str,
+    source: str | None = None,
+    base_source: str | None = None,
+) -> bool:
     # Routing metadata cannot make a committed generated file stale, but the
     # files that define the regeneration commands or forward their outputs can:
     # they must keep waking the regeneration lanes they own.
-    return path in FLUTTER_GENERATION_DEFINITION_INPUTS or path.startswith(FLUTTER_GENERATION_DEFINITION_PREFIXES)
+    if path in FLUTTER_GENERATION_DEFINITION_INPUTS:
+        return True
+    if not path.startswith(FLUTTER_GENERATION_DEFINITION_PREFIXES):
+        return False
+    if source is None or base_source is None:
+        return True
+
+    # detect-changes also routes web/admin, backend, and other unrelated work.
+    # Only edits to its Dart/ARB change classification can affect Flutter
+    # generated-output selection; an admin path-filter edit must not run l10n.
+    flutter_routing_lines = re.compile(r"\b(?:has_dart|has_arb)\b")
+    current = tuple(line.strip() for line in source.splitlines() if flutter_routing_lines.search(line))
+    base = tuple(line.strip() for line in base_source.splitlines() if flutter_routing_lines.search(line))
+    return current != base
 
 
 def _is_app_compile_smoke_input(path: str) -> bool:
@@ -497,7 +515,10 @@ def resolve_impact(
         if path in WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS:
             selected.add("windows-kgworker-native-closure")
 
-    if any(_defines_flutter_generation(path) for path in normalized_paths):
+    if any(
+        _defines_flutter_generation(path, read_text(path), read_base_text(path))
+        for path in normalized_paths
+    ):
         selected.update({"flutter-codegen", "flutter-l10n"})
 
     if selector_changed:

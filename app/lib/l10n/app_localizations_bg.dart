@@ -3980,9 +3980,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Налична е нова версия';
-
-  @override
   String get no => 'Не';
 
   @override
@@ -5071,8 +5068,7 @@ class AppLocalizationsBg extends AppLocalizations {
       'С продължаването вашите разговори, записи и лична информация ще бъдат сигурно съхранени на нашите сървъри. Вашите аудиозаписи и транскрипции се обработват от AI услуги на трети страни (включително Deepgram за транскрипция и OpenAI за анализ), за да ви предоставят прозрения, базирани на AI, и да активират всички функции на приложението.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Задачите от вашите разговори ще се появят тук.\nДокоснете + за ръчно създаване.';
+  String get tasksEmptyStateMessage => 'Започнете разговор, за да създадете задача.';
 
   @override
   String get clearChatAction => 'Изчисти чата';
@@ -12155,5 +12151,117 @@ class AppLocalizationsBg extends AppLocalizations {
       one: 'Етикетирайте човека в още 1 разговор.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count говорители',
+      one: '1 говорител',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Включете Omi в Команди → Siri. Кажете „$askPhrase“ или „$questionPhrase“ и след това задайте въпроса си.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Може да кажете и „$searchPhrase for what I did today“.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Налична е актуализация';
+
+  @override
+  String get updateAvailableMessage => 'Нова версия на Omi е готова, с поправки и подобрения.';
+
+  @override
+  String get updateRequiredTitle => 'Нужна е актуализация';
+
+  @override
+  String get updateRequiredMessage =>
+      'Тази версия на Omi вече не се поддържа. Актуализирайте, за да продължите да записвате и синхронизирате.';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Автоматично премахване на синхронизираните копия';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Синхронизираните копия се изтриват след $days дни';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Изтрива локалните копия $days дни след синхронизация. Облачните копия се запазват.';
+  }
+
+  @override
+  String get localCopiesSection => 'Локални копия';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Означени редове: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Гласът е научен',
+        'pending': 'Научаване на гласа…',
+        'disabled': 'Запазването на глас е изключено',
+        'other': 'Гласът още не е научен',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi ще разпознае $name следващия път.',
+        'pending': 'Това отнема няколко секунди.',
+        'disabled': 'Включете запазването на гласове в Настройки, за да може Omi да разпознава $name.',
+        'other': 'Omi се нуждае от повече ясна реч от $name и ще продължи да опитва.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Предишни разговори с този глас: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Вероятно',
+        'soundsLike': 'Звучи като $name',
+        'notPerson': 'Не е $name',
+        'carried': 'Все още е $name. Пренесено от последния ви разговор.',
+        'change': 'Промяна',
+        'alsoTitle': 'Това също ли е $name?',
+        'alsoBody': 'Omi откри същия глас в предишни разговори.',
+        'confirmed': 'Потвърдихте този етикет',
+        'other': 'Преглед',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration от този глас';
   }
 }

@@ -3946,9 +3946,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'नया संस्करण उपलब्ध';
-
-  @override
   String get no => 'नहीं';
 
   @override
@@ -5031,8 +5028,7 @@ class AppLocalizationsHi extends AppLocalizations {
       'जारी रखने पर, आपकी बातचीत, रिकॉर्डिंग और व्यक्तिगत जानकारी हमारे सर्वर पर सुरक्षित रूप से संग्रहीत की जाएगी। आपकी ऑडियो रिकॉर्डिंग और ट्रांसक्रिप्ट तीसरे पक्ष की AI सेवाओं (ट्रांसक्रिप्शन के लिए Deepgram और विश्लेषण के लिए OpenAI सहित) द्वारा संसाधित किए जाते हैं ताकि आपको AI-संचालित अंतर्दृष्टि प्रदान की जा सके और सभी ऐप सुविधाएँ सक्षम की जा सकें।';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'आपकी बातचीत के कार्य यहां दिखाई देंगे।\nमैन्युअल रूप से बनाने के लिए + टैप करें।';
+  String get tasksEmptyStateMessage => 'टास्क बनाने के लिए बातचीत शुरू करें।';
 
   @override
   String get clearChatAction => 'चैट साफ़ करें';
@@ -12092,5 +12088,117 @@ class AppLocalizationsHi extends AppLocalizations {
       one: 'उन्हें 1 और बातचीत में लेबल करें।',
     );
     return '$_temp0';
+  }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count वक्ता',
+      one: '1 वक्ता',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'शॉर्टकट → Siri में Omi चालू करें। “$askPhrase” या “$questionPhrase” कहकर अपना प्रश्न पूछें।';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' आप “$searchPhrase for what I did today” भी कह सकते हैं।';
+  }
+
+  @override
+  String get updateAvailableTitle => 'अपडेट उपलब्ध है';
+
+  @override
+  String get updateAvailableMessage => 'Omi का नया संस्करण तैयार है, सुधारों और बेहतरियों के साथ।';
+
+  @override
+  String get updateRequiredTitle => 'अपडेट ज़रूरी है';
+
+  @override
+  String get updateRequiredMessage =>
+      'Omi का यह संस्करण अब समर्थित नहीं है। रिकॉर्डिंग और सिंक जारी रखने के लिए अपडेट करें।';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'सिंक की गई कॉपियाँ स्वतः हटाएँ';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'सिंक की गई कॉपियाँ $days दिनों बाद हटा दी जाती हैं';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'सिंक के $days दिन बाद लोकल कॉपियाँ हटा देता है। क्लाउड कॉपियाँ रखी जाती हैं।';
+  }
+
+  @override
+  String get localCopiesSection => 'लोकल कॉपियाँ';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'लेबल लगी लाइनें: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'आवाज़ सीख ली गई',
+        'pending': 'आवाज़ सीखी जा रही है…',
+        'disabled': 'आवाज़ सेव करना बंद है',
+        'other': 'आवाज़ अभी सीखी नहीं गई',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi अगली बार $name को पहचान लेगा।',
+        'pending': 'इसमें कुछ सेकंड लगते हैं।',
+        'disabled': 'Omi $name को पहचान सके, इसके लिए सेटिंग्स में आवाज़ें सेव करना चालू करें।',
+        'other': 'Omi को $name की और साफ़ आवाज़ चाहिए और वह कोशिश करता रहेगा।',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'इस आवाज़ वाली पिछली बातचीत: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'संभावित',
+        'soundsLike': '$name जैसी लग रही है',
+        'notPerson': '$name नहीं',
+        'carried': 'अब भी $name। आपकी पिछली बातचीत से जारी।',
+        'change': 'बदलें',
+        'alsoTitle': 'क्या यह भी $name है?',
+        'alsoBody': 'Omi को यही आवाज़ पिछली बातचीतों में मिली।',
+        'confirmed': 'आपने इस लेबल की पुष्टि की',
+        'other': 'समीक्षा करें',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'इस आवाज़ का $duration';
   }
 }

@@ -3980,9 +3980,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Versi Baharu Tersedia';
-
-  @override
   String get no => 'Tidak';
 
   @override
@@ -5072,8 +5069,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Dengan meneruskan, perbualan, rakaman dan maklumat peribadi anda akan disimpan dengan selamat di pelayan kami. Rakaman audio dan transkrip anda diproses oleh perkhidmatan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan anda pandangan dikuasakan AI dan membolehkan semua ciri aplikasi.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Tugasan daripada perbualan anda akan muncul di sini.\nKetik + untuk mencipta secara manual.';
+  String get tasksEmptyStateMessage => 'Mulakan perbualan untuk mencipta tugasan.';
 
   @override
   String get clearChatAction => 'Kosongkan sembang';
@@ -12143,5 +12139,117 @@ class AppLocalizationsMs extends AppLocalizations {
       one: 'Labelkan mereka dalam 1 lagi perbualan.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count penutur',
+      one: '1 penutur',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Hidupkan Omi dalam Pintasan → Siri. Katakan “$askPhrase” atau “$questionPhrase”, kemudian ajukan soalan anda.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Anda juga boleh katakan “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Kemas kini tersedia';
+
+  @override
+  String get updateAvailableMessage => 'Versi baharu Omi sudah sedia, dengan pembetulan dan penambahbaikan.';
+
+  @override
+  String get updateRequiredTitle => 'Kemas kini diperlukan';
+
+  @override
+  String get updateRequiredMessage =>
+      'Versi Omi ini tidak lagi disokong. Kemas kini untuk terus merakam dan menyegerakkan.';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Buang Salinan Tersegerak Secara Automatik';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Salinan tersegerak dipadam selepas $days hari';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Memadam salinan setempat $days hari selepas segerak. Salinan awan dikekalkan.';
+  }
+
+  @override
+  String get localCopiesSection => 'Salinan Setempat';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Baris dilabel: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Suara dipelajari',
+        'pending': 'Mempelajari suara…',
+        'disabled': 'Penyimpanan suara dimatikan',
+        'other': 'Suara belum dipelajari',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi akan mengecam $name pada masa akan datang.',
+        'pending': 'Ini mengambil masa beberapa saat.',
+        'disabled': 'Hidupkan penyimpanan suara dalam Tetapan supaya Omi dapat mengecam $name.',
+        'other': 'Omi memerlukan lebih banyak pertuturan yang jelas daripada $name dan akan terus mencuba.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Perbualan terdahulu dengan suara ini: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Mungkin',
+        'soundsLike': 'Kedengaran seperti $name',
+        'notPerson': 'Bukan $name',
+        'carried': 'Masih $name. Dibawa daripada perbualan terakhir anda.',
+        'change': 'Tukar',
+        'alsoTitle': 'Adakah ini juga $name?',
+        'alsoBody': 'Omi menemui suara yang sama dalam perbualan terdahulu.',
+        'confirmed': 'Anda telah mengesahkan label ini',
+        'other': 'Semak',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration daripada suara ini';
   }
 }

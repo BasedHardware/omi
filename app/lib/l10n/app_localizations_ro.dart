@@ -3989,9 +3989,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Versiune nouă disponibilă';
-
-  @override
   String get no => 'Nu';
 
   @override
@@ -5078,8 +5075,7 @@ class AppLocalizationsRo extends AppLocalizations {
       'Continuând, conversațiile, înregistrările și informațiile dvs. personale vor fi stocate în siguranță pe serverele noastre. Înregistrările audio și transcrierile dvs. sunt procesate de servicii AI terțe (inclusiv Deepgram pentru transcriere și OpenAI pentru analiză) pentru a vă oferi informații bazate pe AI și a activa toate funcțiile aplicației.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Sarcinile din conversațiile tale vor apărea aici.\nAtinge + pentru a crea una manual.';
+  String get tasksEmptyStateMessage => 'Începe o conversație pentru a crea o sarcină.';
 
   @override
   String get clearChatAction => 'Șterge conversația';
@@ -12165,5 +12161,117 @@ class AppLocalizationsRo extends AppLocalizations {
       one: 'Etichetează-i în încă 1 conversație.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vorbitori: $count',
+      one: '1 vorbitor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'Activați Omi în Comenzi rapide → Siri. Spuneți „$askPhrase” sau „$questionPhrase”, apoi puneți-vă întrebarea.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Puteți spune și „$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'Actualizare disponibilă';
+
+  @override
+  String get updateAvailableMessage => 'O versiune nouă de Omi este gata, cu remedieri și îmbunătățiri.';
+
+  @override
+  String get updateRequiredTitle => 'Actualizare necesară';
+
+  @override
+  String get updateRequiredMessage =>
+      'Această versiune de Omi nu mai este acceptată. Actualizați pentru a continua înregistrarea și sincronizarea.';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Eliminare automată a copiilor sincronizate';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Copiile sincronizate se șterg după $days zile';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Șterge copiile locale la $days zile după sincronizare. Copiile din cloud sunt păstrate.';
+  }
+
+  @override
+  String get localCopiesSection => 'Copii locale';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Rânduri etichetate: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Voce învățată',
+        'pending': 'Se învață vocea…',
+        'disabled': 'Salvarea vocii este dezactivată',
+        'other': 'Vocea nu a fost încă învățată',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi va recunoaște persoana $name data viitoare.',
+        'pending': 'Durează câteva secunde.',
+        'disabled': 'Activează salvarea vocilor în Setări ca Omi să poată recunoaște persoana $name.',
+        'other': 'Omi are nevoie de mai multă vorbire clară de la $name și va continua să încerce.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Conversații anterioare cu această voce: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Probabil',
+        'soundsLike': 'Sună ca $name',
+        'notPerson': 'Nu este $name',
+        'carried': 'Tot $name. Preluat din ultima ta conversație.',
+        'change': 'Schimbă',
+        'alsoTitle': 'Este și aceasta $name?',
+        'alsoBody': 'Omi a găsit aceeași voce în conversații anterioare.',
+        'confirmed': 'Ai confirmat această etichetă',
+        'other': 'Revizuiește',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration din această voce';
   }
 }

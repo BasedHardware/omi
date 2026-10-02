@@ -134,16 +134,26 @@ def test_rejecting_an_automatic_label_clears_it(monkeypatch):
             'speaker_id': 1,
             'use_for_speech_training': False,
             'evidence_source': 'card',
+            'rejection': {'kind': 'not_me', 'person_id': None},
         }
     ]
     assert response.quality_outcome == Q.owner_auto_rejected
 
 
-def test_unknown_voice_and_skip_write_nothing(monkeypatch):
+def test_unknown_voice_writes_an_anonymous_decision_and_skip_writes_nothing(monkeypatch):
     world = World(monkeypatch)
     service.apply_answer('u', _request(K.identify, O.unnamed, A.someone_else), world.schedule, NOW)
     service.apply_answer('u', _request(K.identify, O.unnamed, A.skip), world.schedule, NOW)
-    assert world.assignments == [] and world.answered == ['pid', 'pid']
+    assert world.assignments == [
+        {
+            'person_id': None,
+            'is_user': False,
+            'speaker_id': 1,
+            'use_for_speech_training': False,
+            'evidence_source': 'card',
+        }
+    ]
+    assert world.answered == ['pid', 'pid']
 
 
 def test_invalid_answer_for_kind(monkeypatch):
@@ -580,7 +590,7 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     monkeypatch.setattr(
         service,
         'conversation_clip_pcm',
-        lambda uid, conv, start, end: clipped.append((start, end)) or b'\x01\x00' * 16000,
+        lambda uid, conv, start, end: clipped.append((start, end)) or b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6),
     )
 
     async def verify(wav, rate, text, language=None):
@@ -590,7 +600,9 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
     monkeypatch.setattr(service, 'extract_embedding_from_bytes', lambda *a: np.array([[1.0, 0.0]], dtype=np.float32))
     monkeypatch.setattr(
-        service.voice_profiles_db, 'add_owner_voice_confirmation', lambda uid, embedding, pool, conversation_id: 1
+        service.voice_profiles_db,
+        'add_owner_voice_confirmation',
+        lambda uid, embedding, pool, conversation_id, expected_receipt_generation: 1,
     )
     assert asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a', 'b', 'c'])) == 'stored'
     assert clipped == [(5.0, 15.0)]
@@ -632,7 +644,7 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
     }
     pooled = []
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * 16000)
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6))
 
     async def verify(wav, rate, text, language=None):
         assert text == 'hello there friend' and language == 'en'
@@ -643,7 +655,10 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
     monkeypatch.setattr(
         service.voice_profiles_db,
         'add_owner_voice_confirmation',
-        lambda uid, embedding, pool, conversation_id: pooled.append((embedding, pool([embedding]))) or 1,
+        lambda uid, embedding, pool, conversation_id, expected_receipt_generation: pooled.append(
+            (embedding, pool([embedding]))
+        )
+        or 1,
     )
     outcome = asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a']))
     assert outcome == 'stored'
@@ -658,7 +673,7 @@ def test_owner_sample_rejected_by_quality_gate_is_not_pooled(monkeypatch):
         'transcript_segments': [{'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'text': 'hi'}],
     }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * 16000)
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6))
 
     async def verify(wav, rate, text, language=None):
         return None, False, 'multi_speaker: ratio=0.40'
@@ -693,6 +708,7 @@ def test_not_a_person_clears_an_automatic_label_and_is_remembered(monkeypatch):
             'speaker_id': 1,
             'use_for_speech_training': False,
             'evidence_source': 'card',
+            'rejection': {'kind': 'not_a_person', 'person_id': None},
         }
     ]
     assert ignored == [('u', 'c1', 1, NOW)] and world.answered == ['pid']

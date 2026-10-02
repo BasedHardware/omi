@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.431",
+      "date": "2026-10-01",
+      "changes": [
+        "Naming a speaker during a live recording now actually saves — the label is stored before the sheet closes and the sheet shows an error instead of silently dismissing when the save fails."
+      ]
+    },
+    {
+      "version": "0.12.430",
+      "date": "2026-10-01",
+      "changes": [
+        "Added a way to disconnect Google Calendar from the Calendar import while keeping previously imported memories"
+      ]
+    },
+    {
+      "version": "0.12.429",
+      "date": "2026-10-01",
+      "changes": [
+        "Ask Omi with Siri using more phrases, and hear answers without opening chat"
+      ]
+    },
+    {
       "version": "0.12.428",
       "date": "2026-09-30",
       "changes": [

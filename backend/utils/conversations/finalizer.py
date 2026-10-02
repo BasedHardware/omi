@@ -45,6 +45,7 @@ from utils.observability.finalization import (
     record_finalization_failure,
 )
 from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
+from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
@@ -273,6 +274,7 @@ async def finalize_persisted_conversation(
         if fanout['status'] in {'claimed', 'completed'}:
             await run_blocking(db_executor, link_duplicate_captures, uid, conversation)
         if fanout['status'] == 'completed':
+            schedule_person_voice_learning_retry(uid, conversation_id)
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
             logger.info(
@@ -382,6 +384,7 @@ async def finalize_persisted_conversation(
         )
         if not fanout_completed:
             raise ConversationFinalizationError('fanout_completion_conflict')
+        schedule_person_voice_learning_retry(uid, conversation_id)
         return ConversationFinalizationDisposition.completed
     except Exception as error:
         # Provider and validation exceptions can contain transcript excerpts.

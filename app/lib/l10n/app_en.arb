@@ -4472,10 +4472,6 @@
             }
         }
     },
-    "newVersionAvailable": "New Version Available",
-    "@newVersionAvailable": {
-        "description": "Dialog title when a new app version is available"
-    },
     "no": "No",
     "@no": {
         "description": "Button text to decline or dismiss"
@@ -5978,9 +5974,9 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Tasks from your conversations will appear here.\nTap + to create one manually.",
+    "tasksEmptyStateMessage": "Start a conversation to create a task.",
     "@tasksEmptyStateMessage": {
-        "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
+        "description": "Guidance on the empty Tasks tab: start a conversation to create a task."
     },
     "clearChatAction": "Clear Chat",
     "@clearChatAction": {
@@ -14439,6 +14435,140 @@
         "placeholders": {
             "count": {
                 "type": "int"
+            }
+        }
+    },
+    "transcriptSpeakerCount": "{count, plural, =1{1 speaker} other{{count} speakers}}",
+    "@transcriptSpeakerCount": {
+        "description": "How many people spoke, after the length in the transcript's heading: Transcript · 14 min · 2 speakers",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
+    "@siriShortcutsSetupHint": {
+        "description": "Guidance for enabling Ask Omi in the iOS Shortcuts app; askPhrase/questionPhrase are literal English Siri phrases",
+        "placeholders": {
+            "askPhrase": {
+                "type": "String"
+            },
+            "questionPhrase": {
+                "type": "String"
+            }
+        }
+    },
+    "siriShortcutsSearchHint": " You can also say “{searchPhrase} for what I did today.”",
+    "@siriShortcutsSearchHint": {
+        "description": "Optional iOS 27 search phrase guidance appended to the Shortcuts setup hint; searchPhrase is a literal English Siri phrase",
+        "placeholders": {
+            "searchPhrase": {
+                "type": "String"
+            }
+        }
+    },
+    "updateAvailableTitle": "Update available",
+    "@updateAvailableTitle": {
+        "description": "Title of the pop-up that offers a newer version of the app"
+    },
+    "updateAvailableMessage": "A new version of Omi is ready, with fixes and improvements.",
+    "@updateAvailableMessage": {
+        "description": "Message of the pop-up that offers a newer version of the app"
+    },
+    "updateRequiredTitle": "Update required",
+    "@updateRequiredTitle": {
+        "description": "Title of the pop-up when this app version is no longer supported and must be updated"
+    },
+    "updateRequiredMessage": "This version of Omi is no longer supported. Update to keep recording and syncing.",
+    "@updateRequiredMessage": {
+        "description": "Message of the pop-up when this app version is no longer supported and must be updated"
+    },
+    "autoRemoveSyncedCopiesTitle": "Auto-Remove Synced Copies",
+    "autoRemoveSyncedCopiesDays": "Synced copies deleted after {days} days",
+    "autoRemoveSyncedCopiesDescription": "Deletes local copies {days} days after sync. Cloud copies are kept.",
+    "localCopiesSection": "Local Copies",
+    "@autoRemoveSyncedCopiesTitle": {
+        "description": "Settings row title: automatically remove synced phone-local recording copies"
+    },
+    "@autoRemoveSyncedCopiesDays": {
+        "description": "Subtitle for the auto-remove toggle showing the retention window",
+        "placeholders": {
+            "days": {
+                "type": "int",
+                "example": "30"
+            }
+        }
+    },
+    "@autoRemoveSyncedCopiesDescription": {
+        "description": "Footer description for the auto-remove synced copies setting",
+        "placeholders": {
+            "days": {
+                "type": "int",
+                "example": "30"
+            }
+        }
+    },
+    "@localCopiesSection": {
+        "description": "Section header above the auto-remove synced copies setting"
+    },
+    "speakerLabelLinesLabeled": "Lines labeled: {count}",
+    "@speakerLabelLinesLabeled": {
+        "description": "After tagging a speaker: how many transcript lines received the name",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "speakerLabelVoiceStatus": "{state, select, learned{Voice learned} pending{Learning voice…} disabled{Voice saving is off} other{Voice not learned yet}}",
+    "@speakerLabelVoiceStatus": {
+        "description": "After tagging a person: whether Omi has learned to recognize their voice (server voice_learning_state)",
+        "placeholders": {
+            "state": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerLabelVoiceDetail": "{state, select, learned{Omi will recognize {name} next time.} pending{This takes a few seconds.} disabled{Turn on saving voices in Settings so Omi can recognize {name}.} other{Omi needs more clear speech from {name} and will keep trying.}}",
+    "@speakerLabelVoiceDetail": {
+        "description": "One sentence under speakerLabelVoiceStatus; name is the tagged person",
+        "placeholders": {
+            "state": {
+                "type": "String"
+            },
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerLabelEarlierMatches": "Earlier conversations with this voice: {count}",
+    "@speakerLabelEarlierMatches": {
+        "description": "The tagged person's voice was found, unnamed, in this many earlier conversations",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "speakerLabelText": "{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} carried{Still {name}. Carried over from your last conversation.} change{Change} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}",
+    "@speakerLabelText": {
+        "description": "Short speaker-label texts: likely badge, sounds-like question, reject button, carried-over banner, change button, earlier-voice card title and body, confirmed check label, and the Review button (other)",
+        "placeholders": {
+            "part": {
+                "type": "String"
+            },
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerLabelTalkTime": "{duration} of this voice",
+    "@speakerLabelTalkTime": {
+        "description": "How long an unnamed voice spoke in an earlier conversation; duration is already formatted (14m)",
+        "placeholders": {
+            "duration": {
+                "type": "String"
             }
         }
     }

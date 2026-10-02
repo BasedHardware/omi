@@ -4001,9 +4001,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'Ang Bagong Bersyon ay Available';
-
-  @override
   String get no => 'Hindi';
 
   @override
@@ -5096,8 +5093,7 @@ class AppLocalizationsTl extends AppLocalizations {
       'Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\nI-tap ang + upang lumikha ng isa nang manual.';
+  String get tasksEmptyStateMessage => 'Magsimula ng pag-uusap para gumawa ng gawain.';
 
   @override
   String get clearChatAction => 'Burahin ang Chat';
@@ -12214,5 +12210,117 @@ class AppLocalizationsTl extends AppLocalizations {
       one: 'I-label sila sa 1 pang usapan.',
     );
     return '$_temp0';
+  }
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nagsasalita',
+      one: '1 nagsasalita',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'I-on ang Omi sa Mga Shortcut → Siri. Sabihin ang “$askPhrase” o “$questionPhrase”, pagkatapos ay itanong ang tanong mo.';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' Maaari mo ring sabihin ang “$searchPhrase for what I did today”.';
+  }
+
+  @override
+  String get updateAvailableTitle => 'May available na update';
+
+  @override
+  String get updateAvailableMessage => 'Handa na ang bagong bersyon ng Omi, may mga ayos at pagpapahusay.';
+
+  @override
+  String get updateRequiredTitle => 'Kailangang mag-update';
+
+  @override
+  String get updateRequiredMessage =>
+      'Hindi na sinusuportahan ang bersyong ito ng Omi. Mag-update para patuloy na makapag-record at makapag-sync.';
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'Awtomatikong Tanggalin ang mga Naka-sync na Kopya';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return 'Binubura ang mga naka-sync na kopya pagkatapos ng $days araw';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'Binubura ang mga lokal na kopya $days araw pagkatapos mag-sync. Pinapanatili ang mga kopya sa cloud.';
+  }
+
+  @override
+  String get localCopiesSection => 'Mga Lokal na Kopya';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'Mga linyang may label: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Natutunan na ang boses',
+        'pending': 'Tinututunan ang boses…',
+        'disabled': 'Naka-off ang pag-save ng boses',
+        'other': 'Hindi pa natutunan ang boses',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Makikilala ni Omi si $name sa susunod.',
+        'pending': 'Tatagal ito ng ilang segundo.',
+        'disabled': 'I-on ang pag-save ng mga boses sa Settings para makilala ni Omi si $name.',
+        'other': 'Kailangan ni Omi ng mas malinaw na pananalita mula kay $name at patuloy itong susubok.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'Mga naunang usapan na may ganitong boses: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'Posible',
+        'soundsLike': 'Parang si $name',
+        'notPerson': 'Hindi si $name',
+        'carried': 'Si $name pa rin. Dinala mula sa huli mong usapan.',
+        'change': 'Baguhin',
+        'alsoTitle': 'Si $name rin ba ito?',
+        'alsoBody': 'Nahanap ni Omi ang parehong boses sa mga naunang usapan.',
+        'confirmed': 'Kinumpirma mo ang label na ito',
+        'other': 'Suriin',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return '$duration ng boses na ito';
   }
 }

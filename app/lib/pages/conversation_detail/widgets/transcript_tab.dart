@@ -4,14 +4,22 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/conversations.dart' show assignBulkConversationTranscriptSegments;
+import 'package:omi/backend/http/api/speaker_labels.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_sheet.dart';
+import 'package:omi/pages/conversation_detail/widgets.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/edit_segment_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_summary_action.dart';
+import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -43,6 +51,18 @@ class TranscriptWidgets extends StatefulWidget {
 class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+
+  /// Follows a tag to its outcome (voice learned or not). Tests and the visual audit provide one
+  /// seeded with fake fetchers; the app creates its own.
+  SpeakerTagOutcomeController? _ownOutcome;
+  late final SpeakerTagOutcomeController _outcome =
+      context.read<SpeakerTagOutcomeController?>() ?? (_ownOutcome = SpeakerTagOutcomeController());
+
+  @override
+  void dispose() {
+    _ownOutcome?.dispose();
+    super.dispose();
+  }
 
   void _dismissSearchIfEmpty() {
     FocusScope.of(context).unfocus();
@@ -104,6 +124,55 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           applyToSpeaker,
         );
       },
+      onSpeakerRejected: (kind) async {
+        final segment = provider.conversation.transcriptSegments.where((s) => s.id == segmentId).firstOrNull;
+        return segment != null && await provider.rejectSpeakerLabel(segment, kind);
+      },
+    );
+  }
+
+  /// "Yes" under a line Omi named by voice: the user's answer for every line from that voice.
+  void _confirmSpeakerLabel(ConversationDetailProvider provider, TranscriptSegment segment) {
+    final personId = segment.personId;
+    if (personId == null || !_requireConnection()) return;
+    final name = context.read<PeopleProvider>().people.where((p) => p.id == personId).firstOrNull?.name ?? '';
+    OmiHaptics.light();
+    _startSpeakerAssignment(provider, provider.conversation.id, segment.speakerId, personId, name, [segment.id], true);
+  }
+
+  /// "Not <name>": clears that label from the voice and tells Omi not to match it that way again.
+  Future<void> _rejectSpeakerLabel(ConversationDetailProvider provider, TranscriptSegment segment) async {
+    if (!_requireConnection()) return;
+    OmiHaptics.light();
+    final rejected = await provider.rejectSpeakerLabel(segment, SpeakerRejection.notPerson);
+    if (!mounted) return;
+    rejected
+        ? OmiFeedback.confirm(context, context.l10n.speakerTagPromptRejectedToast)
+        : OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
+  }
+
+  void _reviewEarlierMatches(SpeakerTagOutcome outcome) {
+    showEarlierVoiceMatchesSheet(
+      context,
+      personName: outcome.personName,
+      matches: outcome.matches,
+      onAnswer: (match, same) async {
+        final saved = same
+            ? await assignBulkConversationTranscriptSegments(
+                match.conversationId,
+                match.segmentIds,
+                personId: outcome.personId,
+                speakerId: match.speakerId,
+              )
+            : await rejectConversationSpeaker(
+                match.conversationId,
+                match.speakerId,
+                SpeakerRejection.notPerson,
+                personId: outcome.personId,
+              ) is ApiSuccess<ServerConversation>;
+        if (saved) _outcome.removeMatch(match);
+        return saved;
+      },
     );
   }
 
@@ -163,6 +232,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
       return false;
     }
+    final linesLabeled = applyToSpeaker
+        ? provider.conversation.transcriptSegments.where((s) => s.speakerId == speakerId).length
+        : segmentIds.length;
     unawaited(
       pending.then((saved) {
         if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
@@ -170,6 +242,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           PlatformManager.instance.analytics.taggedSegment(
             resolvedId == 'user' ? 'User' : 'User Person',
           );
+          if (mounted && resolvedId != 'user' && provider.conversationOrNull?.id == conversationId) {
+            _outcome.follow(personId: resolvedId, personName: personName, linesLabeled: linesLabeled);
+          }
         }
       }),
     );
@@ -211,6 +286,18 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
             return Column(
               children: [
                 SpeakerSummaryAction(provider: provider),
+                ListenableBuilder(
+                  listenable: _outcome,
+                  builder: (context, _) {
+                    final outcome = _outcome.outcome;
+                    if (outcome == null) return const SizedBox.shrink();
+                    return SpeakerTagOutcomeCard(
+                      outcome: outcome,
+                      onClose: _outcome.dismiss,
+                      onReview: () => _reviewEarlierMatches(outcome),
+                    );
+                  },
+                ),
                 Expanded(
                   child: getTranscriptWidget(
                     false,
@@ -230,11 +317,49 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                     onSegmentTap: widget.onSegmentTap,
                     onEditSegmentText: (segmentIndex) => _editSegmentText(provider, segmentIndex),
                     editSegment: (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
+                    onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
+                    onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
+                    startedAt: conversation.startedAt ?? conversation.createdAt,
+                    leadingItems: [if (segments.isNotEmpty) _TranscriptHeading(conversation: conversation)],
+                    leadingItemIds: [if (segments.isNotEmpty) 'transcript-heading'],
                   ),
                 ),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// "Transcript · 14m · 2 speakers" over the lines (Omi v8 transcript heading): the length by the
+/// list row's rule, and how many voices took part, counting the owner once.
+class _TranscriptHeading extends StatelessWidget {
+  const _TranscriptHeading({required this.conversation});
+
+  final ServerConversation conversation;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final voices = {
+      for (final segment in conversation.transcriptSegments) segment.isUser ? 'owner' : 'speaker-${segment.speakerId}',
+    };
+    final duration = conversationDurationLabel(conversation, l10n);
+    final label = [
+      l10n.transcript,
+      if (duration.isNotEmpty) duration,
+      l10n.transcriptSpeakerCount(voices.length),
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(top: 18, bottom: 18),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: ConversationDetailChip(
+          key: const Key('conversation_transcript_heading'),
+          icon: const Icon(Icons.notes),
+          label: label,
         ),
       ),
     );
