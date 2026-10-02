@@ -26,6 +26,12 @@ class CredentialVerificationTests(unittest.TestCase):
         client.get.return_value = {"scopes": []}
         self.assertEqual(verify_key(client), ([], None))
 
+    def test_missing_scopes_field_is_unknown_not_crash(self):
+        client = Mock()
+        client.get.return_value = {"name": "Narrow key"}
+        self.assertEqual(verify_key(client), (None, None))
+        client.get.assert_called_once_with("/v1/dev/key")
+
     def test_older_backend(self):
         client = Mock()
         client.get.side_effect = [NotFoundError("Not found"), []]

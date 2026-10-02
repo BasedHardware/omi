@@ -14,7 +14,10 @@ def verify_key(client: OmiClient) -> tuple[Optional[list[str]], Optional[str]]:
     """Check credential metadata, probing content only on an older backend."""
     try:
         credential = client.get("/v1/dev/key")
-        return credential["scopes"], None
+        # A partially deployed backend may omit "scopes"; treat it as
+        # unknown so the legacy probe/warning path still applies instead of
+        # crashing the login flow.
+        return credential.get("scopes"), None
     except NotFoundError:
         try:
             client.get("/v1/dev/user/memories", params={"limit": 1})

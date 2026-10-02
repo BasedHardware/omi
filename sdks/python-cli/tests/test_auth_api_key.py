@@ -201,6 +201,26 @@ def test_login_older_backend_fallback(
     assert "Scopes: unknown" in result.stderr
     if fallback_status == 403:
         assert "Key is valid" in result.stderr
+    # The whole point of the flow is "store only after verification": the
+    # verified candidate key must replace the fixture's pre-loaded key.
+    assert cfg.load().get_profile("default").api_key == "omi_dev_" + "n" * 32
+
+
+def test_login_older_backend_fallback_rejects_invalid_key(
+    authed_profile, respx_mock, cli_runner, config_path
+):
+    """On a legacy backend the memories probe is the only auth gate: a 401
+    from it must propagate as AuthError (exit 2) and preserve the saved
+    profile. (403 is the valid-but-limited case covered by the success test.)"""
+    respx_mock.get("/v1/dev/key").respond(404)
+    probe = respx_mock.get("/v1/dev/user/memories").respond(401, json=[])
+    before = config_path.read_bytes()
+    result = cli_runner.invoke(
+        app, ["auth", "login", "--api-key", "omi_dev_" + "n" * 32]
+    )
+    assert result.exit_code == 2
+    assert probe.call_count == 1
+    assert config_path.read_bytes() == before
 
 
 def test_narrow_key_login_displays_scopes(authed_profile, respx_mock, cli_runner):
