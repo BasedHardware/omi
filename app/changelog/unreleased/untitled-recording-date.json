@@ -1,3 +1,3 @@
 {
-  "change": "Recordings without a title or transcript now show their recording date and time instead of Untitled Conversation."
+  "change": "Conversations without a title or transcript now show a localized date and time instead of Untitled Conversation."
 }

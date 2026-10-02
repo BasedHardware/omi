@@ -61,7 +61,7 @@ String conversationDisplayTitle(
 /// A presentation-only label; never save this placeholder as a user title.
 String recordingFallbackTitle(ServerConversation conversation, AppLocalizations l10n, {OmiDateFormat? dates}) {
   final formatter = dates ?? OmiDateFormat(locale: Locale(l10n.localeName), use24HourFormat: false, l10n: l10n);
-  return '${l10n.recording} · ${formatter.dateTime((conversation.startedAt ?? conversation.createdAt).toLocal())}';
+  return formatter.dateTime((conversation.startedAt ?? conversation.createdAt).toLocal());
 }
 
 /// Reports each missing-title/no-transcript fallback at most once per conversation, surface and

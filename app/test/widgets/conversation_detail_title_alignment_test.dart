@@ -12,6 +12,7 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_header.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/ui/format/omi_date_format.dart';
 import 'package:omi/ui/ui.dart';
 
 class _TitlePersistenceSpy extends ConversationDetailProvider {
@@ -75,7 +76,10 @@ void main() {
       expect(find.text('🧠'), findsNothing);
       expectLines(1);
       if (initialTitle.isEmpty) {
-        expect(find.textContaining('Recording · '), findsOneWidget);
+        expect(
+          find.text(OmiDateFormat.of(tester.element(titleField)).dateTime(conversation.createdAt.toLocal())),
+          findsOneWidget,
+        );
         expect(find.text('Untitled Conversation'), findsNothing);
         expect(detail.titleController!.text, isEmpty);
         expect(conversation.structured.title, isEmpty);

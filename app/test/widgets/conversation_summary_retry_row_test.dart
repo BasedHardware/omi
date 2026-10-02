@@ -15,6 +15,7 @@ import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
+import 'package:omi/ui/format/omi_date_format.dart';
 
 TranscriptSegment _segment(String text) {
   return TranscriptSegment(
@@ -146,7 +147,11 @@ void main() {
     await _pumpRow(tester, conversation: _conversation(title: '', summaryRetryable: false, segments: const []));
 
     expect(find.text(_l10n(tester).untitledConversation), findsNothing);
-    expect(find.textContaining('${_l10n(tester).recording} · '), findsOneWidget);
+    expect(
+      find.text(OmiDateFormat.of(tester.element(find.byType(ConversationListItem)))
+          .dateTime(DateTime.utc(2020, 1, 1, 12).toLocal())),
+      findsOneWidget,
+    );
     expect(emitted, hasLength(1));
     expect(emitted.single.surface, ConversationUntitledRenderedSurface.list);
   });

@@ -138,7 +138,7 @@ void main() {
       final title = conversationDisplayTitle(conversation, l10n,
           surface: ConversationUntitledRenderedSurface.list,
           dates: OmiDateFormat(locale: const Locale('en'), use24HourFormat: true, l10n: l10n));
-      expect(title, 'Recording · Oct 1, 2026 15:12');
+      expect(title, 'Oct 1, 2026 15:12');
       expect(conversation.structured.title, isEmpty);
       expect(conversation.showsSummaryRetry, isFalse);
     });
@@ -158,7 +158,8 @@ void main() {
       for (var i = 0; i < 3; i++) {
         expect(
           conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.list),
-          '${l10n.recording} · ${OmiDateFormat(locale: const Locale('en'), use24HourFormat: false, l10n: l10n).dateTime(conversation.createdAt.toLocal())}',
+          OmiDateFormat(locale: const Locale('en'), use24HourFormat: false, l10n: l10n)
+              .dateTime(conversation.createdAt.toLocal()),
         );
       }
       conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.map);
