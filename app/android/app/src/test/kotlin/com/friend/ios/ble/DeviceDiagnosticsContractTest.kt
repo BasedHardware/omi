@@ -4,6 +4,29 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DeviceDiagnosticsContractTest {
+    @Test fun `local host termination does not claim another phone paired`() {
+        // HCI 0x16 reports local termination, not the reason the host requested it.
+        assertEquals("gatt_error_22", BleDisconnectReason.fromStatus(0x16))
+    }
+
+    @Test fun `link layer response timeout is classified as a timeout`() {
+        assertEquals("connection_timeout", BleDisconnectReason.fromStatus(0x22))
+    }
+
+    @Test fun `connection establishment failure is not an instant passed error`() {
+        // HCI Instant Passed is 0x28, not the failed-establishment status 0x3e.
+        assertEquals("gatt_error_62", BleDisconnectReason.fromStatus(0x3e))
+        assertEquals("gatt_error_40", BleDisconnectReason.fromStatus(0x28))
+    }
+
+    @Test fun `adjacent HCI statuses retain their existing reason vocabulary`() {
+        val expected = mapOf(
+            0 to "clean_disconnect", 8 to "connection_timeout", 19 to "remote_device_terminated",
+            -1 to "app_closed", 133 to "gatt_error_133",
+        )
+        for ((status, reason) in expected) assertEquals(reason, BleDisconnectReason.fromStatus(status))
+    }
+
     @Test fun `firmware decoder rejects short and version zero and accepts append fields`() {
         assertNull(FirmwareDiagnosticsParser.parse(ByteArray(24), 1))
         assertNull(FirmwareDiagnosticsParser.parse(ByteArray(25), 1))

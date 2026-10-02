@@ -1,0 +1,3 @@
+{
+  "change": "Android connection diagnostics show more accurate reasons for disconnects, timeouts, and failed connections instead of misleading pairing or timing errors."
+}

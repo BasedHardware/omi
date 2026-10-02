@@ -847,17 +847,6 @@ class OmiBleForegroundService : Service() {
 
     // ── Diagnostics persistence ──
 
-    private fun hciStatusDescription(status: Int): String = when (status) {
-        0 -> "clean_disconnect"
-        8 -> "connection_timeout"
-        19 -> "remote_device_terminated"
-        22 -> "paired_to_another_phone"
-        34 -> "link_key_mismatch"
-        62 -> "connection_failed_instant_passed"
-        -1 -> "app_closed"
-        else -> "gatt_error_$status"
-    }
-
     private fun historyKey(address: String) = "${KEY_DISCONNECT_HISTORY}_${address.uppercase()}"
     private fun reconnectKey(address: String) = "${KEY_RECONNECT_COUNT}_${address.uppercase()}"
     private fun failToConnectKey(address: String) = "${KEY_FAIL_TO_CONNECT_COUNT}_${address.uppercase()}"
@@ -937,7 +926,7 @@ class OmiBleForegroundService : Service() {
 
         val event = JSONObject().apply {
             put("timestamp", now)
-            put("reason", if (isManual) "manual" else hciStatusDescription(status))
+            put("reason", if (isManual) "manual" else BleDisconnectReason.fromStatus(status))
             put("reasonCode", status)
             put("isManual", isManual)
             put("eventType", eventType)
