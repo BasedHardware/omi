@@ -68,7 +68,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
             enabled: provider.isLoading,
             child: SingleChildScrollView(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.xxl),
+                padding: OmiGroupedPage.padding,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

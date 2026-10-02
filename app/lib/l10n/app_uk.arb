@@ -1340,7 +1340,7 @@
     "writeScope": "Запис",
     "apiKeyCreated": "API ключ створено!",
     "saveKeyWarning": "Збережіть цей ключ зараз! Ви більше не зможете його побачити.",
-    "yourApiKey": "Ваш API ключ",
+    "yourApiKey": "Ваш API-ключ",
     "tapToCopy": "Торкніться, щоб скопіювати",
     "copyKey": "Копіювати ключ",
     "createApiKey": "Створити API ключ",

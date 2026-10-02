@@ -4380,7 +4380,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get saveKeyWarning => 'Збережіть цей ключ зараз! Ви більше не зможете його побачити.';
 
   @override
-  String get yourApiKey => 'Ваш API ключ';
+  String get yourApiKey => 'Ваш API-ключ';
 
   @override
   String get tapToCopy => 'Торкніться, щоб скопіювати';
