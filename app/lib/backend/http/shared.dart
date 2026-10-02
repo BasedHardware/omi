@@ -69,6 +69,10 @@ Future<String> getAuthHeader({
     if (!service.isSessionSnapshotCurrent(sessionSnapshot)) {
       throw AuthTokenUnavailableException(const AuthTokenMissingUser());
     }
+    // Capture before awaiting refresh so a later session cannot substitute its
+    // token. The post-await snapshot check below binds either result to this
+    // same session.
+    final storedToken = SharedPreferencesUtil().authToken;
     final refreshResult = await service.refreshIdToken();
     if (!service.isSessionSnapshotCurrent(sessionSnapshot)) {
       throw AuthTokenUnavailableException(const AuthTokenMissingUser());
@@ -88,6 +92,14 @@ Future<String> getAuthHeader({
           await service.expireSession(
             AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.terminalTokenFailure, code: code),
           );
+        }
+        throw AuthTokenUnavailableException(refreshResult);
+      case AuthTokenTransientFailure():
+        final expiry = jwtExpiry(storedToken);
+        if (storedToken.isNotEmpty &&
+            expiry != null &&
+            expiry.isAfter(DateTime.now().add(const Duration(minutes: 5)))) {
+          return 'Bearer $storedToken';
         }
         throw AuthTokenUnavailableException(refreshResult);
       case _:

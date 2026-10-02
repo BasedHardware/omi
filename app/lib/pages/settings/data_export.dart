@@ -438,9 +438,13 @@ class DataExport {
 
       if (result.status == ShareResultStatus.success) {
         (onExported ?? () => PlatformManager.instance.analytics.exportMemories())();
+        _lastSharedDirectory = retained.directory;
+      } else {
+        // A dismissed retry sheet did not hand the retained archive to a
+        // receiver, so remove it instead of protecting it as a shared export.
+        await (cleanupDirectory ?? _deleteQuietly)(retained.directory);
       }
       if (identical(_retainedShare, retained)) _retainedShare = null;
-      _lastSharedDirectory = retained.directory;
     } finally {
       exportInProgress.value = false;
     }

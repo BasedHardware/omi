@@ -495,6 +495,45 @@ void main() {
     expect(harness.exportedCalls, 1);
   });
 
+  testWidgets('dismissed retry share deletes the retained archive', (tester) async {
+    await _pumpApp(tester);
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
+    harness.exportDirImpl = () async {
+      await harness.exportDir.create(recursive: true);
+      return harness.exportDir;
+    };
+    var shareCalls = 0;
+    String? sharedPath;
+    harness.shareImpl = (params) async {
+      shareCalls++;
+      sharedPath = params.files!.single.path;
+      return shareCalls == 1
+          ? const ShareResult('test', ShareResultStatus.unavailable)
+          : const ShareResult('test', ShareResultStatus.dismissed);
+    };
+    harness.downloadImpl = (path, {onProgress, abortTrigger, authorizationSnapshot}) async {
+      await File(path).writeAsString('{"ok": true}');
+      return path;
+    };
+
+    await _finishRun(tester, _run(tester, harness));
+    expect(find.text(l10n.exportFailedTryAgain), findsOneWidget);
+    expect(File(sharedPath!).existsSync(), isTrue);
+
+    tester.widget<SnackBarAction>(find.widgetWithText(SnackBarAction, l10n.tryAgain)).onPressed();
+    for (var i = 0; i < 200 && shareCalls < 2; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    for (var i = 0; i < 200 && DataExport.exportInProgress.value; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+
+    expect(shareCalls, 2);
+    expect(harness.deletedDirs, [harness.exportDir.path]);
+    expect(File(sharedPath!).existsSync(), isFalse);
+    expect(harness.exportedCalls, 0);
+  });
+
   testWidgets('changed-session retry does not share and removes the retained file', (tester) async {
     await _pumpApp(tester);
     final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
