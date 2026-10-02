@@ -225,6 +225,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  /// [items] without locked tasks, which the list leaves out for now (see [build]).
+  static List<ActionItemWithMetadata> _withoutLocked(List<ActionItemWithMetadata> items) =>
+      items.any((item) => item.isLocked) ? items.where((item) => !item.isLocked).toList(growable: false) : items;
+
   Widget _buildNoSearchResultsContent() {
     return OmiEmptyState(icon: Icons.search_off_rounded, title: context.l10n.noResultsFound);
   }
@@ -387,9 +391,21 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, child) {
-        final categorizedItems = _categorizeItems(provider.actionItems, false);
-        final completedItems = provider.completedItemsNewestFirst;
+        // Locked (paywalled) tasks stay off the list for now. The backend refuses every write on
+        // them with 402, delete included, so a locked row could only lead to the plan page. A paid
+        // plan unlocks them all (unlock_all_action_items), so a paid account lists every task. The
+        // lock-row code below stays for when they come back. Counts are the rows shown.
+        final shownItems = _withoutLocked(provider.actionItems);
+        final categorizedItems = _categorizeItems(shownItems, false);
+        final completedItems = _withoutLocked(provider.completedItemsNewestFirst);
         final hasTasks = categorizedItems.values.any((l) => l.isNotEmpty) || completedItems.isNotEmpty;
+        // Only a scroll asks for the next page, and with locked rows hidden what is left may be too
+        // short to scroll: check once this frame is laid out.
+        if (shownItems.length != provider.actionItems.length && provider.hasMore && !provider.isFetching) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _scrollController.hasClients) _onScroll();
+          });
+        }
         final apiPhase = provider.apiViewState.phase;
         // Successful empty results use the existing icon and conversation guidance.
         final showTypedStatus = apiPhase == ApiViewPhase.error ||
@@ -483,7 +499,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     ActionItemsProvider provider,
   ) {
     final isSearching = provider.isSearching;
-    final filteredItems = isSearching ? provider.filteredActionItems : const <ActionItemWithMetadata>[];
+    final filteredItems = isSearching ? _withoutLocked(provider.filteredActionItems) : const <ActionItemWithMetadata>[];
 
     return CustomScrollView(
       controller: _scrollController,
