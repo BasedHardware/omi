@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import importlib.util
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -235,6 +236,20 @@ class TestMemoriesToHtml(unittest.TestCase):
         content = dest.read_text(encoding="utf-8")
         self.assertIn("CLI Test Report", content)
 
+
+
+class TestRecipeDocInSync(unittest.TestCase):
+    """memories_html.md embeds the full script; keep it byte-identical to the .py."""
+
+    def test_embedded_script_matches_example_file(self):
+        doc = (script_path.parent / "memories_html.md").read_text(encoding="utf-8")
+        blocks = re.findall(r"```python\n(.*?)```", doc, re.S)
+        self.assertEqual(len(blocks), 1, "expected exactly one embedded python block")
+        self.assertEqual(
+            blocks[0],
+            script_path.read_text(encoding="utf-8"),
+            "memories_html.md drifted from memories_to_html.py; re-copy the script into the doc",
+        )
 
 if __name__ == "__main__":
     unittest.main()
