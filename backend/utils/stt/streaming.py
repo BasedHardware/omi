@@ -54,7 +54,7 @@ from utils.stt.speaker_embedding import (
     compare_embeddings,
 )
 from utils.stt.speaker_clustering import select_speaker_cluster
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -92,8 +92,9 @@ class STTService(str, Enum):
 
 
 class ParakeetConnectionError(RuntimeError):
-    def __init__(self, reason: str, detail: str = '') -> None:
+    def __init__(self, reason: str, detail: str = '', *, capacity_subtype: str | None = None) -> None:
         self.reason = reason
+        self.capacity_subtype = capacity_subtype
         super().__init__(detail or reason)
 
 
@@ -375,7 +376,9 @@ async def connect_stt_socket_with_fallback(
     use_config: Optional[bool] = None,
     routing_uid: Optional[str] = None,
     routing_language: Optional[str] = None,
-    routing_pin_primary: bool = False,
+    routing_languages: tuple[str, ...] = (),
+    routing_models: dict[str, str | None] | None = None,
+    failed_targets: set[str] | None = None,
 ) -> Tuple[STTSocket, STTService]:
     """Connect a serving provider; see ARCHITECTURE.md (incident history)."""
     if configured_chain_enabled() if use_config is None else use_config:
@@ -394,11 +397,14 @@ async def connect_stt_socket_with_fallback(
             models=stt_service_models,
             routing_uid=routing_uid,
             routing_language=routing_language,
-            routing_pin_primary=routing_pin_primary,
+            routing_languages=routing_languages,
+            routing_models=routing_models,
+            failed_targets=failed_targets,
         )
     circuit = _circuit_for_primary(primary_service)
 
     reason = 'circuit_open'
+    capacity_subtype: str | None = None
     typed_connect_reason: Optional[str] = None
     if circuit.allow_request():
         try:
@@ -455,6 +461,7 @@ async def connect_stt_socket_with_fallback(
             circuit.record_failure()
         except ParakeetConnectionError as error:
             reason = error.reason
+            capacity_subtype = error.capacity_subtype if reason == 'capacity_full' else None
             if reason in EXPECTED_REJECTIONS:
                 circuit.record_rejection(reason)
             else:
@@ -523,6 +530,7 @@ async def connect_stt_socket_with_fallback(
                 to_mode=service.value,
                 reason=reason,
                 outcome='exhausted',
+                **capacity_fallback_kwargs(capacity_subtype),
             )
             if service == candidates[-1][0]:
                 raise
@@ -536,11 +544,13 @@ async def connect_stt_socket_with_fallback(
                 to_mode=service.value,
                 reason=reason,
                 outcome='exhausted',
+                **capacity_fallback_kwargs(capacity_subtype),
             )
             if service == candidates[-1][0]:
                 raise
             from_mode = service.value
             reason = _fallback_failure_reason(error)
+            capacity_subtype = None
             continue
 
         record_fallback(
@@ -549,6 +559,7 @@ async def connect_stt_socket_with_fallback(
             to_mode=service.value,
             reason=reason,
             outcome='recovered',
+            **capacity_fallback_kwargs(capacity_subtype),
         )
         return fallback_socket, service
 
@@ -1390,9 +1401,9 @@ class SafeModulateSocket(STTSocket):
     def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
         with self._lock:
             if not self._dead:
-                self._dead = True
                 self._death_reason = reason
                 self._typed_death_reason = typed_reason
+                self._dead = True  # Metadata must precede the latch read by death observers.
 
     def send(self, data: bytes) -> bool:
         """Synchronously accept audio only when it reaches the provider queue.

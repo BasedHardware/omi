@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -18,16 +20,18 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUntitledRenderedSurface;
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
-/// The row title for a conversation (hub audit #21): its title, "Untitled Conversation" when the
-/// title is blank, and "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
+/// The row title for a conversation (hub audit #21): its title, else its transcript text (legacy
+/// rows the server left untitled), "Untitled Conversation" only when neither exists, and
+/// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
   if (conversation.discarded) {
@@ -35,8 +39,12 @@ String conversationRowTitle(BuildContext context, ServerConversation conversatio
     if (seconds <= 0) return l10n.discardedConversation;
     return l10n.discardedConversationTitle(OmiDuration.compact(seconds, l10n));
   }
-  final title = conversation.structured.title.decodeString.trim();
-  return title.isEmpty ? l10n.untitledConversation : title;
+  return conversationDisplayTitle(
+    conversation,
+    l10n,
+    surface: ConversationUntitledRenderedSurface.list,
+    title: conversation.structured.title.decodeString,
+  );
 }
 
 /// A plain-text preview of what was said: the transcript words without timestamps or speaker
@@ -96,6 +104,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.transcriptSegments.length,
         conversation.captureGroup?.id,
         conversation.captureGroup?.revision,
+        conversation.summaryRetryable,
+        conversation.isLocked,
       );
 
   @override
@@ -125,13 +135,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
   }
 
-  Widget _buildFailedTitleRecovery(BuildContext context) {
+  /// "Summary failed · Retry": shown only when the server says a reprocess can succeed.
+  Widget _buildSummaryRetry(BuildContext context) {
     return Row(
       children: [
         Flexible(
           child: Text(
-            context.l10n.conversationTitleDidntGenerate,
-            key: const Key('conversation_failed_title_indicator'),
+            context.l10n.conversationSummaryFailed,
+            key: const Key('conversation_summary_failed_indicator'),
             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -140,7 +151,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         GestureDetector(
           onTap: () {}, // absorb so the card's open-on-tap does not fire
           child: TextButton(
-            key: const Key('conversation_failed_title_reprocess_button'),
+            key: const Key('conversation_summary_retry_button'),
             onPressed: _reprocessing ? null : _onReprocess,
             style: TextButton.styleFrom(
               foregroundColor: OmiColors.textPrimary,
@@ -148,8 +159,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
               minimumSize: const Size(44, 44),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child:
-                _reprocessing ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.conversationReprocess),
+            child: _reprocessing ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.retry),
           ),
         ),
       ],
@@ -212,7 +222,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         // Search matches explicitly open Transcript. Other rows
         // let detail choose Transcript for retained fragments that
         // have no generated summary after hydration.
-        initialTabIndex: seek != null ? 0 : null,
+        initialTab: seek != null ? ConversationTab.transcript : null,
         initialSeekStart: seek?.start,
         initialSeekEnd: seek?.end,
       ),
@@ -315,28 +325,30 @@ class _ConversationListItemState extends State<ConversationListItem> {
           final isMerging = rowState.isMerging;
           final isEligible = rowState.isEligible;
 
-          return GestureDetector(
-            onTap: () async {
-              // If in selection mode, toggle selection only if eligible
-              if (isSelectionMode) {
-                if (!isEligible) {
-                  // Show feedback that this conversation cannot be selected
-                  HapticFeedback.lightImpact();
-                  OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
-                  return;
-                }
-                HapticFeedback.selectionClick();
-                provider.toggleConversationSelection(widget.conversation.id);
+          Future<void> onTap() async {
+            // If in selection mode, toggle selection only if eligible
+            if (isSelectionMode) {
+              if (!isEligible) {
+                // Show feedback that this conversation cannot be selected
+                HapticFeedback.lightImpact();
+                OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
                 return;
               }
-              await _open(context, provider);
-            },
+              HapticFeedback.selectionClick();
+              provider.toggleConversationSelection(widget.conversation.id);
+              return;
+            }
+            await _open(context, provider);
+          }
+
+          return GestureDetector(
+            onTap: onTap,
             onLongPress: isSelectionMode || isMerging ? null : () => _showActions(context, provider),
             child: Stack(
               children: [
                 Padding(
                   padding: EdgeInsets.only(
-                    top: 12,
+                    top: 8,
                     left: widget.isFromOnboarding ? 0 : 16,
                     right: widget.isFromOnboarding ? 0 : 16,
                   ),
@@ -345,69 +357,40 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
                     child: Semantics(
                       selected: isSelectionMode ? isSelected : null,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: double.maxFinite,
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? OmiColors.surface3
-                              : (isSelectionMode && !isEligible)
-                                  ? OmiColors.surface2
-                                  : OmiColors.surface1,
-                          borderRadius: OmiRadius.xlAll,
-                          border: isSelected
-                              ? Border.all(color: OmiColors.accent, width: 2)
-                              : (isSelectionMode && !isEligible)
-                                  ? Border.all(color: OmiColors.border, width: 1)
-                                  : null,
-                        ),
-                        child: ClipRRect(
-                          borderRadius: OmiRadius.xlAll,
-                          child: Dismissible(
-                            // Keep the dismissible state stable when the conversation provider
-                            // refreshes. A UniqueKey here recreated every row during unrelated
-                            // notifications, forcing extra layout/paint work while scrolling.
-                            key: ValueKey('conversation_dismissible_${widget.conversation.id}'),
-                            direction:
-                                isSelectionMode || isMerging ? DismissDirection.none : DismissDirection.endToStart,
-                            background: Container(
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 20.0),
-                              color: OmiColors.danger,
-                              child: const Icon(Icons.delete, color: Colors.white),
-                            ),
-                            // One delete path (D5): confirm unless opted out, then Undo.
-                            confirmDismiss: (direction) async {
-                              HapticFeedback.mediumImpact();
-                              trackConversationAction(
-                                  ConversationActionAction.delete, ConversationActionSurface.rowSwipe);
-                              return confirmConversationDelete(context);
-                            },
-                            onDismissed: (direction) {
-                              final conversation = widget.conversation;
-                              PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
-                              unawaited(deleteConversationsWithUndo(context, [conversation]));
-                            },
-                            child: Padding(
-                              padding: PlatformService.isMobile
-                                  ? const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 20)
-                                  : const EdgeInsetsDirectional.all(16),
-                              child: PlatformService.isMobile
-                                  ? _buildMobileLayout(context)
-                                  : Column(
-                                      mainAxisSize: MainAxisSize.max,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        _getConversationHeader(),
-                                        const SizedBox(height: 16),
-                                        _buildConversationBody(context),
-                                        if (widget.conversation.isFailedTitleRecoverable) ...[
-                                          const SizedBox(height: 10),
-                                          _buildFailedTitleRecovery(context),
-                                        ],
-                                      ],
-                                    ),
-                            ),
+                      child: _SwipeDeleteRow(
+                        enabled: !isSelectionMode && !isMerging,
+                        // One delete path (D5): confirm unless opted out, then Undo. The confirm
+                        // pops from the row's delete button.
+                        confirm: (anchor) async {
+                          HapticFeedback.mediumImpact();
+                          trackConversationAction(ConversationActionAction.delete, ConversationActionSurface.rowSwipe);
+                          return confirmConversationDelete(context, anchor: anchor);
+                        },
+                        onDeleted: () {
+                          final conversation = widget.conversation;
+                          PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
+                          unawaited(deleteConversationsWithUndo(context, [conversation]));
+                        },
+                        child: AnimatedContainer(
+                          key: const ValueKey('conversation_card'),
+                          duration: const Duration(milliseconds: 200),
+                          width: double.maxFinite,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? OmiColors.surface3
+                                : (isSelectionMode && !isEligible)
+                                    ? OmiColors.surface2
+                                    : OmiColors.surface1,
+                            borderRadius: OmiRadius.xlAll,
+                            border: isSelected
+                                ? Border.all(color: OmiColors.accent, width: 2)
+                                : (isSelectionMode && !isEligible)
+                                    ? Border.all(color: OmiColors.border, width: 1)
+                                    : null,
+                          ),
+                          child: ClipRRect(
+                            borderRadius: OmiRadius.xlAll,
+                            child: _buildCardContent(context, onTap),
                           ),
                         ),
                       ),
@@ -419,7 +402,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   Positioned.fill(
                     child: Padding(
                       padding: EdgeInsets.only(
-                        top: 12,
+                        top: 8,
                         left: widget.isFromOnboarding ? 0 : 16,
                         right: widget.isFromOnboarding ? 0 : 16,
                       ),
@@ -435,6 +418,19 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+
+  Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
+    final content = Padding(
+      padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+      child: _buildMobileLayout(context),
+    );
+    if (!widget.conversation.isLocked) return content;
+    return OmiLockedPreview(
+      label: context.l10n.upgradeToUnlimited,
+      onPressed: onTap,
+      child: content,
+    );
+  }
 
   /// Time and length, with the New badge beside them (hub audit #16) and the star.
   Widget _buildMetaRow(BuildContext context) {
@@ -486,13 +482,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
               children: [
                 if (!discarded)
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                     alignment: Alignment.center,
                     child: Text(
                       widget.conversation.structured.getEmoji(),
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
                     ),
                   ),
                 if (!discarded) const SizedBox(width: 12),
@@ -515,11 +511,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 3),
                       _buildMetaRow(context),
-                      if (widget.conversation.isFailedTitleRecoverable) ...[
+                      if (widget.conversation.showsSummaryRetry) ...[
                         const SizedBox(height: 8),
-                        _buildFailedTitleRecovery(context),
+                        _buildSummaryRetry(context),
                       ],
                       if (_searchSnippetText() != null) ...[
                         const SizedBox(height: 10),
@@ -553,7 +549,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
             ),
           ],
         ),
-        if (widget.conversation.isLocked) _buildLockedOverlay(),
       ],
     );
   }
@@ -577,161 +572,183 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  Widget _buildConversationBody(BuildContext context) {
-    if (widget.conversation.discarded) {
-      return Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.conversation.photos.isNotEmpty) ...[
-                Row(
-                  children: [
-                    Icon(Icons.photo_library, color: OmiColors.textTertiary, size: 18),
-                    const SizedBox(width: 12),
-                    Text(
-                      context.l10n.conversationPhotosCount(widget.conversation.photos.length),
-                      style:
-                          Theme.of(context).textTheme.bodyMedium!.copyWith(color: OmiColors.textSecondary, height: 1.3),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-              ],
-              Text(
-                conversationSnippet(widget.conversation),
-                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: OmiColors.textSecondary, height: 1.3),
-              ),
-            ],
-          ),
-          if (widget.conversation.isLocked) _buildLockedOverlay(),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(conversationRowTitle(context, widget.conversation), style: Theme.of(context).textTheme.titleLarge),
-        if (_searchSnippetText() != null) ...[
-          const SizedBox(height: 10),
-          Text(
-            _searchSnippetText()!,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium!.copyWith(color: OmiColors.textTertiary, height: 1.35, fontStyle: FontStyle.italic),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildLockedOverlay() {
-    return Positioned.fill(
-      child: ClipRRect(
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            // Avoid a live backdrop blur for every locked card. The opaque overlay
-            // preserves the locked affordance without making the scroll/route paint
-            // path sample and blur the entire card behind it.
-            color: Colors.black.withValues(alpha: 0.62),
-            borderRadius: OmiRadius.smAll,
-          ),
-          child: Text(
-            context.l10n.upgradeToUnlimited,
-            style: OmiType.callout.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-      ),
-    );
-  }
-
-  _getConversationHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 🧠 Emoji + Tag
-          Flexible(
-            fit: FlexFit.tight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!widget.conversation.discarded)
-                  Text(
-                    widget.conversation.structured.getEmoji(),
-                    style: TextStyle(color: OmiColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w500),
-                  ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
-                  const SizedBox(width: 8),
-                if (widget.conversation.structured.category.isNotEmpty)
-                  Flexible(
-                    child: Container(
-                      decoration:
-                          BoxDecoration(color: widget.conversation.getTagColor(), borderRadius: OmiRadius.lgAll),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        widget.conversation.getTag(),
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // 🕒 Timestamp + Duration, New badge beside them, Starred
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-                  style: _metaStyle,
-                  maxLines: 1,
-                ),
-                if (_getConversationDuration(context).isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                      child: Text(_getConversationDuration(context), style: OmiType.caption, maxLines: 1),
-                    ),
-                  ),
-                if (isNew) ...[
-                  const SizedBox(width: 8),
-                  ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
-                ],
-                if (widget.conversation.starred)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 8.0),
-                    child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
   String _getConversationDuration(BuildContext context) {
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
     return OmiDuration.compact(durationSeconds, context.l10n);
+  }
+}
+
+/// A conversation card that swipes open to a round red delete button (#20038).
+///
+/// A short swipe leaves the row open with the button showing; tapping it asks [confirm], whose menu
+/// pops from the button. A swipe past [_askAt] of the row's width opens the row and asks straight
+/// away, as the old swipe-to-delete did. Tapping the open card, swiping it back or scrolling the list
+/// closes it. Once [confirm] says yes, the card slides away and [onDeleted] runs.
+class _SwipeDeleteRow extends StatefulWidget {
+  const _SwipeDeleteRow({required this.enabled, required this.confirm, required this.onDeleted, required this.child});
+
+  final bool enabled;
+
+  /// Asks to delete; [anchor] is the delete button's rect on screen.
+  final Future<bool> Function(Rect anchor) confirm;
+  final VoidCallback onDeleted;
+  final Widget child;
+
+  @override
+  State<_SwipeDeleteRow> createState() => _SwipeDeleteRowState();
+}
+
+class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProviderStateMixin {
+  static const double _button = 44;
+  static const double _inset = 16;
+
+  /// How far the card rests open: the button and the air on either side of it.
+  static const double _open = _button + 2 * _inset;
+
+  /// Past this share of the row's width, letting go asks straight away.
+  static const double _askAt = 0.4;
+
+  /// How far the card is pulled aside, in logical pixels.
+  late final AnimationController _offset = AnimationController.unbounded(vsync: this);
+  final GlobalKey _buttonKey = GlobalKey();
+  ValueListenable<bool>? _scrolling;
+  double _width = 0;
+  bool _asking = false;
+
+  bool get _rtl => Directionality.of(context) == TextDirection.rtl;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scrolling = Scrollable.maybeOf(context)?.position.isScrollingNotifier;
+    if (scrolling != _scrolling) {
+      _scrolling?.removeListener(_onScroll);
+      _scrolling = scrolling?..addListener(_onScroll);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_SwipeDeleteRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled && _offset.value != 0) _settle(0);
+  }
+
+  @override
+  void dispose() {
+    _scrolling?.removeListener(_onScroll);
+    _offset.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrolling!.value && !_asking && _offset.value > 0) _settle(0);
+  }
+
+  Future<void> _settle(double to) =>
+      _offset.animateTo(to, duration: OmiMotion.of(context).standard, curve: Curves.easeOutCubic);
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    if (_asking) return;
+    final delta = _rtl ? details.primaryDelta! : -details.primaryDelta!;
+    _offset.value = (_offset.value + delta).clamp(0.0, _width);
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    if (_asking) return;
+    final velocity = _rtl ? details.primaryVelocity! : -details.primaryVelocity!;
+    if (_offset.value >= _width * _askAt) {
+      _settle(_open);
+      _ask();
+      return;
+    }
+    final open = velocity > 300 || (velocity > -300 && _offset.value > _open / 2);
+    _settle(open ? _open : 0);
+  }
+
+  Future<void> _ask() async {
+    final box = _buttonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (_asking || box == null) return;
+    _asking = true;
+    final confirmed = await widget.confirm(box.localToGlobal(Offset.zero) & box.size);
+    if (!mounted) return;
+    _asking = false;
+    if (!confirmed) {
+      _settle(0);
+      return;
+    }
+    await _offset.animateTo(_width, duration: OmiMotion.of(context).quick, curve: Curves.easeIn);
+    if (!mounted) return;
+    widget.onDeleted();
+    // The list drops the row in the next frame; if it is still here after that, show it closed.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _offset.value = 0;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      _width = constraints.maxWidth;
+      return GestureDetector(
+        onHorizontalDragUpdate: widget.enabled ? _onDragUpdate : null,
+        onHorizontalDragEnd: widget.enabled ? _onDragEnd : null,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(end: _inset),
+                  child: AnimatedBuilder(
+                    animation: _offset,
+                    builder: (context, child) {
+                      final t = Curves.easeOut.transform((_offset.value / _open).clamp(0.0, 1.0));
+                      return Opacity(opacity: t, child: Transform.scale(scale: 0.6 + 0.4 * t, child: child));
+                    },
+                    child: Semantics(
+                      button: true,
+                      label: context.l10n.delete,
+                      child: GestureDetector(
+                        key: _buttonKey,
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _ask,
+                        child: Container(
+                          key: const ValueKey('conversation_swipe_delete'),
+                          width: _button,
+                          height: _button,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(color: OmiColors.danger, shape: BoxShape.circle),
+                          child: const FaIcon(FontAwesomeIcons.trashCan, size: 17, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            AnimatedBuilder(
+              animation: _offset,
+              builder: (context, child) => Transform.translate(
+                offset: Offset(_rtl ? _offset.value : -_offset.value, 0),
+                child: Stack(
+                  children: [
+                    child!,
+                    // While open, a tap on the card closes it instead of opening the conversation.
+                    if (_offset.value > 0)
+                      Positioned.fill(
+                        child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => _settle(0)),
+                      ),
+                  ],
+                ),
+              ),
+              child: widget.child,
+            ),
+          ],
+        ),
+      );
+    });
   }
 }
 

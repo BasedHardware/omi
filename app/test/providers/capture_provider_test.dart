@@ -739,6 +739,32 @@ void main() {
       expect(provider.segments.first.personId, isNull);
     });
 
+    test('replacing a near match removes the old chip across segments of the same speaker', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seg1', 'hello'), _segment('seg2', 'later')];
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg1', suggestedPersonId: 'maya'));
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Sam', segmentId: 'seg2', suggestedPersonId: 'sam'));
+      expect(provider.suggestionsBySegmentId.keys, ['seg2']);
+      expect(provider.suggestionsBySegmentId['seg2']?.suggestedPersonId, 'sam');
+      expect(provider.segments.every((segment) => segment.personId == null), isTrue);
+    });
+
+    test('a wire retraction clears every stale chip for that speaker even after its segment leaves', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seg1', 'hello')];
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg1', suggestedPersonId: 'maya'));
+      provider.suggestionsBySegmentId['other'] = SpeakerLabelSuggestionEvent(
+          speakerId: 1, personId: '', personName: 'Other', segmentId: 'other', suggestedPersonId: 'other');
+      provider.segments = [];
+      final retraction = SpeakerLabelSuggestionEvent.fromJson(
+          {'speaker_id': 0, 'person_id': '', 'person_name': '', 'segment_id': 'new', 'retracted': true});
+      provider.onMessageEventReceived(retraction);
+      expect(provider.suggestionsBySegmentId.keys, ['other']);
+    });
+
     test('auto-applies assignment when personId is provided', () {
       final provider = CaptureProvider();
       // Create segment with speakerId 1 to match the event

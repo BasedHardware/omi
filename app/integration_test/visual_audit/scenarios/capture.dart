@@ -167,9 +167,13 @@ final auditPendant = BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi
 /// Mirrors HomePage's layout: the header, the Home | Tasks switcher, Home, and the floating
 /// Ask Omi row. [recaps] feeds the Daily Recaps row (none by default).
 class HomeFrame extends StatelessWidget {
-  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks});
+  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks, this.pendingSync});
 
   final RecentRecapsLoader recaps;
+
+  /// Recordings waiting to sync or transcribe: shows the Cloud button with that count as a badge,
+  /// as HeaderSyncButton does. Null leaves Cloud out (no device paired, nothing waiting).
+  final int? pendingSync;
 
   /// The Tasks page to show instead of Home (Tasks selected in the switcher; no chat bar there).
   final Widget? tasks;
@@ -188,6 +192,13 @@ class HomeFrame extends StatelessWidget {
             child: BatteryInfoWidget(),
           ),
           Row(children: [
+            if (pendingSync != null)
+              HeaderCircleButton(
+                semanticLabel: 'Sync',
+                onTap: () {},
+                badgeCount: pendingSync!,
+                icon: Icon(Icons.cloud_rounded, size: 18, color: OmiColors.textSecondary),
+              ),
             HeaderCircleButton(
               semanticLabel: 'Search',
               onTap: () {},
@@ -268,6 +279,63 @@ Future<void> _runHome(
   await a.shot(action);
 }
 
+/// Home's feed: two recaps and five conversations, with the capture card in [live]'s state.
+Future<void> _runFeed(AuditRun a, {AuditLive live = AuditLive.idle}) async {
+  final now = DateTime.now();
+  ServerConversation convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
+        id: id,
+        createdAt: at,
+        startedAt: at,
+        finishedAt: at.add(Duration(minutes: minutes)),
+        structured: Structured(title, 'Overview', emoji: emoji, category: 'work'),
+        status: ConversationStatus.completed,
+      );
+  final today = DateTime(now.year, now.month, now.day);
+  final items = [
+    convo('h1', 'Device Connection Troubleshooting', '🔧', today.add(const Duration(hours: 9, minutes: 12)), 2),
+    convo('h2', 'Trying to Identify a Place', '📍', today.subtract(const Duration(hours: 1, minutes: 42)), 3),
+    convo('h3', 'Dinner, a Mall Walk, and Plans for Tomorrow', '🍽️',
+        today.subtract(const Duration(hours: 2, minutes: 50)), 49),
+    convo('h4', 'Omi Reliability Talk on Stage', '🎤', today.subtract(const Duration(hours: 9)), 31),
+    convo('h5', 'Weekly Sync', '📅', today.subtract(const Duration(days: 6, hours: 7)), 32),
+  ];
+  final conversations = ConversationProvider(
+    conversationListFetcher: () async => (items: items, ok: true),
+    isSignedIn: () => true,
+  )
+    ..conversations = items
+    ..groupConversationsByDate();
+  final recaps = [
+    DailySummary(
+      id: 'r1',
+      date: today.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10),
+      createdAt: today,
+      headline: 'Rewrite, equity, and product polish dominated',
+      overview: 'Most of the day went to the v5 rewrite plan and a long equity conversation, '
+          'with a late push on the mobile polish list.',
+      dayEmoji: '🛠️',
+      stats: DayStats(totalConversations: 6, actionItemsCount: 2),
+    ),
+    DailySummary(
+      id: 'r2',
+      date: today.subtract(const Duration(days: 2)).toIso8601String().substring(0, 10),
+      createdAt: today,
+      headline: 'Omi Reliability Talk on Stage',
+      overview: '',
+      stats: DayStats(totalConversations: 4, actionItemsCount: 1),
+    ),
+  ];
+  await a.pump(HomeFrame(recaps: () async => (items: recaps, ok: true), pendingSync: 1), scaffold: false, providers: [
+    ChangeNotifierProvider<DeviceProvider>.value(
+        value: live == AuditLive.idle
+            ? AuditDeviceProvider()
+            : AuditDeviceProvider(connected: true, battery: 89, device: auditPendant)),
+    ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
+    ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+  ]);
+  await a.shot(live == AuditLive.idle ? 'Open the app: Home' : 'Open the app while recording');
+}
+
 Future<void> _runLivePage(AuditRun a, AuditLive live) async {
   await a.pump(const ConversationCapturingPage(), scaffold: false, providers: [
     ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
@@ -286,59 +354,16 @@ final captureScenarios = <AuditScenario>[
     id: 'home-feed',
     title: 'Home: daily recaps, then every conversation',
     page: _home,
-    state: 'Two recaps; five conversations across today, yesterday and last week; nothing recording',
-    run: (a) async {
-      final now = DateTime.now();
-      ServerConversation convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
-            id: id,
-            createdAt: at,
-            startedAt: at,
-            finishedAt: at.add(Duration(minutes: minutes)),
-            structured: Structured(title, 'Overview', emoji: emoji, category: 'work'),
-            status: ConversationStatus.completed,
-          );
-      final today = DateTime(now.year, now.month, now.day);
-      final items = [
-        convo('h1', 'Device Connection Troubleshooting', '🔧', today.add(const Duration(hours: 9, minutes: 12)), 2),
-        convo('h2', 'Trying to Identify a Place', '📍', today.subtract(const Duration(hours: 1, minutes: 42)), 3),
-        convo('h3', 'Dinner, a Mall Walk, and Plans for Tomorrow', '🍽️',
-            today.subtract(const Duration(hours: 2, minutes: 50)), 49),
-        convo('h4', 'Omi Reliability Talk on Stage', '🎤', today.subtract(const Duration(hours: 9)), 31),
-        convo('h5', 'Weekly Sync', '📅', today.subtract(const Duration(days: 6, hours: 7)), 32),
-      ];
-      final conversations = ConversationProvider(
-        conversationListFetcher: () async => (items: items, ok: true),
-        isSignedIn: () => true,
-      )
-        ..conversations = items
-        ..groupConversationsByDate();
-      final recaps = [
-        DailySummary(
-          id: 'r1',
-          date: today.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10),
-          createdAt: today,
-          headline: 'Rewrite, equity, and product polish dominated',
-          overview: 'Most of the day went to the v5 rewrite plan and a long equity conversation, '
-              'with a late push on the mobile polish list.',
-          dayEmoji: '🛠️',
-          stats: DayStats(totalConversations: 6, actionItemsCount: 2),
-        ),
-        DailySummary(
-          id: 'r2',
-          date: today.subtract(const Duration(days: 2)).toIso8601String().substring(0, 10),
-          createdAt: today,
-          headline: 'Omi Reliability Talk on Stage',
-          overview: '',
-          stats: DayStats(totalConversations: 4, actionItemsCount: 1),
-        ),
-      ];
-      await a.pump(HomeFrame(recaps: () async => (items: recaps, ok: true)), scaffold: false, providers: [
-        ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider()),
-        ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(AuditLive.idle)),
-        ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
-      ]);
-      await a.shot('Open the app: Home');
-    },
+    state: 'Two recaps; five conversations across today, yesterday and last week; nothing recording; '
+        'one recording waiting to transcribe (Cloud badge)',
+    run: (a) => _runFeed(a),
+  ),
+  AuditScenario(
+    id: 'home-feed-live',
+    title: 'Home while the pendant records: live card, recaps, conversations',
+    page: _home,
+    state: 'Pendant connected and recording; two recaps; five conversations; one recording waiting (Cloud badge)',
+    run: (a) => _runFeed(a, live: AuditLive.pendant),
   ),
   AuditScenario(
     id: 'home-header',

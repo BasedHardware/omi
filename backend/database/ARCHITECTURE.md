@@ -16,6 +16,9 @@ Do not make a hard-delete primitive call back into conversation orchestration.
   `sync_ledger.py` own job/run leases and durable upload completion. `sync_bridges.py`
   stores revision-checked cleanup receipts on retained donor tombstones; it performs
   no retraction or audio copying. Those effects run in `utils/sync/bridge.py`.
+- `smart_merge.py` owns the smart-merge absorb transaction; `smart_merge_audit.py`
+  stages its content-free `users/{uid}/smart_merge_audit` sibling in that same
+  transaction behind the destructive-operation gate (outside conversation cascades).
 - Domain stores such as `users.py`, `action_items.py`, `memories.py`, `folders.py`,
   `calendar_meetings.py` and `chat.py` own their document operations. Memory ledger,
   projection-repair and account-deletion stores retain their authority fences.

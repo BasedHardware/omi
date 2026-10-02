@@ -13,7 +13,7 @@ import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files, delete_speech_profile_blob
+from utils.other.storage import delete_conversation_audio_files
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -43,6 +43,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
+from utils.conversations.onopen_translation import translate_open_page
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
     merge_typesense_page_with_transcript_hits,
@@ -84,12 +85,12 @@ from utils.conversations.search import (
     clamp_conversation_search_pagination,
     conversation_matches_date_range,
     conversation_matches_speaker,
+    browse_conversations_by_speaker,
     parse_exact_conversation_reference,
     search_conversations,
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
-from utils.manual_speaker_assignments import teaching_segment_ids
-from utils.speaker_identification import extract_speaker_samples
+from utils.speaker_assignment_teaching import commit_manual_assignment
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -518,7 +519,11 @@ def process_in_progress_conversation(
                 outcome='degraded',
                 log=logger,
             )
-            conversation.geolocation = resolve_geolocation(Geolocation(**geolocation))
+            cached_geo = Geolocation.deserialize_safe(geolocation)
+            if cached_geo:
+                conversation.geolocation = resolve_geolocation(cached_geo)
+            else:
+                logger.warning('Skipping malformed cached user geolocation for uid=%s', uid)
 
     # Winner owns ingress. The accepted projection rides the admission CAS:
     # status→processing and client_processing are one write. A later request
@@ -977,6 +982,9 @@ def get_conversation_by_id(
     source: Optional[str] = Query(None, description="Optional provenance constraint for a detail read"),
     include_discarded: bool = Query(True),
     uid: str = Depends(auth.get_current_user_uid),
+    include_translations: bool = Query(False),
+    translation_cursor: Optional[str] = Query(None),
+    response: Response = None,
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
@@ -993,6 +1001,18 @@ def get_conversation_by_id(
         conversation = _enrich_deferred_conversation(uid, conversation)
     else:
         _dispatch_first_open_work(uid, conversation)
+    if include_translations is True:
+        try:
+            conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail='Invalid translation cursor') from error
+        except Exception as error:
+            logger.error('On-open translation unavailable type=%s', type(error).__name__)
+            translation_status, next_cursor = 'unavailable', None
+        if response is not None:
+            response.headers['X-Translation-Status'] = translation_status
+            if next_cursor is not None:
+                response.headers['X-Translation-Cursor'] = next_cursor
     return conversation
 
 
@@ -1197,6 +1217,7 @@ def separate_conversation_from_capture_group(conversation_id: str, uid: str = De
 def patch_conversation_summary(
     conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_summary(uid, conversation_id, data.app_id, data.content)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -1217,6 +1238,7 @@ def patch_conversation_summary(
 def patch_conversation_segment_text(
     conversation_id: str, data: UpdateSegmentTextRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_segment_text(uid, conversation_id, data.segment_id, data.text)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -1511,7 +1533,7 @@ def _assign_manual_speaker(
     is_user = assign_type == 'is_user' and str(value).lower() in {'true', '1'}
     person_id = value if assign_type == 'person_id' else None
     try:
-        raw, resolved, removed, before = conversations_db.assign_conversation_speaker(
+        raw, resolved, removed, before = commit_manual_assignment(
             uid,
             conversation_id,
             person_id=person_id,
@@ -1520,6 +1542,8 @@ def _assign_manual_speaker(
             speaker_id=speaker_id,
             segment_index=segment_index,
             use_for_speech_training=use_for_speech_training,
+            rejection={'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None,
+            background_tasks=background_tasks,
         )
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -1530,17 +1554,6 @@ def _assign_manual_speaker(
     conversation = deserialize_conversation(raw)
     resolved_conversation_id = raw.get('id') or conversation_id
     _drop_display_projection(conversation)
-    if background_tasks is not None:
-        for path in removed:
-            background_tasks.add_task(delete_speech_profile_blob, path)
-        if person_id and use_for_speech_training:
-            background_tasks.add_task(
-                extract_speaker_samples,
-                uid=uid,
-                person_id=person_id,
-                conversation_id=resolved_conversation_id,
-                segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
-            )
     _emit_speaker_identity_confirmed(
         uid=uid,
         conversation_id=resolved_conversation_id,
@@ -1960,6 +1973,31 @@ def search_conversations_endpoint(
             'current_page': exact_page,
             'per_page': exact_per_page,
         }
+
+    if search_request.speaker_id and not (search_request.query or '').strip():
+        # Browsing one speaker's conversations: Typesense cannot filter by speaker, so walk Firestore
+        # (a post-filter over Typesense's first page only ever found the latest 20 conversations).
+        browse_page, browse_per_page = clamp_conversation_search_pagination(
+            search_request.page, search_request.per_page
+        )
+        include_discarded = bool(search_request.include_discarded)
+        start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
+        end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
+        browse_results = browse_conversations_by_speaker(
+            lambda limit, offset: conversations_db.get_conversations_without_photos(
+                uid,
+                limit=limit,
+                offset=offset,
+                include_discarded=include_discarded,
+                start_date=start_dt,
+                end_date=end_dt,
+            ),
+            search_request.speaker_id,
+            page=browse_page,
+            per_page=browse_per_page,
+        )
+        redact_conversations_for_list(browse_results['items'])
+        return browse_results
 
     try:
         search_results = search_conversations(

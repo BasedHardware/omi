@@ -33,7 +33,9 @@ There are exactly two ways out, and they mean different things.
 - Never an X on a pushed page, never a back chevron on something that floats.
 - **System back and the iOS edge swipe always do what the on-screen control does.** A multi-step
   flow makes each step a real route (or a nested `Navigator`) so the swipe steps back one step;
-  `PopScope(canPop: false)` that disables the swipe is a bug unless it guards unsaved input (§4).
+  `PopScope(canPop: false)` that disables the swipe is a bug unless it guards unsaved input (§4)
+  or holds a sheet nothing may dismiss: a required update or a progress sheet that cannot be
+  cancelled (§2).
 - Push with `routeToPage(context, page)`, or `omiPageRoute(builder)` when you need a `Route`
   (`pushReplacement`). Never `PageRouteBuilder` for a push: it has no iOS back swipe
   (`page-route-builder`).
@@ -57,6 +59,9 @@ There are exactly two ways out, and they mean different things.
   widget. It owns the top radius (`OmiRadius.xl`), the 36×4 drag handle, the optional title row
   with a trailing `OmiCloseButton`, safe-area and keyboard insets, and `isScrollControlled`. Never
   a raw `showModalBottomSheet` (`raw-bottom-sheet`) and never a hand-drawn handle.
+- A sheet nothing may dismiss (a required update) passes `isDismissible: false, enableDrag: false`
+  and blocks back with `PopScope`, and has no handle that promises a swipe: `showOmiSheet` drops it
+  itself; `showOmiSurfaceSheet` takes `showDragHandle: false`.
 - A sheet that edits something is `showOmiEditSheet(...)` / `OmiEditSheet(isDirty:, ...)`, with
   explicit Save and Cancel. It owns the swipe-down itself, because the framework's sheet drag pops
   without consulting `PopScope`. Swipe-down, tap-outside, the close X and system back on a **dirty**
@@ -76,7 +81,10 @@ There are exactly two ways out, and they mean different things.
 | On/off setting | `OmiSwitch` in an `OmiSettingsRow` | a checkbox, a purple/green/indigo switch |
 | Settings list | `OmiSettingsGroup` of `OmiSettingsRow`s under an `OmiSectionHeader` | a hand-built row per page |
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
+| Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
+| A level (how sure Omi is, how close a voice is) | `OmiLevelMeter(level: 0–3, semanticsLabel:)` — three neutral steps; a newly filled step animates in (`OmiMotion.standard`) | a percentage, a coloured or traffic-light bar |
 | Loading indicator | `OmiSpinner` (small / regular / large) | `CircularProgressIndicator(` with a local colour and stroke (`raw-spinner`) |
+| Locked card preview | `OmiLockedPreview(child:, label:, onPressed:)` — clips a child-only blur and a translucent surface beneath an `OmiButton.tertiary`; excludes the obscured content from touch and semantics | a dark strip with readable content overlapping its upgrade label |
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label
   next to a checkbox (`OmiCheckboxRow`).
@@ -93,7 +101,7 @@ One policy, and never neither:
 | The delete… | Pattern |
 |---|---|
 | can be deferred and restored — a **memory**, a **task**, a goal | delete at once, `OmiFeedback.undo(...)` for 5 s; **no** confirmation dialog |
-| is a **conversation** | confirm (`showOmiConfirmWithOptOut`, "Don't ask again" allowed) **and** always an Undo toast backed by the provider's pending-delete window, which is at least `OmiFeedbackTiming.undo` (D5) |
+| is a **conversation** | confirm (`showOmiConfirmWithOptOut`, or `showOmiConfirmMenu(offerOptOut: true)` from a swiped row's delete button; "Don't ask again" allowed) **and** always an Undo toast backed by the provider's pending-delete window, which is at least `OmiFeedbackTiming.undo` (D5) |
 | cannot be undone — a local recording file, forget/unpair device, clear chat, sign out, account deletion, bulk delete | `showOmiConfirm(..., destructive: true)` every time; **never** "Don't ask again" |
 
 - The confirm button is a verb naming the action — "Delete", "Forget Device", "Clear Chat",
@@ -108,9 +116,10 @@ One policy, and never neither:
 - A row's long-press opens `showOmiRowMenu(context, title:, actions: [OmiMenuAction(...)])` — the
   same menu shape on conversations, memories and tasks (Open first, Delete last and destructive);
   multi-select is a "Select" entry in that menu, not the long-press itself.
-- Swipe-to-delete follows the same table: `confirmDismiss` shows the confirm for things that cannot
-  be undone; restorable things dismiss and show Undo. A swipe means the same thing on every row of a
-  list.
+- Swipe-to-delete follows the same table: the confirm shows for things that cannot be undone;
+  restorable things dismiss and show Undo. A swipe means the same thing on every row of a list. A
+  conversation row swipes open to a round delete button and asks with `showOmiConfirmMenu` from that
+  button; a long swipe asks straight away.
 
 ## 5. Dialogs
 
@@ -121,12 +130,19 @@ One policy, and never neither:
 |---|---|
 | a question with two answers | `await showOmiConfirm(context, title:, message:, confirmLabel:, destructive:)` → `bool` |
 | the same with "Don't ask again" (only when Undo backs it, §4) | `await showOmiConfirmWithOptOut(...)` → `OmiConfirmResult(confirmed, dontAskAgain)` |
+| a destructive confirm from the button that asked (a row's delete button) | `await showOmiConfirmMenu(context, anchor:, title:, message:, confirmLabel:, offerOptOut:)` → `OmiConfirmResult` |
 | information with one button | `await showOmiAlert(context, title:, message:, okLabel:)` |
 | a widget for `showDialog(builder:)` | `OmiAlertDialog(title:, message:, content:, actions: [OmiDialogAction(...)])` |
+| a dialog that holds a control ("Don't ask again") | `OmiDialogCard(title:, message:, content:, actions:)` |
 
 - Adaptive: `CupertinoAlertDialog` with `CupertinoDialogAction`s on iOS, `AlertDialog` elsewhere.
   Cancel is always present (localized) and always closes. Titles are Title Case questions
   ("Delete Conversation?").
+- A dialog with a control is `OmiDialogCard` on every platform (`showOmiConfirmWithOptOut` uses it):
+  the system alert is a fixed 270 pt and has no room for one. Its width follows the screen (32 pt
+  side margins, at most 400 pt) and its text is centred like the system alerts. Its buttons are
+  plain text in a hairline-split bar, destructive in red, the default bold, and they stack when a
+  label does not fit.
 - Legacy entry points (`ConfirmationDialog`, `OmiConfirmDialog`, `AppDialog`) are thin
   adapters over the same widget; they accept `destructive`. New code calls the functions above.
 
@@ -140,7 +156,7 @@ One policy, and never neither:
 | confirm | `OmiFeedback.confirm(context, msg)` | 1.5 s | the reader just did it ("Saved", "Copied") |
 | info | `OmiFeedback.info(context, msg)` | 4 s | something the reader did not directly cause |
 | error | `OmiFeedback.error(context, msg, actionLabel: l10n.tryAgain, onAction:)` | 8 s, with close | a failure; offer Try Again when retrying can help |
-| undo | `final undone = await OmiFeedback.undo(context, msg, onUndo:)` | 5 s, no close | deferred deletes (§4); commit when it resolves `false` |
+| undo | `final undone = await OmiFeedback.undo(context, msg, onUndo:, icon:)` | 5 s, no close | deferred deletes (§4) and other deferred commits (a voice-card answer, with its own `icon`); commit when it resolves `false` |
 | progress | `OmiFeedback.progress(context, msg)` | until replaced (≤ 1 min) | ongoing work, replaced by its result |
 
 - Neutral surface with a small coloured status icon; never a red or green slab (white on red fails
@@ -252,6 +268,7 @@ for every locale (`hardcoded-text` counts `Text('…')` with letters in it).
 | nothing here / nothing matches | `OmiEmptyState(icon:, title:, message:, action:)` (`glyph: FaIcon(…)` instead of `icon:` where the screen's glyphs are FontAwesome) | Title Case title, one action when it is how the page gets its first row |
 
 - Pull-to-refresh refreshes what the page shows. A failed load always offers Try Again.
+- Home and Tasks use `OmiEmptyState(titleLayoutReference:, messageLayoutReference:)` to reserve enough room for either tab’s title and guidance, keeping their empty-state icons and titles aligned when the text wraps differently. The reference is measured at the available width and text scale; only the current title and message are displayed or announced. Empty Home displays only its icon and title; its reserved guidance space is not displayed or announced. Empty Tasks points to conversation capture and has no creation button.
 
 ## 14. Prompts
 

@@ -830,7 +830,6 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].download_legacy_merged_wav = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].download_playback_artifact = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].upload_playback_artifact = MagicMock()
-        sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
         sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
@@ -887,6 +886,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
         sys.modules['utils.speaker_assignment'].process_speaker_assigned_segments = MagicMock()
         sys.modules['utils.speaker_identification'].detect_speaker_from_text = MagicMock(return_value=None)
+        sys.modules['utils.speaker_identification'].extract_speaker_samples = AsyncMock()
         sys.modules['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock()
         sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
         sys.modules['utils.stt.speaker_embedding'].speaker_embedding_configured = lambda: True

@@ -92,16 +92,27 @@ def normalize_codec_frame(codec: str) -> CodecFrameDecision:
 
 
 OPUS_SUPPORTED_SAMPLE_RATES = frozenset({8000, 12000, 16000, 24000, 48000})
+# Every codec's sample_rate must be one of these standard rates. Released clients send 8000 (the
+# /v4/listen default, pcm8), 16000 (app, desktop, web, firmware) and 48000 (phone calls); the rest
+# are common capture rates kept for third-party integrations. The query parameter is otherwise
+# unbounded and sizes per-session buffers (AudioRingBuffer allocates duration * rate * 2 bytes up
+# front), so an arbitrary value could allocate gigabytes and OOM-kill the listen pod.
+SUPPORTED_SAMPLE_RATES = frozenset({8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000})
+assert OPUS_SUPPORTED_SAMPLE_RATES <= SUPPORTED_SAMPLE_RATES
 
 
 def validate_audio_format(codec: str, sample_rate: int) -> Optional[str]:
     """Reason the client codec/sample_rate cannot initialize a decoder, or None if it can.
 
+    sample_rate must be a standard rate for every codec (see SUPPORTED_SAMPLE_RATES).
     opuslib.Decoder only accepts the standard opus sample rates, and lc3py.Decoder needs a frame
     duration that only the lc3_fs1030 variant carries (bare 'lc3' normalizes to a None duration).
-    Checked before any decoder is constructed so an unsupported request closes the socket cleanly
-    instead of raising OpusError/TypeError out of the ASGI handler as an unclean 1006 drop.
+    Checked before any decoder or buffer is constructed so an unsupported request closes the socket
+    cleanly instead of raising OpusError/TypeError out of the ASGI handler as an unclean 1006 drop.
     """
+    if sample_rate not in SUPPORTED_SAMPLE_RATES:
+        # The reason becomes the WebSocket close reason (max 123 bytes); the query int is unbounded.
+        return f'unsupported sample_rate {str(sample_rate)[:24]}'
     if codec in ('opus', 'opus_fs320') and sample_rate not in OPUS_SUPPORTED_SAMPLE_RATES:
         return f'opus requires a sample rate in {sorted(OPUS_SUPPORTED_SAMPLE_RATES)}, got {sample_rate}'
     if codec == 'lc3':

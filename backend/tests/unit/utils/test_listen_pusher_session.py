@@ -680,6 +680,30 @@ async def test_v2_contiguous_runs_still_share_one_101_frame():
 
 
 @pytest.mark.anyio
+async def test_v2_runs_split_into_separate_101_frames_on_overlap_or_backward_jump():
+    """Overlapping runs or backward jumps must not be concatenated into one frame."""
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000})
+    await session.connect()
+
+    rate = 8000
+    run_a = b'\x05\x00' * rate  # 1 s at 100.0 (ends at 101.0)
+    run_b = b'\x06\x00' * rate  # 1 s at 100.5 (0.5 s overlap)
+    session.audio_bytes_send(run_a, received_at=100.5, conversation_id='conv-1', start_wall=100.0)
+    session.audio_bytes_send(run_b, received_at=101.5, conversation_id='conv-1', start_wall=100.5)
+    await session._audio_bytes_flush()
+
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 2, 'overlapping runs must flush separate frames'
+    first_ts = struct.unpack('d', audio_frames[0][4:12])[0]
+    second_ts = struct.unpack('d', audio_frames[1][4:12])[0]
+    assert first_ts == 100.0
+    assert second_ts == 100.5
+    assert audio_frames[0][12:] == run_a
+    assert audio_frames[1][12:] == run_b
+
+
+@pytest.mark.anyio
 async def test_legacy_runs_without_projection_keep_legacy_grouping():
     """Runs without a projected start (flag-off sessions) never split on gaps."""
     ws = FakePusherWebSocket()

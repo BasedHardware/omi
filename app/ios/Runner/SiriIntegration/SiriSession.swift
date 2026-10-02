@@ -53,6 +53,11 @@ final class SiriSession {
             clear()
         }
         try SafeDefaults.store(.data(try JSONEncoder().encode(config)), forKey: configKey, in: defaults)
+        #if OMI_SIRI_PROBE
+        // The isolated Spotlight simulator fixture has no signed Keychain
+        // entitlement. It never makes a native API request.
+        if SiriDebugProbe.spotlightModeActive { return }
+        #endif
         SecItemDelete(keychainQuery() as CFDictionary)
         if let token = input.token, !token.isEmpty, let expiry = input.tokenExpiresAtMs,
            expiry > (CheckedIntegerConversion.epochMs()) + 60_000 {
@@ -96,6 +101,9 @@ final class SiriSession {
     }
 
     func hasMirroredToken() -> Bool {
+        #if OMI_SIRI_PROBE
+        if SiriDebugProbe.spotlightModeActive { return true }
+        #endif
         var query = keychainQuery()
         query[kSecReturnAttributes as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -112,7 +120,8 @@ final class SiriSession {
         #if OMI_SIRI_PROBE
         // The legacy loopback probe deliberately uses synthetic UIDs. The
         // separate Auth-emulator probe exercises this real authorization gate.
-        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") { return nil }
+        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") ||
+           SiriDebugProbe.spotlightModeActive { return nil }
         #endif
         if FirebaseApp.app() == nil { FirebaseApp.configure() }
         let user = Auth.auth().currentUser
@@ -133,7 +142,8 @@ final class SiriSession {
     /// definitive mismatch outside that lock.
     func hasCurrentFirebaseOwner(_ uid: String) -> Bool {
         #if OMI_SIRI_PROBE
-        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") { return true }
+        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") ||
+           SiriDebugProbe.spotlightModeActive { return true }
         #endif
         return FirebaseApp.app() != nil && Auth.auth().currentUser?.uid == uid
     }

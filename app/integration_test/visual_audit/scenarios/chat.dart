@@ -1,4 +1,6 @@
 // Ask Omi: starters, composing, a reply and its actions, the Chat Apps drawer and Clear Chat.
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -28,6 +30,35 @@ Future<void> _ask(AuditRun a, String question) async {
 
 final chatScenarios = <AuditScenario>[
   AuditScenario(
+    id: 'chat-current-thread',
+    title: 'Ask Omi resumes the current conversation after a provider restart',
+    page: _page,
+    state: 'The existing current-thread endpoint returns one saved assistant reply',
+    run: (a) async {
+      final saved = ServerMessage('saved-answer', DateTime.utc(2026, 9, 29), 'Your existing conversation',
+          MessageSender.ai, MessageType.text, null, false, [], [], []);
+      final body = jsonEncode([saved.toJson()]);
+      a.server.failNext('GET', '/v2/messages', status: 200, body: body);
+      await a.pump(const ChatPage());
+      expect(find.text(saved.text), findsOneWidget);
+      expect(find.byKey(const Key('chat_history')), findsNothing);
+      await a.shot('Load the existing current conversation', step: 'loaded');
+      // Dispose the page and provider, as an app restart does; reload the same server-current thread.
+      await a.tester.pumpWidget(const SizedBox.shrink());
+      await a.settle();
+      a.server.failNext('GET', '/v2/messages', status: 200, body: body);
+      await a.pump(const ChatPage());
+      expect(find.text(saved.text), findsOneWidget);
+      expect(a.server.countOf('GET', '/v2/messages'), 2);
+      await _ask(a, 'Continue this conversation');
+      expect(find.text(saved.text), findsOneWidget);
+      expect(a.server.countOf('POST', '/v2/messages'), 1);
+      expect(a.server.countOf('POST', '/v2/chat-sessions'), 0);
+      expect(a.server.countOf('GET', '/v2/chat-sessions'), 0);
+      await a.shot('Continue the same conversation after restarting', step: 'continued');
+    },
+  ),
+  AuditScenario(
     id: 'chat-ask',
     title: 'Ask Omi: empty, starter, draft, reply and copy',
     page: _page,
@@ -46,7 +77,11 @@ final chatScenarios = <AuditScenario>[
       await a.enterText(find.byKey(_input), 'What did I agree to send Alex?');
       await a.shot('Compose a question', step: 'draft');
       await a.tap(find.byKey(_send));
+      // A normal send continues the server-current conversation without creating or naming a session.
+      await a.settle();
       expect(a.server.countOf('POST', '/v2/messages'), 1);
+      expect(a.server.countOf('POST', '/v2/chat/generate-title'), 0);
+      expect(a.server.countOf('POST', '/v2/chat-sessions'), 0);
       await a.shot('Send and receive the fixture reply', step: 'reply');
       mockCommonPlatformChannels();
       await a.tester.tap(find.bySemanticsLabel('Copy Message'));
@@ -63,13 +98,17 @@ final chatScenarios = <AuditScenario>[
     run: (a) async {
       final memories = MemoriesProvider();
       await a.tester.runAsync(() => memories.createMemory('I prefer morning meetings.', MemoryVisibility.private));
-      await a.pump(const ChatPage(), providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)]);
-      expect(find.text('Summarize my recent activity'), findsOneWidget);
-      expect(find.text('How can I improve?'), findsOneWidget);
+      await a.pump(
+        const ChatPage(),
+        providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)],
+      );
+      expect(find.text('What did I decide today?'), findsOneWidget);
+      expect(find.text('What do I still owe people?'), findsOneWidget);
+      expect(find.text('What did Omi notice?'), findsOneWidget);
       expect(find.text('What can you do for me?'), findsNothing);
       await a.shot('Open empty chat with a saved memory');
-      await a.tap(find.byKey(const Key('chat_starter_activity')));
-      expect(_composer(a), 'Summarize my recent activity');
+      await a.tap(find.byKey(const Key('chat_starter_decide')));
+      expect(_composer(a), 'What did I decide today?');
       expect(a.server.countOf('POST', '/v2/messages'), 0);
     },
   ),
@@ -123,7 +162,10 @@ final chatScenarios = <AuditScenario>[
               ]),
             ),
           ),
-          const ChatSheetTransition(animation: AlwaysStoppedAnimation(0.7), child: ChatPage()),
+          const ChatSheetTransition(
+            animation: AlwaysStoppedAnimation(0.7),
+            child: ChatPage(),
+          ),
         ]),
         scaffold: false,
       );

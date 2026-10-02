@@ -1201,7 +1201,7 @@ class ChatToolExecutor {
           dbQueue: databaseQueue,
           expectedOwnerID: expectedOwnerID,
           timeZone: timeZone)
-      } else if isInsert || isUpdate || isDelete {
+      } else if !readOnly && (isInsert || isUpdate || isDelete) {
         return try await executeWriteQuery(
           trimmed,
           parameters: parameters,

@@ -691,7 +691,10 @@ def upsert_app_payment_link(
         logger.warning(f"App is not found, app_id: {app_id}")
         return None
 
-    app = App(**app_data)
+    app = _safe_build_app(app_data)
+    if not app:
+        logger.warning(f"Cannot upsert payment link for malformed app, app_id: {app_id}")
+        return None
 
     if previous_price and previous_price == price:
         logger.info(f"App price is existing, app_id: {app_id}")
@@ -740,8 +743,14 @@ def is_permit_payment_plan_get(uid: str):
     return True
 
 
-def paid_app(app_id: str, uid: str):
+_PAID_APP_RENEWAL_GRACE_SECONDS = 60 * 60 * 24
+
+
+def paid_app(app_id: str, uid: str, current_period_end: Optional[int] = None):
     expired_seconds = 60 * 60 * 24 * 30  # 30 days
+    if current_period_end:
+        period_remaining = current_period_end - int(datetime.now(timezone.utc).timestamp())
+        expired_seconds = max(period_remaining, 0) + _PAID_APP_RENEWAL_GRACE_SECONDS
     set_user_paid_app(app_id, uid, expired_seconds)
 
 

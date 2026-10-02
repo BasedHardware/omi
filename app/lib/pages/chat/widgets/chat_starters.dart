@@ -1,106 +1,143 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/chat/widgets/chat_entrance.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The empty chat: a greeting in the upper third and a row of starters just above the composer.
-/// Starters stay editable in the composer; choosing one never sends a message.
-class ChatStarters extends StatelessWidget {
+int countConversationsForLocalDay(Iterable<ServerConversation> conversations, DateTime day) {
+  final localDay = day.toLocal();
+  return conversations.where((conversation) {
+    final at = (conversation.startedAt ?? conversation.createdAt).toLocal();
+    return !conversation.discarded && at.year == localDay.year && at.month == localDay.month && at.day == localDay.day;
+  }).length;
+}
+
+class ChatGreeting extends StatelessWidget {
+  const ChatGreeting({super.key, required this.isConnected, this.name = '', this.hour, this.todayCount});
+  final bool isConnected;
+  final String name;
+  final int? hour;
+  final int? todayCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    if (!isConnected) return Center(child: Text(l10n.noInternetConnection, textAlign: TextAlign.center));
+    final h = hour ?? DateTime.now().hour;
+    final greeting = h < 12
+        ? l10n.greetingMorning
+        : h < 18
+            ? l10n.greetingAfternoon
+            : l10n.greetingEvening;
+    final heading = OmiType.title1.copyWith(fontWeight: FontWeight.w600, letterSpacing: -0.7, height: 1.2);
+    final hello = name.trim().isEmpty ? greeting : l10n.greetingWithName(greeting, name.trim());
+    final count = todayCount ??
+        context.select<ConversationProvider?, int>(
+          (provider) => countConversationsForLocalDay(provider?.conversations ?? const [], DateTime.now()),
+        );
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 28, 18, OmiSpacing.md),
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ChatRise(
+              key: const Key('chat_greeting_rise'),
+              child: Semantics(
+                  header: true,
+                  child: Text(
+                    '$hello.',
+                    style: heading,
+                  ))),
+          ChatRise(
+            key: const Key('chat_count_rise'),
+            interval: ChatIntro.countLine,
+            child: _ConversationCount(count: count, style: heading),
+          ),
+          const SizedBox(height: 10),
+          ChatRise(
+              key: const Key('chat_question_rise'),
+              interval: ChatIntro.question,
+              child: Text(l10n.whatDoYouWantToKnow,
+                  style: OmiType.title3.copyWith(
+                      fontWeight: FontWeight.w500, letterSpacing: -0.2, height: 1.2, color: OmiColors.textSecondary))),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ConversationCount extends StatelessWidget {
+  const _ConversationCount({required this.count, required this.style});
+  final int count;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final animation = ChatEntrance.animationOf(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    Widget label(double progress) => Text(
+          l10n.conversationsTodayCount((count * progress).round()),
+          key: const Key('chat_today_count'),
+          style: style.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+        );
+    return Semantics(
+      label: l10n.conversationsTodayCount(count),
+      excludeSemantics: true,
+      child: animation == null || reduceMotion
+          ? label(1)
+          : AnimatedBuilder(
+              animation: animation,
+              builder: (context, _) => label(ChatIntro.countProgress(animation.value)),
+            ),
+    );
+  }
+}
+
+/// Selecting a question fills the draft. Sending remains an explicit action.
+class ChatSuggestions extends StatelessWidget {
+  const ChatSuggestions(
+      {super.key, required this.hasExistingData, required this.isConnected, required this.onSelected});
   final bool hasExistingData;
   final bool isConnected;
   final ValueChanged<String> onSelected;
 
-  /// Overrides the signed-in given name (tests and the visual audit).
-  final String? givenName;
-
-  const ChatStarters({
-    super.key,
-    required this.hasExistingData,
-    required this.isConnected,
-    required this.onSelected,
-    this.givenName,
-  });
-
   @override
   Widget build(BuildContext context) {
-    final name = (givenName ?? SharedPreferencesUtil().givenName).trim();
+    if (!isConnected) return const SizedBox.shrink();
     final l10n = context.l10n;
-    final prompts = hasExistingData ? ['activity', 'improve'] : ['capabilities', 'goal'];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Spacer(flex: 2),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-          child: TweenAnimationBuilder<double>(
-            // The greeting settles in as the sheet lands.
-            tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 520),
-            curve: Curves.easeOutCubic,
-            builder: (context, t, child) => Opacity(
-              opacity: t,
-              child: Transform.translate(offset: Offset(0, 8 * (1 - t)), child: child),
-            ),
-            child: Text(
-              name.isEmpty ? l10n.askAnything : l10n.chatGreeting(name),
-              key: const ValueKey('chat_greeting'),
-              textAlign: TextAlign.center,
-              style: OmiType.title2.copyWith(fontWeight: FontWeight.w500, letterSpacing: -0.3),
-            ),
-          ),
-        ),
-        if (!isConnected)
-          Padding(
-            padding: const EdgeInsets.only(top: OmiSpacing.sm),
-            child: Text(
-              l10n.noInternetConnection,
-              textAlign: TextAlign.center,
-              style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-            ),
-          ),
-        const Spacer(flex: 3),
-        if (isConnected)
-          // A wrap, not a scroller: two starters sit on one row, and under large text the second
-          // moves to its own line instead of hiding off screen.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
-            child: Wrap(
-              spacing: OmiSpacing.xs,
-              children: [
-                for (final kind in prompts)
-                  Semantics(
-                    button: true,
-                    child: GestureDetector(
-                      key: ValueKey('chat_starter_$kind'),
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => onSelected(l10n.chatStarterPrompt(kind)),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
-                        child: Align(
-                          widthFactor: 1,
-                          heightFactor: 1,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                            decoration: BoxDecoration(
-                              color: OmiColors.surface1,
-                              borderRadius: OmiRadius.pillAll,
-                              border: Border.all(color: OmiColors.border),
-                            ),
-                            child: Text(
-                              l10n.chatStarterPrompt(kind),
-                              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                            ),
-                          ),
+    final prompts = hasExistingData
+        ? {'decide': l10n.askSuggestDecide, 'owe': l10n.askSuggestOwe, 'notice': l10n.askSuggestNotice}
+        : {'capabilities': l10n.chatStarterPrompt('capabilities'), 'goal': l10n.chatStarterPrompt('goal')};
+    return LayoutBuilder(
+        builder: (context, constraints) => ChatRise(
+              interval: ChatIntro.suggestions,
+              fadeOnly: true,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+                child: Row(children: [
+                  for (final prompt in prompts.entries)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: OmiSpacing.xs),
+                      child: OutlinedButton(
+                        key: ValueKey('chat_starter_${prompt.key}'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: OmiColors.textPrimary,
+                          minimumSize: const Size(44, 44),
+                          maximumSize: Size(constraints.maxWidth - OmiSpacing.md * 2, double.infinity),
+                          side: BorderSide(color: OmiColors.border),
+                          shape: const StadiumBorder(),
                         ),
+                        onPressed: () => onSelected(prompt.value),
+                        child: Text(prompt.value, style: OmiType.callout),
                       ),
                     ),
-                  ),
-              ],
-            ),
-          ),
-        const SizedBox(height: OmiSpacing.xs),
-      ],
-    );
+                ]),
+              ),
+            ));
   }
 }

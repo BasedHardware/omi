@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/gen/people_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/http/api/goals.dart';
@@ -21,6 +22,7 @@ import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/notifications_settings_page.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/pages/settings/person_detail_page.dart';
 import 'package:omi/pages/settings/phone_call_settings_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -30,6 +32,7 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 
+import '../fakes.dart';
 import '../harness.dart';
 
 const _account = 'Signed-in fixture account; no device connected';
@@ -155,23 +158,68 @@ final settingsPagesScenarios = <AuditScenario>[
   ),
   AuditScenario(
     id: 'settings-people',
-    title: 'People with one enrolled person',
+    title: 'People: pinned group, confidence meters and reasons, filters, Clean Up banner, select',
     page: 'lib/pages/settings/people.dart (UserPeoplePage)',
-    state: 'PeopleProvider holding one person (Alex) with one speech sample',
+    state: 'Eleven people: two pinned and Confirmed, Likely people, and six Unverified misheard names',
     run: (a) async {
-      final people = PeopleProvider(
-          loadPeople: () async => [
-                Person(
-                  id: 'p1',
-                  name: 'Alex',
-                  createdAt: DateTime.utc(2026, 9, 1),
-                  updatedAt: DateTime.utc(2026, 9, 1),
-                  speechSamples: const ['https://example.invalid/sample-0.wav'],
-                  speechSampleTranscripts: const ['Hello there'],
-                ),
-              ]);
+      final people = _auditPeople();
       await a.pump(const UserPeoplePage(), providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
-      await a.shot('Open People with one enrolled person');
+      expect(find.text('Recent'), findsOneWidget);
+      expect(find.byKey(const Key('people_clean_up_banner')), findsOneWidget);
+      await a.shot('Open People');
+      await a.tap(find.byKey(const Key('people_select')));
+      await a.shot('Tap Select: plain selection or Clean Up', step: 'select-menu');
+      await a.tap(find.text('Select People'));
+      await a.tap(find.byKey(const Key('people_select_all')));
+      await a.shot('Select People, then Select All (pinned people are skipped)', step: 'select');
+    },
+  ),
+  AuditScenario(
+    id: 'settings-people-clean-up',
+    title: 'Clean Up: review unsure people, untick one, confirm',
+    page: 'lib/pages/settings/people_clean_up_page.dart (PeopleCleanUpPage)',
+    state: 'Same eleven people; six Unverified and unpinned are preselected',
+    run: (a) async {
+      final people = _auditPeople();
+      await a.pump(const UserPeoplePage(), providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
+      await a.tap(find.byKey(const Key('people_clean_up_review')));
+      await a.tap(find.byKey(const Key('people_clean_up_row_p-ines')));
+      await a.shot('Review, then untick Inês (real, just not heard yet)');
+      await a.tap(find.byKey(const Key('people_clean_up_delete')));
+      await a.shot('Tap Delete 5 People', step: 'confirm');
+    },
+  ),
+  AuditScenario(
+    id: 'settings-people-why',
+    title: 'Why sheet: the evidence behind a person\'s confidence',
+    page: 'lib/pages/settings/widgets/person_confidence.dart (showPersonConfidenceSheet)',
+    state: 'Sam: picked in two suggestions, one correction, three unchecked automatic matches, voice ready',
+    run: (a) async {
+      final people = _auditPeople();
+      await a.pump(const UserPeoplePage(), providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
+      await a.longPress(find.text('Sam Okafor'));
+      await a.shot('Long-press Sam', step: 'row-menu');
+      await a.tap(find.text('Why Likely?'));
+      await a.shot('Tap Why Likely?');
+    },
+  ),
+  AuditScenario(
+    id: 'settings-person-detail',
+    title: 'One person: confidence pill, stats, Pin, voice samples, conversations',
+    page: 'lib/pages/settings/person_detail_page.dart (PersonDetailPage)',
+    state: 'Maya (pinned, Confirmed, voice ready, one sample) with two seeded conversations',
+    run: (a) async {
+      a.server.conversations
+        ..add(auditConversation('pd-1', title: 'Roadmap review').toJson())
+        ..add(auditConversation('pd-2', title: 'Coffee catch-up').toJson());
+      final people = _auditPeople();
+      await people.refresh();
+      await a.pump(const PersonDetailPage(personId: 'p-maya'),
+          providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
+      expect(find.text('Roadmap review'), findsOneWidget);
+      await a.shot('Open Maya from People');
+      await a.tap(find.byTooltip('Delete person'));
+      await a.shot('Tap Delete: a pinned person is named in the confirm', step: 'delete-pinned');
     },
   ),
   AuditScenario(
@@ -286,4 +334,85 @@ class _PlansHostState extends State<_PlansHost> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) => PlansSheet(
       waveController: _wave, notesController: _notes, arrowController: _arrow, arrowAnimation: _arrowAnimation);
+}
+
+PeopleProvider _auditPeople() {
+  final now = DateTime.now();
+  Person person(
+    String id,
+    String name, {
+    int? count,
+    int? daysAgo,
+    String voice = 'not_learned',
+    int samples = 0,
+    String confidence = 'unverified',
+    Map<String, int> reasons = const {'never_confirmed': 1},
+    bool pinned = false,
+    int? labelsToConfirm,
+  }) =>
+      Person(
+        id: id,
+        name: name,
+        createdAt: DateTime.utc(2026, 9, 1),
+        updatedAt: DateTime.utc(2026, 9, 1),
+        voiceReadiness: voice,
+        speechSamples: [for (var i = 0; i < samples; i++) 'https://example.invalid/sample-$i.wav'],
+        speechSampleTranscripts: [for (var i = 0; i < samples; i++) 'Let us move the review to Thursday'],
+        conversationCount: count,
+        lastHeardAt: daysAgo == null ? null : now.subtract(Duration(days: daysAgo)),
+        talkSeconds: count == null ? null : count * 245.0,
+        confidence: confidence,
+        confidenceReasons: [
+          for (final entry in reasons.entries) GeneratedPersonConfidenceReason(code: entry.key, count: entry.value),
+        ],
+        pinned: pinned,
+        labelsToConfirm: labelsToConfirm,
+      );
+  const confirmed = 'confirmed';
+  const likely = 'likely';
+  return PeopleProvider(
+    setPinned: (_, __) async => true,
+    deletePersonById: (_) async => true,
+    loadPeople: () async => [
+      person('p-maya', 'Maya Chen',
+          count: 24,
+          daysAgo: 0,
+          voice: 'ready',
+          samples: 1,
+          confidence: confirmed,
+          reasons: {'manual_labels': 6, 'voice_ready': 1},
+          pinned: true),
+      person('p-jordan', 'Jordan Lee',
+          count: 9,
+          daysAgo: 1,
+          voice: 'ready',
+          samples: 2,
+          confidence: confirmed,
+          reasons: {'manual_labels': 4, 'voice_ready': 1},
+          pinned: true),
+      person('p-because', 'Because', count: 3, daysAgo: 5, reasons: {'auto_unconfirmed': 3, 'never_confirmed': 1}),
+      person('p-sam', 'Sam Okafor',
+          count: 5,
+          daysAgo: 7,
+          voice: 'ready',
+          samples: 1,
+          confidence: likely,
+          reasons: {'card_picks': 2, 'auto_corrected': 1, 'voice_ready': 1, 'auto_unconfirmed': 3},
+          labelsToConfirm: 1),
+      person('p-alex', 'Alex Rivera',
+          count: 4,
+          daysAgo: 9,
+          voice: 'ready',
+          confidence: likely,
+          reasons: {'manual_labels': 1, 'voice_ready': 1},
+          labelsToConfirm: 1),
+      person('p-american', 'American', count: 1, daysAgo: 13, reasons: {'auto_corrected': 1, 'never_confirmed': 1}),
+      person('p-cs', 'Cs', count: 2, daysAgo: 18),
+      person('p-priya', 'Priya Natarajan',
+          count: 2, daysAgo: 31, confidence: likely, reasons: {'manual_labels': 2, 'needs_voice': 1}),
+      person('p-leo', 'Leo', count: 1, daysAgo: 59, reasons: {'auto_unconfirmed': 1, 'never_confirmed': 1}),
+      person('p-ines', 'Inês Moreira', count: 0),
+      person('p-thanks', 'Thanks', count: 0),
+    ],
+  );
 }

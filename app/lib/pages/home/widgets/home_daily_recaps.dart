@@ -57,7 +57,7 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 16, 0),
+          padding: const EdgeInsets.fromLTRB(20, 8, 8, 0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -67,12 +67,12 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
                   child: Semantics(header: true, child: Text(context.l10n.dailyRecaps, style: OmiType.headline)),
                 ),
               ),
-              OmiButton.secondary(label: context.l10n.viewAll, size: OmiButtonSize.compact, onPressed: _openAll),
+              OmiButton.tertiary(label: context.l10n.viewAll, size: OmiButtonSize.compact, onPressed: _openAll),
             ],
           ),
         ),
         Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 4),
+          padding: const EdgeInsets.only(top: 4),
           child: SizedBox(
             height: DailySummaryCard.height,
             child: ListView.builder(
