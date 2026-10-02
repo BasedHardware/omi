@@ -21,10 +21,14 @@ exposes `getRevision` so Flutter engine reconstruction retains the native revisi
 high-water mark. A process latch is not durable across OS process death; if
 storage fails, that error must remain visible to the caller.
 
-The ordinary device mute, Transcribe Later mute, phone stop, and explicit resume
-use this authority. Reconnect, mode changes, file rotation, and session cleanup
-must not create an unmute intent. A manual file cut preserves mute. Automatic
-phone session restarts preserve policy; an explicit phone start can unmute.
+The ordinary device mute, Transcribe Later mute, phone pause and stop, and
+explicit resume use this authority. Reconnect, mode changes, file rotation, and
+session cleanup must not create an unmute intent. A manual file cut preserves
+mute. Automatic phone session restarts preserve policy; an explicit phone start
+can unmute. A user stop of a live phone recording mutes first (retiring its
+callbacks) and then restores the policy the recording started from, so stopping
+the phone never leaves the next source paused; Transcribe Later keeps its mute
+across stop.
 
 Dart callbacks carry the admitted revision. Native BLE/phone batch writers check
 the same policy before admission and recheck the revision at a deferred write.
@@ -36,6 +40,30 @@ old mute preferences. Dart initialization persists that value before deleting
 legacy keys. A malformed or unsupported canonical policy denies capture. The
 legacy fallback is an installation migration, never an alternative writable
 policy; new application code cannot write the old keys.
+
+## Live sources
+
+One source captures at a time: the pendant, the phone microphone, or an Omi
+phone call. `CaptureController` owns the switch, so no caller can mix two
+sources into one transcription socket.
+
+- An explicit phone start while a realtime pendant is streaming (or user-paused)
+  hands the pendant off: its Dart and native BLE streams close, its conversation
+  is processed if it has content, and it resumes by itself when the phone
+  recording stops, in the state it was in (live or paused). `finishCapture`
+  processes the phone conversation before that resume, so the processing request
+  cannot reach the pendant's next conversation.
+- A pendant that connects during a phone recording waits for it the same way,
+  and a pendant (dis)connecting never rolls the phone's capture session.
+- An Omi call (connecting, ringing, active) pauses a streaming pendant without
+  touching the policy or its conversation; the pendant resumes when the call
+  ends. A pendant the user paused stays paused.
+- A phone pause mutes, releases the microphone and keeps the socket and the
+  recording id; resume unmutes and restarts only the microphone, so the
+  conversation continues.
+- Transcribe Later pendants write natively under this single policy and are not
+  handed off; phone and pendant capture in that mode is a known gap that needs a
+  per-source native gate.
 
 ## Boundaries
 

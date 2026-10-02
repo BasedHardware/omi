@@ -43,20 +43,29 @@ separate; use the Developer settings described below.
 Use the hosted server URL as the remote MCP URL:
 
 ```text
-https://api.omi.me/v1/mcp/sse
+https://api.omi.me/v1/mcp
 ```
 
-The endpoint supports MCP Streamable HTTP (`2025-03-26`) and advertises OAuth metadata at:
+The endpoint speaks **Streamable HTTP** (MCP `2026-07-28`; older protocol
+versions remain supported) and advertises OAuth metadata at:
 
 ```text
-https://api.omi.me/.well-known/oauth-protected-resource/v1/mcp/sse
+https://api.omi.me/.well-known/oauth-protected-resource/v1/mcp
 https://api.omi.me/.well-known/oauth-authorization-server
 ```
 
+<Note>
+`https://api.omi.me/v1/mcp/sse` is a permanent compatibility alias of the same
+endpoint (older configs and OAuth metadata keep working). New setups should
+always use the canonical `/v1/mcp` URL above.
+</Note>
+
 OAuth uses browser sign-in, explicit consent, authorization code + PKCE, and refresh
-tokens. Omi currently provides registered public clients for its ChatGPT and Claude setup
-flows. A generic MCP client cannot invent a client ID; if it is not one of those supported
-flows, use an MCP key instead.
+tokens. Omi provides registered public clients for its ChatGPT and Claude setup
+flows. A generic MCP client that supports **Client ID Metadata Documents** can
+also identify itself with an HTTPS `client_id` URL (PKCE); dynamic client
+registration is not offered. Omitting the `scope` parameter grants all
+available read scopes — writes are never included by default.
 
 <Tabs>
   <Tab title="ChatGPT" icon="robot">
@@ -65,7 +74,7 @@ flows, use an MCP key instead.
 
     For the advanced developer-mode fallback, use:
 
-    - **Connection / server URL:** `https://api.omi.me/v1/mcp/sse`
+    - **Connection / server URL:** `https://api.omi.me/v1/mcp`
     - **Authentication:** OAuth
     - **OAuth Client ID:** `omi-chatgpt-prod`
     - **OAuth Client Secret:** leave blank
@@ -77,9 +86,9 @@ flows, use an MCP key instead.
     In Claude, open **Customize → Connectors → Add custom connector**, then use:
 
     - **Name:** Omi Memory
-    - **Remote MCP server URL:** `https://api.omi.me/v1/mcp/sse`
-    - **OAuth Client ID:** `omi-claude-prod`
-    - **OAuth Client Secret:** leave blank
+    - **Remote MCP server URL:** `https://api.omi.me/v1/mcp`
+    - **Advanced settings** (only if asked): OAuth Client ID `omi-claude-prod`,
+      OAuth Client Secret **leave blank**
 
     Click **Add**, then **Connect**, and approve Omi's OAuth consent screen. The Omi macOS
     app exposes the same flow under **Use omi memory anywhere → Claude / Claude Code →
@@ -116,9 +125,9 @@ OAuth flows.
   <Step title="Configure Your Client" icon="sliders">
     Use the following connection details:
 
-    - **Server URL:** `https://api.omi.me/v1/mcp/sse`
+    - **Server URL:** `https://api.omi.me/v1/mcp`
     - **Authorization:** `Bearer omi_mcp_...` (your generated key)
-    - **Transport:** Streamable HTTP (MCP `2025-03-26`)
+    - **Transport:** Streamable HTTP (MCP `2026-07-28`; older protocol versions supported)
 
   </Step>
 </Steps>
@@ -128,15 +137,37 @@ OAuth flows.
 ## Manual hosted-client configuration
 
 <Tabs>
-  <Tab title="Claude Desktop / Claude Code" icon="robot">
-    Claude's cloud connector supports OAuth as described above. For a manual-key fallback,
-    add this to `claude_desktop_config.json`:
+  <Tab title="Claude Desktop" icon="robot">
+    Claude Desktop adds remote MCP servers through the Connectors UI — not a
+    config file. Open **Settings → Connectors → Add custom connector**, then use:
+
+    - **Name:** Omi Memory
+    - **Remote MCP server URL:** `https://api.omi.me/v1/mcp`
+    - **Advanced settings** (only if asked): OAuth Client ID `omi-claude-prod`,
+      OAuth Client Secret **leave blank**
+
+    Click **Add**, then **Connect**, and approve Omi's OAuth consent screen.
+    `claude_desktop_config.json` only launches local stdio `command` servers — it
+    cannot hold a hosted HTTP entry. For a manual-key local path use the
+    [deprecated local stdio fallback](#local-stdio-server-with-uvx-or-python-deprecated).
+  </Tab>
+  <Tab title="Claude Code" icon="terminal">
+    Add the hosted server at user scope:
+
+    ```bash
+    claude mcp add --scope user --transport http omi-memory \
+      https://api.omi.me/v1/mcp \
+      --header "Authorization: Bearer omi_mcp_YOUR_KEY_HERE"
+    ```
+
+    Equivalently, add the entry to `~/.claude.json` directly:
 
     ```json
     {
       "mcpServers": {
         "omi": {
-          "url": "https://api.omi.me/v1/mcp/sse",
+          "type": "http",
+          "url": "https://api.omi.me/v1/mcp",
           "headers": {
             "Authorization": "Bearer omi_mcp_YOUR_KEY_HERE"
           }
@@ -145,39 +176,37 @@ OAuth flows.
     }
     ```
 
-    **Config file location:**
-    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-    - Windows PowerShell: `$env:APPDATA\Claude\claude_desktop_config.json`
-    - Windows cmd: `%APPDATA%\Claude\claude_desktop_config.json`
-
-    Claude Code can be configured at user scope instead:
-
-    ```bash
-    claude mcp add --scope user --transport http omi-memory \
-      https://api.omi.me/v1/mcp/sse \
-      --header "Authorization: Bearer omi_mcp_YOUR_KEY_HERE"
-    ```
-
   </Tab>
   <Tab title="Cursor" icon="i-cursor">
-    Go to **Cursor Settings → MCP** and add a new server:
+    Add a native remote entry to your `mcp.json` (project `.cursor/mcp.json` or
+    global `~/.cursor/mcp.json`) — Streamable HTTP, no SSE transport selection:
 
-    - **Name:** Omi
-    - **Transport:** SSE
-    - **URL:** `https://api.omi.me/v1/mcp/sse`
-    - **Headers:** `Authorization: Bearer omi_mcp_YOUR_KEY_HERE`
+    ```json
+    {
+      "mcpServers": {
+        "omi": {
+          "url": "https://api.omi.me/v1/mcp",
+          "headers": {
+            "Authorization": "Bearer omi_mcp_YOUR_KEY_HERE"
+          }
+        }
+      }
+    }
+    ```
 
   </Tab>
   <Tab title="Codex" icon="terminal">
-    Add this to `~/.codex/config.toml`:
+    Add a native HTTP entry to `~/.codex/config.toml` — no `mcp-remote` bridge:
 
     ```toml
-    [mcp_servers.omi-memory]
-    command = "npx"
-    args = ["-y", "mcp-remote", "https://api.omi.me/v1/mcp/sse", "--header", "Authorization: Bearer omi_mcp_YOUR_KEY_HERE"]
+    [mcp_servers.omi]
+    url = "https://api.omi.me/v1/mcp"
+    http_headers = { Authorization = "Bearer omi_mcp_YOUR_KEY_HERE" }
     ```
 
-    Restart Codex after saving the file.
+    To keep the key out of the file, Codex also supports
+    `bearer_token_env_var = "OMI_MCP_API_KEY"` (requires that env var to be set
+    wherever Codex runs). Restart Codex after saving the file.
   </Tab>
   <Tab title="OpenCode" icon="terminal">
     Add to your project's `opencode.json` (or `~/.config/opencode/opencode.json` globally):
@@ -188,7 +217,7 @@ OAuth flows.
       "mcp": {
         "omi": {
           "type": "remote",
-          "url": "https://api.omi.me/v1/mcp/sse",
+          "url": "https://api.omi.me/v1/mcp",
           "enabled": true,
           "headers": {
             "Authorization": "Bearer {env:OMI_MCP_API_KEY}"
@@ -225,31 +254,53 @@ OAuth flows.
   </Tab>
   <Tab title="Custom Client" icon="code">
     Any MCP client that supports **Streamable HTTP** and custom authorization headers can
-    use the manual-key path:
+    use the manual-key path. With the `2026-07-28` protocol there is no
+    initialize handshake or session ID — each request carries the protocol
+    version and client identity in `_meta`, plus the `MCP-Protocol-Version` /
+    `Mcp-Method` headers. Discovery starts with `server/discover`:
 
     ```bash
-    # Endpoint
-    POST https://api.omi.me/v1/mcp/sse
-
-    # Headers
+    POST https://api.omi.me/v1/mcp
     Authorization: Bearer omi_mcp_YOUR_KEY_HERE
     Content-Type: application/json
-    Accept: text/event-stream  # for SSE responses
+    MCP-Protocol-Version: 2026-07-28
+    Mcp-Method: server/discover
 
-    # Body (JSON-RPC 2.0)
-    {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "server/discover",
+      "params": {},
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/clientInfo": {"name": "my-client", "version": "1.0"}
+      }
+    }
     ```
+
+    Older handshake clients still work: send an `initialize` request with your
+    `protocolVersion` (e.g. `2025-03-26`) and the server answers it in that
+    protocol revision — no `Mcp-Session-Id` management or GET stream is
+    required.
 
   </Tab>
 </Tabs>
 
 ---
 
-## Local stdio server with uvx or Python
+## Local stdio server with uvx or Python (deprecated)
 
-Run the MCP server locally over the standard input/output transport. `uvx` downloads and
-runs the published package without a separate installation. Python 3.11.6 or newer is
-required.
+<Warning>
+The local `mcp-server-omi` package is **deprecated** — the hosted endpoint above
+is the supported path for every client that accepts a remote URL. Keep this
+section only for clients that genuinely require a local stdio process or a
+self-hosted backend.
+</Warning>
+
+Run the MCP server locally over the standard input/output transport. `uvx` (which
+ships with [uv](https://docs.astral.sh/uv/)) downloads and runs the published
+package without a separate installation. Python 3.11.6 or newer is required.
 
 <Tabs>
   <Tab title="uvx" icon="terminal">
@@ -303,9 +354,10 @@ required.
 
 ---
 
-## Local stdio server with Docker
+## Local stdio server with Docker (deprecated)
 
-If you prefer to run the MCP server locally:
+Migration-only, like the uvx path above — prefer the hosted endpoint. If you
+must run the MCP server locally:
 
 <Steps>
   <Step title="Generate an API Key" icon="key">
@@ -351,13 +403,16 @@ docker run --rm -i \
 
 ## Custom Backend URL
 
-If you are self-hosting the Omi backend:
+Only applies to the **local `mcp-server-omi` package** above when self-hosting
+the Omi backend. The package appends REST segments (`memories`,
+`conversations/...`) directly, so the value **must end with `/v1/mcp/`**:
 
 ```bash
-export OMI_API_BASE_URL="https://your-backend-url.com"
+export OMI_API_BASE_URL="https://your-backend-url.com/v1/mcp/"
 ```
 
 <Note>
-  Only needed for self-hosted Omi instances. The default URL points to the
-  official Omi API.
+  This is the *REST base* for the self-hosted package — distinct from the
+  hosted MCP endpoint remote clients connect to (`https://api.omi.me/v1/mcp`,
+  no trailing slash). Only needed for self-hosted Omi instances.
 </Note>

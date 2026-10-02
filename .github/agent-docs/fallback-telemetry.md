@@ -15,7 +15,7 @@ ELSE (pure cache miss, expected soft path with no mode change):
 
 | Field | Values |
 |-------|--------|
-| `component` / `area` | closed enum (`sync_dispatch`, `pusher`, `realtime_hub`, `ptt_cascade`, …) → else `other` |
+| `component` / `area` | closed enum (`sync_dispatch`, `pusher`, `stt_selection`, `stt_live_session`, `realtime_hub`, `ptt_cascade`, …) → else `other` |
 | `from` / `to` | closed enums or `none` |
 | `reason` | shared bounded set (`enqueue_failed`, `circuit_open`, `byok`, …) → else `other` |
 | `outcome` | `recovered` (full UX restored) \| `degraded` (continues with hit) \| `exhausted` (no path left) |

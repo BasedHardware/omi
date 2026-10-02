@@ -58,11 +58,14 @@ final class ShortcutSettingsTests: XCTestCase {
     XCTAssertEqual(ShortcutSettings.defaultAskOmiShortcut.displayTokens, ["⌘", "O"])
   }
 
-  func testAskOmiPresetsShowCommandOFirst() {
-    XCTAssertEqual(ShortcutSettings.askOmiPresets.first, ShortcutSettings.askOmiCommandOShortcut)
+  func testAskOmiPresetsMatchOnboardingOrder() {
+    // Onboarding recommends ⌃⌘O first; Settings must list it, first, so the choice never reads as
+    // "Custom" afterwards.
+    XCTAssertEqual(ShortcutSettings.askOmiPresets.first, ShortcutSettings.askOmiControlCommandOShortcut)
     XCTAssertEqual(
       ShortcutSettings.askOmiPresets,
       [
+        ShortcutSettings.askOmiControlCommandOShortcut,
         ShortcutSettings.askOmiCommandOShortcut,
         ShortcutSettings.askOmiCommandReturnShortcut,
         ShortcutSettings.askOmiCommandShiftReturnShortcut,

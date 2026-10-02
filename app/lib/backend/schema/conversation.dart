@@ -6,12 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/backend/schema/capture_group.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Grep-style transcript hit from conversation search (seek-to-moment).
 class TranscriptMatchSnippet {
@@ -441,8 +444,24 @@ class ServerConversation {
   String? folderId;
   ConversationVisibility visibility;
 
+  /// The app keeps its historical private fallback for unknown wire values;
+  /// Siri excludes that row instead of inferring the owner's visibility.
+  final bool siriVisibilityValid;
+
   /// Search-only transcript evidence for find-and-play.
   final List<TranscriptMatchSnippet> matchSnippets;
+
+  /// The event this recording belongs to when other devices recorded it too;
+  /// null for a conversation captured by one surface.
+  final CaptureGroup? captureGroup;
+
+  /// Whether and which speaker ids are people; null on conversations processed before it existed.
+  final ConversationSpeakers? speakerResolution;
+
+  /// Server-authored: summarization failed on a transient error after its retries and a
+  /// reprocess can still succeed. Absent (false) on every other row, including rows where the
+  /// model ran and found nothing to summarize.
+  final bool summaryRetryable;
 
   // local label
   bool isNew = false;
@@ -471,7 +490,11 @@ class ServerConversation {
     this.starred = false,
     this.folderId,
     this.visibility = ConversationVisibility.private_,
+    this.siriVisibilityValid = true,
     this.matchSnippets = const [],
+    this.captureGroup,
+    this.speakerResolution,
+    this.summaryRetryable = false,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -504,6 +527,8 @@ class ServerConversation {
       structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
+      siriVisibilityValid: json['siri_visibility_valid'] != false &&
+          (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
     );
   }
@@ -513,6 +538,7 @@ class ServerConversation {
     Structured? structured,
     Geolocation? geolocation,
     bool deleted = false,
+    bool siriVisibilityValid = true,
     List<TranscriptMatchSnippet>? matchSnippets,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
@@ -549,7 +575,12 @@ class ServerConversation {
       starred: generated.starred,
       folderId: generated.folderId,
       visibility: ConversationVisibility.fromString(generated.visibility),
+      siriVisibilityValid: siriVisibilityValid,
       matchSnippets: snippets,
+      captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
+      speakerResolution:
+          generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
+      summaryRetryable: generated.summaryRetryable == true,
     );
   }
 
@@ -570,7 +601,9 @@ class ServerConversation {
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
       'deleted': deleted,
-      'source': source?.toString(),
+      // Cache/webhook payloads use the wire value (for example `sdcard`),
+      // not Dart's enum rendering (`ConversationSource.sdcard`).
+      'source': source?.name,
       'language': language,
       'external_data': externalIntegration?.toJson(),
       'calendar_event': calendarEvent?.toJson(),
@@ -579,6 +612,10 @@ class ServerConversation {
       'starred': starred,
       'folder_id': folderId,
       'visibility': visibility.value,
+      if (!siriVisibilityValid) 'siri_visibility_valid': false,
+      'capture_group': captureGroup?.toJson(),
+      'speaker_resolution': speakerResolution?.toJson(),
+      if (summaryRetryable) 'summary_retryable': true,
     };
   }
 
@@ -608,6 +645,9 @@ class ServerConversation {
       starred: starred,
       folderId: folderId,
       visibility: visibility.value,
+      captureGroup: captureGroup?.toGenerated(),
+      speakerResolution: speakerResolution?.toGenerated(),
+      summaryRetryable: summaryRetryable ? true : null,
     );
   }
 
@@ -644,12 +684,12 @@ class ServerConversation {
 
   Color getTagTextColor() {
     if (source == ConversationSource.screenpipe) return Colors.deepPurple;
-    return Colors.white;
+    return OmiColors.textPrimary;
   }
 
   Color getTagColor() {
     if (source == ConversationSource.screenpipe) return Colors.white;
-    return const Color(0xFF35343B);
+    return OmiColors.categorySurface;
   }
 
   VoidCallback? onTagPressed(BuildContext context) {
@@ -678,19 +718,37 @@ class ServerConversation {
     return _getDurationInSecondsByTranscripts();
   }
 
-  /// Calculates the conversation duration in seconds based on transcript segments
+  /// Calculates the conversation duration in seconds based on transcript segments.
+  ///
+  /// Computes the speech span (lastEndTime - firstStartTime) so that speech
+  /// recorded late in an ongoing continuous audio stream is not inflated by the
+  /// stream's session start offset (#18520).
   int _getDurationInSecondsByTranscripts() {
     if (transcriptSegments.isEmpty) return 0;
 
-    // Find the last segment's end time
-    double lastEndTime = 0;
+    double firstStartTime = transcriptSegments.first.start;
+    double lastEndTime = transcriptSegments.first.end;
+
     for (var segment in transcriptSegments) {
+      if (segment.start < firstStartTime) {
+        firstStartTime = segment.start;
+      }
       if (segment.end > lastEndTime) {
         lastEndTime = segment.end;
       }
     }
 
-    return lastEndTime.toInt();
+    if (firstStartTime < 0) firstStartTime = 0;
+    final duration = lastEndTime - firstStartTime;
+    return duration > 0 ? duration.toInt() : 0;
+  }
+
+  /// Show "Summary failed · Retry" only when the server says a reprocess can succeed
+  /// ([summaryRetryable]). Discarded, locked and in-flight rows stay quiet.
+  bool get showsSummaryRetry {
+    if (discarded || isLocked) return false;
+    if (status != ConversationStatus.completed) return false;
+    return summaryRetryable;
   }
 
   /// Check if this conversation has audio files available

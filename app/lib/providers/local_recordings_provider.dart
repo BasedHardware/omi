@@ -44,6 +44,14 @@ class LocalRecordingsProvider extends ChangeNotifier {
   static const String _jobsPrefKey = 'localRecordingJobs';
   Map<String, String> _jobs = {};
 
+  static const String _ownersFileName = 'omibatch_owners.json';
+  Set<String> _ownedNames = {};
+
+  @visibleForTesting
+  Future<SyncJobFetch> Function(String jobId)? jobStatusFetcherOverride;
+
+  Future<SyncJobFetch> Function(String jobId) get _jobStatusFetcher => jobStatusFetcherOverride ?? fetchSyncJobStatus;
+
   // Exact per-file duration (seconds), computed once by walking the frame
   // prefixes. Finalized .bin files are immutable, so this is cached by fileName.
   final Map<String, int> _secondsByFile = {};
@@ -80,15 +88,19 @@ class LocalRecordingsProvider extends ChangeNotifier {
     _jobs = _loadJobs();
     // Trigger (a): auto-upload offline-fallback recordings once the initial scan
     // is in. Trigger (b): whenever connectivity is (re)gained.
-    refresh().then((_) => _maybeAutoUpload());
+    refresh().then((_) {
+      _maybeAutoUpload();
+      if (_ownedJobs().isNotEmpty) {
+        _startReconcileTimer();
+        _reconcile();
+      }
+    });
     _connectivitySub = ConnectivityService().onConnectionChange.listen((connected) {
       if (connected) _maybeAutoUpload();
     });
-    if (_jobs.isNotEmpty) {
-      _startReconcileTimer();
-      _reconcile();
-    }
   }
+
+  Map<String, String> _ownedJobs() => Map.fromEntries(_jobs.entries.where((entry) => _ownedNames.contains(entry.key)));
 
   /// Wired from main.dart so a finished transcription can surface its
   /// conversation into the list the user is looking at.
@@ -128,14 +140,30 @@ class LocalRecordingsProvider extends ChangeNotifier {
         _recordings = [];
         return;
       }
+      final uid = SharedPreferencesUtil().uid;
+      final ownersFile = File('${dir.path}/$_ownersFileName');
+      final owners = _readOwners(ownersFile);
+      if (owners == null) {
+        _recordings = [];
+        _ownedNames = {};
+        return;
+      }
+      var ownersChanged = false;
       final list = <LocalRecording>[];
       final seen = <String>{};
+      final onDisk = <String>{};
       for (final entity in dir.listSync().whereType<File>()) {
         final name = entity.path.split('/').last;
         // Only batch recordings (audio_omibatch* — includes the omibatchlimitless
         // marker) — never offline-sync WAL flushes, which share this directory and
         // the same audio_*.bin naming.
         if (!name.startsWith('audio_$batchRecordingDevice') || !name.endsWith('.bin')) continue;
+        onDisk.add(name);
+        if (uid.isNotEmpty && !owners.containsKey(name)) {
+          owners[name] = uid;
+          ownersChanged = true;
+        }
+        if (owners[name] != uid) continue;
         final size = await entity.length();
         seen.add(name);
         final rec = LocalRecording.fromFile(
@@ -149,8 +177,12 @@ class LocalRecordingsProvider extends ChangeNotifier {
         );
         if (rec != null) list.add(rec);
       }
+      final ownerCount = owners.length;
+      owners.removeWhere((name, _) => !onDisk.contains(name));
+      if (ownersChanged || owners.length != ownerCount) await _writeOwners(ownersFile, owners);
       list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
       _recordings = list;
+      _ownedNames = seen;
       _secondsByFile.removeWhere((k, _) => !seen.contains(k));
     } catch (e) {
       Logger.error('LocalRecordings: scan failed: $e');
@@ -158,7 +190,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
       _isLoading = false;
       // Resume polling if recordings are still awaiting transcription (e.g. the
       // timer was dropped while backgrounded and we just resumed).
-      if (_jobs.isNotEmpty) _startReconcileTimer();
+      if (_ownedJobs().isNotEmpty) _startReconcileTimer();
       if (!_disposed) notifyListeners();
     }
   }
@@ -329,24 +361,30 @@ class LocalRecordingsProvider extends ChangeNotifier {
   /// Poll every pending job once. `completed` → delete file + surface the
   /// conversation. `failed`/`notFound` → drop the job; the file stays on disk
   /// so it reverts to a pending, retriable recording.
+  @visibleForTesting
+  Future<void> reconcileForTesting() => _reconcile();
+
   Future<void> _reconcile() async {
-    if (_jobs.isEmpty) {
+    final owned = _ownedJobs();
+    if (owned.isEmpty) {
       _stopReconcileTimer();
       return;
     }
+    final uid = SharedPreferencesUtil().uid;
     final newIds = <String>[];
     final updIds = <String>[];
     bool changed = false;
 
-    for (final entry in Map<String, String>.from(_jobs).entries) {
+    for (final entry in owned.entries) {
       final name = entry.key;
       final jobId = entry.value;
       SyncJobFetch fetch;
       try {
-        fetch = await fetchSyncJobStatus(jobId);
+        fetch = await _jobStatusFetcher(jobId);
       } catch (_) {
         continue; // transient — retry next tick
       }
+      if (SharedPreferencesUtil().uid != uid) return;
       switch (fetch.outcome) {
         case SyncJobFetchOutcome.transient:
           break;
@@ -373,9 +411,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
     }
 
     if (changed) await _saveJobs();
+    if (SharedPreferencesUtil().uid != uid) return;
     if (newIds.isNotEmpty || updIds.isNotEmpty) await _surface(newIds, updIds);
     await refresh();
-    if (_jobs.isEmpty) _stopReconcileTimer();
+    if (_ownedJobs().isEmpty) _stopReconcileTimer();
   }
 
   Future<void> _surface(List<String> newIds, List<String> updatedIds) async {
@@ -488,6 +527,44 @@ class LocalRecordingsProvider extends ChangeNotifier {
   }
 
   // ───────────────────────── sidecar ─────────────────────────
+
+  Future<void> _writeOwners(File file, Map<String, String> owners) async {
+    final temp = File('${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
+    final handle = await temp.open(mode: FileMode.write);
+    try {
+      await handle.writeString(jsonEncode(owners));
+      await handle.flush();
+    } finally {
+      await handle.close();
+    }
+    await temp.rename(file.path);
+  }
+
+  Map<String, String>? _readOwners(File file) {
+    try {
+      if (!file.existsSync()) return {};
+      final decoded = jsonDecode(file.readAsStringSync());
+      if (decoded is! Map<String, dynamic>) return null;
+      final owners = <String, String>{};
+      for (final entry in decoded.entries) {
+        final value = entry.value;
+        if (value is! String) return null;
+        owners[entry.key] = value;
+      }
+      return owners;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void clearUserData() {
+    _recordings = [];
+    _jobs = {};
+    _failedName = null;
+    _autoFailures.clear();
+    _stopReconcileTimer();
+    if (!_disposed) notifyListeners();
+  }
 
   Map<String, String> _loadJobs() {
     try {

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-mobile-store-build-code-collision",
+  "violated_contract": "A mobile production release must publish the tag's marketing version under a store build number no upload has already consumed. Google Play version codes are global and immutable, so a prod lane that pins the tag's build number without checking the live store floor collides with codes the internal-auto lane keeps allocating (floor + 1) after the tag is cut, and the publish is rejected with 'Version code has already been used'.",
+  "canonical_prevention": "Resolve the prod Android build number against the live Play floor at build time: keep the tag number while it is above the floor, otherwise allocate floor + 1, and fail closed on lookup or parse errors by reusing the auto lane's strict store-output parsing. The tag stays authoritative for the marketing version and as the minimum build number.",
+  "canonical_prevention_artifact": [
+    "app/scripts/mobile_play_build_number_test.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "codemagic.yaml",
+    "app/scripts/mobile_play_build_number.py",
+    "app/scripts/mobile_store_version.py",
+    "app/scripts/mobile_release_identity.py"
+  ],
+  "status": "open"
+}

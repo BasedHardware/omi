@@ -118,9 +118,17 @@ def _vertex_request(request: Mapping[str, Any]) -> dict[str, Any]:
     output_limit = _output_limit(request)
     if output_limit is not None:
         generation_config['maxOutputTokens'] = output_limit
-    thinking_budget = _thinking_budget(request)
-    if thinking_budget is not None:
-        generation_config['thinkingConfig'] = {'thinkingBudget': thinking_budget}
+    google = request.get('google')
+    config = google.get('thinking_config') if isinstance(google, Mapping) else None
+    level = config.get('thinking_level') if isinstance(config, Mapping) else None
+    if level is not None:
+        if level not in {'minimal', 'low', 'medium', 'high'}:
+            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+        generation_config['thinkingConfig'] = {'thinkingLevel': level}
+    else:
+        thinking_budget = _thinking_budget(request)
+        if thinking_budget is not None:
+            generation_config['thinkingConfig'] = {'thinkingBudget': thinking_budget}
     response_format = request.get('response_format')
     if isinstance(response_format, Mapping):
         format_type = response_format.get('type')

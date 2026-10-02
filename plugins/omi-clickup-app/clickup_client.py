@@ -429,11 +429,15 @@ class ClickUpClient:
 
                             has_time = 'T' in due_str
                             if has_time:
-                                dt_naive = datetime.fromisoformat(due_str.replace('Z', ''))
-                                dt = tz.localize(dt_naive) if tz else dt_naive
+                                iso = due_str[:-1] + '+00:00' if due_str.endswith('Z') else due_str
+                                parsed = datetime.fromisoformat(iso)
                             else:
-                                dt_naive = datetime.fromisoformat(due_str + 'T23:59:59')
-                                dt = tz.localize(dt_naive) if tz else dt_naive
+                                parsed = datetime.fromisoformat(due_str + 'T23:59:59')
+
+                            if parsed.tzinfo is not None:
+                                dt = parsed
+                            else:
+                                dt = tz.localize(parsed) if tz else parsed
 
                             due_timestamp = int(dt.timestamp() * 1000)
                             task_data["due_date"] = due_timestamp

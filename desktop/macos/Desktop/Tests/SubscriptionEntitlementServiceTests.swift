@@ -157,6 +157,151 @@ final class SubscriptionEntitlementServiceTests: XCTestCase {
     XCTAssertFalse(ManagedPlanGateHTTP.isPlanGated(status: 403, data: detail))
   }
 
+  func testManagedPlanGateHTTPTypedMintIgnoresProsePlanGated() {
+    let body = Data(
+      #"{"error":"trial_expired","detail":"This failure is not plan_gated; the chat trial expired."}"#
+        .utf8)
+    XCTAssertFalse(ManagedPlanGateHTTP.isPlanGatedTypedJSON(status: 402, data: body))
+    XCTAssertFalse(
+      ManagedPlanGateHTTP.isPlanGated(
+        status: 402,
+        payload: APIErrorPayload(
+          error: "trial_expired",
+          code: nil,
+          message: nil,
+          detail: "This failure is not plan_gated; the chat trial expired.",
+          provider: nil,
+          reason: nil,
+          backendRoute: nil,
+          upstreamStatusCode: nil,
+          retryable: nil,
+          retryAfterSeconds: nil)))
+    let error = RealtimeTokenMintError(
+      statusCode: 402,
+      healthError: .paywalled(message: "trial_expired"),
+      payload: APIErrorPayload(
+        error: "trial_expired",
+        code: nil,
+        message: nil,
+        detail: "This failure is not plan_gated; the chat trial expired.",
+        provider: nil,
+        reason: nil,
+        backendRoute: nil,
+        upstreamStatusCode: nil,
+        retryable: nil,
+        retryAfterSeconds: nil),
+      responseBody: body)
+    XCTAssertFalse(ManagedPlanGateHTTP.isPlanGatedMint(error))
+    XCTAssertFalse(ManagedPlanGateHTTP.isPlanGatedWarmFailure(error))
+    // Legacy Gemini/lane scanner still matches substring containment. The hub
+    // mint path must not use it.
+    XCTAssertTrue(ManagedPlanGateHTTP.isPlanGated(status: 402, data: body))
+  }
+
+  func testManagedPlanGateHTTPTypedCodeTrimsAndLowercases() {
+    XCTAssertTrue(ManagedPlanGateHTTP.isTypedPlanGatedCode(" Plan_Gated "))
+    XCTAssertFalse(ManagedPlanGateHTTP.isTypedPlanGatedCode("not plan_gated"))
+    XCTAssertTrue(
+      ManagedPlanGateHTTP.isPlanGatedTypedJSON(
+        status: 402, data: Data(#"{"code":"PLAN_GATED"}"#.utf8)))
+    XCTAssertTrue(
+      ManagedPlanGateHTTP.isPlanGatedTypedJSON(
+        status: 402, data: Data(#"{"detail":{"error":"plan_gated"}}"#.utf8)))
+  }
+
+  func testMintErrorDescriptionDoesNotSurfaceResponseBody() {
+    let marker = "raw-mint-body-must-not-surface"
+    let body = Data(#"{"detail":{"error":"plan_gated","secret":"\#(marker)"}}"#.utf8)
+    let error = RealtimeTokenMintError(
+      statusCode: 402,
+      healthError: .paywalled(message: "plan_gated"),
+      payload: nil,
+      responseBody: body)
+    let description = error.errorDescription ?? ""
+    XCTAssertFalse(description.contains(marker))
+    XCTAssertFalse(description.contains(String(data: body, encoding: .utf8) ?? marker))
+  }
+
+  func testManagedPlanGateHTTPRecognizesMintBodyWhenPayloadDecodeFails() {
+    let body = Data(#"{"detail":{"error":"plan_gated","plan_type":"basic"}}"#.utf8)
+    let error = RealtimeTokenMintError(
+      statusCode: 402,
+      healthError: .paywalled(message: "plan_gated"),
+      payload: nil,
+      responseBody: body)
+    XCTAssertTrue(ManagedPlanGateHTTP.isPlanGatedMint(error))
+    XCTAssertTrue(ManagedPlanGateHTTP.isPlanGatedWarmFailure(error))
+    XCTAssertTrue(
+      ManagedPlanGateHTTP.isPlanGatedWarmFailure(GeminiClient.GeminiClientError.planGated))
+    XCTAssertFalse(
+      ManagedPlanGateHTTP.isPlanGatedWarmFailure(
+        CredentialHealthError.backendTransient(statusCode: 500, message: "boom")))
+  }
+
+  func testManagedPlanGateLatchSkipsWhenDecisionIsPlanGated() {
+    var latch = ManagedPlanGateLatch()
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    XCTAssertTrue(
+      latch.shouldSkipAutomaticManagedWork(decision: .planGated, now: now))
+    XCTAssertFalse(
+      latch.shouldSkipAutomaticManagedWork(decision: .allowManagedProactivity, now: now))
+  }
+
+  func testManagedPlanGateLatchClearsWhenDecisionBecomesAllow() {
+    var latch = ManagedPlanGateLatch()
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    _ = latch.shouldSkipAutomaticManagedWork(decision: .planGated, now: now)
+    latch.latchServerDenial(at: now)
+    XCTAssertTrue(latch.shouldSkipAutomaticManagedWork(decision: .planGated, now: now))
+    XCTAssertFalse(
+      latch.shouldSkipAutomaticManagedWork(decision: .allowManagedProactivity, now: now))
+    XCTAssertFalse(latch.serverDenied)
+  }
+
+  func testManagedPlanGateLatchExpiresAfterBoundedLifetime() {
+    var latch = ManagedPlanGateLatch()
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    _ = latch.shouldSkipAutomaticManagedWork(decision: .allowManagedProactivity, now: now)
+    latch.latchServerDenial(at: now)
+    XCTAssertTrue(
+      latch.shouldSkipAutomaticManagedWork(decision: .allowManagedProactivity, now: now))
+    XCTAssertFalse(
+      latch.shouldSkipAutomaticManagedWork(
+        decision: .allowManagedProactivity,
+        now: now.addingTimeInterval(ManagedPlanGateLatch.defaultLifetime)))
+    XCTAssertFalse(latch.serverDenied)
+  }
+
+  func testManagedPlanGateLatchLifetimeDoesNotUseSleep() {
+    XCTAssertEqual(ManagedPlanGateLatch.defaultLifetime, 10 * 60)
+  }
+
+  func testManagedPlanGateLatchResetsWhenOwnerChanges() {
+    var latch = ManagedPlanGateLatch()
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    XCTAssertFalse(
+      latch.shouldSkipAutomaticManagedWork(
+        decision: .allowManagedProactivity, now: now, ownerID: "user-a"))
+    latch.latchServerDenial(at: now, ownerID: "user-a")
+    XCTAssertTrue(
+      latch.shouldSkipAutomaticManagedWork(
+        decision: .allowManagedProactivity, now: now, ownerID: "user-a"))
+    XCTAssertFalse(
+      latch.shouldSkipAutomaticManagedWork(
+        decision: .allowManagedProactivity, now: now, ownerID: "user-b"))
+    XCTAssertFalse(latch.serverDenied)
+  }
+
+  func testManagedPlanGateLatchKeepsDenialWhenFirstObservationIsAllow() {
+    var latch = ManagedPlanGateLatch()
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    latch.latchServerDenial(at: now, ownerID: "user-a")
+    XCTAssertTrue(
+      latch.shouldSkipAutomaticManagedWork(
+        decision: .allowManagedProactivity, now: now, ownerID: "user-a"))
+    XCTAssertTrue(latch.serverDenied)
+  }
+
   private static func decodeSubscription(plan: String, features: [String] = []) throws
     -> UserSubscriptionResponse
   {

@@ -99,11 +99,19 @@ def get_upsert_segment_to_transcript_plugin(
     if not raw:
         segments = []
     else:
+        if isinstance(raw, bytes):
+            raw = raw.decode('utf-8')
         try:
-            parsed = ast.literal_eval(raw.decode('utf-8') if isinstance(raw, bytes) else raw)
+            parsed = ast.literal_eval(raw)
+            if isinstance(parsed, list):
+                segments = [
+                    elem for elem in parsed
+                    if isinstance(elem, dict) and all(k in elem for k in ('text', 'speaker', 'is_user', 'start', 'end'))
+                ]
+            else:
+                segments = []
         except (ValueError, SyntaxError):
-            parsed = None
-        segments = [s for s in parsed if isinstance(s, dict)] if isinstance(parsed, list) else []
+            segments = []
 
     segments.extend([segment.dict() for segment in new_segments])
 
@@ -116,4 +124,10 @@ def get_upsert_segment_to_transcript_plugin(
     # expire 5m
     r.expire(key, 60 * 5)
 
-    return [TranscriptSegment(**segment) for segment in segments]
+    valid_result = []
+    for segment in segments:
+        try:
+            valid_result.append(TranscriptSegment(**segment))
+        except Exception:
+            continue
+    return valid_result

@@ -15,14 +15,21 @@ def test_tools_rest_get_memories_text_uses_universal_service_for_arbitrary_uid(m
 
         def read(self, uid, **kwargs):
             calls.append((uid, kwargs))
-            return [SimpleNamespace(created_at=datetime.now(timezone.utc), id="m1", is_locked=False)]
+            return [
+                SimpleNamespace(
+                    created_at=datetime.now(timezone.utc),
+                    id="m1",
+                    memory_id="m1",
+                    content="memory-id=m1",
+                    is_locked=False,
+                )
+            ]
 
     monkeypatch.setattr(memory_services, "MemoryService", _UniversalService)
-    monkeypatch.setattr(memory_services.MemoryDB, "get_memories_as_str", lambda memories: "memory-id=m1")
 
     result = memory_services.get_memories_text(uid="uid-former-cohort", limit=6000, offset=-3)
 
-    assert "memory-id=m1" in result
+    assert '"memory-id=m1"' in result
     assert calls == [("uid-former-cohort", {"limit": 5000, "offset": 0, "now": None})]
 
 
@@ -40,8 +47,20 @@ def test_tools_rest_get_memories_text_preserves_empty_and_invalid_date_contract(
 
 
 def test_tools_rest_get_memories_text_backfills_after_filtered_first_page(monkeypatch):
-    locked = SimpleNamespace(created_at=datetime.now(timezone.utc), id="locked", is_locked=True)
-    visible = SimpleNamespace(created_at=datetime.now(timezone.utc), id="visible", is_locked=False)
+    locked = SimpleNamespace(
+        created_at=datetime.now(timezone.utc),
+        id="locked",
+        memory_id="locked",
+        content="locked",
+        is_locked=True,
+    )
+    visible = SimpleNamespace(
+        created_at=datetime.now(timezone.utc),
+        id="visible",
+        memory_id="visible",
+        content="visible",
+        is_locked=False,
+    )
     calls = []
 
     class _UniversalService:
@@ -53,9 +72,11 @@ def test_tools_rest_get_memories_text_backfills_after_filtered_first_page(monkey
             return [[locked, locked], [visible], []][len(calls) - 1]
 
     monkeypatch.setattr(memory_services, "MemoryService", _UniversalService)
-    monkeypatch.setattr(memory_services.MemoryDB, "get_memories_as_str", lambda memories: memories[0].id)
 
-    assert memory_services.get_memories_text(uid="uid", limit=2) == "User Memories (1 total):\n\nvisible"
+    result = memory_services.get_memories_text(uid="uid", limit=2)
+
+    assert '"visible"' in result
+    assert '"locked"' not in result
     assert calls[:2] == [
         ("uid", {"limit": 2, "offset": 0, "now": None}),
         ("uid", {"limit": 500, "offset": 2, "now": None}),
@@ -129,19 +150,16 @@ def test_tools_rest_temporal_list_filters_suppressed_rows_and_sources(monkeypatc
             pass
 
         def read_page(self, *_args, **_kwargs):
-            return SimpleNamespace(memories=[suppressed, visible], next_cursor=None)
+            return SimpleNamespace(memories=[suppressed, visible], next_cursor=None, truncated=False)
 
     monkeypatch.setattr(memory_services, "MemoryService", _UniversalService)
     monkeypatch.setattr(memory_services, "belief_model_enabled", lambda: True)
-    monkeypatch.setattr(
-        memory_services.MemoryDB, "get_memories_as_str", lambda memories: ",".join(m.id for m in memories)
-    )
     sources = []
 
     result = memory_services.get_memories_text(uid="uid", source_sink=sources)
 
     assert "suppressed" not in result
-    assert "visible" in result
+    assert '"use this"' in result
     assert [source["source_id"] for source in sources] == ["visible"]
 
 
@@ -154,7 +172,7 @@ def test_tools_rest_temporal_list_bounds_empty_continuation_pages(monkeypatch):
 
         def read_page(self, *_args, **_kwargs):
             calls.append(_kwargs)
-            return SimpleNamespace(memories=[], next_cursor=f"cursor-{len(calls)}")
+            return SimpleNamespace(memories=[], next_cursor=f"cursor-{len(calls)}", truncated=False)
 
     monkeypatch.setattr(memory_services, "MemoryService", _UniversalService)
     monkeypatch.setattr(memory_services, "belief_model_enabled", lambda: True)
@@ -163,6 +181,32 @@ def test_tools_rest_temporal_list_bounds_empty_continuation_pages(monkeypatch):
 
     assert len(calls) == 10
     assert "bounded scan reached its safety limit" in result
+
+
+def test_tools_rest_temporal_list_accepts_older_page_shape_without_truncated(monkeypatch):
+    memory = SimpleNamespace(
+        id="legacy-page",
+        memory_id="legacy-page",
+        content="legacy page shape",
+        created_at=datetime(2026, 9, 14, tzinfo=timezone.utc),
+        is_locked=False,
+        arguments={},
+    )
+
+    class _UniversalService:
+        def __init__(self, **_kwargs):
+            pass
+
+        def read_page(self, *_args, **_kwargs):
+            return SimpleNamespace(memories=[memory], next_cursor=None)
+
+    monkeypatch.setattr(memory_services, "MemoryService", _UniversalService)
+    monkeypatch.setattr(memory_services, "belief_model_enabled", lambda: True)
+
+    result = memory_services.get_memories_text(uid="uid", view="history", limit=1)
+
+    assert '"legacy page shape"' in result
+    assert "Error retrieving memories" not in result
 
 
 def test_tools_rest_temporal_ranges_use_evidence_date_for_delayed_sources(monkeypatch):
@@ -183,11 +227,10 @@ def test_tools_rest_temporal_ranges_use_evidence_date_for_delayed_sources(monkey
             pass
 
         def read_page(self, *_args, **_kwargs):
-            return SimpleNamespace(memories=[delayed], next_cursor=None)
+            return SimpleNamespace(memories=[delayed], next_cursor=None, truncated=False)
 
     monkeypatch.setattr(memory_services, 'MemoryService', _UniversalService)
     monkeypatch.setattr(memory_services, 'belief_model_enabled', lambda: True)
-    monkeypatch.setattr(memory_services.MemoryDB, 'get_memories_as_str', lambda memories: memories[0].content)
     sources = []
 
     result = memory_services.get_memories_text(

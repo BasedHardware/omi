@@ -7,10 +7,12 @@ without violating the utils → routers import hierarchy.
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import HTTPException
 
+import database.notifications as notifications_db
 import database.users as users_db
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -209,6 +211,13 @@ async def perform_request_with_token_retry(
     return response, integration, None
 
 
+async def _due_date_in_user_zone(uid: str, due_date: datetime) -> datetime:
+    if due_date.tzinfo is None:
+        return due_date
+    tz_name = await run_blocking(db_executor, notifications_db.resolve_user_timezone, uid)
+    return due_date.astimezone(ZoneInfo(tz_name))
+
+
 async def create_task_internal(
     uid: str,
     app_key: str,
@@ -244,6 +253,8 @@ async def create_task_internal(
 
     try:
         client = client or get_http_client()
+        if due_date and app_key != 'clickup':
+            due_date = await _due_date_in_user_zone(uid, due_date)
 
         if app_key == 'todoist':
             body = {'content': title, 'priority': 2}

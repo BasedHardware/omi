@@ -581,6 +581,28 @@ import XCTest
       XCTAssertEqual(AuthRetryURLStub.attempts, 1)
     }
 
+    func testTTSStreamDeliversSuccessfulBodyChunks() async throws {
+      AuthRetryURLStub.returnStatus(200, body: "streamed-audio")
+      setenv("OMI_DESKTOP_API_URL", "http://rust-test:9002", 1)
+      defer { unsetenv("OMI_DESKTOP_API_URL") }
+
+      let config = URLSessionConfiguration.ephemeral
+      config.protocolClasses = [AuthRetryURLStub.self]
+      let client = APIClient(session: URLSession(configuration: config))
+      await client.setTestAuthHeader("Bearer test-token")
+
+      let stream = try await client.synthesizeSpeechStream(
+        request: APIClient.TtsSynthesizeRequest(text: "Hello", voiceId: "onyx", instructions: nil)
+      )
+      var received = Data()
+      for try await chunk in stream {
+        received.append(chunk)
+      }
+
+      XCTAssertEqual(received, Data("streamed-audio".utf8))
+      XCTAssertEqual(AuthRetryURLStub.attempts, 1)
+    }
+
     private func configureRefreshableSession() throws {
       let auth = AuthService.shared
       auth.tokenStorageHooks = AuthService.TokenStorageHooks(

@@ -41,6 +41,30 @@ enum ClientProcessingContract {
     return formatter.string(from: date)
   }
 
+  /// Does this projection carry anything a reader would call a summary?
+  ///
+  /// Asked of the **assembled** projection, not the draft, so it sees what
+  /// would actually be stored and rendered: `clip` has already replaced empty
+  /// strings, and `projectedSection` / `projectedAction` / `projectedEvent`
+  /// have already dropped malformed entries.
+  ///
+  /// The title is deliberately not content. `assemble` substitutes the
+  /// deterministic minimum's title for an empty one, so a draft that produced
+  /// nothing but a title is indistinguishable from the minimum in the only
+  /// field it filled — while still being stamped with a model id and, because
+  /// the canonical structure on a free-tier conversation *is* the minimum,
+  /// selected over it for display. A summary that says nothing must not
+  /// outrank the fallback by claiming to be a model's work.
+  static func carriesContent(_ projection: OmiAPI.ClientProcessing) -> Bool {
+    if !(projection.structure.overview ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      return true
+    }
+    if !(projection.structure.sections ?? []).isEmpty { return true }
+    if !(projection.structure.events ?? []).isEmpty { return true }
+    if !(projection.actionItems ?? []).isEmpty { return true }
+    return false
+  }
+
   static func assemble(
     draft: LocalSummaryDraft,
     transcriptSha256: String,

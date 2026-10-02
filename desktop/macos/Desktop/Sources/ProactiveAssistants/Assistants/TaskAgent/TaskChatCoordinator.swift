@@ -625,6 +625,7 @@ final class TaskChatCoordinator: ObservableObject {
     func registerAutomationActions() {
       DesktopAutomationActionRegistry.shared.register(
         name: "task_thread_scenario_13",
+        effects: [.localState, .networkOrModel, .remoteWrite],
         summary: "Exercise live task-backed thread continuity through the app kernel",
         params: ["task", "resume"]
       ) { [weak self] params in
@@ -1014,11 +1015,11 @@ final class TaskChatCoordinator: ObservableObject {
 
   private func runtimeStatusLabel(_ status: AgentRunProjectionStatus) -> String {
     switch status {
-    case .queued, .starting: return "Starting..."
+    case .queued, .starting: return "Starting…"
     case .waitingApproval: return "Needs approval"
     case .waitingInput: return "Needs input"
-    case .cancelling: return "Stopping..."
-    case .running: return "Working..."
+    case .cancelling: return "Stopping…"
+    case .running: return "Working…"
     default: return ""
     }
   }

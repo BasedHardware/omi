@@ -3,11 +3,10 @@ import {
   buildTimelineDayGroups,
   conversationSignals,
   countTimelineItems,
-  dayKeyOf,
   dayLabel,
   flattenTimelineItems,
-  parseLocalDay,
 } from '@/lib/conversationTimeline';
+import { dayKeyOf, parseLocalDay } from '@/lib/localDay';
 import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
 

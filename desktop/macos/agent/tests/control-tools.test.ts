@@ -2778,12 +2778,12 @@ describe("agent control tools", () => {
       terminalStatus: "succeeded",
       adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
       providerTargets: ["openai-codex"],
-      modelsUsed: ["gpt-5.6-luna"],
+      modelsUsed: ["gpt-6-luna"],
     });
     const completed = await execution;
     expect(JSON.parse(store.getRow("SELECT result_json FROM runs WHERE run_id = ?", [completed.run.runId]).result_json)).toMatchObject({
       providerTargets: ["openai-codex"],
-      modelsUsed: ["gpt-5.6-luna"],
+      modelsUsed: ["gpt-6-luna"],
     });
 
     const inspected = parseToolResult(await handleAgentControlToolCall(
@@ -2794,10 +2794,10 @@ describe("agent control tools", () => {
     expect(inspected.run).toMatchObject({
       requestedModelId: "omi-sonnet",
       providerTargets: ["openai-codex"],
-      modelsUsed: ["gpt-5.6-luna"],
+      modelsUsed: ["gpt-6-luna"],
       result: {
         providerTargets: ["openai-codex"],
-        modelsUsed: ["gpt-5.6-luna"],
+        modelsUsed: ["gpt-6-luna"],
       },
     });
     store.close();

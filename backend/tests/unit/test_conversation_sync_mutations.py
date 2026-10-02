@@ -144,7 +144,7 @@ def _apply(
         base_revision=base_revision,
         operation=operation or {'type': 'set_title', 'title': 'My title'},
         firestore_client=database,
-    )
+    )[0]
 
 
 def test_title_mutation_commits_compact_receipt_and_exact_canonical_revision():

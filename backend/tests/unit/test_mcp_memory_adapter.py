@@ -106,25 +106,23 @@ def test_mcp_rest_routes_keep_scope_grants_and_use_universal_service():
 
     assert "get_mcp_memory_default_memory_read_context" in search_route
     assert "authorize_memory_external_default_memory_read(auth_context, db_client=db)" in search_route
-    assert "memory_service = MemoryService(db_client=db)" in search_route
-    assert "memory_service.search_mcp(uid, query, limit=limit)" in search_route
+    # The search read is delegated to the shared registry handler, which owns
+    # the MemoryService.search_mcp path for both MCP and REST.
+    assert '_call_tool_handler("search_memories"' in search_route
     assert "read_default_read_rollout" not in search_route
     assert "search_default_mcp_memories_vector" not in search_route
     assert "memories_db" not in search_route
-    assert "MemoryService(db_client=db).read" in list_route
-    assert "collect_filtered_memories" in list_route
+    # The list read is delegated to the shared handler core, which owns the
+    # MemoryService read/collect path for both MCP and REST.
+    assert "mcp_memory_handlers.memories_page_core(" in list_route
     assert "read_default_read_rollout" not in list_route
     assert "memories_db" not in list_route
 
 
 def test_mcp_sse_memory_tools_keep_scope_grants_and_use_universal_service():
-    source = (BACKEND / "routers/mcp_sse.py").read_text(encoding="utf-8")
-    get_tool = source[
-        source.index('elif tool_name == "get_memories":') : source.index('elif tool_name == "create_memory":')
-    ]
-    search_tool = source[
-        source.index('elif tool_name == "search_memories":') : source.index('elif tool_name == "search_conversations":')
-    ]
+    source = (BACKEND / "utils/mcp_server/handlers/memories.py").read_text(encoding="utf-8")
+    get_tool = source[source.index('def get_memories(') : source.index('def create_memory(')]
+    search_tool = source[source.index('def search_memories(') :]
 
     assert "auth_context is None" in get_tool
     assert "authorize_memory_external_default_memory_read(auth_context, db_client=db)" in get_tool
@@ -151,12 +149,17 @@ def test_mcp_rest_memory_list_uses_single_authorization_context():
 
 
 def test_mcp_sse_transport_authenticates_full_api_key_context_without_inferred_scopes():
-    source = (BACKEND / "routers/mcp_sse.py").read_text(encoding="utf-8")
+    source = (BACKEND / "utils/mcp_server/auth.py").read_text(encoding="utf-8")
+    transport_source = (BACKEND / "utils/mcp_server/transport.py").read_text(encoding="utf-8")
     assert "def authenticate_api_key_auth_context(authorization: Optional[str])" in source
-    assert "def authenticate_mcp_request(authorization: Optional[str])" in source
+    assert "def authenticate_mcp_request(" in source
+    assert "request: Optional[Request] = None" in source
     assert "mcp_api_key_db.get_api_key_auth_result(token)" in source
     assert 'record_api_key_repairs(key_kind="mcp", operation="auth"' in source
     assert "scopes=tuple(user_data.get(\"scopes\") or ())" in source
     assert "memory_context=_mcp_memory_context_from_auth_data(user_data)" in source
-    assert "auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)" in source
-    assert "user_id = auth_context.uid" in source
+    assert (
+        "auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization, request)"
+        in transport_source
+    )
+    assert "uid = auth_context.uid" in transport_source

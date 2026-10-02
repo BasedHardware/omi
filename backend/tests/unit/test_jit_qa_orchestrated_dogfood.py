@@ -77,7 +77,8 @@ def test_subprocess_environment_is_allowlisted_and_uses_private_runtime_home():
     assert child["XDG_CONFIG_HOME"] != _safe_env()["XDG_CONFIG_HOME"]
     assert Path(child["HOME"]).name == "dogfood-home"
     assert child["PROVIDER_MODE"] == "offline"
-    assert child["MEMORY_MODE"] == "read"
+    assert child["MEMORY_ENABLED"] == "on"
+    assert "MEMORY_MODE" not in child
     assert child["GOOGLE_CLOUD_PROJECT"] == "demo-omi-jit-qa"
 
 

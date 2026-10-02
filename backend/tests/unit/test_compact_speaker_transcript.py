@@ -177,6 +177,22 @@ def test_calendar_guard_requires_exactly_one_unresolved_and_one_remaining_name()
     assert 'Speaker' not in resolved.context
 
 
+def _joined_prompt(messages) -> str:
+    """Flatten every message to text, whatever envelope each one uses.
+
+    Messages may be LangChain message objects or plain dicts, and a cacheable one
+    carries its text in a list of content blocks.
+    """
+    parts: list[str] = []
+    for message in messages:
+        content = message['content'] if isinstance(message, dict) else getattr(message, 'content', '')
+        if isinstance(content, list):
+            parts.extend(str(block.get('text', '')) for block in content)
+        else:
+            parts.append(str(content))
+    return '\n'.join(parts)
+
+
 def _poisoned_notes_model(captured):
     class Model:
         def invoke(self, messages):
@@ -235,8 +251,10 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
     assert 'Speaker 0' not in structured.title
     assert 'Speaker 0' not in structured.overview
     assert 'flush is about 9mm' in structured.overview
-    instructions = captured['messages'][-1].content
-    assert 'Speaker keys are diarization clusters, not names' in instructions
+    # The speaker-key guidance lives in the static cacheable prefix, the transcript in the
+    # volatile suffix; assert against the whole prompt rather than one message's position.
+    prompt = _joined_prompt(captured['messages'])
+    assert 'Speaker keys are diarization clusters, not names' in prompt
 
 
 def _summary_app() -> App:

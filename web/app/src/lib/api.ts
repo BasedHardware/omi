@@ -2,7 +2,6 @@ import { getIdToken } from './firebase';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
-  invalidateCacheKey,
   invalidationPatterns,
   fetchWithCache,
   cacheKeys,
@@ -31,6 +30,7 @@ import type {
   CreateConversationResponse,
   ActionItemsResponse,
   FairUseStatusResponse,
+  StoreRecordingPermissionResponse,
 } from './omiApi.generated';
 import {
   normalizeKnowledgeLedgerMemories,
@@ -243,7 +243,9 @@ export async function toggleStarred(id: string, starred: boolean): Promise<void>
  * Delete a conversation
  */
 export async function deleteConversation(id: string): Promise<void> {
-  await fetchWithAuth(`/v1/conversations/${id}`, {
+  // The server default is still cascade=false (Q8). Mobile and macOS already
+  // send true, which is what removes memories extracted from the recording.
+  await fetchWithAuth(`/v1/conversations/${id}?cascade=true`, {
     method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.conversations);
@@ -258,19 +260,15 @@ export async function deleteConversation(id: string): Promise<void> {
 
 /**
  * Get the approved screenshot set (banner + strip) for a conversation.
- * Uses the same fetch-with-cache idiom as `getConversation`; a short TTL
- * balances against the frame set's signed URLs expiring after 60 minutes.
+ * Deliberately uncached: every response carries signed URLs that expire
+ * after 60 minutes, and a cached GET that resolved after a delete would
+ * serve the deleted frames again on reopen. The set is small.
  */
 export async function getConversationScreenFrames(
   conversationId: string,
 ): Promise<ConversationScreenFrameSet> {
-  return fetchWithCache<ConversationScreenFrameSet>(
-    cacheKeys.screenFrames(conversationId),
-    () =>
-      fetchWithAuth<ConversationScreenFrameSet>(
-        `/v1/conversations/${conversationId}/screenshots`,
-      ),
-    { ttl: CACHE_TTL.SHORT },
+  return fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots`,
   );
 }
 
@@ -288,7 +286,6 @@ export async function deleteScreenFrame(
     `/v1/conversations/${conversationId}/screenshots/${frameId}`,
     { method: 'DELETE' },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -300,7 +297,6 @@ export async function deleteAllScreenFrames(
     `/v1/conversations/${conversationId}/screenshots`,
     { method: 'DELETE' },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -317,7 +313,6 @@ export async function patchScreenFrameSharing(
     `/v1/conversations/${conversationId}/screenshot-sharing`,
     { method: 'PATCH', body: JSON.stringify(body) },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -1598,16 +1593,13 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
     const token = await getIdToken();
     if (!token) return [];
 
-    const response = await fetch(
-      `${API_BASE_URL}/v1/apps/proactive-notification-scopes`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-App-Platform': 'web',
-        },
+    const response = await fetch(`${API_BASE_URL}/v1/app/proactive-notification-scopes`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-App-Platform': 'web',
       },
-    );
+    });
 
     if (!response.ok) return [];
     return response.json();
@@ -1808,7 +1800,10 @@ export async function getDeveloperWebhooksStatus(): Promise<DeveloperWebhooks> {
  * Get store recording permission
  */
 export async function getRecordingPermission(): Promise<RecordingPermission> {
-  return fetchWithAuth<RecordingPermission>('/v1/users/store-recording-permission');
+  const response = await fetchWithAuth<StoreRecordingPermissionResponse>(
+    '/v1/users/store-recording-permission',
+  );
+  return { enabled: response.store_recording_permission };
 }
 
 /**
@@ -2022,10 +2017,12 @@ export async function createPerson(name: string): Promise<Person> {
  * Update person name
  */
 export async function updatePersonName(personId: string, name: string): Promise<void> {
-  await fetchWithAuth(`/v1/users/people/${personId}/name`, {
-    method: 'PATCH',
-    body: JSON.stringify({ name }),
-  });
+  await fetchWithAuth(
+    `/v1/users/people/${personId}/name?value=${encodeURIComponent(name)}`,
+    {
+      method: 'PATCH',
+    },
+  );
 }
 
 /**
@@ -2267,16 +2264,19 @@ export async function deleteKnowledgeGraph(): Promise<void> {
 // ============================================================================
 
 /**
- * Get custom vocabulary words from transcription preferences
+ * Get custom vocabulary words from transcription preferences.
+ *
+ * Returns null when the list could not be fetched, so a failure is not read as
+ * an empty vocabulary. The save path replaces the whole list.
  */
-export async function getCustomVocabulary(): Promise<string[]> {
+export async function getCustomVocabulary(): Promise<string[] | null> {
   try {
     const result = await fetchWithAuth<TranscriptionPreferences>(
       '/v1/users/transcription-preferences',
     );
     return result.vocabulary || [];
   } catch {
-    return [];
+    return null;
   }
 }
 

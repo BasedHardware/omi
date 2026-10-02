@@ -6,6 +6,20 @@ from typing import Any
 
 RUNTIME_GOOGLE_CREDENTIALS_PATH = Path('/tmp/omi-google-credentials.json')
 
+# Explicit customer-data project for deployments that run on an attached
+# runtime identity (Cloud Run service account / GKE Workload Identity) instead
+# of a mounted ``SERVICE_ACCOUNT_JSON`` key. It replaces the only thing the JSON
+# contributed besides the identity itself: its ``project_id``. Without it, bare
+# ADC follows ``GOOGLE_CLOUD_PROJECT``, which on dev GKE is the compute project
+# (``based-hardware-dev``) rather than the customer project.
+CUSTOMER_DATA_PROJECT_ENV = 'OMI_CUSTOMER_DATA_PROJECT'
+
+
+def customer_data_project() -> str | None:
+    """The explicitly configured customer-data project for ADC deployments."""
+    project = os.environ.get(CUSTOMER_DATA_PROJECT_ENV, '').strip()
+    return project or None
+
 
 def prepare_google_credentials() -> None:
     service_account_json = os.environ.get('SERVICE_ACCOUNT_JSON', '').strip()
@@ -27,7 +41,12 @@ def prepare_google_credentials() -> None:
 
 
 def customer_data_service_account() -> tuple[Any, str] | None:
-    """Return explicit customer-data credentials when ``SERVICE_ACCOUNT_JSON`` is set.
+    """Return the pinned customer-data ``(credentials, project)``, or ``None``.
+
+    ``SERVICE_ACCOUNT_JSON`` wins when set (the legacy key path, kept as the
+    rollback). Otherwise ``OMI_CUSTOMER_DATA_PROJECT`` pins the project and the
+    credentials are ``None``, meaning "the runtime identity via ADC"; callers
+    pass that straight to the client constructor.
 
     Dev GKE listen mounts both Workload Identity (parity-pack exporter) and the
     runtime JSON SA (nik-164 / prod customer project). ADC can silently prefer
@@ -39,7 +58,8 @@ def customer_data_service_account() -> tuple[Any, str] | None:
     prepare_google_credentials()
     service_account_json = os.environ.get('SERVICE_ACCOUNT_JSON', '').strip()
     if not service_account_json:
-        return None
+        pinned_project = customer_data_project()
+        return (None, pinned_project) if pinned_project else None
 
     try:
         service_account_info = json.loads(service_account_json)
@@ -68,7 +88,9 @@ def customer_entitlement_service_account() -> tuple[Any, str] | None:
     Development desktop-backend mounts that same SA only at
     ``FIREBASE_AUTH_CREDENTIALS_PATH`` so Cloud Run ADC stays on
     ``GOOGLE_CLOUD_PROJECT`` (GCE / ``agentVm``). Quota, usage, and
-    subscription reads must still use the SA's ``project_id``.
+    subscription reads must still use the SA's ``project_id``. A keyless
+    desktop-backend (neither variable set) pins ADC to
+    ``OMI_FIRESTORE_DATA_PLANE_PROJECT`` instead, returning ``(None, project)``.
     """
     pinned = customer_data_service_account()
     if pinned is not None:
@@ -76,7 +98,10 @@ def customer_entitlement_service_account() -> tuple[Any, str] | None:
 
     credentials_path = os.environ.get('FIREBASE_AUTH_CREDENTIALS_PATH', '').strip()
     if not credentials_path:
-        return None
+        # Keyless desktop-backend: the runtime identity via ADC, pinned to the
+        # declared data plane rather than the compute project.
+        data_plane_project = os.environ.get('OMI_FIRESTORE_DATA_PLANE_PROJECT', '').strip()
+        return (None, data_plane_project) if data_plane_project else None
 
     path = Path(credentials_path)
     if not path.is_file():

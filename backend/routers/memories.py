@@ -30,6 +30,7 @@ from utils.memory.memory_service import (
 )
 from utils.memory.canonical_memory_adapter import mint_direct_user_write_authority
 from utils.observability.fallback import record_fallback
+from utils.product_metrics import record_product_event
 from utils.feedback import record_memory_feedback
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.import_write_guard import (
@@ -57,6 +58,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 _auth_module = cast(Any, auth)
+
+
+def _sanitize_memories_error(exc: Exception, fallback: str) -> str:
+    """Sanitize query parameter and temporal view error details while preserving debug logging."""
+    logger.warning("Memories query operation failed: %s: %s", type(exc).__name__, exc)
+    msg = str(exc).strip()
+    if msg.startswith("unsupported memory read view:"):
+        return "unsupported memory read view"
+    if msg == "device_scope must be one of: all, current, explicit":
+        return msg
+    return fallback
 
 
 class MemoryMutationResponse(BaseModel):
@@ -316,7 +328,8 @@ def _resolve_get_memories_device_scope(
             x_device_id_hash=x_device_id_hash,
         )
     except DeviceScopeValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        detail = _sanitize_memories_error(exc, "device_scope must be one of: all, current, explicit")
+        raise HTTPException(status_code=400, detail=detail) from exc
 
 
 def _validate_device_scope_request(device_scope: str, resolved_device_id: Optional[str]) -> None:
@@ -373,6 +386,7 @@ async def extract_memory_log(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:extract"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).
 
@@ -400,6 +414,9 @@ async def extract_memory_log(
     )
     if extraction is None:
         raise HTTPException(status_code=502, detail="memories_extract_failed")
+    created_count = len(extraction.memories)
+    if created_count:
+        record_product_event('memory_created', request=http_request, uid=uid, source='extract', count=created_count)
     return ExtractMemoryLogResponse(memories=list(extraction.memories), profile=extraction.profile or "")
 
 
@@ -458,11 +475,14 @@ async def create_memory(
             require_canonical_promotion=True,
             direct_user_authority=mint_direct_user_write_authority(),
         )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("MemoryService create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     _finish_memory_parity_capture(parity_capture, [created])
+    record_product_event('memory_created', request=request, uid=uid, source='client')
     return created
 
 
@@ -555,6 +575,8 @@ async def create_memories_batch(
             require_canonical_promotion=True,
             direct_user_authority=mint_direct_user_write_authority(),
         )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("MemoryService create_memories_batch failed uid=%s count=%s", uid, len(memory_dbs))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -562,6 +584,14 @@ async def create_memories_batch(
     if has_public:
         submit_with_context(postprocess_executor, update_personas_async, uid)
     _finish_memory_parity_capture(parity_capture, server_memories)
+    if server_memories:
+        record_product_event(
+            'memory_created',
+            request=request_context,
+            uid=uid,
+            source='client',
+            count=len(server_memories),
+        )
     return BatchMemoriesResponse(memories=server_memories, created_count=len(server_memories))
 
 
@@ -575,6 +605,7 @@ async def create_memory_import_batch(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memory_imports:batch"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """
     Ingest imported source artifacts without creating product memories.
@@ -618,6 +649,9 @@ async def create_memory_import_batch(
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     parity_capture.observe("inbound", {"type": "memory_import_result", **result.response.model_dump(mode="json")})
     parity_capture.persist()
+    imported = len(request.items)
+    if imported:
+        record_product_event('memory_created', request=http_request, uid=uid, source='import', count=imported)
     return result.response
 
 
@@ -654,7 +688,8 @@ def get_memories(
         try:
             temporal_view = normalize_temporal_read_view(view)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            detail = _sanitize_memories_error(exc, "unsupported memory read view")
+            raise HTTPException(status_code=422, detail=detail) from exc
         if not belief_model_enabled():
             temporal_view = 'released'
     if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
@@ -680,6 +715,8 @@ def get_memories(
     # so neither leg can consume the whole HTTP_GET_TIMEOUT by itself (#11831).
     budget = list_read_budget_for_request(request, route='memories')
 
+    # X-Omi-Memory-* capability headers exist for pre-capability desktop clients;
+    # removal requires minimum supported desktop version 0.12.386+12386.
     response_headers = {
         _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
         _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',
@@ -952,6 +989,7 @@ def delete_memories_batch(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_batch"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Delete up to MEMORIES_BATCH_MAX memories in one request.
 
@@ -982,6 +1020,7 @@ def delete_memories_batch(
         raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
+    record_product_event('memory_deleted', request=http_request, count=len(memory_ids))
     return {'status': 'ok'}
 
 
@@ -991,6 +1030,7 @@ def delete_memory(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     try:
         MemoryService(db_client=getattr(db_client_module, 'db', None)).delete(uid, memory_id)
@@ -998,6 +1038,7 @@ def delete_memory(
         raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
+    record_product_event('memory_deleted', request=http_request)
     return {'status': 'ok'}
 
 
@@ -1010,12 +1051,14 @@ def delete_memories(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_all"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
     if scope == 'default':
         service.delete_default(uid)
     else:
         service.delete_all(uid)
+    record_product_event('memory_deleted', request=http_request)
     return {'status': 'ok'}
 
 
@@ -1026,6 +1069,7 @@ def review_memory(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
     _validate_mutable_memory(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
@@ -1034,6 +1078,7 @@ def review_memory(
     # memory is a mutable flag with no timestamp, so the ledger row is what
     # gives the verdict a time and lands it in the daily report.
     record_memory_feedback(uid, memory_id, value)
+    record_product_event('memory_updated', request=http_request, op='review')
     return {'status': 'ok'}
 
 
@@ -1079,6 +1124,7 @@ def edit_memory(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     mutation_value = request.value if request is not None else value
     if mutation_value is None:
@@ -1092,7 +1138,9 @@ def edit_memory(
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
     if updated.ledger_schema_version == 'knowledge_ledger.v1':
+        record_product_event('memory_updated', request=http_request, op='update')
         return {'status': 'ok', 'memory': updated}
+    record_product_event('memory_updated', request=http_request, op='update')
     return {'status': 'ok'}
 
 
@@ -1108,6 +1156,7 @@ def update_memory_visibility(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     mutation_value = request.value if request is not None else value
     if mutation_value is None:
@@ -1118,6 +1167,7 @@ def update_memory_visibility(
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
     MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
     submit_with_context(postprocess_executor, update_personas_async, uid)
+    record_product_event('memory_updated', request=http_request, op='visibility')
     return {'status': 'ok'}
 
 
@@ -1128,6 +1178,7 @@ def update_memory_read_status(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Persist durable insight/memory read and dismiss state for desktop clients."""
 
@@ -1144,6 +1195,7 @@ def update_memory_read_status(
         )
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
+    record_product_event('memory_updated', request=http_request, op='read')
     return _memory_response(memory)
 
 
@@ -1152,10 +1204,12 @@ def update_memory_baseline(
     memory_id: str,
     value: bool,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Preserve the released baseline flag through universal memory authority."""
 
     db_client = getattr(db_client_module, 'db', None)
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
     MemoryService(db_client=db_client).update_baseline(uid, memory_id, value)
+    record_product_event('memory_updated', request=http_request, op='baseline')
     return {'status': 'ok'}

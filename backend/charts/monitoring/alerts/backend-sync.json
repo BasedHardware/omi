@@ -961,5 +961,189 @@
       "component": "api",
       "impact": "product"
     }
+  },
+  {
+    "uid": "omi-sync-intake-fragmented",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync intake - created share indicates per-chunk conversations",
+    "condition": "F",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "deuxlwt1d569sb",
+        "model": {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend-sync-backfill\" AND (textPayload:\"omi_sync_intake outcome=created\" OR jsonPayload.message:\"omi_sync_intake outcome=created\")",
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "deuxlwt1d569sb",
+        "model": {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"cloud_run_revision\" AND (resource.labels.service_name=\"backend-sync\" OR resource.labels.service_name=\"backend-sync-backfill\") AND (textPayload:\"omi_sync_intake outcome=merged\" OR jsonPayload.message:\"omi_sync_intake outcome=merged\")",
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "count",
+          "refId": "C",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "count",
+          "refId": "D",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$C >= 100 && $C / ($C + $D + 0.001) > 0.80",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "F",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "F"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "E",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "F",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-20T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "OK",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "17",
+      "summary": "Sync intake is creating a conversation for more than 80% of chunks with at least 100 creates in 30m",
+      "threshold": "created / (created+merged) > 0.80 with >= 100 created log lines in 30m, for 10m",
+      "user_impact": "Users see one conversation per synced audio chunk instead of a continuous recording. This is the 2026-09-19 fragmentation symptom (107 shards / 121 conversations for one account), regardless of whether live STT or assignment logic caused it.",
+      "scope": "Cloud Run backend-sync-backfill (created+merged) and backend-sync (merged only) ingest_sync_conversation outcomes. Prometheus scrape of this counter is not yet ingested.",
+      "verification": "Cloud Logging counts of omi_sync_intake on the emitting services, not Grafana evaluation of the previous backend-sync-only filter. Measured 2026-09-21 00:00-18:00Z: created=9626 all from backend-sync-backfill (backend-sync created=0); merged=21482 backfill + 757 backend-sync. Fleet created share=9626/(9626+22239)=0.302. Expected values from the 2026-09-19 incident: one account received 121 conversations / 107 shards in a day, so created share approached 1.0 for that user's 60s sync chunks. A healthy continuous recording of N 60s chunks is 1 created + (N-1) merged = 1/N. Threshold 0.80 with >= 100 created in 30m sits above the measured 0.302 floor. Prometheus evaluation is owed after backend-sync and backend-sync-backfill are added to the Cloud Run metrics exporter.",
+      "safe_next_action": "Confirm created vs merged on Cloud Logging for backend-sync-backfill and backend-sync omi_sync_intake. Do not change assignment logic here; the continuity fix is a separate PR. This alert only makes the condition visible.",
+      "runbook": "backend/docs/runbooks/resilience-dashboards.md",
+      "evaluated_bad": "2026-09-19 per-chunk storm: created share approached 1.0 (107 shards / 121 conversations for one account). The previous backend-sync-only filter evaluated to 0 created on 2026-09-21 00:00-18:00Z while backend-sync-backfill emitted 9626 created.",
+      "evaluated_good": "2026-09-21 00:00-18:00Z fleet created share 9626/(9626+22239)=0.302 (created all from backend-sync-backfill; merged 21482 backfill + 757 backend-sync). A continuous N-chunk recording is 1/N. Threshold 0.80 sits above this measured floor."
+    },
+    "labels": {
+      "alert_identity": "omi-sync-intake-fragmented",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "speech-processing"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
   }
 ]

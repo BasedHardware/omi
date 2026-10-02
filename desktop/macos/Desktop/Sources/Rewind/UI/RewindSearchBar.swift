@@ -64,15 +64,7 @@ struct RewindSearchBar: View {
       }
 
       if isTyped {
-        Button(action: onClear) {
-          Image(systemName: "xmark.circle.fill")
-            .font(.system(size: 13, weight: .regular))
-            .foregroundStyle(Ink.secondary)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(Self.clearActionName)
-        .accessibilityLabel(Text(Self.clearActionName))
+        ClearFieldButton(help: Self.clearActionName) { onClear() }
       }
     }
     .frame(height: RewindSearchLayout.barHeight)

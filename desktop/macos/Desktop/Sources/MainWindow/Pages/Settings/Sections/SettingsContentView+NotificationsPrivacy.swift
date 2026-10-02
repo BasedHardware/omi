@@ -218,6 +218,35 @@ extension SettingsContentView {
 
   var privacySection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      settingsCard(settingId: "privacy.siri") {
+        HStack(spacing: OmiSpacing.lg) {
+          SettingsIconTile(symbol: "sparkles")
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Use Omi with Siri & Apple Intelligence")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+            Text("Make conversation summaries, memories and tasks available to Siri on this Mac")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+          Spacer()
+          Toggle(
+            "",
+            isOn: Binding(
+              get: { SiriIntegrationSettings.isEnabled },
+              set: { enabled in
+                SiriIntegrationSettings.isEnabled = enabled
+                if #available(macOS 15.4, *) {
+                  SiriIndexHooks.ownerChanged()
+                }
+              }
+            )
+          )
+          .toggleStyle(OmiToggleStyle())
+          .labelsHidden()
+        }
+      }
+
       // Data Controls
       settingsCard(settingId: "privacy.storerecordings") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
@@ -226,7 +255,7 @@ extension SettingsContentView {
           privacyToggleRow(
             icon: "mic.fill",
             title: "Store Recordings",
-            subtitle: "Allow omi to store audio recordings of your conversations",
+            subtitle: "Allow Omi to store audio recordings of your conversations",
             isOn: $recordingPermissionEnabled
           ) { newValue in
             updateRecordingPermission(newValue)
@@ -242,6 +271,23 @@ extension SettingsContentView {
           ) { newValue in
             updatePrivateCloudSync(newValue)
           }
+
+          GlassSeparator()
+
+          settingRow(
+            title: "Export All Data",
+            subtitle: "Download a JSON copy of your account data",
+            settingId: "privacy.exportdata"
+          ) {
+            Button("Export All Data…") {
+              dataExportModel.startExport()
+            }
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .disabled(dataExportModel.isExporting)
+            .accessibilityIdentifier("privacy.exportdata")
+          }
+
+          AccountDataExportView(model: dataExportModel)
         }
       }
 

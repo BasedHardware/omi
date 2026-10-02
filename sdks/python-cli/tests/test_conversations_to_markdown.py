@@ -105,6 +105,105 @@ class TestConversationsToMarkdown(unittest.TestCase):
             expected_file = out_dir / "undated_hello_world_2026_abc-123.md"
             self.assertTrue(expected_file.exists())
 
+    def test_is_completed_normalization(self):
+        """Validates completion status normalization for loose typing."""
+        # Native booleans
+        self.assertTrue(c2m.is_completed(True))
+        self.assertFalse(c2m.is_completed(False))
+
+        # Numbers
+        self.assertTrue(c2m.is_completed(1))
+        self.assertTrue(c2m.is_completed(-1))
+        self.assertFalse(c2m.is_completed(0))
+
+        # Truthy loose strings
+        for word in ("true", "TRUE", "yes", "YES", "1", "done", "DONE", "completed"):
+            self.assertTrue(c2m.is_completed(word), f"Expected {word} to be truthy")
+
+        # Falsy strings and arbitrary non-completion values
+        for word in ("false", "FALSE", "no", "NO", "0", "", "   ", "pending", "in-progress", None, [], {}):
+            self.assertFalse(c2m.is_completed(word), f"Expected {word} to be falsy")
+
+    def test_action_items_completion_rendering(self):
+        """Action items with string falsy values must not be rendered as completed checkboxes."""
+        conv = {
+            "id": "conv-test-items",
+            "started_at": "2026-09-20T10:00:00Z",
+            "structured": {
+                "title": "Action Items Review",
+                "action_items": [
+                    {"description": "Open string false", "completed": "false"},
+                    {"description": "Open string no", "completed": "no"},
+                    {"description": "Open string zero", "completed": "0"},
+                    {"description": "Open boolean false", "completed": False},
+                    {"description": "Done string true", "completed": "true"},
+                    {"description": "Done string yes", "completed": "yes"},
+                    {"description": "Done string one", "completed": "1"},
+                    {"description": "Done boolean true", "completed": True},
+                    {"description": "", "completed": False},
+                    "Bare string open task",
+                ],
+            },
+        }
+        md = c2m.conversation_to_markdown(conv)
+
+        self.assertIn("- [ ] Open string false", md)
+        self.assertIn("- [ ] Open string no", md)
+        self.assertIn("- [ ] Open string zero", md)
+        self.assertIn("- [ ] Open boolean false", md)
+        self.assertIn("- [x] Done string true", md)
+        self.assertIn("- [x] Done string yes", md)
+        self.assertIn("- [x] Done string one", md)
+        self.assertIn("- [x] Done boolean true", md)
+        self.assertIn("- [ ] Untitled action item", md)
+        self.assertIn("- [ ] Bare string open task", md)
+
+    def test_extract_conversations_unwrapping(self):
+        """Verify bare arrays, wrapped dictionaries, and empty wrappers unwrap properly."""
+        conv1 = {"id": "c1", "structured": {"title": "Conv 1"}}
+        conv2 = {"id": "c2", "structured": {"title": "Conv 2"}}
+
+        # Bare array
+        self.assertEqual(c2m.extract_conversations([conv1, conv2]), [conv1, conv2])
+        self.assertEqual(c2m.extract_conversations([]), [])
+
+        # Wrapped dictionary envelopes
+        self.assertEqual(c2m.extract_conversations({"conversations": [conv1, conv2]}), [conv1, conv2])
+        self.assertEqual(c2m.extract_conversations({"items": [conv1]}), [conv1])
+        self.assertEqual(c2m.extract_conversations({"data": [conv2]}), [conv2])
+
+        # Empty wrapped dictionary envelopes
+        self.assertEqual(c2m.extract_conversations({"conversations": []}), [])
+        self.assertEqual(c2m.extract_conversations({"items": []}), [])
+        self.assertEqual(c2m.extract_conversations({"data": []}), [])
+
+        # Single conversation dictionary
+        self.assertEqual(c2m.extract_conversations(conv1), [conv1])
+
+    def test_extract_conversations_invalid_payload_guard(self):
+        """Invalid dict payloads (error responses, unrelated dicts, empty dicts) return empty list."""
+        self.assertEqual(c2m.extract_conversations({}), [])
+        self.assertEqual(c2m.extract_conversations({"detail": "Not authenticated"}), [])
+        self.assertEqual(c2m.extract_conversations({"status": "error", "message": "unauthorized"}), [])
+        self.assertEqual(c2m.extract_conversations({"error": {"code": 404}}), [])
+
+        # Single conversation with various valid fields unwraps properly
+        self.assertEqual(c2m.extract_conversations({"id": "c1"}), [{"id": "c1"}])
+        self.assertEqual(c2m.extract_conversations({"transcript_segments": []}), [{"transcript_segments": []}])
+        self.assertEqual(c2m.extract_conversations({"structured": {"title": "Test"}}), [{"structured": {"title": "Test"}}])
+        self.assertEqual(c2m.extract_conversations({"started_at": "2026-09-28T00:00:00Z"}), [{"started_at": "2026-09-28T00:00:00Z"}])
+        self.assertEqual(c2m.extract_conversations({"created_at": "2026-09-28T00:00:00Z"}), [{"created_at": "2026-09-28T00:00:00Z"}])
+
+
+    def test_empty_conversations_export_produces_no_files(self):
+        """Exporting an empty list must create 0 files and leave the directory clean."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir) / "empty_out"
+            exported = c2m.export_conversations([], output_dir=out_dir)
+
+            self.assertEqual(len(exported), 0)
+            self.assertEqual(list(out_dir.glob("*.md")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

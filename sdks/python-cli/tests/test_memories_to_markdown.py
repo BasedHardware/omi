@@ -138,6 +138,118 @@ class TestMemoriesToMarkdown(unittest.TestCase):
         self.assertEqual(len(items), 3)
         self.assertEqual(items[0]["id"], "mem_01_work")
 
+    def test_colliding_category_filenames_preserve_every_group(self):
+        """#14927: two categories sanitizing to one slug must not overwrite each other."""
+        items = [
+            {"id": "first", "category": "work/life", "content": "First category memory"},
+            {"id": "second", "category": "work?life", "content": "Second category memory"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir)
+            written = m2m.write_grouped_directory(items, output_dir)
+
+            # Two groups -> two distinct files, and both groups survive on disk.
+            self.assertEqual(len(written), 2)
+            self.assertEqual(len(set(written)), 2)
+            self.assertEqual(len(list(output_dir.glob("*.md"))), 2)
+            for item in items:
+                matching = [path for path in written if item["content"] in path.read_text(encoding="utf-8")]
+                self.assertEqual(len(matching), 1, item["id"])
+
+            # The first group keeps the natural filename, the second is suffixed.
+            self.assertIn("First category memory", (output_dir / "work_life_memories.md").read_text(encoding="utf-8"))
+            self.assertIn(
+                "Second category memory", (output_dir / "work_life_2_memories.md").read_text(encoding="utf-8")
+            )
+
+    def test_disambiguated_name_does_not_steal_natural_category_name(self):
+        items = [
+            {"id": "a", "category": "work/life", "content": "Slash category"},
+            {"id": "b", "category": "work?life", "content": "Question mark category"},
+            {"id": "c", "category": "work_life_2", "content": "Literal suffix category"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir)
+            written = m2m.write_grouped_directory(items, output_dir)
+
+            self.assertEqual(len(written), 3)
+            self.assertEqual(len({path.name for path in written}), 3)
+            self.assertIn(
+                "Literal suffix category", (output_dir / "work_life_2_memories.md").read_text(encoding="utf-8")
+            )
+            for item in items:
+                self.assertEqual(
+                    sum(item["content"] in path.read_text(encoding="utf-8") for path in written),
+                    1,
+                    item["id"],
+                )
+
+    def test_collision_free_categories_keep_natural_filenames(self):
+        """No collisions: filenames must stay exactly as before the fix."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir)
+            written = m2m.write_grouped_directory(self.sample_memories, output_dir)
+            self.assertEqual(
+                {path.name for path in written},
+                {"work_memories.md", "skills_memories.md", "learnings_memories.md"},
+            )
+
+    def test_colliding_export_is_stable_across_repeated_runs(self):
+        items = [
+            {"id": "first", "category": "work/life", "content": "First category memory"},
+            {"id": "second", "category": "work?life", "content": "Second category memory"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir)
+            first_run = m2m.write_grouped_directory(items, output_dir)
+            second_run = m2m.write_grouped_directory(list(reversed(items)), output_dir)
+
+            self.assertEqual(first_run, second_run)
+            self.assertEqual(len(list(output_dir.glob("*.md"))), 2)
+
+    def test_extract_memories_bare_array(self):
+        items = [{"id": "m1", "content": "note 1"}, "not-a-dict", {"id": "m2", "content": "note 2"}]
+        extracted = m2m.extract_memories(items)
+        self.assertEqual(len(extracted), 2)
+        self.assertEqual(extracted[0]["id"], "m1")
+        self.assertEqual(extracted[1]["id"], "m2")
+
+    def test_extract_memories_wrapped_envelopes(self):
+        self.assertEqual(len(m2m.extract_memories({"memories": [{"id": "m1"}]})), 1)
+        self.assertEqual(len(m2m.extract_memories({"items": [{"id": "m2"}]})), 1)
+        self.assertEqual(len(m2m.extract_memories({"data": [{"id": "m3"}]})), 1)
+
+    def test_extract_memories_empty_envelopes_return_empty(self):
+        self.assertEqual(m2m.extract_memories({"memories": []}), [])
+        self.assertEqual(m2m.extract_memories({"items": []}), [])
+        self.assertEqual(m2m.extract_memories({"data": []}), [])
+
+    def test_extract_memories_single_object(self):
+        single = {"id": "m_solo", "content": "Standalone thought", "category": "work"}
+        extracted = m2m.extract_memories(single)
+        self.assertEqual(len(extracted), 1)
+        self.assertEqual(extracted[0]["id"], "m_solo")
+
+    def test_extract_memories_unrelated_object_returns_empty(self):
+        self.assertEqual(m2m.extract_memories({"status": "error", "code": 500}), [])
+        self.assertEqual(m2m.extract_memories("invalid input"), [])
+
+    def test_empty_memories_render_clean_markdown(self):
+        extracted = m2m.extract_memories({"memories": []})
+        md = m2m.memories_to_markdown(extracted)
+        self.assertIn("total: 0", md)
+        self.assertIn("categories_count: 0", md)
+        self.assertIn("_No memories found matching criteria._", md)
+        self.assertNotIn("_Untitled memory_", md)
+
+    def test_empty_memories_grouped_directory_writes_zero_files(self):
+        extracted = m2m.extract_memories({"memories": []})
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir) / "vault"
+            written = m2m.write_grouped_directory(extracted, out_dir)
+            self.assertEqual(len(written), 0)
+            self.assertEqual(list(out_dir.glob("*.md")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

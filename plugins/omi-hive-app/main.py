@@ -7,6 +7,7 @@ and chat tools for managing projects, tasks, actions, and searching.
 import os
 import urllib.parse
 from typing import Optional, Dict, Any, List, Tuple
+from urllib.parse import quote
 
 import requests
 from dotenv import load_dotenv
@@ -108,10 +109,10 @@ def hive_graphql_request(
         return {"errors": [{"message": "Request timed out. Please try again."}]}
     except requests.RequestException as e:
         print(f"🐝 Hive Request Error: {e}")
-        return {"errors": [{"message": f"Request failed: {str(e)}"}]}
+        return {"errors": [{"message": "Hive request failed. Please try again."}]}
     except Exception as e:
         print(f"🐝 Hive Unexpected Error: {e}")
-        return {"errors": [{"message": f"Unexpected error: {str(e)}"}]}
+        return {"errors": [{"message": "Unexpected error talking to Hive. Please try again."}]}
 
 
 def get_graphql_error(result: Dict) -> Optional[str]:
@@ -121,6 +122,26 @@ def get_graphql_error(result: Dict) -> Optional[str]:
         if isinstance(errors, list) and len(errors) > 0:
             return errors[0].get("message", "Unknown GraphQL error")
     return None
+
+
+def _hive_error_message(result: Dict[str, Any]) -> Optional[str]:
+    """Return a message when the payload carries an error, else None.
+
+    Hive's own failures come back as [{"message": ...}], but a 2xx body can carry
+    any shape under "errors", including an empty list on a successful write, so
+    presence of the key is not on its own an error.
+    """
+    errors = result.get("errors")
+    if not errors:
+        return None
+    if isinstance(errors, list):
+        first = errors[0]
+        if isinstance(first, dict):
+            return first.get("message", "Unknown error")
+        return str(first)
+    if isinstance(errors, dict):
+        return errors.get("message", "Unknown error")
+    return str(errors)
 
 
 def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict[str, Any]:
@@ -452,57 +473,82 @@ def get_project_tasks(uid: str, project_id: str, limit: int = 20) -> List[HiveTa
     return tasks
 
 
+def _action_to_task(a: Dict[str, Any]) -> HiveTask:
+    title = a.get("title") or a.get("name", "")
+    project = a.get("project")
+    project_id = ""
+    project_name = ""
+    if isinstance(project, dict):
+        project_id = project.get("_id") or project.get("id", "")
+        project_name = project.get("name", "")
+    elif isinstance(project, str):
+        project_id = project
+
+    return HiveTask(
+        id=a.get("_id") or a.get("id", ""),
+        name=title,
+        description=a.get("description", ""),
+        status=a.get("status"),
+        project_id=project_id,
+        project_name=project_name,
+    )
+
+
+# Ceiling on how many of the workspace's projects a name search fans out across,
+# so a workspace with an unusual number of projects still bounds the request count.
+MAX_SEARCH_PROJECTS = 20
+
+
 def search_tasks(uid: str, query: str, limit: int = 50) -> List[HiveTask]:
-    """Search for tasks across all projects via REST API."""
-    # Get workspace ID
+    """Search for tasks across all projects via REST API.
+
+    The 'Get actions' endpoint has no text search, so this fetches actions and filters
+    locally. It used to fetch a single `workspaces/{id}/actions?limit=50` -- a cap on the
+    50 most recently *touched* actions across the entire workspace, not per project -- so
+    a task outside that window was silently unfindable by exact name no matter how small
+    its own project was, breaking update-status and parent-task lookups on any workspace
+    with more than 50 actions in flight. Searching per project instead (the same
+    `projectId`-scoped request `get_project_tasks` already uses) raises the effective
+    ceiling to 50 per project.
+    """
     credentials = get_hive_credentials(uid)
     workspace_id = credentials.get("workspace_id") if credentials else None
 
     if not workspace_id:
         return []
 
-    # Fetch recent actions from workspace and filter locally
-    # The API doesn't support text search in 'Get actions'
-    result = hive_rest_request(uid, "GET", f"workspaces/{workspace_id}/actions", params={"limit": 50})
-
-    if "errors" in result:
-        return []
-
-    actions_data = result if isinstance(result, list) else result.get("data", [])
-    if not isinstance(actions_data, list):
-        actions_data = [result] if result.get("_id") else []
+    projects = get_user_projects(uid, workspace_id)
 
     query_lower = query.strip().lower()
-    exact_matches = []
-    partial_matches = []
+    exact_matches: List[HiveTask] = []
+    partial_matches: List[HiveTask] = []
 
-    for a in actions_data or []:
-        title = a.get("title") or a.get("name", "")
-        desc = a.get("description", "")
-        title_lower = title.strip().lower()
-
-        project = a.get("project")
-        project_id = ""
-        project_name = ""
-        if isinstance(project, dict):
-            project_id = project.get("_id") or project.get("id", "")
-            project_name = project.get("name", "")
-        elif isinstance(project, str):
-            project_id = project
-
-        task_obj = HiveTask(
-            id=a.get("_id") or a.get("id", ""),
-            name=title,
-            description=desc,
-            status=a.get("status"),
-            project_id=project_id,
-            project_name=project_name,
+    for project in projects[:MAX_SEARCH_PROJECTS]:
+        result = hive_rest_request(
+            uid, "GET", f"workspaces/{workspace_id}/actions", params={"projectId": project.id, "limit": 50}
         )
+        if "errors" in result:
+            continue
 
-        if query_lower == title_lower:
-            exact_matches.append(task_obj)
-        elif query_lower in title_lower or (desc and query_lower in desc.lower()):
-            partial_matches.append(task_obj)
+        actions_data = result if isinstance(result, list) else result.get("data", [])
+        if not isinstance(actions_data, list):
+            actions_data = [result] if result.get("_id") else []
+
+        for a in actions_data or []:
+            title_lower = (a.get("title") or a.get("name", "")).strip().lower()
+            desc = a.get("description", "")
+            task_obj = _action_to_task(a)
+
+            if query_lower == title_lower:
+                exact_matches.append(task_obj)
+            elif query_lower in title_lower or (desc and query_lower in desc.lower()):
+                partial_matches.append(task_obj)
+
+        # An exact match is definitive for the disambiguation this feeds (update-status,
+        # parent-task lookup) -- once we have at least `limit` of them, further projects
+        # can't change the outcome.
+        if len(exact_matches) >= limit:
+            break
 
     all_matches = exact_matches + partial_matches
     return all_matches[:limit]
@@ -668,7 +714,8 @@ async def tool_hive_get_projects(request: Request):
         return ChatToolResponse(result=f"📋 Your Hive projects:\n\n" + "\n".join(results))
 
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get projects: {str(e)}")
+        print(f"🐝 Hive get_projects error: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get projects. Please try again.")
 
 
 @app.post("/tools/hive_get_tasks", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -727,7 +774,8 @@ async def tool_hive_get_tasks(request: Request):
         )
 
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get tasks: {str(e)}")
+        print(f"🐝 Hive get_tasks error: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get tasks. Please try again.")
 
 
 @app.post("/tools/hive_create_task", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -822,8 +870,8 @@ async def tool_hive_create_task(request: Request):
 
         result = hive_rest_request(uid, "POST", "actions/create", data=create_data)
 
-        if "errors" in result:
-            error_msg = result["errors"][0].get("message", "Unknown error")
+        error_msg = _hive_error_message(result)
+        if error_msg:
             return ChatToolResponse(error=f"Failed to create task: {error_msg}")
 
         success_msg = f"✅ Created task **{task_name}** in project **{target_project.name}**!"
@@ -833,7 +881,8 @@ async def tool_hive_create_task(request: Request):
         return ChatToolResponse(result=success_msg)
 
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create task: {str(e)}")
+        print(f"🐝 Hive create_task error: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to create task. Please try again.")
 
 
 @app.post("/tools/hive_search", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -876,7 +925,8 @@ async def tool_hive_search(request: Request):
         )
 
     except Exception as e:
-        return ChatToolResponse(error=f"Search failed: {str(e)}")
+        print(f"🐝 Hive search error: {type(e).__name__}")
+        return ChatToolResponse(error="Search failed. Please try again.")
 
 
 @app.post("/tools/hive_update_task_status", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -946,8 +996,8 @@ async def tool_hive_update_task_status(request: Request):
         # Hive usually uses PUT /actions/{id}
         result = hive_rest_request(uid, "PUT", f"actions/{task_id}", data={"status": hive_status})
 
-        if "errors" in result:
-            error_msg = result["errors"][0].get("message", "Unknown error")
+        error_msg = _hive_error_message(result)
+        if error_msg:
             return ChatToolResponse(error=f"Failed to update task: {error_msg}")
 
         task_display = f"**{task_name}**" if task_name else f"`{task_id}`"
@@ -956,7 +1006,8 @@ async def tool_hive_update_task_status(request: Request):
         )
 
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to update task: {str(e)}")
+        print(f"🐝 Hive update_task_status error: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to update task. Please try again.")
 
 
 # ============================================

@@ -31,7 +31,8 @@ export function buildPublicEnvironment(
       'NEXT_PUBLIC_FIREBASE_APP_ID',
       'NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID',
       'NEXT_PUBLIC_FIREBASE_VAPID_KEY',
-      'NEXT_PUBLIC_MIXPANEL_TOKEN',
+      'NEXT_PUBLIC_POSTHOG_KEY',
+      'NEXT_PUBLIC_POSTHOG_HOST',
     ].map((key) => [key, environment[key] ?? '']),
   );
   publicEnvironment.NEXT_PUBLIC_WS_BASE_URL = webSocketBaseUrl;
@@ -271,6 +272,10 @@ const handler = createRequestHandler({
 // Prevent clickjacking: disallow embedding any page (incl. /login) in a frame.
 const fetch = async (request) => {
   const response = await handler(request);
+  // Streamed chat replies can pause for 25s during a tool call, longer than Bun's 10s idle default.
+  if (response.headers.get('content-type')?.includes('text/event-stream')) {
+    server.timeout(request, 60);
+  }
   const headers = new Headers(response.headers);
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Content-Security-Policy', "frame-ancestors 'none'");

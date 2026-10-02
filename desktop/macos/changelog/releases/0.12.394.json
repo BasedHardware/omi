@@ -1,0 +1,7 @@
+{
+  "version": "0.12.394",
+  "date": "2026-09-25",
+  "changes": [
+    "Onboarding no longer restarts unexpectedly after setup; any in-progress setup can still be completed."
+  ]
+}

@@ -12,6 +12,7 @@ private final class DraftEngine: LocalInferenceService, @unchecked Sendable {
   private var rejectOverWindow: Bool
   private(set) var generateCallCount = 0
   private(set) var prompts: [String] = []
+  private(set) var schemaNames: [String] = []
   private(set) var maxPromptTokens = 0
 
   init(
@@ -30,11 +31,12 @@ private final class DraftEngine: LocalInferenceService, @unchecked Sendable {
     self.rejectOverWindow = rejectOverWindow
   }
 
-  func generateStructured<T: Decodable>(prompt: String, schema _: LocalInferenceJSONSchema) async throws -> T {
+  func generateStructured<T: Decodable>(prompt: String, schema: LocalInferenceJSONSchema) async throws -> T {
     let tokens = ConversationChunkSummarizer.estimatedTokens(prompt)
     let result: Result<LocalSummaryDraft, Error> = lock.withLock {
       generateCallCount += 1
       prompts.append(prompt)
+      schemaNames.append(schema.name)
       maxPromptTokens = max(maxPromptTokens, tokens)
       if rejectOverWindow, tokens > capabilities.contextWindowTokens {
         return .failure(LocalInferenceError.engineFailed("exceededContextWindowSize"))
@@ -111,6 +113,70 @@ private final class DraftEngine: LocalInferenceService, @unchecked Sendable {
       XCTAssertFalse(engine.prompts.contains(where: { $0.contains("exceededContextWindowSize") }))
     }
 
+    // red-proof: use LocalSummaryDraft.jsonSchema for the map pass again
+    func testMapPassesAskForASmallerDraftThanTheFinalPass() async throws {
+      let engine = DraftEngine(contextWindowTokens: 4096, generateResults: [])
+      let summarizer = makeSummarizer(engine: engine, store: MemoryLocalProjectionStore())
+      _ = try await summarizer.summarize(sessionId: 11, segments: thirtyMinuteSegments(), startedAt: startedAt)
+
+      let names = engine.schemaNames
+      XCTAssertGreaterThan(names.count, 2, "expected several map passes and one reduce")
+      XCTAssertEqual(
+        names.last, LocalSummaryDraft.jsonSchema.name, "the reduce sees the whole meeting and keeps the full caps")
+      XCTAssertTrue(
+        names.dropLast().allSatisfy { $0 == LocalSummaryDraft.mapJSONSchema.name },
+        "a map pass that may emit 8 sections and 15 items overflowed AFM's prompt+completion window")
+
+      func caps(_ schema: LocalInferenceJSONSchema) throws -> [Int] {
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: schema.json) as? [String: Any])
+        let properties = try XCTUnwrap(object["properties"] as? [String: Any])
+        return try ["sections", "events", "action_items"].map {
+          try XCTUnwrap((properties[$0] as? [String: Any])?["maxItems"] as? Int)
+        }
+      }
+      let full = try caps(LocalSummaryDraft.jsonSchema)
+      let map = try caps(LocalSummaryDraft.mapJSONSchema)
+      XCTAssertEqual(full, [8, 6, 15])
+      XCTAssertTrue(zip(map, full).allSatisfy { $0 < $1 }, "map caps \(map) must be tighter than \(full)")
+      // The bridge parse is the OS-independent half of what AFM will accept.
+      XCTAssertNoThrow(try AFMJSONSchemaBridge.parse(LocalSummaryDraft.mapJSONSchema))
+    }
+
+    // red-proof: drop the `windowTokens` budget from reducePrompt
+    func testReducePromptFitsTheWindowAndKeepsEveryPartialsCommitments() {
+      let body = String(repeating: "Detail about the rollout plan and its many caveats. ", count: 120)
+      let partials = (1...6).map { index in
+        LocalSummaryDraft(
+          title: "part \(index)",
+          overview: "Overview of part \(index).",
+          sections: (1...5).map { LocalSectionDraft(heading: "Topic \(index).\($0)", bodyMarkdown: body) },
+          actionItems: [LocalActionItemDraft(description: "Owner \(index) ships item \(index) — naïve café ✓")]
+        )
+      }
+      let window = 8192
+      let unbounded = ConversationChunkSummarizer.reducePrompt(partials)
+      XCTAssertGreaterThan(
+        ConversationChunkSummarizer.estimatedTokens(unbounded), window, "fixture must overflow to prove anything")
+
+      let bounded = ConversationChunkSummarizer.reducePrompt(partials, windowTokens: window)
+      XCTAssertLessThanOrEqual(
+        ConversationChunkSummarizer.estimatedTokens(bounded)
+          + ConversationChunkSummarizer.completionReserve(windowTokens: window),
+        window)
+      for index in 1...6 {
+        XCTAssertTrue(bounded.contains("Overview of part \(index)."), "partial \(index) vanished")
+        XCTAssertTrue(
+          bounded.contains("Action: Owner \(index) ships item \(index)"),
+          "a cut must cost section detail before it costs a commitment (partial \(index))")
+      }
+    }
+
+    func testCompletionReserveScalesWithTheWindow() {
+      XCTAssertEqual(ConversationChunkSummarizer.completionReserve(windowTokens: 8192), 3584)
+      XCTAssertEqual(ConversationChunkSummarizer.completionReserve(windowTokens: 32768), 3584)
+      XCTAssertEqual(ConversationChunkSummarizer.completionReserve(windowTokens: 4096), 2048)
+    }
+
     func testRetryReturnsTheStoredProjectionAndDoesNotRegenerate() async throws {
       let engine = DraftEngine(
         contextWindowTokens: 8192,
@@ -179,12 +245,95 @@ private final class DraftEngine: LocalInferenceService, @unchecked Sendable {
       XCTAssertEqual(local.generateCallCount, 2)
     }
 
+    /// red-proof: return `assembled` unconditionally and this stores a projection
+    /// whose model_id is the engine's, with nothing in it.
+    func testTitleOnlyDraftFailsClosedToTheMinimumInsteadOfImpersonatingASummary() async throws {
+      // Schema-valid and content-free. `LocalSummaryDraft` decodes every field
+      // through `decodeIfPresent ?? ""` / `?? []`, so this is what a fail-open
+      // constrained-decoding path produces.
+      let engine = DraftEngine(
+        contextWindowTokens: 2048,
+        generateResults: [.success(LocalSummaryDraft(title: "Team Sync"))]
+      )
+      let store = MemoryLocalProjectionStore()
+      let runtime = LocalInferenceRuntime(
+        engines: [engine],
+        killSwitches: .enabled,
+        fallback: DesktopLocalInferenceFallbackRecorder(),
+        defaultEngineID: .localServer
+      )
+      let summarizer = ConversationChunkSummarizer(
+        runtime: runtime,
+        store: store,
+        now: { Date(timeIntervalSince1970: 1_704_140_040) },
+        deviceClass: "macos",
+        sourceLabel: "Recording",
+        timeZone: TimeZone.gmt
+      )
+      let segments = [TranscriptHash.Segment(text: "We decided to ship the local runtime today. Extra sentence.")]
+
+      let stored = try await summarizer.summarize(sessionId: 21, segments: segments, startedAt: startedAt)
+      let payload = try ClientProcessingContract.decode(stored.json)
+
+      // The deterministic minimum, not the model's empty draft. Attribution is
+      // the point: a projection stamped with an engine id outranks the minimum
+      // for display, so an empty one must not claim to be the engine's work.
+      XCTAssertEqual(payload.provenance.modelId, ClientProcessingContract.deterministicModelID)
+      XCTAssertEqual(payload.provenance.runtime, "deterministic")
+      XCTAssertNotEqual(payload.structure.title, "Team Sync")
+
+      let snapshot = try latestFallbackSnapshot()
+      XCTAssertEqual(snapshot["reason"] as? String, "contentless_projection")
+    }
+
+    /// The gate must not swallow a thin but real summary. One action item and
+    /// nothing else is still something the user did not have before.
+    func testASingleActionItemIsEnoughContentToKeepTheProjection() async throws {
+      let engine = DraftEngine(
+        contextWindowTokens: 2048,
+        generateResults: [
+          .success(
+            LocalSummaryDraft(
+              title: "Team Sync",
+              actionItems: [LocalActionItemDraft(description: "Send the notes", completed: false)]
+            ))
+        ]
+      )
+      let store = MemoryLocalProjectionStore()
+      let runtime = LocalInferenceRuntime(
+        engines: [engine],
+        killSwitches: .enabled,
+        fallback: DesktopLocalInferenceFallbackRecorder(),
+        defaultEngineID: .localServer
+      )
+      let summarizer = ConversationChunkSummarizer(
+        runtime: runtime,
+        store: store,
+        now: { Date(timeIntervalSince1970: 1_704_140_040) },
+        deviceClass: "macos",
+        sourceLabel: "Recording",
+        timeZone: TimeZone.gmt
+      )
+      let segments = [TranscriptHash.Segment(text: "We decided to ship the local runtime today. Extra sentence.")]
+
+      let stored = try await summarizer.summarize(sessionId: 22, segments: segments, startedAt: startedAt)
+      let payload = try ClientProcessingContract.decode(stored.json)
+
+      XCTAssertEqual(payload.provenance.modelId, LocalInferenceEngineID.localServer.rawValue)
+      XCTAssertEqual(payload.structure.title, "Team Sync")
+      XCTAssertEqual(payload.actionItems?.count, 1)
+    }
+
     func testHashChangeRegeneratesAndKeepsTheNewStoredBlob() async throws {
+      // Overviews carry the content. This test is about regeneration on a hash
+      // change, so its drafts must survive the contentless gate on their own
+      // merits; a title-only draft now fails closed to the minimum and would
+      // make this assert the wrong thing.
       let engine = DraftEngine(
         contextWindowTokens: 8192,
         generateResults: [
-          .success(LocalSummaryDraft(title: "Original")),
-          .success(LocalSummaryDraft(title: "Edited")),
+          .success(LocalSummaryDraft(title: "Original", overview: "First pass")),
+          .success(LocalSummaryDraft(title: "Edited", overview: "Second pass")),
         ]
       )
       let store = MemoryLocalProjectionStore()

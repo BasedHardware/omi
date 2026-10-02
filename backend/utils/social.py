@@ -28,6 +28,22 @@ logger = logging.getLogger(__name__)
 rapid_api_host = os.getenv('RAPID_API_HOST')
 rapid_api_key = os.getenv('RAPID_API_KEY')
 
+
+class SocialCredentialsError(Exception):
+    """RapidAPI credentials are unset. Non-retryable by nature: no amount of
+    retrying fixes a missing RAPID_API_KEY/RAPID_API_HOST, and the retry loop
+    would otherwise burn its full backoff budget on a guaranteed failure."""
+
+
+def is_rapid_api_configured() -> bool:
+    return bool(rapid_api_host and rapid_api_key)
+
+
+def _require_rapid_api_credentials() -> None:
+    if not is_rapid_api_configured():
+        raise SocialCredentialsError('RAPID_API_KEY/RAPID_API_HOST not configured')
+
+
 defaultTimeoutSec = 15
 
 
@@ -87,6 +103,7 @@ async def async_with_retry(operation_name: str, func: Callable[[], Awaitable[Any
 
 async def get_twitter_profile(handle: str) -> TwitterProfile:
     """Fetch Twitter profile for a user and return structured data"""
+    _require_rapid_api_credentials()
     url = f"https://{rapid_api_host}/screenname.php?screenname={quote(handle, safe='')}"
 
     headers = cast(Dict[str, str], {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host})
@@ -121,6 +138,7 @@ def create_memories_from_twitter_tweets(uid: str, persona_id: str, tweets: List[
 
 async def get_twitter_timeline(handle: str) -> TwitterTimeline:
     """Fetch Twitter timeline for a user and return structured data"""
+    _require_rapid_api_credentials()
     logger.info(f"Fetching Twitter timeline for {handle}...")
     url = f"https://{rapid_api_host}/timeline.php?screenname={quote(handle, safe='')}"
 

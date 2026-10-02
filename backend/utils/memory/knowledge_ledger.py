@@ -298,6 +298,7 @@ def save_fact(
     arguments: Optional[Dict[str, Any]] = None,
     valid_from: Optional[datetime] = None,
     visibility: Literal["private", "public", "shared"] = "private",
+    user_asserted: bool = False,
     db_client: Any = None,
     _direct_user_authority: object | None = None,
 ) -> str:
@@ -315,6 +316,7 @@ def save_fact(
             predicate=predicate,
             arguments=dict(arguments or {}),
             valid_from=valid_from,
+            user_asserted=user_asserted,
             visibility=visibility,
         ),
         db_client=db_client,
@@ -335,6 +337,7 @@ def amend_fact(
     curation_weight: int = 0,
     valid_from: Optional[datetime] = None,
     visibility: Literal["private", "public", "shared"] = "private",
+    user_asserted: bool = False,
     db_client: Any = None,
     required_source_item: Optional[MemoryItem] = None,
 ) -> str:
@@ -351,6 +354,7 @@ def amend_fact(
             subject_entity_id=subject_entity_id,
             curation_weight=curation_weight,
             valid_from=valid_from,
+            user_asserted=user_asserted,
             visibility=visibility,
             supersedes=[prior_memory_id],
         ),

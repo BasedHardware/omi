@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-sync-backfill-dispatch-abort-unobserved",
+  "violated_contract": "A Cloud Run dispatch abort on backend-sync-backfill ('The request was aborted because there was no available instance') must be a first-class, alertable signal. Leaving it as unstructured WARNING/ERROR lines means cold-start instance starvation is invisible until users report stranded backfill.",
+  "canonical_prevention": "Provision a Cloud Logging metric (sync_backfill_dispatch_abort) and a monitoring policy on the existing sync-backfill-lifecycle budget-alert path, filtered to backend-sync-backfill dispatch aborts, alerting when count > 0, using the same ALERT_CHANNELS as budget alerts in prod. Do not change queue rate limits to paper over missing telemetry.",
+  "canonical_prevention_artifact": [
+    ".github/actions/sync-backfill-lifecycle/action.yml",
+    "backend/tests/unit/test_sync_two_lane.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/actions/sync-backfill-lifecycle/**",
+    "backend/tests/unit/test_sync_two_lane.py"
+  ],
+  "status": "open"
+}

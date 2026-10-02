@@ -17,6 +17,7 @@ import database.action_items as action_items_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
 from models.shared import EmptyResponse
+from utils.product_metrics import record_product_event
 from models.conversation import SearchRequest
 from models.app import App
 from models.geolocation import Geolocation
@@ -72,7 +73,7 @@ async def _resolve_geolocation(geolocation: Optional[Geolocation]) -> Optional[G
 
 @router.post(
     '/v2/integrations/{app_id}/user/conversations',
-    response_model=EmptyResponse,
+    response_model=integration_models.ConversationCreateResponse,
     tags=['integration', 'conversations'],
 )
 async def create_conversation_via_integration(
@@ -81,7 +82,7 @@ async def create_conversation_via_integration(
     create_conversation: conversation_models.ExternalIntegrationCreateConversation,
     uid: str,
     authorization: Optional[str] = Header(None),
-) -> Dict[str, Any]:
+) -> integration_models.ConversationCreateResponse:
     # Verify API key from Authorization header
     if not authorization or not authorization.startswith('Bearer '):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
@@ -143,9 +144,7 @@ async def create_conversation_via_integration(
     # Always trigger integration
     await trigger_external_integrations(uid, conversation)
 
-    # TODO: Empty for now, replace with ConversationCreateResponse once we don't have to wait for process_conversation
-    # to finish for the conversation id
-    return {}
+    return integration_models.ConversationCreateResponse(status="success", conversation_id=conversation.id)
 
 
 @router.post(
@@ -196,6 +195,12 @@ def create_memories_via_integration(
     # Process and save the memory using the utility function
     process_external_integration_memory(uid, fact_data, app_id)
 
+    record_product_event(
+        'memory_created',
+        client_kind='unknown',
+        source='integration',
+        uid=uid,
+    )
     # Empty response
     return {}
 
@@ -693,7 +698,7 @@ def get_tasks_via_integration(
     for task in tasks:
         task_data = task.copy()
         if task_data.get('is_locked', False):
-            description = task_data.get('description', '')
+            description = task_data.get('description') or ''
             task_data['description'] = (description[:70] + '...') if len(description) > 70 else description
         try:
             task_items.append(integration_models.TaskItem(**task_data))

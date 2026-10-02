@@ -50,7 +50,12 @@ enum ConversationShareLinkAction {
   ) async -> ConversationShareLinkFeedback {
     do {
       let link = try await mintLink()
-      return copyToPasteboard(link) ? .copied : .failed
+      guard copyToPasteboard(link) else { return .failed }
+      if let sid = DesktopBackendEnvironment.shareID(from: link) {
+        AnalyticsManager.shared.shareAction(
+          category: "conversation", properties: ["share_id": sid, "target_app": "copy"])
+      }
+      return .copied
     } catch {
       onFailure(error)
       return .failed
@@ -68,7 +73,6 @@ enum ConversationShareLinkAction {
 struct ConversationShareLinkButton: View {
   let conversationId: String
   var canShare: Bool = true
-  var onCopied: (() -> Void)? = nil
 
   @State private var isCopyingLink = false
   @State private var feedback: ConversationShareLinkFeedback?
@@ -143,9 +147,6 @@ struct ConversationShareLinkButton: View {
       onFailure: { logError("Failed to get share link", error: $0) }
     )
 
-    if outcome == .copied {
-      onCopied?()
-    }
     show(outcome)
   }
 

@@ -114,6 +114,8 @@ class TaskWorkflowControl(BaseModel):
 
     workflow_mode: TaskWorkflowMode = TaskWorkflowMode.off
     account_generation: int = Field(default=0, ge=0)
+    # Compatibility wire key for pre-chat-first desktop clients; removal
+    # requires minimum supported desktop version 0.12.386+12386.
     chat_first_ui: bool = False
 
     @model_validator(mode='before')

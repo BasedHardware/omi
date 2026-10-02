@@ -1,5 +1,7 @@
 self-hosted-runner:
   labels:
     - macos
+    # GitHub-hosted public preview label; actionlint's built-in list lags the image rollout.
+    - xcode-27
 
 config-variables: null

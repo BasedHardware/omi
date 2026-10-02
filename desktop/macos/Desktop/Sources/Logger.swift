@@ -27,6 +27,20 @@ enum OmiLogPathResolver {
 
 private let logBundleIdentifier = Bundle.main.bundleIdentifier ?? "unknown"
 private let logProcessID = getpid()
+
+/// EXP-002: launch-scoped experiment context appended to every structured
+/// desktop log line once the arm resolves, so logs are sliceable by arm
+/// alongside PostHog events and Sentry tags. Written once per launch on the
+/// main actor before the main shell paints.
+private nonisolated(unsafe) var logExperimentContext: (experimentId: String, variant: String)?
+private let logExperimentContextLock = NSLock()
+
+func setLogExperimentContext(experimentId: String, variant: String) {
+  logExperimentContextLock.withLock {
+    logExperimentContext = (experimentId, variant)
+  }
+}
+
 private let logFile: String = OmiLogPathResolver.logPath(
   isNonProduction: AppBuild.isNonProduction,
   bundleIdentifier: logBundleIdentifier,
@@ -194,7 +208,11 @@ private func ensureLogParentDirectories() -> Bool {
 }
 
 private func logLine(timestamp: String, category: String, message: String) -> String {
-  "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)] \(message)"
+  let experiment = logExperimentContextLock.withLock { logExperimentContext }
+  let experimentFields =
+    experiment.map { " [experiment_id=\($0.experimentId) variant=\($0.variant)]" } ?? ""
+  return
+    "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)]\(experimentFields) \(message)"
 }
 
 func writeToLogFile(
@@ -238,6 +256,11 @@ private func writeToLogFile(_ data: Data) {
 
 /// Log a performance event with timing info - writes to omi.log with [perf] tag
 func logPerf(_ message: String, duration: Double? = nil, cpu: Bool = false) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   var parts = [logLine(timestamp: timestamp, category: "perf", message: message)]
 
@@ -308,6 +331,11 @@ private let isDevBuild: Bool = AppBuild.isNonProduction
 /// Write to log file synchronously — guaranteed to persist even if the app terminates immediately after.
 /// Use sparingly (blocks the calling thread); prefer `log()` for normal logging.
 func logSync(_ message: String) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
@@ -321,6 +349,11 @@ func logSync(_ message: String) {
 
 /// Write to log file, stdout, and Sentry breadcrumbs
 func log(_ message: String) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
@@ -656,6 +689,11 @@ func logError(
   fileID: StaticString = #fileID,
   function: StaticString = #function
 ) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(error.map { "\(message): \($0.localizedDescription)" } ?? message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let errorDesc = error?.localizedDescription ?? ""
   let fullMessage = error != nil ? "\(message): \(errorDesc)" : message

@@ -29,10 +29,14 @@ extension APIClient {
 
   /// `POST /v1/screen-frame-egress/adjudications`. Uploads canonical candidate bytes and gets
   /// back the conversation's whole frame set — never a verdict, never an approval (contract §0).
+  /// With `authorizationSnapshot`, the request is owner-bound: rejected before sending, and its
+  /// response discarded, if that owner is no longer the signed-in session.
   func adjudicateScreenFrames(
-    _ request: ScreenFrameAdjudicationRequestWire
+    _ request: ScreenFrameAdjudicationRequestWire,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ScreenFrameAdjudicationResponseWire {
-    try await post("v1/screen-frame-egress/adjudications", body: request)
+    try await post(
+      "v1/screen-frame-egress/adjudications", body: request, authorizationSnapshot: authorizationSnapshot)
   }
 
   /// `GET /v1/conversations/{id}/screenshots`. The source of truth for what a note currently

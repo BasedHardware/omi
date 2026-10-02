@@ -31,10 +31,13 @@ class TestParseCategories:
         logger = logging.getLogger("test")
         assert _parse_categories([], ConversationCategory, logger) == []
 
-    def test_invalid_category_is_dropped_and_logged(self):
+    def test_invalid_category_is_rejected_and_logged(self):
+        # Dropping the value used to leave an empty filter, which both
+        # dispatchers then omit from the request -- i.e. unfiltered results for a
+        # filtered question. See tests/test_category_filters.py.
         logger = MagicMock(spec=logging.Logger)
-        result = _parse_categories(["not-a-real-category"], ConversationCategory, logger)
-        assert result == []
+        with pytest.raises(ValueError, match="Invalid category 'not-a-real-category'"):
+            _parse_categories(["not-a-real-category"], ConversationCategory, logger)
         logger.warning.assert_called_once()
 
     def test_non_list_input_raises_value_error(self):
