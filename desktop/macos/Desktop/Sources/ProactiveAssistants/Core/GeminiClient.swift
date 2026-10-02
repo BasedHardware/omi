@@ -1180,7 +1180,7 @@ extension GeminiClient {
           guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
             // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
             // if the failure is transient and a fallback model remains.
-            if modelIndex < models.count - 1 && Self.shouldAutoRetry(error) {
+            if maximumAttempts == nil && modelIndex < models.count - 1 && Self.shouldAutoRetry(error) {
               DesktopDiagnosticsManager.shared.recordFallback(
                 area: "gemini_model",
                 from: Self.bucketGeminiModel(activeModel),
