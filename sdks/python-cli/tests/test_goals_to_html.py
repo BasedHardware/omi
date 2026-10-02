@@ -144,11 +144,35 @@ class TestGoalsToHTML(unittest.TestCase):
             g2html.derive_status({"is_active": True, "is_completed": True}),
             "completed",
         )
+        # Normalized string boolean flags
+        self.assertEqual(
+            g2html.derive_status({
+                "is_active": True,
+                "is_achieved": "false",
+                "is_completed": "true",
+            }),
+            "completed",
+        )
+        # Boolean goal reaching 1.0 without explicit achieved flag derives completed
+        self.assertEqual(
+            g2html.derive_status({
+                "is_active": True,
+                "goal_type": "boolean",
+                "current_value": 1.0,
+            }),
+            "completed",
+        )
         # Active
         self.assertEqual(
             g2html.derive_status({"is_active": True, "is_achieved": False}),
             "active",
         )
+
+    def test_parse_float_overflow(self):
+        # Massive integer string outside float range must return None rather than raising OverflowError
+        massive_str = "9" * 400
+        self.assertIsNone(g2html.parse_float(massive_str))
+        self.assertIsNone(g2html.parse_float(10**400))
 
     def test_unwrap_goals(self):
         for key in ("goals", "items", "data", "results"):
@@ -239,8 +263,6 @@ class TestGoalsToHTML(unittest.TestCase):
         count = g2html.convert([str(src)], destination=str(dest))
         self.assertEqual(count, 4)
         self.assertTrue(dest.exists())
-        orig_bytes = dest.read_bytes()
-
         # Second call without overwrite must fail
         with self.assertRaises(FileExistsError):
             g2html.convert([str(src)], destination=str(dest), overwrite=False)
@@ -252,6 +274,9 @@ class TestGoalsToHTML(unittest.TestCase):
         # No leftover temp files exist
         tmp_files = list(self.tmp.glob(".tmp_goals_html_*"))
         self.assertEqual(tmp_files, [])
+
+        # Capture snapshot of destination immediately before injecting write failure
+        orig_bytes = dest.read_bytes()
 
         # Failing tmp write in overwrite mode cleans up temporary file and leaves destination intact
         real_open = Path.open

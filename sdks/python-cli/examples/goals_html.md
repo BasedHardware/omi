@@ -19,7 +19,9 @@ pip install omi-cli
 omi auth login
 ```
 
-Export your tracked goals (including completed and inactive milestones):
+Export your tracked goals (including completed and inactive milestones). Note that `omi goal list` caps
+exports at `--limit 100` and currently provides no pagination offset, so accounts with more than 100 goals
+will export the newest 100 records:
 
 ```sh
 omi --json goal list --limit 100 --include-inactive > goals.json
@@ -51,7 +53,7 @@ python goals_to_html.py goals.json -o ~/Reports/goals_dashboard.html
 
 ### 3. Filter by Goal Status
 
-Generate a dashboard focused only on active or completed milestones:
+Generate a dashboard focused strictly on active milestones:
 
 ```sh
 python goals_to_html.py goals.json --status active -o ~/Reports/active_goals.html
