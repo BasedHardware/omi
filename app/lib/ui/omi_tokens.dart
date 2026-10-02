@@ -43,7 +43,6 @@ class OmiPalette {
       required this.glass,
       required this.glassEdge,
       required this.glassRim,
-      required this.glassShadow,
       required this.deviceTile,
       required this.deviceTileInk});
 
@@ -82,9 +81,6 @@ class OmiPalette {
   final Color glassEdge;
   final Color glassRim;
 
-  /// The soft shadow that lifts glass off a light page; clear in dark, where the lit rim does it.
-  final Color glassShadow;
-
   /// The tile behind a device glyph on a list row (`DeviceTile`).
   final Color deviceTile;
   final Color deviceTileInk;
@@ -116,7 +112,6 @@ class OmiPalette {
     glass: Color(0x803A3A3C),
     glassEdge: Color(0x29FFFFFF),
     glassRim: Color(0x12FFFFFF),
-    glassShadow: Color(0x00000000),
     deviceTile: Color(0xFF1A1A1A),
     deviceTileInk: Color(0xFF8E8982),
   );
@@ -145,10 +140,10 @@ class OmiPalette {
     dangerSurface: Color(0x26FF3B30),
     canvas: Color(0xFFFFFFFF),
     canvasCard: Color(0xFFF2F2F7),
-    glass: Color(0xE6FAFAFC),
+    // Dark's glass in light grey: as see-through, with the same lit top edge.
+    glass: Color(0x80D1D1D6),
     glassEdge: Color(0xF2FFFFFF),
-    glassRim: Color(0x0C000000),
-    glassShadow: Color(0x08000000),
+    glassRim: Color(0x0F000000),
     deviceTile: Color(0xFFFAF8F4),
     deviceTileInk: Color(0xFF8C877F),
   );
@@ -187,7 +182,6 @@ abstract final class OmiColors {
   static Color get glass => active.glass;
   static Color get glassEdge => active.glassEdge;
   static Color get glassRim => active.glassRim;
-  static Color get glassShadow => active.glassShadow;
   static Color get deviceTile => active.deviceTile;
   static Color get deviceTileInk => active.deviceTileInk;
 }

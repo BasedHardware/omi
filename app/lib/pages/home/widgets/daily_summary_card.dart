@@ -43,7 +43,7 @@ class DailySummaryCard extends StatelessWidget {
           width: width,
           height: height,
           margin: const EdgeInsets.only(right: 12),
-          // A card, not a control: the page's card colour with the glass rim, and no shadow.
+          // A card, not a control: the page's card colour with the glass rim.
           decoration: ShapeDecoration(shape: _cardShape, color: OmiCanvas.cardOf(context)),
           // Over the map too, so the glass edge runs across its top.
           foregroundDecoration: OmiGlass.rim(_cardShape),

@@ -66,7 +66,6 @@ void main() {
     final card = tester.widget<Container>(find.byKey(const ValueKey('daily_summary_card_summary-1')));
     final fill = card.decoration! as ShapeDecoration;
     expect(fill.color, OmiColors.surface1, reason: 'the card colour, not the controls\' glass');
-    expect(fill.shadows, isNull, reason: 'content sits on the page; only controls are lifted');
     expect(card.foregroundDecoration, isA<OmiGlassRim>());
     expect(find.text('🌉'), findsNothing);
 
