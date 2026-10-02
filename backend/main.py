@@ -38,6 +38,8 @@ from routers import (
     notifications,
     speech_profile,
     speaker_tag_prompts,
+    speaker_labels,
+    people,
     agents,
     users,
     trends,
@@ -93,6 +95,7 @@ from routers import (
     desktop_core,
     desktop_prompts,
     desktop_proxy,
+    desktop_task_gate,
     desktop_realtime,
     desktop_screen_crisp,
     frame_requests,
@@ -232,6 +235,8 @@ app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
 app.include_router(speaker_tag_prompts.router)
+app.include_router(speaker_labels.router)
+app.include_router(people.router)
 app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
@@ -296,6 +301,7 @@ app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
 app.include_router(desktop_proxy.router)
+app.include_router(desktop_task_gate.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(frame_requests.router)

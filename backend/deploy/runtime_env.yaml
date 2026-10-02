@@ -136,9 +136,15 @@ environments:
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
-          STT_ROUTING_PROBE_PERCENT:
-            value: '2'
+          STT_ROUTING_ON_PERCENT:
+            value: '0'
             category: rollout
+          STT_ROUTING_TARGETS_JSON:
+            value: ''
+            category: rollout
+          STT_ROUTING_DISRUPTION_GATE:
+            value: '0.08'
+            category: reliability
           STT_NO_TEXT_SECONDS:
             value: '30'
             category: rollout
@@ -386,6 +392,30 @@ environments:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          MEMORY_OWNER_JEV_FLIP_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -502,6 +532,30 @@ environments:
             category: rollout
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
@@ -979,6 +1033,30 @@ environments:
             MEMORY_OWNER_JEV_FLIP_ENABLED:
               value: 'true'
               category: rollout
+            MEMORY_OWNER_JEV_FLIP_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+              value: ''
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -1202,6 +1280,30 @@ environments:
             MEMORY_OWNER_JEV_FLIP_ENABLED:
               value: 'true'
               category: rollout
+            MEMORY_OWNER_JEV_FLIP_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+              value: ''
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -1379,6 +1481,24 @@ environments:
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: '1.0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+              value: ''
               category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
@@ -1980,9 +2100,15 @@ environments:
           STT_ROUTING_REDIS_TIMEOUT_SECONDS:
             value: '0.075'
             category: rollout
-          STT_ROUTING_PROBE_PERCENT:
-            value: '2'
+          STT_ROUTING_ON_PERCENT:
+            value: '0'
             category: rollout
+          STT_ROUTING_TARGETS_JSON:
+            value: ''
+            category: rollout
+          STT_ROUTING_DISRUPTION_GATE:
+            value: '0.08'
+            category: reliability
           STT_NO_TEXT_SECONDS:
             value: '30'
             category: rollout
@@ -2005,7 +2131,7 @@ environments:
             value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '5'
+            value: '50'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
             value: '8'
@@ -2248,6 +2374,27 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '2'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -2340,6 +2487,27 @@ environments:
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
             category: storage_retention
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '2'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -2676,6 +2844,8 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            FIREBASE_SIGNER_SERVICE_ACCOUNT:
+              value: backend-runtime@based-hardware.iam.gserviceaccount.com
             SCREEN_FRAME_EGRESS_ENABLED:
               value: 'true'
               category: rollout
@@ -2748,6 +2918,27 @@ environments:
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '2'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_PERCENT:
+              value: '1'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -2760,6 +2951,7 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: rollout
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -2964,6 +3156,27 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '2'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_PERCENT:
+              value: '1'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -2976,6 +3189,7 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: rollout
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -3149,6 +3363,27 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_PERCENT:
+              value: '100'
+              category: rollout
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+              value: '2'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_PERCENT:
+              value: '1'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+              value: '60000'
+              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -3162,6 +3397,7 @@ environments:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: rollout
           provisional: true
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -3294,6 +3530,7 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: rollout
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -3304,6 +3541,7 @@ environments:
           flags:
             --task-timeout: 3600s
             --memory: 2Gi
+            --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -3316,9 +3554,6 @@ environments:
               version: latest
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
-              version: latest
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
               version: latest
           env:
             OMI_LLM_GATEWAY_URL:
@@ -3564,6 +3799,7 @@ environments:
           flags:
             --remove-env-vars: HOSTED_PUSHER_API_URL
             --task-timeout: 900s
+            --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
           secrets:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
@@ -3576,9 +3812,6 @@ environments:
               version: latest
             LIFECYCLE_EMAIL_SIGNING_SECRET:
               secret: LIFECYCLE_EMAIL_SIGNING_SECRET
-              version: latest
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
               version: latest
           env:
             OMI_ENV_STAGE:

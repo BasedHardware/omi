@@ -569,7 +569,7 @@ async def test_chain_account_death_labels_error_class_by_typed_reason(monkeypatc
     # The connect counter must carry the typed token so a 402 reads
     # error_class=budget on the dashboard and leg-error alert; 'auth' is
     # reserved for actual authentication refusals. The account bench still
-    # arms either way, and omi_fallback_total keeps its bounded vocabulary.
+    # arms either way, while omi_fallback_total retains its legacy quota/auth labels.
     from utils.stt import live_chain
 
     monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'modulate-velma-2'])
@@ -590,7 +590,8 @@ async def test_chain_account_death_labels_error_class_by_typed_reason(monkeypatc
     assert connect_metrics.connect_error_class(failures[0]['reason']) == error_class
     assert st._soniox_circuit.state == 'open'  # account bench armed, unchanged
     assert fallbacks, 'the bounded fallback vocabulary is still recorded'
-    assert all(event['reason'] in ('quota', 'auth', 'other') for event in fallbacks)
+    fallback_reason = 'quota' if error_class == 'budget' else 'auth'
+    assert all(event['reason'] == fallback_reason for event in fallbacks)
 
 
 def test_mid_session_metrics_retain_their_bounded_vocabulary():
@@ -633,7 +634,8 @@ def test_late_probe_callbacks_cannot_consume_a_new_generation_probe():
 @pytest.mark.parametrize('provider', ['soniox', 'modulate'])
 @pytest.mark.parametrize('reason', [PROVIDER_BUDGET_EXHAUSTED, PROVIDER_AUTH_REJECTED])
 def test_shared_typed_account_death_uses_long_cooldown_and_one_probe(monkeypatch, provider, reason):
-    from utils.stt.live_failure import note_typed_provider_death, fallback_reason_for_typed_death
+    from utils.stt.live_failure import note_typed_provider_death
+    from utils.stt.live_reason import normalize_live_stt_reason
 
     now = [0.0]
     cb = resilience.ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30, clock=lambda: now[0])
@@ -644,7 +646,7 @@ def test_shared_typed_account_death_uses_long_cooldown_and_one_probe(monkeypatch
     now[0] = 1800
     assert cb.allow_request(max_probes=4)
     assert not cb.allow_request(max_probes=4)
-    assert fallback_reason_for_typed_death(reason) == ('quota' if reason == PROVIDER_BUDGET_EXHAUSTED else 'auth')
+    assert normalize_live_stt_reason(reason) == reason
 
 
 @pytest.mark.parametrize('code', [401, 403])

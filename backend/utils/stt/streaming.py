@@ -376,7 +376,9 @@ async def connect_stt_socket_with_fallback(
     use_config: Optional[bool] = None,
     routing_uid: Optional[str] = None,
     routing_language: Optional[str] = None,
-    routing_pin_primary: bool = False,
+    routing_languages: tuple[str, ...] = (),
+    routing_models: dict[str, str | None] | None = None,
+    failed_targets: set[str] | None = None,
 ) -> Tuple[STTSocket, STTService]:
     """Connect a serving provider; see ARCHITECTURE.md (incident history)."""
     if configured_chain_enabled() if use_config is None else use_config:
@@ -395,7 +397,9 @@ async def connect_stt_socket_with_fallback(
             models=stt_service_models,
             routing_uid=routing_uid,
             routing_language=routing_language,
-            routing_pin_primary=routing_pin_primary,
+            routing_languages=routing_languages,
+            routing_models=routing_models,
+            failed_targets=failed_targets,
         )
     circuit = _circuit_for_primary(primary_service)
 
@@ -1397,9 +1401,9 @@ class SafeModulateSocket(STTSocket):
     def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
         with self._lock:
             if not self._dead:
-                self._dead = True
                 self._death_reason = reason
                 self._typed_death_reason = typed_reason
+                self._dead = True  # Metadata must precede the latch read by death observers.
 
     def send(self, data: bytes) -> bool:
         """Synchronously accept audio only when it reaches the provider queue.

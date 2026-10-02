@@ -1,13 +1,14 @@
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import Any, Dict, Optional, List, Tuple
+from typing import Any, Dict, Literal, Optional, List, Tuple
 import uuid
 import re
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, model_serializer
 from pydantic.json_schema import SkipJsonSchema
 
 from models.other import Person
+from models.speaker_label_provenance import project_source
 
 # Unicode sentence-ending punctuation used across supported locales.
 # Conservative set: English (.!?), CJK (。！？), Arabic/Urdu (؟۔), Hindi/Sanskrit (।॥)
@@ -71,6 +72,7 @@ class TranscriptSegment(BaseModel):
     speaker_id: Optional[int] = None
     is_user: bool
     person_id: Optional[str] = None
+    speaker_label_source: Optional[Literal['manual', 'auto', 'carried']] = None
     start: float
     end: float
     translations: Optional[List[Translation]] = Field(default_factory=list)
@@ -90,22 +92,26 @@ class TranscriptSegment(BaseModel):
     # V2 accepted-send run start in capture samples. Stops live text merging
     # from turning two valid windows across a VAD skip into one false window.
     audio_capture_run: SkipJsonSchema[Optional[int]] = Field(default=None, exclude=True)
+    # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
+    # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
+    voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
     # looks real after a round-trip.
     _speaker_id_synthesized: bool = PrivateAttr(default=False)
 
-    def model_dump(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
-        # The ordinary model schema and every v1 dump stay unchanged. Only a
-        # v2 unplaced segment carries this internal marker into persistence
-        # and WebSocket payloads; Pydantic's model serializer would erase the
-        # public TranscriptSegment OpenAPI shape entirely.
-        data = super().model_dump(*args, **kwargs)
-        if self.audio_alignment is not None:
-            data['audio_alignment'] = self.audio_alignment
-        if self.audio_capture_run is not None:
-            data['audio_capture_run'] = self.audio_capture_run
+    @model_serializer(mode='wrap')
+    def _serialize_internal_evidence(self, handler):
+        # A wrap serializer also runs when a parent conversation is dumped. Leave
+        # the return type inferred so Pydantic retains the public field schema.
+        # Omit absent internal markers to keep ordinary v1 payloads unchanged.
+        data = handler(self)
+        data['speaker_label_source'] = project_source(data)
+        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
+            value = getattr(self, key)
+            if value is not None:
+                data[key] = value
         return data
 
     def __init__(self, **data: Any):
@@ -114,6 +120,14 @@ class TranscriptSegment(BaseModel):
         speaker_in_payload = data.get('speaker') is not None
         speaker_id_in_payload = data.get('speaker_id') is not None
         super().__init__(**data)
+        self.speaker_label_source = project_source(
+            {
+                'person_id': self.person_id,
+                'is_user': self.is_user,
+                'speaker_label_source': self.speaker_label_source,
+                'speaker_match_source': self.speaker_match_source,
+            }
+        )
         self._speaker_id_synthesized = not speaker_in_payload and not speaker_id_in_payload
         if not self.id:
             self.id = str(uuid.uuid4())
@@ -322,6 +336,8 @@ class TranscriptSegment(BaseModel):
             if b.stt_provider != a.stt_provider:
                 return a, b
             if b.speaker_match_source != a.speaker_match_source:
+                return a, b
+            if b.speaker_label_source != a.speaker_label_source:
                 return a, b
             if b.speaker_id_scope != a.speaker_id_scope:
                 return a, b

@@ -16,6 +16,7 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
+from utils.live_speaker_carry import carried_receipt
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.live_continuation import resolve_live_continuation
@@ -328,9 +329,18 @@ class LiveConversationController:
             latest and (latest.get('transcript_segments') or latest.get('has_content') or latest.get('photos'))
         ) and await self.schedule_finalization(conversation_id)
 
+    def _active_speaker_scope(self) -> Optional[str]:
+        epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
+        return getattr(epoch, 'current_scope', None)
+
     async def create_new_in_progress_conversation(self, *, rollover: bool = False) -> None:
         request = self.host.request
+        carry_from: Optional[tuple[str, str]] = None
         if rollover:
+            previous_id = self.host.state.current_conversation_id
+            active_scope = self._active_speaker_scope()
+            if previous_id and active_scope:
+                carry_from = (previous_id, active_scope)
             continuation = await self._continuation()
             if continuation and await self._resume_continuation(continuation):
                 return
@@ -463,13 +473,36 @@ class LiveConversationController:
             external_data=external_data,
             geolocation=request.geolocation,
         )
+        carry = {}
+        if carry_from:
+            try:
+                previous = await self.host.persistence.call(
+                    conversations_db.get_conversation,
+                    request.uid,
+                    carry_from[0],
+                    read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
+                )
+            except Exception as error:
+                logger.warning('Speaker carry lookup failed type=%s', type(error).__name__)
+                previous = None
+            if (
+                previous
+                and not previous.get('deleted')
+                and not previous.get('discarded')
+                and not previous.get('is_locked')
+                and self._active_speaker_scope() == carry_from[1]
+            ):
+                carry = carried_receipt(previous, carry_from[1])
+        # The modeled field's None default is omitted, never stamped:
+        # persist is merge=True, so a dumped None would become an
+        # explicit Firestore key on every fresh recording.
+        payload = omit_null_processing_state(conversation.model_dump())
+        if carry:
+            payload['manual_speaker_assignments'] = carry
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
-            # The modeled field's None default is omitted, never stamped:
-            # persist is merge=True, so a dumped None would become an
-            # explicit Firestore key on every fresh recording.
-            omit_null_processing_state(conversation.model_dump()),
+            payload,
             idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
         )
         if rollover:
@@ -683,7 +716,7 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
             elif action == ConversationLifecycleAction.process_and_create_new:
                 await self.host.transcripts.flush_speaker_assignments(conversation_id)
-                await self.process_conversation(conversation_id)
+                await self._finalize_isolated(self.process_conversation, conversation_id, stage='lifecycle_rollover')
                 await self.create_new_in_progress_conversation(rollover=True)
 
     async def send_last_conversation(self) -> None:

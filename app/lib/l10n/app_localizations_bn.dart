@@ -3984,9 +3984,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => 'নতুন সংস্করণ উপলব্ধ';
-
-  @override
   String get no => 'না';
 
   @override
@@ -5072,8 +5069,7 @@ class AppLocalizationsBn extends AppLocalizations {
       'চালিয়ে যাওয়ার মাধ্যমে, আপনার কথোপকথন, রেকর্ডিং এবং ব্যক্তিগত তথ্য আমাদের সার্ভারে নিরাপদে সংরক্ষণ করা হবে। আপনার অডিও রেকর্ডিং এবং ট্রান্সক্রিপ্ট তৃতীয় পক্ষের AI পরিষেবা দ্বারা প্রক্রিয়া করা হয় (ট্রান্সক্রিপশনের জন্য Deepgram এবং বিশ্লেষণের জন্য OpenAI সহ) যাতে আপনাকে AI-চালিত অন্তর্দৃষ্টি প্রদান করা যায় এবং সমস্ত অ্যাপ বৈশিষ্ট্য সক্ষম করা যায়।';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'আপনার কথোপকথন থেকে কাজগুলি এখানে উপস্থিত হবে।\nম্যানুয়ালি একটি তৈরি করতে + ট্যাপ করুন।';
+  String get tasksEmptyStateMessage => 'একটি কাজ তৈরি করতে কথোপকথন শুরু করুন।';
 
   @override
   String get clearChatAction => 'চ্যাট সাফ করুন';
@@ -11658,5 +11654,586 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String diagnosticsCountSincePairing(int count) {
     return 'জোড়া হওয়ার পর থেকে $count';
+  }
+
+  @override
+  String get peopleFilterLowConfidence => 'কম নিশ্চিত';
+
+  @override
+  String get peopleFilterPinned => 'পিন করা';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি পিন করা',
+      one: '1টি পিন করা',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'নিশ্চিত';
+
+  @override
+  String get confidenceLikely => 'সম্ভাব্য';
+
+  @override
+  String get confidenceUnverified => 'যাচাই হয়নি';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'নিশ্চয়তা: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'আপনি $count বার নাম দিয়েছেন',
+      one: 'আপনি একবার নাম দিয়েছেন',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি পরামর্শে বেছে নেওয়া হয়েছে',
+      one: '1টি পরামর্শে বেছে নেওয়া হয়েছে',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'আপনি $countটি মিল নিশ্চিত করেছেন',
+      one: 'আপনি 1টি মিল নিশ্চিত করেছেন',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'শুধু স্বয়ংক্রিয় মিল, কখনো নিশ্চিত করা হয়নি';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'কখনো নিশ্চিত করা হয়নি';
+
+  @override
+  String get confidenceReasonCorrected => 'আপনি এর মিল ঠিক করেছেন';
+
+  @override
+  String get confidenceReasonVoiceReady => 'ভয়েস প্রস্তুত';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'ভয়েস দরকার';
+
+  @override
+  String get confidenceReasonNotHeard => 'এখনো শোনা যায়নি';
+
+  @override
+  String get confidenceSheetTitle => 'নিশ্চয়তা';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi $name-এর কণ্ঠ চেনে, এবং আপনি তা নিশ্চিত করেছেন।';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi সাধারণত $name-এর কণ্ঠ চেনে, কিন্তু আপনি মাত্র কয়েকবার নিশ্চিত করেছেন।';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'আপনার কোনো কাজই এখনো $name-কে সমর্থন করে না।';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'প্রমাণ';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'আপনি $countটি কথোপকথনে নাম দিয়েছেন',
+      one: 'আপনি 1টি কথোপকথনে নাম দিয়েছেন',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি পরামর্শে “হ্যাঁ”',
+      one: '1টি পরামর্শে “হ্যাঁ”',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি পরামর্শে বেছে নেওয়া হয়েছে',
+      one: '1টি পরামর্শে বেছে নেওয়া হয়েছে',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি স্বয়ংক্রিয় মিল নিশ্চিত করা হয়েছে',
+      one: '1টি স্বয়ংক্রিয় মিল নিশ্চিত করা হয়েছে',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি মিল অন্য কারও কাছে সরানো হয়েছে',
+      one: '1টি মিল অন্য কারও কাছে সরানো হয়েছে',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি স্বয়ংক্রিয় মিল কেউ নিশ্চিত করেনি',
+      one: '1টি স্বয়ংক্রিয় মিল কেউ নিশ্চিত করেনি',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'ভয়েস স্যাম্পল প্রস্তুত';
+
+  @override
+  String get evidenceNoVoice => 'এখনো ভয়েস স্যাম্পল নেই';
+
+  @override
+  String get evidenceNotHeard => 'এখনো কোনো কথোপকথনে শোনা যায়নি';
+
+  @override
+  String get evidenceNothing => 'আপনি এখনো নাম দেননি বা নিশ্চিত করেননি';
+
+  @override
+  String get effectCountsALot => 'অনেক গুরুত্বপূর্ণ';
+
+  @override
+  String get effectCounts => 'গুরুত্বপূর্ণ';
+
+  @override
+  String get effectCountsALittle => 'সামান্য গুরুত্বপূর্ণ';
+
+  @override
+  String get effectBarelyCounts => 'প্রায় গুরুত্বহীন';
+
+  @override
+  String get effectCountsAgainst => 'বিপক্ষে যায়';
+
+  @override
+  String get effectNeeded => '“নিশ্চিত” হতে দরকার';
+
+  @override
+  String get confidenceToReachConfirmed => '“নিশ্চিত” হতে করণীয়';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi-র $name-এর একটি ভয়েস স্যাম্পলও দরকার। “ভয়েস মনে রাখুন” চালু রেখে নাম দিন।';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name নিশ্চিত। প্রতিটি নামের মাধ্যমে Omi শিখতে থাকে।';
+  }
+
+  @override
+  String get confidenceFootnote => 'শুধু আপনার উত্তরই নিশ্চয়তা বেশি বাড়ায়। স্বয়ংক্রিয় মিল একা প্রায় গুরুত্বহীন।';
+
+  @override
+  String get personWhyConfidence => 'কেন?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return '$name-কে পিন করুন';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name-কে রাখুন এবং আপনার কথোপকথনে তাকে আশা করুন';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'অনুমান করার বদলে Omi কাছাকাছি মিলগুলো নিশ্চিত করতে আপনাকে জিজ্ঞেস করবে।';
+
+  @override
+  String get pinAction => 'পিন করুন';
+
+  @override
+  String get unpinAction => 'আনপিন করুন';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name পিন করা হয়েছে';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name আনপিন করা হয়েছে';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'কেন $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return '$name-কে মুছবেন?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name পিন করা আছে। তার ভয়েস স্যাম্পল মুছে যাবে, Omi তাকে আর চিনবে না, এবং আগের ট্রান্সক্রিপ্টে তিনি নামহীন বক্তা হিসেবে দেখাবেন। এটি ফেরানো যাবে না।';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return '$name-কে মুছুন';
+  }
+
+  @override
+  String get selectPeople => 'মানুষ বেছে নিন';
+
+  @override
+  String get cleanUpEllipsis => 'পরিষ্কার করুন…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জন, যাদের সম্পর্কে Omi নিশ্চিত নয়',
+      one: '1 জন, যার সম্পর্কে Omi নিশ্চিত নয়',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'বেশিরভাগই ভুল শোনা নাম। দেখে নিন এবং যেগুলো আসল নয় সেগুলো সরিয়ে দিন।';
+
+  @override
+  String get reviewAction => 'দেখুন';
+
+  @override
+  String get cleanUpTitle => 'পরিষ্কার করুন';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi এই $count জন সম্পর্কে নিশ্চিত নয়। বেশিরভাগই ট্রান্সক্রিপ্টে ভুল শোনা নাম। যাদের রাখতে চান তাদের টিক তুলে দিন।',
+      one: 'Omi এই ব্যক্তির সম্পর্কে নিশ্চিত নয়। রাখতে চাইলে টিক তুলে দিন।',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'পিন করা মানুষ কখনো পরিষ্কারের আওতায় পড়ে না।';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জনকে মুছুন',
+      one: '1 জনকে মুছুন',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জনকে মুছে ফেলা হয়েছে',
+      one: '1 জনকে মুছে ফেলা হয়েছে',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'পরিষ্কার করার কিছু নেই';
+
+  @override
+  String get cleanUpNothingMessage => 'এখন Omi কারও সম্পর্কে অনিশ্চিত নয়।';
+
+  @override
+  String get selectAllSkipsPinned => '“সব নির্বাচন” পিন করা মানুষদের বাদ দেয়। তাদের পাতা থেকে একে একে মুছুন।';
+
+  @override
+  String get pinnedNotSelectable => 'পিন করা, বেছে নেওয়া যাবে না';
+
+  @override
+  String get ignoredVoicesTitle => 'উপেক্ষিত ভয়েস';
+
+  @override
+  String get ignoredVoicesSubtitle => 'টিভি, পডকাস্ট ও অন্য যেসব ভয়েসকে আপনি “ব্যক্তি নয়” চিহ্নিত করেছেন';
+
+  @override
+  String get ignoredVoicesEmpty => 'কোনো উপেক্ষিত ভয়েস নেই';
+
+  @override
+  String get restoreAction => 'ফিরিয়ে আনুন';
+
+  @override
+  String get voiceRestoredToast => 'Omi এই ভয়েস নিয়ে আবার জিজ্ঞেস করতে পারে';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'অন্য কেউ…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'ব্যক্তি নয়';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'নিশ্চিত নই';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'এটা আমি';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'সবচেয়ে কাছের ভয়েস';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'সম্প্রতি যাদের সঙ্গে কথা বলেছেন';
+
+  @override
+  String get voiceMatchClose => 'কাছাকাছি মিল';
+
+  @override
+  String get voiceMatchPossible => 'সম্ভাব্য মিল';
+
+  @override
+  String get voiceMatchWeak => 'দুর্বল মিল';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'ভয়েস মিল: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify =>
+      'প্রতিটি উত্তর Omi-কে একটি ভয়েস শেখায় এবং ওই ব্যক্তির নিশ্চয়তা বাড়ায়।';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '“হ্যাঁ” বললে $name-এর নিশ্চয়তা বাড়ে।';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'আপনার নিজের ভয়েস প্রোফাইল নির্ভুল রাখে, যাতে Omi কখনো আপনাকে অন্য কেউ বলে না ডাকে।';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return '$name হিসেবে সংরক্ষিত';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'আপনি হিসেবে সংরক্ষিত';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi এই ভয়েস নিয়ে আর জিজ্ঞেস করবে না';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return '$name হিসেবে চিহ্নিত';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'আপনি হিসেবে চিহ্নিত';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'ব্যক্তি নয় হিসেবে চিহ্নিত';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'লেবেল সরানো হয়েছে';
+
+  @override
+  String get whoIsItTitle => 'এটা কে?';
+
+  @override
+  String get newPersonEllipsis => 'নতুন ব্যক্তি…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return '“$name” যোগ করুন';
+  }
+
+  @override
+  String get everyoneHeader => 'সবাই';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'এই বক্তার প্রতিটি লাইনে প্রযোজ্য';
+
+  @override
+  String get collapseAction => 'গুটিয়ে নিন';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'আমি নই';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'আরও $countটি কথোপকথনে তাদের লেবেল করুন।',
+      one: 'আরও 1টি কথোপকথনে তাদের লেবেল করুন।',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
+    return 'শর্টকাট → Siri-তে Omi চালু করুন। “$askPhrase” বা “$questionPhrase” বলুন, তারপর আপনার প্রশ্ন করুন।';
+  }
+
+  @override
+  String siriShortcutsSearchHint(String searchPhrase) {
+    return ' আপনি “$searchPhrase for what I did today”-ও বলতে পারেন।';
+  }
+
+  @override
+  String get updateAvailableTitle => 'আপডেট উপলব্ধ';
+
+  @override
+  String get updateAvailableMessage => 'Omi-এর নতুন সংস্করণ প্রস্তুত, সংশোধন ও উন্নতিসহ।';
+
+  @override
+  String get updateRequiredTitle => 'আপডেট প্রয়োজন';
+
+  @override
+  String get updateRequiredMessage => 'Omi-এর এই সংস্করণ আর সমর্থিত নয়। রেকর্ডিং ও সিঙ্ক চালিয়ে যেতে আপডেট করুন।';
+
+  @override
+  String get exportingAllData =>
+      'আপনার ডেটা রপ্তানি করা হচ্ছে… Omi খোলা রাখুন; বড় অ্যাকাউন্টের ক্ষেত্রে কয়েক মিনিট লাগতে পারে।';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জন বক্তা',
+      one: '১ জন বক্তা',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoRemoveSyncedCopiesTitle => 'সিঙ্ক করা কপি স্বয়ংক্রিয়ভাবে সরান';
+
+  @override
+  String autoRemoveSyncedCopiesDays(int days) {
+    return '$days দিন পরে সিঙ্ক করা কপি মুছে যায়';
+  }
+
+  @override
+  String autoRemoveSyncedCopiesDescription(int days) {
+    return 'সিঙ্কের $days দিন পরে লোকাল কপি মুছে যায়। ক্লাউড কপি রাখা হয়।';
+  }
+
+  @override
+  String get localCopiesSection => 'লোকাল কপি';
+
+  @override
+  String speakerLabelLinesLabeled(int count) {
+    return 'লেবেল করা লাইন: $count';
+  }
+
+  @override
+  String speakerLabelVoiceStatus(String state) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'ভয়েস শেখা হয়েছে',
+        'pending': 'ভয়েস শেখা হচ্ছে…',
+        'disabled': 'ভয়েস সংরক্ষণ বন্ধ আছে',
+        'other': 'ভয়েস এখনও শেখা হয়নি',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelVoiceDetail(String state, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      state,
+      {
+        'learned': 'Omi পরের বার $name-কে চিনতে পারবে।',
+        'pending': 'এতে কয়েক সেকেন্ড লাগবে।',
+        'disabled': 'Omi যাতে $name-কে চিনতে পারে, সেজন্য সেটিংসে ভয়েস সংরক্ষণ চালু করুন।',
+        'other': 'Omi-র $name-এর আরও স্পষ্ট কথা দরকার এবং সে চেষ্টা চালিয়ে যাবে।',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelEarlierMatches(int count) {
+    return 'এই ভয়েসের আগের কথোপকথন: $count';
+  }
+
+  @override
+  String speakerLabelText(String part, String name) {
+    String _temp0 = intl.Intl.selectLogic(
+      part,
+      {
+        'likely': 'সম্ভাব্য',
+        'soundsLike': '$name-এর মতো শোনাচ্ছে',
+        'notPerson': '$name নয়',
+        'carried': 'এখনও $name। আপনার আগের কথোপকথন থেকে নেওয়া হয়েছে।',
+        'change': 'পরিবর্তন',
+        'alsoTitle': 'এটিও কি $name?',
+        'alsoBody': 'Omi আগের কথোপকথনগুলোতে একই ভয়েস খুঁজে পেয়েছে।',
+        'confirmed': 'আপনি এই লেবেল নিশ্চিত করেছেন',
+        'other': 'পর্যালোচনা',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerLabelTalkTime(String duration) {
+    return 'এই ভয়েসের $duration';
   }
 }

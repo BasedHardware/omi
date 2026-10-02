@@ -44,6 +44,30 @@ const _twoSourceGroup = CaptureGroup(id: 'group-1', primaryId: 'grouped-a', memb
 
 final conversationsScenarios = <AuditScenario>[
   AuditScenario(
+    id: 'conversations-locked-preview',
+    title: 'Locked conversations with an upgrade action',
+    page: _page,
+    state: 'An unlocked conversation followed by three locked previews; synthetic titles only',
+    run: (a) async {
+      final items = [
+        auditConversation('unlocked', title: 'Design catch-up with Alex'),
+        for (var i = 0; i < 3; i++)
+          ServerConversation(
+            id: 'locked-$i',
+            createdAt: DateTime(2026, 9, 20, 10 - i),
+            startedAt: DateTime(2026, 9, 20, 10 - i),
+            finishedAt: DateTime(2026, 9, 20, 10 - i, 3),
+            structured: Structured('Planning the next team meeting', 'Overview', emoji: '📝'),
+            isLocked: true,
+          ),
+      ];
+      await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders(items));
+      expect(find.byType(ConversationListItem), findsNWidgets(4));
+      expect(find.text('Upgrade to Unlimited'), findsNWidgets(3));
+      await a.shot('Conversation list with frosted locked previews');
+    },
+  ),
+  AuditScenario(
     id: 'conversations-list',
     title: 'Conversations list, row menu and swipe to delete',
     page: _page,
@@ -64,7 +88,7 @@ final conversationsScenarios = <AuditScenario>[
       globalNavigatorKey.currentState!.pop();
       await a.settle();
       // A raw gesture in steps: the first move claims the horizontal drag before the row's
-      // long-press recognizer fires, the rest carry the row past the dismiss threshold.
+      // long-press recognizer fires, the rest carry the row past the point where it asks.
       final gesture = await a.tester.startGesture(a.tester.getCenter(find.byType(ConversationListItem).first));
       for (var i = 0; i < 6; i++) {
         await gesture.moveBy(const Offset(-60, 0));
@@ -72,8 +96,8 @@ final conversationsScenarios = <AuditScenario>[
       }
       await gesture.up();
       await a.settle();
-      expect(find.text('Delete Conversation?'), findsOneWidget);
-      await a.shot('Swipe the first row to delete: the delete confirmation', step: 'swipe-delete');
+      expect(find.text('Delete Conversation'), findsOneWidget);
+      await a.shot('Swipe the first row to delete: the confirm menu from its delete button', step: 'swipe-delete');
     },
   ),
   AuditScenario(

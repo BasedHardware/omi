@@ -1,0 +1,142 @@
+"""Source provenance must not determine the input model used for summarization."""
+
+import importlib
+from contextlib import nullcontext
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from testing.import_isolation import stub_modules
+
+
+@pytest.fixture(scope='module')
+def stack():
+    # Load names within the isolated fixture: other suites stub these modules.
+    # Imports run during setup, outside the fast-unit call-phase CPU budget.
+    with stub_modules({}):
+        yield SimpleNamespace(
+            process=importlib.import_module('utils.conversations.process_conversation'),
+            models=importlib.import_module('models.conversation'),
+            enums=importlib.import_module('models.conversation_enums'),
+            structured=importlib.import_module('models.structured'),
+            segments=importlib.import_module('models.transcript_segment'),
+        )
+
+
+@pytest.fixture
+def processing(stack, monkeypatch):
+    pc = stack.process
+    monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda *_: 'UTC')
+    monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda *_: 'en')
+    monkeypatch.setattr(pc, '_proposes_task_candidates', lambda *_: False)
+    monkeypatch.setattr(pc, 'track_usage', lambda *_, **__: nullcontext())
+    monkeypatch.setattr(pc, '_meeting_notes_rich_context_enabled', lambda: False)
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates', lambda *_, **__: [])
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *_, **__: [])
+    monkeypatch.setattr(pc, '_primary_user_name', lambda *_: None)
+    monkeypatch.setattr(pc, 'submit_relevance_shadow', lambda **_: None)
+    monkeypatch.setattr(pc, 'decide_relevance', lambda **_: SimpleNamespace(discard=False, reason='kept'))
+    return pc
+
+
+@pytest.mark.parametrize('source', ['workflow', 'external_integration'])
+@pytest.mark.parametrize('model_name', ['Conversation', 'CreateConversation'])
+@pytest.mark.parametrize('notes_v2', [False, True])
+def test_segment_models_use_transcript_even_with_integration_provenance(
+    stack, processing, monkeypatch, source, model_name, notes_v2
+):
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    segment = stack.segments.TranscriptSegment(
+        id='segment-1', text='Synthetic transcript', speaker='SPEAKER_00', is_user=False, start=0, end=10
+    )
+    fields = dict(started_at=now, finished_at=now, source=source, transcript_segments=[segment])
+    if model_name == 'Conversation':
+        fields.update(id='segment-conversation', created_at=now, structured=stack.structured.Structured())
+    conversation = getattr(stack.models, model_name)(**fields)
+    assert not hasattr(conversation, 'text_source')
+    transcript = Mock(return_value=('Synthetic transcript', '[segment-1] Synthetic transcript', {}))
+    monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', transcript)
+    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: notes_v2)
+    structured = stack.structured.Structured(title='Segment summary')
+    legacy = Mock(return_value=structured)
+    notes = Mock(return_value=structured)
+    actions = Mock(return_value=[])
+    prefix = Mock(return_value='Synthetic prefix')
+    monkeypatch.setattr(processing, 'get_transcript_structure', legacy)
+    monkeypatch.setattr(processing, 'get_conversation_notes', notes)
+    monkeypatch.setattr(processing, 'build_conversation_prompt_prefix', prefix)
+    monkeypatch.setattr(processing, 'extract_action_items', actions)
+    message = Mock(side_effect=AssertionError('Segment input reached message summarization'))
+    monkeypatch.setattr(processing, 'get_message_structure', message)
+
+    result, discarded = processing._get_structured('synthetic-uid', 'en', conversation)
+
+    assert result is structured
+    assert discarded is False
+    transcript.assert_called_once_with('synthetic-uid', conversation, None)
+    message.assert_not_called()
+    if notes_v2:
+        notes.assert_called_once()
+        assert prefix.call_args.kwargs['transcript_segment_ids'] == ['segment-1']
+        legacy.assert_not_called()
+        actions.assert_not_called()
+    else:
+        legacy.assert_called_once()
+        assert legacy.call_args.kwargs['transcript_segment_ids'] == ['segment-1']
+        actions.assert_called_once()
+        notes.assert_not_called()
+
+
+@pytest.mark.parametrize('source', ['workflow', 'external_integration'])
+@pytest.mark.parametrize('text_source', ['audio', 'message', 'other'])
+@pytest.mark.parametrize('notes_v2', [False, True])
+def test_external_create_models_keep_text_summarization(stack, processing, monkeypatch, source, text_source, notes_v2):
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    conversation = stack.models.ExternalIntegrationCreateConversation(
+        started_at=now,
+        source=source,
+        text='Synthetic integration input',
+        text_source=getattr(stack.enums.ExternalIntegrationConversationSource, text_source),
+        text_source_spec='synthetic',
+    )
+    monkeypatch.setattr(processing, '_conversation_notes_v2_enabled', lambda: notes_v2)
+    transcript = Mock(side_effect=AssertionError('External create input reached segment summarization'))
+    monkeypatch.setattr(processing, 'conversation_transcripts_for_llm', transcript)
+    structured = stack.structured.Structured(title='External summary')
+    providers = {}
+    for name in (
+        'get_transcript_structure',
+        'get_conversation_notes',
+        'get_message_structure',
+        'summarize_experience_text',
+    ):
+        providers[name] = Mock(return_value=structured)
+        monkeypatch.setattr(processing, name, providers[name])
+    prefix = Mock(return_value='Synthetic prefix')
+    monkeypatch.setattr(processing, 'build_conversation_prompt_prefix', prefix)
+    monkeypatch.setattr(processing, 'extract_action_items', Mock(return_value=[]))
+
+    result, discarded = processing._get_structured('synthetic-uid', 'en', conversation)
+
+    assert result is structured
+    assert discarded is False
+    transcript.assert_not_called()
+    expected = {
+        'audio': 'get_conversation_notes' if notes_v2 else 'get_transcript_structure',
+        'message': 'get_message_structure',
+        'other': 'summarize_experience_text',
+    }[text_source]
+    providers[expected].assert_called_once()
+    for name, provider in providers.items():
+        if name != expected:
+            provider.assert_not_called()
+    if text_source == 'audio' and notes_v2:
+        assert prefix.call_args.kwargs['transcript'] == conversation.text
+    else:
+        assert providers[expected].call_args.args[0] == conversation.text
+        if text_source == 'message':
+            assert providers[expected].call_args.args[4] == conversation.text_source_spec
+        elif text_source == 'other':
+            assert providers[expected].call_args.args[1] == conversation.text_source_spec

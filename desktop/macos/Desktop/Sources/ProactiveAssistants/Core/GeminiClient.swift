@@ -383,8 +383,14 @@ actor GeminiClient {
   }
 
   /// Get Firebase auth header for proxy requests
-  private func authHeader() async throws -> String {
+  private func authHeader(authorization: RuntimeOwnerAuthorizationSnapshot? = nil) async throws -> String {
     let authService = await MainActor.run { AuthService.shared }
+    if let authorization {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw CancellationError() }
+      let header = try await authService.getAuthHeader(expectedUserId: authorization.ownerID)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw CancellationError() }
+      return header
+    }
     return try await authService.getAuthHeader()
   }
 
@@ -1052,8 +1058,10 @@ extension GeminiClient {
     systemPrompt: String,
     tools: [GeminiTool],
     forceToolCall: Bool = false,
-    thinkingBudget: Int = 0
+    thinkingBudget: Int = 0,
+    authorization: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ToolChatResult {
+    if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) { throw CancellationError() }
     try await Self.enforceManagedProactivity()
     // Try the primary model first; if it keeps failing transiently, fall back to the
     // secondary model (e.g. Pro overloaded → Flash) before giving up.
@@ -1096,11 +1104,14 @@ extension GeminiClient {
           var urlRequest = URLRequest(url: url)
           urlRequest.httpMethod = "POST"
           urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-          urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+          urlRequest.setValue(try await authHeader(authorization: authorization), forHTTPHeaderField: "Authorization")
           urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
           urlRequest.timeoutInterval = 300
           urlRequest.httpBody = requestBody
 
+          if let authorization, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) {
+            throw CancellationError()
+          }
           let (data, urlResponse) = try await Self.send(urlRequest)
           try checkHTTPStatus(urlResponse, data: data)
 

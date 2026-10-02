@@ -16,11 +16,14 @@ overlay:
         # frame, 0 connects since 08-26), so they got no transcript. The configured order
         # The allocated windowed TDT cohort precedes the unchanged vendor order;
         # otherwise Soniox is second after Modulate. Canary allocation follows the
-        # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29).
+        # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29;
+        # rolled back to 0% on 2026-10-01 for a first-text latency regression;
+        # back to 5% after the posting-cadence fix #20043; 25% on 2026-10-01;
+        # 50% on 2026-10-02 after the batch-pressure quorum fix #20208).
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
-          value: '5'
+          value: '50'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '8'
         PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
@@ -140,6 +143,27 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '2'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '1'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -199,6 +223,27 @@ overlay:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           value: http://diarizer.omi.me:80
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '2'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '1'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -292,6 +337,8 @@ overlay:
           env_var: CLOUD_RUN_VPC_SUBNET
     services:
       backend:
+        # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         secrets:
           DESKTOP_PREVIEW_PUBLISH_KEY:
             secret: DESKTOP_PREVIEW_PUBLISH_KEY
@@ -306,6 +353,10 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          # Keyless custom tokens (/v1/auth/token) are signed through IAM signBlob as this account;
+          # naming it avoids relying on metadata discovery. Inert while a key credential is mounted.
+          FIREBASE_SIGNER_SERVICE_ACCOUNT:
+            value: backend-runtime@based-hardware.iam.gserviceaccount.com
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           SCREEN_FRAME_EGRESS_ENABLED:
@@ -410,6 +461,27 @@ overlay:
           MCP_OAUTH_CLAUDE_REDIRECT_URIS:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '2'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -426,6 +498,10 @@ overlay:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-sync:
+        # Attached runtime identity (credential hygiene D4). The deploy pins it and removes
+        # SERVICE_ACCOUNT_JSON/GOOGLE_APPLICATION_CREDENTIALS; every secret and bucket this
+        # service reads needs its own grant to this account. Every backend Cloud Run service is pinned.
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -517,6 +593,27 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '2'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -533,6 +630,7 @@ overlay:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-sync-backfill:
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -603,6 +701,27 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '2'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '1'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -619,6 +738,7 @@ overlay:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-integration:
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -674,10 +794,11 @@ overlay:
             category: rollout
     jobs:
       notifications-job:
-        secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
+        # Keyless (credential hygiene D4): run as the jobs runtime identity. Job deploys pass secrets
+        # with --set-secrets (full replacement), so the undeclared nik-164 key ref is dropped by that;
+        # --remove-secrets cannot be combined with it.
+        flags:
+          --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -751,10 +872,11 @@ overlay:
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
             value: ''
       day3-reengagement-email-job:
-        secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
+        # Keyless (credential hygiene D4): run as the jobs runtime identity. Job deploys pass secrets
+        # with --set-secrets (full replacement), so the undeclared nik-164 key ref is dropped by that;
+        # --remove-secrets cannot be combined with it.
+        flags:
+          --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
