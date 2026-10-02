@@ -14426,15 +14426,6 @@
             }
         }
     },
-    "transcriptSpeakerCount": "{count, plural, =1{1 speaker} other{{count} speakers}}",
-    "@transcriptSpeakerCount": {
-        "description": "How many people spoke, after the length in the transcript's heading: Transcript · 14 min · 2 speakers",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "siriShortcutsSetupHint": "Turn on Omi in Shortcuts → Siri. Say “{askPhrase}” or “{questionPhrase},” then speak your question.",
     "@siriShortcutsSetupHint": {
         "description": "Guidance for enabling Ask Omi in the iOS Shortcuts app; askPhrase/questionPhrase are literal English Siri phrases",
@@ -14471,6 +14462,19 @@
     "updateRequiredMessage": "This version of Omi is no longer supported. Update to keep recording and syncing.",
     "@updateRequiredMessage": {
         "description": "Message of the pop-up when this app version is no longer supported and must be updated"
+    },
+    "exportingAllData": "Exporting your data… Keep Omi open; large accounts can take several minutes.",
+    "@exportingAllData": {
+        "description": "Data export progress sheet - status text while the account export downloads"
+    },
+    "transcriptSpeakerCount": "{count, plural, =1{1 speaker} other{{count} speakers}}",
+    "@transcriptSpeakerCount": {
+        "description": "How many people spoke, after the length in the transcript's heading: Transcript · 14 min · 2 speakers",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     },
     "autoRemoveSyncedCopiesTitle": "Auto-Remove Synced Copies",
     "autoRemoveSyncedCopiesDays": "Synced copies deleted after {days} days",

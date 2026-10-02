@@ -11885,17 +11885,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 位发言人',
-      one: '1 位发言人',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return '在快捷指令 → Siri 中开启 Omi。说“$askPhrase”或“$questionPhrase”，然后提出你的问题。';
   }
@@ -11916,6 +11905,20 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateRequiredMessage => '此版本的 Omi 已不再受支持。请更新以继续录音和同步。';
+
+  @override
+  String get exportingAllData => '正在导出您的数据… 请保持 Omi 打开；大型账户可能需要几分钟。';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 位发言人',
+      one: '1 位发言人',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => '自动删除已同步副本';

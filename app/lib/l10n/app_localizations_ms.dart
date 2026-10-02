@@ -12132,17 +12132,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count penutur',
-      one: '1 penutur',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Hidupkan Omi dalam Pintasan → Siri. Katakan “$askPhrase” atau “$questionPhrase”, kemudian ajukan soalan anda.';
   }
@@ -12164,6 +12153,21 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Versi Omi ini tidak lagi disokong. Kemas kini untuk terus merakam dan menyegerakkan.';
+
+  @override
+  String get exportingAllData =>
+      'Mengeksport data anda… Biarkan Omi terbuka; akaun besar mungkin mengambil masa beberapa minit.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count penutur',
+      one: '1 penutur',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Buang Salinan Tersegerak Secara Automatik';

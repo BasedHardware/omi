@@ -21759,12 +21759,6 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Label them in 1 more conversation.} other{Label them in {count} more conversations.}}'**
   String confidenceNextLabels(int count);
 
-  /// How many people spoke, after the length in the transcript's heading: Transcript · 14 min · 2 speakers
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 speaker} other{{count} speakers}}'**
-  String transcriptSpeakerCount(int count);
-
   /// Guidance for enabling Ask Omi in the iOS Shortcuts app; askPhrase/questionPhrase are literal English Siri phrases
   ///
   /// In en, this message translates to:
@@ -21800,6 +21794,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This version of Omi is no longer supported. Update to keep recording and syncing.'**
   String get updateRequiredMessage;
+
+  /// Data export progress sheet - status text while the account export downloads
+  ///
+  /// In en, this message translates to:
+  /// **'Exporting your data… Keep Omi open; large accounts can take several minutes.'**
+  String get exportingAllData;
+
+  /// How many people spoke, after the length in the transcript's heading: Transcript · 14 min · 2 speakers
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 speaker} other{{count} speakers}}'**
+  String transcriptSpeakerCount(int count);
 
   /// Settings row title: automatically remove synced phone-local recording copies
   ///

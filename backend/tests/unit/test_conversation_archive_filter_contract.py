@@ -23,6 +23,13 @@ _list_budget_spec = _importlib_util.spec_from_file_location("_omi_real_list_budg
 list_budget_real = _importlib_util.module_from_spec(_list_budget_spec)
 _list_budget_spec.loader.exec_module(list_budget_real)
 
+_portability_read_path = _BACKEND / "utils" / "other" / "portability_read.py"
+_portability_read_spec = _importlib_util.spec_from_file_location(
+    "_omi_real_portability_read", str(_portability_read_path)
+)
+portability_read_real = _importlib_util.module_from_spec(_portability_read_spec)
+_portability_read_spec.loader.exec_module(portability_read_real)
+
 
 class _FieldFilter:
     def __init__(self, field_path, op_string, value):
@@ -200,6 +207,7 @@ def conversations_db():
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
+        "utils.other.portability_read": portability_read_real,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
     }
 

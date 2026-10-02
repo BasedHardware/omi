@@ -12097,17 +12097,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count kõnelejat',
-      one: '1 kõneleja',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Lülitage Omi sisse jaotises Otseteed → Siri. Ütlege „$askPhrase“ või „$questionPhrase“ ja seejärel esitage oma küsimus.';
   }
@@ -12129,6 +12118,21 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Seda Omi versiooni enam ei toetata. Värskenda, et jätkata salvestamist ja sünkroonimist.';
+
+  @override
+  String get exportingAllData =>
+      'Teie andmete eksportimine… Hoidke Omi avatud; suurte kontode puhul võib see võtta mitu minutit.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kõnelejat',
+      one: '1 kõneleja',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Sünkroonitud koopiate automaatne eemaldamine';

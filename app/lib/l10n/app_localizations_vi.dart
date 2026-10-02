@@ -12093,17 +12093,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count người nói',
-      one: '1 người nói',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Bật Omi trong Lối tắt → Siri. Nói “$askPhrase” hoặc “$questionPhrase”, sau đó đặt câu hỏi của bạn.';
   }
@@ -12125,6 +12114,20 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Phiên bản Omi này không còn được hỗ trợ. Hãy cập nhật để tiếp tục ghi âm và đồng bộ.';
+
+  @override
+  String get exportingAllData => 'Đang xuất dữ liệu của bạn… Hãy giữ Omi mở; tài khoản lớn có thể mất vài phút.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count người nói',
+      one: '1 người nói',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Tự động xóa bản sao đã đồng bộ';
