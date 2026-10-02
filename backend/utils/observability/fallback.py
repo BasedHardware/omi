@@ -169,6 +169,7 @@ ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
         'modulate_serve_error',
         'provider_rate_limited',
         'soniox_idle_timeout',
+        'soniox_request_timeout',
         'soniox_rotation',
         'provider_5xx',
         'capacity_full',
@@ -299,3 +300,36 @@ def safe_label(value: object, *, default: str = 'unknown') -> str:
         text = default
     normalized = ''.join(char if char.isalnum() or char in _SAFE_LABEL_CHARS else '_' for char in text)
     return (normalized or default)[:_LABEL_MAX_LENGTH]
+
+
+def initialize_live_stt_exhausted_children() -> None:
+    """Expose zero before the first burst so increase() can observe it."""
+    providers = ('parakeet', 'modulate', 'soniox', 'deepgram')
+    reasons = LIVE_STT_REASONS | {'auth', 'quota', 'last_resort', 'config_incomplete'}
+    for reason in sorted(reasons):
+        for provider in providers:
+            for replacement in providers:
+                OMI_FALLBACK_TOTAL.labels(
+                    component='stt_live_session',
+                    from_mode=provider,
+                    to_mode=replacement,
+                    reason=reason,
+                    outcome='exhausted',
+                )
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_live_session',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=reason,
+                outcome='exhausted',
+            )
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_selection',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=reason,
+                outcome='exhausted',
+            )
+
+
+initialize_live_stt_exhausted_children()

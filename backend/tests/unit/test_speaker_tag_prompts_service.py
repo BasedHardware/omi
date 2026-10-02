@@ -19,6 +19,8 @@ from utils import speaker_sample
 from utils.speaker_tag_prompts import service
 from utils.stt import pre_recorded
 from utils.executors import ExecutorSaturatedError, MonitoredThreadPoolExecutor
+from utils.other import storage
+from tests.unit.fixtures.audio_chunk_storage import memory_bucket
 
 NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
 
@@ -97,13 +99,15 @@ def test_thats_me_labels_owner_and_queues_owner_voice_sample(monkeypatch):
     assert set(properties) == {'kind', 'origin', 'answer', 'quality_outcome', 'first_time', 'voice_sample_queued'}
 
 
-def test_free_user_cannot_name_other_people(monkeypatch):
+def test_free_user_names_a_person_on_a_served_card(monkeypatch):
+    # Automatic suggestions are paid; naming by hand is not. A card served before a
+    # downgrade, or an owner check answered with who it really is, must still apply.
     world = World(monkeypatch, paid=False)
-    with pytest.raises(service.TagPromptForbidden):
-        service.apply_answer('u', _request(K.identify, O.unnamed, A.person, person_id='p1'), world.schedule, NOW)
-    with pytest.raises(service.TagPromptForbidden):
-        service.apply_answer('u', _request(K.owner_check, O.unnamed, A.new_person, name='Ana'), world.schedule, NOW)
-    assert world.assignments == []
+    service.apply_answer('u', _request(K.identify, O.unnamed, A.person, person_id='p1'), world.schedule, NOW)
+    service.apply_answer('u', _request(K.owner_check, O.unnamed, A.new_person, name='Ana'), world.schedule, NOW)
+    assert world.assignments[0]['person_id'] == 'p1' and world.created[0]['name'] == 'Ana'
+    assert len(world.assignments) == 2
+    assert all(a['is_user'] is False and a['use_for_speech_training'] is True for a in world.assignments)
 
 
 def test_naming_a_person_teaches_voice_when_allowed(monkeypatch):
@@ -594,7 +598,8 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     monkeypatch.setattr(
         service,
         'conversation_clip_pcm',
-        lambda uid, conv, start, end: clipped.append((start, end)) or b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6),
+        lambda uid, conv, start, end, **kwargs: clipped.append((start, end))
+        or b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6),
     )
 
     async def verify(wav, rate, text, language=None):
@@ -606,7 +611,7 @@ def test_owner_sample_verifies_only_text_inside_the_clip(monkeypatch):
     monkeypatch.setattr(
         service.voice_profiles_db,
         'add_owner_voice_confirmation',
-        lambda uid, embedding, pool, conversation_id, expected_receipt_generation, segment_ids: 1,
+        lambda uid, embedding, pool, **kwargs: 1,
     )
     assert asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a', 'b', 'c'])) == 'stored'
     assert clipped == [(5.0, 15.0)]
@@ -652,7 +657,9 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
         'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
     }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6))
+    monkeypatch.setattr(
+        service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6)
+    )
 
     async def verify(wav, rate, text, language=None):
         assert text == 'hello there friend' and language == 'en'
@@ -663,15 +670,46 @@ def test_owner_sample_is_verified_then_pooled(monkeypatch):
     monkeypatch.setattr(
         service.voice_profiles_db,
         'add_owner_voice_confirmation',
-        lambda uid, embedding, pool, conversation_id, expected_receipt_generation, segment_ids: pooled.append(
-            (embedding, pool([embedding]))
-        )
-        or 1,
+        lambda uid, embedding, pool, **kwargs: pooled.append((embedding, pool([embedding]))) or 1,
     )
     outcome = asyncio.run(service.store_owner_voice_sample('u', 'c1', ['a']))
     assert outcome == 'stored'
     assert pooled[0][0] == [3.0, 4.0]
     assert pooled[0][1] == pytest.approx([0.6, 0.8])
+
+
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_real_live_batches_still_supply_owner_confirmations(memory_bucket, monkeypatch, protection):
+    origin = 1700000000.0
+    uid, cid = 'synthetic-user', 'synthetic'
+    parts = [{'timestamp': origin + offset, 'data': b'\x01\x00' * 64000} for offset in (0, 4)]
+    storage.upload_audio_chunks_batch(parts, uid, cid, data_protection_level=protection)
+    conversation = {
+        'id': cid,
+        'started_at': origin,
+        'language': 'en',
+        'audio_files': [{'chunk_timestamps': [origin, origin + 4], 'duration': 8}],
+        'transcript_segments': [{'id': 'a', 'start': 0, 'end': 8, 'is_user': True, 'text': 'hello there friend'}],
+        'manual_speaker_assignments': {'generation': 1, 'segments': {'a': {'generation': 1, 'is_user': True}}},
+    }
+    monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda *args: conversation)
+
+    async def verify(wav, rate, text, language=None):
+        assert text == 'hello there friend' and language == 'en'
+        assert wav[44:] == b'\x01\x00' * (rate * 8)
+        return text, True, 'ok'
+
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    monkeypatch.setattr(service, 'extract_embedding_from_bytes', lambda *args: np.array([[3.0, 4.0]]))
+    pooled = []
+    monkeypatch.setattr(
+        service.voice_profiles_db,
+        'add_owner_voice_confirmation',
+        lambda *args, **kwargs: pooled.append(args[1]) or True,
+    )
+    assert asyncio.run(service.store_owner_voice_sample(uid, cid, ['a'])) == 'stored'
+    assert pooled == [[3.0, 4.0]]
+    assert len(memory_bucket.listings) == len(memory_bucket.reads) == 1
 
 
 def test_owner_sample_rejected_by_quality_gate_is_not_pooled(monkeypatch):
@@ -685,7 +723,9 @@ def test_owner_sample_rejected_by_quality_gate_is_not_pooled(monkeypatch):
         'segments': {s['id']: {'generation': 1, 'is_user': True} for s in conversation['transcript_segments']},
     }
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid: conversation)
-    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6))
+    monkeypatch.setattr(
+        service, 'conversation_clip_pcm', lambda *a, **kwargs: b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 6)
+    )
 
     async def verify(wav, rate, text, language=None):
         return None, False, 'multi_speaker: ratio=0.40'

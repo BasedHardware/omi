@@ -52,6 +52,7 @@ _rate_limit_log_lock = threading.Lock()
 # all surfaced as one free-text ERROR signature, indistinguishable in metrics
 # and in the terminal-failure reason vocabulary.
 SONIOX_DEATH_IDLE_TIMEOUT: Final = 'soniox_idle_timeout'
+SONIOX_DEATH_REQUEST_TIMEOUT: Final = 'soniox_request_timeout'
 SONIOX_DEATH_ROTATION: Final = 'soniox_rotation'
 SONIOX_DEATH_INVALID_HINT: Final = 'soniox_invalid_hint'
 _SONIOX_BUDGET_ERROR_TYPES: Final = frozenset(
@@ -104,6 +105,11 @@ def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = N
         # covers the no-client-audio case; this shape arrives when VAD gating
         # withheld real audio for the whole window.
         return SONIOX_DEATH_IDLE_TIMEOUT
+    if code == 408 or error == 'request_timeout':
+        # Soniox documents 408 as a request deadline, commonly because audio
+        # arrived too slowly or not at all. That is client/stream timing
+        # evidence, not a provider outage, and differs from its 400 idle error.
+        return SONIOX_DEATH_REQUEST_TIMEOUT
     if code == 413:
         # Documented rotation: open a new WebSocket. The failover path does.
         return SONIOX_DEATH_ROTATION
@@ -206,9 +212,9 @@ class SafeSonioxSocket(STTSocket):
     def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
         with self._lock:
             if not self._dead:
-                self._dead = True
                 self._death_reason = reason
                 self._typed_death_reason = typed_reason
+                self._dead = True  # Publish cause before any observer sees death.
 
     def send(self, data: bytes) -> bool:
         with self._lock:
@@ -229,13 +235,13 @@ class SafeSonioxSocket(STTSocket):
         except RuntimeError:
             current_loop = None
         if current_loop is not self._loop and (current_loop is not None or self._loop.is_running()):
-            self._mark_dead('send called outside provider event loop')
+            self._mark_dead('send called outside provider event loop', typed_reason='other')
             return False
 
         try:
             self._send_queue.put_nowait(aligned)
         except asyncio.QueueFull:
-            self._mark_dead('send queue full')
+            self._mark_dead('send queue full', typed_reason='capacity_full')
             return False
         return True
 
@@ -246,7 +252,7 @@ class SafeSonioxSocket(STTSocket):
             try:
                 self._send_queue.put_nowait(json.dumps({'type': 'finalize'}))
             except asyncio.QueueFull:
-                self._mark_dead('send queue full')
+                self._mark_dead('send queue full', typed_reason='capacity_full')
 
         try:
             current_loop = asyncio.get_running_loop()
@@ -258,7 +264,7 @@ class SafeSonioxSocket(STTSocket):
             try:
                 self._loop.call_soon_threadsafe(enqueue)
             except RuntimeError:
-                self._mark_dead('finalize called after provider event loop closed')
+                self._mark_dead('finalize called after provider event loop closed', typed_reason='normal_close')
 
     def finish(self) -> None:
         with self._lock:
@@ -273,7 +279,7 @@ class SafeSonioxSocket(STTSocket):
                 try:
                     self._send_queue.put_nowait(b'')
                 except asyncio.QueueFull:
-                    self._mark_dead('send queue full')
+                    self._mark_dead('send queue full', typed_reason='capacity_full')
 
         try:
             current_loop = asyncio.get_running_loop()
@@ -285,7 +291,7 @@ class SafeSonioxSocket(STTSocket):
             try:
                 self._loop.call_soon_threadsafe(finish_on_loop)
             except RuntimeError:
-                self._mark_dead('finish called after provider event loop closed')
+                self._mark_dead('finish called after provider event loop closed', typed_reason='normal_close')
 
     async def drain_and_close(self) -> None:
         try:

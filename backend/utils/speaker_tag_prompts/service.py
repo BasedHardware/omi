@@ -776,7 +776,9 @@ async def store_owner_voice_sample(
             outcome = 'clip_not_clean'
             return outcome
         start, end, text, (win_scope, win_speaker) = cast(Tuple[float, float, str, Tuple[Any, int]], window)
-        pcm = await run_blocking(sync_executor, conversation_clip_pcm, uid, conversation, start, end)
+        pcm = await run_blocking(
+            sync_executor, conversation_clip_pcm, uid, conversation, start, end, caller='owner_confirmation'
+        )
         if not pcm:
             outcome = 'no_audio'
             return outcome

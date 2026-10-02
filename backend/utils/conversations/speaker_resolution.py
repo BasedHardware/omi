@@ -34,9 +34,9 @@ from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
 from utils.metrics import OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL, OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES
 from utils.observability.fallback import record_fallback
+from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.other.storage import (
     download_speaker_embedding_cache,
-    iter_audio_chunk_pcm,
     upload_speaker_embedding_cache,
 )
 from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16

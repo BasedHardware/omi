@@ -1,252 +1,285 @@
 # Live STT routing and Soniox runway
 
-## Controls and rollout
+## Controls and evidence contract
 
-`STT_ROUTING_MODE=off` keeps configured order. `shadow` computes cost-order
-selection and bounded primary agreement without changing connections. `on`
-applies it to `STT_ROUTING_ON_PERCENT` of UIDs, default zero. Production stays
-shadow/zero on merge. Roll out on at 5 → 25 → 100%, using the headline transcript
-SLI and first-text latency. Return to shadow/off or on-percent zero to restore
-static selection. Keep Parakeet's independent allocation at its approved value.
+Production merges in `STT_ROUTING_MODE=shadow`, `STT_ROUTING_ON_PERCENT=0`.
+The configured fallback order is Parakeet window → Soniox → Modulate → retired
+Deepgram. Parakeet allocation/capacity remain independently approved controls;
+do not copy an older allocation percentage from this runbook. The static reorder
+avoids exposing shadow and rollback sessions to the known Modulate brownout.
+The active router still chooses the cheapest capable healthy target, with no
+artificial diversification or expensive-provider probes.
 
-The [cost router design](../../utils/stt/ARCHITECTURE.md#cost-ordered-health-gated-live-routing)
-owns the registry schema, second-Modulate example, sequential statistical gate,
-shared 5%/25%/100% recovery stages, false-positive/detection measurements and
-limits. `STT_ROUTING_TARGETS_JSON` is the complete target registry override;
-`STT_ROUTING_DISRUPTION_GATE` defaults to 0.08. The old
-`STT_ROUTING_PROBE_PERCENT` control is retired. Expensive providers do not
-receive artificial probe traffic. New endpoints reuse an existing provider
-protocol; a genuinely new protocol first needs an adapter.
+`LiveLegOutcome.settle` emits a serving decision's fallback and router observation
+once, synchronously. The source cause survives successor rejection and cleanup.
+Liveness reads emit neither. Normal client/owner close is success if text was
+seen, otherwise censored. Teardown snapshots the published death latch before
+closing: an already-dead provider counts even if the monitor has not claimed it;
+transport errors that begin after this fence remain censored. A provider death is counted without a speech minimum
+when the serving owner replaces/rejects it or exhausts recovery. A pending hop
+without successor text settles as degraded after 30 seconds, with no socket or
+audio change. Established fallback reasons stay stable, including quota/auth;
+health retains the corresponding typed account reasons. Soniox 408 uses censored `soniox_request_timeout`; 400 no-audio uses
+`soniox_idle_timeout`. Neither opens a provider circuit for all users, including connect rejection.
+Repeated Soniox 408 connect rejections deliberately do not create a cross-session
+bench: this cause cannot distinguish a provider outage from client/input timing.
+Each connection still falls through to the next provider. Accept that repeated
+connect cost/latency risk; inspect its reason counter and transcript/latency SLIs
+and withdraw the endpoint manually if the aggregate shows an outage.
+Local VAD and other explicitly censored input/configuration failures also release
+circuit admission without accumulating provider failures.
 
-The connection path reads cached memory. Redis state is refreshed off connect
-with a 75 ms deadline and eight bounded result-write slots. Redis faults retain
-known benches and use local evidence; pods do not independently reopen cost
-gate trials. Completed text counts at close and attributable provider deaths as soon as
-known. Plain no-text/deadline-only outcomes are censored and cannot advance
-health or recovery. Connect failures have their own classified target outcome. First-text `text`/`no_text` metrics remain diagnostic and are
-not double-counted into the cost health test. The static-path legacy score and
-account state remains available for local resilience; it does not rank the
-active policy. Fleet deadlines use Redis server time; opposite +/-60-second
-pod skews cannot start recovery early. During a Redis outage local evidence
-keeps routing usable, and pending local benches reconcile before re-entry.
+`omi_stt_cost_routing_settlements_total{target,outcome,reason,path}` is the
+expected observation count from that seam (`path=close|failover|connect`). Its
+sum over path must equal `omi_stt_cost_routing_observations_total` by
+instance/target/outcome/reason. This comparison covers exactly the managed
+router population; legacy/PTT fallback events are not extra router samples.
+A direct acknowledgement from the observation writer feeds the single
+`omi_stt_cost_routing_emission_ack_errors_total` counter; exceptions or missing
+acknowledgements increment it. This checks acknowledgement only: neither this
+counter nor the paired emissions detects omitted terminal paths or consistently
+wrong classification, and neither proves Redis persistence. Redis drop counters and
+`omi_stt_cost_routing_votes_total{target,scope,result}` prove whether classified
+evidence reached shared state (`applied|user_cap|window_full|generation|stage`).
 
-Window candidates must match the session's actual engine choice, language
-eligibility and hosted endpoint. Mismatches and empty proposals restore the
-configured chain and increment `omi_stt_cost_routing_fail_open_total`.
-Configured unregistered services remain at the tail, followed by health-skipped
-trial/bench targets as last resorts. Health stages cannot empty an eligible
-chain: all-degraded candidates are ordered by stage, observed error rate, then
-cost. The terminal target has no health/trial share limit unless a cheaper
-fully healthy candidate can serve this UID. Explicit ramp, engine/capability
-and account exclusions remain hard. Read the all-degraded counter before on. Capacity signals and five-second local capacity
-cooldowns exclude terminal legs and configured-default aliases when an
-alternative remains. If all remaining candidates are capacity-blocked, dial
-one least-recently-refused candidate through its normal account/circuit and
-admission gates, at most once per session. This serves a sole candidate that
-recovers inside its cooldown; it intentionally removes the process-wide
-five-second dial bound in that case. A
-`capacity_full` refusal releases the circuit probe and starts that target
-cooldown without recording a circuit/health failure. Empty-proposal
-last-resort forcing respects it; the one-attempt escape above is the only
-capacity exception in the on cohort. Ordinary mid-session deaths exclude only the target;
-quota/auth failures exclude its whole family.
+State uses `omi:live-stt:cost-v7:<target>:<bounded-language>` and `all`. Do not
+reuse v5 evidence. At stage 100, one hashed user contributes at most three
+success/failure outcomes in a five-minute Redis-time window. Windows hold at
+most 2,048 ordinary fingerprints (above 1,500 at 10x 1,800 sessions/hour),
+plus an eight-fingerprint outage reserve. At saturation, eight distinct new
+users failing without an intervening classified success bench the target. Every
+success resets this reserve, even if its normal vote is capped; one repeated
+caller cannot fill it, and it cannot fill without benching. This reserve does
+not feed failure-only samples into CUSUM or refill existing user budgets. Any
+`window_full` remains a rollout stop because normal brownout evidence is sampled. Healthy
+state keys expire after 900 idle seconds; benched/trial state persists to prevent
+expiry bypassing staged recovery and holds no healthy-window fingerprint list. Raw observation counts remain uncapped for
+reconciliation. Trials retain their separate user votes, generation fences,
+5→25→100 shares, and exponentially increasing cooldown. Redis CAS enforces all
+of this fleet-wide. Shared snapshots refresh off connect, normally every five
+seconds, under a 75 ms deadline; local fallback retains known benches.
 
-The gate is an 8% Page CUSUM on **provider availability errors**, not an
-anytime-valid probability test or a no-text quality gate. Errors are typed
-serve/death/connect failures (`modulate_serve_error`, `connection_lost`,
-`send_failed`, `provider_5xx`, `provider_429`, `provider_rate_limited`, `timeout`).
-Completed text is passing evidence; plain no-text, first-text deadline/empty
-streak, client/VAD, account/config/capacity and idle/rotation are censored.
-Legacy transcript and deadline SLIs remain essential: this loses automatic
-health-gate detection of a recognizer that connects but silently emits no words.
-No successor/content join is performed. Shadow serving and diagnostics remain
-unchanged; active routing no longer opens a local serve breaker for plain
-no-text. Account and genuine provider breakers retain their fast protection.
+The [architecture](../../utils/stt/ARCHITECTURE.md#serving-owned-health-evidence-cost-v7)
+has the taxonomy, registry and second-endpoint example, exact gate, and
+reproducible calibration. The gate stays 8%. In cost-v7 simulation, every
+realistic-floor row has zero false benches in 400k sessions; 40%/60%/100%
+provider errors bench at median 20/13/8 and p95 48/21/8 sessions. At 62 sessions
+per five minutes that is about four minutes at the 40% p95, plus settlement
+and cache delay. The rate must be representative admitted votes, not one
+client's repeated reconnects. These are synthetic bounds, not prod acceptance.
 
-At 5%/7%/10% no-text with zero provider errors, replays observe zero false
-benches per 400k sessions at each floor. Conditional on that classification,
-the probability is zero: no-text cannot raise a score. With a 10% censored
-noise floor, 200 seeded runs detect 100% errors in 8/8 median/p95 sessions,
-60% errors in 13/19 sessions (8/9 failures), and a 40% Modulate brownout in
-22/47 sessions (9/15 failures). Wall time depends on observed classified
-traffic and completion/cache delay. Sparse language breadth protection remains.
+## Minimum shadow go/no-go (normally 60–120 minutes)
 
-Promotion needs 30/60 **classified** trial outcomes and a passing user-vote
-fraction; each user gets one majority-outcome vote and only the first three
-outcomes contribute sequential evidence. Broad trial failures reject; held
-windows reset at 120/240. Two always-failing users and 23 always-passing users
-observed in each window (>=92% healthy observed users) promote within 360
-classified outcomes. Censored noise does not advance this bound; healthy
-users absent from the sticky cohort cannot establish recovery.
+Start the observation window after every listen pod runs the same new image and
+has been scraped. Do not reset shared state mid-window. Require at least 60
+minutes plus the following positive coverage; elapsed time alone never passes:
 
-The v5 namespace starts fresh provider-error evidence. Do not reinterpret v3/v4
-misclassified history, or raise on-percent until the new shadow data is warm.
+1. At least 500 proposals, 100 settled classified Parakeet legs, and 100 Soniox
+   legs. Inspect every observed language group and all provider-failure reasons.
+   The new seam's real-parser/receiver tests must be green on the deployed SHA.
+2. No persistent opened-minus-settled-minus-open lifecycle gap; exactly zero
+   emission acknowledgement errors, evidence exceptions, unavailable
+   proposals and all-degraded selections. No Redis result drops, saturated
+   evidence windows, router/cache errors or unknown/stale snapshots.
+3. Parakeet and Soniox global stage 100 on every fresh pod, with no unexplained
+   language bench. Proposal shares match current allocation and capabilities;
+   no healthy admitted Parakeet primary is diverted to a costlier target.
+4. Modulate either demonstrates its bench/5% recovery on real fallback evidence,
+   **or is explicitly withdrawn with registry `ramp_percent=0` in the on config**.
+   Static Soniox-first order can legitimately yield too little Modulate traffic
+   to warm its new namespace. Unknown/untested Modulate is not permission to
+   send it new primary traffic. Do not manufacture probe traffic to qualify it.
+   A complete registry override must retain Parakeet and Soniox entries; after
+   active selection their registered Modulate sibling cannot reappear as a
+   static tail. Router-error fail-open still uses the documented static chain.
+5. Transcript-success, no-text share, first-text latency, window capacity and
+   GPU pressure remain within the conditions below. Confirm the existing
+   transcript-success alert is evaluated and routed to the live contact point.
 
-At 17.9k eligible sessions/day and 61% Modulate disruption, the delayed-result
-trial replay averages 75.46 disruptions/day (p95 80; worst seeded run 83),
-versus 545.95/day for an uninterrupted 5% trial. The deterministic replay bound
-is below 100/day, including ten initial outage failures. This is conditional
-on the documented workload/delay assumptions, not a hard production traffic
-budget. Watch actual failovers and dropped writes before increasing the ramp.
+If low-volume coverage is missing after two hours, keep that target withdrawn
+or remain shadow. This is a bounded first canary, not 24-hour reliability proof.
+A new Modulate endpoint later enters through its own registry ID and 5% ramp;
+its evidence must never reuse the old endpoint's identity or state.
 
-## Read during rollout
+## Exact PromQL
 
-Use the backend-listen Grafana dashboard and these PromQL queries:
+Use `job="backend-listen-metrics"`, and a window containing only the new image.
+The **emission acknowledgement check** below must be zero; it is not an
+independent correctness oracle. Missing metrics are failure of coverage, not zero.
+The paired-counter difference is also useful by instance/target/reason, but a
+scrape reads separate collectors at slightly different instants: a transient
+difference during active settlement can be a scrape race. Require that the
+one-minute minimum paired difference is zero, and investigate any persistent
+mismatch; do not mistake `increase()` extrapolation or a first scrape for lost
+evidence.
 
 ```promql
-sum by (provider, language, outcome) (rate(omi_stt_leg_transcript_outcome_total{job="backend-listen-metrics"}[15m]))
-sum by (provider, outcome) (rate(omi_stt_provider_connect_total{job="backend-listen-metrics"}[15m]))
-max by (provider, kind) (omi_stt_provider_circuit_open{job="backend-listen-metrics"})
-histogram_quantile(0.95, sum by (le) (rate(omi_stt_routing_decision_seconds_bucket{job="backend-listen-metrics"}[10m])))
-sum by (kind) (rate(omi_stt_fleet_health_write_dropped_total{job="backend-listen-metrics"}[5m]))
-sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[5m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[5m])), 1)
+sum(omi_stt_cost_routing_emission_ack_errors_total{job="backend-listen-metrics"})
+min_over_time((sum(abs(
+  sum by (instance, target, outcome, reason) (omi_stt_cost_routing_settlements_total{job="backend-listen-metrics"})
+  -
+  sum by (instance, target, outcome, reason) (omi_stt_cost_routing_observations_total{job="backend-listen-metrics"})
+)))[1m:15s])
+sum(increase(omi_stt_cost_routing_evidence_errors_total{job="backend-listen-metrics"}[1h]))
+sum by (target, path, outcome, reason) (increase(omi_stt_cost_routing_settlements_total{job="backend-listen-metrics"}[1h]))
+sum by (from_mode, reason, outcome) (increase(omi_fallback_total{job="backend-listen-metrics",component="stt_live_session"}[1h]))
 ```
 
-Cost state uses `omi:live-stt:cost-v5:<target>:<bounded-language>` (and `all`)
-with atomic compare-and-set updates and trial-start leases. A full result-write
-pool, deadline or CAS contention can drop a fleet sample and increments
-`omi_stt_fleet_health_write_dropped_total`; local evidence still advances.
-Monitor dropped writes before increasing traffic. New dashboard panels should
-show `omi_stt_cost_routing_decisions_total`, `omi_stt_cost_routing_shadow_total`,
-`omi_stt_cost_routing_benched`, `omi_stt_cost_routing_stage`, and
-`omi_stt_cost_routing_events_total`, and `omi_stt_cost_routing_fail_open_total`.
-Transition logs include counts, failure rate and CUSUM score.
-The bench/stage gauges are **pod views of global target state**, including
-local fallback during Redis faults. Every refresh observes all registry global
-keys and republishes, even on idle/ineligible pods; unknown is NaN with
-`omi_stt_cost_routing_state_known=0`. The snapshot timestamp is Redis server
-time; NaN means never refreshed, whereas a finite old timestamp is stale.
-The background loop refreshes registry targets even without session traffic.
-Require fresh, known, converged views before interpreting min/max.
-Counters record CAS transitions once at the writer with `scope=global|language`;
-local Redis-down transitions remain logs. Target/event/scope series are
-initialised at zero before traffic so first post-scrape transitions are counted.
-Increments before a pod's first scrape cannot be recovered by `increase()`.
-Transition rates are classified outcomes; promotion uses user votes.
-Shadow labels remain at most 16 registry IDs plus fixed sentinels; no UID or
-content. Drain old pods before using the v5 reason-labelled observation queries.
+The last query includes legacy/PTT traffic and uses provider-family labels;
+endpoint-specific equality is checked by the paired-counter difference. For managed failure
+settlements, account labels map budget→quota and rejected-auth→auth. Connect
+settlements belong to `stt_selection`, terminal deaths to `stt_live_session`.
 
-The `omi-modulate-failing-soniox` Telegram rule names the active spend lever.
-The existing `Omi - Services Alerting (Telegram)` Grafana contact point must
-reach David. The coordinator must verify this contact point and the live rule
-evaluation after deployment; committed JSON alone is not delivery evidence.
+Deaths are eligible at the first serving claim, not at a read-only liveness
+poll. Explicit client/application disconnect, inactive state or shutdown at
+that claim excludes the death and suppresses its fallback emission. A claim
+already made with a connected client remains valid after later departure.
+Existing text remains one success; otherwise the excluded leg settles as
+censored no-text. Repeated claims/close/validation cannot revive a settled leg.
+The backend cannot recover the ordering of an unclaimed raw death and client
+departure retrospectively.
 
-## Exact router rollout queries
-
-Global-state pod stage (0 benched, 5/25 trial, 100 available), filtering to
-recent snapshots. Unknown NaN is not evidence of health:
+For a fixed accepted-socket cohort and bounded provider reasons:
+`provider_failure observations = settled nonterminal hops + connected terminal deaths`.
+Terminal deaths now also emit fallback to `unavailable`, so do not add their
+session-level terminal counter to the whole fallback total again. Connect-chain
+exhaustion remains a separate surface and can be zero for a serving terminal
+Soniox death. Excluded deaths have no provider-failure or hop emission; read:
 
 ```promql
-min by (target) (omi_stt_cost_routing_stage{job="backend-listen-metrics"} and on (job, instance) (time() - omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"} < 15))
-max by (target) (omi_stt_cost_routing_stage{job="backend-listen-metrics"} and on (job, instance) (time() - omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"} < 15))
+sum by (target, reason, boundary) (increase(omi_stt_cost_routing_ignored_deaths_total{job="backend-listen-metrics"}[1h]))
+sum by (component, from_mode, to_mode, reason, outcome) (increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session"}[1h]))
+sum by (provider, outcome, phase) (increase(omi_live_stt_terminal_failures_total{job="backend-listen-metrics"}[1h]))
+sum(increase(omi_stt_chain_exhausted_total{job="backend-listen-metrics"}[1h])) or vector(0)
+```
+
+The ignored counter covers a claimed death excluded by lifecycle, not every
+late transport-close symptom. Its labels are registered target (<=16), bounded
+reason vocabulary and boundary (`client_gone`/`owner_teardown`), preinitialized.
+Require Modulate provider-failure counts to match the managed serving cohort
+of selection plus live/terminal fallback emissions per reason before `on`.
+The paired counters alone can agree while both classify client churn wrongly.
+New `cost-v7` state discards v5/v6 post-client failures and strikes; it does not
+migrate or backfill those samples. The sequential gate and vote budgets stay intact.
+
+Independent lifecycle oracle: the chain counts `opened` when handing off a
+connected managed leg (including same-provider replacement), transport release
+decrements `open`, and terminal settlement separately counts `settled`. Rejected
+connects that never hand off are excluded from all three. The per-pod/target
+difference must return to zero; allow the existing 30-second deferred hop
+settlement and scrape races, but **no nonzero gap persisting two minutes**. A
+missing settlement after transport release grows this gap even if acknowledgement
+errors stay zero. This detects lifecycle coverage, not wrong reason attribution;
+retain real-object tests and provider-reason/session-SLI inspection for that.
+
+```promql
+sum by (instance, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
+- sum by (instance, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
+- sum by (instance, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
+
+min_over_time((abs(
+  sum by (instance, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
+  - sum by (instance, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
+  - sum by (instance, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
+))[2m:15s]) > 0
+```
+
+Coverage, admitted votes and health evidence:
+
+```promql
+sum(increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h]))
+sum by (target) (increase(omi_stt_cost_routing_observations_total{job="backend-listen-metrics",outcome=~"success|provider_failure"}[1h]))
+sum by (target, scope, result) (increase(omi_stt_cost_routing_votes_total{job="backend-listen-metrics"}[1h]))
+sum by (target) (increase(omi_stt_cost_routing_observations_total{job="backend-listen-metrics",outcome="provider_failure"}[1h])) / clamp_min(sum by (target) (increase(omi_stt_cost_routing_observations_total{job="backend-listen-metrics",outcome=~"success|provider_failure"}[1h])), 1)
+sum by (kind) (increase(omi_stt_fleet_health_write_dropped_total{job="backend-listen-metrics"}[1h]))
+```
+
+Global stage and snapshot integrity (minimum and maximum must agree; unknown
+NaN is never healthy). A language transition can restrict one language without
+changing the global gauge; inspect the separate transition scope:
+
+```promql
+min by (target) (omi_stt_cost_routing_stage{job="backend-listen-metrics"})
+max by (target) (omi_stt_cost_routing_stage{job="backend-listen-metrics"})
 min by (target) (omi_stt_cost_routing_state_known{job="backend-listen-metrics"})
 max(time() - omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"})
-```
-
-Global and language transitions over the last hour, with separate scopes:
-
-```promql
-sum by (target, event, scope) (increase(omi_stt_cost_routing_events_total{job="backend-listen-metrics",event=~"bench|unbench|stage"}[1h]))
-```
-
-Static/proposed primary shares and pair agreement:
-
-```promql
-sum by (static_primary) (rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h])) / scalar(sum(rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h])))
-sum by (proposed_primary) (rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h])) / scalar(sum(rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h])))
-sum by (agreement, static_primary, proposed_primary) (rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[15m]))
-```
-
-Audio-independent provider-error fraction, plus censored observations:
-
-```promql
-sum by (target) (rate(omi_stt_cost_routing_observations_total{job="backend-listen-metrics",outcome="provider_failure"}[1h])) / clamp_min(sum by (target) (rate(omi_stt_cost_routing_observations_total{job="backend-listen-metrics",outcome=~"success|provider_failure"}[1h])), 1e-9)
-sum by (target, outcome) (increase(omi_stt_cost_routing_observations_total{job="backend-listen-metrics"}[1h]))
-```
-
-Reconcile classifications with settled source-leg failovers over the same window:
-
-```promql
-sum by (target, outcome, reason) (increase(omi_stt_cost_routing_observations_total{job="backend-listen-metrics"}[1h]))
-sum by (from_mode, reason, outcome) (increase(omi_fallback_total{job="backend-listen-metrics",component="stt_live_session"}[1h]))
 count(omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"} != omi_stt_cost_routing_snapshot_timestamp_seconds{job="backend-listen-metrics"}) or vector(0)
+sum by (target, event, scope) (increase(omi_stt_cost_routing_events_total{job="backend-listen-metrics"}[1h]))
 ```
 
-**Before enabling `on`, require Modulate's `provider_failure` counts to track its attributable
-mid-session failovers by reason.** `modulate-velma-2` maps to fallback
-`from_mode="modulate"`; `parakeet-window` maps to `parakeet`. Fallbacks use family
-labels: sibling endpoints cannot be distinguished there, so compare their
-combined health counts when more than one endpoint is configured. Health counts
-once on death; fallback settlement occurs later, on successor text/exhaustion.
-Allow for settlement delay and first-scrape counter boundaries. Connect failures
-are additional health observations; deaths before one second of VAD speech do
-not enter serving health. Explain these differences rather than demanding
-instantaneous equality. Compare only provider-attributable reasons for the
-failure count (`modulate_serve_error`, `connection_lost`, `send_failed`,
-`provider_5xx`, `provider_429`, `provider_rate_limited`, `timeout`).
+Require snapshot age <15 seconds, no NaNs, known=1 for traffic-enabled targets.
+A deliberately withdrawn unused target can remain unknown; exclude it explicitly
+when evaluating that requirement. Series are preinitialized before traffic so
+post-first-scrape transitions and observations are visible to `increase()`.
 
-A socket-owned typed cause precedes a bounded raw cause, then the observing
-send/monitor symptom. Unknown/free-text serving deaths become `connection_lost`,
-or `send_failed` when observed directly on send; free text is never a label.
-Window `first_text_deadline`, `empty_streak`, `capacity_full`, account refusals,
-rotation/idle timeout and explicit client/VAD causes keep their own censored
-reason. Normal completion uses `text` or `no_text`. Failed hops retain the source
-cause instead of relabelling that source with the successor's rejection.
-Budget/auth reasons now use `provider_budget_exhausted`/`provider_auth_rejected`
-in these STT fallback metrics rather than `quota`/`auth`; serving account
-protection is unchanged. The closed vocabulary has 27 reasons, with up to 16
-registry targets and three outcomes. No UID or diagnostic text is exported.
-
-Unavailable proposals, degraded-only selection, dropped samples and errors:
+Would-have-changed-primary breakdown and guard counters:
 
 ```promql
-sum(increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics",proposed_primary="unavailable"}[8h])) or vector(0)
-sum by (target) (increase(omi_stt_cost_routing_all_degraded_total{job="backend-listen-metrics"}[8h])) or vector(0)
-sum by (reason) (increase(omi_stt_cost_routing_fail_open_total{job="backend-listen-metrics"}[8h]))
-sum by (kind) (increase(omi_stt_fleet_health_write_dropped_total{job="backend-listen-metrics"}[8h]))
-sum(increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[8h]))
+sum by (agreement, static_primary, proposed_primary) (increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h]))
+sum by (proposed_primary) (rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h])) / scalar(sum(rate(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics"}[1h])))
+sum(increase(omi_stt_cost_routing_shadow_total{job="backend-listen-metrics",proposed_primary="unavailable"}[1h])) or vector(0)
+sum(increase(omi_stt_cost_routing_all_degraded_total{job="backend-listen-metrics"}[1h])) or vector(0)
+sum by (reason) (increase(omi_stt_cost_routing_fail_open_total{job="backend-listen-metrics"}[1h]))
 ```
 
-A zero unavailable delta needs positive traffic coverage and no proposal errors;
-check absolute counters/logs too during pod startup because first increments
-before the first scrape can be invisible. These comparisons run in shadow and
-on; verify runtime mode before calling them shadow qualification.
+`static_primary` is the configured eligible nomination before local circuit and
+connect attempts, not the eventual serving provider. The pair metric runs in
+shadow and on; read the actual runtime mode. Positive proposal coverage is
+required before interpreting an absent/zero guard series.
 
-## Shadow go/no-go before on
+User-facing SLIs and silent-provider detection:
 
-Keep `shadow`/on-percent `0` for at least a full 24h traffic/language cycle after
-the v5 rollout. Do not increase the router percentage until all checks pass:
+```promql
+sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[15m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[15m])), 1)
+sum by (provider, language, outcome) (increase(omi_stt_leg_transcript_outcome_total{job="backend-listen-metrics"}[15m]))
+histogram_quantile(0.95, sum by (le) (rate(omi_stt_window_first_text_seconds_bucket{job="backend-listen-metrics"}[15m])))
+sum(increase(omi_stt_window_admissions_total{job="backend-listen-metrics",outcome="overflow"}[15m])) / clamp_min(sum(increase(omi_stt_window_admissions_total{job="backend-listen-metrics"}[15m])), 1)
+histogram_quantile(0.95, sum by (le) (rate(omi_stt_window_post_seconds_bucket{job="backend-listen-metrics"}[15m])))
+```
 
-- Positive observation/proposal coverage for all configured targets; snapshot
-  age <15s, known state, and converged pod min/max. No sustained write drops,
-  Redis/cache errors, or unexplained language-specific bench transitions.
-- **Zero unavailable proposals and zero all-degraded selections.** A capable,
-  ramp-admitted, account-available target must keep a chain. Missing/withdrawn
-  targets, account denial or malformed config must be understood first.
-- **Soniox and Parakeet at global 100**, without noise-driven language benches;
-  **Modulate benched or in bounded 5% re-entry**, never promoted on this error
-  rate. Its stage may legitimately cycle 0/5 as backoff runs.
-- Proposed Parakeet share matches its eligible 25% sticky cohort, without a
-  health-driven reduction to 5%; no proposals divert a capable, admitted
-  healthy Parakeet session to a more expensive target. Compare target shares
-  and pair disagreement with static selection, accounting for language,
-  actual window/RNNT engine eligibility, cohort repetition and capacity.
-- **Reason reconciliation passes:** Modulate provider failures track settled
-  provider-error failovers, not censored outcomes. Window deadline/empty/capacity
-  failovers appear only as censored health observations; rotation/account/client
-  reasons do too. No pod has a never-refreshed snapshot after startup warmup.
-- Provider-error fractions for healthy targets stay around the observed
-  0.3–1%, and no-text floors no longer affect benches. Headline conversation
-  transcript success and first-text latency do not regress. Deadline/empty
-  failures rescued by another provider deserve investigation even though
-  they are censored by this gate.
+No-text is a mandatory separate SLI, never gate failure evidence. An accepted
+non-window provider that returns no words indefinitely has no new automatic
+per-session rescue. Continuing speech triggers the diagnostic no-text deadline;
+completed sessions feed `omi-live-transcription-success-low` (existing <90%,
+>=50 counted sessions/5m, five-minute dwell page). Quiet unfinished streams do
+not establish a vendor fault and remain outside this automatic detector.
 
-The local aggregate replay is diagnostic evidence: it keeps Soniox/Parakeet at
-100, Modulate in 0/5, and proposals nonempty. It cannot reconstruct real UID,
-cohort, language-failure or successor joins. After passing the checklist, the
-coordinator can ramp on 5 → 25 → 100 with a dwell at each step and the same
-checks; shadow/off or on-percent zero is the kill switch. This PR does not
-perform that rollout.
+## Recommended on ramp and abort
+
+After the checklist passes, configure `on` at **5% for at least 60 minutes and
+100 classified canary sessions**, then **25% for at least 60 minutes and 300**,
+then **100% with at least two hours of attended observation**. Count actual
+router allocation with the new intent-to-treat cohort metric below. The arm is
+captured before initialization: an on-arm session that fails open or cannot
+connect still counts in the on arm. Custom-STT, BYOK and multi-channel sessions
+are excluded. `too_short` remains visible but outside the success denominator.
+
+```promql
+sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[1h]))
+sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[15m])) / clamp_min(sum by (arm) (increase(omi_stt_cost_routing_canary_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[15m])), 1)
+```
+
+Extend dwell until the on arm reaches the exposure floor; do not substitute
+shadow proposals or window-allocation counts for actual router canary sessions.
+
+Abort to shadow/zero for a persistent lifecycle gap, any emission acknowledgement error or evidence exception; any
+unavailable/all-degraded proposal; sustained Redis/write/cap errors; or a
+Parakeet/Soniox bench unexplained by actual provider failures. Abort for a >2
+percentage-point drop in transcript success from the pre-ramp baseline over
+15 minutes with >=100 counted sessions, or <95% absolute; first-text p95 >=30s;
+window POST p95 >=2s; or >1% capacity overflow for ten minutes. Compare language
+mix and absolute counts; use existing GPU/backfill capacity gates as well.
+Apply the transcript abort to the on arm as well as the whole fleet; compare
+with the control arm and the pre-ramp baseline. At small sample sizes these are
+operational gates, not a statistical proof of non-inferiority.
+
+Kill switch: set `STT_ROUTING_ON_PERCENT=0` or `STT_ROUTING_MODE=shadow` (`off`
+also restores static selection). Apply through the coordinator's config PR and
+normal deployment; this is not an instant process-local env mutation.
+`PARAKEET_WINDOW_ALLOCATION_PERCENT=0` independently withdraws the window leg.
+Keep chart + prod overlay aligned, then regenerate `backend/deploy/runtime_env.yaml`
+with `python3 backend/deploy/compose_runtime_env.py`. Do not write routing state
+through dev: dev shares production Redis/Firestore.
 
 ## Soniox runway
 
