@@ -8,6 +8,57 @@ class OmiBleEnergyPolicyTest < Minitest::Test
   IOS_ROOT = File.expand_path('..', __dir__)
   POLICY_SOURCE = File.join(IOS_ROOT, 'Runner', 'Ble', 'OmiBleEnergyPolicy.swift')
 
+  def test_recovery_latency_tracks_the_disconnect_across_failed_retries
+    Dir.mktmpdir('omi-ble-recovery') do |directory|
+      harness = File.join(directory, 'main.swift')
+      binary = File.join(directory, 'omi-ble-recovery-test')
+      File.write(harness, <<~SWIFT)
+        import Foundation
+
+        @main
+        struct RecoveryHarness {
+            static func main() {
+                var recovery = OmiBleReconnectDiagnostics()
+                recovery.recordEvent(timestampMs: 1_000, eventType: "disconnect", isManual: false)
+                recovery.recordEvent(timestampMs: 2_000, eventType: "fail_to_connect", isManual: false)
+                recovery.recordEvent(timestampMs: 5_000, eventType: "fail_to_connect", isManual: false)
+                let reconnected = recovery.recovered(atMs: 9_000, hadConnection: true)!
+                precondition(reconnected.eventTimestampMs == 1_000)
+                precondition(reconnected.durationMs == 8_000)
+                precondition(recovery.recovered(atMs: 10_000, hadConnection: true) == nil)
+
+                // Failure before the first successful connection must be
+                // consumed, so a later link loss starts a new recovery.
+                recovery.recordEvent(timestampMs: 11_000, eventType: "fail_to_connect", isManual: false)
+                precondition(recovery.recovered(atMs: 12_000, hadConnection: false) == nil)
+                precondition(recovery.recovered(atMs: 13_000, hadConnection: true) == nil)
+                recovery.recordEvent(timestampMs: 20_000, eventType: "disconnect", isManual: false)
+                recovery.recordEvent(timestampMs: 21_000, eventType: "fail_to_connect", isManual: false)
+                let laterRecovery = recovery.recovered(atMs: 25_000, hadConnection: true)!
+                precondition(laterRecovery.eventTimestampMs == 20_000)
+                precondition(laterRecovery.durationMs == 5_000)
+
+                recovery.recordEvent(timestampMs: 30_000, eventType: "disconnect", isManual: false)
+                recovery.recordEvent(timestampMs: 31_000, eventType: "disconnect", isManual: true)
+                precondition(recovery.recovered(atMs: 35_000, hadConnection: true) == nil)
+
+                // A new physical disconnect supersedes an earlier attempt;
+                // clock adjustments must not produce negative durations.
+                recovery.recordEvent(timestampMs: 40_000, eventType: "fail_to_connect", isManual: false)
+                recovery.recordEvent(timestampMs: 45_000, eventType: "disconnect", isManual: false)
+                let newLoss = recovery.recovered(atMs: 44_000, hadConnection: true)!
+                precondition(newLoss.eventTimestampMs == 45_000)
+                precondition(newLoss.durationMs == 0)
+            }
+        }
+      SWIFT
+      stdout, stderr, compile = Open3.capture3('swiftc', '-parse-as-library', POLICY_SOURCE, harness, '-o', binary)
+      assert compile.success?, "swiftc failed:\n#{stdout}\n#{stderr}"
+      stdout, stderr, run = Open3.capture3(binary)
+      assert run.success?, "recovery assertions failed:\n#{stdout}\n#{stderr}"
+    end
+  end
+
   def test_rssi_polling_and_battery_history_policy
     Dir.mktmpdir('omi-ble-energy-policy') do |directory|
       harness = File.join(directory, 'main.swift')
