@@ -1,6 +1,8 @@
 """Real VAD export and process_segment preserve speech extents; silence creates nothing."""
 
 import logging
+from copy import deepcopy
+from google.api_core.exceptions import InvalidArgument, ServiceUnavailable
 from pathlib import Path
 import threading
 from unittest.mock import MagicMock
@@ -13,7 +15,7 @@ import pytest
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cloud_tasks import _load_sync_jobs, _seed_fenced_job
-from tests.unit.test_sync_cross_job_assignment import intake, conversations
+from tests.unit.test_sync_cross_job_assignment import intake, conversations, chunk
 from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
 from utils.sync import telemetry
 from utils.sync.capture import chunk_identity
@@ -44,6 +46,7 @@ def pipeline():
         module = load_module_fresh(
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
         )
+        module.ingest_test_seam = lifecycle
         module.real_bridge = real_bridge
         module.AudioSegment = AudioSegment
         module.get_timestamp_from_path = lambda path: float(Path(path).stem)
@@ -315,10 +318,28 @@ def test_bridge_finishes_once_at_process_segment_completion(pipeline, monkeypatc
     finish.assert_called_once_with('u', conversations(store)[0]['id'], audio_source_id=None)
 
 
+@pytest.mark.parametrize('flag', ['true', 'off'])
+def test_locked_segments_merge_and_an_identical_locked_retry_is_not_a_conflict(pipeline, monkeypatch, flag):
+    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', flag)
+    module, store = pipeline
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors = []
+    # The last call repeats a segment whose assignment already committed.
+    for timestamp in (1000, 1060, 1060):
+        outcome = {}
+        module.process_segment(
+            f'{timestamp}.wav', 'u', response, threading.Lock(), errors, is_locked=True, deferred_outcome=outcome
+        )
+        assert outcome['outcome'].value == 'success'
+    assert errors == []
+    rows = conversations(store)
+    assert len(rows) == 1
+    assert rows[0]['is_locked'] is True and len(rows[0]['transcript_segments']) == 2
+
+
 @pytest.mark.parametrize('condition', ['anchor_deleted', 'lineage_deleted', 'user_managed', 'provenance', 'cycle'])
-def test_assignment_outcomes_through_process_segment(pipeline, condition):
-    from copy import deepcopy
-    from tests.unit.test_sync_cross_job_assignment import chunk
+def test_assignment_outcomes_through_process_segment(pipeline, condition, monkeypatch):
+    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', 'off')
 
     module, store = pipeline
     cid = chunk_identity('u', 'omi', None, False, 1000)
@@ -350,9 +371,38 @@ def test_assignment_outcomes_through_process_segment(pipeline, condition):
     assert store.rows == before
     assert response == {'new_memories': set(), 'updated_memories': set()}
     if condition in ('provenance', 'cycle'):
-        assert errors == ['stt_upstream_error']
-        assert outcome['outcome'].value == 'upstream_error' and outcome['retryable']
+        assert errors == ['sync_persistence_failed']
+        assert outcome['outcome'].value == 'upstream_error' and not outcome['retryable']
         assert outcome['failure_subtype'] == ('provenance_mismatch' if condition == 'provenance' else 'redirect_cycle')
     else:
         assert errors == []
         assert outcome['outcome'].value == 'success' and not outcome['retryable']
+
+
+@pytest.mark.parametrize(
+    'error,expected,retryable',
+    [
+        (InvalidArgument('Document private-id exceeds the maximum allowed size'), 'document_size_limit', False),
+        (InvalidArgument('private unexpected input'), 'invalid_argument_other', True),
+        (InvalidArgument('The transaction has expired private-id'), 'expired_transaction', True),
+        (ServiceUnavailable('private detail'), 'ServiceUnavailable', True),
+    ],
+)
+def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, error, expected, retryable):
+    module, store = pipeline
+    module.ingest_test_seam.ingest_sync_conversation = MagicMock(side_effect=error)
+    module.get_prerecorded_service = lambda language: ('deepgram', None, 'nova-3')
+    errors, outcome = [], {}
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert (
+        module.process_segment('1000.wav', 'u', response, threading.Lock(), errors, deferred_outcome=outcome) is False
+    )
+    assert not store.rows and not response['new_memories']
+    assert errors == ['sync_persistence_failed']
+    assert outcome['provider'] == outcome['model'] == 'unknown'
+    assert outcome['retryable'] is retryable
+    assert ('repeat_failure_fingerprint' in outcome) is (not retryable)
+    event = next(r.message for r in caplog.records if 'event=sync_persistence_exception' in r.message)
+    assert f'firestore_error={expected}' in event
+    assert 'private' not in event
+    module.prerecorded.assert_called_once()
