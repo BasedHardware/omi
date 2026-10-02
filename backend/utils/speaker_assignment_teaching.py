@@ -80,6 +80,7 @@ def schedule_assignment_teaching(
             person_id=person_id,
             conversation_id=conversation_id,
             segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
+            allow_text_relocation=True,
         )
     elif is_user:
         background_tasks.add_task(

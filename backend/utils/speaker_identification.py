@@ -39,6 +39,10 @@ from utils.speaker_tag_prompts.clips import v2_relevant_timestamps
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
 
+from config.speaker_clip_location import text_anchored_clips_enabled
+from utils.observability.speaker_clip_location import record_location
+from utils.speaker_clip_relocation import relocate_person_sample
+
 logger = logging.getLogger(__name__)
 
 
@@ -783,6 +787,8 @@ async def extract_speaker_samples(
     conversation_id: str,
     segment_ids: List[str],
     sample_rate: int = 16000,
+    *,
+    allow_text_relocation: bool = False,
 ) -> str:
     """
     Extract a pooled speech sample for ``person_id`` and store it as their voice profile.
@@ -913,6 +919,7 @@ async def extract_speaker_samples(
 
         timeline_v2 = is_audio_timeline_v2(conversation)
         clips: List[bytes] = []
+        covered_seconds_before_failure = 0.0
         decoded_seconds = 0.0
         covered_end: Optional[float] = None
         for start, end in plan.intervals:
@@ -931,9 +938,11 @@ async def extract_speaker_samples(
                     sample_rate,
                 )
                 if clip is None:
+                    covered_seconds_before_failure = decoded_seconds
                     clean_seconds = decoded_seconds
-                    outcome = 'uncovered_audio'
-                    return outcome
+                    clips.clear()
+                    decoded_seconds = 0.0
+                    break
                 clips.append(clip)
                 decoded_seconds += len(clip) / (sample_rate * 2)
                 continue
@@ -971,23 +980,50 @@ async def extract_speaker_samples(
                 clips.append(clip)
                 decoded_seconds += len(clip) / (sample_rate * 2)
 
-        if not clips:
-            outcome = 'no_chunks'
-            return outcome
+        relocated = False
+        failure = None
+        transcript = None
         sample_audio = b''.join(clips)
         clean_seconds = min(plan.total_seconds, decoded_seconds)
-        if decoded_seconds < TEACHING_MIN_TOTAL_SECONDS:
-            outcome = 'insufficient_speech'
-            return outcome
-
-        wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
-
-        transcript, is_valid, reason = await verify_and_transcribe_sample(
-            wav_bytes, sample_rate, expected_text, language=sample_language
-        )
-        if not is_valid or transcript is None:
-            outcome = _verify_outcome(reason)
-            return outcome
+        if not clips:
+            clean_seconds = max(clean_seconds, covered_seconds_before_failure)
+            failure = 'uncovered_audio'
+        elif decoded_seconds < TEACHING_MIN_TOTAL_SECONDS:
+            failure = 'insufficient_speech'
+        else:
+            wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
+            transcript, is_valid, reason = await verify_and_transcribe_sample(
+                wav_bytes, sample_rate, expected_text, language=sample_language
+            )
+            if not is_valid or transcript is None:
+                failure = _verify_outcome(reason)
+            elif allow_text_relocation and text_anchored_clips_enabled():
+                record_location('verified_at_stored_position')
+        if failure:
+            if allow_text_relocation and failure in {'uncovered_audio', 'text_mismatch', 'insufficient_speech'}:
+                if not text_anchored_clips_enabled():
+                    record_location('disabled')
+                elif timeline_v2 or sample_rate != 16000:
+                    record_location('unsupported_source')
+                elif not (receipt.get('segments') or receipt.get('speakers')):
+                    record_location('not_authorized')
+                else:
+                    recovered = await relocate_person_sample(
+                        uid, conversation_id, ordered_contributors, sample_language
+                    )
+                    if recovered is not None:
+                        sample_audio = recovered.pcm
+                        transcript = recovered.transcript
+                        contributing_ids = recovered.segment_ids
+                        clean_seconds = len(sample_audio) / (sample_rate * 2)
+                        wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
+                        relocated = True
+            if not relocated:
+                outcome = failure
+                return outcome
+        if relocated and conversation.get('updated_at') is None:
+            outcome = 'stale_assignment'
+            return outcome  # Relocation requires the server conversation revision fence.
 
         # Complete embedding work before replacing anything. A failed provider
         # call leaves the prior profile intact and allows a later retry.
@@ -1015,6 +1051,7 @@ async def extract_speaker_samples(
             conversation_id,
             contributing_ids,
             speech_seconds=clean_seconds,
+            **({'expected_conversation_revision': conversation['updated_at']} if relocated else {}),
         )
         if old_samples is None:
             await run_blocking(storage_executor, delete_sample_from_storage, path)

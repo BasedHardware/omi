@@ -2214,3 +2214,51 @@ the transactional deletion fence. Late commits after a worker timeout are valid 
 (uid, document ID), separately from attempt metrics. Drops are coverage losses.
 The protocol and TTL deployment prerequisite
 are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).
+
+### Optional legacy teaching text location
+
+`SPEAKER_TEXT_ANCHORED_CLIPS_ENABLED=true` enables text location only for manual
+person teaching scheduled by REST assignments, tag-prompt answers and the
+post-finalization learning retry. The code default is false. Set it on the
+backend REST and backend-sync/finalization services that execute those jobs;
+live socket enrollment, owner enrollment and preview requests do not opt in.
+Pusher/listen can leave it unset. There are no new providers or dependencies.
+
+After stored-position coverage, duration or text verification fails, the
+background coordinator enumerates the entire raw chunk inventory, rejecting
+batch interiors, unsupported entries, truncation and sources longer than 60 s.
+A generation-fenced download becomes a per-user encrypted ASR entry index in
+Redis for one hour. Partial indexes can resume on another label but cannot
+prove uniqueness. A label requires at least 12 tokens and 8 distinct tokens;
+search compares the first 32 tokens at every possible start, including 0.8
+competitors. Alternative windows are coalesced only when shared expected tokens
+map to identical source token positions. Separate copies remain competitors.
+Coarse provider entries retain their real boundaries; partial coarse phrases
+never invent word timestamps. No cached offset is treated as historical truth.
+
+The returned 10–12 s clip passes the existing 0.9 text-containment and 0.7
+dominant-speaker gates before embedding. Conversation server revision and
+person/settings fences prevent publication after a concurrent correction.
+The existing prerecorded service selects Parakeet or Modulate by language and
+policy; it generally supplies segment timings rather than individual words.
+Untimed matches fail closed. Paid automatic naming and free manual teaching
+permissions remain governed by `speaker_permissions`.
+
+Additional work is capped at 600 transcribed seconds and 12 downloads per
+label, 1800 seconds and 60 downloads per conversation per UTC day, and 18000
+seconds across the fleet per UTC day. Atomic Redis reservations are consumed
+before attempts, never refunded; an unavailable cache declines relocation.
+Each source is at most 4 MB / 60 s PCM, inventory at most 128 sources, index at
+most 20000 entries/tokens and 2 MB. The coordinator deadline is 35 s; provider,
+download and Redis socket limits are 10 s, 5 s and 2 s. These bounds cover added
+relocation work, not the existing stored-position attempt or embedding.
+
+`omi_speaker_clip_location_total{outcome}` and content-free reason logs report
+relocated, verified_at_stored_position, ambiguous, not_found, budget_exhausted,
+disabled, not_authorized, short_or_generic, invalid_timing, unsupported_source,
+source_changed, incomplete_audio, verification_rejected, transcription_failed,
+cache_unavailable, busy, timeout and error. The shared fallback metric reports
+recovered/exhausted. Enable only after raw-chunk/provider acceptance; monitor
+these outcomes with `omi_person_voice_learning_total` and manual corrections.
+Wrong-person learning or increased corrections requires disabling the flag.
+No historical timestamps or profiles are rewritten by enabling it.

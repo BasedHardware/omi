@@ -684,3 +684,88 @@ def test_model_derives_learning_state_from_readiness():
         == 'pending'
     ), 'a learned claim with no usable print but a recorded outcome stays pending'
     assert Person(id='p1', name='Alex', voice_learning_state='learned').voice_learning_state == 'unknown'
+
+
+@pytest.mark.parametrize('current,deleted', [(datetime(2026, 10, 2), False), (datetime(2026, 10, 1), True)])
+def test_relocated_publication_rejects_changed_or_deleted_conversation(world, monkeypatch, current, deleted):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+    from database.conversation_revisions import ensure_timezone_aware
+
+    expected = ensure_timezone_aware(datetime(2026, 10, 1))
+    world.store.rows[CONV_PATH] = {'deleted': deleted}
+    original_get = StrictFirestoreDocument.get
+
+    def get_with_revision(ref, *args, **kwargs):
+        snapshot = original_get(ref, *args, **kwargs)
+        snapshot.update_time = ensure_timezone_aware(current)
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get_with_revision)
+    before = deepcopy(world.store.rows[PERSON_PATH])
+    assert (
+        users.replace_person_speech_profile(
+            UID,
+            PERSON,
+            None,
+            'synthetic.wav',
+            'synthetic transcript',
+            [1.0],
+            CONV,
+            ['s1'],
+            expected_conversation_revision=expected,
+        )
+        is None
+    )
+    assert world.store.rows[PERSON_PATH] == before
+
+
+def test_relocated_publication_accepts_matching_server_revision(world, monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+    from database.conversation_revisions import ensure_timezone_aware
+
+    revision = ensure_timezone_aware(datetime(2026, 10, 1))
+    world.store.rows[CONV_PATH] = {}
+    original_get = StrictFirestoreDocument.get
+
+    def get_with_revision(ref, *args, **kwargs):
+        snapshot = original_get(ref, *args, **kwargs)
+        snapshot.update_time = revision
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get_with_revision)
+    assert (
+        users.replace_person_speech_profile(
+            UID,
+            PERSON,
+            None,
+            'synthetic.wav',
+            'synthetic transcript',
+            [1.0],
+            CONV,
+            ['s1'],
+            expected_conversation_revision=revision,
+        )
+        == []
+    )
+    assert world.store.rows[PERSON_PATH]['speech_samples'] == ['synthetic.wav']
+
+
+def test_stored_failure_can_relocate_only_manual_background_teaching(world, monkeypatch):
+    from utils.speaker_clip_relocation import RelocatedSample
+
+    segments = [seg('s1', 0, 12)]
+    set_conversation(world, conversation(segments, receipt=receipt_segments(['s1'])))
+    monkeypatch.setenv('SPEAKER_TEXT_ANCHORED_CLIPS_ENABLED', 'true')
+    monkeypatch.setattr(teaching, 'legacy_speaker_clip_pcm', lambda *args: None)
+    calls = []
+
+    async def relocate(*args):
+        calls.append(args)
+        return RelocatedSample(pcm_for(12), 'synthetic verified transcript', ['s1'])
+
+    monkeypatch.setattr(teaching, 'relocate_person_sample', relocate)
+    assert teach() == 'uncovered_audio'
+    assert not calls and not world.uploads
+    # A missing server revision must prevent publication even after recovery.
+    assert teach(allow_text_relocation=True) == 'stale_assignment'
+    assert len(calls) == 1 and not world.uploads

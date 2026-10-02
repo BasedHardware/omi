@@ -22,6 +22,7 @@ from database.firestore_tier_context import invalidate_subscription, observe_sub
 from database.person_aliases import rename_person_retaining_aliases
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.speaker_learning_fields import voice_learning_fields
+from database.conversation_revisions import firestore_revision_datetime
 from database.redis_db import (
     delete_cached_user_geolocation,
     try_acquire_client_device_write_lock,
@@ -1030,7 +1031,15 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
 
 
 @transactional
-def _replace_speech_profile_transaction(transaction, person_ref, expected_updated_at, profile, user_ref=None):
+def _replace_speech_profile_transaction(
+    transaction,
+    person_ref,
+    expected_updated_at,
+    profile,
+    user_ref=None,
+    conversation_ref=None,
+    expected_conversation_revision=None,
+):
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
         return None
@@ -1038,6 +1047,18 @@ def _replace_speech_profile_transaction(transaction, person_ref, expected_update
         'save_other_voice_profiles', True
     ):
         return None
+    if conversation_ref is not None:
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        if not conversation_snapshot.exists:
+            return None
+        conversation = conversation_snapshot.to_dict() or {}
+        if conversation.get('deleted') or conversation.get('discarded'):
+            return None
+        if (
+            firestore_revision_datetime(getattr(conversation_snapshot, 'update_time', None))
+            != expected_conversation_revision
+        ):
+            return None  # The receipt, text or audio inventory changed during relocation.
     person = snapshot.to_dict()
     if person.get('updated_at') != expected_updated_at:
         return None  # Deleted, corrected or replaced while audio work was in flight.
@@ -1057,6 +1078,7 @@ def replace_person_speech_profile(
     segment_ids: list[str],
     *,
     speech_seconds: Optional[float] = None,
+    expected_conversation_revision: Optional[Any] = None,
 ) -> Optional[list[str]]:
     """Publish one verified sample, its embedding and teaching provenance atomically.
 
@@ -1072,7 +1094,19 @@ def replace_person_speech_profile(
         'speech_sample_source': {'conversation_id': conversation_id, 'segment_ids': segment_ids},
         **voice_learning_fields('learned', 'stored', speech_seconds),
     }
-    return _replace_speech_profile_transaction(db.transaction(), ref, expected_updated_at, profile, user_ref=user_ref)
+    return _replace_speech_profile_transaction(
+        db.transaction(),
+        ref,
+        expected_updated_at,
+        profile,
+        user_ref=user_ref,
+        conversation_ref=(
+            user_ref.collection('conversations').document(conversation_id)
+            if expected_conversation_revision is not None
+            else None
+        ),
+        expected_conversation_revision=expected_conversation_revision,
+    )
 
 
 @transactional

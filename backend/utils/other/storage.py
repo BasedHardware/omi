@@ -931,7 +931,14 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
                 deleted_batch_paths.add(blob.name)
 
 
-def list_audio_chunks(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
+def list_audio_chunks(
+    uid: str,
+    conversation_id: str,
+    *,
+    max_results: Optional[int] = None,
+    timeout: Optional[float] = None,
+    require_complete: bool = False,
+) -> List[Dict[str, Any]]:
     """
     List all audio chunks for a conversation.
 
@@ -940,10 +947,17 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
     """
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     prefix = f'chunks/{uid}/{conversation_id}/'
-    blobs = bucket.list_blobs(prefix=prefix)
+    listing_options: Dict[str, Any] = {'prefix': prefix}
+    if max_results is not None:
+        listing_options['max_results'] = max_results
+    if timeout is not None:
+        listing_options.update(timeout=timeout, retry=None)
+    blobs = bucket.list_blobs(**listing_options)
 
     chunks: List[Dict[str, Any]] = []
-    for blob in blobs:
+    for blob_number, blob in enumerate(blobs, 1):
+        if require_complete and max_results is not None and blob_number >= max_results:
+            raise ValueError('audio inventory limit reached')
         # Extract timestamp from filename
         # Supports single-chunk: '1234567890.123.opus', '1234567890.123.opus.enc', etc.
         # Supports batch: '1234567890.123-1234567900.123.batch.bin', '1234567890.123.batch.enc'
@@ -967,12 +981,19 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
                     'size': blob.size,
                     'is_batch': is_batch,
                 }
+                generation = getattr(blob, 'generation', None)
+                if generation is not None:
+                    chunk_entry['generation'] = generation
                 span = parse_span_blob_metadata(getattr(blob, 'metadata', None))
                 if span is not None:
                     chunk_entry['span'] = span
                 chunks.append(chunk_entry)
             except ValueError:
+                if require_complete:
+                    raise ValueError('unrecognized audio inventory entry') from None
                 continue
+        elif require_complete:
+            raise ValueError('unrecognized audio inventory entry')
 
     return sorted(chunks, key=lambda x: x['timestamp'])
 

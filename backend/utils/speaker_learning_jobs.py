@@ -54,7 +54,7 @@ async def retry_people_without_voiceprint(uid: str, conversation_id: str) -> Non
                 if segment_ids:
                     eligible.append((person_id, segment_ids))
             for person_id, segment_ids in eligible:
-                await extract_speaker_samples(uid, person_id, conversation_id, segment_ids)
+                await extract_speaker_samples(uid, person_id, conversation_id, segment_ids, allow_text_relocation=True)
     except TimeoutError:
         logger.info('speaker_voice_learning retry deadline conversation=%s', conversation_id)
     except Exception as error:

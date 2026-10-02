@@ -529,6 +529,7 @@ def apply_answer(
                 person_id=person_id,
                 conversation_id=request.conversation_id,
                 segment_ids=teaching_segment_ids(conversation.get('transcript_segments') or [], resolved),
+                allow_text_relocation=True,
             )
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='queued').inc()
             voice_sample_queued = True

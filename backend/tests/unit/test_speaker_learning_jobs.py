@@ -72,7 +72,7 @@ def world(monkeypatch):
         lambda uid, cid: deepcopy(conversation[0]) if conversation[0] else None,
     )
     monkeypatch.setattr(jobs.users_db, 'get_person', lambda uid, pid: deepcopy(people.get(pid)))
-    extract = AsyncMock(side_effect=lambda uid, pid, cid, segment_ids: extracted.append((pid, segment_ids)))
+    extract = AsyncMock(side_effect=lambda uid, pid, cid, segment_ids, **kwargs: extracted.append((pid, segment_ids)))
     monkeypatch.setattr(jobs, 'extract_speaker_samples', extract)
     scheduled = []
     monkeypatch.setattr(
