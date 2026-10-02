@@ -77,6 +77,9 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
     CustomSttLogService.instance.info('Composite', 'Connecting both sockets...');
     _status = PureSocketStatus.connecting;
+    // A reused composite must not carry degraded state (or a stale retry
+    // timer) from a previous session.
+    _clearDegraded();
 
     final results = await Future.wait([primarySocket.connect(), secondarySocket.connect()]);
 
@@ -228,6 +231,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     DebugLogManager.logEvent('composite_socket_child_closed', {'child_socket': name, 'close_code': closeCode ?? -1});
 
     _status = PureSocketStatus.disconnected;
+    _clearDegraded();
     _disconnectBothQuietly();
     onClosed(closeCode);
   }
@@ -248,6 +252,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     DebugLogManager.logError(err, trace, 'composite_socket_child_error', {'child_socket': name});
 
     _status = PureSocketStatus.disconnected;
+    _clearDegraded();
     _disconnectBothQuietly();
     onError(err, trace);
   }

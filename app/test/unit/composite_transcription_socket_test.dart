@@ -12,6 +12,9 @@ import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
 void main() {
+  // The service-level tests attach listen client state, which reads WidgetsBinding.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUpAll(() {
     Env.init(_TestEnvFields());
   });
@@ -213,7 +216,10 @@ void main() {
     test('default behaviour is unchanged: a failed Omi connect fails the composite', () async {
       final primary = _ScriptedSocket();
       final secondary = _ScriptedSocket(connectResults: [false]);
-      final socket = build(primary, secondary, keepPrimary: false);
+      // Default constructor: keepPrimaryWhenSecondaryFails is not passed.
+      final socket = CompositeTranscriptionSocket(primarySocket: primary, secondarySocket: secondary);
+
+      expect(socket.keepPrimaryWhenSecondaryFails, isFalse);
 
       expect(await socket.connect(), isFalse);
       expect(socket.status, PureSocketStatus.notConnected);
@@ -301,6 +307,60 @@ void main() {
 
       expect(secondary.connectCalls, 1);
       expect(socket.secondaryDegraded, isFalse);
+    });
+
+    test('the service reports no delivery to Omi while degraded with raw-audio forwarding', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [false, false, false, false, false]);
+      final service =
+          TranscriptSegmentSocketService.withSocket(16000, BleAudioCodec.pcm16, 'en', build(primary, secondary));
+
+      expect(service.deliversToOmi, isTrue, reason: 'nothing degraded before connecting');
+      await service.start();
+      expect(service.state, SocketServiceState.connected);
+      expect(service.deliversToOmi, isFalse);
+      await service.stop();
+    });
+
+    test('raw-audio opt-out keeps marking frames synced while degraded (no later upload)', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [false, false, false, false, false]);
+      final composite = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: false,
+        keepPrimaryWhenSecondaryFails: true,
+        secondaryRetryInitialDelay: const Duration(milliseconds: 10),
+        secondaryRetryMaxDelay: const Duration(milliseconds: 40),
+      );
+      final service = TranscriptSegmentSocketService.withSocket(16000, BleAudioCodec.pcm16, 'en', composite);
+
+      await service.start();
+      expect(composite.secondaryDegraded, isTrue);
+      expect(service.deliversToOmi, isTrue);
+      await service.stop();
+    });
+
+    test('a primary close clears degraded state so a reconnect retries Omi again', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [false, false, false, false, false, false, false, true]);
+      final socket = build(primary, secondary);
+
+      expect(await socket.connect(), isTrue);
+      expect(socket.secondaryDegraded, isTrue);
+
+      primary.emitClosed(1006);
+      expect(socket.status, PureSocketStatus.disconnected);
+      expect(socket.secondaryDegraded, isFalse);
+      final callsAfterClose = secondary.connectCalls;
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(secondary.connectCalls, callsAfterClose, reason: 'no retries after the primary closed');
+
+      expect(await socket.connect(), isTrue);
+      expect(socket.secondaryDegraded, isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(socket.secondaryDegraded, isFalse, reason: 'retry loop runs again on the reconnected composite');
+      await socket.stop();
     });
 
     test('live custom STT turns degraded mode on and reports delivery to Omi', () async {
