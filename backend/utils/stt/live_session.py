@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
@@ -72,6 +73,7 @@ class LiveChainSession:
         self, sample_rate: int, epoch: Any = None, *, same_provider: bool = False, replay_start_sample: int = 0
     ) -> STTSocket:
         host = self.receiver.host
+        constructed: list[LiveLegSocket] = []
         language = host.stt_language
         uid = host.request.uid
         models = [m.strip() for m in st.stt_service_models]
@@ -298,6 +300,7 @@ class LiveChainSession:
                     # An empty snapshot still carries the obligation to retain
                     # future speech until this replacement emits text.
                     leg.enable_window_replay_tracking()
+                constructed.append(leg)
                 return leg
             except BaseException:
                 if raw is not None:
@@ -324,35 +327,46 @@ class LiveChainSession:
                 raise st.ParakeetConnectionError('config_incomplete')
 
             primary = unavailable
-        if same_provider:
-            if primary_missing:
-                raise st.ParakeetConnectionError('config_incomplete')
-            try:
-                target = self._routing_target_entry if routing_on(uid) else None
-            except ValueError:
-                target = None
-            token = connecting_target.set(target)
-            try:
-                socket, actual = await primary(), host.stt_service
-                record_managed_leg_handoff(socket)
-            finally:
-                connecting_target.reset(token)
-        else:
-            socket, actual = await st.connect_stt_socket_with_fallback(
-                primary_service=host.stt_service,
-                connect_primary=primary,
-                connect_parakeet=callbacks[st.STTService.parakeet],
-                connect_soniox=callbacks[st.STTService.soniox],
-                connect_modulate=callbacks[st.STTService.modulate],
-                connect_deepgram=callbacks[st.STTService.deepgram],
-                failed=self.receiver._stt_failed_providers,
-                use_config=True,
-                routing_uid=uid,
-                routing_language=host.language,
-                routing_languages=tuple(getattr(host.language_profile, 'expected', ())),
-                routing_models=engine_models,
-                failed_targets=self.receiver._stt_failed_targets,
-            )
+        try:
+            if same_provider:
+                if primary_missing:
+                    raise st.ParakeetConnectionError('config_incomplete')
+                try:
+                    target = self._routing_target_entry if routing_on(uid) else None
+                except ValueError:
+                    target = None
+                token = connecting_target.set(target)
+                try:
+                    socket, actual = await primary(), host.stt_service
+                    record_managed_leg_handoff(socket)
+                finally:
+                    connecting_target.reset(token)
+            else:
+                socket, actual = await st.connect_stt_socket_with_fallback(
+                    primary_service=host.stt_service,
+                    connect_primary=primary,
+                    connect_parakeet=callbacks[st.STTService.parakeet],
+                    connect_soniox=callbacks[st.STTService.soniox],
+                    connect_modulate=callbacks[st.STTService.modulate],
+                    connect_deepgram=callbacks[st.STTService.deepgram],
+                    failed=self.receiver._stt_failed_providers,
+                    use_config=True,
+                    routing_uid=uid,
+                    routing_language=host.language,
+                    routing_languages=tuple(getattr(host.language_profile, 'expected', ())),
+                    routing_models=engine_models,
+                    failed_targets=self.receiver._stt_failed_targets,
+                )
+        except asyncio.CancelledError:
+            # A setup timeout/disconnect can arrive after a raw socket opens
+            # but before the connector hands it back to the receiver.
+            from utils.stt.replay_delivery import abort_replay_socket
+
+            for candidate in constructed:
+                candidate.retire_for_replay()
+                candidate.mark_owner_teardown()
+                await abort_replay_socket(candidate)
+            raise
         host.stt_service = actual
         self._routing_target_entry = getattr(socket, '_routing_target_entry', None)
         host.stt_model = {
@@ -877,7 +891,7 @@ class LiveLegSocket(STTSocket):
         # at the first claim, even if the 1s monitor lost the race.
         if not self.leg_outcome.claimed and self.is_connection_dead:
             self._latch_failure()
-            settle_terminal_socket(self, self.service.value, self.normalized_death_reason)
+            settle_terminal_socket(self, self.service.value, self.normalized_death_reason, departing=True)
         self.leg_outcome.owner_closing = True
 
     def finish(self) -> None:

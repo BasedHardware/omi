@@ -17,6 +17,16 @@ from utils.stt.soniox import SafeSonioxSocket
 from utils.stt.streaming import SafeModulateSocket
 
 
+from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def replay_stress_budget(monkeypatch):
+    # Legacy full-ring stress cases also qualify pacing without the production
+    # cut. The slow-consumer budget test restores the shipped 20-second budget.
+    monkeypatch.setattr('utils.stt.replay_delivery.REPLAY_PREFIX_SECONDS', 150.0)
+
+
 class Transport:
     def __init__(self, fail_after=None):
         self.sent = []
@@ -24,6 +34,9 @@ class Transport:
         self.inbound = asyncio.Queue()
         self.fail_after = fail_after
         self.on_send = lambda: None
+        self.closed = False
+        self.timer = None
+        self.sent_at = []
         self.gate = asyncio.Event()
         self.gate.set()
 
@@ -31,7 +44,10 @@ class Transport:
         await self.gate.wait()
         if self.fail_after is not None and len(self.sent) >= self.fail_after:
             raise OSError('synthetic transport failure')
+        if self.timer is not None and isinstance(data, bytes):
+            await self.timer.sleep(0.020)
         self.sent.append(data)
+        self.sent_at.append(self.timer.now if self.timer is not None else 0.0)
         if isinstance(data, bytes):
             self.byte_count += len(data)
         self.on_send()
@@ -43,7 +59,7 @@ class Transport:
         return await self.inbound.get()
 
     async def close(self):
-        pass
+        self.closed = True
 
     @property
     def pcm(self):
@@ -145,7 +161,9 @@ async def setup_receiver(monkeypatch, order, *, fail_first=False, router_on=Fals
     host.state.dg_usage_ms_pending = 0
     host.client_device_context = SimpleNamespace(platform='ios')
     host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
-    host.spawn = lambda coro, **kw: coro.close()
+    host.spawn = lambda coro, **kw: (
+        coro.close() if kw.get('name') == 'stt_death_monitor' else asyncio.create_task(coro, name=kw.get('name'))
+    )
     raws = []
     legs = []
     observations = []
@@ -218,7 +236,16 @@ async def test_parakeet_full_135s_replay_then_live_audio_order_and_settlement(mo
         assert source.retired_for_replay
         successor_leg.finish()
         successor_leg.finish()
-        assert all(leg.leg_outcome.settled for leg in legs)
+        assert all(leg.leg_outcome.settled for leg in legs), [
+            (
+                leg.service.value,
+                leg.leg_outcome.claimed,
+                leg.leg_outcome.settled,
+                leg.leg_outcome.reason,
+                leg.leg_outcome.owner_closing,
+            )
+            for leg in legs
+        ]
         assert len(observations) == len(legs) == 2
         assert fallback_count() - base.fallback_before == 1
         assert actual._window_ring().ring_seconds <= 150
@@ -236,6 +263,10 @@ async def test_parakeet_full_135s_replay_then_live_audio_order_and_settlement(mo
     ],
 )
 async def test_successor_dies_mid_replay_walks_to_next_provider(monkeypatch, order):
+    from utils.stt.live_metrics import REPLAY_CLOSED
+
+    first_family = 'soniox' if order[1] == 'soniox' else 'modulate'
+    closed_before = REPLAY_CLOSED.labels(source='parakeet', successor=first_family)._value.get()
     actual, base, raws, legs, observations = await setup_receiver(monkeypatch, order, fail_first=True)
     actual.stt_socket.raw.fail('first_text_deadline')
     expected = b''.join(data for _, data in actual._window_ring().snapshot())
@@ -251,6 +282,8 @@ async def test_successor_dies_mid_replay_walks_to_next_provider(monkeypatch, ord
         assert len(base.emitted) == 1
         assert len(actual._stt_failed_providers) == 2
         assert not actual.host.state.stt_terminal_failure
+        assert REPLAY_CLOSED.labels(source='parakeet', successor=first_family)._value.get() == closed_before + 1
+        assert raws[0]._ws.closed and raws[0]._send_task.done() and raws[0]._recv_task.done()
         actual.stt_socket.finish()
         for leg in legs:
             leg.finish()
@@ -314,9 +347,20 @@ async def test_replay_teardown_closes_unadopted_leg_once(monkeypatch, cancel):
             released.set()
             assert not await task
         assert len(legs) == 2
-        assert all(leg.leg_outcome.settled for leg in legs)
+        assert all(leg.leg_outcome.settled for leg in legs), [
+            (
+                leg.service.value,
+                leg.leg_outcome.claimed,
+                leg.leg_outcome.settled,
+                leg.leg_outcome.reason,
+                leg.leg_outcome.owner_closing,
+            )
+            for leg in legs
+        ]
         assert legs[-1].leg_outcome.owner_closing
         assert len(observations) == 2
+        assert raws[-1]._send_task.done() and raws[-1]._recv_task.done()
+        assert raws[-1]._ws.closed
     finally:
         released.set()
         for leg in legs:
@@ -338,6 +382,62 @@ async def test_stalled_replay_queue_rejects_with_bounded_capacity_cause(monkeypa
         assert raw.is_connection_dead and raw.typed_death_reason == 'capacity_full'
     finally:
         await stop([raw])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', [SafeSonioxSocket, SafeModulateSocket])
+async def test_stalled_default_queue_replay_never_hides_behind_2000_slots(monkeypatch, kind):
+    monkeypatch.setattr('utils.stt.send_queue.REPLAY_QUEUE_WAIT_SECONDS', 0.001)
+    transport = Transport()
+    transport.gate.clear()
+    raw = kind(transport, lambda _: None, asyncio.get_running_loop())
+    raw.replay_send = lambda data, start: raw.send(data)
+    ring = full_ring()
+    try:
+        rejected = await replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet', soniox=None)
+        assert rejected is not None
+        assert raw._send_queue.maxsize == 2000 and raw._send_queue.high_water == 2
+        assert raw.typed_death_reason == 'capacity_full'
+    finally:
+        await stop([raw])
+
+
+@pytest.mark.asyncio
+async def test_disconnect_during_successor_setup_closes_constructed_leg(monkeypatch):
+    actual, _, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', 'soniox'])
+    actual.stt_socket.raw.fail('first_text_deadline')
+    entered = asyncio.Event()
+    held = []
+
+    async def handshake(*args):
+        leg = args[-1]
+        held.append(leg)
+        entered.set()
+        await asyncio.Event().wait()
+
+    from utils.stt import live_chain
+
+    monkeypatch.setattr(st, '_primary_is_serving', handshake)
+    monkeypatch.setattr(st, 'fallback_socket_is_serving', handshake)
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', handshake)
+    task = asyncio.create_task(actual._failover_stt_socket())
+    try:
+        await entered.wait()
+        actual.host.state.active = False
+        actual.stt_socket.mark_owner_teardown()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert held[0].leg_outcome.settled and held[0].leg_outcome.owner_closing
+        assert raws[0]._send_task.done() and raws[0]._recv_task.done() and raws[0]._ws.closed
+        assert legs[0].leg_outcome.settled
+        assert len(observations) == 2
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        for leg in legs + held:
+            leg.finish()
+        await stop(raws)
 
 
 def test_replay_coalescing_preserves_capture_gaps_and_packet_bound(monkeypatch):
@@ -385,6 +485,116 @@ async def test_text_during_failed_replay_is_not_replayed_or_emitted_twice(monkey
         raws[-1]._stream_transcript([{'text': 'rest', 'start': 0, 'end': 134.5, 'speaker': 'speaker_0'}])
         assert [segment['text'] for segment in base.emitted] == ['first', 'rest']
         assert [(segment['start'], segment['end']) for segment in base.emitted] == [(0, 0.5), (0.5, 135)]
+    finally:
+        for leg in legs:
+            leg.finish()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
+async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monkeypatch, virtual_clock, successor):
+    from utils.stt import replay_delivery
+    from utils.stt.live_metrics import REPLAY_SKIPPED, REPLAY_AUDIO, REPLAY_CLOSED
+
+    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
+    actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['parakeet-window', successor])
+    actual.stt_socket.raw.fail('first_text_deadline')
+    original = b''.join(data for _, data in actual._window_ring().snapshot())
+    family = 'soniox' if successor == 'soniox' else 'modulate'
+    labels = dict(source='parakeet', successor=family)
+    skipped_before = REPLAY_SKIPPED.labels(**labels)._value.get()
+    audio_before = REPLAY_AUDIO.labels(**labels)._value.get()
+    closed_before = REPLAY_CLOSED.labels(**labels)._value.get()
+    original_create = actual._create_stt_socket
+
+    async def create(*args, **kwargs):
+        leg = await original_create(*args, **kwargs)
+        leg.raw._ws.timer = virtual_clock
+        return leg
+
+    monkeypatch.setattr(actual, '_create_stt_socket', create)
+    monkeypatch.setattr(actual, '_capture', lambda *args, **kwargs: None)
+    tail = []
+    captured = []
+
+    async def ingest():
+        for n in range(70):  # 21s of real-time capture; continues past adoption.
+            await virtual_clock.sleep(0.3)
+            data = (6000 + n).to_bytes(2, 'little') * 4800
+            tail.append(data)
+            captured.append(virtual_clock.now)
+            actual._stt_buffer_start_sample = 135 * 16000 + n * 4800
+            buffer = bytearray(data)
+            await actual._flush_stt_buffer(buffer, force=True)
+            assert not buffer  # Ingestion never waits for the recovery lock.
+
+    task = asyncio.create_task(actual._failover_stt_socket())
+    ingestion = asyncio.create_task(ingest())
+    try:
+        assert await task
+        replay_wall = virtual_clock.now
+        assert 19 <= replay_wall <= 20
+        await ingestion
+        expected = original[115 * 32000 :] + b''.join(tail)
+        await until(lambda: raws[-1]._ws.byte_count == len(expected))
+        transport = raws[-1]._ws
+        assert transport.pcm == expected
+        assert raws[-1]._send_queue.high_water <= 2
+        assert not raws[-1].is_connection_dead
+        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == 115
+        assert REPLAY_AUDIO.labels(**labels)._value.get() - audio_before == pytest.approx(20)
+        assert REPLAY_CLOSED.labels(**labels)._value.get() == closed_before
+        # For every replay admission interval: <=1x audio plus one bounded packet.
+        packets = [(data, at) for data, at in zip(transport.sent, transport.sent_at) if isinstance(data, bytes)]
+        delivered = 0.0
+        for data, at in packets:
+            delivered += len(data) / 32000
+            assert delivered <= at + 0.512 + 0.001
+        live_times = [at for _, at in packets[40:]]  # ceil(640000 / 16384) replay packets
+        assert len(live_times) == len(captured)
+        assert max(at - born for at, born in zip(live_times, captured)) <= 20.532
+        assert sum(len(data) for _, data in actual.stt_socket.tail) <= 21 * 32000
+    finally:
+        task.cancel()
+        ingestion.cancel()
+        await asyncio.gather(task, ingestion, return_exceptions=True)
+        for leg in legs:
+            leg.finish()
+        actual.stt_socket.finish()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
+async def test_send_queue_full_during_owner_departure_is_not_exhaustion(monkeypatch, successor):
+    from utils.stt.live_failure import settle_terminal_socket
+
+    actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['parakeet-window', successor])
+    actual.stt_socket.raw.fail('first_text_deadline')
+    try:
+        assert await actual._failover_stt_socket()
+        leg = actual.stt_socket
+        # Healthy socket, stalled sender outside replay: finalize also needs a slot.
+        raw = raws[-1]
+        raw._send_task.cancel()
+        await asyncio.sleep(0)
+        raw._send_task.cancel()
+        await asyncio.gather(raw._send_task, return_exceptions=True)
+        while not raw._send_queue.full():
+            raw._send_queue.put_nowait(b'\x01\x00')
+        actual.host.state.active = False
+        before = fallback_count()
+        raw.finalize() if successor == 'soniox' else raw.send(b'\x01\x00')
+        assert raw.is_connection_dead
+        assert raw.death_reason == 'send queue full'
+        settle_terminal_socket(leg, actual.host.stt_service.value, 'capacity_full')
+        settle_terminal_socket(leg, actual.host.stt_service.value, 'capacity_full')
+        assert leg.leg_outcome.settled and leg.leg_outcome.excluded_death
+        assert fallback_count() == before
+        assert not actual.host.state.stt_terminal_failure
+        while not raw._send_queue.empty():
+            raw._send_queue.get_nowait()
     finally:
         for leg in legs:
             leg.finish()

@@ -2,6 +2,26 @@
 
 from prometheus_client import Counter, Gauge, Histogram
 
+REPLAY_WALL = Histogram(
+    'omi_stt_replay_wall_seconds',
+    'Elapsed prefix replay time',
+    ['source', 'successor'],
+    buckets=(0.1, 1, 5, 10, 15, 20, 25),
+)
+REPLAY_AUDIO = Counter('omi_stt_replay_audio_seconds_total', 'Replay audio admitted', ['source', 'successor'])
+REPLAY_QUEUE_HIGH_WATER = Histogram(
+    'omi_stt_replay_queue_high_water',
+    'Maximum adapter queue items during replay',
+    ['source', 'successor'],
+    buckets=(1, 2, 4, 8, 16, 32, 64, 256, 2000),
+)
+REPLAY_SKIPPED = Counter(
+    'omi_stt_replay_skipped_seconds_total', 'Unanswered audio skipped by replay wall budget', ['source', 'successor']
+)
+REPLAY_CLOSED = Counter(
+    'omi_stt_replay_successor_closed_total', 'Successor deaths during replay', ['source', 'successor']
+)
+
 WINDOW_ACTIVE = Gauge('omi_stt_window_sessions_active', 'Admitted windowed TDT sessions')
 WINDOW_CAP = Gauge('omi_stt_window_sessions_capacity', 'Process windowed TDT session cap')
 WINDOW_ADMISSION = Counter('omi_stt_window_admissions_total', 'Window admission decisions', ['outcome'])

@@ -4,6 +4,7 @@ import asyncio
 import json
 
 import pytest
+from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
 import routers.listen.receiver as receiver_module
 from tests.unit.test_parakeet_window_live import Client, _flush_capture, _receiver_for_anchor_replay, runtime, window

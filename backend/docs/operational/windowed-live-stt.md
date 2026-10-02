@@ -271,25 +271,62 @@ Speech-free capture can still roll off, and the current chunk must fit. The
 speech-free trims. If pending audio itself exceeds the ring, the leg fails
 with `capacity_full` and replays from the anchor onto the next vendor.
 
-Replay coalesces contiguous capture spans into at most 16 KiB PCM packets,
-preserving sample positions and gaps, then yields between queue admissions.
-Soniox and Modulate retain their 2,000-item send queues; replay waits for a
-consumer to free space rather than overflowing them with thousands of small
-capture frames. A queue that makes no room for two seconds rejects the leg
-with the existing `capacity_full` cause. A successor dying during replay is
-retired and the remaining un-emitted capture walks to the next eligible provider
-within the same failover budget. Managed recovery consults the owner-teardown
-fence, not a provider's internal transport-cleanup flag.
+Replay coalesces contiguous capture spans into at most 16 KiB PCM packets and
+paces each adapter at **1x real time**. The adapter declarations in Soniox and
+Modulate and the conservative default for Deepgram/Parakeet share this ceiling.
+[Soniox cadence](https://soniox.com/docs/stt/rt/error-handling#real-time-cadence)
+requires real-time or near-real-time input and warns about prolonged bursts.
+[Modulate streaming docs](https://www.modulate.ai/api-overview) and
+[Deepgram streaming docs](https://developers.deepgram.com/docs/live-streaming-audio)
+do not establish a numeric accelerated replay ceiling; 1x is our conservative
+choice, not a claimed vendor limit. The owned Parakeet adapter has no documented
+accelerated replay contract, so it also receives the conservative default.
 
-New live capture follows the replay prefix under the receiver's failover lock;
-replay does not sleep for the audio duration. Replacement headroom grows by 15
-seconds up to an absolute 150-second retained-PCM ceiling (4.8 MB at 16 kHz
-mono s16le), allowing a full 135-second backlog plus a live tail. Text progress
-reclaims that temporary headroom. Cancellation/client teardown closes an
-unadopted successor without starting another hop. Synthetic provider-pair tests
-exercise real Soniox/Modulate queues and send loops with fake transports,
-including concurrent live audio and router-on with Modulate benched. PTT has
-no capture-ring replay and its policy excludes window Parakeet and Soniox.
+A replacement has **5s setup + 20s replay**, a 25s admission budget. Unanswered
+capture exceeding 20s is cut to the newest 20s (135s becomes 20s; 115s skipped),
+with `omi_stt_replay_skipped_seconds_total{source,successor}` recording the loss.
+Emitted capture prefixes remain excluded. This is an intentional bounded-loss
+tradeoff; do not describe it as full-ring transcript preservation. Partial
+replay rejection retains the remaining obligation for the next eligible leg.
+
+Live ingestion does not await the failover lock. A supervisor-owned ordered tail
+holds at most **26s PCM** (832,000 bytes at 16 kHz), behind the replay prefix.
+At 1x live input the lag stays fixed until silence allows it to drain. The
+healthy 20ms/packet test bounds delay by 20.532s after setup; allowing the full
+5s setup budget gives **25.532s at 16 kHz** (26.044s at 8 kHz, because a 16KiB
+packet represents 1.024s). This is audio delivery delay, not a vendor transcript
+latency guarantee. A nonresponsive transport is rejected: the replay helper
+admits at most two queued packets and waits at most 2s for space; prefix wall
+admission also has a 20s deadline. Ordinary live sends retain the 2,000-item
+queue. The existing three managed rebuild attempts, full-pod exclusion, and
+one healthy Soniox re-entry remain. Setup timeout skips its requested family
+and continues within that attempt budget. Cancelled/unadopted replay legs close
+both adapter tasks and their websocket.
+
+Metrics use only bounded source/successor families (`parakeet`, `modulate`,
+`soniox`, `deepgram`, `unknown`): `omi_stt_replay_wall_seconds`,
+`omi_stt_replay_audio_seconds_total`, `omi_stt_replay_queue_high_water`,
+`omi_stt_replay_skipped_seconds_total`, `omi_stt_replay_successor_closed_total`.
+The wall histogram covers the prefix pump, including capacity waits, not setup.
+
+A Soniox `send queue full` can arise on ordinary send, finalize, or EOS when a
+sender stalls, independently of replay. #20350 excludes deaths first observed
+after client departure. An eligible earlier death remains health evidence,
+but an unproven hop settled during owner departure is `degraded`, not
+`exhausted`; genuine active recovery exhaustion still emits `stt_failed`/1011.
+Aggregates alone do not prove which mechanism explains each production event.
+Compare those fallback events with client-terminal counters and content-free
+owner/client-state evidence rather than treating every `to=unavailable` as a
+client termination.
+
+Replacement ring headroom still grows by 15 seconds up to an absolute
+150-second retained-PCM ceiling (4.8 MB at 16 kHz mono s16le); text progress
+reclaims it. The prefix budget now trims that ring before replay. Synthetic
+provider-pair tests exercise the real Soniox/Modulate queues and send loops,
+slow consumers, concurrent live input, client teardown, and router-on with
+Modulate benched. PTT has no replay ring, and its accepted 5 MiB frame can still
+overflow the synchronous 30ms send loop. The PR describes the exact separate
+frame-ownership/paced-delivery follow-up; PTT provider policy stays unchanged.
 The window socket separately retains PCM from its POST anchor. Its VAD speech
 spans are pruned on each POST-anchor advance; rapid speech/silence toggles
 coalesce the closest adjacent spans at the 1,024-entry bound rather than
