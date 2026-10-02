@@ -30,8 +30,10 @@ The first flag gates all new routing/breaker behavior, including account cooldow
 last-resort primary admission and Soniox's own circuit configuration. With it off,
 the existing fixed order, fallback breaker behavior, and Modulate-named Soniox
 circuit env lookup remain unchanged. Production's configured order is
-`parakeet-window,soniox,modulate-velma-2,dg-nova-3`: healthy Soniox is the first
-static fallback during router shadow and rollback. Dev retains its separately
+`parakeet-window,modulate-velma-2,soniox,dg-nova-3`. Soniox-first was tried on
+2026-10-02 and rolled back within the hour: a Parakeet failover replays its
+capture ring into Soniox's bounded send queue, which overflowed (`capacity_full`)
+and ended the session. Dev retains its separately
 configured order; never use dev to mutate health state (it shares production
 Redis). The first token uses windowed TDT only for the allocated UID bucket;
 everyone else retains the configured vendor tail. Streaming RNNT is outside
