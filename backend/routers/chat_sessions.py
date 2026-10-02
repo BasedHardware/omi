@@ -14,9 +14,13 @@ import database.llm_usage as llm_usage_db
 from database.users import set_chat_message_rating_score
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from models.chat import Message
-from models.chat_session import (ChatSessionResponse, DeleteMessagesResponse,
-                                 GenerateTitleResponse, InitialMessageResponse,
-                                 SaveMessageResponse)
+from models.chat_session import (
+    ChatSessionResponse,
+    DeleteMessagesResponse,
+    GenerateTitleResponse,
+    InitialMessageResponse,
+    SaveMessageResponse,
+)
 from models.feedback import MAX_COMMENT_LENGTH, FeedbackReason, FeedbackSurface
 from models.shared import StatusResponse
 from pydantic import BaseModel, Field
