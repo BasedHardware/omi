@@ -831,8 +831,15 @@ async def store_owner_voice_sample(
                 if s.get('id') in consented
                 and s.get('speaker_id_scope') == win_scope
                 and speaker_id_of(s) == win_speaker
-                and s.get('start', end) < end
-                and s.get('end', start) > start
+                # Only segments that put audio in the clip: zero-duration provider
+                # points and unplaced text contribute none, and naming them would let
+                # an edit to that text retract or block a sample it never fed.
+                and s.get('audio_alignment') != 'unplaced'
+                and s.get('start') is not None
+                and s.get('end') is not None
+                and float(s['end']) > float(s['start'])
+                and float(s['start']) < end
+                and float(s['end']) > start
             ],
         )
         if not stored:
