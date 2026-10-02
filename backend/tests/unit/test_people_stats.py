@@ -107,3 +107,95 @@ def test_sync_text_matches_are_automatic_without_changing_manual_labels():
         stats = aggregate_people_stats([_conv(None, *(segment.model_dump() for segment in segments))])
         assert stats['p1']['auto_conversation_count'] == 1
         assert stats['p2']['auto_conversation_count'] == 0
+
+# --- #19908: a dropped invisible row must not end the scan -------------------
+#
+# A server-side limit/offset reader drops invisible rows in Python without
+# padding, so a short page there only means "some rows in this window were
+# filtered". The scan is therefore driven through the scan-and-fill reader
+# (`include_discarded=True`), which keeps reading until the page is full;
+# rows that the scan reads only to keep the offset aligned are excluded
+# during aggregation.
+
+
+class _ScanAndFillReader:
+    """Mirrors ``_collect_visible_conversation_page``'s ``include_discarded=True`` branch.
+
+    The detail that matters: ``offset`` counts **visible** rows already returned,
+    and rows that fail visibility are skipped *without* counting toward it —
+    exactly what the real branch does with ``skipped_visible``. A fake that
+    applied ``offset`` to raw rows instead would re-deliver an already-seen
+    row on the second page and let a double-count pass as correct.
+    """
+
+    def __init__(self, rows, invisible_keys=()):
+        self.rows = rows
+        self.invisible = set(invisible_keys)
+        self.calls = []
+
+    def __call__(self, limit, offset):
+        self.calls.append((limit, offset))
+        out = []
+        skipped_visible = 0
+        for index, row in enumerate(self.rows):
+            if index in self.invisible:
+                continue
+            if skipped_visible < offset:
+                skipped_visible += 1
+                continue
+            out.append(row)
+            if len(out) >= limit:
+                break
+        return out
+
+
+def test_scan_survives_a_tombstone_inside_the_window():
+    # Ten stored rows, one of them a tombstone the reader must skip.
+    rows = [_conv(None, {"person_id": "p1", "start": 0, "end": 1}) for _ in range(10)]
+    reader = _ScanAndFillReader(rows, invisible_keys={1})
+
+    stats = collect_people_stats(reader, scan_cap=10, batch=4)
+
+    # Nine visible conversations: the tombstone is skipped without truncating
+    # the page and without being counted as a visible row.
+    assert stats["p1"]["conversation_count"] == 9
+    assert reader.calls == [(4, 0), (4, 4), (2, 8)]
+
+
+def test_scan_walks_several_full_pages():
+    rows = [_conv(None, {"person_id": "p1", "start": 0, "end": 1}) for _ in range(25)]
+    reader = _ScanAndFillReader(rows)
+
+    stats = collect_people_stats(reader, scan_cap=100, batch=10)
+
+    assert stats["p1"]["conversation_count"] == 25
+    # Two full pages, then a short one: the offsets advance by what was
+    # actually returned, which is only true because the reader fills pages.
+    assert reader.calls == [(10, 0), (10, 10), (10, 20)]
+
+
+def test_short_page_from_a_scan_and_fill_reader_still_ends_the_scan():
+    rows = [_conv(None, {"person_id": "p1", "start": 0, "end": 1}) for _ in range(6)]
+    reader = _ScanAndFillReader(rows)
+
+    stats = collect_people_stats(reader, scan_cap=100, batch=10)
+
+    assert stats["p1"]["conversation_count"] == 6
+    # Six rows cannot fill a page of ten, so that short page is real
+    # exhaustion and the scan stops after one read.
+    assert reader.calls == [(10, 0)]
+
+
+def test_aggregate_skips_discarded_rows_scanned_to_keep_the_offset_aligned():
+    """Discarded rows reach the scanner only to keep pages full; stats ignore them."""
+    t = datetime(2026, 9, 5, tzinfo=timezone.utc)
+    stats = aggregate_people_stats(
+        [
+            _conv(t, {"person_id": "p1", "start": 0, "end": 5}),
+            _conv(t, {"person_id": "p1", "start": 0, "end": 5}, discarded=True),
+            _conv(t, {"person_id": "p2", "start": 0, "end": 2}),
+        ]
+    )
+    assert stats["p1"]["conversation_count"] == 1
+    assert stats["p1"]["talk_seconds"] == 5.0
+    assert stats["p2"]["conversation_count"] == 1
