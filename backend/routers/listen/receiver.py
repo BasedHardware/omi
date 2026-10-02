@@ -57,16 +57,14 @@ from utils.stt.live_failure import (
     live_stt_socket_is_dead,
     live_stt_terminal_reason,
     live_stt_upstream_failure,
-    note_typed_provider_death,
     send_live_stt_audio,
     terminate_live_stt_session,
     terminate_live_stt_backoff,
 )
 from utils.stt.live_chain import ProviderChainUnavailable
-from utils.stt.live_recovery import allow_healthy_soniox_rescue
+from utils.stt.live_recovery import select_live_replacement
 from config.stt_provider_policy import provider_for_service
-from utils.stt.live_router import note_failed_route
-from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.live_rollout import managed_chain_enabled
 from utils.stt.brand_terms import normalize_brand_segments
 from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
 from utils.stt.resilient_stream import (
@@ -1192,24 +1190,8 @@ class ListenReceiver(ReplayFilterMixin):
             return False
 
         dead_provider = provider_for_service(self.host.stt_service)
-        failures = note_failed_route(self, dead_provider)
-        self._stt_rebuild_attempts += 1
-        if dead_provider:
-            self._stt_failed_reasons[dead_provider] = live_stt_terminal_reason(self.stt_socket, 'connection_lost')
-        if max(failures, self._stt_rebuild_attempts) > (3 if managed_chain_enabled(self.host) else MAX_STT_FAILOVERS):
-            self._settle_pending_live_failover_failure()
-            return False
-        note_typed_provider_death(self.stt_socket, dead_provider)
-        allow_healthy_soniox_rescue(self)
-        service, language, model = get_stt_service_for_language(
-            self.host.language,
-            multi_lang_enabled=self.host.multi_lang_enabled,
-            language_profile=self.host.language_profile,
-            exclude=frozenset(self._stt_failed_providers),
-            **window_selection_kwargs(self.host, self.host.request.uid),
-        )
-        if service is None or provider_for_service(service) in self._stt_failed_providers:
-            self._settle_pending_live_failover_failure()
+        service, language, model = select_live_replacement(self, dead_provider, get_stt_service_for_language)
+        if service is None:
             return False
         # A failed hop is degraded while the chain continues; exhausted means no replacement path.
         self._settle_pending_live_failover_failure(continuing=True)
