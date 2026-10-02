@@ -3549,7 +3549,6 @@
     "captureStarting": "शुरू हो रहा है…",
     "capturePhoneStorageFull": "फ़ोन स्टोरेज भर गया",
     "captureStorageAlmostFull": "स्टोरेज लगभग भर गया",
-    "capturePendantDisconnectedDetail": "आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।",
     "participantsSummaryUncounted": "{name} और अन्य",
     "deviceOnboardingVoiceReplyTitle": "Omi के जवाब सुनें",
     "deviceOnboardingVoiceReplySample": "समझ गया। आपकी अगली मीटिंग बीस मिनट में शुरू होगी।",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "इस आवाज़ वाली पिछली बातचीत: {count}",
     "speakerLabelText": "{part, select, likely{संभावित} soundsLike{{name} जैसी लग रही है} notPerson{{name} नहीं} carried{अब भी {name}। आपकी पिछली बातचीत से जारी।} change{बदलें} alsoTitle{क्या यह भी {name} है?} alsoBody{Omi को यही आवाज़ पिछली बातचीतों में मिली।} confirmed{आपने इस लेबल की पुष्टि की} other{समीक्षा करें}}",
     "speakerLabelTalkTime": "इस आवाज़ का {duration}",
-    "askAnythingButton": "कुछ भी पूछें"
+    "askAnythingButton": "कुछ भी पूछें",
+    "pendantLostConnection": "आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया।",
+    "pendantReconnectsOnItsOwn": "पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा।",
+    "pendantRecordingSafe": "इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।"
 }

@@ -3645,7 +3645,6 @@
     "captureStarting": "Indítás…",
     "capturePhoneStorageFull": "A telefon tárhelye megtelt",
     "captureStorageAlmostFull": "A tárhely majdnem megtelt",
-    "capturePendantDisconnectedDetail": "A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.",
     "participantsSummaryUncounted": "{name} és mások",
     "deviceOnboardingVoiceReplyTitle": "Hallgasd meg Omi válaszait",
     "deviceOnboardingVoiceReplySample": "Rendben. A következő megbeszélésed húsz perc múlva kezdődik.",
@@ -3876,5 +3875,8 @@
     "speakerLabelEarlierMatches": "Korábbi beszélgetések ezzel a hanggal: {count}",
     "speakerLabelText": "{part, select, likely{Valószínű} soundsLike{{name} hangjához hasonlít} notPerson{Nem {name}} carried{Továbbra is {name}. Átvéve az előző beszélgetésedből.} change{Módosítás} alsoTitle{Ő is {name}?} alsoBody{Az Omi ugyanezt a hangot megtalálta korábbi beszélgetésekben.} confirmed{Megerősítetted ezt a címkét} other{Áttekintés}}",
     "speakerLabelTalkTime": "{duration} ebből a hangból",
-    "askAnythingButton": "Kérdezz bármit"
+    "askAnythingButton": "Kérdezz bármit",
+    "pendantLostConnection": "A medál elvesztette a kapcsolatot ezzel a telefonnal.",
+    "pendantReconnectsOnItsOwn": "Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van.",
+    "pendantRecordingSafe": "Minden, amit eddig rögzített, biztonságban van."
 }

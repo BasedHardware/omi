@@ -3549,7 +3549,6 @@
     "captureStarting": "S'està iniciant…",
     "capturePhoneStorageFull": "Emmagatzematge del telèfon ple",
     "captureStorageAlmostFull": "Emmagatzematge gairebé ple",
-    "capturePendantDisconnectedDetail": "El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s'ha gravat abans és segur.",
     "participantsSummaryUncounted": "{name} i altres",
     "deviceOnboardingVoiceReplyTitle": "Escolta les respostes d'Omi",
     "deviceOnboardingVoiceReplySample": "Entesos. La teva pròxima reunió comença d'aquí a vint minuts.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Converses anteriors amb aquesta veu: {count}",
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Sona com {name}} notPerson{No és {name}} carried{Continua sent {name}. Heretat de la teva última conversa.} change{Canvia} alsoTitle{Aquesta veu també és {name}?} alsoBody{Omi ha trobat la mateixa veu en converses anteriors.} confirmed{Has confirmat aquesta etiqueta} other{Revisa}}",
     "speakerLabelTalkTime": "{duration} d’aquesta veu",
-    "askAnythingButton": "Pregunta qualsevol cosa"
+    "askAnythingButton": "Pregunta qualsevol cosa",
+    "pendantLostConnection": "El penjoll ha perdut la connexió amb aquest telèfon.",
+    "pendantReconnectsOnItsOwn": "Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop.",
+    "pendantRecordingSafe": "Tot el que s'ha gravat abans és segur."
 }

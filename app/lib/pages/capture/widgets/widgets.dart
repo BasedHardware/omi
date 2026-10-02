@@ -86,7 +86,7 @@ class _CardRow extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: DeviceTile.rowPadding),
               child: Row(
                 children: [
                   DeviceTile(icon: icon),

@@ -3549,7 +3549,6 @@
     "captureStarting": "Iniciando…",
     "capturePhoneStorageFull": "Almacenamiento del teléfono lleno",
     "captureStorageAlmostFull": "Almacenamiento casi lleno",
-    "capturePendantDisconnectedDetail": "Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo.",
     "participantsSummaryUncounted": "{name} y otros",
     "deviceOnboardingVoiceReplyTitle": "Escucha las respuestas de Omi",
     "deviceOnboardingVoiceReplySample": "Entendido. Tu próxima reunión empieza en veinte minutos.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Conversaciones anteriores con esta voz: {count}",
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Suena como {name}} notPerson{No es {name}} carried{Sigue siendo {name}. Heredado de tu última conversación.} change{Cambiar} alsoTitle{¿Es también {name}?} alsoBody{Omi encontró la misma voz en conversaciones anteriores.} confirmed{Confirmaste esta etiqueta} other{Revisar}}",
     "speakerLabelTalkTime": "{duration} de esta voz",
-    "askAnythingButton": "Pregunta cualquier cosa"
+    "askAnythingButton": "Pregunta cualquier cosa",
+    "pendantLostConnection": "Tu colgante perdió la conexión con este teléfono.",
+    "pendantReconnectsOnItsOwn": "Omi se volverá a conectar solo cuando el colgante esté encendido y cerca.",
+    "pendantRecordingSafe": "Todo lo grabado antes está a salvo."
 }

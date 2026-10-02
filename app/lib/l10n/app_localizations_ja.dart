@@ -11058,10 +11058,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get captureStorageAlmostFull => '空き容量わずか';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$nameほか';
   }
@@ -12021,4 +12017,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get askAnythingButton => '何でも聞いてください';
+
+  @override
+  String get pendantLostConnection => 'ペンダントとこのスマートフォンの接続が切れました。';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。';
+
+  @override
+  String get pendantRecordingSafe => 'それまでに録音した内容は保存されています。';
 }

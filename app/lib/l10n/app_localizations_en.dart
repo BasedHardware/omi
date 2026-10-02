@@ -11233,10 +11233,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureStorageAlmostFull => 'Storage almost full';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name + others';
   }
@@ -12204,4 +12200,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Ask Anything';
+
+  @override
+  String get pendantLostConnection => 'Your pendant lost its connection to this phone.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi reconnects on its own when the pendant is on and nearby.';
+
+  @override
+  String get pendantRecordingSafe => 'Everything recorded before this is safe.';
 }

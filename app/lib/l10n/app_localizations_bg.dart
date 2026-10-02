@@ -11285,10 +11285,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get captureStorageAlmostFull => 'Паметта е почти пълна';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
@@ -12261,4 +12257,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Попитайте каквото и да е';
+
+  @override
+  String get pendantLostConnection => 'Висулката загуби връзка с този телефон.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi ще се свърже отново сам, когато висулката е включена и наблизо.';
+
+  @override
+  String get pendantRecordingSafe => 'Всичко записано дотук е запазено.';
 }

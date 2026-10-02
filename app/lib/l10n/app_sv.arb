@@ -3549,7 +3549,6 @@
     "captureStarting": "Startar…",
     "capturePhoneStorageFull": "Telefonens lagring är full",
     "captureStorageAlmostFull": "Lagringen är nästan full",
-    "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.",
     "participantsSummaryUncounted": "{name} och andra",
     "deviceOnboardingVoiceReplyTitle": "Lyssna på Omis svar",
     "deviceOnboardingVoiceReplySample": "Uppfattat. Ditt nästa möte börjar om tjugo minuter.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Tidigare konversationer med den här rösten: {count}",
     "speakerLabelText": "{part, select, likely{Troligen} soundsLike{Låter som {name}} notPerson{Inte {name}} carried{Fortfarande {name}. Förd över från din senaste konversation.} change{Ändra} alsoTitle{Är det också {name}?} alsoBody{Omi hittade samma röst i tidigare konversationer.} confirmed{Du har bekräftat den här etiketten} other{Granska}}",
     "speakerLabelTalkTime": "{duration} av den här rösten",
-    "askAnythingButton": "Fråga vad som helst"
+    "askAnythingButton": "Fråga vad som helst",
+    "pendantLostConnection": "Hängsmycket tappade anslutningen till den här telefonen.",
+    "pendantReconnectsOnItsOwn": "Omi ansluter igen av sig själv när hängsmycket är på och i närheten.",
+    "pendantRecordingSafe": "Allt som spelats in innan är säkert."
 }

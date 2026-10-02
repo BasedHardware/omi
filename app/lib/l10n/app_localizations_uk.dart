@@ -11264,10 +11264,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get captureStorageAlmostFull => 'Пам’ять майже заповнена';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name та інші';
   }
@@ -12241,4 +12237,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Запитайте що завгодно';
+
+  @override
+  String get pendantLostConnection => 'Кулон втратив зв’язок із цим телефоном.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi перепідключиться сам, коли кулон буде ввімкнений і поруч.';
+
+  @override
+  String get pendantRecordingSafe => 'Усе, що записано до цього, збережено.';
 }

@@ -11255,10 +11255,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get captureStorageAlmostFull => 'Depolama neredeyse dolu';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ve diğerleri';
   }
@@ -12228,4 +12224,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Her şeyi sor';
+
+  @override
+  String get pendantLostConnection => 'Kolyenin bu telefonla bağlantısı kesildi.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır.';
+
+  @override
+  String get pendantRecordingSafe => 'Bundan önce kaydedilen her şey güvende.';
 }

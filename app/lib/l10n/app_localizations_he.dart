@@ -11154,10 +11154,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureStorageAlmostFull => 'האחסון כמעט מלא';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ואחרים';
   }
@@ -12122,4 +12118,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'שאל כל דבר';
+
+  @override
+  String get pendantLostConnection => 'התליון איבד את החיבור לטלפון הזה.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב.';
+
+  @override
+  String get pendantRecordingSafe => 'כל מה שהוקלט עד עכשיו שמור.';
 }

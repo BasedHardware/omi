@@ -3549,7 +3549,6 @@
     "captureStarting": "開始中…",
     "capturePhoneStorageFull": "端末の空き容量なし",
     "captureStorageAlmostFull": "空き容量わずか",
-    "capturePendantDisconnectedDetail": "ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。",
     "participantsSummaryUncounted": "{name}ほか",
     "deviceOnboardingVoiceReplyTitle": "Omiの回答を聞く",
     "deviceOnboardingVoiceReplySample": "了解しました。次の会議は20分後に始まります。",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "この声の過去の会話数：{count}",
     "speakerLabelText": "{part, select, likely{候補} soundsLike{{name}さんの声に似ています} notPerson{{name}さんではない} carried{引き続き{name}さんです。前回の会話から引き継ぎました。} change{変更} alsoTitle{これも{name}さんですか？} alsoBody{Omi は過去の会話で同じ声を見つけました。} confirmed{このラベルを確認済みです} other{確認する}}",
     "speakerLabelTalkTime": "この声の{duration}",
-    "askAnythingButton": "何でも聞いてください"
+    "askAnythingButton": "何でも聞いてください",
+    "pendantLostConnection": "ペンダントとこのスマートフォンの接続が切れました。",
+    "pendantReconnectsOnItsOwn": "ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。",
+    "pendantRecordingSafe": "それまでに録音した内容は保存されています。"
 }

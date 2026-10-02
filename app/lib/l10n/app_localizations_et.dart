@@ -11241,10 +11241,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get captureStorageAlmostFull => 'Mälu on peaaegu täis';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ja teised';
   }
@@ -12214,4 +12210,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Küsi mida tahes';
+
+  @override
+  String get pendantLostConnection => 'Ripats kaotas ühenduse selle telefoniga.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal.';
+
+  @override
+  String get pendantRecordingSafe => 'Kõik varem salvestatu on alles.';
 }

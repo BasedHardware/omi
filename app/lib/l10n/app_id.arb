@@ -3584,7 +3584,6 @@
     "captureStarting": "Memulai…",
     "capturePhoneStorageFull": "Penyimpanan ponsel penuh",
     "captureStorageAlmostFull": "Penyimpanan hampir penuh",
-    "capturePendantDisconnectedDetail": "Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.",
     "participantsSummaryUncounted": "{name} dan lainnya",
     "deviceOnboardingVoiceReplyTitle": "Dengarkan jawaban Omi",
     "deviceOnboardingVoiceReplySample": "Baik. Rapat Anda berikutnya dimulai dua puluh menit lagi.",
@@ -3815,5 +3814,8 @@
     "speakerLabelEarlierMatches": "Percakapan sebelumnya dengan suara ini: {count}",
     "speakerLabelText": "{part, select, likely{Mungkin} soundsLike{Terdengar seperti {name}} notPerson{Bukan {name}} carried{Masih {name}. Dilanjutkan dari percakapan terakhir Anda.} change{Ubah} alsoTitle{Apakah ini juga {name}?} alsoBody{Omi menemukan suara yang sama di percakapan sebelumnya.} confirmed{Anda telah mengonfirmasi label ini} other{Tinjau}}",
     "speakerLabelTalkTime": "{duration} dari suara ini",
-    "askAnythingButton": "Tanyakan apa saja"
+    "askAnythingButton": "Tanyakan apa saja",
+    "pendantLostConnection": "Liontin kehilangan koneksi dengan ponsel ini.",
+    "pendantReconnectsOnItsOwn": "Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda.",
+    "pendantRecordingSafe": "Semua yang direkam sebelumnya aman."
 }

@@ -11106,7 +11106,6 @@
     "captureStarting": "ప్రారంభమవుతోంది…",
     "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
     "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
-    "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
     "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
     "deviceOnboardingVoiceReplyTitle": "Omi సమాధానాలను వినండి",
     "deviceOnboardingVoiceReplySample": "అర్థమైంది. మీ తదుపరి సమావేశం ఇరవై నిమిషాల్లో ప్రారంభమవుతుంది.",
@@ -11337,5 +11336,8 @@
     "speakerLabelEarlierMatches": "ఈ వాయిస్‌తో మునుపటి సంభాషణలు: {count}",
     "speakerLabelText": "{part, select, likely{అవకాశం} soundsLike{{name} లాగా వినిపిస్తోంది} notPerson{{name} కాదు} carried{ఇప్పటికీ {name}. మీ చివరి సంభాషణ నుండి కొనసాగింది.} change{మార్చండి} alsoTitle{ఇది కూడా {name} యేనా?} alsoBody{Omi మునుపటి సంభాషణల్లో ఇదే వాయిస్‌ను కనుగొంది.} confirmed{మీరు ఈ లేబుల్‌ను నిర్ధారించారు} other{సమీక్షించండి}}",
     "speakerLabelTalkTime": "ఈ వాయిస్ యొక్క {duration}",
-    "askAnythingButton": "ఏదైనా అడగండి"
+    "askAnythingButton": "ఏదైనా అడగండి",
+    "pendantLostConnection": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది.",
+    "pendantReconnectsOnItsOwn": "పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది.",
+    "pendantRecordingSafe": "దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి."
 }

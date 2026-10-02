@@ -76,8 +76,10 @@ void main() {
     final card = tester.widget<AnimatedContainer>(find.byKey(const ValueKey('conversation_card')));
     expect((card.decoration! as BoxDecoration).color, OmiColors.canvas,
         reason: 'the page colour, so the swipe-delete button behind stays hidden');
-    final rowLeft = tester.getRect(find.byType(DeviceTile)).left;
-    expect(rowLeft, OmiSpacing.md, reason: 'on the page gutter, in line with the day labels');
+    final tileRect = tester.getRect(find.byType(DeviceTile));
+    expect(tileRect.left, OmiSpacing.md, reason: 'on the page gutter, in line with the day labels');
+    final cardRect = tester.getRect(find.byKey(const ValueKey('conversation_card')));
+    expect(tileRect.top - cardRect.top, DeviceTile.rowPadding, reason: 'air above and below each row');
   });
 
   testWidgets('processing: the same row, its device faded, "Processing" over the start time', (tester) async {
@@ -108,7 +110,7 @@ void main() {
     expect(find.byType(InkWell), findsNothing);
   });
 
-  testWidgets('recording now: a green dot while live, grey when paused or in trouble', (tester) async {
+  testWidgets('recording now: a green dot while live, grey when paused; trouble marks the words', (tester) async {
     Future<Color?> dot({bool paused = false, String? explanation}) async {
       await pump(
         tester,
@@ -131,6 +133,7 @@ void main() {
         greaterThanOrEqualTo(tester.getRect(find.text('Listening')).left),
         reason: 'the transcript line sits under the text, clear of the tile');
     expect(await dot(paused: true), OmiColors.textTertiary);
-    expect(await dot(explanation: 'The pendant disconnected.'), OmiColors.textTertiary);
+    expect(await dot(explanation: 'The pendant disconnected.'), isNull, reason: 'no dot on the tile');
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget, reason: 'the warning sits beside the word');
   });
 }

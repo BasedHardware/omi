@@ -348,9 +348,25 @@ void main() {
       final elapsed = tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed;
       await tester.pump(const Duration(seconds: 3));
       expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, elapsed);
+      // The warning sits beside the word; the tile carries no dot.
+      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+      expect(find.byKey(const ValueKey('device_tile_status')), findsNothing);
+
+      // The words open the Disconnected sheet: what happened, the pendant reconnecting, two things to know.
+      // (The spinner runs while it reconnects, so the sheet is pumped by frames, not settled.)
       await tester.tap(find.text(en.disconnected));
-      await tester.pumpAndSettle();
-      expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(OmiSpinner), findsOneWidget);
+      expect(find.text(en.pendantLostConnection), findsOneWidget);
+      expect(find.byKey(const ValueKey('pendant_dropped_status')), findsOneWidget);
+      expect(find.text(en.pendantRecordingSafe), findsOneWidget);
+      expect(find.text(en.pendantReconnectsOnItsOwn), findsOneWidget);
+      expect(find.text(en.deviceSettings), findsOneWidget);
+      await tester.tap(find.text(en.gotIt));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text(en.pendantLostConnection), findsNothing);
     });
 
     testWidgets('a paired pendant that was never capturing stays hidden', (tester) async {

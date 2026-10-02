@@ -11246,10 +11246,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get captureStorageAlmostFull => 'Tallennustila melkein täynnä';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ja muut';
   }
@@ -12221,4 +12217,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Kysy mitä tahansa';
+
+  @override
+  String get pendantLostConnection => 'Riipus menetti yhteyden tähän puhelimeen.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä.';
+
+  @override
+  String get pendantRecordingSafe => 'Kaikki tätä ennen tallennettu on tallessa.';
 }

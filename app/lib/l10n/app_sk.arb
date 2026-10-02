@@ -3549,7 +3549,6 @@
     "captureStarting": "Spúšťa sa…",
     "capturePhoneStorageFull": "Úložisko telefónu je plné",
     "captureStorageAlmostFull": "Úložisko je takmer plné",
-    "capturePendantDisconnectedDetail": "Prívesok stratil spojenie s týmto telefónom. Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku. Všetko nahraté predtým je v bezpečí.",
     "participantsSummaryUncounted": "{name} a ďalší",
     "deviceOnboardingVoiceReplyTitle": "Vypočujte si odpovede Omi",
     "deviceOnboardingVoiceReplySample": "Rozumiem. Vaše ďalšie stretnutie sa začne o dvadsať minút.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Predchádzajúce rozhovory s týmto hlasom: {count}",
     "speakerLabelText": "{part, select, likely{Pravdepodobne} soundsLike{Znie ako {name}} notPerson{Nie je to {name}} carried{Stále {name}. Prevzaté z vášho posledného rozhovoru.} change{Zmeniť} alsoTitle{Je to aj {name}?} alsoBody{Omi našiel rovnaký hlas v predchádzajúcich rozhovoroch.} confirmed{Tento štítok ste potvrdili} other{Skontrolovať}}",
     "speakerLabelTalkTime": "{duration} tohto hlasu",
-    "askAnythingButton": "Spýtajte sa na čokoľvek"
+    "askAnythingButton": "Spýtajte sa na čokoľvek",
+    "pendantLostConnection": "Prívesok stratil spojenie s týmto telefónom.",
+    "pendantReconnectsOnItsOwn": "Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku.",
+    "pendantRecordingSafe": "Všetko nahraté predtým je v bezpečí."
 }

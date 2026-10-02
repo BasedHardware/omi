@@ -7,17 +7,21 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/capture_sources.dart';
 
-/// The device a Home row came from, as a line glyph in a small warm tile at the start of the row.
-/// Pendants, phones, watches and glasses have drawn glyphs; any other source shows its
-/// [CaptureSources.icon]. Decorative: the row names what it is.
+/// The device a Home row came from, as a soft line glyph in a small warm tile at the start of the
+/// row. Pendants, phones, watches and glasses have drawn glyphs; any other source shows its
+/// [CaptureSources.icon]. A recap's tile holds its day [emoji]. Decorative: the row names what it is.
 class DeviceTile extends StatelessWidget {
-  const DeviceTile({super.key, this.source, this.icon, this.status, this.faded = false, this.missing = false});
+  const DeviceTile(
+      {super.key, this.source, this.icon, this.emoji, this.status, this.faded = false, this.missing = false});
 
   /// A conversation source ('omi', 'phone', 'apple_watch', …).
   final String? source;
 
   /// A glyph instead of the source's, for a row that is not a recording (a firmware update).
   final IconData? icon;
+
+  /// An emoji instead of a glyph (a recap's day, a highlight).
+  final String? emoji;
 
   /// A dot on the top-right corner, ringed in the page colour: live or paused capture.
   final Color? status;
@@ -30,24 +34,23 @@ class DeviceTile extends StatelessWidget {
 
   static const double size = 40;
 
+  /// Air above and below a row that starts with a tile, so the list breathes.
+  static const double rowPadding = 14;
+
   @override
   Widget build(BuildContext context) {
     final ink = missing ? OmiColors.textTertiary : OmiColors.deviceTileInk;
-    final glyph = icon == null ? glyphFor(source) : null;
+    final glyph = icon == null && emoji == null ? glyphFor(source) : null;
     Widget tile = Container(
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: missing
-          ? null
-          : BoxDecoration(
-              color: OmiColors.deviceTile,
-              borderRadius: OmiRadius.mdAll,
-              border: Border.all(color: OmiColors.deviceTileEdge),
-            ),
-      child: glyph != null
-          ? SvgPicture.string(glyph, width: 24, height: 24, colorFilter: ColorFilter.mode(ink, BlendMode.srcIn))
-          : Icon(icon ?? CaptureSources.icon(source), size: 20, color: ink),
+      decoration: missing ? null : BoxDecoration(color: OmiColors.deviceTile, borderRadius: OmiRadius.mdAll),
+      child: emoji != null
+          ? Text(emoji!, style: OmiType.title3)
+          : glyph != null
+              ? SvgPicture.string(glyph, width: 24, height: 24, colorFilter: ColorFilter.mode(ink, BlendMode.srcIn))
+              : Icon(icon ?? CaptureSources.icon(source), size: 20, color: ink),
     );
     if (missing) tile = CustomPaint(painter: _DashedOutlinePainter(OmiColors.textTertiary), child: tile);
     if (faded) tile = Opacity(opacity: 0.45, child: tile);
@@ -90,8 +93,8 @@ class DeviceTile extends StatelessWidget {
       '<circle cx="12" cy="14.4" r="7.2"/><circle cx="12" cy="14.4" r="4.2" stroke-width="1.2" opacity=".55"/>'
       '<circle cx="12" cy="14.4" r="1.5" fill="currentColor" stroke="none"/>');
   static final String _phone = _svg('<rect x="7" y="3" width="10" height="18" rx="2.6"/><path d="M11 18h2"/>');
-  static final String _watch =
-      _svg('<rect x="6.5" y="6.5" width="11" height="11" rx="3"/><path d="M9 6.5l.6-3h4.8l.6 3M9 17.5l.6 3h4.8l.6-3"/>');
+  static final String _watch = _svg(
+      '<rect x="6.5" y="6.5" width="11" height="11" rx="3"/><path d="M9 6.5l.6-3h4.8l.6 3M9 17.5l.6 3h4.8l.6-3"/>');
   static final String _glasses = _svg('<circle cx="7" cy="14" r="3.5"/><circle cx="17" cy="14" r="3.5"/>'
       '<path d="M10.5 14h3M3.5 14l1-5M20.5 14l-1-5"/>');
 }

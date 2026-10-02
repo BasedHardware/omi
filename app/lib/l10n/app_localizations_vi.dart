@@ -11238,10 +11238,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get captureStorageAlmostFull => 'Bộ nhớ gần đầy';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name và những người khác';
   }
@@ -12210,4 +12206,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Hỏi bất cứ điều gì';
+
+  @override
+  String get pendantLostConnection => 'Mặt dây chuyền đã mất kết nối với điện thoại này.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần.';
+
+  @override
+  String get pendantRecordingSafe => 'Mọi thứ đã ghi trước đó vẫn an toàn.';
 }

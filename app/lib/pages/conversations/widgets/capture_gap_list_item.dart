@@ -41,7 +41,7 @@ class CaptureGapListItem extends StatelessWidget {
         '${dateTimeFormat('h:mm a', gap.startTime.toLocal(), locale: locale)} – ${dateTimeFormat('h:mm a', gap.endTime.toLocal(), locale: locale)}';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: DeviceTile.rowPadding),
       child: Row(
         children: [
           const DeviceTile(icon: Icons.event_busy, missing: true),

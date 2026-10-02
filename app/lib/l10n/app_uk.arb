@@ -3549,7 +3549,6 @@
     "captureStarting": "Запуск…",
     "capturePhoneStorageFull": "Пам’ять телефона заповнена",
     "captureStorageAlmostFull": "Пам’ять майже заповнена",
-    "capturePendantDisconnectedDetail": "Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.",
     "participantsSummaryUncounted": "{name} та інші",
     "deviceOnboardingVoiceReplyTitle": "Слухайте відповіді Omi",
     "deviceOnboardingVoiceReplySample": "Зрозуміло. Ваша наступна зустріч почнеться за двадцять хвилин.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Попередні розмови з цим голосом: {count}",
     "speakerLabelText": "{part, select, likely{Імовірно} soundsLike{Схоже на {name}} notPerson{Не {name}} carried{Досі {name}. Перенесено з вашої останньої розмови.} change{Змінити} alsoTitle{Це теж {name}?} alsoBody{Omi знайшов такий самий голос у попередніх розмовах.} confirmed{Ви підтвердили цю мітку} other{Переглянути}}",
     "speakerLabelTalkTime": "{duration} цього голосу",
-    "askAnythingButton": "Запитайте що завгодно"
+    "askAnythingButton": "Запитайте що завгодно",
+    "pendantLostConnection": "Кулон втратив зв’язок із цим телефоном.",
+    "pendantReconnectsOnItsOwn": "Omi перепідключиться сам, коли кулон буде ввімкнений і поруч.",
+    "pendantRecordingSafe": "Усе, що записано до цього, збережено."
 }

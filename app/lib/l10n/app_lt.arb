@@ -3549,7 +3549,6 @@
     "captureStarting": "Paleidžiama…",
     "capturePhoneStorageFull": "Telefono atmintis pilna",
     "captureStorageAlmostFull": "Atmintis beveik pilna",
-    "capturePendantDisconnectedDetail": "Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.",
     "participantsSummaryUncounted": "{name} ir kiti",
     "deviceOnboardingVoiceReplyTitle": "Klausykitės „Omi“ atsakymų",
     "deviceOnboardingVoiceReplySample": "Supratau. Kitas jūsų susitikimas prasidės po dvidešimties minučių.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Ankstesni pokalbiai su šiuo balsu: {count}",
     "speakerLabelText": "{part, select, likely{Tikėtina} soundsLike{Skamba kaip {name}} notPerson{Ne {name}} carried{Vis dar {name}. Perkelta iš paskutinio pokalbio.} change{Keisti} alsoTitle{Ar tai taip pat {name}?} alsoBody{Omi rado tą patį balsą ankstesniuose pokalbiuose.} confirmed{Patvirtinote šią žymą} other{Peržiūrėti}}",
     "speakerLabelTalkTime": "{duration} šio balso",
-    "askAnythingButton": "Klauskite bet ko"
+    "askAnythingButton": "Klauskite bet ko",
+    "pendantLostConnection": "Pakabukas prarado ryšį su šiuo telefonu.",
+    "pendantReconnectsOnItsOwn": "Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese.",
+    "pendantRecordingSafe": "Viskas, kas įrašyta iki šiol, išsaugota."
 }

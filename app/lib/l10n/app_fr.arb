@@ -3584,7 +3584,6 @@
     "captureStarting": "Démarrage…",
     "capturePhoneStorageFull": "Stockage du téléphone plein",
     "captureStorageAlmostFull": "Stockage presque plein",
-    "capturePendantDisconnectedDetail": "Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.",
     "participantsSummaryUncounted": "{name} et d'autres",
     "deviceOnboardingVoiceReplyTitle": "Écoutez les réponses d’Omi",
     "deviceOnboardingVoiceReplySample": "C’est noté. Votre prochaine réunion commence dans vingt minutes.",
@@ -3815,5 +3814,8 @@
     "speakerLabelEarlierMatches": "Conversations précédentes avec cette voix : {count}",
     "speakerLabelText": "{part, select, likely{Probable} soundsLike{Ressemble à {name}} notPerson{Pas {name}} carried{Toujours {name}. Repris de votre dernière conversation.} change{Modifier} alsoTitle{Est-ce aussi {name} ?} alsoBody{Omi a retrouvé la même voix dans des conversations précédentes.} confirmed{Vous avez confirmé cette étiquette} other{Vérifier}}",
     "speakerLabelTalkTime": "{duration} de cette voix",
-    "askAnythingButton": "Demandez n'importe quoi"
+    "askAnythingButton": "Demandez n'importe quoi",
+    "pendantLostConnection": "Votre pendentif a perdu la connexion avec ce téléphone.",
+    "pendantReconnectsOnItsOwn": "Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité.",
+    "pendantRecordingSafe": "Tout ce qui a été enregistré avant est en sécurité."
 }

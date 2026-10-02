@@ -25,6 +25,7 @@ import 'package:omi/utils/processing_timeout.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
+import 'package:omi/pages/conversations/widgets/pendant_dropped_sheet.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/device_tile.dart';
@@ -210,13 +211,16 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   Widget _buildPendantDroppedUI(CaptureProvider provider, {required bool reconnecting}) {
     final l10n = context.l10n;
     final startedAt = _droppedStartedAt;
+    final source = _droppedSource!;
+    final elapsed = startedAt == null ? null : (_droppedAt ?? DateTime.now()).difference(startedAt);
     return LiveCaptureCard(
-      source: _droppedSource!,
+      source: source,
       status: l10n.disconnected,
       detail: reconnecting ? l10n.reconnecting : null,
-      explanation: l10n.capturePendantDisconnectedDetail,
-      elapsed: startedAt == null ? null : (_droppedAt ?? DateTime.now()).difference(startedAt),
+      explanation: l10n.pendantLostConnection,
+      elapsed: elapsed,
       lastLine: provider.segments.lastOrNull?.text,
+      onShowDetails: () => showPendantDroppedSheet(context, source: source, elapsed: elapsed),
     );
   }
 
@@ -760,7 +764,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
       // A row like the conversation it will become: its device, faded while it is being made, then
       // "Processing" over the real start time (hub audit #25). Static, to save CPU and battery.
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: DeviceTile.rowPadding),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

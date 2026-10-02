@@ -20481,12 +20481,6 @@ abstract class AppLocalizations {
   /// **'Storage almost full'**
   String get captureStorageAlmostFull;
 
-  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
-  ///
-  /// In en, this message translates to:
-  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
-  String get capturePendantDisconnectedDetail;
-
   /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
   ///
   /// In en, this message translates to:
@@ -21872,6 +21866,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Ask Anything'**
   String get askAnythingButton;
+
+  /// Disconnected sheet: first line, what happened when the pendant dropped
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant lost its connection to this phone.'**
+  String get pendantLostConnection;
+
+  /// Disconnected sheet: reassurance that reconnecting needs no action
+  ///
+  /// In en, this message translates to:
+  /// **'Omi reconnects on its own when the pendant is on and nearby.'**
+  String get pendantReconnectsOnItsOwn;
+
+  /// Disconnected sheet: reassurance that nothing recorded is lost
+  ///
+  /// In en, this message translates to:
+  /// **'Everything recorded before this is safe.'**
+  String get pendantRecordingSafe;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

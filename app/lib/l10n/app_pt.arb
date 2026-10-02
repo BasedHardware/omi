@@ -3584,7 +3584,6 @@
     "captureStarting": "Iniciando…",
     "capturePhoneStorageFull": "Armazenamento do telefone cheio",
     "captureStorageAlmostFull": "Armazenamento quase cheio",
-    "capturePendantDisconnectedDetail": "Seu pendente perdeu a conexão com este telefone. O Omi se reconecta sozinho quando o pendente estiver ligado e por perto. Tudo o que foi gravado antes está seguro.",
     "participantsSummaryUncounted": "{name} e outros",
     "deviceOnboardingVoiceReplyTitle": "Ouça as respostas do Omi",
     "deviceOnboardingVoiceReplySample": "Entendido. Sua próxima reunião começa em vinte minutos.",
@@ -3815,5 +3814,8 @@
     "speakerLabelEarlierMatches": "Conversas anteriores com esta voz: {count}",
     "speakerLabelText": "{part, select, likely{Provável} soundsLike{Soa como {name}} notPerson{Não é {name}} carried{Continua sendo {name}. Mantido da sua última conversa.} change{Alterar} alsoTitle{Esta voz também é {name}?} alsoBody{O Omi encontrou a mesma voz em conversas anteriores.} confirmed{Você confirmou este rótulo} other{Revisar}}",
     "speakerLabelTalkTime": "{duration} desta voz",
-    "askAnythingButton": "Pergunte qualquer coisa"
+    "askAnythingButton": "Pergunte qualquer coisa",
+    "pendantLostConnection": "Seu pendente perdeu a conexão com este telefone.",
+    "pendantReconnectsOnItsOwn": "O Omi se reconecta sozinho quando o pendente estiver ligado e por perto.",
+    "pendantRecordingSafe": "Tudo o que foi gravado antes está seguro."
 }

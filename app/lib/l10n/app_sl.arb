@@ -11106,7 +11106,6 @@
     "captureStarting": "Zaganjanje…",
     "capturePhoneStorageFull": "Pomnilnik telefona je poln",
     "captureStorageAlmostFull": "Pomnilnik je skoraj poln",
-    "capturePendantDisconnectedDetail": "Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.",
     "participantsSummaryUncounted": "{name} in drugi",
     "deviceOnboardingVoiceReplyTitle": "Poslušajte Omijeve odgovore",
     "deviceOnboardingVoiceReplySample": "Razumem. Vaš naslednji sestanek se začne čez dvajset minut.",
@@ -11337,5 +11336,8 @@
     "speakerLabelEarlierMatches": "Prejšnji pogovori s tem glasom: {count}",
     "speakerLabelText": "{part, select, likely{Verjetno} soundsLike{Zveni kot {name}} notPerson{Ni {name}} carried{Še vedno {name}. Preneseno iz vašega zadnjega pogovora.} change{Spremeni} alsoTitle{Je to tudi {name}?} alsoBody{Omi je našel isti glas v prejšnjih pogovorih.} confirmed{Potrdili ste to oznako} other{Preglej}}",
     "speakerLabelTalkTime": "{duration} tega glasu",
-    "askAnythingButton": "Vprašaj kaj koli"
+    "askAnythingButton": "Vprašaj kaj koli",
+    "pendantLostConnection": "Obesek je izgubil povezavo s tem telefonom.",
+    "pendantReconnectsOnItsOwn": "Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini.",
+    "pendantRecordingSafe": "Vse, kar je bilo posneto prej, je varno."
 }

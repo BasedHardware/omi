@@ -11295,10 +11295,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get captureStorageAlmostFull => 'Spațiul e aproape plin';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name și alții';
   }
@@ -12271,4 +12267,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Întreabă orice';
+
+  @override
+  String get pendantLostConnection => 'Pandantivul a pierdut conexiunea cu acest telefon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se va reconecta singur când pandantivul este pornit și în apropiere.';
+
+  @override
+  String get pendantRecordingSafe => 'Tot ce s-a înregistrat înainte este în siguranță.';
 }

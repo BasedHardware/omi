@@ -11106,7 +11106,6 @@
     "captureStarting": "در حال شروع…",
     "capturePhoneStorageFull": "حافظه تلفن پر است",
     "captureStorageAlmostFull": "حافظه تقریباً پر است",
-    "capturePendantDisconnectedDetail": "آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.",
     "participantsSummaryUncounted": "{name} و دیگران",
     "deviceOnboardingVoiceReplyTitle": "پاسخ‌های Omi را بشنوید",
     "deviceOnboardingVoiceReplySample": "انجام شد. جلسه بعدی شما بیست دقیقه دیگر شروع می‌شود.",
@@ -11337,5 +11336,8 @@
     "speakerLabelEarlierMatches": "گفتگوهای قبلی با این صدا: {count}",
     "speakerLabelText": "{part, select, likely{احتمالاً} soundsLike{شبیه {name} است} notPerson{{name} نیست} carried{همچنان {name}. از آخرین گفتگوی شما منتقل شد.} change{تغییر} alsoTitle{آیا این هم {name} است؟} alsoBody{Omi همین صدا را در گفتگوهای قبلی پیدا کرد.} confirmed{شما این برچسب را تأیید کردید} other{بررسی}}",
     "speakerLabelTalkTime": "{duration} از این صدا",
-    "askAnythingButton": "هر چیزی بپرسید"
+    "askAnythingButton": "هر چیزی بپرسید",
+    "pendantLostConnection": "آویز شما اتصالش را با این تلفن از دست داد.",
+    "pendantReconnectsOnItsOwn": "وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود.",
+    "pendantRecordingSafe": "هر آنچه پیش از این ضبط شده محفوظ است."
 }

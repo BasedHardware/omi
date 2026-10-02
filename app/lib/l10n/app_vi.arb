@@ -3549,7 +3549,6 @@
     "captureStarting": "Đang bắt đầu…",
     "capturePhoneStorageFull": "Bộ nhớ điện thoại đầy",
     "captureStorageAlmostFull": "Bộ nhớ gần đầy",
-    "capturePendantDisconnectedDetail": "Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.",
     "participantsSummaryUncounted": "{name} và những người khác",
     "deviceOnboardingVoiceReplyTitle": "Nghe câu trả lời của Omi",
     "deviceOnboardingVoiceReplySample": "Tôi hiểu rồi. Cuộc họp tiếp theo của bạn bắt đầu sau hai mươi phút nữa.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Số cuộc trò chuyện trước có giọng nói này: {count}",
     "speakerLabelText": "{part, select, likely{Có thể} soundsLike{Nghe giống {name}} notPerson{Không phải {name}} carried{Vẫn là {name}. Được giữ từ cuộc trò chuyện gần nhất của bạn.} change{Đổi} alsoTitle{Đây cũng là {name}?} alsoBody{Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.} confirmed{Bạn đã xác nhận nhãn này} other{Xem lại}}",
     "speakerLabelTalkTime": "{duration} từ giọng nói này",
-    "askAnythingButton": "Hỏi bất cứ điều gì"
+    "askAnythingButton": "Hỏi bất cứ điều gì",
+    "pendantLostConnection": "Mặt dây chuyền đã mất kết nối với điện thoại này.",
+    "pendantReconnectsOnItsOwn": "Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần.",
+    "pendantRecordingSafe": "Mọi thứ đã ghi trước đó vẫn an toàn."
 }

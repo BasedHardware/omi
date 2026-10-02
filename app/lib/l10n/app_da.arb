@@ -3591,7 +3591,6 @@
     "captureStarting": "Starter…",
     "capturePhoneStorageFull": "Telefonens lager er fuldt",
     "captureStorageAlmostFull": "Lageret er næsten fuldt",
-    "capturePendantDisconnectedDetail": "Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.",
     "participantsSummaryUncounted": "{name} og andre",
     "deviceOnboardingVoiceReplyTitle": "Hør Omis svar",
     "deviceOnboardingVoiceReplySample": "Det er klaret. Dit næste møde begynder om tyve minutter.",
@@ -3822,5 +3821,8 @@
     "speakerLabelEarlierMatches": "Tidligere samtaler med denne stemme: {count}",
     "speakerLabelText": "{part, select, likely{Sandsynlig} soundsLike{Lyder som {name}} notPerson{Ikke {name}} carried{Stadig {name}. Overført fra din seneste samtale.} change{Skift} alsoTitle{Er det også {name}?} alsoBody{Omi fandt den samme stemme i tidligere samtaler.} confirmed{Du har bekræftet denne etiket} other{Gennemgå}}",
     "speakerLabelTalkTime": "{duration} af denne stemme",
-    "askAnythingButton": "Spørg om hvad som helst"
+    "askAnythingButton": "Spørg om hvad som helst",
+    "pendantLostConnection": "Dit vedhæng mistede forbindelsen til denne telefon.",
+    "pendantReconnectsOnItsOwn": "Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden.",
+    "pendantRecordingSafe": "Alt optaget før dette er i sikkerhed."
 }

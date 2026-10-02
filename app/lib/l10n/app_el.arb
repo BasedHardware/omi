@@ -3549,7 +3549,6 @@
     "captureStarting": "Έναρξη…",
     "capturePhoneStorageFull": "Ο χώρος του τηλεφώνου γέμισε",
     "captureStorageAlmostFull": "Ο χώρος σχεδόν γέμισε",
-    "capturePendantDisconnectedDetail": "Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.",
     "participantsSummaryUncounted": "{name} και άλλοι",
     "deviceOnboardingVoiceReplyTitle": "Ακούστε τις απαντήσεις του Omi",
     "deviceOnboardingVoiceReplySample": "Έγινε. Η επόμενη συνάντησή σας ξεκινά σε είκοσι λεπτά.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Προηγούμενες συζητήσεις με αυτή τη φωνή: {count}",
     "speakerLabelText": "{part, select, likely{Πιθανό} soundsLike{Ακούγεται σαν {name}} notPerson{Όχι {name}} carried{Εξακολουθεί να είναι {name}. Μεταφέρθηκε από την τελευταία σας συζήτηση.} change{Αλλαγή} alsoTitle{Είναι και αυτό το άτομο {name};} alsoBody{Το Omi βρήκε την ίδια φωνή σε προηγούμενες συζητήσεις.} confirmed{Επιβεβαιώσατε αυτή την ετικέτα} other{Έλεγχος}}",
     "speakerLabelTalkTime": "{duration} αυτής της φωνής",
-    "askAnythingButton": "Ρωτήστε οτιδήποτε"
+    "askAnythingButton": "Ρωτήστε οτιδήποτε",
+    "pendantLostConnection": "Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο.",
+    "pendantReconnectsOnItsOwn": "Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά.",
+    "pendantRecordingSafe": "Ό,τι ηχογραφήθηκε πριν είναι ασφαλές."
 }

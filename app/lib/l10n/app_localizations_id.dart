@@ -11253,10 +11253,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get captureStorageAlmostFull => 'Penyimpanan hampir penuh';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name dan lainnya';
   }
@@ -12228,4 +12224,14 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Tanyakan apa saja';
+
+  @override
+  String get pendantLostConnection => 'Liontin kehilangan koneksi dengan ponsel ini.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda.';
+
+  @override
+  String get pendantRecordingSafe => 'Semua yang direkam sebelumnya aman.';
 }

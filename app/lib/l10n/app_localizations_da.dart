@@ -11230,10 +11230,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get captureStorageAlmostFull => 'Lageret er næsten fuldt';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
@@ -12203,4 +12199,14 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Spørg om hvad som helst';
+
+  @override
+  String get pendantLostConnection => 'Dit vedhæng mistede forbindelsen til denne telefon.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden.';
+
+  @override
+  String get pendantRecordingSafe => 'Alt optaget før dette er i sikkerhed.';
 }

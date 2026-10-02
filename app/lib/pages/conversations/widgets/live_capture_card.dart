@@ -9,7 +9,8 @@ import 'package:omi/widgets/device_tile.dart';
 /// The one capture status and control surface on Home: what is recording now.
 ///
 /// Leading: the source's [DeviceTile] (pendant, phone or call) with a dot, green while live and grey
-/// when paused or in trouble, named for screen readers but not in text. Then two lines: the short [status] ("Listening", "Paused", "Not
+/// when paused, named for screen readers but not in text; a problem marks the words, not the tile.
+/// Then two lines: the short [status] ("Listening", "Paused", "Not
 /// transcribing"), and in a muted colour the elapsed time and the [detail] ("0:14 · Audio saved,
 /// transcribes later"). A problem ([explanation] set) carries an amber warning glyph instead of a
 /// status dot, and tapping the text opens a sheet that explains it. Trailing: Pause while live,
@@ -27,6 +28,7 @@ class LiveCaptureCard extends StatelessWidget {
     this.lastLine,
     this.note,
     this.onPauseToggle,
+    this.onShowDetails,
   });
 
   /// A conversation source ('omi', 'phone', …) or [callSource].
@@ -49,6 +51,9 @@ class LiveCaptureCard extends StatelessWidget {
 
   /// Null hides the Pause/Resume control.
   final VoidCallback? onPauseToggle;
+
+  /// Opens a problem's own sheet instead of the [explanation] one (a dropped pendant).
+  final VoidCallback? onShowDetails;
 
   static const String callSource = 'call';
 
@@ -103,7 +108,7 @@ class LiveCaptureCard extends StatelessWidget {
       child: DeviceTile(
         source: isCall ? null : source,
         icon: isCall ? Icons.call_rounded : null,
-        status: paused || problem ? OmiColors.textTertiary : OmiColors.success,
+        status: problem ? null : (paused ? OmiColors.textTertiary : OmiColors.success),
       ),
     );
 
@@ -138,7 +143,7 @@ class LiveCaptureCard extends StatelessWidget {
         hint: l10n.learnMore,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => showDetails(context, title: status, explanation: explanation!),
+          onTap: onShowDetails ?? () => showDetails(context, title: status, explanation: explanation!),
           child: ConstrainedBox(constraints: const BoxConstraints(minHeight: kOmiMinTapTarget), child: text),
         ),
       );

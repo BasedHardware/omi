@@ -11272,10 +11272,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get captureStorageAlmostFull => 'Storan hampir penuh';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name dan lain-lain';
   }
@@ -12249,4 +12245,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Tanya apa sahaja';
+
+  @override
+  String get pendantLostConnection => 'Loket anda terputus sambungan dengan telefon ini.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan.';
+
+  @override
+  String get pendantRecordingSafe => 'Semua yang dirakam sebelum ini selamat.';
 }

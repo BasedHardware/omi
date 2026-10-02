@@ -3549,7 +3549,6 @@
     "captureStarting": "Käynnistetään…",
     "capturePhoneStorageFull": "Puhelimen tallennustila täynnä",
     "captureStorageAlmostFull": "Tallennustila melkein täynnä",
-    "capturePendantDisconnectedDetail": "Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.",
     "participantsSummaryUncounted": "{name} ja muut",
     "deviceOnboardingVoiceReplyTitle": "Kuuntele Omin vastaukset",
     "deviceOnboardingVoiceReplySample": "Selvä. Seuraava kokouksesi alkaa kahdenkymmenen minuutin kuluttua.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Aiemmat keskustelut tällä äänellä: {count}",
     "speakerLabelText": "{part, select, likely{Todennäköinen} soundsLike{Kuulostaa henkilöltä {name}} notPerson{Ei {name}} carried{Edelleen {name}. Siirretty edellisestä keskustelustasi.} change{Vaihda} alsoTitle{Onko tämä myös {name}?} alsoBody{Omi löysi saman äänen aiemmista keskusteluista.} confirmed{Vahvistit tämän nimen} other{Tarkista}}",
     "speakerLabelTalkTime": "{duration} tästä äänestä",
-    "askAnythingButton": "Kysy mitä tahansa"
+    "askAnythingButton": "Kysy mitä tahansa",
+    "pendantLostConnection": "Riipus menetti yhteyden tähän puhelimeen.",
+    "pendantReconnectsOnItsOwn": "Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä.",
+    "pendantRecordingSafe": "Kaikki tätä ennen tallennettu on tallessa."
 }

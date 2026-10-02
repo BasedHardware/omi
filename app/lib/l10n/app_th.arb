@@ -3549,7 +3549,6 @@
     "captureStarting": "กำลังเริ่ม…",
     "capturePhoneStorageFull": "พื้นที่โทรศัพท์เต็ม",
     "captureStorageAlmostFull": "พื้นที่ใกล้เต็ม",
-    "capturePendantDisconnectedDetail": "จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้ Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้ ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย",
     "participantsSummaryUncounted": "{name} และคนอื่นๆ",
     "deviceOnboardingVoiceReplyTitle": "ฟังคำตอบของ Omi",
     "deviceOnboardingVoiceReplySample": "รับทราบ การประชุมครั้งถัดไปของคุณจะเริ่มในอีกยี่สิบนาที",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "การสนทนาก่อนหน้าที่มีเสียงนี้: {count}",
     "speakerLabelText": "{part, select, likely{น่าจะเป็น} soundsLike{เสียงคล้าย {name}} notPerson{ไม่ใช่ {name}} carried{ยังคงเป็น {name} ต่อจากการสนทนาครั้งล่าสุดของคุณ} change{เปลี่ยน} alsoTitle{นี่คือ {name} ด้วยหรือไม่} alsoBody{Omi พบเสียงเดียวกันในการสนทนาก่อนหน้า} confirmed{คุณยืนยันป้ายชื่อนี้แล้ว} other{ตรวจสอบ}}",
     "speakerLabelTalkTime": "{duration} ของเสียงนี้",
-    "askAnythingButton": "ถามอะไรก็ได้"
+    "askAnythingButton": "ถามอะไรก็ได้",
+    "pendantLostConnection": "จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้",
+    "pendantReconnectsOnItsOwn": "Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้",
+    "pendantRecordingSafe": "ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย"
 }

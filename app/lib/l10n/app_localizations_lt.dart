@@ -11262,10 +11262,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get captureStorageAlmostFull => 'Atmintis beveik pilna';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ir kiti';
   }
@@ -12236,4 +12232,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Klauskite bet ko';
+
+  @override
+  String get pendantLostConnection => 'Pakabukas prarado ryšį su šiuo telefonu.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese.';
+
+  @override
+  String get pendantRecordingSafe => 'Viskas, kas įrašyta iki šiol, išsaugota.';
 }

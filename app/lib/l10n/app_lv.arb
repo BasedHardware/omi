@@ -3549,7 +3549,6 @@
     "captureStarting": "Sāk…",
     "capturePhoneStorageFull": "Tālruņa krātuve ir pilna",
     "captureStorageAlmostFull": "Krātuve gandrīz pilna",
-    "capturePendantDisconnectedDetail": "Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.",
     "participantsSummaryUncounted": "{name} un citi",
     "deviceOnboardingVoiceReplyTitle": "Klausieties Omi atbildes",
     "deviceOnboardingVoiceReplySample": "Sapratu. Jūsu nākamā sapulce sāksies pēc divdesmit minūtēm.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Iepriekšējās sarunas ar šo balsi: {count}",
     "speakerLabelText": "{part, select, likely{Iespējams} soundsLike{Izklausās pēc {name}} notPerson{Nav {name}} carried{Joprojām {name}. Pārnests no jūsu pēdējās sarunas.} change{Mainīt} alsoTitle{Vai šī ir arī {name}?} alsoBody{Omi atrada to pašu balsi iepriekšējās sarunās.} confirmed{Jūs apstiprinājāt šo birku} other{Pārskatīt}}",
     "speakerLabelTalkTime": "{duration} no šīs balss",
-    "askAnythingButton": "Jautājiet jebko"
+    "askAnythingButton": "Jautājiet jebko",
+    "pendantLostConnection": "Kulons zaudēja savienojumu ar šo tālruni.",
+    "pendantReconnectsOnItsOwn": "Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā.",
+    "pendantRecordingSafe": "Viss, kas ierakstīts līdz šim, ir drošībā."
 }

@@ -11241,10 +11241,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get captureStorageAlmostFull => 'Úložiště je téměř plné';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name a další';
   }
@@ -12215,4 +12211,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Zeptejte se na cokoliv';
+
+  @override
+  String get pendantLostConnection => 'Přívěsek ztratil spojení s tímto telefonem.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž.';
+
+  @override
+  String get pendantRecordingSafe => 'Vše nahrané předtím je v bezpečí.';
 }

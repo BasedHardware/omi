@@ -419,7 +419,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
     final content = Padding(
-      padding: const EdgeInsetsDirectional.symmetric(horizontal: OmiSpacing.md - _rowInset, vertical: 9),
+      padding:
+          const EdgeInsetsDirectional.symmetric(horizontal: OmiSpacing.md - _rowInset, vertical: DeviceTile.rowPadding),
       child: _buildMobileLayout(context),
     );
     if (!widget.conversation.isLocked) return content;

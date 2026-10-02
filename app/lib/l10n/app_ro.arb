@@ -3549,7 +3549,6 @@
     "captureStarting": "Se pornește…",
     "capturePhoneStorageFull": "Spațiul telefonului e plin",
     "captureStorageAlmostFull": "Spațiul e aproape plin",
-    "capturePendantDisconnectedDetail": "Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.",
     "participantsSummaryUncounted": "{name} și alții",
     "deviceOnboardingVoiceReplyTitle": "Ascultă răspunsurile Omi",
     "deviceOnboardingVoiceReplySample": "Am înțeles. Următoarea întâlnire începe peste douăzeci de minute.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Conversații anterioare cu această voce: {count}",
     "speakerLabelText": "{part, select, likely{Probabil} soundsLike{Sună ca {name}} notPerson{Nu este {name}} carried{Tot {name}. Preluat din ultima ta conversație.} change{Schimbă} alsoTitle{Este și aceasta {name}?} alsoBody{Omi a găsit aceeași voce în conversații anterioare.} confirmed{Ai confirmat această etichetă} other{Revizuiește}}",
     "speakerLabelTalkTime": "{duration} din această voce",
-    "askAnythingButton": "Întreabă orice"
+    "askAnythingButton": "Întreabă orice",
+    "pendantLostConnection": "Pandantivul a pierdut conexiunea cu acest telefon.",
+    "pendantReconnectsOnItsOwn": "Omi se va reconecta singur când pandantivul este pornit și în apropiere.",
+    "pendantRecordingSafe": "Tot ce s-a înregistrat înainte este în siguranță."
 }

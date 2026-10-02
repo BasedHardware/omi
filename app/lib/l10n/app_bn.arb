@@ -11106,7 +11106,6 @@
     "captureStarting": "শুরু হচ্ছে…",
     "capturePhoneStorageFull": "ফোনের স্টোরেজ পূর্ণ",
     "captureStorageAlmostFull": "স্টোরেজ প্রায় পূর্ণ",
-    "capturePendantDisconnectedDetail": "আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।",
     "participantsSummaryUncounted": "{name} ও অন্যরা",
     "deviceOnboardingVoiceReplyTitle": "Omi-এর উত্তর শুনুন",
     "deviceOnboardingVoiceReplySample": "হয়ে গেছে। আপনার পরবর্তী মিটিং বিশ মিনিট পরে শুরু হবে।",
@@ -11337,5 +11336,8 @@
     "speakerLabelEarlierMatches": "এই ভয়েসের আগের কথোপকথন: {count}",
     "speakerLabelText": "{part, select, likely{সম্ভাব্য} soundsLike{{name}-এর মতো শোনাচ্ছে} notPerson{{name} নয়} carried{এখনও {name}। আপনার আগের কথোপকথন থেকে নেওয়া হয়েছে।} change{পরিবর্তন} alsoTitle{এটিও কি {name}?} alsoBody{Omi আগের কথোপকথনগুলোতে একই ভয়েস খুঁজে পেয়েছে।} confirmed{আপনি এই লেবেল নিশ্চিত করেছেন} other{পর্যালোচনা}}",
     "speakerLabelTalkTime": "এই ভয়েসের {duration}",
-    "askAnythingButton": "যেকোনো কিছু জিজ্ঞাসা করুন"
+    "askAnythingButton": "যেকোনো কিছু জিজ্ঞাসা করুন",
+    "pendantLostConnection": "আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে।",
+    "pendantReconnectsOnItsOwn": "পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে।",
+    "pendantRecordingSafe": "এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।"
 }

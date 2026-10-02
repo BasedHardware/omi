@@ -11257,10 +11257,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get captureStorageAlmostFull => 'Меморија је скоро пуна';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
@@ -12231,4 +12227,13 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Питај шта год';
+
+  @override
+  String get pendantLostConnection => 'Привезак је изгубио везу са овим телефоном.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi ће се сам поново повезати кад је привезак укључен и у близини.';
+
+  @override
+  String get pendantRecordingSafe => 'Све снимљено до сада је безбедно.';
 }

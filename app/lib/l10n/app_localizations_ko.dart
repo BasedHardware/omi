@@ -11062,10 +11062,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get captureStorageAlmostFull => '저장 공간 거의 참';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      '펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name 외 여러 명';
   }
@@ -12025,4 +12021,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get askAnythingButton => '무엇이든 물어보세요';
+
+  @override
+  String get pendantLostConnection => '펜던트와 이 휴대폰의 연결이 끊겼어요.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => '펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요.';
+
+  @override
+  String get pendantRecordingSafe => '그 전에 녹음된 내용은 안전하게 보관돼요.';
 }

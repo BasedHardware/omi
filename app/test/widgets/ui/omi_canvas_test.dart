@@ -110,6 +110,15 @@ void main() {
     });
   });
 
+  testWidgets('a locked row is veiled in the page colour on the canvas, in the card colour elsewhere', (tester) async {
+    Color veil() => tester.widget<ColoredBox>(find.byKey(const Key('locked_preview_tint'))).color;
+    final locked = OmiLockedPreview(label: 'Upgrade', onPressed: () {}, child: const SizedBox(width: 200, height: 60));
+    await pumpIn(tester, locked);
+    expect(veil(), OmiColors.canvas.withValues(alpha: 0.65));
+    await pumpIn(tester, locked, canvas: false);
+    expect(veil(), OmiColors.surface1.withValues(alpha: 0.65));
+  });
+
   group('DeviceTile', () {
     test('pendants, phones, watches and glasses have drawn glyphs; other sources use their icon', () {
       for (final source in ['omi', 'friend', 'limitless', 'bee', 'plaud']) {
@@ -131,11 +140,18 @@ void main() {
       final tile =
           tester.widget<Container>(find.descendant(of: find.byType(DeviceTile), matching: find.byType(Container)));
       expect((tile.decoration! as BoxDecoration).color, OmiColors.deviceTile);
+      expect((tile.decoration! as BoxDecoration).border, isNull, reason: 'no outline: a mark, not a button');
       expect(find.descendant(of: find.byType(DeviceTile), matching: find.byType(ExcludeSemantics)), findsOneWidget);
 
       await pumpIn(tester, const DeviceTile(source: 'screenpipe'));
       expect(find.byType(SvgPicture), findsNothing);
       expect(find.byType(Icon), findsOneWidget);
+    });
+
+    testWidgets('a recap tile holds its emoji', (tester) async {
+      await pumpIn(tester, const DeviceTile(emoji: '🌉', source: 'omi'));
+      expect(find.text('🌉'), findsOneWidget);
+      expect(find.byType(SvgPicture), findsNothing);
     });
 
     testWidgets('missing is an empty dashed outline; faded dims it; a status dot is ringed in the page colour',

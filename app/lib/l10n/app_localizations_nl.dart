@@ -11277,10 +11277,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get captureStorageAlmostFull => 'Opslag bijna vol';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name en anderen';
   }
@@ -12255,4 +12251,14 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Vraag wat je wilt';
+
+  @override
+  String get pendantLostConnection => 'Je hanger heeft de verbinding met deze telefoon verloren.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is.';
+
+  @override
+  String get pendantRecordingSafe => 'Alles wat eerder is opgenomen, is veilig.';
 }

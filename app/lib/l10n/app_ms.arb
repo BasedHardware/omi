@@ -3549,7 +3549,6 @@
     "captureStarting": "Memulakan…",
     "capturePhoneStorageFull": "Storan telefon penuh",
     "captureStorageAlmostFull": "Storan hampir penuh",
-    "capturePendantDisconnectedDetail": "Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.",
     "participantsSummaryUncounted": "{name} dan lain-lain",
     "deviceOnboardingVoiceReplyTitle": "Dengar jawapan Omi",
     "deviceOnboardingVoiceReplySample": "Baik. Mesyuarat anda yang seterusnya bermula dalam masa dua puluh minit.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Perbualan terdahulu dengan suara ini: {count}",
     "speakerLabelText": "{part, select, likely{Mungkin} soundsLike{Kedengaran seperti {name}} notPerson{Bukan {name}} carried{Masih {name}. Dibawa daripada perbualan terakhir anda.} change{Tukar} alsoTitle{Adakah ini juga {name}?} alsoBody{Omi menemui suara yang sama dalam perbualan terdahulu.} confirmed{Anda telah mengesahkan label ini} other{Semak}}",
     "speakerLabelTalkTime": "{duration} daripada suara ini",
-    "askAnythingButton": "Tanya apa sahaja"
+    "askAnythingButton": "Tanya apa sahaja",
+    "pendantLostConnection": "Loket anda terputus sambungan dengan telefon ini.",
+    "pendantReconnectsOnItsOwn": "Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan.",
+    "pendantRecordingSafe": "Semua yang dirakam sebelum ini selamat."
 }

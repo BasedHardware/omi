@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
+import 'package:omi/widgets/device_tile.dart';
 
 Widget _wrap(Widget sliver) {
   return MaterialApp(
@@ -33,8 +34,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         DailySummariesList(
-          fetchSummaries: ({int limit = 30, int offset = 0}) async =>
-              (items: const <DailySummary>[], ok: false),
+          fetchSummaries: ({int limit = 30, int offset = 0}) async => (items: const <DailySummary>[], ok: false),
         ),
       ),
     );
@@ -48,8 +48,7 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         DailySummariesList(
-          fetchSummaries: ({int limit = 30, int offset = 0}) async =>
-              (items: const <DailySummary>[], ok: true),
+          fetchSummaries: ({int limit = 30, int offset = 0}) async => (items: const <DailySummary>[], ok: true),
         ),
       ),
     );
@@ -70,5 +69,9 @@ void main() {
 
     expect(find.text('No daily recaps yet'), findsNothing);
     expect(find.text('Something went wrong! Please try again later.'), findsNothing);
+    // A flat row like Home's: the day's emoji in a tile and a chevron, no card around it.
+    final summary = _summary();
+    expect(tester.widget<DeviceTile>(find.byType(DeviceTile)).emoji, summary.dayEmoji);
+    expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
   });
 }

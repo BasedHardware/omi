@@ -3549,7 +3549,6 @@
     "captureStarting": "Стартиране…",
     "capturePhoneStorageFull": "Паметта на телефона е пълна",
     "captureStorageAlmostFull": "Паметта е почти пълна",
-    "capturePendantDisconnectedDetail": "Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.",
     "participantsSummaryUncounted": "{name} и други",
     "deviceOnboardingVoiceReplyTitle": "Чуйте отговорите на Omi",
     "deviceOnboardingVoiceReplySample": "Готово. Следващата ви среща започва след двадесет минути.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "Предишни разговори с този глас: {count}",
     "speakerLabelText": "{part, select, likely{Вероятно} soundsLike{Звучи като {name}} notPerson{Не е {name}} carried{Все още е {name}. Пренесено от последния ви разговор.} change{Промяна} alsoTitle{Това също ли е {name}?} alsoBody{Omi откри същия глас в предишни разговори.} confirmed{Потвърдихте този етикет} other{Преглед}}",
     "speakerLabelTalkTime": "{duration} от този глас",
-    "askAnythingButton": "Попитайте каквото и да е"
+    "askAnythingButton": "Попитайте каквото и да е",
+    "pendantLostConnection": "Висулката загуби връзка с този телефон.",
+    "pendantReconnectsOnItsOwn": "Omi ще се свърже отново сам, когато висулката е включена и наблизо.",
+    "pendantRecordingSafe": "Всичко записано дотук е запазено."
 }

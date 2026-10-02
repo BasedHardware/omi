@@ -44,7 +44,6 @@ class OmiPalette {
       required this.glassEdge,
       required this.glassRim,
       required this.deviceTile,
-      required this.deviceTileEdge,
       required this.deviceTileInk});
 
   final Color surface0;
@@ -84,7 +83,6 @@ class OmiPalette {
 
   /// The tile behind a device glyph on a list row (`DeviceTile`).
   final Color deviceTile;
-  final Color deviceTileEdge;
   final Color deviceTileInk;
 
   static const dark = OmiPalette(
@@ -115,8 +113,7 @@ class OmiPalette {
     glassEdge: Color(0x29FFFFFF),
     glassRim: Color(0x12FFFFFF),
     deviceTile: Color(0xFF1A1A1A),
-    deviceTileEdge: Color(0x12FFFFFF),
-    deviceTileInk: Color(0xFFB3AEA6),
+    deviceTileInk: Color(0xFF8E8982),
   );
 
   static const light = OmiPalette(
@@ -147,8 +144,7 @@ class OmiPalette {
     glassEdge: Color(0xF2FFFFFF),
     glassRim: Color(0x14000000),
     deviceTile: Color(0xFFFAF8F4),
-    deviceTileEdge: Color(0x12000000),
-    deviceTileInk: Color(0xFF5F5B55),
+    deviceTileInk: Color(0xFF8C877F),
   );
 }
 
@@ -186,7 +182,6 @@ abstract final class OmiColors {
   static Color get glassEdge => active.glassEdge;
   static Color get glassRim => active.glassRim;
   static Color get deviceTile => active.deviceTile;
-  static Color get deviceTileEdge => active.deviceTileEdge;
   static Color get deviceTileInk => active.deviceTileInk;
 }
 

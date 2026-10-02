@@ -7,6 +7,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/device_tile.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -205,11 +206,11 @@ class DailySummariesListState extends State<DailySummariesList> {
           (index) => Padding(
             padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
             child: ShimmerWithTimeout(
-              baseColor: OmiColors.surface1,
+              baseColor: OmiCanvas.cardOf(context),
               highlightColor: OmiColors.surface3,
               child: Container(
                 height: 80,
-                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+                decoration: BoxDecoration(color: OmiCanvas.cardOf(context), borderRadius: OmiRadius.xlAll),
               ),
             ),
           ),
@@ -227,10 +228,12 @@ class DailySummariesListState extends State<DailySummariesList> {
     ].join(' · ');
   }
 
+  /// A flat row like Home's: the day's emoji in a tile, the headline (two lines at most), then the date
+  /// and counts. Swiping it reveals Delete.
   Widget _buildSummaryCard(DailySummary summary) {
     final l10n = context.l10n;
     final stats = _statsLabel(summary);
-    final metaStyle = TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+    final date = recapDateLabel(context, summary.date);
     return Dismissible(
       key: ValueKey('daily-summary-${summary.id}'),
       direction: DismissDirection.endToStart,
@@ -241,70 +244,57 @@ class DailySummariesListState extends State<DailySummariesList> {
         await _handleSwipeDelete(summary);
         return false;
       },
-      background: Padding(
-        padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
-        child: Container(
-          decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.xlAll),
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          alignment: Alignment.centerRight,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(l10n.deleteRecap, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
-              const SizedBox(width: 10),
-              const Icon(Icons.delete_outline, color: Colors.white),
-            ],
-          ),
+      background: Container(
+        color: OmiColors.danger,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        alignment: Alignment.centerRight,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text(l10n.deleteRecap, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(width: 10),
+            const Icon(Icons.delete_outline, color: Colors.white),
+          ],
         ),
       ),
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => _openSummary(summary),
-        child: Padding(
-          padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
-          child: Container(
-            width: double.maxFinite,
-            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Emoji container - matches conversation list item
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                    alignment: Alignment.center,
-                    child: ExcludeSemantics(
-                      child: Text(summary.dayEmoji, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500)),
-                    ),
+        // The page colour keeps the swipe's red behind the row until it moves.
+        child: ColoredBox(
+          color: OmiCanvas.pageOf(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: DeviceTile.rowPadding),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DeviceTile(emoji: summary.dayEmoji),
+                const SizedBox(width: OmiSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        summary.headline,
+                        style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        stats.isEmpty ? date : '$date · $stats',
+                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  // Title and metadata
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          summary.headline,
-                          style: Theme.of(context).textTheme.titleMedium,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          stats.isEmpty
-                              ? recapDateLabel(context, summary.date)
-                              : '${recapDateLabel(context, summary.date)} · $stats',
-                          style: metaStyle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Icon(Icons.chevron_right_rounded, color: OmiColors.textTertiary, size: 22),
+                ),
+              ],
             ),
           ),
         ),

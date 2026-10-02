@@ -3549,7 +3549,6 @@
     "captureStarting": "جارٍ البدء…",
     "capturePhoneStorageFull": "مساحة الهاتف ممتلئة",
     "captureStorageAlmostFull": "المساحة ممتلئة تقريبًا",
-    "capturePendantDisconnectedDetail": "فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.",
     "participantsSummaryUncounted": "{name} وآخرون",
     "deviceOnboardingVoiceReplyTitle": "استمع إلى إجابات Omi",
     "deviceOnboardingVoiceReplySample": "تم. يبدأ اجتماعك التالي بعد عشرين دقيقة.",
@@ -3780,5 +3779,8 @@
     "speakerLabelEarlierMatches": "المحادثات السابقة بهذا الصوت: {count}",
     "speakerLabelText": "{part, select, likely{محتمل} soundsLike{يشبه صوت {name}} notPerson{ليس {name}} carried{لا يزال {name}. تم نقله من محادثتك الأخيرة.} change{تغيير} alsoTitle{هل هذا أيضًا {name}؟} alsoBody{عثر Omi على الصوت نفسه في محادثات سابقة.} confirmed{لقد أكدت هذه التسمية} other{مراجعة}}",
     "speakerLabelTalkTime": "{duration} من هذا الصوت",
-    "askAnythingButton": "اسأل أي شيء"
+    "askAnythingButton": "اسأل أي شيء",
+    "pendantLostConnection": "فقد القلادة اتصالها بهذا الهاتف.",
+    "pendantReconnectsOnItsOwn": "سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة.",
+    "pendantRecordingSafe": "كل ما سُجّل قبل ذلك محفوظ."
 }

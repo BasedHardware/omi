@@ -11269,10 +11269,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get captureStorageAlmostFull => 'Krātuve gandrīz pilna';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name un citi';
   }
@@ -12242,4 +12238,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Jautājiet jebko';
+
+  @override
+  String get pendantLostConnection => 'Kulons zaudēja savienojumu ar šo tālruni.';
+
+  @override
+  String get pendantReconnectsOnItsOwn => 'Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā.';
+
+  @override
+  String get pendantRecordingSafe => 'Viss, kas ierakstīts līdz šim, ir drošībā.';
 }

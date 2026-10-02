@@ -11106,7 +11106,6 @@
     "captureStarting": "Покретање…",
     "capturePhoneStorageFull": "Меморија телефона је пуна",
     "captureStorageAlmostFull": "Меморија је скоро пуна",
-    "capturePendantDisconnectedDetail": "Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.",
     "participantsSummaryUncounted": "{name} и други",
     "deviceOnboardingVoiceReplyTitle": "Чујте Omi одговоре",
     "deviceOnboardingVoiceReplySample": "Разумем. Ваш следећи састанак почиње за двадесет минута.",
@@ -11337,5 +11336,8 @@
     "speakerLabelEarlierMatches": "Ранији разговори са овим гласом: {count}",
     "speakerLabelText": "{part, select, likely{Вероватно} soundsLike{Звучи као {name}} notPerson{Није {name}} carried{И даље {name}. Пренето из вашег последњег разговора.} change{Промени} alsoTitle{Да ли је ово такође {name}?} alsoBody{Omi је пронашао исти глас у ранијим разговорима.} confirmed{Потврдили сте ову ознаку} other{Прегледај}}",
     "speakerLabelTalkTime": "{duration} овог гласа",
-    "askAnythingButton": "Питај шта год"
+    "askAnythingButton": "Питај шта год",
+    "pendantLostConnection": "Привезак је изгубио везу са овим телефоном.",
+    "pendantReconnectsOnItsOwn": "Omi ће се сам поново повезати кад је привезак укључен и у близини.",
+    "pendantRecordingSafe": "Све снимљено до сада је безбедно."
 }

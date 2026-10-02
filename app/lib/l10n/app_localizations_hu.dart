@@ -11286,10 +11286,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get captureStorageAlmostFull => 'A tárhely majdnem megtelt';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name és mások';
   }
@@ -12262,4 +12258,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'Kérdezz bármit';
+
+  @override
+  String get pendantLostConnection => 'A medál elvesztette a kapcsolatot ezzel a telefonnal.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van.';
+
+  @override
+  String get pendantRecordingSafe => 'Minden, amit eddig rögzített, biztonságban van.';
 }

@@ -11292,10 +11292,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get captureStorageAlmostFull => 'స్టోరేజ్ దాదాపు నిండింది';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name మరియు ఇతరులు';
   }
@@ -12267,4 +12263,14 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get askAnythingButton => 'ఏదైనా అడగండి';
+
+  @override
+  String get pendantLostConnection => 'మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది.';
+
+  @override
+  String get pendantReconnectsOnItsOwn =>
+      'పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది.';
+
+  @override
+  String get pendantRecordingSafe => 'దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.';
 }
