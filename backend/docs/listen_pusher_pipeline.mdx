@@ -1007,7 +1007,7 @@ deletion. Soft-deleted rows also suppress recreation. **Hard deletions and origi
 titles edited before the first receipt are unknowable**; a delete-time identity
 tombstone would close that historical gap, but is outside this change.
 
-Before smart-merge donor cleanup, an atomic transaction transfers donor task ids
+Before smart-merge or sync-bridge donor cleanup, an atomic transaction transfers donor task ids
 to the survivor without delivery. Exact matches are annotated with
 `refresh_duplicate_of`; both live rows remain visible because equal descriptions
 cannot prove their completion, edits, folders or external links are interchangeable.

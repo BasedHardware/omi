@@ -146,3 +146,38 @@ def test_each_bound_aborts_without_blocking_another_conversation(world, bound):
     world.write(['New other task'], cid='other')
     world.drain()
     assert len(world.external) == 1
+
+
+def test_sync_bridge_cleanup_transfers_tasks_before_retraction_and_replays(world, monkeypatch):
+    from utils.sync import bridge
+
+    seed_donor(world)
+    donor = world.store.rows[conv_path('donor')]
+    donor.pop('smart_merge')
+    donor.update(sync_merged_into='survivor', sync_content_revision=1)
+    world.store.rows[conv_path('survivor')]['sync_merged_from'] = ['donor']
+    monkeypatch.setattr(
+        bridge.conversations_db, 'get_conversation', lambda uid, cid: deepcopy(world.store.rows.get(conv_path(cid)))
+    )
+    before = deepcopy(world.store.rows[task_path('donor-task')])
+    calls = []
+
+    def retract(uid, cid):
+        # The real retraction deletes every row still assigned to this donor.
+        assert not any(r.get('conversation_id') == cid for p, r in world.store.rows.items() if p[-2] == 'action_items')
+        calls.append(cid)
+        if len(calls) == 1:
+            raise RuntimeError('cleanup failed after task transfer')
+
+    def mark(uid, cid, revision, audio_target):
+        world.store.rows[conv_path(cid)]['sync_bridge_cleaned_revision'] = revision
+        return True
+
+    monkeypatch.setattr(bridge, 'retract_sync_bridge_source', retract)
+    monkeypatch.setattr(bridge, 'mark_sync_bridge_cleaned', mark)
+    with pytest.raises(RuntimeError, match='cleanup failed'):
+        bridge.finish_sync_bridges(UID, 'survivor')
+    assert bridge.finish_sync_bridges(UID, 'survivor') == 'survivor'
+    assert bridge.finish_sync_bridges(UID, 'survivor') == 'survivor'
+    assert len(calls) == 2
+    assert world.store.rows[task_path('donor-task')] == {**before, 'conversation_id': 'survivor'}

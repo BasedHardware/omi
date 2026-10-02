@@ -58,7 +58,14 @@ def reconcile(
         donor_rows, donor_receipt = None, None
         if donor_id is not None:
             donor = typed_doc(user.collection('conversations').document(donor_id).get(transaction=transaction))
-            if not donor.get('deleted') or (donor.get('smart_merge') or {}).get('survivor_id') != conversation_id:
+            smart_target = (donor.get('smart_merge') or {}).get('survivor_id')
+            sync_target = donor.get('sync_merged_into')
+            # Sync ancestry is persisted atomically with the redirect. It also
+            # owns transitive sources whose immediate redirect is an older donor.
+            owns_source = smart_target == conversation_id or (
+                sync_target and donor_id in conversation.get('sync_merged_from', [])
+            )
+            if not donor.get('deleted') or not owns_source:
                 raise ValueError('refresh donor is not an absorbed source')
             donor_refs = task_refs(user, donor_id, transaction)
             donor_rows = {ref.id: typed_doc(ref.get(transaction=transaction)) for ref in donor_refs}
