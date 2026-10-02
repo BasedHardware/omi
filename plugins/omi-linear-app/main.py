@@ -416,10 +416,6 @@ def get_user_profile(uid: str) -> Optional[LinearUser]:
 async def home(request: Request, uid: Optional[str] = None):
     """Home page / App settings page."""
     sig = ""
-    from linear_disconnect_auth import sign_uid, _configured_secret
-    secret = _configured_secret()
-    if secret:
-        sig = sign_uid(uid)
 
     if not uid:
         return templates.TemplateResponse("setup.html", {
@@ -428,6 +424,12 @@ async def home(request: Request, uid: Optional[str] = None):
             "error": "Missing user ID",
             "disconnect_sig": sig,
         })
+
+    from linear_disconnect_auth import sign_uid, _configured_secret
+    secret = _configured_secret()
+    if secret:
+        sig = sign_uid(uid)
+
 
     tokens = get_linear_tokens(uid)
     authenticated = tokens is not None

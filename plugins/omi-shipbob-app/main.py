@@ -408,15 +408,17 @@ def get_inventory_by_product(uid: str, product_name: str) -> Optional[Dict]:
 async def home(request: Request, uid: Optional[str] = None):
     """Home page / App settings page."""
     sig = ""
-    from shipbob_disconnect_auth import sign_uid, _configured_secret
-    secret = _configured_secret()
-    if secret:
-        sig = sign_uid(uid)
 
     if not uid:
         return templates.TemplateResponse(
             "setup.html", {"request": request, "authenticated": False, "error": "Missing user ID", "disconnect_sig": sig}
         )
+
+    from shipbob_disconnect_auth import sign_uid, _configured_secret
+    secret = _configured_secret()
+    if secret:
+        sig = sign_uid(uid)
+
 
     tokens = get_shipbob_tokens(uid)
     authenticated = tokens is not None
