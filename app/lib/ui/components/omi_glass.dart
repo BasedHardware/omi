@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../omi_tokens.dart';
 
-/// A little liquid glass for a control floating on the page: a translucent fill and a rim lit along
-/// its top edge. Over content that scrolls beneath it ([blur]), what passes under is blurred.
+/// A little liquid glass for a control floating on the page: a translucent fill, a rim lit along
+/// its top edge and, on a light page, a soft shadow. Over content that scrolls beneath it ([blur]),
+/// what passes under is blurred.
 ///
 /// [shape] is the outline: a [CircleBorder], [StadiumBorder] or [RoundedRectangleBorder]. [tint]
 /// replaces the glass fill for a control that is on or busy. The child is not clipped; one that
@@ -26,9 +27,20 @@ class OmiGlass extends StatelessWidget {
 
   static const double blurSigma = 16;
 
-  /// The glass fill in [shape], or [tint] for a control that is on or busy.
+  /// The glass fill in [shape], or [tint] for a control that is on or busy, with its [shadows].
   static ShapeDecoration fill(ShapeBorder shape, {Color? tint}) =>
-      ShapeDecoration(shape: shape, color: tint ?? OmiColors.glass);
+      ShapeDecoration(shape: shape, color: tint ?? OmiColors.glass, shadows: shadows);
+
+  /// On a light page: a hairline ring that outlines the glass, so the white rim reads as lit, and a
+  /// wide soft lift. None in dark, where the lit rim alone does it.
+  static List<BoxShadow> get shadows {
+    final color = OmiColors.glassShadow;
+    if (color.a == 0) return const [];
+    return [
+      BoxShadow(color: color, spreadRadius: 0.5),
+      BoxShadow(color: color.withValues(alpha: color.a * 0.6), blurRadius: 12, offset: const Offset(0, 2)),
+    ];
+  }
 
   /// The lit rim around [shape]. A foreground decoration, so it draws over a child that paints to
   /// the edges.
@@ -37,17 +49,19 @@ class OmiGlass extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget glass = DecoratedBox(
-      decoration: fill(shape, tint: tint),
-      child: DecoratedBox(decoration: rim(shape), position: DecorationPosition.foreground, child: child),
-    );
-    if (blur) {
-      glass = ClipPath(
+    final rimmed = DecoratedBox(decoration: rim(shape), position: DecorationPosition.foreground, child: child);
+    if (!blur) return DecoratedBox(decoration: fill(shape, tint: tint), child: rimmed);
+    // The shadow sits outside the blur's clip, so it is painted around it.
+    return DecoratedBox(
+      decoration: ShapeDecoration(shape: shape, shadows: shadows),
+      child: ClipPath(
         clipper: ShapeBorderClipper(shape: shape),
-        child: BackdropFilter(filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma), child: glass),
-      );
-    }
-    return glass;
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+          child: DecoratedBox(decoration: ShapeDecoration(shape: shape, color: tint ?? OmiColors.glass), child: rimmed),
+        ),
+      ),
+    );
   }
 }
 

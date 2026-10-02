@@ -61,10 +61,12 @@ void main() {
     expect(preview.pins.single.longitude, -122.4194);
   });
 
-  testWidgets('the card is glass, and only a recap without a map shows its emoji', (tester) async {
+  testWidgets('the card has the glass rim, and only a recap without a map shows its emoji', (tester) async {
     await _pumpCard(tester, _summary(locations: [LocationPin(latitude: 51.5072, longitude: -0.1276)], emoji: '🌉'));
     final card = tester.widget<Container>(find.byKey(const ValueKey('daily_summary_card_summary-1')));
-    expect(card.decoration, isA<ShapeDecoration>());
+    final fill = card.decoration! as ShapeDecoration;
+    expect(fill.color, OmiColors.surface1, reason: 'the card colour, not the controls\' glass');
+    expect(fill.shadows, isNull, reason: 'content sits on the page; only controls are lifted');
     expect(card.foregroundDecoration, isA<OmiGlassRim>());
     expect(find.text('🌉'), findsNothing);
 
