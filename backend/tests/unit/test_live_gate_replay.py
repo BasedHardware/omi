@@ -20,7 +20,7 @@ def default_gate(monkeypatch):
 def baseline_counts():
     counts = Counter()
     yield counts
-    # Fast lane: 400k sessions per rate; slow lane adds 4 million per rate.
+    # Fast lane: 20k sessions per rate; slow lane retains the full sweep.
     # Long trajectories remain runnable explicitly without breaking CI CPU limits.
     # Require no false bench in this seeded baseline; bound higher-rate
     # calibration separately so the reported sensitivity does not drift.
@@ -29,9 +29,13 @@ def baseline_counts():
     assert counts[0.075] <= 32
 
 
+# Preserve main's slow full sweep; short fast trajectories fit the 0.30s CPU guard.
+_BASELINE_SEEDS = [seed if seed < 10 else pytest.param(seed, marks=pytest.mark.slow) for seed in range(200)]
+
+
 @pytest.mark.parametrize('sessions', [2000, pytest.param(20000, marks=pytest.mark.slow)])
 @pytest.mark.parametrize('rate', [0.03, 0.05, 0.075])
-@pytest.mark.parametrize('seed', range(200))
+@pytest.mark.parametrize('seed', _BASELINE_SEEDS)
 def test_seeded_session_baseline(rate, seed, sessions, baseline_counts):
     rng, state = random.Random(seed), GateState()
     for n in range(sessions):
@@ -107,7 +111,9 @@ def trial_day(seed, rate=0.61, sessions=17900, *, outcome_delay=30, cache_delay=
     return trials, disruptions
 
 
-@pytest.mark.parametrize('seed', range(100))
+@pytest.mark.parametrize(
+    'seed', [seed if seed < 10 else pytest.param(seed, marks=pytest.mark.slow) for seed in range(100)]
+)
 def test_chronic_modulate_daily_trial_disruption_budget(seed):
     trials, disruptions = trial_day(seed)
     assert disruptions + 10 < 100  # include an initial hard-outage detection allowance
