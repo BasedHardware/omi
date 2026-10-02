@@ -337,6 +337,13 @@ APP_CLIENT_EXCLUDED_ROUTES: dict[tuple[str, str], str] = {
         'Developer API key + conversations:read only (dev:ask); public OpenAPI is the '
         'authoritative contract. App-client firebaseBearer would mis-document auth.'
     ),
+    (
+        'GET',
+        '/v1/dev/key',
+    ): (
+        'Developer API key only (dev:key_read); public OpenAPI is the authoritative contract. '
+        'App-client firebaseBearer would mis-document auth.'
+    ),
 }
 
 HTTP_METHODS = {'GET', 'POST', 'PUT', 'PATCH', 'DELETE'}

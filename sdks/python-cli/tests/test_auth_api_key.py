@@ -42,7 +42,9 @@ def test_validate_strips_whitespace() -> None:
 
 def test_login_persists_to_disk(config_path) -> None:
     key = "omi_dev_" + "y" * 40
-    profile = api_key_auth.login_with_api_key("default", key, api_base="https://api.staging.omi.me")
+    profile = api_key_auth.login_with_api_key(
+        "default", key, api_base="https://api.staging.omi.me"
+    )
     assert profile.api_key == key
     assert profile.api_base == "https://api.staging.omi.me"
 
@@ -81,9 +83,13 @@ def test_rejected_login_preserves_existing_profile(
         )
     before = config_path.read_bytes()
     rejected_key = "omi_dev_" + "r" * 32
-    route = respx_mock.get("/v1/dev/user/memories").respond(status_code, json={"detail": "Rejected candidate key"})
+    route = respx_mock.get("/v1/dev/key").respond(
+        status_code, json={"detail": "Rejected candidate key"}
+    )
 
-    result = cli_runner.invoke(app, ["--json", "auth", "login", "--api-key", rejected_key])
+    result = cli_runner.invoke(
+        app, ["--json", "auth", "login", "--api-key", rejected_key]
+    )
 
     assert result.exit_code == 2
     assert route.calls.last.request.headers["Authorization"] == f"Bearer {rejected_key}"
@@ -94,7 +100,7 @@ def test_rejected_login_to_new_profile_does_not_change_active_profile(
     config_path, authed_profile, respx_mock, cli_runner
 ) -> None:
     before = config_path.read_bytes()
-    respx_mock.get("/v1/dev/user/memories").respond(401, json={"detail": "Invalid candidate"})
+    respx_mock.get("/v1/dev/key").respond(401, json={"detail": "Invalid candidate"})
     result = cli_runner.invoke(
         app,
         [
@@ -112,7 +118,9 @@ def test_rejected_login_to_new_profile_does_not_change_active_profile(
     assert config_path.read_bytes() == before
 
 
-def test_api_key_login_persists_only_after_verification(config_path, authed_profile, respx_mock, cli_runner) -> None:
+def test_api_key_login_persists_only_after_verification(
+    config_path, authed_profile, respx_mock, cli_runner
+) -> None:
     import httpx
 
     before = config_path.read_bytes()
@@ -121,9 +129,9 @@ def test_api_key_login_persists_only_after_verification(config_path, authed_prof
     def verify_candidate(request):
         assert config_path.read_bytes() == before
         assert request.headers["Authorization"] == f"Bearer {new_key}"
-        return httpx.Response(200, json=[])
+        return httpx.Response(200, json={"scopes": ["action_items:read"]})
 
-    respx_mock.get("/v1/dev/user/memories").mock(side_effect=verify_candidate)
+    respx_mock.get("/v1/dev/key").mock(side_effect=verify_candidate)
     result = cli_runner.invoke(app, ["--json", "auth", "login", "--api-key", new_key])
     assert result.exit_code == 0
     assert json.loads(result.stdout)["auth_method"] == "api_key"
@@ -135,7 +143,7 @@ def test_api_key_login_keeps_existing_http_server_error_policy(
 ) -> None:
     monkeypatch.setattr("omi_cli.client.MAX_RETRY_ATTEMPTS", 1)
     new_key = "omi_dev_" + "n" * 32
-    respx_mock.get("/v1/dev/user/memories").respond(503, json={"detail": "Unavailable"})
+    respx_mock.get("/v1/dev/key").respond(503, json={"detail": "Unavailable"})
     result = cli_runner.invoke(app, ["--json", "auth", "login", "--api-key", new_key])
     assert result.exit_code == 0
     assert cfg.load().get_profile("default").api_key == new_key
@@ -149,9 +157,14 @@ def test_transport_failure_during_login_leaves_saved_config_unchanged(
 
     monkeypatch.setattr("omi_cli.client.MAX_RETRY_ATTEMPTS", 1)
     before = config_path.read_bytes()
-    route = respx_mock.get("/v1/dev/user/memories").mock(side_effect=httpx.ConnectError("Connection unavailable"))
-    result = cli_runner.invoke(app, ["auth", "login", "--api-key", "omi_dev_" + "n" * 32])
-    assert result.exit_code != 0
+    route = respx_mock.get("/v1/dev/key").mock(
+        side_effect=httpx.ConnectError("Connection unavailable")
+    )
+    result = cli_runner.invoke(
+        app, ["auth", "login", "--api-key", "omi_dev_" + "n" * 32]
+    )
+    assert result.exit_code == 3
+    assert "Authentication failed" not in result.stderr
     assert route.call_count == 1
     assert config_path.read_bytes() == before
 
@@ -163,8 +176,40 @@ def test_transport_timeout_during_login_leaves_saved_config_unchanged(
 
     monkeypatch.setattr("omi_cli.client.MAX_RETRY_ATTEMPTS", 1)
     before = config_path.read_bytes()
-    route = respx_mock.get("/v1/dev/user/memories").mock(side_effect=httpx.ConnectTimeout("Connection timed out"))
-    result = cli_runner.invoke(app, ["auth", "login", "--api-key", "omi_dev_" + "n" * 32])
+    route = respx_mock.get("/v1/dev/key").mock(
+        side_effect=httpx.ConnectTimeout("Connection timed out")
+    )
+    result = cli_runner.invoke(
+        app, ["auth", "login", "--api-key", "omi_dev_" + "n" * 32]
+    )
     assert result.exit_code == 3
     assert route.call_count == 1
     assert config_path.read_bytes() == before
+
+
+@pytest.mark.parametrize("fallback_status", [200, 403])
+def test_login_older_backend_fallback(
+    authed_profile, respx_mock, cli_runner, fallback_status
+):
+    respx_mock.get("/v1/dev/key").respond(404)
+    probe = respx_mock.get("/v1/dev/user/memories").respond(fallback_status, json=[])
+    result = cli_runner.invoke(
+        app, ["auth", "login", "--api-key", "omi_dev_" + "n" * 32]
+    )
+    assert result.exit_code == 0
+    assert probe.call_count == 1
+    assert "Scopes: unknown" in result.stderr
+    if fallback_status == 403:
+        assert "Key is valid" in result.stderr
+
+
+def test_narrow_key_login_displays_scopes(authed_profile, respx_mock, cli_runner):
+    info = respx_mock.get("/v1/dev/key").respond(
+        200, json={"scopes": ["action_items:read"]}
+    )
+    result = cli_runner.invoke(
+        app, ["auth", "login", "--api-key", "omi_dev_" + "n" * 32]
+    )
+    assert result.exit_code == 0
+    assert info.call_count == 1
+    assert "Scopes: action_items:read" in result.stderr
