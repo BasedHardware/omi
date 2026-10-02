@@ -23,6 +23,8 @@ struct ScreenTaskHTTPFailure: Error {
   }
 }
 
+protocol ScreenTaskClassifiedError: Error { var screenTaskErrorClass: String { get } }
+
 enum ScreenTaskErrorPolicy {
   static func outageReason(_ error: Error) -> String? {
     if let failure = error as? ScreenTaskHTTPFailure {
@@ -64,19 +66,7 @@ enum ScreenTaskErrorPolicy {
       }
     }
     if case APIError.unauthorized = error { return "auth" }
-    if let error = error as? GeminiClient.GeminiClientError {
-      switch error {
-      case .planGated: return "plan_or_quota"
-      case .apiError(let message, let retryable):
-        if message.hasPrefix("HTTP 401:") { return "auth" }
-        if message.hasPrefix("HTTP 402:") { return "plan_or_quota" }
-        if message.hasPrefix("HTTP 429:") { return "backpressure" }
-        return retryable == false ? "http_terminal" : "provider_error"
-      case .networkError: return "offline"
-      case .invalidResponse: return "invalid_response"
-      case .missingAPIKey: return "auth"
-      }
-    }
+    if let error = error as? ScreenTaskClassifiedError { return error.screenTaskErrorClass }
     if error is DecodingError { return "invalid_response" }
     return outageReason(error) ?? "local_failure"
   }

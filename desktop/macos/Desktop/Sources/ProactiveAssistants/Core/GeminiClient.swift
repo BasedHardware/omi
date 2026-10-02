@@ -213,7 +213,21 @@ actor GeminiClient {
     )
   }
 
-  nonisolated enum GeminiClientError: LocalizedError {
+  nonisolated enum GeminiClientError: LocalizedError, ScreenTaskClassifiedError {
+    var screenTaskErrorClass: String {
+      switch self {
+      case .planGated: return "plan_or_quota"
+      case .apiError(let message, let retryable):
+        if message.hasPrefix("HTTP 401:") { return "auth" }
+        if message.hasPrefix("HTTP 402:") { return "plan_or_quota" }
+        if message.hasPrefix("HTTP 429:") { return "backpressure" }
+        return retryable == false ? "http_terminal" : "provider_error"
+      case .networkError: return "offline"
+      case .invalidResponse: return "invalid_response"
+      case .missingAPIKey: return "auth"
+      }
+    }
+
     case missingAPIKey
     case networkError(Error)
     case invalidResponse
