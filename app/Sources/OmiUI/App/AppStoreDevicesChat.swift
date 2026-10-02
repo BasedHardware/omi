@@ -683,7 +683,7 @@ extension AppStore {
         runtime.streamTasks.append(Task {
             guard let record = try? await storing.createRecordingJournal(handoff.input)
             else { return }
-            for packet in handoff.packets {
+            for (packetOffset, packet) in handoff.packets.enumerated() {
                 let entry = JSON.serialize(
                     JSONValue.array([
                         JSONValue.string("p"),
@@ -691,7 +691,8 @@ extension AppStore {
                             Data(packet.payload).base64EncodedString()),
                     ]))
                 _ = try? await storing.appendRecordingJournal(
-                    handle: record.handle, entry: entry)
+                    handle: record.handle, entry: entry,
+                    expectedEntryCount: packetOffset + 1)
             }
         })
     }

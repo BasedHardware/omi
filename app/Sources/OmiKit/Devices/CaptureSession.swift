@@ -102,6 +102,8 @@ public final class CaptureSessionMachine: @unchecked Sendable {
     public private(set) var deviceName: String?
     public private(set) var codec: Int = 0
     public private(set) var startedAtMs: Int64?
+    public private(set) var captureId = ""
+    private var cachedJournalInput: RecordingJournalInput?
 
     public init() {
         handle = Policy.deviceCaptureCreate()
@@ -140,6 +142,19 @@ public final class CaptureSessionMachine: @unchecked Sendable {
         self.deviceName = deviceName
         self.codec = codec
         startedAtMs = nowMs
+        captureId = UUID().uuidString.lowercased()
+        cachedJournalInput = nil
+    }
+
+    /// Returns the stable identity tuple for this capture. The first accepted
+    /// packet timestamp remains fixed if journal creation is retried.
+    public func journalInput(capturedAtMs: Int64?) -> RecordingJournalInput {
+        if let cachedJournalInput { return cachedJournalInput }
+        let input = RecordingJournalInput(
+            captureId: captureId, capturedAtMs: capturedAtMs,
+            deviceId: deviceId, deviceName: deviceName, codec: codec)
+        cachedJournalInput = input
+        return input
     }
 
     /// Feeds a raw audio notification through the C++ assembler. Returns the
@@ -164,8 +179,7 @@ public final class CaptureSessionMachine: @unchecked Sendable {
     public func handoff(nowMs: Int64) -> CaptureHandoff? {
         guard let handoff = Policy.deviceCaptureHandoff(handle, nowMs: nowMs)
         else { return nil }
-        let input = RecordingJournalInput(
-            deviceId: deviceId, deviceName: deviceName, codec: codec)
+        let input = journalInput(capturedAtMs: handoff.packets.first?.receivedAtMs)
         let packets = handoff.packets.map {
             CaptureBatchPacket(
                 index: $0.index, payload: $0.payload,

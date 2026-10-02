@@ -7,6 +7,7 @@ final class RecordingJournalClientTests: XCTestCase {
         let vault = JournalPartitionVault()
         let accountA = OwnerScopedJournalTransport(owner: "account-a", vault: vault)
         let input = RecordingJournalInput(
+            captureId: OwnerScopedJournalTransport.captureID,
             capturedAtMs: 1_000, deviceId: "omi-1", deviceName: "NotePin", codec: 1)
         let journal = try await createRecordingJournal(accountA, input: input)
 
@@ -45,8 +46,9 @@ final class RecordingJournalClientTests: XCTestCase {
 // test exercises OmiKit's transport wrapper against that protocol boundary;
 // it does not claim a production host persistence implementation exists.
 private enum JournalPartitionError: Error, Sendable, Equatable {
-    case missingHandle
-    case foreignHandle
+  case missingHandle
+  case foreignHandle
+  case invalidAppendSequence
 }
 
 private actor JournalPartitionVault {
@@ -54,10 +56,11 @@ private actor JournalPartitionVault {
     private var records: [String: RecordingJournalRecord] = [:]
 
     func create(
-        owner: String, input: RecordingJournalInput, captureId: String
+        owner: String, input: RecordingJournalInput
     ) -> RecordingJournalRecord {
         let record = RecordingJournalRecord(
-            capturedAtMs: input.capturedAtMs, handle: captureId, captureId: captureId,
+            capturedAtMs: input.capturedAtMs, handle: input.captureId,
+            captureId: input.captureId,
             deviceId: input.deviceId, deviceName: input.deviceName, codec: input.codec,
             sessionId: nil, entries: [])
         ownerByHandle[record.handle] = owner
@@ -78,11 +81,22 @@ private actor JournalPartitionVault {
         return record
     }
 
-    func append(owner: String, handle: String, entry: String) throws -> Int {
+    func append(
+        owner: String, handle: String, entry: String, expectedEntryCount: Int
+    ) throws -> Int {
         var record = try read(owner: owner, handle: handle)
+        if record.entries.count == expectedEntryCount {
+            guard record.entries.last == entry else {
+                throw JournalPartitionError.invalidAppendSequence
+            }
+            return expectedEntryCount
+        }
+        guard record.entries.count + 1 == expectedEntryCount else {
+            throw JournalPartitionError.invalidAppendSequence
+        }
         record.entries.append(entry)
         records[handle] = record
-        return record.entries.count
+        return expectedEntryCount
     }
 
     func request(
@@ -132,7 +146,7 @@ private actor OwnerScopedJournalTransport: BackendTransport, RecordingJournalSto
     func createRecordingJournal(
         _ input: RecordingJournalInput
     ) async throws -> RecordingJournalRecord {
-        await vault.create(owner: owner, input: input, captureId: Self.captureID)
+        await vault.create(owner: owner, input: input)
     }
 
     func listRecordingJournals() async throws -> [RecordingJournalRecord] {
@@ -143,8 +157,12 @@ private actor OwnerScopedJournalTransport: BackendTransport, RecordingJournalSto
         try await vault.read(owner: owner, handle: handle)
     }
 
-    func appendRecordingJournal(handle: String, entry: String) async throws -> Int {
-        try await vault.append(owner: owner, handle: handle, entry: entry)
+    func appendRecordingJournal(
+        handle: String, entry: String, expectedEntryCount: Int
+    ) async throws -> Int {
+        try await vault.append(
+            owner: owner, handle: handle, entry: entry,
+            expectedEntryCount: expectedEntryCount)
     }
 
     func requestRecordingJournal(
@@ -157,5 +175,5 @@ private actor OwnerScopedJournalTransport: BackendTransport, RecordingJournalSto
         await vault.remove(owner: owner, handle: handle)
     }
 
-    private static let captureID = "123e4567-e89b-42d3-a456-426614174000"
+    fileprivate static let captureID = "123e4567-e89b-42d3-a456-426614174000"
 }

@@ -246,11 +246,14 @@ final class DevicesTests: XCTestCase {
     func testCaptureHandoffProducesJournalInputAndCompletes() {
         var capture = CaptureSessionMachine()
         capture.open(deviceId: "dev-9", deviceName: "NotePin", codec: 3, nowMs: 100)
+        let captureId = capture.captureId
         _ = capture.ingest(rawPacket(index: 0, payload: [1]), receivedAtMs: 110)
         _ = capture.ingest(rawPacket(index: 1, payload: [2, 2]), receivedAtMs: 120)
         let handoff = capture.handoff(nowMs: 200)
         XCTAssertNotNil(handoff)
         XCTAssertEqual(handoff?.input.deviceId, "dev-9")
+        XCTAssertEqual(handoff?.input.captureId, captureId)
+        XCTAssertEqual(handoff?.input.capturedAtMs, 110)
         XCTAssertEqual(handoff?.input.deviceName, "NotePin")
         XCTAssertEqual(handoff?.input.codec, 3)
         XCTAssertEqual(handoff?.packets.map { $0.index }, [0, 1])
@@ -285,9 +288,11 @@ final class DevicesTests: XCTestCase {
     func testCaptureReopenResetsBatch() {
         var capture = CaptureSessionMachine()
         capture.open(deviceId: "a", deviceName: nil, codec: 1, nowMs: 0)
+        let previousCaptureId = capture.captureId
         _ = capture.ingest(rawPacket(index: 0, payload: [1]), receivedAtMs: 1)
         _ = capture.handoff(nowMs: 2)
         capture.open(deviceId: "b", deviceName: "Omi", codec: 2, nowMs: 10)
+        XCTAssertNotEqual(capture.captureId, previousCaptureId)
         XCTAssertEqual(capture.chunkCount, 0)
         XCTAssertEqual(capture.byteCount, 0)
         XCTAssertEqual(capture.stage, .waiting)

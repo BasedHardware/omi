@@ -87,8 +87,16 @@ public protocol BackendTransport: Sendable {
     func stampedBackendOrigin() async -> String?
 }
 
-/// Optional journal storage capability, mirroring the TS
+/// Optional encrypted journal capability, mirroring the TS
 /// `hasRecordingJournal` feature probe: `transport as? RecordingJournalStoring`.
+/// Implementations must scope every operation to the currently authenticated
+/// owner: listing exposes only that owner's journals, and read/append/request
+/// reject handles from another owner. An append acknowledgement means the
+/// entry and any ownership/session metadata it records are durable before the
+/// method returns. `expectedEntryCount` is the one-based post-append count; it
+/// identifies retries even when consecutive journal entries have equal text.
+/// Owner changes may hide existing journals but must not delete or reassign
+/// their data.
 public protocol RecordingJournalStoring: Sendable {
     func createRecordingJournal(
         _ input: RecordingJournalInput
@@ -96,7 +104,9 @@ public protocol RecordingJournalStoring: Sendable {
     func listRecordingJournals() async throws -> [RecordingJournalRecord]
     func readRecordingJournal(handle: String) async throws -> RecordingJournalRecord
     @discardableResult
-    func appendRecordingJournal(handle: String, entry: String) async throws -> Int
+    func appendRecordingJournal(
+        handle: String, entry: String, expectedEntryCount: Int
+    ) async throws -> Int
     /// Performs a backend request from inside the journal ownership context.
     func requestRecordingJournal(
         handle: String, request: BackendRequest

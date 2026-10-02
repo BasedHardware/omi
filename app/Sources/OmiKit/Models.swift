@@ -362,15 +362,17 @@ public struct DeviceSessionRecord: Sendable, Hashable, Identifiable {
 }
 
 public struct RecordingJournalInput: Sendable, Hashable {
+    public var captureId: String
     public var capturedAtMs: Int64?
     public var deviceId: String
     public var deviceName: String?
     public var codec: Int
 
     public init(
-        capturedAtMs: Int64? = nil, deviceId: String, deviceName: String?,
-        codec: Int
+        captureId: String, capturedAtMs: Int64? = nil,
+        deviceId: String, deviceName: String?, codec: Int
     ) {
+        self.captureId = captureId
         self.capturedAtMs = capturedAtMs
         self.deviceId = deviceId
         self.deviceName = deviceName

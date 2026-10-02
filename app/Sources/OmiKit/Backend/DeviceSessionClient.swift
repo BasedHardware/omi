@@ -38,6 +38,9 @@ public enum DeviceSessionClientError: Error, Sendable, Equatable {
     case unacknowledgedTranscription
 }
 
+public let deviceSessionMaxBatchPackets = 128
+public let deviceSessionMaxBatchBytes = 1_048_576
+
 public func isOptionalCaptureTimestamp(_ value: Int64?) -> Bool {
     guard let value else { return true }
     return value >= 0 && value <= 8_640_000_000_000_000
@@ -60,7 +63,9 @@ public func isCaptureUUID(_ value: String) -> Bool {
         case 19:
             if !(byte == UInt8(ascii: "8") || byte == UInt8(ascii: "9")
                 || byte == UInt8(ascii: "a") || byte == UInt8(ascii: "b"))
-            { return false }
+            {
+                return false
+            }
         default:
             if !hex(byte) { return false }
         }
@@ -162,8 +167,8 @@ public func appendDeviceSessionAudio(
     chunkIndex: Int
 ) async throws -> DeviceSessionRecord {
     let byteCount = packets.reduce(0) { $0 + $1.count }
-    if chunkIndex < 0 || packets.count < 1 || packets.count > 128
-        || chunkIndex + packets.count > 65536 || byteCount > 1_048_576
+    if chunkIndex < 0 || packets.count < 1 || packets.count > deviceSessionMaxBatchPackets
+        || chunkIndex + packets.count > 65536 || byteCount > deviceSessionMaxBatchBytes
         || packets.contains(where: { $0.isEmpty })
     {
         throw DeviceSessionClientError.invalidAudioBatch
