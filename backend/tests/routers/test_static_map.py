@@ -488,6 +488,43 @@ def test_several_pins_are_framed_a_margin_inside_the_render():
     assert static_map_mod.frame_pins([(40.7233, -74.0030), (40.7234, -74.0029)], 350, 200)[1] == 15
 
 
+def test_pins_either_side_of_the_antimeridian_frame_as_neighbours():
+    # Two Fiji pins about 2 km apart, one each side of 180 degrees.
+    pins = [(-17.0, -179.99), (-17.0, 179.99)]
+    center, zoom = static_map_mod.frame_pins(pins, 300, 150)
+
+    assert zoom >= 13
+    assert abs(abs(center[1]) - 180) < 1e-6
+    (x1, y1), (x2, y2) = static_map_mod.pin_pixels(pins, center, zoom, 300, 150)
+    margin = static_map_mod._FIT_MARGIN_PX * 2
+    for x in (x1, x2):
+        assert margin - 1 <= x <= 600 - margin + 1
+    assert abs((x1 + x2) / 2 - 300) < 1 and abs(y1 - 150) < 1e-6 and abs(y2 - 150) < 1e-6
+
+
+def test_pins_that_do_not_fit_even_at_zoom_0_are_refused():
+    # London and Sydney cannot both sit inside a 64-pixel-tall frame at any zoom.
+    with pytest.raises(static_map_mod.PinsDoNotFitError):
+        static_map_mod.frame_pins([(51.5072, -0.1276), (-33.8688, 151.2093)], 64, 64)
+
+
+@pytest.mark.asyncio
+async def test_a_render_whose_pins_do_not_fit_is_not_fetched_served_or_cached(monkeypatch):
+    redis, captured = _patch_environment(monkeypatch)
+    pins = [(-33.8688, 151.2093), (51.5072, -0.1276)]
+
+    assert await static_map_mod.fetch_static_map(pins, 64, 64, 'dark') is None
+    assert captured['provider_calls'] == 0
+    assert static_map_mod._cache_key(pins, 64, 64, 'dark') not in redis.store
+
+
+def test_latitudes_past_web_mercator_land_on_its_edge():
+    assert static_map_mod._world(89.9, 0)[1] == pytest.approx(0, abs=1e-12)
+    assert static_map_mod._world(-89.9, 0)[1] == pytest.approx(1, abs=1e-12)
+    assert static_map_mod._world(85.05, 0)[1] > 0
+    assert static_map_mod._world(0, 0) == (0.5, 0.5)
+
+
 def test_the_pin_is_a_dot_in_the_theme_ink_drawn_where_it_lands():
     from PIL import Image
 

@@ -119,10 +119,16 @@ _PIN_RADIUS = 9.0
 _PIN_RING = 3.4  # centred on the disc's edge
 _PIN_CENTER = 2.7
 _PIN_INK = {'dark': ((255, 255, 255), (0, 0, 0)), 'light': ((0, 0, 0), (255, 255, 255))}
+# Web Mercator ends at about ±85.0511° (sin = tanh(pi)), where the provider's tiles stop.
+_MAX_SIN_LATITUDE = math.tanh(math.pi)
 
 
 class MalformedPinsError(ValueError):
     """Client sent a pins parameter that cannot be parsed into bounded coordinates."""
+
+
+class PinsDoNotFitError(ValueError):
+    """The pins spread wider than the render holds, even at the provider's widest zoom."""
 
 
 def parse_pins(pins: str) -> List[Tuple[float, float]]:
@@ -161,9 +167,15 @@ def parse_pins(pins: str) -> List[Tuple[float, float]]:
 
 
 def _world(latitude: float, longitude: float) -> Tuple[float, float]:
-    """Web Mercator position as a fraction of the world, 0..1 on each axis."""
-    sin_lat = min(max(math.sin(math.radians(latitude)), -0.9999), 0.9999)
+    """Web Mercator position as a fraction of the world, 0..1 on each axis. A latitude past
+    the projection's edge lands on it, as on the provider's tiles."""
+    sin_lat = min(max(math.sin(math.radians(latitude)), -_MAX_SIN_LATITUDE), _MAX_SIN_LATITUDE)
     return (longitude + 180) / 360, 0.5 - math.log((1 + sin_lat) / (1 - sin_lat)) / (4 * math.pi)
+
+
+def _wrapped(dx: float) -> float:
+    """A world-x offset taken the short way round the antimeridian, in [-0.5, 0.5)."""
+    return (dx + 0.5) % 1 - 0.5
 
 
 def _from_world(x: float, y: float) -> Tuple[float, float]:
@@ -174,16 +186,28 @@ def frame_pins(pins: List[Tuple[float, float]], width: int, height: int) -> Tupl
     """The render's centre and zoom: one pin centred at street zoom; several, the
     closest zoom (at most street zoom) that keeps every pin a margin inside the
     frame. Framed here rather than by the provider so the pins can be drawn where
-    they land."""
+    they land. Raises ``PinsDoNotFitError`` when they don't fit even at zoom 0."""
     if len(pins) == 1:
         return pins[0], _STREET_ZOOM
     xs, ys = zip(*(_world(*pin) for pin in pins))
-    span_x, span_y = max(xs) - min(xs), max(ys) - min(ys)
+    # The pins cover the world minus its widest empty stretch of longitude, so pins either side
+    # of the antimeridian frame as neighbours. On a tie the stretch across it wins: the usual frame.
+    order = sorted(xs)
+    gaps = [east - west for west, east in zip(order, order[1:])] + [order[0] + 1 - order[-1]]
+    widest = max(range(len(gaps)), key=lambda i: (gaps[i], i == len(gaps) - 1))
+    span_x, span_y = 1 - gaps[widest], max(ys) - min(ys)
+    center_x = (order[(widest + 1) % len(order)] + span_x / 2) % 1
     room_x, room_y = max(width - 2 * _FIT_MARGIN_PX, 1), max(height - 2 * _FIT_MARGIN_PX, 1)
+
+    def fits(zoom: int) -> bool:
+        return span_x * _TILE_PX * 2**zoom <= room_x and span_y * _TILE_PX * 2**zoom <= room_y
+
     zoom = _STREET_ZOOM
-    while zoom > 0 and (span_x * _TILE_PX * 2**zoom > room_x or span_y * _TILE_PX * 2**zoom > room_y):
+    while zoom > 0 and not fits(zoom):
         zoom -= 1
-    return _from_world((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2), zoom
+    if not fits(zoom):
+        raise PinsDoNotFitError(f'{len(pins)} pins do not fit a {width}x{height} render')
+    return _from_world(center_x, (min(ys) + max(ys)) / 2), zoom
 
 
 def pin_pixels(
@@ -195,7 +219,9 @@ def pin_pixels(
     points: List[Tuple[float, float]] = []
     for pin in pins:
         x, y = _world(*pin)
-        points.append((width * _SCALE / 2 + (x - center_x) * world_px, height * _SCALE / 2 + (y - center_y) * world_px))
+        points.append(
+            (width * _SCALE / 2 + _wrapped(x - center_x) * world_px, height * _SCALE / 2 + (y - center_y) * world_px)
+        )
     return points
 
 
@@ -319,7 +345,12 @@ async def _render_from_provider(
         logger.error('static map render unavailable: GOOGLE_MAPS_API_KEY is not set')
         return None
 
-    url = build_static_map_url(pins, width, height, api_key, theme)
+    try:
+        url = build_static_map_url(pins, width, height, api_key, theme)
+    except PinsDoNotFitError:
+        # Too spread out for this size even at the widest zoom; the app's canvas shows every pin instead.
+        logger.warning('static map pins do not fit pin_count=%d size=%dx%d', len(pins), width, height)
+        return None
     try:
         async with get_maps_semaphore():
             response = await get_maps_client().get(url)
