@@ -2225,10 +2225,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get appLanguage => 'Appspråk';
 
   @override
-  String get appInterfaceSectionTitle => 'APP-GRENSESNITT';
+  String get appInterfaceSectionTitle => 'App-grensesnitt';
 
   @override
-  String get speechTranscriptionSectionTitle => 'TALE OG TRANSKRIPSJON';
+  String get speechTranscriptionSectionTitle => 'Tale og transkripsjon';
 
   @override
   String get languageSettingsHelperText =>
@@ -4371,7 +4371,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get saveKeyWarning => 'Lagre denne nøkkelen nå! Du vil ikke kunne se den igjen.';
 
   @override
-  String get yourApiKey => 'DIN API-NØKKEL';
+  String get yourApiKey => 'Din API-nøkkel';
 
   @override
   String get tapToCopy => 'Trykk for å kopiere';
@@ -4386,13 +4386,13 @@ class AppLocalizationsNo extends AppLocalizations {
   String get accessDataProgrammatically => 'Få tilgang til dataene dine programmatisk';
 
   @override
-  String get keyNameLabel => 'NØKKELNAVN';
+  String get keyNameLabel => 'Nøkkelnavn';
 
   @override
   String get keyNamePlaceholder => 'f.eks., Min app-integrasjon';
 
   @override
-  String get permissionsLabel => 'TILLATELSER';
+  String get permissionsLabel => 'Tillatelser';
 
   @override
   String get permissionsInfoNote => 'R = Les, W = Skriv. Standard kun lesing hvis ingenting er valgt.';
@@ -8469,7 +8469,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get tipAutoSync => 'Opptak synkroniseres automatisk';
 
   @override
-  String get storageSection => 'LAGRING';
+  String get storageSection => 'Lagring';
 
   @override
   String get permissions => 'Tillatelser';
@@ -12220,4 +12220,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av denne stemmen';
   }
+
+  @override
+  String get settingsSectionRecording => 'Opptak';
+
+  @override
+  String get settingsSectionSupport => 'Støtte';
 }

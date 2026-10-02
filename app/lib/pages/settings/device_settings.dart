@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -22,6 +21,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/ui/ui.dart';
@@ -107,9 +107,18 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Future<void> _loadDeviceFeatures() async {
     final deviceProvider = context.read<DeviceProvider>();
     if (deviceProvider.pairedDevice == null) return;
-    final connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
-    if (connection == null) return;
-    final features = await connection.getFeatures();
+    final DeviceConnection? connection;
+    final int features;
+    try {
+      connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
+      if (connection == null) return;
+      features = await connection.getFeatures();
+    } catch (e) {
+      // The LED and mic rows are optional; a failed read leaves them hidden instead of throwing
+      // from a fire-and-forget call.
+      Logger.debug('Device features unavailable: $e');
+      return;
+    }
     final hasDimming = (features & OmiFeatures.ledDimming) != 0;
     final hasMicGain = (features & OmiFeatures.micGain) != 0;
     if (!mounted) return;
@@ -392,7 +401,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final isOmi = device?.type == DeviceType.omi;
     final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
     final doubleTapRow = OmiSettingsRow(
-      leading: const FaIcon(FontAwesomeIcons.handPointer),
       title: l10n.doubleTap,
       value: _doubleTapActionLabel(SharedPreferencesUtil().doubleTapAction),
       onTap: _pickDoubleTapAction,
@@ -404,7 +412,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         if (supportsFind)
           OmiSettingsRow(
             key: const Key('find_device_button'),
-            leading: const FaIcon(FontAwesomeIcons.bullseye),
             title: l10n.findDevice,
             showChevron: false,
             trailing: _isFindingDevice ? const OmiSpinner(size: OmiSpinnerSize.small) : null,
@@ -413,7 +420,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         if (isOmi) ...[
           OmiSettingsRow.toggle(
             key: const Key('omi_button_actions_toggle'),
-            leading: const FaIcon(FontAwesomeIcons.handPointer),
             title: l10n.omiButtonActions,
             value: _omiButtonActionsEnabled,
             onChanged: (value) {
@@ -432,7 +438,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           doubleTapRow,
         if (_isDimRatioLoaded && _hasDimmingFeature == true)
           OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.lightbulb),
             title: l10n.ledBrightness,
             value: '${_dimRatio.round()}%',
             onTap: _showBrightnessSheet,
@@ -440,7 +445,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
         if (_isMicGainLoaded && _hasMicGainFeature == true)
           OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.microphone),
             title: l10n.micGain,
             value: micGainLevelLabel(context, _micGain.round()),
             onTap: _showMicGainSheet,
@@ -467,7 +471,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         if (connected?.type == DeviceType.omi &&
             DeviceUtils.isOmiCv1(modelNumber: paired?.modelNumber, deviceName: connected?.name))
           OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.graduationCap),
             title: l10n.deviceTutorial,
             onTap: () => routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true)),
           ),
@@ -475,13 +478,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         // update rows are hidden for it.
         if (isRayBan)
           OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.camera),
             title: l10n.raybanMetaCapturePhoto,
             onTap: connected != null ? _captureRayBanMetaPhoto : null,
           ),
         if (!isRayBan && firmwarePolicy.allowsFirmwareUpdateForDevice(paired))
           OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.download),
             title: l10n.productUpdate,
             // An update needs the device itself, so without it the row says so and is inert.
             value: connected == null
@@ -498,12 +499,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             provider.latestStableFirmwareVersion.isNotEmpty &&
             paired?.firmwareRevision != provider.latestStableFirmwareVersion)
           OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.rotateLeft),
             title: l10n.rollbackToStableFirmware,
             onTap: () => _confirmRollback(provider),
           ),
         OmiSettingsRow(
-          leading: const FaIcon(FontAwesomeIcons.sdCard),
           title: l10n.offlineSync,
           trailing: pendingSeconds > 0 ? _PendingSyncChip(seconds: pendingSeconds) : null,
           showChevron: true,
@@ -512,7 +511,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         // Omi devices only: opt out of syncing offline recordings automatically on connect.
         if (paired?.type == DeviceType.omi)
           OmiSettingsRow.toggle(
-            leading: const FaIcon(FontAwesomeIcons.arrowsRotate),
             title: l10n.autoSync,
             subtitle: l10n.autoSyncDescription,
             value: _autoSyncOfflineRecordings,
@@ -523,12 +521,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
         if (provider.isConnected && diagnosticsId != null)
           OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.stethoscope),
             title: l10n.diagnostics,
             onTap: () => routeToPage(context, DeviceDiagnostics(deviceId: diagnosticsId)),
           ),
         OmiSettingsRow(
-          leading: const FaIcon(FontAwesomeIcons.circleQuestion),
           title: l10n.chargingIssues,
           onTap: () => _openChargingHelp(provider),
         ),
@@ -542,7 +538,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       children: [
         OmiSettingsRow(
           key: const Key('forget_device_button'),
-          leading: const FaIcon(FontAwesomeIcons.linkSlash),
           title: l10n.forgetDevice,
           isDestructive: true,
           showChevron: false,
@@ -551,7 +546,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         // Limitless pendants also need a BLE unpair so another phone can take them.
         if (provider.isConnected && provider.connectedDevice?.type == DeviceType.limitless)
           OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.ban),
             title: l10n.unpairAndForget,
             isDestructive: true,
             showChevron: false,
@@ -569,9 +563,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final connected = provider.connectedDevice;
     const gap = SizedBox(height: OmiSpacing.xxl);
 
-    return Scaffold(
-      backgroundColor: OmiColors.surface0,
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.deviceSettings)),
+    return OmiGroupedPage(
+      title: context.l10n.deviceSettings,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 48),
         children: [

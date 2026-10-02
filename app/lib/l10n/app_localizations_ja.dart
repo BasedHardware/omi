@@ -12024,4 +12024,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'この声の$duration';
   }
+
+  @override
+  String get settingsSectionRecording => '録音';
+
+  @override
+  String get settingsSectionSupport => 'サポート';
 }

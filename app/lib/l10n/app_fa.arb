@@ -11338,5 +11338,7 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi دفعه بعد {name} را تشخیص می‌دهد.} pending{این کار چند ثانیه طول می‌کشد.} disabled{ذخیره صداها را در تنظیمات روشن کنید تا Omi بتواند {name} را تشخیص دهد.} other{Omi به گفتار واضح‌تری از {name} نیاز دارد و به تلاش ادامه می‌دهد.}}",
     "speakerLabelEarlierMatches": "گفتگوهای قبلی با این صدا: {count}",
     "speakerLabelText": "{part, select, likely{احتمالاً} soundsLike{شبیه {name} است} notPerson{{name} نیست} carried{همچنان {name}. از آخرین گفتگوی شما منتقل شد.} change{تغییر} alsoTitle{آیا این هم {name} است؟} alsoBody{Omi همین صدا را در گفتگوهای قبلی پیدا کرد.} confirmed{شما این برچسب را تأیید کردید} other{بررسی}}",
-    "speakerLabelTalkTime": "{duration} از این صدا"
+    "speakerLabelTalkTime": "{duration} از این صدا",
+    "settingsSectionRecording": "ضبط",
+    "settingsSectionSupport": "پشتیبانی"
 }

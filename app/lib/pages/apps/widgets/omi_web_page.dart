@@ -82,11 +82,8 @@ class _OmiWebPageState extends State<OmiWebPage> {
         final canGoBack = await _controller.canGoBack();
         if (mounted) setState(() => _canGoBack = canGoBack);
       },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: const OmiBackButton(),
-          title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
+      child: OmiGroupedPage(
+        title: widget.title,
         body: Stack(
           children: [
             WebViewWidget(controller: _controller),

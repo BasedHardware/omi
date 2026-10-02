@@ -12230,4 +12230,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'اس آواز کا $duration';
   }
+
+  @override
+  String get settingsSectionRecording => 'ریکارڈنگ';
+
+  @override
+  String get settingsSectionSupport => 'معاونت';
 }

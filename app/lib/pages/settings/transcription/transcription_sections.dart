@@ -146,13 +146,13 @@ class WhisperModelStatus extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.only(left: OmiSpacing.sm, top: OmiSpacing.xxs, bottom: OmiSpacing.xxs),
         decoration: BoxDecoration(
-          color: OmiColors.successSurface,
+          color: OmiColors.groupedCard,
           borderRadius: OmiRadius.smAll,
-          border: Border.all(color: OmiColors.success.withValues(alpha: 0.3)),
+          border: Border.all(color: OmiColors.groupedBorder),
         ),
         child: Row(
           children: [
-            Icon(Icons.check_circle, color: OmiColors.success, size: 20),
+            Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 20),
             const SizedBox(width: OmiSpacing.sm),
             Expanded(
               child: Text(l10n.modelReadyWithName(modelFile),
@@ -209,9 +209,9 @@ class _CustomSttLogsSectionState extends State<CustomSttLogsSection> {
           Container(
             constraints: const BoxConstraints(maxHeight: 200),
             decoration: BoxDecoration(
-              color: OmiColors.surface1,
+              color: OmiColors.groupedCard,
               borderRadius: OmiRadius.mdAll,
-              border: Border.all(color: OmiColors.border),
+              border: Border.all(color: OmiColors.groupedBorder),
             ),
             child: logs.isEmpty
                 ? Padding(

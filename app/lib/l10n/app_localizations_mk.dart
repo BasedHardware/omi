@@ -2236,10 +2236,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get appLanguage => 'Јазик на апликација';
 
   @override
-  String get appInterfaceSectionTitle => 'ИНТЕРФЕЈС НА АПЛИКАЦИЈА';
+  String get appInterfaceSectionTitle => 'Интерфејс на апликација';
 
   @override
-  String get speechTranscriptionSectionTitle => 'ГОВОР И ТРАНСКРИПЦИЈА';
+  String get speechTranscriptionSectionTitle => 'Говор и транскрипција';
 
   @override
   String get languageSettingsHelperText =>
@@ -4395,7 +4395,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get saveKeyWarning => 'Зачувај го овој клуч сега! Нема да можеш да го видиш повторно.';
 
   @override
-  String get yourApiKey => 'ТВОЈ API КЛУЧ';
+  String get yourApiKey => 'Твој API клуч';
 
   @override
   String get tapToCopy => 'Кликни за копирање';
@@ -4410,13 +4410,13 @@ class AppLocalizationsMk extends AppLocalizations {
   String get accessDataProgrammatically => 'Пристапи твои податоци програматски';
 
   @override
-  String get keyNameLabel => 'ИМЕ НА КЛУЧ';
+  String get keyNameLabel => 'Име на клуч';
 
   @override
   String get keyNamePlaceholder => 'пр. Моја интеграција на апликација';
 
   @override
-  String get permissionsLabel => 'ДОЗВОЛИ';
+  String get permissionsLabel => 'Дозволи';
 
   @override
   String get permissionsInfoNote => 'R = Читање, W = Пишување. Подразбирана е само за читање ако ничего не е одберено.';
@@ -8519,7 +8519,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get tipAutoSync => 'Записите се синхронизираат автоматски';
 
   @override
-  String get storageSection => 'СКЛАДИРАЊЕ';
+  String get storageSection => 'Складирање';
 
   @override
   String get permissions => 'Дозволи';
@@ -12283,4 +12283,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration од овој глас';
   }
+
+  @override
+  String get settingsSectionRecording => 'Снимање';
+
+  @override
+  String get settingsSectionSupport => 'Поддршка';
 }

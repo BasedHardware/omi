@@ -163,12 +163,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     super.build(context);
     return Consumer<MemoriesProvider>(
       builder: (context, provider, _) {
-        return Scaffold(
-          backgroundColor: OmiColors.surface0,
-          appBar: AppBar(
-            leading: const OmiBackButton(),
-            title: Text(context.l10n.memories),
-          ),
+        return OmiGroupedPage(
+          title: context.l10n.memories,
           body: Stack(
             children: [
               RefreshIndicator(

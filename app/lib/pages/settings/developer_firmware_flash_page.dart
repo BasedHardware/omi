@@ -49,11 +49,9 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
     return PopScope(
       // Leaving mid-flash would kill the update manager and can leave the device half-written.
       canPop: !flashing,
-      child: Scaffold(
-        appBar: AppBar(
-          leading: flashing ? const SizedBox.shrink() : const OmiBackButton(),
-          title: Text(l10n.flashFirmware),
-        ),
+      child: OmiGroupedPage(
+        leading: flashing ? const SizedBox.shrink() : null,
+        title: l10n.flashFirmware,
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(OmiSpacing.xl),
@@ -63,7 +61,7 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
                 OmiSettingsGroup(
                   children: [
                     OmiSettingsRow(
-                      leading: const Icon(Icons.insert_drive_file_outlined),
+                      leading: const OmiSettingsIconTile(OmiLineGlyph.file),
                       title: widget.fileName,
                       subtitle: l10n.firmwareFlashTarget(widget.device.name),
                     ),

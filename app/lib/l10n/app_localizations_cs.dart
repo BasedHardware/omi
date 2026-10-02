@@ -2229,10 +2229,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get appLanguage => 'Jazyk aplikace';
 
   @override
-  String get appInterfaceSectionTitle => 'ROZHRANÍ APLIKACE';
+  String get appInterfaceSectionTitle => 'Rozhraní aplikace';
 
   @override
-  String get speechTranscriptionSectionTitle => 'ŘEČ A PŘEPIS';
+  String get speechTranscriptionSectionTitle => 'Řeč a přepis';
 
   @override
   String get languageSettingsHelperText =>
@@ -4366,7 +4366,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get saveKeyWarning => 'Uložte si tento klíč nyní! Znovu ho neuvidíte.';
 
   @override
-  String get yourApiKey => 'VÁŠ API KLÍČ';
+  String get yourApiKey => 'Váš API klíč';
 
   @override
   String get tapToCopy => 'Klepnutím zkopírujete';
@@ -4381,13 +4381,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get accessDataProgrammatically => 'Programově přistupujte ke svým datům';
 
   @override
-  String get keyNameLabel => 'NÁZEV KLÍČE';
+  String get keyNameLabel => 'Název klíče';
 
   @override
   String get keyNamePlaceholder => 'např. Moje integrace aplikace';
 
   @override
-  String get permissionsLabel => 'OPRÁVNĚNÍ';
+  String get permissionsLabel => 'Oprávnění';
 
   @override
   String get permissionsInfoNote => 'R = Čtení, W = Zápis. Výchozí je pouze pro čtení, pokud není nic vybráno.';
@@ -8469,7 +8469,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tipAutoSync => 'Nahrávky se synchronizují automaticky';
 
   @override
-  String get storageSection => 'ÚLOŽIŠTĚ';
+  String get storageSection => 'Úložiště';
 
   @override
   String get permissions => 'Oprávnění';
@@ -12218,4 +12218,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tohoto hlasu';
   }
+
+  @override
+  String get settingsSectionRecording => 'Nahrávání';
+
+  @override
+  String get settingsSectionSupport => 'Podpora';
 }

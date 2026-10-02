@@ -2227,10 +2227,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get appLanguage => 'Sovelluksen kieli';
 
   @override
-  String get appInterfaceSectionTitle => 'SOVELLUKSEN KÄYTTÖLIITTYMÄ';
+  String get appInterfaceSectionTitle => 'Sovelluksen käyttöliittymä';
 
   @override
-  String get speechTranscriptionSectionTitle => 'PUHE JA LITTEROINTI';
+  String get speechTranscriptionSectionTitle => 'Puhe ja litterointi';
 
   @override
   String get languageSettingsHelperText =>
@@ -4372,7 +4372,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get saveKeyWarning => 'Tallenna tämä avain nyt! Et näe sitä enää uudelleen.';
 
   @override
-  String get yourApiKey => 'API-AVAIMESI';
+  String get yourApiKey => 'API-avaimesi';
 
   @override
   String get tapToCopy => 'Kopioi napauttamalla';
@@ -4387,13 +4387,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get accessDataProgrammatically => 'Käytä tietojasi ohjelmallisesti';
 
   @override
-  String get keyNameLabel => 'AVAIMEN NIMI';
+  String get keyNameLabel => 'Avaimen nimi';
 
   @override
   String get keyNamePlaceholder => 'esim. Oma sovellus';
 
   @override
-  String get permissionsLabel => 'OIKEUDET';
+  String get permissionsLabel => 'Oikeudet';
 
   @override
   String get permissionsInfoNote => 'R = Luku, W = Kirjoitus. Oletuksena vain luku, jos mitään ei ole valittu.';
@@ -8474,7 +8474,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get tipAutoSync => 'Nauhoitukset synkronoidaan automaattisesti';
 
   @override
-  String get storageSection => 'TALLENNUSTILA';
+  String get storageSection => 'Tallennustila';
 
   @override
   String get permissions => 'Käyttöoikeudet';
@@ -12224,4 +12224,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration tästä äänestä';
   }
+
+  @override
+  String get settingsSectionRecording => 'Tallennus';
+
+  @override
+  String get settingsSectionSupport => 'Tuki';
 }

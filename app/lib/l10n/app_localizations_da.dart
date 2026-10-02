@@ -2212,10 +2212,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get appLanguage => 'App-sprog';
 
   @override
-  String get appInterfaceSectionTitle => 'APP-GRÆNSEFLADE';
+  String get appInterfaceSectionTitle => 'App-grænseflade';
 
   @override
-  String get speechTranscriptionSectionTitle => 'TALE OG TRANSSKRIPTION';
+  String get speechTranscriptionSectionTitle => 'Tale og transskription';
 
   @override
   String get languageSettingsHelperText =>
@@ -4359,7 +4359,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get saveKeyWarning => 'Gem denne nøgle nu! Du vil ikke kunne se den igen.';
 
   @override
-  String get yourApiKey => 'DIN API-NØGLE';
+  String get yourApiKey => 'Din API-nøgle';
 
   @override
   String get tapToCopy => 'Tryk for at kopiere';
@@ -4374,13 +4374,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get accessDataProgrammatically => 'Få adgang til dine data programmatisk';
 
   @override
-  String get keyNameLabel => 'NØGLENAVN';
+  String get keyNameLabel => 'Nøglenavn';
 
   @override
   String get keyNamePlaceholder => 'f.eks. Min app-integration';
 
   @override
-  String get permissionsLabel => 'TILLADELSER';
+  String get permissionsLabel => 'Tilladelser';
 
   @override
   String get permissionsInfoNote => 'R = Læs, W = Skriv. Standard kun læsning, hvis intet er valgt.';
@@ -8460,7 +8460,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get tipAutoSync => 'Optagelser synkroniseres automatisk';
 
   @override
-  String get storageSection => 'LAGER';
+  String get storageSection => 'Lager';
 
   @override
   String get permissions => 'Tilladelser';
@@ -12206,4 +12206,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration af denne stemme';
   }
+
+  @override
+  String get settingsSectionRecording => 'Optagelse';
+
+  @override
+  String get settingsSectionSupport => 'Support';
 }

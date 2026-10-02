@@ -2248,10 +2248,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get appLanguage => 'Langue de l\'application';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFACE DE L\'APPLICATION';
+  String get appInterfaceSectionTitle => 'Interface de l\'application';
 
   @override
-  String get speechTranscriptionSectionTitle => 'VOIX ET TRANSCRIPTION';
+  String get speechTranscriptionSectionTitle => 'Voix et transcription';
 
   @override
   String get languageSettingsHelperText =>
@@ -4411,7 +4411,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get saveKeyWarning => 'Enregistrez cette clé maintenant ! Vous ne pourrez plus la voir.';
 
   @override
-  String get yourApiKey => 'VOTRE CLÉ API';
+  String get yourApiKey => 'Votre clé API';
 
   @override
   String get tapToCopy => 'Appuyez pour copier';
@@ -4426,13 +4426,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get accessDataProgrammatically => 'Accédez à vos données par programmation';
 
   @override
-  String get keyNameLabel => 'NOM DE LA CLÉ';
+  String get keyNameLabel => 'Nom de la clé';
 
   @override
   String get keyNamePlaceholder => 'ex., Mon intégration';
 
   @override
-  String get permissionsLabel => 'AUTORISATIONS';
+  String get permissionsLabel => 'Autorisations';
 
   @override
   String get permissionsInfoNote => 'R = Lecture, W = Écriture. Lecture seule par défaut si rien n\'est sélectionné.';
@@ -5980,7 +5980,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get downloadWhisperModel => 'Téléchargez un modèle whisper pour utiliser la transcription sur appareil';
 
   @override
-  String get deviceNotCompatible => 'Votre appareil nest pas compatible avec la transcription sur appareil';
+  String get deviceNotCompatible => 'Votre appareil n\'est pas compatible avec la transcription sur appareil';
 
   @override
   String get deviceRequirements => 'Votre appareil ne répond pas aux exigences pour la transcription sur l\'appareil.';
@@ -6016,7 +6016,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get batteryDrainIncrease => 'La consommation de batterie augmentera considérablement.';
 
   @override
-  String get deviceMayWarmUp => 'Lappareil peut chauffer lors dune utilisation prolongée.';
+  String get deviceMayWarmUp => 'L\'appareil peut chauffer lors d\'une utilisation prolongée.';
 
   @override
   String get speedAccuracyLower => 'La vitesse et la précision peuvent être inférieures aux modèles cloud.';
@@ -6029,7 +6029,7 @@ class AppLocalizationsFr extends AppLocalizations {
       '300 minutes premium/mois. L\'onglet Sur l\'appareil offre une transcription gratuite illimitée.';
 
   @override
-  String get viewUsage => 'Voir lutilisation';
+  String get viewUsage => 'Voir l\'utilisation';
 
   @override
   String get localProcessingInfo =>
@@ -6164,7 +6164,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'La transcription en direct intégrée dOmi est optimisée pour les conversations en temps réel avec détection automatique des interlocuteurs et diarisation.';
+      'La transcription en direct intégrée d\'Omi est optimisée pour les conversations en temps réel avec détection automatique des interlocuteurs et diarisation.';
 
   @override
   String get reset => 'Réinitialiser';
@@ -8552,7 +8552,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get tipAutoSync => 'Les enregistrements se synchronisent automatiquement';
 
   @override
-  String get storageSection => 'STOCKAGE';
+  String get storageSection => 'Stockage';
 
   @override
   String get permissions => 'Autorisations';
@@ -12321,4 +12321,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration de cette voix';
   }
+
+  @override
+  String get settingsSectionRecording => 'Enregistrement';
+
+  @override
+  String get settingsSectionSupport => 'Assistance';
 }

@@ -2267,11 +2267,11 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "INTERFEJS APLIKACIJE",
+    "appInterfaceSectionTitle": "Interfejs aplikacije",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "GOVOR I TRANSKRIPCIJA",
+    "speechTranscriptionSectionTitle": "Govor i transkripcija",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
@@ -4996,7 +4996,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "TVOJ API KLJUČ",
+    "yourApiKey": "Tvoj API ključ",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5019,7 +5019,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "IME KLJUČA",
+    "keyNameLabel": "Ime ključa",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5027,7 +5027,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "DOZVOLE",
+    "permissionsLabel": "Dozvole",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -10089,7 +10089,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "MEMORIJA",
+    "storageSection": "Memorija",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -11338,5 +11338,7 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi će prepoznati osobu {name} sljedeći put.} pending{Ovo traje nekoliko sekundi.} disabled{Uključite spremanje glasova u postavkama da bi Omi mogao prepoznati osobu {name}.} other{Omi treba više jasnog govora osobe {name} i nastavit će pokušavati.}}",
     "speakerLabelEarlierMatches": "Raniji razgovori s ovim glasom: {count}",
     "speakerLabelText": "{part, select, likely{Vjerovatno} soundsLike{Zvuči kao {name}} notPerson{Nije {name}} carried{I dalje {name}. Preneseno iz vašeg posljednjeg razgovora.} change{Promijeni} alsoTitle{Je li ovo također {name}?} alsoBody{Omi je pronašao isti glas u ranijim razgovorima.} confirmed{Potvrdili ste ovu oznaku} other{Pregledaj}}",
-    "speakerLabelTalkTime": "{duration} ovog glasa"
+    "speakerLabelTalkTime": "{duration} ovog glasa",
+    "settingsSectionRecording": "Snimanje",
+    "settingsSectionSupport": "Podrška"
 }

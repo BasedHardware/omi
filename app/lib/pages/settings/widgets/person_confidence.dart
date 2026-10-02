@@ -99,26 +99,26 @@ class _ConfidenceSheet extends StatelessWidget {
 
   final Person person;
 
-  List<(IconData, String, _Effect)> _evidence(BuildContext context) {
+  List<(OmiLineGlyph, String, _Effect)> _evidence(BuildContext context) {
     final l10n = context.l10n;
-    final rows = <(IconData, String, _Effect)>[];
-    void add(String code, IconData icon, String Function(int) text, _Effect effect) {
+    final rows = <(OmiLineGlyph, String, _Effect)>[];
+    void add(String code, OmiLineGlyph icon, String Function(int) text, _Effect effect) {
       final count = person.reasonCount(code);
       if (count > 0) rows.add((icon, text(count), effect));
     }
 
-    add('manual_labels', Icons.label_outline, l10n.evidenceManualLabels, _Effect.alot);
-    add('card_confirms', Icons.check_circle_outline, l10n.evidenceCardConfirms, _Effect.counts);
-    add('card_picks', Icons.touch_app_outlined, l10n.evidenceCardPicks, _Effect.counts);
-    add('auto_confirmed', Icons.done_all, l10n.evidenceAutoConfirmed, _Effect.little);
+    add('manual_labels', OmiLineGlyph.tag, l10n.evidenceManualLabels, _Effect.alot);
+    add('card_confirms', OmiLineGlyph.check, l10n.evidenceCardConfirms, _Effect.counts);
+    add('card_picks', OmiLineGlyph.person, l10n.evidenceCardPicks, _Effect.counts);
+    add('auto_confirmed', OmiLineGlyph.star, l10n.evidenceAutoConfirmed, _Effect.little);
     rows.add(person.voiceReadiness == 'ready'
-        ? (Icons.graphic_eq, l10n.evidenceVoiceReady, _Effect.counts)
-        : (Icons.graphic_eq, l10n.evidenceNoVoice, _Effect.needed));
-    add('auto_unconfirmed', Icons.auto_awesome_outlined, l10n.evidenceAutoUnconfirmed, _Effect.barely);
-    add('auto_corrected', Icons.swap_horiz, l10n.evidenceAutoCorrected, _Effect.against);
-    if (person.conversationCount == 0) rows.add((Icons.hearing_outlined, l10n.evidenceNotHeard, _Effect.none));
+        ? (OmiLineGlyph.wave, l10n.evidenceVoiceReady, _Effect.counts)
+        : (OmiLineGlyph.wave, l10n.evidenceNoVoice, _Effect.needed));
+    add('auto_unconfirmed', OmiLineGlyph.star, l10n.evidenceAutoUnconfirmed, _Effect.barely);
+    add('auto_corrected', OmiLineGlyph.refresh, l10n.evidenceAutoCorrected, _Effect.against);
+    if (person.conversationCount == 0) rows.add((OmiLineGlyph.microphone, l10n.evidenceNotHeard, _Effect.none));
     if (person.reasonCount('never_confirmed') > 0) {
-      rows.add((Icons.help_outline, l10n.evidenceNothing, _Effect.none));
+      rows.add((OmiLineGlyph.info, l10n.evidenceNothing, _Effect.none));
     }
     return rows;
   }
@@ -160,10 +160,10 @@ class _ConfidenceSheet extends StatelessWidget {
             header: l10n.confidenceEvidenceHeader,
             children: [
               for (final (icon, text, effect) in person.confidence == 'unknown'
-                  ? [(Icons.help_outline, l10n.unknown, _Effect.none)]
+                  ? [(OmiLineGlyph.info, l10n.unknown, _Effect.none)]
                   : _evidence(context))
                 OmiSettingsRow(
-                  leading: Icon(icon),
+                  leading: OmiSettingsIconTile(icon),
                   title: text,
                   trailing: effect == _Effect.none ? null : _EffectLabel(effect: effect),
                 ),

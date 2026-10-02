@@ -12152,4 +12152,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ของเสียงนี้';
   }
+
+  @override
+  String get settingsSectionRecording => 'การบันทึก';
+
+  @override
+  String get settingsSectionSupport => 'ฝ่ายสนับสนุน';
 }

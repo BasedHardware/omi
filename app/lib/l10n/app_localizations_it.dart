@@ -2237,10 +2237,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get appLanguage => 'Lingua App';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFACCIA APP';
+  String get appInterfaceSectionTitle => 'Interfaccia app';
 
   @override
-  String get speechTranscriptionSectionTitle => 'VOCE E TRASCRIZIONE';
+  String get speechTranscriptionSectionTitle => 'Voce e trascrizione';
 
   @override
   String get languageSettingsHelperText =>
@@ -4394,7 +4394,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get saveKeyWarning => 'Salva questa chiave ora! Non potrai vederla di nuovo.';
 
   @override
-  String get yourApiKey => 'LA TUA CHIAVE API';
+  String get yourApiKey => 'La tua chiave API';
 
   @override
   String get tapToCopy => 'Tocca per copiare';
@@ -4409,13 +4409,13 @@ class AppLocalizationsIt extends AppLocalizations {
   String get accessDataProgrammatically => 'Accedi ai tuoi dati in modo programmatico';
 
   @override
-  String get keyNameLabel => 'NOME CHIAVE';
+  String get keyNameLabel => 'Nome chiave';
 
   @override
   String get keyNamePlaceholder => 'es., La mia integrazione';
 
   @override
-  String get permissionsLabel => 'PERMESSI';
+  String get permissionsLabel => 'Permessi';
 
   @override
   String get permissionsInfoNote =>
@@ -5966,7 +5966,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deviceRequirements => 'Il tuo dispositivo non soddisfa i requisiti per la trascrizione su dispositivo.';
 
   @override
-  String get willLikelyCrash => 'Abilitare questo probabilmente causerà il crash o il blocco dellapp.';
+  String get willLikelyCrash => 'Abilitare questo probabilmente causerà il crash o il blocco dell\'app.';
 
   @override
   String get transcriptionSlowerLessAccurate => 'La trascrizione sarà significativamente più lenta e meno accurata.';
@@ -6039,7 +6039,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get redownload => 'Riscarica';
 
   @override
-  String get doNotCloseApp => 'Non chiudere lapp.';
+  String get doNotCloseApp => 'Non chiudere l\'app.';
 
   @override
   String get downloading => 'Download in corso…';
@@ -6104,7 +6104,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get modelTooLargeWarning =>
-      'Questo modello è grande e potrebbe causare il crash dellapp o un funzionamento molto lento sui dispositivi mobili.\n\nSi consiglia small o base.';
+      'Questo modello è grande e potrebbe causare il crash dell\'app o un funzionamento molto lento sui dispositivi mobili.\n\nSi consiglia small o base.';
 
   @override
   String get nativeEngineNoDownload =>
@@ -8524,7 +8524,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get tipAutoSync => 'Le registrazioni si sincronizzano automaticamente';
 
   @override
-  String get storageSection => 'ARCHIVIO';
+  String get storageSection => 'Archivio';
 
   @override
   String get permissions => 'Autorizzazioni';
@@ -12288,4 +12288,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration di questa voce';
   }
+
+  @override
+  String get settingsSectionRecording => 'Registrazione';
+
+  @override
+  String get settingsSectionSupport => 'Assistenza';
 }

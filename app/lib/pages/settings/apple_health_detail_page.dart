@@ -97,8 +97,7 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
     final provider = context.watch<IntegrationProvider>();
     final isConnected = provider.isAppConnected(IntegrationApp.appleHealth);
 
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton()),
+    return OmiGroupedPage(
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.xl),

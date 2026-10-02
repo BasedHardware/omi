@@ -2230,10 +2230,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get appLanguage => 'Appspråk';
 
   @override
-  String get appInterfaceSectionTitle => 'APPGRÄNSSNITT';
+  String get appInterfaceSectionTitle => 'Appgränssnitt';
 
   @override
-  String get speechTranscriptionSectionTitle => 'TAL OCH TRANSKRIPTION';
+  String get speechTranscriptionSectionTitle => 'Tal och transkription';
 
   @override
   String get languageSettingsHelperText =>
@@ -4376,7 +4376,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get saveKeyWarning => 'Spara denna nyckel nu! Du kommer inte att kunna se den igen.';
 
   @override
-  String get yourApiKey => 'DIN API-NYCKEL';
+  String get yourApiKey => 'Din API-nyckel';
 
   @override
   String get tapToCopy => 'Tryck för att kopiera';
@@ -4391,13 +4391,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get accessDataProgrammatically => 'Få programmatisk åtkomst till dina data';
 
   @override
-  String get keyNameLabel => 'NYCKELNAMN';
+  String get keyNameLabel => 'Nyckelnamn';
 
   @override
   String get keyNamePlaceholder => 't.ex., Min app-integration';
 
   @override
-  String get permissionsLabel => 'BEHÖRIGHETER';
+  String get permissionsLabel => 'Behörigheter';
 
   @override
   String get permissionsInfoNote => 'R = Läs, W = Skriv. Standard endast läsning om inget är valt.';
@@ -8478,7 +8478,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tipAutoSync => 'Inspelningar synkroniseras automatiskt';
 
   @override
-  String get storageSection => 'LAGRING';
+  String get storageSection => 'Lagring';
 
   @override
   String get permissions => 'Behörigheter';
@@ -12228,4 +12228,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration av den här rösten';
   }
+
+  @override
+  String get settingsSectionRecording => 'Inspelning';
+
+  @override
+  String get settingsSectionSupport => 'Support';
 }

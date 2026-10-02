@@ -2206,10 +2206,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get appLanguage => 'Idioma do App';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFACE DO APLICATIVO';
+  String get appInterfaceSectionTitle => 'Interface do aplicativo';
 
   @override
-  String get speechTranscriptionSectionTitle => 'FALA E TRANSCRIÇÃO';
+  String get speechTranscriptionSectionTitle => 'Fala e transcrição';
 
   @override
   String get languageSettingsHelperText =>
@@ -4359,7 +4359,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get saveKeyWarning => 'Salve esta chave agora! Você não poderá vê-la novamente.';
 
   @override
-  String get yourApiKey => 'SUA CHAVE API';
+  String get yourApiKey => 'Sua chave API';
 
   @override
   String get tapToCopy => 'Toque para copiar';
@@ -4374,13 +4374,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get accessDataProgrammatically => 'Acesse seus dados programaticamente';
 
   @override
-  String get keyNameLabel => 'NOME DA CHAVE';
+  String get keyNameLabel => 'Nome da chave';
 
   @override
   String get keyNamePlaceholder => 'ex., Minha integração';
 
   @override
-  String get permissionsLabel => 'PERMISSÕES';
+  String get permissionsLabel => 'Permissões';
 
   @override
   String get permissionsInfoNote => 'R = Leitura, W = Escrita. Padrão somente leitura se nada for selecionado.';
@@ -8479,7 +8479,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get tipAutoSync => 'As gravações são sincronizadas automaticamente';
 
   @override
-  String get storageSection => 'ARMAZENAMENTO';
+  String get storageSection => 'Armazenamento';
 
   @override
   String get permissions => 'Permissões';
@@ -12237,4 +12237,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration desta voz';
   }
+
+  @override
+  String get settingsSectionRecording => 'Gravação';
+
+  @override
+  String get settingsSectionSupport => 'Suporte';
 }

@@ -2229,10 +2229,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get appLanguage => 'Мова прыкладання';
 
   @override
-  String get appInterfaceSectionTitle => 'ІНТЭРФЕЙС ПРЫКЛАДАННЯ';
+  String get appInterfaceSectionTitle => 'Інтэрфейс прыкладання';
 
   @override
-  String get speechTranscriptionSectionTitle => 'МОВ І РАСШЫФРОЎКА';
+  String get speechTranscriptionSectionTitle => 'Маўленне і расшыфроўка';
 
   @override
   String get languageSettingsHelperText =>
@@ -4382,7 +4382,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get saveKeyWarning => 'Захаваць гэты ключ зараз! Вы не зможаце убачыць яго зноў.';
 
   @override
-  String get yourApiKey => 'ВАШ API КЛЮЧ';
+  String get yourApiKey => 'Ваш API ключ';
 
   @override
   String get tapToCopy => 'Клацніце для копіяванна';
@@ -4397,13 +4397,13 @@ class AppLocalizationsBe extends AppLocalizations {
   String get accessDataProgrammatically => 'Мець доступ да вашых даных праграматычна';
 
   @override
-  String get keyNameLabel => 'НАЗВА КЛЮЧА';
+  String get keyNameLabel => 'Назва ключа';
 
   @override
   String get keyNamePlaceholder => 'напр., Мая інтэграцыя прыкладання';
 
   @override
-  String get permissionsLabel => 'ДАЗВОЛЫ';
+  String get permissionsLabel => 'Дазволы';
 
   @override
   String get permissionsInfoNote => 'R = Чытанне, W = Запіс. Па змаўчанні чытанне толькі, калі нічога не выбрана.';
@@ -8496,7 +8496,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get tipAutoSync => 'Запісы сінхранізуюцца аўтаматычна';
 
   @override
-  String get storageSection => 'СХОВІШЧА';
+  String get storageSection => 'Сховішча';
 
   @override
   String get permissions => 'Дазволы';
@@ -12251,4 +12251,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration гэтага голасу';
   }
+
+  @override
+  String get settingsSectionRecording => 'Запіс';
+
+  @override
+  String get settingsSectionSupport => 'Падтрымка';
 }

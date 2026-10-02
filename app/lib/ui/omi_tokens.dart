@@ -37,7 +37,12 @@ class OmiPalette {
       required this.successSurface,
       required this.warning,
       required this.danger,
-      required this.dangerSurface});
+      required this.dangerSurface,
+      required this.groupedPage,
+      required this.groupedCard,
+      required this.groupedBorder,
+      required this.iconTile,
+      required this.iconTileGlyph});
 
   final Color surface0;
   final Color surface1;
@@ -63,6 +68,15 @@ class OmiPalette {
   final Color danger;
   final Color dangerSurface;
 
+  /// Top-level Settings: the page under outlined groups, the group card and its hairline border.
+  final Color groupedPage;
+  final Color groupedCard;
+  final Color groupedBorder;
+
+  /// The warm tile behind a settings row's line glyph, and the glyph itself.
+  final Color iconTile;
+  final Color iconTileGlyph;
+
   static const dark = OmiPalette(
     surface0: Color(0xFF000000),
     surface1: Color(0xFF1C1C1E),
@@ -85,6 +99,11 @@ class OmiPalette {
     warning: Color(0xFFFF9F0A),
     danger: Color(0xFFFF453A),
     dangerSurface: Color(0x26FF453A),
+    groupedPage: Color(0xFF0A0A0A),
+    groupedCard: Color(0xFF141414),
+    groupedBorder: Color(0x14FFFFFF),
+    iconTile: Color(0xFF1B1A17),
+    iconTileGlyph: Color(0xFFB3AEA6),
   );
 
   static const light = OmiPalette(
@@ -109,6 +128,11 @@ class OmiPalette {
     warning: Color(0xFFFF9500),
     danger: Color(0xFFFF3B30),
     dangerSurface: Color(0x26FF3B30),
+    groupedPage: Color(0xFFFDFDFD),
+    groupedCard: Color(0xFFFFFFFF),
+    groupedBorder: Color(0x120A0A0A),
+    iconTile: Color(0xFFFAF8F4),
+    iconTileGlyph: Color(0xFF5F5B55),
   );
 }
 
@@ -140,6 +164,11 @@ abstract final class OmiColors {
   static Color get warning => active.warning;
   static Color get danger => active.danger;
   static Color get dangerSurface => active.dangerSurface;
+  static Color get groupedPage => active.groupedPage;
+  static Color get groupedCard => active.groupedCard;
+  static Color get groupedBorder => active.groupedBorder;
+  static Color get iconTile => active.iconTile;
+  static Color get iconTileGlyph => active.iconTileGlyph;
 }
 
 /// Omi's type ramp, modelled on iOS text styles so that sizes land where the app's text already

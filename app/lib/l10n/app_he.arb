@@ -2271,7 +2271,7 @@
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "דיבור וריבוי מדיה",
+    "speechTranscriptionSectionTitle": "דיבור ותמלול",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
@@ -11338,5 +11338,7 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi יזהה את {name} בפעם הבאה.} pending{זה לוקח כמה שניות.} disabled{הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את {name}.} other{Omi צריך עוד דיבור ברור של {name} וימשיך לנסות.}}",
     "speakerLabelEarlierMatches": "שיחות קודמות עם הקול הזה: {count}",
     "speakerLabelText": "{part, select, likely{סביר} soundsLike{נשמע כמו {name}} notPerson{לא {name}} carried{עדיין {name}. הועבר מהשיחה האחרונה שלך.} change{שינוי} alsoTitle{האם זה גם {name}?} alsoBody{Omi מצא את אותו קול בשיחות קודמות.} confirmed{אישרת את התווית הזו} other{סקירה}}",
-    "speakerLabelTalkTime": "{duration} מהקול הזה"
+    "speakerLabelTalkTime": "{duration} מהקול הזה",
+    "settingsSectionRecording": "הקלטה",
+    "settingsSectionSupport": "תמיכה"
 }

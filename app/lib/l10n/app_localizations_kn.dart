@@ -2232,7 +2232,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get appLanguage => 'ಅ್ಯಪ್ ಭಾಷೆ';
 
   @override
-  String get appInterfaceSectionTitle => 'ಅ್ಯಪ್ ಇಂಟರ್ಫೇಸ್';
+  String get appInterfaceSectionTitle => 'ಆ್ಯಪ್ ಇಂಟರ್‌ಫೇಸ್';
 
   @override
   String get speechTranscriptionSectionTitle => 'ಭಾಷಣ ಮತ್ತು ಟ್ರಾನ್ಸ್ಕ್ರಿಪ್ಷನ್';
@@ -12257,4 +12257,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return 'ಈ ಧ್ವನಿಯ $duration';
   }
+
+  @override
+  String get settingsSectionRecording => 'ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get settingsSectionSupport => 'ಬೆಂಬಲ';
 }

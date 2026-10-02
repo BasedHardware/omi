@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
+import 'package:intl/intl.dart';
+
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -29,6 +31,9 @@ int? goalSliderDivisions(double targetValue) {
 class GoalsWidget extends StatefulWidget {
   const GoalsWidget({super.key, this.onRefresh});
 
+  /// How many goals a person can keep at once.
+  static const int maxGoals = 4;
+
   final VoidCallback? onRefresh;
 
   @override
@@ -37,7 +42,6 @@ class GoalsWidget extends StatefulWidget {
 
 class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   static const String _goalsEmojiKey = 'goals_tracker_emojis';
-  static const int _maxGoals = 4;
 
   // Available emojis for goals
   static const List<String> _availableEmojis = [
@@ -201,8 +205,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
   void addGoal() {
     final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-    if (goalsProvider.goals.length >= _maxGoals) {
-      OmiFeedback.info(context, context.l10n.maximumGoalsAllowed(_maxGoals));
+    if (goalsProvider.goals.length >= GoalsWidget.maxGoals) {
+      OmiFeedback.info(context, context.l10n.maximumGoalsAllowed(GoalsWidget.maxGoals));
       return;
     }
 
@@ -275,16 +279,17 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     );
   }
 
-  String _rawNum(double v) {
-    return v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+  /// "4/12 books", "2,450.5/6,000 USD": grouped, at most one decimal, with the goal's unit.
+  String _progressLabel(Goal goal) {
+    final number = NumberFormat.decimalPattern(context.l10n.localeName)..maximumFractionDigits = 1;
+    final unit = goal.unit?.trim();
+    final values = '${number.format(goal.currentValue)}/${number.format(goal.targetValue)}';
+    return unit == null || unit.isEmpty ? values : '$values $unit';
   }
 
-  /// Colour carries state only: on track (green), under way (amber), not started (grey).
-  Color _getColor(double progress) {
-    if (progress >= 0.8) return OmiColors.success;
-    if (progress >= 0.2) return OmiColors.warning;
-    return OmiColors.textTertiary;
-  }
+  /// Progress is ink however far along (black and white, like Settings); the bar's length and the
+  /// "6/12" beside it carry the state.
+  Color _getColor(double progress) => OmiColors.textPrimary;
 
   @override
   Widget build(BuildContext context) {
@@ -303,37 +308,13 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
           return const SizedBox.shrink();
         }
 
+        // The page's bar carries the title and the add button.
         return Container(
-          margin: const EdgeInsets.only(left: 16, right: 16),
-          // The header row is as tall as its 44pt add button; the paddings around it
-          // give back the 6pt it gained on each side over the 32pt circle it paints.
-          padding: const EdgeInsets.only(top: 10, bottom: 20),
+          margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+          padding: const EdgeInsets.only(top: OmiSpacing.sm, bottom: OmiSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.only(left: 8, bottom: 6),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Semantics(header: true, child: Text(context.l10n.goals, style: OmiType.title3)),
-                    if (goals.length < _maxGoals)
-                      Transform.translate(
-                        // Keeps the painted circle on the card's right edge.
-                        offset: const Offset((kOmiMinTapTarget - 32) / 2, 0),
-                        child: OmiIconButton.filled(
-                          label: context.l10n.addGoal,
-                          onPressed: addGoal,
-                          diameter: 32,
-                          fillColor: OmiColors.surface2,
-                          color: OmiColors.textSecondary,
-                          icon: const Icon(Icons.add),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
               // Goals list
               ...goals.asMap().entries.map((entry) {
                 final goal = entry.value;
@@ -374,7 +355,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         },
         child: Container(
           margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+          decoration: BoxDecoration(
+            color: OmiColors.groupedCard,
+            borderRadius: OmiRadius.xlAll,
+            border: Border.all(color: OmiColors.groupedBorder),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Row(
             children: [
@@ -383,7 +368,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 width: 40,
                 height: 40,
                 margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                decoration: BoxDecoration(
+                  color: OmiColors.iconTile,
+                  borderRadius: OmiRadius.mdAll,
+                  border: Border.all(color: OmiColors.groupedBorder),
+                ),
                 child: Center(child: ExcludeSemantics(child: Text(emoji, style: OmiType.headline))),
               ),
               // Content
@@ -394,7 +383,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     Text(
                       goal.title,
                       style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
@@ -436,7 +425,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${_rawNum(goal.currentValue)}/${_rawNum(goal.targetValue)}',
+                          _progressLabel(goal),
                           style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                         ),
                       ],

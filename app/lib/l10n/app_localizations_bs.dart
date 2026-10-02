@@ -2228,10 +2228,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String get appLanguage => 'Jezik aplikacije';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFEJS APLIKACIJE';
+  String get appInterfaceSectionTitle => 'Interfejs aplikacije';
 
   @override
-  String get speechTranscriptionSectionTitle => 'GOVOR I TRANSKRIPCIJA';
+  String get speechTranscriptionSectionTitle => 'Govor i transkripcija';
 
   @override
   String get languageSettingsHelperText =>
@@ -4379,7 +4379,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get saveKeyWarning => 'Spremi ovaj ključ sada! Nećeš ga moći vidjeti ponovno.';
 
   @override
-  String get yourApiKey => 'TVOJ API KLJUČ';
+  String get yourApiKey => 'Tvoj API ključ';
 
   @override
   String get tapToCopy => 'Dodirni za kopiranje';
@@ -4394,13 +4394,13 @@ class AppLocalizationsBs extends AppLocalizations {
   String get accessDataProgrammatically => 'Pristupi tvojim podacima programski';
 
   @override
-  String get keyNameLabel => 'IME KLJUČA';
+  String get keyNameLabel => 'Ime ključa';
 
   @override
   String get keyNamePlaceholder => 'npr. Moja integracija aplikacije';
 
   @override
-  String get permissionsLabel => 'DOZVOLE';
+  String get permissionsLabel => 'Dozvole';
 
   @override
   String get permissionsInfoNote => 'R = Čitaj, W = Napiši. Zadano je samo čitanje ako ništa nije odabrano.';
@@ -8496,7 +8496,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get tipAutoSync => 'Snimke se sinhronizuju automatski';
 
   @override
-  String get storageSection => 'MEMORIJA';
+  String get storageSection => 'Memorija';
 
   @override
   String get permissions => 'Dozvole';
@@ -12250,4 +12250,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ovog glasa';
   }
+
+  @override
+  String get settingsSectionRecording => 'Snimanje';
+
+  @override
+  String get settingsSectionSupport => 'Podrška';
 }

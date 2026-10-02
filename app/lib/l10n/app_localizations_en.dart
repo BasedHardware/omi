@@ -2223,10 +2223,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appLanguage => 'App Language';
 
   @override
-  String get appInterfaceSectionTitle => 'APP INTERFACE';
+  String get appInterfaceSectionTitle => 'App Interface';
 
   @override
-  String get speechTranscriptionSectionTitle => 'SPEECH & TRANSCRIPTION';
+  String get speechTranscriptionSectionTitle => 'Speech & Transcription';
 
   @override
   String get languageSettingsHelperText =>
@@ -4373,7 +4373,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saveKeyWarning => 'Save this key now! You won\'t be able to see it again.';
 
   @override
-  String get yourApiKey => 'YOUR API KEY';
+  String get yourApiKey => 'Your API Key';
 
   @override
   String get tapToCopy => 'Tap to copy';
@@ -4388,13 +4388,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accessDataProgrammatically => 'Access your data programmatically';
 
   @override
-  String get keyNameLabel => 'KEY NAME';
+  String get keyNameLabel => 'Key Name';
 
   @override
   String get keyNamePlaceholder => 'e.g., My App Integration';
 
   @override
-  String get permissionsLabel => 'PERMISSIONS';
+  String get permissionsLabel => 'Permissions';
 
   @override
   String get permissionsInfoNote => 'R = Read, W = Write. Defaults to read-only if nothing selected.';
@@ -6100,7 +6100,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.';
+      'Omi\'s built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.';
 
   @override
   String get reset => 'Reset';
@@ -8469,7 +8469,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tipAutoSync => 'Recordings sync automatically';
 
   @override
-  String get storageSection => 'STORAGE';
+  String get storageSection => 'Storage';
 
   @override
   String get permissions => 'Permissions';
@@ -12207,4 +12207,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration of this voice';
   }
+
+  @override
+  String get settingsSectionRecording => 'Recording';
+
+  @override
+  String get settingsSectionSupport => 'Support';
 }

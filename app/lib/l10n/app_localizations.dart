@@ -4332,13 +4332,13 @@ abstract class AppLocalizations {
   /// Section title for app interface language settings
   ///
   /// In en, this message translates to:
-  /// **'APP INTERFACE'**
+  /// **'App Interface'**
   String get appInterfaceSectionTitle;
 
   /// Section title for speech and transcription language settings
   ///
   /// In en, this message translates to:
-  /// **'SPEECH & TRANSCRIPTION'**
+  /// **'Speech & Transcription'**
   String get speechTranscriptionSectionTitle;
 
   /// Helper text explaining the difference between app language and speech language
@@ -8346,7 +8346,7 @@ abstract class AppLocalizations {
   /// Label for API key display section
   ///
   /// In en, this message translates to:
-  /// **'YOUR API KEY'**
+  /// **'Your API Key'**
   String get yourApiKey;
 
   /// Hint text for tap to copy action
@@ -8376,7 +8376,7 @@ abstract class AppLocalizations {
   /// Label for key name input field
   ///
   /// In en, this message translates to:
-  /// **'KEY NAME'**
+  /// **'Key Name'**
   String get keyNameLabel;
 
   /// Placeholder text for key name input
@@ -8388,7 +8388,7 @@ abstract class AppLocalizations {
   /// Label for permissions section
   ///
   /// In en, this message translates to:
-  /// **'PERMISSIONS'**
+  /// **'Permissions'**
   String get permissionsLabel;
 
   /// Info note explaining permission toggles
@@ -11544,7 +11544,7 @@ abstract class AppLocalizations {
   /// Description of Omi transcription features
   ///
   /// In en, this message translates to:
-  /// **'Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.'**
+  /// **'Omi\'s built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.'**
   String get omiTranscriptionOptimized;
 
   /// Reset button label
@@ -15834,7 +15834,7 @@ abstract class AppLocalizations {
   /// Section header for storage settings
   ///
   /// In en, this message translates to:
-  /// **'STORAGE'**
+  /// **'Storage'**
   String get storageSection;
 
   /// Title for the permissions settings page
@@ -21878,6 +21878,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} of this voice'**
   String speakerLabelTalkTime(String duration);
+
+  /// Settings section header above the Device and Recording & Transcription rows (a noun, not the live 'recording' status).
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get settingsSectionRecording;
+
+  /// Settings section header above the Help & About and Feedback / Bug rows.
+  ///
+  /// In en, this message translates to:
+  /// **'Support'**
+  String get settingsSectionSupport;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

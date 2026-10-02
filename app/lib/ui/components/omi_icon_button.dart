@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/components/omi_settings.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 /// Smallest comfortable touch target: Apple's HIG asks for 44x44pt, Material for 48dp. Icon
@@ -65,7 +66,8 @@ class OmiIconButton extends StatelessWidget {
   /// Whether a circle is painted behind the glyph.
   final bool filled;
 
-  /// Circle colour for [OmiIconButton.filled]. Defaults to [OmiColors.surface1].
+  /// Circle colour for [OmiIconButton.filled]. Defaults to [OmiColors.surface1], or
+  /// [OmiColors.iconTile] on a page in the Settings look ([OmiGroupedScope]).
   final Color? fillColor;
 
   /// Diameter of the painted circle. The touch target stays [kOmiMinTapTarget].
@@ -86,7 +88,10 @@ class OmiIconButton extends StatelessWidget {
         width: diameter,
         height: diameter,
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: fillColor ?? OmiColors.surface1, shape: BoxShape.circle),
+        decoration: BoxDecoration(
+          color: fillColor ?? (OmiGroupedScope.of(context) ? OmiColors.iconTile : OmiColors.surface1),
+          shape: BoxShape.circle,
+        ),
         child: glyph,
       );
     }

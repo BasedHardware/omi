@@ -70,6 +70,7 @@ void main() {
     expect(formatUsageDuration(30720), '8h 32m');
     expect(formatUsageDuration(806400), '224 h');
     expect(formatUsageDuration(805740), '224 h');
+    expect(formatUsageDuration(1523 * 3600, 'en'), '1,523 h', reason: 'thousands are grouped');
     expect(formatUsageCount(44910, 'en'), '44.9K');
     expect(niceUsageScale(9600), (5000.0, 10000.0));
     expect(niceUsageScale(0), (1.0, 2.0));
@@ -126,7 +127,9 @@ void main() {
     expect(chart.data.barGroups[26].barRods.single.color, Colors.transparent);
     expect(chart.data.maxY, 10000);
     expect(chart.data.extraLinesData.horizontalLines.single.y, chart.data.maxY);
-    expect(find.byKey(const Key('selected_metric_dot')), findsOneWidget);
+    final wordsChip = tester.widget<Semantics>(
+        find.ancestor(of: find.byKey(const Key('metric_words')), matching: find.byType(Semantics)).first);
+    expect(wordsChip.properties.selected, isTrue, reason: 'the selected metric is marked, not coloured');
     expect(tester.getSize(find.byKey(const Key('metric_words'))).height, greaterThanOrEqualTo(44));
     expect(chart.data.barTouchData.touchTooltipData.fitInsideVertically, isTrue);
     expect(chart.data.barTouchData.touchTooltipData.fitInsideHorizontally, isTrue);

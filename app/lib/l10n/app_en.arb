@@ -2317,11 +2317,11 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "APP INTERFACE",
+    "appInterfaceSectionTitle": "App Interface",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "SPEECH & TRANSCRIPTION",
+    "speechTranscriptionSectionTitle": "Speech & Transcription",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
@@ -5046,7 +5046,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "YOUR API KEY",
+    "yourApiKey": "Your API Key",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5069,7 +5069,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "KEY NAME",
+    "keyNameLabel": "Key Name",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5077,7 +5077,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "PERMISSIONS",
+    "permissionsLabel": "Permissions",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -7458,7 +7458,7 @@
             }
         }
     },
-    "omiTranscriptionOptimized": "Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.",
+    "omiTranscriptionOptimized": "Omi's built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.",
     "@omiTranscriptionOptimized": {
         "description": "Description of Omi transcription features"
     },
@@ -10140,7 +10140,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "STORAGE",
+    "storageSection": "Storage",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -14571,5 +14571,13 @@
                 "type": "String"
             }
         }
+    },
+    "settingsSectionRecording": "Recording",
+    "@settingsSectionRecording": {
+        "description": "Settings section header above the Device and Recording & Transcription rows (a noun, not the live 'recording' status)."
+    },
+    "settingsSectionSupport": "Support",
+    "@settingsSectionSupport": {
+        "description": "Settings section header above the Help & About and Feedback / Bug rows."
     }
 }

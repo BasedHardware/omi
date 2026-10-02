@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -27,27 +26,22 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// Every page is opened through [openSettingsDestination], which records "Settings Page Opened"
 /// with the group's page name.
 
-/// A small coloured label after a row title ("BETA", "NEW").
+/// A quiet label after a section title ("Beta"): tertiary caption text, no fill.
 class SettingsTag extends StatelessWidget {
-  const SettingsTag(this.label, this.color, {super.key});
+  const SettingsTag(this.label, {super.key});
 
   final String label;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.xxs),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: OmiRadius.smAll),
-      child: Text(label, style: OmiType.caption.copyWith(color: color, fontWeight: FontWeight.w600)),
-    );
+    return Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary));
   }
 }
 
 /// The widget key of the row that opens [destination] on a group page (for UI harnesses).
 ValueKey<String> settingsRowKey(SettingsDestination destination) => ValueKey('settings_row_${destination.name}');
 
-/// The shared page shell: back button, title, and grouped rows on the page colour.
+/// The shared page shell: the Settings look (circled back, centred title, outlined groups).
 class _GroupPage extends StatelessWidget {
   const _GroupPage({required this.pageKey, required this.title, required this.children});
 
@@ -57,13 +51,10 @@ class _GroupPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return OmiGroupedPage(
       key: ValueKey(pageKey),
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(title)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.xxl),
-        children: children,
-      ),
+      title: title,
+      body: ListView(padding: OmiGroupedPage.padding, children: children),
     );
   }
 }
@@ -78,14 +69,14 @@ mixin _GroupRows<T extends StatefulWidget> on State<T> {
 
   Widget row(
     SettingsDestination destination, {
-    required FaIconData icon,
+    required OmiLineGlyph glyph,
     required String title,
     String? subtitle,
     String? value,
   }) {
     return OmiSettingsRow(
       key: settingsRowKey(destination),
-      leading: FaIcon(icon),
+      leading: OmiSettingsIconTile(glyph),
       title: title,
       subtitle: subtitle,
       value: value,
@@ -117,11 +108,11 @@ class _DeviceGroupPageState extends State<DeviceGroupPage> with _GroupRows {
         OmiSettingsGroup(
           children: [
             if (deviceConnected)
-              row(SettingsDestination.device, icon: FontAwesomeIcons.bluetooth, title: l10n.deviceSettings),
-            row(SettingsDestination.offlineSync, icon: FontAwesomeIcons.solidCloud, title: l10n.offlineSync),
-            row(SettingsDestination.phoneCalls, icon: FontAwesomeIcons.phone, title: l10n.phoneCalls),
+              row(SettingsDestination.device, glyph: OmiLineGlyph.bluetooth, title: l10n.deviceSettings),
+            row(SettingsDestination.offlineSync, glyph: OmiLineGlyph.cloud, title: l10n.offlineSync),
+            row(SettingsDestination.phoneCalls, glyph: OmiLineGlyph.phone, title: l10n.phoneCalls),
             // Most-opened Settings item: people come here to fix microphone, Bluetooth and notifications.
-            row(SettingsDestination.permissions, icon: FontAwesomeIcons.shieldHalved, title: l10n.permissions),
+            row(SettingsDestination.permissions, glyph: OmiLineGlyph.key, title: l10n.permissions),
           ],
         ),
       ],
@@ -209,21 +200,23 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
         OmiSettingsGroup(
           children: [
             row(SettingsDestination.transcription,
-                icon: FontAwesomeIcons.microphone, title: l10n.transcription, value: _transcriptionValue()),
-            row(SettingsDestination.language, icon: FontAwesomeIcons.globe, title: l10n.language),
-            row(SettingsDestination.customVocabulary, icon: FontAwesomeIcons.book, title: l10n.customVocabulary),
+                glyph: OmiLineGlyph.microphone, title: l10n.transcription, value: _transcriptionValue()),
+            row(SettingsDestination.language, glyph: OmiLineGlyph.globe, title: l10n.language),
+            row(SettingsDestination.customVocabulary, glyph: OmiLineGlyph.book, title: l10n.customVocabulary),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
         OmiSettingsGroup(
           children: [
-            row(SettingsDestination.voiceProfile, icon: FontAwesomeIcons.waveSquare, title: l10n.speechProfile),
-            row(SettingsDestination.people, icon: FontAwesomeIcons.users, title: l10n.identifyingOthers),
+            row(SettingsDestination.voiceProfile, glyph: OmiLineGlyph.wave, title: l10n.speechProfile),
+            row(SettingsDestination.people, glyph: OmiLineGlyph.people, title: l10n.identifyingOthers),
             OmiSettingsRow(
               key: const ValueKey('settings_row_voiceResponseMode'),
-              leading: const FaIcon(FontAwesomeIcons.volumeHigh),
+              leading: const OmiSettingsIconTile(OmiLineGlyph.speaker),
               title: l10n.voiceResponseMode,
-              value: _voiceResponseModeLabel(_prefs.voiceResponseMode),
+              // A subtitle, not a trailing value: "Headphones only" next to the tile would wrap the title.
+              subtitle: _voiceResponseModeLabel(_prefs.voiceResponseMode),
+              showChevron: true,
               onTap: _showVoiceResponseModeSheet,
             ),
           ],
@@ -232,21 +225,19 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
         OmiSettingsGroup(
           children: [
             row(SettingsDestination.conversationTimeout,
-                icon: FontAwesomeIcons.clock,
-                title: l10n.conversationTimeout,
-                subtitle: l10n.setWhenConversationsAutoEnd),
+                glyph: OmiLineGlyph.clock, title: l10n.conversationTimeout, subtitle: l10n.setWhenConversationsAutoEnd),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
 
         // Capture modes: two-state settings, so inline switches that apply immediately.
-        OmiSectionHeader(l10n.recording, trailing: SettingsTag(l10n.beta, OmiColors.warning)),
+        OmiSectionHeader(l10n.recording, trailing: SettingsTag(l10n.beta)),
         OmiSettingsGroup(
           footer: l10n.transcribeLaterNote,
           children: [
             OmiSettingsRow.toggle(
               key: const ValueKey('settings_row_transcribeLater'),
-              leading: const FaIcon(FontAwesomeIcons.floppyDisk),
+              leading: const OmiSettingsIconTile(OmiLineGlyph.save),
               title: l10n.transcribeLaterTitle,
               subtitle: batchStorageFull ? l10n.transcribeLaterStorageFull : l10n.transcribeLaterDescription,
               value: _prefs.batchModeEnabled,
@@ -255,7 +246,7 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
             if (PlatformService.isAndroid)
               OmiSettingsRow.toggle(
                 key: const ValueKey('settings_row_backgroundMode'),
-                leading: const FaIcon(FontAwesomeIcons.towerBroadcast),
+                leading: const OmiSettingsIconTile(OmiLineGlyph.broadcast),
                 title: l10n.backgroundModeTitle,
                 subtitle: canEnableBackground || backgroundEnabled
                     ? l10n.backgroundModeDescription
@@ -318,11 +309,11 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
       children: [
         OmiSettingsGroup(
           children: [
-            row(SettingsDestination.notifications, icon: FontAwesomeIcons.solidBell, title: l10n.notifications),
-            row(SettingsDestination.conversationDisplay, icon: FontAwesomeIcons.list, title: l10n.conversationDisplay),
+            row(SettingsDestination.notifications, glyph: OmiLineGlyph.bell, title: l10n.notifications),
+            row(SettingsDestination.conversationDisplay, glyph: OmiLineGlyph.list, title: l10n.conversationDisplay),
             OmiSettingsRow(
               key: const ValueKey('settings_row_appearance'),
-              leading: const FaIcon(FontAwesomeIcons.circleHalfStroke),
+              leading: const OmiSettingsIconTile(OmiLineGlyph.contrast),
               title: l10n.appearance,
               value: _appearanceLabel(appearance),
               onTap: _showAppearancePicker,
@@ -355,12 +346,12 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
       children: [
         OmiSettingsGroup(
           children: [
-            row(SettingsDestination.dataPrivacy, icon: FontAwesomeIcons.shield, title: l10n.dataProtection),
+            row(SettingsDestination.dataPrivacy, glyph: OmiLineGlyph.shield, title: l10n.dataProtection),
             ValueListenableBuilder<bool>(
               valueListenable: DataExport.exportInProgress,
               builder: (context, exporting, _) => OmiSettingsRow(
                 key: settingsRowKey(SettingsDestination.exportData),
-                leading: const FaIcon(FontAwesomeIcons.fileExport),
+                leading: const OmiSettingsIconTile(OmiLineGlyph.export),
                 title: l10n.exportAllData,
                 subtitle: l10n.exportConversationsToJson,
                 trailing: exporting ? const OmiSpinner(size: OmiSpinnerSize.small) : null,
@@ -369,7 +360,7 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
               ),
             ),
             row(SettingsDestination.importData,
-                icon: FontAwesomeIcons.fileImport, title: l10n.importData, subtitle: l10n.importDataFromOtherSources),
+                glyph: OmiLineGlyph.import, title: l10n.importData, subtitle: l10n.importDataFromOtherSources),
           ],
         ),
       ],
@@ -461,8 +452,8 @@ class _HelpAboutGroupPageState extends State<HelpAboutGroupPage> with _GroupRows
         OmiSettingsGroup(
           children: [
             if (PlatformService.isIntercomSupported)
-              row(SettingsDestination.helpCenter, icon: FontAwesomeIcons.book, title: l10n.helpCenter),
-            row(SettingsDestination.whatsNew, icon: FontAwesomeIcons.solidStar, title: l10n.whatsNew),
+              row(SettingsDestination.helpCenter, glyph: OmiLineGlyph.help, title: l10n.helpCenter),
+            row(SettingsDestination.whatsNew, glyph: OmiLineGlyph.star, title: l10n.whatsNew),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),

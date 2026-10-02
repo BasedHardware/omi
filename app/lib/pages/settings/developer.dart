@@ -131,7 +131,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       header: l10n.debugAndDiagnostics,
       children: [
         OmiSettingsRow.toggle(
-          leading: const FaIcon(FontAwesomeIcons.bug),
           title: l10n.debugLogs,
           subtitle: enabled ? l10n.autoDeletesAfterThreeDays : l10n.helpsDiagnoseIssues,
           value: enabled,
@@ -148,7 +147,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 Expanded(
                   child: OmiButton.secondary(
                     label: l10n.shareLogs,
-                    leading: const FaIcon(FontAwesomeIcons.fileArrowUp),
                     size: OmiButtonSize.compact,
                     onPressed: _shareLogs,
                   ),
@@ -156,7 +154,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 const SizedBox(width: OmiSpacing.sm),
                 OmiButton.destructive(
                   label: l10n.clear,
-                  leading: const FaIcon(FontAwesomeIcons.trash),
                   size: OmiButtonSize.compact,
                   onPressed: () async {
                     final message = l10n.debugLogCleared;
@@ -184,7 +181,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         OmiSettingsRow.toggle(
-          leading: FaIcon(icon),
           title: title,
           subtitle: description,
           value: isEnabled,
@@ -268,21 +264,18 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       header: l10n.experimental,
       children: [
         OmiSettingsRow.toggle(
-          leading: const FaIcon(FontAwesomeIcons.code),
           title: l10n.conversationDeveloperTools,
           subtitle: l10n.conversationDeveloperToolsDescription,
           value: SharedPreferencesUtil().devModeEnabled,
           onChanged: (v) => setState(() => SharedPreferencesUtil().devModeEnabled = v),
         ),
         OmiSettingsRow.toggle(
-          leading: const FaIcon(FontAwesomeIcons.stethoscope),
           title: l10n.transcriptionDiagnostics,
           subtitle: l10n.detailedDiagnosticMessages,
           value: provider.transcriptionDiagnosticEnabled,
           onChanged: provider.onTranscriptionDiagnosticChanged,
         ),
         OmiSettingsRow.toggle(
-          leading: const FaIcon(FontAwesomeIcons.microphoneSlash),
           title: l10n.vadGate,
           subtitle: l10n.vadGateDescription,
           value: provider.vadGateEnabled,
@@ -307,7 +300,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         headerSubtitle: l10n.flashCustomFirmwareDescription,
         children: [
           OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.microchip),
             title: l10n.flashCustomFirmware,
             onTap: () => _pickFirmware(deviceProvider),
           ),
@@ -330,25 +322,22 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           },
           child: GestureDetector(
             onTap: () => FocusScope.of(context).unfocus(),
-            child: Scaffold(
-              appBar: AppBar(
-                leading: const OmiBackButton(),
-                title: Text(l10n.developerSettings),
-                actions: [
-                  if (dirty || provider.savingSettingsLoading)
-                    Padding(
-                      padding: const EdgeInsets.only(right: OmiSpacing.xs),
-                      child: Center(
-                        child: OmiButton.tertiary(
-                          label: l10n.save,
-                          size: OmiButtonSize.compact,
-                          isLoading: provider.savingSettingsLoading,
-                          onPressed: provider.saveSettings,
-                        ),
+            child: OmiGroupedPage(
+              title: l10n.developerSettings,
+              actions: [
+                if (dirty || provider.savingSettingsLoading)
+                  Padding(
+                    padding: const EdgeInsets.only(right: OmiSpacing.xs),
+                    child: Center(
+                      child: OmiButton.tertiary(
+                        label: l10n.save,
+                        size: OmiButtonSize.compact,
+                        isLoading: provider.savingSettingsLoading,
+                        onPressed: provider.saveSettings,
                       ),
                     ),
-                ],
-              ),
+                  ),
+              ],
               body: ListView(
                 padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.xxl),
                 children: [
@@ -356,7 +345,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                     header: l10n.appCreators,
                     children: [
                       OmiSettingsRow(
-                        leading: const FaIcon(FontAwesomeIcons.solidCreditCard),
                         title: l10n.creatorPayouts,
                         onTap: () => openSettingsDestination(context, SettingsDestination.creatorPayouts),
                       ),
@@ -402,7 +390,7 @@ class _DeveloperTextField extends StatelessWidget {
         labelText: label,
         labelStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
         filled: true,
-        fillColor: OmiColors.surface2,
+        fillColor: OmiColors.iconTile,
         contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
         border: border,
         enabledBorder: border,

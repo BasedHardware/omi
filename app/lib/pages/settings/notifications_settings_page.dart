@@ -1,7 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -221,19 +220,19 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.notifications)),
+    return OmiGroupedPage(
+      title: context.l10n.notifications,
       body: _isLoading
           ? const NotificationsSettingsLoadingShimmer()
           : ListView(
-              padding: const EdgeInsets.all(OmiSpacing.md),
+              padding: OmiGroupedPage.padding,
               children: [
                 OmiSectionHeader(
                   context.l10n.notificationFrequency,
                   subtitle: context.l10n.notificationFrequencyDescription,
                 ),
                 _buildFrequencyCard(),
-                const SizedBox(height: OmiSpacing.xxl),
+                const SizedBox(height: OmiSpacing.xl),
                 _buildDailySummaryGroup(),
               ],
             ),
@@ -242,9 +241,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
 
   Widget _buildFrequencyCard() {
     final isOff = _notificationFrequency == 0;
-    return Container(
-      padding: const EdgeInsets.all(OmiSpacing.lg),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+    return OmiGroupedCard(
       child: Column(
         children: [
           // Current value display
@@ -269,7 +266,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: isOff ? OmiColors.surface2 : OmiColors.surface3,
+                    color: OmiColors.iconTile,
                     borderRadius: OmiRadius.mdAll,
                   ),
                   child: Center(
@@ -333,7 +330,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
       headerSubtitle: context.l10n.dailySummaryDescription,
       children: [
         OmiSettingsRow.toggle(
-          leading: const FaIcon(FontAwesomeIcons.bell),
           title: context.l10n.enable,
           value: _dailySummaryEnabled,
           onChanged: _updateDailySummaryEnabled,
@@ -342,7 +338,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
           opacity: _dailySummaryEnabled ? 1.0 : 0.4,
           duration: OmiMotion.of(context).standard,
           child: OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.clock),
             title: context.l10n.deliveryTime,
             value: _formatHourDisplay(context, _dailySummaryHour),
             showChevron: true,

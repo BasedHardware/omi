@@ -47,16 +47,9 @@ class PaymentMethodCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(OmiSpacing.md),
         decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: OmiRadius.mdAll,
-          border: !isConnected
-              ? Border.all(
-                  color: OmiColors.border,
-                  width: 2,
-                  strokeAlign: BorderSide.strokeAlignOutside,
-                  style: BorderStyle.solid,
-                )
-              : null,
+          color: OmiColors.groupedCard,
+          borderRadius: OmiRadius.xlAll,
+          border: Border.all(color: OmiColors.groupedBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,7 +58,7 @@ class PaymentMethodCard extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                  decoration: BoxDecoration(color: OmiColors.iconTile, borderRadius: OmiRadius.mdAll),
                   child: icon,
                 ),
                 const SizedBox(width: OmiSpacing.md),
@@ -81,14 +74,14 @@ class PaymentMethodCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isActive ? OmiColors.successSurface : OmiColors.surface3,
+                          color: OmiColors.iconTile,
                           borderRadius: OmiRadius.mdAll,
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (isActive) ...[
-                              Icon(Icons.check_circle, color: OmiColors.success, size: 16),
+                              Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 16),
                               const SizedBox(width: 4),
                             ] else if (isConnected && !isActive) ...[
                               Icon(Icons.circle, color: OmiColors.textSecondary, size: 16),
@@ -97,7 +90,7 @@ class PaymentMethodCard extends StatelessWidget {
                             Text(
                               subtitle,
                               style: OmiType.footnote.copyWith(
-                                color: isActive ? OmiColors.success : OmiColors.textSecondary,
+                                color: isActive ? OmiColors.textPrimary : OmiColors.textSecondary,
                                 fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
                               ),
                             ),

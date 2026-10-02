@@ -2238,10 +2238,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get appLanguage => 'Limba aplicației';
 
   @override
-  String get appInterfaceSectionTitle => 'INTERFAȚĂ APLICAȚIE';
+  String get appInterfaceSectionTitle => 'Interfață aplicație';
 
   @override
-  String get speechTranscriptionSectionTitle => 'VORBIRE ȘI TRANSCRIERE';
+  String get speechTranscriptionSectionTitle => 'Vorbire și transcriere';
 
   @override
   String get languageSettingsHelperText =>
@@ -4394,7 +4394,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get saveKeyWarning => 'Salvați această cheie acum! Nu o veți mai putea vedea.';
 
   @override
-  String get yourApiKey => 'CHEIA DVS. API';
+  String get yourApiKey => 'Cheia dvs. API';
 
   @override
   String get tapToCopy => 'Atingeți pentru a copia';
@@ -4409,13 +4409,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String get accessDataProgrammatically => 'Accesați datele dvs. programatic';
 
   @override
-  String get keyNameLabel => 'NUMELE CHEII';
+  String get keyNameLabel => 'Numele cheii';
 
   @override
   String get keyNamePlaceholder => 'ex., Integrarea mea';
 
   @override
-  String get permissionsLabel => 'PERMISIUNI';
+  String get permissionsLabel => 'Permisiuni';
 
   @override
   String get permissionsInfoNote => 'R = Citire, W = Scriere. Implicit doar citire dacă nu este selectat nimic.';
@@ -8513,7 +8513,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get tipAutoSync => 'Înregistrările se sincronizează automat';
 
   @override
-  String get storageSection => 'STOCARE';
+  String get storageSection => 'Stocare';
 
   @override
   String get permissions => 'Permisiuni';
@@ -12274,4 +12274,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration din această voce';
   }
+
+  @override
+  String get settingsSectionRecording => 'Înregistrare';
+
+  @override
+  String get settingsSectionSupport => 'Asistență';
 }

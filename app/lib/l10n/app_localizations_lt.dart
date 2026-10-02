@@ -2226,10 +2226,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get appLanguage => 'Programėlės kalba';
 
   @override
-  String get appInterfaceSectionTitle => 'PROGRAMOS SĄSAJA';
+  String get appInterfaceSectionTitle => 'Programos sąsaja';
 
   @override
-  String get speechTranscriptionSectionTitle => 'KALBA IR TRANSKRIBAVIMAS';
+  String get speechTranscriptionSectionTitle => 'Kalba ir transkribavimas';
 
   @override
   String get languageSettingsHelperText =>
@@ -4368,7 +4368,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get saveKeyWarning => 'Išsaugokite šį raktą dabar! Daugiau jo nematysite.';
 
   @override
-  String get yourApiKey => 'JŪSŲ API RAKTAS';
+  String get yourApiKey => 'Jūsų API raktas';
 
   @override
   String get tapToCopy => 'Bakstelėkite, kad nukopijuotumėte';
@@ -4383,13 +4383,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String get accessDataProgrammatically => 'Pasiekite savo duomenis programiškai';
 
   @override
-  String get keyNameLabel => 'RAKTO PAVADINIMAS';
+  String get keyNameLabel => 'Rakto pavadinimas';
 
   @override
   String get keyNamePlaceholder => 'pvz., Mano programėlės integracija';
 
   @override
-  String get permissionsLabel => 'LEIDIMAI';
+  String get permissionsLabel => 'Leidimai';
 
   @override
   String get permissionsInfoNote => 'R = Skaityti, W = Rašyti. Numatytasis tik skaitymas, jei nieko nepasirinkta.';
@@ -8479,7 +8479,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get tipAutoSync => 'Įrašai sinchronizuojami automatiškai';
 
   @override
-  String get storageSection => 'SAUGYKLA';
+  String get storageSection => 'Saugykla';
 
   @override
   String get permissions => 'Leidimai';
@@ -12239,4 +12239,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration šio balso';
   }
+
+  @override
+  String get settingsSectionRecording => 'Įrašymas';
+
+  @override
+  String get settingsSectionSupport => 'Pagalba';
 }

@@ -2233,10 +2233,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get appLanguage => 'Език на приложението';
 
   @override
-  String get appInterfaceSectionTitle => 'ИНТЕРФЕЙС НА ПРИЛОЖЕНИЕТО';
+  String get appInterfaceSectionTitle => 'Интерфейс на приложението';
 
   @override
-  String get speechTranscriptionSectionTitle => 'РЕЧ И ТРАНСКРИПЦИЯ';
+  String get speechTranscriptionSectionTitle => 'Реч и транскрипция';
 
   @override
   String get languageSettingsHelperText =>
@@ -4385,7 +4385,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get saveKeyWarning => 'Запазете този ключ сега! Няма да можете да го видите отново.';
 
   @override
-  String get yourApiKey => 'ВАШИЯТ API КЛЮЧ';
+  String get yourApiKey => 'Вашият API ключ';
 
   @override
   String get tapToCopy => 'Докоснете за копиране';
@@ -4400,13 +4400,13 @@ class AppLocalizationsBg extends AppLocalizations {
   String get accessDataProgrammatically => 'Достъп до данните ви програмно';
 
   @override
-  String get keyNameLabel => 'ИМЕ НА КЛЮЧА';
+  String get keyNameLabel => 'Име на ключа';
 
   @override
   String get keyNamePlaceholder => 'напр., Моята интеграция';
 
   @override
-  String get permissionsLabel => 'РАЗРЕШЕНИЯ';
+  String get permissionsLabel => 'Разрешения';
 
   @override
   String get permissionsInfoNote => 'R = Четене, W = Запис. По подразбиране само за четене, ако не е избрано нищо.';
@@ -8507,7 +8507,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get tipAutoSync => 'Записите се синхронизират автоматично';
 
   @override
-  String get storageSection => 'СЪХРАНЕНИЕ';
+  String get storageSection => 'Съхранение';
 
   @override
   String get permissions => 'Разрешения';
@@ -12264,4 +12264,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration от този глас';
   }
+
+  @override
+  String get settingsSectionRecording => 'Записване';
+
+  @override
+  String get settingsSectionSupport => 'Поддръжка';
 }

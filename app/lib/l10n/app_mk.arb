@@ -2267,11 +2267,11 @@
     "@appLanguage": {
         "description": "Label for app language selector"
     },
-    "appInterfaceSectionTitle": "ИНТЕРФЕЈС НА АПЛИКАЦИЈА",
+    "appInterfaceSectionTitle": "Интерфејс на апликација",
     "@appInterfaceSectionTitle": {
         "description": "Section title for app interface language settings"
     },
-    "speechTranscriptionSectionTitle": "ГОВОР И ТРАНСКРИПЦИЈА",
+    "speechTranscriptionSectionTitle": "Говор и транскрипција",
     "@speechTranscriptionSectionTitle": {
         "description": "Section title for speech and transcription language settings"
     },
@@ -4996,7 +4996,7 @@
     "@saveKeyWarning": {
         "description": "Warning message when API key is created"
     },
-    "yourApiKey": "ТВОЈ API КЛУЧ",
+    "yourApiKey": "Твој API клуч",
     "@yourApiKey": {
         "description": "Label for API key display section"
     },
@@ -5019,7 +5019,7 @@
     "@accessDataProgrammatically": {
         "description": "Subtitle for create API key sheet"
     },
-    "keyNameLabel": "ИМЕ НА КЛУЧ",
+    "keyNameLabel": "Име на клуч",
     "@keyNameLabel": {
         "description": "Label for key name input field"
     },
@@ -5027,7 +5027,7 @@
     "@keyNamePlaceholder": {
         "description": "Placeholder text for key name input"
     },
-    "permissionsLabel": "ДОЗВОЛИ",
+    "permissionsLabel": "Дозволи",
     "@permissionsLabel": {
         "description": "Label for permissions section"
     },
@@ -10089,7 +10089,7 @@
     "@tipAutoSync": {
         "description": "Tip in sync info sheet"
     },
-    "storageSection": "СКЛАДИРАЊЕ",
+    "storageSection": "Складирање",
     "@storageSection": {
         "description": "Section header for storage settings"
     },
@@ -11338,5 +11338,7 @@
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ќе препознае {name} следниот пат.} pending{Ова трае неколку секунди.} disabled{Вклучете го зачувувањето на гласови во Поставки за Omi да може да препознава {name}.} other{На Omi му треба појасен говор од {name} и ќе продолжи да се обидува.}}",
     "speakerLabelEarlierMatches": "Претходни разговори со овој глас: {count}",
     "speakerLabelText": "{part, select, likely{Веројатно} soundsLike{Звучи како {name}} notPerson{Не е {name}} carried{Сѐ уште е {name}. Пренесено од вашиот последен разговор.} change{Промени} alsoTitle{Дали и ова е {name}?} alsoBody{Omi го најде истиот глас во претходни разговори.} confirmed{Ја потврдивте оваа ознака} other{Прегледај}}",
-    "speakerLabelTalkTime": "{duration} од овој глас"
+    "speakerLabelTalkTime": "{duration} од овој глас",
+    "settingsSectionRecording": "Снимање",
+    "settingsSectionSupport": "Поддршка"
 }

@@ -100,7 +100,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sheet is Account, Plan, Referral, the groups, Memories, Goals and Feedback, in order, keyed',
+  testWidgets('Settings is six labelled groups: Account, Recording, Features, Preferences, Support, Developer',
       (tester) async {
     await pumpSheet(tester);
     final rows = _rowsOnScreen(tester);
@@ -110,11 +110,11 @@ void main() {
       'settings_row_referral',
       'settings_group_device',
       'settings_group_recording',
-      'settings_group_notifications',
-      'settings_group_integrations',
-      'settings_group_privacy',
       'settings_row_memories',
       'settings_row_goals',
+      'settings_group_integrations',
+      'settings_group_notifications',
+      'settings_group_privacy',
       'settings_group_help',
       'settings_row_feedback', // where Intercom is supported (the host test is)
       'settings_group_developer',
@@ -127,17 +127,36 @@ void main() {
       en.referralProgram,
       en.device,
       en.recordingAndTranscription,
-      en.notificationsAndDisplay,
-      en.integrations,
-      en.dataAndPrivacy,
       en.memories,
       en.goals,
+      en.integrations,
+      en.notificationsAndDisplay,
+      en.dataAndPrivacy,
       en.helpAndAbout,
       en.feedbackBug,
       en.developerSettings,
     ]);
-    // The search field and close button stay in the header.
-    expect(find.byType(OmiCloseButton), findsOneWidget);
+    final groups = tester.widgetList<OmiSettingsGroup>(find.byType(OmiSettingsGroup)).toList();
+    // First the profile card on its own (no label), then the six labelled groups.
+    expect(groups.first.header, isNull);
+    expect(
+        find.descendant(of: find.byKey(const ValueKey('settings_account')), matching: find.byType(OmiSettingsAvatar)),
+        findsOneWidget);
+    expect(groups.skip(1).map((g) => g.header).toList(), [
+      en.account,
+      en.settingsSectionRecording,
+      en.features,
+      en.preferences,
+      en.settingsSectionSupport,
+      en.developer,
+    ]);
+    expect(groups.every((g) => g.style == OmiSettingsGroupStyle.outlined), isTrue, reason: 'no hairlines between rows');
+    expect(find.byType(Divider), findsNothing);
+    expect(find.byType(OmiSettingsIconTile), findsNWidgets(rows.length - 1),
+        reason: 'every row but the profile card leads with an icon tile');
+    // A pushed page: back on the leading edge, search trailing, no close X.
+    expect(find.byType(OmiBackButton), findsOneWidget);
+    expect(find.byType(OmiCloseButton), findsNothing);
     expect(find.bySemanticsLabel(en.search), findsOneWidget);
   });
 
@@ -298,5 +317,23 @@ void main() {
     await tester.tap(find.widgetWithText(OmiSettingsRow, en.voiceResponseMode));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('settings_page_recording')), findsOneWidget);
+  });
+
+  testWidgets('every search result leads with the icon of the Settings row it sits under', (tester) async {
+    await pumpSheet(tester);
+    await tester.tap(find.bySemanticsLabel(en.search));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'a');
+    await tester.pumpAndSettle();
+    final results = _rowsOnScreen(tester);
+    expect(results.length, greaterThan(10));
+    expect(find.byType(OmiSettingsIconTile), findsNWidgets(results.length));
+    OmiLineGlyph? glyphOf(String title) => tester
+        .widget<OmiSettingsIconTile>(
+            find.descendant(of: find.widgetWithText(OmiSettingsRow, title), matching: find.byType(OmiSettingsIconTile)))
+        .glyph;
+    expect(glyphOf(en.deleteAccountTitle), OmiLineGlyph.person);
+    expect(glyphOf(en.language), OmiLineGlyph.microphone);
+    expect(glyphOf(en.dataProtection), OmiLineGlyph.shield);
   });
 }

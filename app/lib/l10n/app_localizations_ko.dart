@@ -12028,4 +12028,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '이 목소리 $duration';
   }
+
+  @override
+  String get settingsSectionRecording => '녹음';
+
+  @override
+  String get settingsSectionSupport => '지원';
 }

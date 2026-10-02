@@ -2211,7 +2211,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get appInterfaceSectionTitle => 'ממשק אפליקציה';
 
   @override
-  String get speechTranscriptionSectionTitle => 'דיבור וריבוי מדיה';
+  String get speechTranscriptionSectionTitle => 'דיבור ותמלול';
 
   @override
   String get languageSettingsHelperText =>
@@ -12125,4 +12125,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration מהקול הזה';
   }
+
+  @override
+  String get settingsSectionRecording => 'הקלטה';
+
+  @override
+  String get settingsSectionSupport => 'תמיכה';
 }

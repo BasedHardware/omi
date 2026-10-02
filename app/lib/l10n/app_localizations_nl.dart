@@ -2235,10 +2235,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get appLanguage => 'App-taal';
 
   @override
-  String get appInterfaceSectionTitle => 'APP-INTERFACE';
+  String get appInterfaceSectionTitle => 'App-interface';
 
   @override
-  String get speechTranscriptionSectionTitle => 'SPRAAK & TRANSCRIPTIE';
+  String get speechTranscriptionSectionTitle => 'Spraak & transcriptie';
 
   @override
   String get languageSettingsHelperText =>
@@ -4386,7 +4386,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get saveKeyWarning => 'Sla deze sleutel nu op! U kunt hem niet meer zien.';
 
   @override
-  String get yourApiKey => 'UW API-SLEUTEL';
+  String get yourApiKey => 'Uw API-sleutel';
 
   @override
   String get tapToCopy => 'Tik om te kopiëren';
@@ -4401,13 +4401,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String get accessDataProgrammatically => 'Toegang tot uw gegevens via programmering';
 
   @override
-  String get keyNameLabel => 'SLEUTELNAAM';
+  String get keyNameLabel => 'Sleutelnaam';
 
   @override
   String get keyNamePlaceholder => 'bijv., Mijn app-integratie';
 
   @override
-  String get permissionsLabel => 'MACHTIGINGEN';
+  String get permissionsLabel => 'Machtigingen';
 
   @override
   String get permissionsInfoNote => 'R = Lezen, W = Schrijven. Standaard alleen lezen als niets is geselecteerd.';
@@ -6127,7 +6127,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omis ingebouwde live transcriptie is geoptimaliseerd voor realtime gesprekken met automatische sprekersdetectie en diarisatie.';
+      'Omi\'s ingebouwde live transcriptie is geoptimaliseerd voor realtime gesprekken met automatische sprekersdetectie en diarisatie.';
 
   @override
   String get reset => 'Resetten';
@@ -8499,7 +8499,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get tipAutoSync => 'Opnames worden automatisch gesynchroniseerd';
 
   @override
-  String get storageSection => 'OPSLAG';
+  String get storageSection => 'Opslag';
 
   @override
   String get permissions => 'Machtigingen';
@@ -12258,4 +12258,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration van deze stem';
   }
+
+  @override
+  String get settingsSectionRecording => 'Opnemen';
+
+  @override
+  String get settingsSectionSupport => 'Ondersteuning';
 }

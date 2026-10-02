@@ -97,7 +97,7 @@ class _IgnoredVoicesState extends State<_IgnoredVoices> {
         children: [
           for (final voice in voices)
             OmiSettingsRow(
-              leading: const Icon(Icons.tv_outlined),
+              leading: const OmiSettingsIconTile(OmiLineGlyph.wave),
               // No transcript here to number speakers densely (§9), so the conversation stands in.
               title: voice.conversationTitle.isEmpty ? l10n.untitledConversation : voice.conversationTitle,
               subtitle: dates.timestamp(voice.conversationStartedAt ?? voice.ignoredAt),

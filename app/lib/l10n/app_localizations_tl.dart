@@ -2241,10 +2241,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get appLanguage => 'App Language';
 
   @override
-  String get appInterfaceSectionTitle => 'APP INTERFACE';
+  String get appInterfaceSectionTitle => 'App interface';
 
   @override
-  String get speechTranscriptionSectionTitle => 'SPEECH & TRANSCRIPTION';
+  String get speechTranscriptionSectionTitle => 'Speech & transcription';
 
   @override
   String get languageSettingsHelperText =>
@@ -4406,7 +4406,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get saveKeyWarning => 'I-save ang key na ito ngayon! Hindi mo na makikita ito ulit.';
 
   @override
-  String get yourApiKey => 'ANG IYONG API KEY';
+  String get yourApiKey => 'Ang iyong API key';
 
   @override
   String get tapToCopy => 'Itap upang kopyahin';
@@ -4421,13 +4421,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get accessDataProgrammatically => 'I-access ang iyong data nang programmatically';
 
   @override
-  String get keyNameLabel => 'KEY NAME';
+  String get keyNameLabel => 'Key name';
 
   @override
   String get keyNamePlaceholder => 'e.g., My App Integration';
 
   @override
-  String get permissionsLabel => 'PERMISSIONS';
+  String get permissionsLabel => 'Permissions';
 
   @override
   String get permissionsInfoNote => 'R = Read, W = Write. Defaults sa read-only kung walang napiling selection.';
@@ -8550,7 +8550,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get tipAutoSync => 'Ang mga recordings ay nag-sync automatically';
 
   @override
-  String get storageSection => 'STORAGE';
+  String get storageSection => 'Storage';
 
   @override
   String get permissions => 'Permissions';
@@ -12323,4 +12323,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String speakerLabelTalkTime(String duration) {
     return '$duration ng boses na ito';
   }
+
+  @override
+  String get settingsSectionRecording => 'Pagre-record';
+
+  @override
+  String get settingsSectionSupport => 'Suporta';
 }

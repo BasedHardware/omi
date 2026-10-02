@@ -156,13 +156,8 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Scaffold(
-      backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
-        backgroundColor: OmiColors.surface0,
-        title: Text(l10n.addMcpServer, style: OmiType.body),
-        leading: const OmiBackButton(),
-      ),
+    return OmiGroupedPage(
+      title: l10n.addMcpServer,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(OmiSpacing.xl),
         child: Form(

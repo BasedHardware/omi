@@ -200,7 +200,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       builder: (sheetCtx) => OmiSettingsGroup(
         children: [
           OmiSettingsRow(
-            leading: const Icon(Icons.refresh),
+            leading: const OmiSettingsIconTile(OmiLineGlyph.refresh),
             title: context.l10n.regenerateRecap,
             showChevron: false,
             onTap: () {
@@ -209,7 +209,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             },
           ),
           OmiSettingsRow(
-            leading: const Icon(Icons.delete_outline),
+            leading: const OmiSettingsIconTile(OmiLineGlyph.trash),
             title: context.l10n.deleteRecap,
             isDestructive: true,
             showChevron: false,
