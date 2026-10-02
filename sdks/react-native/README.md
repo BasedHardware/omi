@@ -113,6 +113,18 @@ async function connectToDevice(deviceId) {
 ```
 
 
+## Stopping Deepgram transcription
+
+`stop()` sends Deepgram's `CloseStream` once and stops accepting audio. The
+socket remains open for final transcript callbacks until Deepgram closes it or
+the five-second drain deadline expires. `stop()` returns immediately; keep the
+transcript callback available during this drain.
+
+Set `drainTimeoutMs` on `createDeepgramTranscriber` or the shared
+`createTranscriber('deepgram', options)` factory to change the deadline. Set it
+to `0` to close immediately after `CloseStream`. Failed terminal sends close the
+socket immediately.
+
 ## Troubleshooting
 
 <AccordionGroup>
