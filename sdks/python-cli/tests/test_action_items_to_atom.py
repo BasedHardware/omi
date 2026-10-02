@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -9,7 +10,7 @@ import shutil
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import xml.etree.ElementTree as ET
 
 RECIPE_PATH = Path(__file__).resolve().parent.parent / "examples" / "action_items_to_atom.py"
@@ -192,6 +193,23 @@ class TestActionItemsToAtom(unittest.TestCase):
         self.assertEqual(len(root.findall("atom:entry", ATOM_NS)), 0)
         updated = root.find("atom:updated", ATOM_NS)
         self.assertEqual(updated.text, "1970-01-01T00:00:00Z")
+
+    def test_empty_input_is_rejected_not_published_as_empty_feed(self):
+        src = self.tmp / "empty.json"
+        src.write_bytes(b"  \n")
+        with self.assertRaises(ValueError):
+            ai2atom.load([str(src)])
+
+        stdin = Mock()
+        stdin.buffer = io.BytesIO(b"")
+        with patch.object(ai2atom.sys, "stdin", stdin):
+            with self.assertRaises(ValueError):
+                ai2atom.load(["-"])
+
+    def test_empty_json_array_is_still_a_valid_empty_feed(self):
+        src = self.tmp / "none.json"
+        src.write_text("[]", encoding="utf-8")
+        self.assertEqual(ai2atom.load([str(src)]), {})
 
     def test_convert_exclusive_creation_and_atomic_overwrite(self):
         src = self.tmp / "input.json"
