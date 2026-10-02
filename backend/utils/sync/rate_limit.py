@@ -3,6 +3,7 @@
 import json
 import re
 import sys
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from config.plan_catalog import PLAN_TYPE_VALUES
@@ -119,3 +120,9 @@ def emit_sync_rate_limit_event(event: Dict[str, Any]) -> None:
     """Write one exact JSON object so Cloud Logging ingests it as jsonPayload."""
     sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
     sys.stdout.flush()
+
+
+def retry_after_until_next_utc_day() -> int:
+    now = datetime.now(timezone.utc)
+    next_day = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(1, int((next_day - now).total_seconds()))

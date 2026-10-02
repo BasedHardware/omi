@@ -34,8 +34,7 @@ class TestProcessSegmentErrorHandling:
 
     @staticmethod
     def _read_pipeline_source():
-        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
-        return _read_text(pipeline_path)
+        return _read_text(os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py'))
 
     def test_process_segment_has_try_except(self):
         """process_segment() must wrap its body in try/except to catch all errors."""
@@ -91,8 +90,7 @@ class TestSyncEndpointErrorReporting:
 
     @staticmethod
     def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        return _read_text(sync_path)
+        return _read_text(os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'))
 
     def test_endpoint_creates_lock_and_errors(self):
         """Endpoint must create segment_lock and segment_errors."""
@@ -757,6 +755,7 @@ _STUB_MODULES = [
     'utils.stt.vad',
     'utils.speaker_assignment',
     'utils.speaker_identification',
+    'utils.speaker_learning_jobs',
     'utils.stt.speaker_embedding',
     'utils.fair_use',
     'utils.subscription',
@@ -820,6 +819,7 @@ class TestProcessSegmentReal:
         sys.modules['database._client'].is_document_size_limit_error = lambda error: False
         sys.modules['database._client'].is_expired_transaction_error = lambda error: False
         sys.modules['database.auth'].get_user_name = MagicMock(return_value='User')
+        sys.modules['utils.speaker_learning_jobs'].schedule_person_voice_learning_retries = MagicMock()
         _mock_conv_db = sys.modules['database.conversations']
         _mock_conv_db.get_closest_conversation_to_timestamps = MagicMock()
         _mock_conv_db.update_conversation_segments = MagicMock()

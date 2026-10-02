@@ -1357,13 +1357,13 @@ can give that number to another voice. A missing or user-deleted survivor
 remains a 404; missing selected segments fail instead of labeling another
 speaker. The returned conversation carries the survivor ID for client refresh.
 
-Enrollment stays fire-and-forget, now receipt-driven: `extract_speaker_samples`
-pools clean same-scope speech (10 s min, 30 s / 12 clips / 10 s each), verifies
-one pooled WAV under the unchanged gates, and records one outcome on
-`voice_learning_*`. `audio_files` publish during capture and at finalization;
-REST tries immediately, sockets queue a delayed attempt, and fanout completion
-schedules a bounded retry for receipt-named people lacking a usable voiceprint
-(≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
+Manual assignments commit bounded person/owner teaching jobs beside the receipt. The ledger (`database/speaker_learning_jobs.py`) caps 32 jobs, 200 ids, five attempts,
+two-minute leases and seven-day eligibility; audio publish, finalization, sync and
+reprocessing run ≤5 jobs per 45 s pass with 30/120/600/3600 s backoff, no timers.
+Quality gates and authority fences are unchanged; `omi_speaker_learning_jobs_total`
+reports queued/retried/stored/terminal. Only durable authorized work projects to
+`pending`, other quality failures stay `unknown`; expired jobs reconcile on later
+access, not a sweep, and clients still collapse `unknown`/timeout into more-speech.
 
 Legacy person teaching, owner confirmations and speaker-tag preview clips use
 `utils/speaker_audio.py`. Main's manifest timestamp selection is retained.

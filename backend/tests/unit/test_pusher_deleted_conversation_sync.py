@@ -134,3 +134,35 @@ async def test_live_conversation_keeps_syncing_audio(private_cloud_session):
 
     assert private_cloud_session['uploaded'] == [CONVERSATION_ID, CONVERSATION_ID]
     assert private_cloud_session['fallbacks'] == []
+
+
+@pytest.mark.asyncio
+async def test_applied_manifest_schedules_learning_retry(private_cloud_session, monkeypatch):
+    scheduled = []
+    monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda uid, cid: scheduled.append(cid))
+    websocket = private_cloud_session['run'](conversation_exists=True)
+
+    await pusher._websocket_util_trigger(websocket, UID, SAMPLE_RATE)
+
+    assert scheduled == [CONVERSATION_ID, CONVERSATION_ID]
+
+
+@pytest.mark.asyncio
+async def test_learning_retry_runs_before_playback_invalidation(private_cloud_session, monkeypatch):
+    calls = []
+    monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda uid, cid: calls.append('retry'))
+    monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(
+        pusher.conversations_db, 'get_conversation_audio_stamp', lambda uid, cid: {'conversation_audio': {}}
+    )
+
+    def invalidate(uid, cid, stamp, files, reason):
+        calls.append('invalidate')
+        raise RuntimeError('playback store down')
+
+    monkeypatch.setattr(pusher, 'maybe_invalidate_conversation_playback', invalidate)
+    websocket = private_cloud_session['run'](conversation_exists=True)
+
+    await pusher._websocket_util_trigger(websocket, UID, SAMPLE_RATE)
+
+    assert calls[:2] == ['retry', 'invalidate']

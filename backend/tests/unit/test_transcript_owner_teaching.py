@@ -70,9 +70,12 @@ def _conversation_model(segments):
 
 @pytest.fixture
 def world(monkeypatch):
-    scheduled = {'owner': [], 'person': [], 'deleted': []}
-    monkeypatch.setattr(teaching_tasks, 'store_owner_voice_sample', lambda **kwargs: scheduled['owner'].append(kwargs))
-    monkeypatch.setattr(teaching_tasks, 'extract_speaker_samples', lambda **kwargs: scheduled['person'].append(kwargs))
+    scheduled = {'owner': [], 'person': [], 'jobs': [], 'deleted': []}
+    monkeypatch.setattr(
+        teaching_tasks,
+        'run_speaker_learning_jobs',
+        lambda uid, conversation_id: scheduled['jobs'].append({'uid': uid, 'conversation_id': conversation_id}),
+    )
     monkeypatch.setattr(teaching_tasks, 'delete_speech_profile_blob', lambda path: scheduled['deleted'].append(path))
     monkeypatch.setattr(conversations_router, 'emit_product_event', lambda **kwargs: None)
     monkeypatch.setattr(
@@ -123,8 +126,7 @@ def test_speaker_endpoint_is_user_queues_owner_sample(world):
     )
     assert response.status_code == 200
     assert world.assignments[0]['is_user'] is True and world.assignments[0]['speaker_id'] == 0
-    assert world.scheduled['owner'] == [{'uid': UID, 'conversation_id': CONV, 'segment_ids': ['s1', 's2']}]
-    assert world.scheduled['person'] == []
+    assert world.scheduled['jobs'] == [{'uid': UID, 'conversation_id': CONV}]
 
 
 def test_segment_endpoint_is_user_queues_owner_sample(world):
@@ -133,7 +135,7 @@ def test_segment_endpoint_is_user_queues_owner_sample(world):
         f'/v1/conversations/{CONV}/segments/0/assign', params={'assign_type': 'is_user', 'value': '1'}
     )
     assert response.status_code == 200
-    assert world.scheduled['owner'] == [{'uid': UID, 'conversation_id': CONV, 'segment_ids': ['s1']}]
+    assert world.scheduled['jobs'] == [{'uid': UID, 'conversation_id': CONV}]
 
 
 def test_bulk_endpoint_is_user_queues_owner_sample(world):
@@ -144,7 +146,7 @@ def test_bulk_endpoint_is_user_queues_owner_sample(world):
         json={'assign_type': 'is_user', 'value': 'true', 'segment_ids': ['s1', 's2']},
     )
     assert response.status_code == 200
-    assert world.scheduled['owner'] == [{'uid': UID, 'conversation_id': CONV, 'segment_ids': ['s1', 's2']}]
+    assert world.scheduled['jobs'] == [{'uid': UID, 'conversation_id': CONV}]
 
 
 def test_merged_conversation_uses_canonical_id(world):
@@ -153,7 +155,7 @@ def test_merged_conversation_uses_canonical_id(world):
         f'/v1/conversations/{CONV}/assign-speaker/0', params={'assign_type': 'is_user', 'value': 'true'}
     )
     assert response.status_code == 200
-    assert world.scheduled['owner'] == [{'uid': UID, 'conversation_id': 'survivor-9', 'segment_ids': ['s1']}]
+    assert world.scheduled['jobs'] == [{'uid': UID, 'conversation_id': 'survivor-9'}]
 
 
 def test_is_user_false_and_training_false_queue_nothing(world):
@@ -164,7 +166,7 @@ def test_is_user_false_and_training_false_queue_nothing(world):
     ):
         response = world.client.patch(f'/v1/conversations/{CONV}/assign-speaker/0', params=params)
         assert response.status_code == 200
-    assert world.scheduled['owner'] == [] and world.scheduled['person'] == []
+    assert world.scheduled['jobs'] == []
 
 
 def test_person_assignment_keeps_person_teaching(world):
@@ -174,10 +176,7 @@ def test_person_assignment_keeps_person_teaching(world):
         f'/v1/conversations/{CONV}/assign-speaker/0', params={'assign_type': 'person_id', 'value': 'p1'}
     )
     assert response.status_code == 200
-    assert world.scheduled['owner'] == []
-    assert world.scheduled['person'] == [
-        {'uid': UID, 'person_id': 'p1', 'conversation_id': CONV, 'segment_ids': ['s1']}
-    ]
+    assert world.scheduled['jobs'] == [{'uid': UID, 'conversation_id': CONV}]
     assert world.scheduled['deleted'] == ['old.wav']
 
 
@@ -191,7 +190,7 @@ def test_owner_teaching_never_checks_named_entitlement(world, monkeypatch):
         f'/v1/conversations/{CONV}/assign-speaker/0', params={'assign_type': 'is_user', 'value': 'true'}
     )
     assert response.status_code == 200
-    assert world.scheduled['owner']
+    assert world.scheduled['jobs']
 
 
 def test_owner_window_allows_split_same_voice_run():

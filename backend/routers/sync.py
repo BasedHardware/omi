@@ -128,6 +128,7 @@ from utils.sync.pipeline import (
     bind_or_converge_sync_ledger_completion,
     _finalize_sync_audio_files,
     _reprocess_merged_conversations,
+    _RESPONSE_FENCED_CONVERSATION_IDS,
     _retrieve_file_paths_v2,
     _run_full_pipeline_background_async,
     _stage_files_to_gcs,
@@ -137,12 +138,14 @@ from utils.sync.pipeline import (
     SyncConversationPersistenceFenced,
 )
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
+from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.sync.rate_limit import (
     FAIR_USE_RATE_LIMIT_CODE,
     bounded_fair_use_retry_after,
     build_sync_rate_limit_event,
     emit_sync_rate_limit_event,
     fair_use_rate_limit_headers,
+    retry_after_until_next_utc_day,
     validated_correlation_id,
 )
 from utils.sync.backfill import (
@@ -305,12 +308,6 @@ def _get_sync_rate_limit_telemetry_fields(uid: str) -> Dict[str, object]:
         logger.warning('sync_rate_limit_telemetry subscription_read_failed error=%s', type(e).__name__)
 
     return fields
-
-
-def _retry_after_until_next_utc_day() -> int:
-    now = datetime.now(timezone.utc)
-    next_day = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return max(1, int((next_day - now).total_seconds()))
 
 
 async def _fair_use_restriction_response(
@@ -587,7 +584,7 @@ async def sync_local_files(
         logger.info(f'sync: daily audio ceiling reached uid={uid}')
         return await _fair_use_restriction_response(
             uid=uid,
-            retry_after=_retry_after_until_next_utc_day(),
+            retry_after=retry_after_until_next_utc_day(),
             client_platform=client_device_context.platform,
             device_hash=client_device_context.device_hash,
             app_version=client_device_context.app_version,
@@ -730,7 +727,7 @@ async def sync_local_files(
             await run_blocking(sync_executor, _cleanup_files, list(segmented_paths))
             return await _fair_use_restriction_response(
                 uid=uid,
-                retry_after=_retry_after_until_next_utc_day(),
+                retry_after=retry_after_until_next_utc_day(),
                 client_platform=client_device_context.platform,
                 device_hash=client_device_context.device_hash,
                 app_version=client_device_context.app_version,
@@ -799,6 +796,7 @@ async def sync_local_files(
         await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
         if private_cloud_sync_enabled:
             await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
+        schedule_person_voice_learning_retries(uid, response, _RESPONSE_FENCED_CONVERSATION_IDS)
 
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
@@ -1011,7 +1009,7 @@ async def sync_local_files_v2(
             logger.info('sync_v2: daily audio ceiling reached uid=%s', uid)
             return await _fair_use_restriction_response(
                 uid=uid,
-                retry_after=_retry_after_until_next_utc_day(),
+                retry_after=retry_after_until_next_utc_day(),
                 client_platform=client_device_context.platform,
                 device_hash=client_device_context.device_hash,
                 app_version=client_device_context.app_version,
