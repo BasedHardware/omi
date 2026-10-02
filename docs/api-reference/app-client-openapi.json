@@ -24713,6 +24713,70 @@
         "title": "ScreenFrameSubjectIn",
         "type": "object"
       },
+      "ScreenTaskGateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "app_name": {
+            "default": "",
+            "maxLength": 128,
+            "title": "App Name",
+            "type": "string"
+          },
+          "ocr_text": {
+            "maxLength": 12000,
+            "title": "Ocr Text",
+            "type": "string"
+          },
+          "related_tasks": {
+            "items": {
+              "maxLength": 576,
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Related Tasks",
+            "type": "array"
+          },
+          "user_context": {
+            "default": "",
+            "maxLength": 1024,
+            "title": "User Context",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ocr_text"
+        ],
+        "title": "ScreenTaskGateRequest",
+        "type": "object"
+      },
+      "ScreenTaskGateResponse": {
+        "properties": {
+          "audit_sample": {
+            "title": "Audit Sample",
+            "type": "boolean"
+          },
+          "gate_outcome": {
+            "enum": [
+              "passed",
+              "rejected",
+              "fail_open"
+            ],
+            "title": "Gate Outcome",
+            "type": "string"
+          },
+          "should_extract": {
+            "title": "Should Extract",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "should_extract",
+          "gate_outcome",
+          "audit_sample"
+        ],
+        "title": "ScreenTaskGateResponse",
+        "type": "object"
+      },
       "SearchConversationsResponse": {
         "properties": {
           "current_page": {
@@ -57957,6 +58021,90 @@
         "tags": [
           "screen_frames"
         ]
+      }
+    },
+    "/v1/screen-task/gate": {
+      "post": {
+        "operationId": "screen_task_gate_v1_screen_task_gate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenTaskGateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenTaskGateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Screen Task Gate"
       }
     },
     "/v1/search/overview": {

@@ -1365,10 +1365,10 @@ def test_flash_stays_on_the_current_reservation_until_target_capacity_exists(mon
     assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
 
 
-def test_flash_is_remapped_once_the_target_reservation_is_observed(monkeypatch):
+def test_old_flash_keeps_its_model_once_the_target_reservation_is_observed(monkeypatch):
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
     desktop_proxy._record_pt_target_observation(True)
-    assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-3.1-flash-lite:generateContent"
+    assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
 
 
 def test_operator_override_pins_the_reservation_back(monkeypatch):
@@ -1420,11 +1420,10 @@ def test_overflow_plan_is_empty_for_traffic_that_cannot_exhaust_the_reservation(
     assert desktop_proxy._overflow_plan("gemini-2.5-flash-lite") == []
 
 
-def test_overflow_plan_probes_the_target_before_paying_on_demand(monkeypatch):
+def test_old_flash_overflow_never_probes_the_more_expensive_target(monkeypatch):
     monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
     plan = desktop_proxy._overflow_plan("gemini-2.5-flash")
     assert plan == [
-        ("gemini-3.1-flash-lite", "dedicated"),
         ("gemini-3.1-flash-lite", "shared"),
         ("gemini-2.5-flash-lite", "shared"),
     ]
@@ -1451,7 +1450,7 @@ async def test_gateway_and_desktop_kill_switch_overflow_agree(monkeypatch):
         unset_desktop = desktop_proxy._overflow_plan("gemini-2.5-flash")
         unset_gateway = provider._overflow_plan("gemini-2.5-flash")
         assert unset_desktop == unset_gateway
-        assert unset_desktop[0] == ("gemini-3.1-flash-lite", "dedicated")
+        assert unset_desktop[0] == ("gemini-3.1-flash-lite", "shared")
 
         capped_desktop = desktop_proxy._overflow_plan("gemini-2.5-flash", origin_model=origin)
         capped_gateway = provider._overflow_plan("gemini-2.5-flash", origin_model=origin)
@@ -1460,10 +1459,10 @@ async def test_gateway_and_desktop_kill_switch_overflow_agree(monkeypatch):
 
         desktop_proxy._record_pt_target_observation(True)
         provider._pt_target_ready = True
-        promoted_desktop = desktop_proxy._overflow_plan("gemini-3.1-flash-lite", origin_model=origin)
-        promoted_gateway = provider._overflow_plan("gemini-3.1-flash-lite", origin_model=origin)
+        promoted_desktop = desktop_proxy._overflow_plan(desktop_proxy.VERTEX_PT_TARGET_MODEL, origin_model=origin)
+        promoted_gateway = provider._overflow_plan(desktop_proxy.VERTEX_PT_TARGET_MODEL, origin_model=origin)
         assert promoted_desktop == promoted_gateway == [("gemini-2.5-flash-lite", "shared")]
-        assert all(model != "gemini-3.1-flash-lite" for model, _capacity in promoted_desktop)
+        assert all(model != desktop_proxy.VERTEX_PT_TARGET_MODEL for model, _capacity in promoted_desktop)
     finally:
         await provider.aclose()
 
@@ -1479,13 +1478,13 @@ def test_overflow_skips_a_rung_traffic_has_proved_unreachable(monkeypatch):
     """Keeping an unreachable rung in the plan would spend a round trip to 404
     on every overflow request."""
     monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
-    desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
+    desktop_proxy._record_model_unavailable("gemini-3.1-flash-lite")
     assert desktop_proxy._overflow_plan("gemini-2.5-flash") == [("gemini-2.5-flash-lite", "shared")]
 
 
 def test_pro_falls_back_when_the_target_is_unreachable(monkeypatch):
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
-    desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
+    desktop_proxy._record_model_unavailable("gemini-3.1-flash-lite")
     assert _retarget("models/gemini-2.5-pro:generateContent") == (
         f"models/{desktop_proxy._QUOTA_DEMOTION_MODEL}:generateContent"
     )
@@ -1608,41 +1607,31 @@ def _install_proxy_doubles(monkeypatch, client):
 
 
 @pytest.mark.asyncio
-async def test_saturated_reservation_probes_the_target_then_pays_on_demand(monkeypatch):
-    """A full reservation must not silently spill onto pay-as-you-go flash.
-
-    Attempt 1 is the reservation. Attempt 2 asks the migration target for
-    dedicated capacity and is refused. Attempt 3 buys the same work on-demand
-    at gemini-3.1-flash-lite rates ($1.50/1M out) instead of gemini-2.5-flash
-    spillover ($2.50/1M out).
-    """
-    client = _ScriptedClient([_pt_exhausted_response, _pt_exhausted_response, _ok_response])
+async def test_saturated_old_reservation_overflows_directly_to_a_cheaper_model(monkeypatch):
+    client = _ScriptedClient([_pt_exhausted_response, _ok_response])
     routed = _install_proxy_doubles(monkeypatch, client)
-
     response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
-
     assert response.status_code == 200
-    assert routed == [
-        ("gemini-2.5-flash", ""),
-        ("gemini-3.1-flash-lite", "dedicated"),
-        ("gemini-3.1-flash-lite", "shared"),
-    ]
+    assert routed == [("gemini-2.5-flash", ""), ("gemini-3.1-flash-lite", "shared")]
     assert desktop_proxy._pt_target_is_ready() is False
 
 
 @pytest.mark.asyncio
-async def test_a_successful_dedicated_probe_promotes_the_reservation(monkeypatch):
-    """This is the whole migration mechanism: no deploy, no flag, no date."""
-    client = _ScriptedClient([_pt_exhausted_response, _ok_response])
+@pytest.mark.parametrize("status,ready", [(200, True), (302, False)])
+async def test_only_successful_target_dedicated_requests_promote_the_reservation(monkeypatch, status, ready):
+    def reply(url):
+        response = _ok_response(url)
+        response.status_code = status
+        return response
+
+    client = _ScriptedClient([reply])
     routed = _install_proxy_doubles(monkeypatch, client)
-
-    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
-
-    assert response.status_code == 200
-    assert routed == [("gemini-2.5-flash", ""), ("gemini-3.1-flash-lite", "dedicated")]
-    assert desktop_proxy._pt_target_is_ready() is True
-    # And from now on flash requests are served by the new reservation.
-    assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-3.1-flash-lite:generateContent"
+    target = desktop_proxy.VERTEX_PT_TARGET_MODEL
+    response = await desktop_proxy._proxy(make_request(), f"models/{target}:generateContent", False, "user")
+    assert response.status_code == status
+    assert routed == [(target, "")]
+    assert desktop_proxy._pt_target_is_ready() is ready
+    assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
 
 
 @pytest.mark.asyncio
@@ -1726,7 +1715,7 @@ async def test_streaming_overflow_falls_back_and_leaks_no_provider_slot(monkeypa
     class Client:
         def stream(self, _method, url, **_kwargs):
             opened.append(url)
-            return StreamContext(Refused() if len(opened) < 3 else Served())
+            return StreamContext(Refused() if len(opened) < 2 else Served())
 
     async def route(path, model, action, query, *, request_type=None):
         return desktop_proxy.UpstreamRoute(
@@ -1768,9 +1757,8 @@ async def test_streaming_overflow_falls_back_and_leaks_no_provider_slot(monkeypa
     assert [url.rsplit("/", 1)[-1] for url in opened] == [
         "gemini-2.5-flash",
         "gemini-3.1-flash-lite",
-        "gemini-3.1-flash-lite",
     ]
-    assert closed == 3
+    assert closed == 2
     assert semaphore.locked() is False
 
 
@@ -1852,7 +1840,7 @@ async def test_one_404_stops_the_whole_fleet_retrying_a_dead_model(monkeypatch):
     routed = _install_proxy_doubles(monkeypatch, client)
 
     await desktop_proxy._proxy(make_request(), "models/gemini-2.5-pro:generateContent", False, "user")
-    assert desktop_proxy._model_believed_available(desktop_proxy.VERTEX_PT_TARGET_MODEL) is False
+    assert desktop_proxy._model_believed_available("gemini-3.1-flash-lite") is False
 
     await desktop_proxy._proxy(make_request(), "models/gemini-2.5-pro:generateContent", False, "user")
     # Second request goes straight to a model the project can call.
@@ -1867,7 +1855,7 @@ async def test_access_granted_later_promotes_without_a_deploy(monkeypatch):
     clock = {"now": 1_000.0}
     monkeypatch.setattr(desktop_proxy.time, "monotonic", lambda: clock["now"])
 
-    desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
+    desktop_proxy._record_model_unavailable("gemini-3.1-flash-lite")
     assert _retarget("models/gemini-2.5-pro:generateContent") != ("models/gemini-3.1-flash-lite:generateContent")
 
     clock["now"] += desktop_proxy._PT_PROBE_TTL_SECONDS + 1
@@ -2038,25 +2026,15 @@ def test_a_terminal_model_has_no_recovery_plan(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_a_404_on_any_model_falls_back_and_latches_it(monkeypatch):
-    """Generalized from the migration target to every routable model: the
-    second request must not repeat the round trip that already failed."""
     client = _ScriptedClient([_model_not_found_response, _ok_response, _ok_response])
     routed = _install_proxy_doubles(monkeypatch, client)
-    desktop_proxy._record_pt_target_observation(True)  # 3.1-flash-lite now holds PT
-
+    desktop_proxy._record_pt_target_observation(True)
     response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
-
     assert response.status_code == 200
-    # Flash is served by the promoted reservation, 404s, and steps to the floor.
-    assert routed == [("gemini-3.1-flash-lite", ""), ("gemini-2.5-flash-lite", "shared")]
-    assert desktop_proxy._model_believed_available("gemini-3.1-flash-lite") is False
-
-    # The second request never re-attempts the latched model: a model that
-    # cannot be reached cannot be holding prepaid capacity, so the reservation
-    # demotes back to gemini-2.5-flash and serves flash traffic directly.
+    assert routed == [("gemini-2.5-flash", ""), ("gemini-3.1-flash-lite", "shared")]
+    assert desktop_proxy._model_believed_available("gemini-2.5-flash") is False
     await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
-    assert routed[-1] == ("gemini-2.5-flash", "")
-    assert "gemini-3.1-flash-lite" not in [model for model, _ in routed[2:]]
+    assert routed[-1] == ("gemini-3.1-flash-lite", "")
 
 
 @pytest.mark.asyncio
@@ -2159,13 +2137,13 @@ def test_server_paid_traffic_never_dispatches_gemini_2_5_pro(monkeypatch, target
     if reservation_promoted:
         desktop_proxy._record_pt_target_observation(True)
     if not target_reachable:
-        desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
+        desktop_proxy._record_model_unavailable("gemini-3.1-flash-lite")
 
     served = _retarget("models/gemini-2.5-pro:generateContent")
 
     assert "gemini-2.5-pro" not in served
     expected = (
-        f"models/{desktop_proxy.VERTEX_PT_TARGET_MODEL}:generateContent"
+        "models/gemini-3.1-flash-lite:generateContent"
         if target_reachable
         else f"models/{desktop_proxy._QUOTA_DEMOTION_MODEL}:generateContent"
     )

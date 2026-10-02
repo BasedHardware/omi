@@ -178,7 +178,7 @@ async def test_control_late_rejection_continues_without_a_window_replay_ring(mon
     receiver.host.request.websocket.close.assert_not_called()
     assert [r.message for r in caplog.records if 'component=stt_live_session' in r.message] == [
         f'omi_fallback_event component=stt_live_session from={primary.value} to={rejected_service.value} '
-        'reason=other outcome=degraded subtype=connection_lost'
+        'reason=connection_lost outcome=degraded'
     ]
 
 
@@ -382,7 +382,7 @@ async def test_connect_then_vendor_close_is_not_recovered(monkeypatch):
             'component': 'stt_live_session',
             'from_mode': MODULATE_PROVIDER,
             'to_mode': 'soniox',
-            'reason': 'quota',
+            'reason': 'connection_lost',
             'outcome': 'exhausted',
         }
     ]
@@ -409,7 +409,7 @@ async def test_connect_then_delayed_vendor_close_is_exhausted_not_recovered(monk
     live = [event for event in events if event.get('component') == 'stt_live_session']
     assert live, events
     assert live[0]['outcome'] == 'exhausted'
-    assert live[0]['reason'] == 'quota'
+    assert live[0]['reason'] == 'connection_lost'  # Source Modulate death, not successor Soniox's quota.
     assert live[0]['to_mode'] == 'soniox'
     assert all(event['outcome'] != 'recovered' for event in events)
 

@@ -40,7 +40,21 @@ class VertexPTPolicyMixin:
 
     def _attempt_plan(self, anchor: str, *, origin_model: str = '') -> list[tuple[str, str]]:
         serving = self._serving_model(anchor, origin_model=origin_model)
+        if serving == ptr.PT_MODEL_TARGET and not self._pt_target_is_ready() and self._pt_probe_due():
+            self._pt_target_probed_at = self._now()
+            return [(serving, ptr.REQUEST_TYPE_DEDICATED), (serving, ptr.REQUEST_TYPE_SHARED)]
         return [(serving, self._capacity_for(serving))]
+
+    def _is_target_probe(self, model: str, capacity: str) -> bool:
+        return (
+            model == ptr.PT_MODEL_TARGET and capacity == ptr.REQUEST_TYPE_DEDICATED and not self._pt_target_is_ready()
+        )
+
+    @staticmethod
+    def _pt_probe_timeout_ms(remaining_ms: int) -> int:
+        # At most one second and one quarter of the original remaining budget.
+        # The shared attempt keeps the same request deadline, without a reset.
+        return max(1, min(1000, remaining_ms // 4))
 
     def _serving_model(self, anchor: str, *, origin_model: str = '') -> str:
         intended = self._validated_pin(
@@ -73,9 +87,13 @@ class VertexPTPolicyMixin:
         return ptr.request_type_for(model=model, pt_model=self._provisioned_model())
 
     def _recovery_attempts(
-        self, served_model: str, status_code: int, preview: bytes, *, origin_model: str = ''
+        self, served_model: str, status_code: int, preview: bytes, *, origin_model: str = '', capacity: str = ''
     ) -> list[tuple[str, str]]:
         message = _bounded_error_text(preview)
+        if served_model == ptr.PT_MODEL_TARGET and capacity == ptr.REQUEST_TYPE_DEDICATED:
+            if self._is_target_probe(served_model, capacity) or status_code == 429:
+                # Preserve the target lane's precision on absent/full dedicated capacity.
+                return [(served_model, ptr.REQUEST_TYPE_SHARED)]
         if ptr.is_model_unavailable(status_code, message):
             self._record_model_unavailable(served_model)
             return [
@@ -86,15 +104,23 @@ class VertexPTPolicyMixin:
             return self._overflow_plan(served_model, origin_model=origin_model)
         return []
 
-    def _observe_attempt(self, model: str, capacity: str, status_code: int, preview: bytes) -> None:
+    def _observe_attempt(
+        self,
+        model: str,
+        capacity: str,
+        status_code: int,
+        preview: bytes,
+        *,
+        traffic_type: str | None = 'PROVISIONED_THROUGHPUT',
+    ) -> None:
         """Latch PT-target probe outcomes from a dedicated attempt."""
-        if capacity != ptr.REQUEST_TYPE_DEDICATED:
+        if model != ptr.PT_MODEL_TARGET or capacity != ptr.REQUEST_TYPE_DEDICATED:
             return
-        message = _bounded_error_text(preview)
-        unavailable = ptr.is_model_unavailable(status_code, message)
-        exhausted = self._overflow_triggered(status_code, message)
-        if not unavailable:
-            self._record_pt_target_observation(not exhausted)
+        if 200 <= status_code < 300 and traffic_type == 'PROVISIONED_THROUGHPUT':
+            self._record_pt_target_observation(True)
+        else:
+            # No error proves an order exists or revokes a successful observation.
+            self._pt_target_probed_at = self._now()
 
     def _overflow_triggered(self, status_code: int, message: str) -> bool:
         return ptr.is_provisioned_capacity_exhausted(status_code, message) or ptr.is_provisioned_capacity_absent(
@@ -111,7 +137,7 @@ class VertexPTPolicyMixin:
             ladder = ptr.resolve_overflow_ladder(
                 pt_model=pt_model,
                 override=self._env(self._overflow_model_override_env),
-                origin_model=origin_model,
+                origin_model=origin_model or served_model,
             )
         except ValueError:
             return []
@@ -119,8 +145,6 @@ class VertexPTPolicyMixin:
         for rung in ladder:
             if not self._model_believed_available(rung):
                 continue
-            if rung == ptr.PT_MODEL_TARGET and self._pt_probe_due():
-                plan.append((rung, ptr.REQUEST_TYPE_DEDICATED))
             plan.append((rung, ptr.REQUEST_TYPE_SHARED))
         return plan
 
@@ -188,7 +212,7 @@ class VertexPTPolicyMixin:
     def _env(name: str, default: str = '') -> str:
         return os.getenv(name, default)
 
-    def _endpoint(self, model: str, *, method: str) -> str:
+    def _endpoint(self, model: str, *, method: str, capacity: str = '') -> str:
         project = os.getenv(self._project_env, '').strip()
         if not project:
             raise ProviderFailure(FailureClass.INVALID_CONFIG)
@@ -201,6 +225,13 @@ class VertexPTPolicyMixin:
             regional_location=os.getenv(self._location_env, DEFAULT_GCP_LOCATION).strip() or DEFAULT_GCP_LOCATION,
             multi_region_location=self._multi_region_location(),
         )
+        if model == ptr.PT_MODEL_TARGET and capacity == ptr.REQUEST_TYPE_DEDICATED:
+            try:
+                host, location = ptr.target_capacity_endpoint(
+                    location=self._env(ptr.PT_TARGET_LOCATION_ENV, self._multi_region_location())
+                )
+            except ValueError as exc:
+                raise ProviderFailure(FailureClass.INVALID_CONFIG) from exc
         return (
             f'https://{host}/{VERTEX_API_VERSION}/projects/{project}'
             f'/locations/{location}/publishers/google/models/{model}:{method}'

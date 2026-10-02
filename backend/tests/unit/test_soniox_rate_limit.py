@@ -238,6 +238,9 @@ def test_managed_socket_gauge_tracks_physical_close_not_death_latch():
     socket = LiveLegSocket.__new__(LiveLegSocket)
     socket.raw = FakeSocket(dead=True)
     socket._dead = False
+    socket._terminal_reason = None
+    socket._local_death_reason = None
+    socket._replay_failure_reason = None
     socket._closing_for_health = False
     socket._cost_recorded = False
     socket._cost_censored_no_text = False

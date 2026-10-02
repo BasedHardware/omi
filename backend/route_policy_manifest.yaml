@@ -3821,3 +3821,20 @@ routes:
       deprecation:
         state: active
       owner: backend
+
+  - route_type: http
+    method: POST
+    path: /v1/screen-task/gate
+    policy:
+      <<: *desktop_migration_policy
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      rate_limit:
+        policy_name: screen_activity:sync
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
