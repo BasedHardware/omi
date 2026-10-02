@@ -7,7 +7,8 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
 class KnowledgeGraphApi {
-  static final String _baseUrl = '${Env.apiBaseUrl}v1/knowledge-graph';
+  // Read per call: the base URL can be overridden after this class is first used (tests, local dev).
+  static String get _baseUrl => '${Env.apiBaseUrl}v1/knowledge-graph';
 
   /// Short user-facing copy for a knowledge-graph HTTP failure.
   ///

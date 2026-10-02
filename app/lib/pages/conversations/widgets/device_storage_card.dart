@@ -49,7 +49,7 @@ class DeviceStorageCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: fraction,
               minHeight: 6,
-              backgroundColor: OmiColors.iconTile,
+              backgroundColor: OmiColors.surface3,
               valueColor: AlwaysStoppedAnimation<Color>(barColor),
             ),
           ),

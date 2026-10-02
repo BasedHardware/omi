@@ -1,4 +1,5 @@
-// The Settings sheet, the Account page, each settings group page and settings search.
+// The Settings page (scenario ids keep the old "settings-sheet" name), the Account page, each
+// settings group page and settings search.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
