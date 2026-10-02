@@ -12,10 +12,14 @@ def request_body(body: bytes, url: str) -> bytes:
         return body
     model = url.split('/models/')[-1].split(':')[0]
     payload = json.loads(body)
+    if not isinstance(payload, Mapping):
+        return body
     if model != ptr.PT_MODEL_TARGET:
         config = payload.get('generationConfig', payload.get('generation_config', {}))
+        if not isinstance(config, Mapping):
+            return body
         thinking = config.get('thinkingConfig', config.get('thinking_config', {}))
-        if 'thinkingLevel' not in thinking and 'thinking_level' not in thinking:
+        if not isinstance(thinking, Mapping) or ('thinkingLevel' not in thinking and 'thinking_level' not in thinking):
             return body
     return json.dumps(ptr.model_payload(payload, model), separators=(',', ':')).encode()
 
