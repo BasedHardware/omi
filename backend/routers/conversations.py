@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
+import database.conversation_scan as conversation_scan_db
 import database.conversations as conversations_db
 import database._client as db_client_module
 import database.action_items as action_items_db
@@ -103,6 +104,7 @@ from services.conversation_frame_evidence import delete_conversation_and_frame_e
 from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
+    finish_list_budget,
     list_read_budget_for_request,
 )
 from utils.conversations.calendar_linking import (
@@ -1924,6 +1926,8 @@ async def generate_conversation_topic_endpoint(
 def search_conversations_endpoint(
     search_request: SearchRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     if search_request.speaker_id and search_request.speaker_id != 'user':
         person = users_db.get_person(uid, search_request.speaker_id)
@@ -1980,26 +1984,20 @@ def search_conversations_endpoint(
         include_discarded = bool(search_request.include_discarded)
         start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
         end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
+        budget = conversation_scan_db.conversation_scan_budget(request, route='speaker-browse')
+        # One bounded snapshot-cursor pass (never offset): invisible rows advance the cursor (#19908).
         browse_results = browse_conversations_by_speaker(
-            # Pass the caller's include_discarded through rather than forcing the
-            # scan-and-fill branch: that branch restarts its stream from the
-            # newest row on every page, so a deep browse re-read the whole
-            # history once per page and ran for minutes. On the limit/offset
-            # branch a tombstone inside the window can end the scan early (#19908).
-            lambda limit, offset: conversations_db.get_conversations_without_photos(
-                uid,
-                limit=limit,
-                offset=offset,
-                include_discarded=include_discarded,
-                start_date=start_dt,
-                end_date=end_dt,
+            conversation_scan_db.speaker_browse_scan(
+                uid, include_discarded=include_discarded, start_date=start_dt, end_date=end_dt, budget=budget
             ),
             search_request.speaker_id,
             page=browse_page,
             per_page=browse_per_page,
             include_discarded=include_discarded,
+            budget=budget,
         )
         redact_conversations_for_list(browse_results['items'])
+        finish_list_budget(response, budget)
         return browse_results
 
     try:

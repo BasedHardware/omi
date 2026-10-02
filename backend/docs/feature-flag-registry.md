@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-01 -->
+<!-- feature-flag-registry as-of: 2026-10-02 -->
 
 # Feature-flag authority registry
 
@@ -104,7 +104,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-01.
+None as of 2026-10-02.
 
 ## Flags
 
@@ -270,7 +270,9 @@ and an explicit empty literal renders as `''`.
 | `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION` | Permit direct-model gateway exception | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE` | Allow production gateway feature mode | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` | Enable gateway observability logs | backend | env | closed | — | — | — | — | keep | — | unowned |
+| `OMI_VERTEX_LEGACY_TASK_MODE` | enforce (default) refuses positively identified macOS task loops below the configured capable build after confirmed inactivity; unset/invalid threshold or observe only counts | backend | env | closed | env_var | env_var | env_var | — | keep | — | dazheng |
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | — | unowned |
+| `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | — | dazheng |
 | `SYNC_BACKFILL_ENABLED` | Emergency stop for accepting sync backfill | backend | env | open | true | true | true | — | keep | — | unowned |
 | `TRANSCRIPTION_SHADOW_KILL_SWITCH` | Stop Parakeet final-pass shadow admission | backend | env | inverted | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (gke/pusher, pusher (chart)) | — | keep | — | dazheng |
 | `TRANSLATION_DEMAND_GATE_ENABLED` | Gate live translation on transcript-view demand (on-demand rollout; false restores legacy always-translate) | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | — | keep | — | dazheng |
@@ -296,7 +298,9 @@ and an explicit empty literal renders as `''`.
 | `OMI_LLM_CHAT_AGENT_ROUTE` | Select managed chat-agent gateway route | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_LLM_GATEWAY_FEATURE_MODE` | Select LLM gateway versus direct serving | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_MODEL_TIER` | Select proxy budget tier | backend | env | closed | — | — | — | — | keep | — | unowned |
+| `OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` | First released macOS build containing #20374; positive integer read per request; unset/invalid serves all and counts candidate would-refuse volume in bounded build buckets | backend | env | open | env_var | env_var | env_var | — | keep | — | dazheng |
 | `OMI_VERTEX_PT_TARGET_LOCATION` | Moved Vertex order location; default us; global explicitly widens residency | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `OMI_VERTEX_RESERVATION_STATES` | Per-model active/inactive/unknown/auto JSON overrides; read per request, invalid JSON fails open | backend, llm-gateway | env | open | env_var | env_var | env_var | — | keep | — | dazheng |
 | `PARAKEET_ATTENTION_MODE` | Choose full versus local attention on Parakeet GPU | backend | env | closed | — | — | auto (parakeet (chart)) | — | keep | — | unowned |
 | `PARAKEET_DIARIZATION` | Enable prerecorded Parakeet diarization | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `PARAKEET_INFERENCE_MODE` | Choose Parakeet transcription inference backend | backend | env | closed | — | nemo (parakeet (chart)) | nemo (parakeet (chart)) | — | keep | — | unowned |
@@ -357,6 +361,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
 - `SCREEN_TASK_JEV_AUDIT_RATE` — Screen gate reject audit fraction, default 0.01 (fail: open)
 - `SCREEN_TASK_JEV_THRESHOLD` — Screen gate threshold, default 0.5 (fail: open)
+- `SCREEN_TASK_STOP` — Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease (fail: inverted)
 - `SELFHEAL_MODE` — Conversation self-heal sweeper mode: off/detect-only/nudge/heal (fail: closed)
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
