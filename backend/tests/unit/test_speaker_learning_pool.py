@@ -319,13 +319,14 @@ def test_real_reader_pools_rounded_short_chunks_once(world, memory_bucket, monke
 
 
 @pytest.mark.parametrize('offset', [0.1234, 0.1236])
-def test_rounded_complete_ten_seconds_keeps_teaching_floor(world, memory_bucket, monkeypatch, offset):
+@pytest.mark.parametrize('chunk_seconds', [10, 60])
+def test_rounded_complete_ten_seconds_keeps_teaching_floor(world, memory_bucket, monkeypatch, offset, chunk_seconds):
     monkeypatch.setattr(storage, 'list_audio_chunks', world.real_listing)
     monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', audio_chunks.iter_audio_chunk_pcm)
-    data = memory_bucket.add(STARTED_AT + offset, 10, uid=UID, conversation_id=CONV)
+    data = memory_bucket.add(STARTED_AT + offset, chunk_seconds, uid=UID, conversation_id=CONV)
     set_conversation(world, conversation([seg('a', offset, offset + 10)]))
     assert teach(('a',)) == 'stored'
-    assert world.captured['pcm'] == data
+    assert world.captured['pcm'] == data[: 16000 * 10 * 2]
 
 
 @pytest.mark.parametrize('protection', ['standard', 'enhanced'])

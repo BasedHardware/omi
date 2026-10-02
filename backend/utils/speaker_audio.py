@@ -121,7 +121,7 @@ def legacy_speaker_clip_pcm(
                 continue
             pcm = pcm[: span['samples'] * 2]
         first = round((blob_start - start) * sample_rate)
-        if not authoritative and abs(first) <= tolerance and len(pcm) // 2 == needed:
+        if not authoritative and abs(first) <= tolerance and len(pcm) // 2 >= needed:
             # A complete boundary-aligned filename-only chunk can have either
             # sign of rounding error. Move its uncertain origin within the
             # known +/-0.5ms interval; keep every real sample and the 10s floor.
