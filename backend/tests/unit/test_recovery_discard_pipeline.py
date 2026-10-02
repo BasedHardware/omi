@@ -204,7 +204,9 @@ async def test_decode_failure_preserves_blob_and_uses_existing_terminal_path(pip
     assert 'relevance_decision' not in row
     assert pipeline.store.rows[JOB_PATH]['last_failure_code'] == 'recovery_structure_unavailable'
     assert counters['verified'] == 0 and counters['refused'] == 1
-    assert 'verify_not_rich' not in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert 'verify_not_rich' not in output
+    assert '"structure_reason": "transcript_decode_failed"' in output
     pipeline.paid_notes.assert_not_called()
 
 

@@ -14,6 +14,12 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+            value: 'true'
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -441,6 +447,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -808,6 +817,12 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             TRANSLATION_DEMAND_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -1090,6 +1105,12 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1337,6 +1358,12 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1537,6 +1564,12 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1980,6 +2013,12 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+            value: 'true'
+            category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -2423,6 +2462,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+            value: 'true'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -2674,6 +2716,12 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             TRANSLATION_DEMAND_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -2973,6 +3021,12 @@ environments:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -3210,6 +3264,12 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'
@@ -3421,6 +3481,12 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
+              value: 'true'
+              category: rollout
+            SYNC_ASSIGNMENT_RECOVERY_ENABLED:
+              value: 'true'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'

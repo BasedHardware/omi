@@ -815,6 +815,10 @@ class TestProcessSegmentReal:
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()
+        # The pipeline classifies persistence errors with these predicates; no
+        # test here raises a Firestore error, so the stub answers "not one".
+        sys.modules['database._client'].is_document_size_limit_error = lambda error: False
+        sys.modules['database._client'].is_expired_transaction_error = lambda error: False
         sys.modules['database.auth'].get_user_name = MagicMock(return_value='User')
         _mock_conv_db = sys.modules['database.conversations']
         _mock_conv_db.get_closest_conversation_to_timestamps = MagicMock()

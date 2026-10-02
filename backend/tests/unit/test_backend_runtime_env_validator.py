@@ -248,6 +248,7 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "SYNC_ASSIGNMENT_RECOVERY_ENABLED", "value": "true"},\n'
         '        {"name": "SYNC_LEDGER_FENCE_MODE", "value": "legacy"},',
     )
 
@@ -414,6 +415,14 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         lambda match: match.group(1) + '\n' + entries + ',',
         payload,
         count=1,
+        flags=re.DOTALL,
+    )
+    # Gateway/secret fixtures must include the task-preservation binding on each
+    # Cloud Run conversation-processing host, leaving their intended error intact.
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},',
+        payload,
         flags=re.DOTALL,
     )
     return with_backend_integration_events_secret(payload)
