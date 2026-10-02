@@ -799,7 +799,7 @@ class CaptureController extends ChangeNotifier
       if (health?.verifiedAt(_now()) == true) {
         _verifiedIngressStartedAt ??= _now();
         _recordingTelemetry.markStarted(evidence: 'native_ingress');
-      } else {
+      } else if (health == null) {
         _verifiedIngressStartedAt = null;
       }
       _wedgeMonitor.observeIngressHealth(deviceId, health);

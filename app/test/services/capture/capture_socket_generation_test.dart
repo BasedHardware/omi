@@ -206,8 +206,29 @@ void main() {
       );
       ble.notifyListeners();
       expect(p.pendantCaptureVerified, isTrue);
-      expect(p.liveCaptureStartedAt, world.clock.now());
+      final verifiedAt = world.clock.now();
+      expect(p.liveCaptureStartedAt, verifiedAt);
       expect(events.where((e) => e == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
+
+      // A lease expiry is a verification lapse, not a new recording: the first
+      // verified time must survive so the timer continues instead of
+      // restarting at zero when audio returns.
+      world.clock.advanceTo(verifiedAt.add(const Duration(seconds: 35)));
+      expect(p.pendantCaptureVerified, isFalse);
+      expect(p.liveCaptureStartedAt, isNull, reason: 'unverified is still hidden');
+      ble.health = CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'fresh',
+        reason: 'audio_observed',
+        validUntilMs: world.clock.now().millisecondsSinceEpoch + 30000,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      );
+      ble.notifyListeners();
+      expect(p.pendantCaptureVerified, isTrue);
+      expect(p.liveCaptureStartedAt, verifiedAt, reason: 'audio returning must not restart the timer');
+      expect(events.where((e) => e == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
+
       ble.health = null; // ready replay invalidates proof
       ble.notifyListeners();
       expect(p.liveCaptureStartedAt, isNull);

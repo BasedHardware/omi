@@ -164,6 +164,26 @@ void main() {
       expect(monitor.visiblePrompt, isNotNull);
     });
 
+    test('native ownership arriving while the feature gate is pending blocks the declaration', () async {
+      final gate = Completer<bool>();
+      final monitor = makeMonitor(featureGate: () => gate.future, withRetry: true);
+      zeroSession(monitor);
+      zeroSession(monitor);
+      zeroSession(monitor); // streak reached; declaration waits on the gate
+      await pumpEventQueue();
+      expect(forEvent('Capture Wedge Detected'), isEmpty);
+
+      // Ownership lands while the gate is still pending.
+      monitor.setNativeIngressOwner('dev-a', true);
+      gate.complete(true);
+      await pumpEventQueue();
+
+      // The legacy episode must not be declared behind native ownership: it
+      // would be invisible (owner guard hides it) yet block later declarations.
+      expect(forEvent('Capture Wedge Detected'), isEmpty);
+      expect(retriedDevices, isEmpty);
+    });
+
     test('a session that never reached connected does not count', () async {
       final monitor = makeMonitor();
       zeroSession(monitor);
@@ -382,6 +402,47 @@ void main() {
       await pumpEventQueue();
 
       expect(monitor.visiblePrompt, isNull);
+    });
+
+    test('a transcript during an ingress alert still releases the telemetry slot', () async {
+      final monitor = makeMonitor(withRetry: true);
+      monitor.setNativeIngressOwner('dev-a', true);
+      monitor.observeIngressHealth(
+        'dev-a',
+        const CaptureIngressHealth(
+          phase: 'actionRequired',
+          generation: 'epoch-1',
+          reason: 'recovery_exhausted',
+          validUntilMs: 0,
+          subscriptionConfirmed: false,
+          unverifiedSinceMs: 1234,
+        ),
+      );
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed);
+
+      // A byte-producing session with no transcript declares the telemetry-only
+      // episode natively-owned devices can still get.
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      await pumpEventQueue();
+
+      // Transcript arrives during the alert: the ingress failure must stay
+      // (native owns it), but the telemetry slot must be released so later
+      // declarations are not blocked.
+      monitor.onTranscriptObserved('dev-a');
+      await pumpEventQueue();
+
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed,
+          reason: 'the ingress failure stays owned by native recovery');
+      // The telemetry episode is gone; three more no-transcript sessions can
+      // declare a fresh one instead of being blocked by the stale slot.
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      await pumpEventQueue();
+      expect(forEvent('Capture Wedge Detected').where((e) => e['trigger'] == 'bytes_sent_no_transcript'), isNotEmpty,
+          reason: 'a stale telemetry slot must not block later declarations');
     });
 
     test('two minutes of byte-producing silence tracks and retries without a prompt', () async {

@@ -90,7 +90,14 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
 
     override fun subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String,
                                          callback: (Result<Unit>) -> Unit) {
-        bleManager.subscribeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, callback)
+        // The generated Pigeon handler has no synchronous try/catch around this
+        // call, so an exception here would escape the message handler and leave
+        // Dart waiting out its full subscription timeout. Reply instead.
+        try {
+            bleManager.subscribeCharacteristic(peripheralUuid, serviceUuid, characteristicUuid, callback)
+        } catch (e: Exception) {
+            callback(Result.failure(e))
+        }
     }
 
     override fun setCaptureAuthorized(uuid: String, authorized: Boolean) {

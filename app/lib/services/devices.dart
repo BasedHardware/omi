@@ -322,7 +322,12 @@ class DeviceService {
         if (existing != null && BleBridge.instance.preservesCaptureIntent(deviceId)) {
           // Preserve the source and its listeners; native manageDevice will
           // establish/discover a real link if the cached transport is down.
-          await existing.transport.connect();
+          // Go through the connection (not the bare transport) so device setup
+          // such as the pendant time sync runs after the link returns, and a
+          // transport failure surfaces as DeviceConnectionException like the
+          // cold-connect path. Re-pass the service callback so later state
+          // changes keep reaching subscribers.
+          await existing.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
         } else {
           await _connectToDevice(deviceId);
         }

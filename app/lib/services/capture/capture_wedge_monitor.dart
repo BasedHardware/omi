@@ -418,7 +418,15 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         allowed = false;
       }
     }
-    if (!allowed || !_canDeclare(state, trigger)) return;
+    // Ownership can arrive while the gate was pending (TOCTOU): recheck after
+    // the await, or a legacy episode lands invisibly, blocks later declarations
+    // via _canDeclare, and its recovery exits at the owner guard.
+    if (!allowed ||
+        !_canDeclare(state, trigger) ||
+        (_nativeIngressDevices.contains(deviceId) &&
+            (trigger == triggerZeroByteStreak || trigger == triggerRapidReconnects))) {
+      return;
+    }
     final episode = CaptureWedgeEpisode(deviceId: deviceId, source: source, trigger: trigger, declaredAt: _now());
     if (_isTelemetryOnlyTrigger(trigger)) {
       state.telemetryEpisode = episode;
@@ -484,7 +492,15 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   }
 
   void _resolveIfActive(String deviceId, _DeviceWedgeState state) {
-    if (state.episode?.trigger == triggerIngressRecoveryFailed) return;
+    if (state.episode?.trigger == triggerIngressRecoveryFailed) {
+      // The ingress failure stays (native owns it), but a transcript during
+      // the alert must still release the telemetry slot: native-owned devices
+      // can hold bytes_sent_no_transcript episodes, and an occupied slot
+      // blocks later declarations and transfer retries.
+      state.telemetryEpisode = null;
+      notifyListeners();
+      return;
+    }
     if (state.episode == null && state.telemetryEpisode == null) return;
     for (final episode in [state.episode, state.telemetryEpisode]) {
       if (episode != null && _now().difference(episode.declaredAt) <= resolveWindow) {

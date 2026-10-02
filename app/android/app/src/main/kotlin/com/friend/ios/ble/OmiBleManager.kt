@@ -73,6 +73,9 @@ class OmiBleManager private constructor(private val application: Application) {
 
         /** CCCD UUID for enabling/disabling notifications. */
         private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+        /** Bounds an accepted CCCD write that never produces onDescriptorWrite. */
+        private const val CCCD_ACK_TIMEOUT_MS = 15000L
     }
 
     // ── Listener for the foreground service ──
@@ -433,14 +436,35 @@ class OmiBleManager private constructor(private val application: Application) {
         }
     }
 
+    /** A pending CCCD subscription: which peripheral asked and how to answer. */
+    private class PendingSubscription(
+        val address: String,
+        val completion: ((Result<Unit>) -> Unit)?,
+    )
+
     private val subscriptionCompletions =
-        ConcurrentHashMap<BluetoothGattDescriptor, (Result<Unit>) -> Unit>()
+        ConcurrentHashMap<BluetoothGattDescriptor, PendingSubscription>()
+    private val subscriptionTimeouts =
+        ConcurrentHashMap<BluetoothGattDescriptor, Runnable>()
 
     fun subscribeCharacteristic(address: String, serviceUuid: String, characteristicUuid: String,
                                 completion: (Result<Unit>) -> Unit = {}) {
-        val gatt = connectedGatts[address.uppercase()]
-        val characteristic = findCharacteristic(gatt, serviceUuid, characteristicUuid)
-        val descriptor = characteristic?.getDescriptor(CCCD_UUID)
+        // Never throw synchronously: the Pigeon message handler would escape,
+        // Dart would get no reply, and its caller would wait out the full
+        // subscription timeout. Every failure settles through the completion.
+        val addr: String
+        val gatt: BluetoothGatt?
+        val characteristic: BluetoothGattCharacteristic?
+        val descriptor: BluetoothGattDescriptor?
+        try {
+            addr = address.uppercase()
+            gatt = connectedGatts[addr]
+            characteristic = findCharacteristic(gatt, serviceUuid, characteristicUuid)
+            descriptor = characteristic?.getDescriptor(CCCD_UUID)
+        } catch (e: Exception) {
+            completion(Result.failure(e))
+            return
+        }
         if (gatt == null || characteristic == null || descriptor == null) {
             completion(Result.failure(IllegalStateException("Notification characteristic or CCCD not found")))
             return
@@ -448,18 +472,54 @@ class OmiBleManager private constructor(private val application: Application) {
         // Report the actual CCCD result; Dart owns the bounded wait and retry.
         // Queue scheduling and GATT lifetime remain unchanged in this cut.
         enqueueCommand {
-            subscriptionCompletions[descriptor] = completion
-            if (!gatt.setCharacteristicNotification(characteristic, true)) {
-                finishSubscription(descriptor, Result.failure(IllegalStateException("Notification enable failed")))
+            try {
+                subscriptionCompletions[descriptor] = PendingSubscription(addr, completion)
+                if (!gatt.setCharacteristicNotification(characteristic, true)) {
+                    finishSubscription(descriptor, Result.failure(IllegalStateException("Notification enable failed")))
+                    completeCommand()
+                } else if (!writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
+                    finishSubscription(descriptor, Result.failure(IllegalStateException("CCCD write rejected")))
+                } else {
+                    armSubscriptionTimeout(descriptor)
+                }
+            } catch (e: Exception) {
+                // A posted command must never crash the main looper or strand the
+                // Dart caller: every failure path reaches the completion.
+                finishSubscription(descriptor, Result.failure(e))
                 completeCommand()
-            } else if (!writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
-                finishSubscription(descriptor, Result.failure(IllegalStateException("CCCD write rejected")))
             }
         }
     }
 
-    private fun finishSubscription(descriptor: BluetoothGattDescriptor, result: Result<Unit>) {
-        subscriptionCompletions.remove(descriptor)?.invoke(result)
+    /**
+     * Bound the accepted CCCD write. If `onDescriptorWrite` never arrives, the
+     * serialized GATT queue would stay blocked on this command and Dart's retry
+     * would queue behind it forever, so fail the pending completion and release
+     * the queue. 15s mirrors iOS `OmiCaptureHealth.Policy.operationTimeout` and
+     * stays under Dart's 20s subscription wait.
+     *
+     * Ownership is the pending map: the timeout fires only while this map entry
+     * survives, and a late ack that arrives after the timeout must not double-
+     * release the queue slot now owned by a later command.
+     */
+    private fun armSubscriptionTimeout(descriptor: BluetoothGattDescriptor) {
+        val runnable = Runnable {
+            val pending = subscriptionCompletions.remove(descriptor) ?: return@Runnable
+            subscriptionTimeouts.remove(descriptor)
+            Log.w(TAG, "CCCD write for ${descriptor.uuid} ack timed out after ${CCCD_ACK_TIMEOUT_MS}ms")
+            pending.completion?.invoke(Result.failure(IllegalStateException("CCCD write timed out")))
+            completeCommand()
+        }
+        subscriptionTimeouts[descriptor] = runnable
+        mainHandler.postDelayed(runnable, CCCD_ACK_TIMEOUT_MS)
+    }
+
+    /** @return true when this call settled the pending entry (callback or sentinel). */
+    private fun finishSubscription(descriptor: BluetoothGattDescriptor, result: Result<Unit>): Boolean {
+        subscriptionTimeouts.remove(descriptor)?.let { mainHandler.removeCallbacks(it) }
+        val pending = subscriptionCompletions.remove(descriptor) ?: return false
+        pending.completion?.invoke(result)
+        return true
     }
 
     fun unsubscribeCharacteristic(address: String, serviceUuid: String, characteristicUuid: String) {
@@ -469,10 +529,27 @@ class OmiBleManager private constructor(private val application: Application) {
 
         val descriptor = characteristic.getDescriptor(CCCD_UUID)
         enqueueCommand {
-            gatt.setCharacteristicNotification(characteristic, false)
-            if (descriptor != null) {
-                writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
-            } else {
+            try {
+                gatt.setCharacteristicNotification(characteristic, false)
+                if (descriptor != null) {
+                    // Sentinel claim on the descriptor: the DISABLE write's slot
+                    // is released only by its own ack/timeout, not by the stale
+                    // ENABLE ack it may supersede.
+                    subscriptionCompletions[descriptor] =
+                        PendingSubscription(addr, null)
+                    if (!writeDescriptorCompat(gatt, descriptor, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)) {
+                        // writeDescriptorCompat already released the queue on
+                        // rejection; drop the sentinel so the timeout cannot
+                        // double-release a later command's slot.
+                        finishSubscription(descriptor, Result.failure(IllegalStateException("CCCD write rejected")))
+                    } else {
+                        armSubscriptionTimeout(descriptor)
+                    }
+                } else {
+                    completeCommand()
+                }
+            } catch (e: Exception) {
+                finishSubscription(descriptor, Result.failure(e))
                 completeCommand()
             }
         }
@@ -596,6 +673,16 @@ class OmiBleManager private constructor(private val application: Application) {
         }
         for (key in writeCompletions.keys().toList().filter { it.startsWith(addr.lowercase()) }) {
             writeCompletions.remove(key)?.invoke(Result.failure(Exception("Peripheral disconnected")))
+        }
+
+        // Fail and drop pending CCCD completions for this peripheral; their
+        // cancelled writes may never ack, and the completion must not dangle.
+        for (descriptor in subscriptionCompletions.keys().toList()) {
+            val pending = subscriptionCompletions[descriptor] ?: continue
+            if (!pending.address.equals(addr, ignoreCase = true)) continue
+            subscriptionTimeouts.remove(descriptor)?.let { mainHandler.removeCallbacks(it) }
+            subscriptionCompletions.remove(descriptor)
+            pending.completion?.invoke(Result.failure(Exception("Peripheral disconnected")))
         }
 
         gattQueue.clear()
@@ -785,8 +872,15 @@ class OmiBleManager private constructor(private val application: Application) {
         }
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-            finishSubscription(descriptor, if (status == BluetoothGatt.GATT_SUCCESS) Result.success(Unit)
-                else Result.failure(IllegalStateException("CCCD write failed: $status")))
+            // Only the pending owner releases the queue slot. A late ack after
+            // the 15s CCCD timeout (or after cleanup) settles nothing: the slot
+            // already moved on to a later command.
+            val settled = finishSubscription(
+                descriptor,
+                if (status == BluetoothGatt.GATT_SUCCESS) Result.success(Unit)
+                else Result.failure(IllegalStateException("CCCD write failed: $status")),
+            )
+            if (!settled) return
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Descriptor write failed (status=$status) for ${descriptor.characteristic.uuid}")
             }
