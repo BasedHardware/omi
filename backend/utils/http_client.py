@@ -99,7 +99,7 @@ def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
     like a normal request to the original hostname.
     """
     parsed = urlparse(url)
-    hostname = parsed.hostname
+    hostname = parsed.hostname or ''
     host_header = f'[{hostname}]' if ':' in hostname else hostname
     netloc = f'[{resolved_ip}]' if ':' in resolved_ip else resolved_ip
     if parsed.port:
