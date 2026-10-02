@@ -46,6 +46,20 @@ void main() {
     }
   }
 
+  /// Waits, in real time, until [done] holds for the phone's WALs. Writing, stamping and releasing
+  /// copies touch real files outside the virtual scheduler, so a quiet moment does not prove they are done.
+  Future<List<Wal>> walsReach(bool Function(List<Wal> wals) done) async {
+    for (var i = 0; i < 200; i++) {
+      final wals = await world.wal.syncs.phone.getAllWals();
+      if (done(wals)) return wals;
+      await world.settle();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return world.wal.syncs.phone.getAllWals();
+  }
+
+  int totalSeconds(List<Wal> wals) => wals.fold<int>(0, (total, wal) => total + wal.seconds);
+
   /// The controller asks for recovery through its session owner; the replay world has none, so wake
   /// the world's coordinator the way that request would.
   Future<void> recoveryPass() async {
@@ -94,15 +108,14 @@ void main() {
     await settleFiles();
   }
 
-  Future<int> keptSeconds() async =>
-      (await world.wal.syncs.phone.getAllWals()).fold<int>(0, (total, wal) => total + wal.seconds);
-
   test('phone mic: a recording the server never transcribed stays on the phone and is uploaded', () async {
     await recordOnline(130);
 
-    expect(await keptSeconds(), greaterThanOrEqualTo(120), reason: 'sent audio is kept until a transcript confirms it');
+    final kept = await walsReach((wals) => totalSeconds(wals) >= 120);
+    expect(totalSeconds(kept), greaterThanOrEqualTo(120), reason: 'sent audio is kept until a transcript confirms it');
     await recoveryPass();
     expect(world.uploads.attempts, isNotEmpty, reason: 'the recovery pass sends the audio for repair');
+    await walsReach((wals) => wals.every((wal) => wal.status != WalStatus.miss));
     expect((await world.walCounts())[WalStatus.miss] ?? 0, 0, reason: 'nothing is left waiting after the upload');
   });
 
@@ -111,6 +124,9 @@ void main() {
     await recordOnline(130);
 
     await serverCloses(conversation('c1', origin, const []));
+    final stamped = await walsReach((wals) => wals.isNotEmpty && wals.every((wal) => wal.conversationId == 'c1'));
+    expect(stamped.map((wal) => wal.conversationId).toSet(), {'c1'},
+        reason: 'the copy is stamped with its conversation');
     await recoveryPass();
 
     expect(world.uploads.attempts, isNotEmpty);
@@ -122,9 +138,9 @@ void main() {
     await recordOnline(130);
 
     await serverCloses(conversation('c1', origin, [for (var t = 1.0; t < 125; t += 20) (t, t + 15)]));
-    await recoveryPass();
+    expect(await walsReach((wals) => wals.isEmpty), isEmpty);
 
-    expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
+    await recoveryPass();
     expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
   });
 }
