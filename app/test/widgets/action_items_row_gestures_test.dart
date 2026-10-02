@@ -100,7 +100,7 @@ void main() {
     expect(find.text('Open'), findsOneWidget);
     expect(find.text('Select'), findsOneWidget);
     expect(find.text('Outdent'), findsOneWidget);
-    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Delete Task'), findsOneWidget);
 
     await tester.tap(find.text('Outdent'));
     await tester.pumpAndSettle();

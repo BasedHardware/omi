@@ -8,7 +8,9 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
+import 'package:omi/pages/action_items/task_page.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/providers/action_items_provider.dart';
 
 import '../fakes.dart';
@@ -66,8 +68,8 @@ final tasksScenarios = <AuditScenario>[
         completed: false,
         dueAt: DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 9),
       );
-      await a.pumpHost((context) => _openTaskForm(context, item: item));
-      await a.shot('Open an existing task for editing');
+      await a.pumpHost((context) => routeToPage(context, TaskPage(item: item)));
+      await a.shot('Open an existing task: its own page');
     },
   ),
   AuditScenario(
