@@ -236,7 +236,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
   void _onTap(BuildContext context) {
     final capture = context.read<CaptureProvider>();
     if (capture.recordingState == RecordingState.initialising) return;
-    final ownsRecording = capture.recordingState == RecordingState.record || capture.isPhoneMicPaused;
+    final ownsRecording = _phoneOwnsCapture(capture);
     if (ownsRecording || _callInProgress(context) || _pendantHasCapture(capture) || capture.isPendantBatchRecording) {
       _startRecording(context);
       return;
@@ -262,6 +262,13 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       ),
     );
   }
+
+  /// The phone capture is this button's own: live, paused, or interrupted while transcription
+  /// reconnects (ownership, not the recording state, says so).
+  static bool _phoneOwnsCapture(CaptureProvider capture) =>
+      capture.liveCaptureSource == 'phone' ||
+      capture.recordingState == RecordingState.record ||
+      capture.isPhoneMicPaused;
 
   static bool _callInProgress(BuildContext context) => _isCallLive(context.read<PhoneCallProvider>().callState);
 
@@ -357,7 +364,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     return Consumer<CaptureProvider>(
       builder: (context, captureProvider, _) {
         // The phone recording is this button's own (live or paused); anything else is idle here.
-        final isRecording = captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused;
+        final isRecording = _phoneOwnsCapture(captureProvider);
         final isInitialising = captureProvider.recordingState == RecordingState.initialising;
         final l10n = context.l10n;
         // Idle with nothing to take over, a tap opens the Record with chooser rather than recording,

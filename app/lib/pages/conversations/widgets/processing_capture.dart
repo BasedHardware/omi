@@ -28,6 +28,7 @@ import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/conversations/widgets/pendant_dropped_sheet.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/device_tile.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
@@ -214,14 +215,18 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     final startedAt = _droppedStartedAt;
     final source = _droppedSource!;
     final elapsed = startedAt == null ? null : (_droppedAt ?? DateTime.now()).difference(startedAt);
+    // The Disconnected sheet speaks of a pendant; glasses and other wearables get the generic
+    // explanation with their own name.
+    final pendant = DeviceTile.isPendant(source);
     return LiveCaptureCard(
       source: source,
       status: l10n.disconnected,
       detail: reconnecting ? l10n.reconnecting : null,
-      explanation: l10n.pendantLostConnection,
+      explanation:
+          pendant ? l10n.pendantLostConnection : l10n.deviceDisconnectedBody(CaptureSources.label(context, source)),
       elapsed: elapsed,
       lastLine: provider.segments.lastOrNull?.text,
-      onShowDetails: () => showPendantDroppedSheet(context, source: source, elapsed: elapsed),
+      onShowDetails: pendant ? () => showPendantDroppedSheet(context, source: source, elapsed: elapsed) : null,
     );
   }
 
@@ -325,7 +330,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         note:
             isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
         // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
-        onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
+        // Nothing to pause until the microphone has opened.
+        onPauseToggle: starting || !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
             ? null
             : () => _togglePause(provider),
       );

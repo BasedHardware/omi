@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -97,8 +98,13 @@ void main() {
     );
     await pumpHeader(tester, width: 375, folder: folder);
     expectOneLine(tester, 375);
-    // The header's gutters, then the folder's share of what is left.
-    expect(tester.getSize(find.byKey(const Key('conversation_folder'))).width,
-        lessThanOrEqualTo((375 - 2 * OmiSpacing.md) * ConversationDetailHeader.folderShare + 0.5));
+    // The chip stops at its share of the row (the header's gutters, then the folder's share)...
+    const cap = (375 - 2 * OmiSpacing.md) * ConversationDetailHeader.folderShare;
+    expect(tester.getSize(find.byKey(const Key('conversation_folder'))).width, closeTo(cap, 0.5));
+    // ...and its label is cut there with an ellipsis, not clipped.
+    final label = tester.renderObject<RenderParagraph>(
+        find.descendant(of: find.byKey(const Key('conversation_folder')), matching: find.text(folder.name)));
+    expect(label.didExceedMaxLines, isTrue);
+    expect(label.overflow, TextOverflow.ellipsis);
   });
 }

@@ -77,6 +77,10 @@ class DeviceTile extends StatelessWidget {
     return ExcludeSemantics(child: tile);
   }
 
+  /// Whether [source] is a pendant (Omi, Limitless, Bee, Plaud, …), as opposed to a phone, watch,
+  /// glasses or other source.
+  static bool isPendant(String? source) => glyphFor(source) == _pendant;
+
   /// The drawn glyph for [source]. Every source has one, so a row never falls back to a bare mic.
   static String glyphFor(String? source) => switch (source) {
         'omi' || 'friend' || 'friend_com' || 'sdcard' || 'limitless' || 'bee' || 'fieldy' || 'plaud' => _pendant,

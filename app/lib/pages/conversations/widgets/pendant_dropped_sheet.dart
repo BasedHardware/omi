@@ -70,7 +70,8 @@ class PendantDroppedSheet extends StatelessWidget {
               const SizedBox(width: OmiSpacing.sm),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(name ?? CaptureSources.label(context, source),
+                  // A blank paired name falls back to the source's name, so the tile always has a title.
+                  Text(name == null || name.trim().isEmpty ? CaptureSources.label(context, source) : name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
