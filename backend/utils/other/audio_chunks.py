@@ -4,6 +4,14 @@ import threading
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
+from google.api_core.exceptions import (
+    DeadlineExceeded,
+    InternalServerError,
+    RetryError,
+    ServiceUnavailable,
+    TooManyRequests,
+)
+
 from utils.other import storage
 
 MAX_SPEAKER_DOWNLOADS = 32
@@ -49,7 +57,14 @@ class AudioChunkReadSession:
                     retry=DEFAULT_RETRY.with_timeout(min(1.0, remaining)),
                     deadline=self.deadline,
                 )
-            except TimeoutError:
+            except (
+                TimeoutError,
+                RetryError,
+                DeadlineExceeded,
+                InternalServerError,
+                ServiceUnavailable,
+                TooManyRequests,
+            ):
                 self.reason = 'download_limit'
                 self.limit_hit = True
                 self._chunks = []

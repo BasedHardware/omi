@@ -50,16 +50,22 @@ def legacy_speaker_clip_pcm(
     ):
         record('invalid_window', 'invalid_window')
         return None
-    needed = round((end - start) * sample_rate)
+    start_sample = round(start * sample_rate)
+    end_sample = round(end * sample_rate)
+    needed = end_sample - start_sample
     if needed <= 0:
         record('invalid_window', 'invalid_window')
         return None
     session = session or AudioChunkReadSession(uid, conversation_id, sample_rate)
+    listed_chunks = session.chunks
+    if session.limit_hit:
+        record('missing', 'download_limit')
+        return None
     session.reason = 'missing_blob'
 
     # Use the manifest's original timestamps, exactly as main did. Batch ranges
     # describe chunk starts, not continuity or the last chunk's end.
-    ordered = sorted(set(timestamps)) if timestamps is not None else [c['timestamp'] for c in session.chunks]
+    ordered = sorted(set(timestamps)) if timestamps is not None else [c['timestamp'] for c in listed_chunks]
     first = max((i for i, ts in enumerate(ordered) if ts <= start), default=0)
     relevant = [ts for ts in ordered[first:] if ts <= end]
 
@@ -72,19 +78,19 @@ def legacy_speaker_clip_pcm(
                 conversation_id,
                 relevant,
                 sample_rate=sample_rate,
-                listed_chunks=session.chunks,
+                listed_chunks=listed_chunks,
                 chunk_loader=loader,
             )
         except FileNotFoundError:
             return None
-        offset = round((start - min(relevant)) * sample_rate)
+        offset = start_sample - round(min(relevant) * sample_rate)
         return merged[max(0, offset) * 2 : max(0, offset + needed) * 2] or None
 
     # Any selected uncertain object requires main's policy for this window.
     # Include batches by their requested timestamp range, as the merger does.
     selected = []
     relevant_set = {round(ts, 3) for ts in relevant}
-    for chunk in session.chunks:
+    for chunk in listed_chunks:
         if chunk.get('is_batch'):
             key = chunk['path'].split('/')[-1].split('.batch.', 1)[0]
             bounds = [float(value) for value in key.split('-', 1)]

@@ -1,9 +1,11 @@
 """Synthetic sample-identifiable PCM through the actual storage iterator and clip reader."""
 
+import time
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from google.api_core.exceptions import RetryError, ServiceUnavailable
 
 from utils import speaker_audio
 from tests.unit.fixtures.audio_chunk_storage import memory_bucket
@@ -347,11 +349,21 @@ def test_16khz_adjacent_rounded_chunks_equal_main(memory_bucket):
     second = memory_bucket.add(start + 4.0002, 6)
     result = speaker_audio.legacy_speaker_clip_pcm('synthetic-user', 'synthetic', start, start + 10.0002)
     assert result is not None
-    assert len(first + second) - 32 <= len(result) <= len(first + second)
     timestamps = [round(start, 3), round(start + 4.0002, 3)]
     merged = storage.download_audio_chunks_and_merge('synthetic-user', 'synthetic', timestamps)
-    offset = max(0, round((start - timestamps[0]) * 16000))
-    assert result == merged[offset * 2 : (offset + round(10.0002 * 16000)) * 2]
+    offset = round(start * 16000) - round(timestamps[0] * 16000)
+    sample_count = round((start + 10.0002) * 16000) - round(start * 16000)
+    assert result == merged[offset * 2 : (offset + sample_count) * 2]
+
+
+def test_clip_sample_count_rounds_start_and_end_independently(memory_bucket):
+    start = ORIGIN + 0.0001
+    memory_bucket.add(ORIGIN, 11, span=True)
+    result = speaker_audio.legacy_speaker_clip_pcm(
+        'synthetic-user', 'synthetic', start, start + 10.00004, sample_rate=16000
+    )
+    assert result is not None
+    assert len(result) // 2 == round((start + 10.00004) * 16000) - round(start * 16000) == 160000
 
 
 @pytest.mark.parametrize('enhanced', [False, True])
@@ -456,6 +468,58 @@ def test_transient_failure_is_not_negative_cached(memory_bucket, monkeypatch):
     assert blob.name not in session.cache
     monkeypatch.setattr(blob, 'download_as_bytes', download)
     assert session.fetch(blob.name) == data
+
+
+def test_listing_retry_exhaustion_is_bounded_and_retryable_in_new_session(memory_bucket, monkeypatch):
+    data = memory_bucket.add(ORIGIN, 10, span=True)
+    bucket = memory_bucket.bucket
+    real_list_blobs = bucket.list_blobs
+    calls = []
+    attempts = []
+    retry_errors = []
+
+    def transient_listing(prefix, *, timeout=None, retry=None, **kwargs):
+        calls.append(prefix)
+
+        def list_once():
+            attempts.append(prefix)
+            if len(calls) == 1:
+                raise ServiceUnavailable('synthetic transient listing 503')
+            return real_list_blobs(prefix, **kwargs)
+
+        try:
+            return retry(list_once)()
+        except RetryError as exc:
+            retry_errors.append(exc)
+            raise
+
+    monkeypatch.setattr(bucket, 'list_blobs', transient_listing)
+    failed = audio_chunks.AudioChunkReadSession('synthetic-user', 'synthetic')
+    failed.deadline = time.monotonic() + 0.05
+    limit_label = speaker_audio.OMI_SPEAKER_CLIP_COVERAGE_TOTAL.labels(
+        outcome='missing', reason='download_limit', caller='teaching'
+    )
+    before = limit_label._value.get()
+    assert (
+        speaker_audio.legacy_speaker_clip_pcm(
+            'synthetic-user', 'synthetic', ORIGIN, ORIGIN + 10, session=failed, caller='teaching'
+        )
+        is None
+    )
+    assert failed.reason == 'download_limit'
+    assert failed.limit_hit
+    assert failed.cache == {}
+    assert limit_label._value.get() == before + 1
+    assert retry_errors and attempts
+
+    succeeded = audio_chunks.AudioChunkReadSession('synthetic-user', 'synthetic')
+    assert (
+        speaker_audio.legacy_speaker_clip_pcm(
+            'synthetic-user', 'synthetic', ORIGIN, ORIGIN + 10, session=succeeded, caller='teaching'
+        )
+        == data
+    )
+    assert len(calls) >= 2
 
 
 def test_authoritative_placement_never_recovers_main_rejected_window(memory_bucket):
