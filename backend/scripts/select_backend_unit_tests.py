@@ -127,12 +127,46 @@ FIRESTORE_INDEX_GUARD_TESTS = (
     'tests/unit/test_firestore_runtime_witnesses.py',
     'tests/unit/test_firestore_index_rules.py',
     'tests/unit/test_firestore_query_contract.py',
+    'tests/unit/test_firestore_field_indexes.py',
 )
 
 FIRESTORE_INDEX_GUARD_SUPPORT_PREFIX = 'backend/tests/support/firestore_'
 FIRESTORE_INDEX_GUARD_SCHEMA_PATHS = frozenset(
     {'firestore.indexes.json', 'backend/database/firestore_index_registry.py'}
 )
+
+# Shared with the canonical release manifest's named trigger. Do not copy the
+# inventory's directory exclusions into a second set of workflow path globs.
+FIRESTORE_INDEX_GUARD_CONTROL_PATHS = frozenset(
+    {
+        'backend/scripts/select_backend_unit_tests.py',
+        'backend/scripts/run_firestore_index_guard.py',
+        'backend/scripts/generate_firestore_indexes.py',
+        'backend/firestore-guard-requirements.txt',
+        'backend/openapi-requirements.txt',
+        'backend/.python-version',
+        'backend/pyproject.toml',
+        'backend/test.sh',
+        'backend/tests/conftest.py',
+        'backend/tests/unit/conftest.py',
+        'backend/tests/unit/memory_import_isolation.py',
+        'backend/testing/hermetic_network.py',
+    }
+)
+
+
+def is_firestore_index_guard_path(path: str) -> bool:
+    path = normalize_changed_path(path)
+    return (
+        path in FIRESTORE_INDEX_GUARD_SCHEMA_PATHS
+        or path in FIRESTORE_INDEX_GUARD_CONTROL_PATHS
+        or path.startswith(FIRESTORE_INDEX_GUARD_SUPPORT_PREFIX)
+        or path.startswith('backend/scripts/firestore_')
+        and path.endswith('.py')
+        or path.removeprefix('backend/') in FIRESTORE_INDEX_GUARD_TESTS
+        or is_serving_query_inventory_path(path)
+    )
+
 
 AREA_TESTS = (
     (
@@ -464,12 +498,7 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         return all_tests, 'no changed paths were provided'
 
     selected: set[str] = set()
-    if any(
-        path in FIRESTORE_INDEX_GUARD_SCHEMA_PATHS
-        or path.startswith(FIRESTORE_INDEX_GUARD_SUPPORT_PREFIX)
-        or is_serving_query_inventory_path(path)
-        for path in changed_paths
-    ):
+    if any(is_firestore_index_guard_path(path) for path in changed_paths):
         selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
     backend_paths = [path for path in changed_paths if is_selectable_backend_path(path)]
     test_paths = [path for path in backend_paths if path.startswith('backend/tests/') and path.endswith('.py')]
