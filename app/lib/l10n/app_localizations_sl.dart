@@ -12246,7 +12246,7 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get askAnythingButton => 'Vprašaj kaj koli';
+  String get askAnythingButton => 'Vprašaj karkoli';
 
   @override
   String get pendantLostConnection => 'Obesek je izgubil povezavo s tem telefonom.';

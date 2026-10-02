@@ -1193,7 +1193,8 @@ class _DetailBarBackdrop extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: const [0, 0.4, 0.76],
+              // Half at the bar's top, solid at its bottom, wherever the inset puts the bar.
+              stops: [0, _fade / height, (_fade + _barHeight) / height],
               colors: [page.withValues(alpha: 0), page.withValues(alpha: 0.5), page],
             ),
           ),

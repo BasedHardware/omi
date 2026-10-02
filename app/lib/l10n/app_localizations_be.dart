@@ -12247,7 +12247,7 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get askAnythingButton => 'Запытайцеся чаго-небудзь';
+  String get askAnythingButton => 'Спытайце што заўгодна';
 
   @override
   String get pendantLostConnection => 'Кулон страціў сувязь з гэтым тэлефонам.';

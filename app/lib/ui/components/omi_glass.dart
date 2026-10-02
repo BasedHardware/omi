@@ -61,18 +61,24 @@ class OmiGlass extends StatelessWidget {
       );
     }
     final floatRim = OmiGlassRim(shape: shape, edge: OmiColors.floatEdge, rim: OmiColors.floatRim);
-    // The outline and shadow sit outside the blur's clip, so they are painted around it.
+    // The outline and shadow sit outside the blur's clip, so they are painted around it. Only the
+    // blurred backdrop and its fill are clipped to the shape; the child sits on top, unclipped.
     return DecoratedBox(
       decoration: ShapeDecoration(shape: shape, shadows: floatShadows),
-      child: ClipPath(
-        clipper: ShapeBorderClipper(shape: shape),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: DecoratedBox(
-            decoration: ShapeDecoration(shape: shape, color: tint ?? OmiColors.floatGlass),
-            child: DecoratedBox(decoration: floatRim, position: DecorationPosition.foreground, child: child),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: ClipPath(
+              clipper: ShapeBorderClipper(shape: shape, textDirection: Directionality.maybeOf(context)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+                child: DecoratedBox(decoration: ShapeDecoration(shape: shape, color: tint ?? OmiColors.floatGlass)),
+              ),
+            ),
           ),
-        ),
+          DecoratedBox(decoration: floatRim, position: DecorationPosition.foreground, child: child),
+        ],
       ),
     );
   }
