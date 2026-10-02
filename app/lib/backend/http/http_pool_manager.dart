@@ -55,8 +55,13 @@ class HttpPoolManager {
     });
 
     if (isGet) {
-      _pendingGets[url] = future;
-      future.whenComplete(() => _pendingGets.remove(url));
+      // Share the cleanup future with callers so request failures cannot escape
+      // through a second, unobserved future (even when the caller catches them).
+      final tracked = future.whenComplete(() {
+        _pendingGets.remove(url);
+      });
+      _pendingGets[url] = tracked;
+      return tracked;
     }
     return future;
   }

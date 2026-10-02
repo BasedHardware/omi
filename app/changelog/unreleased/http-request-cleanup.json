@@ -1,0 +1,3 @@
+{
+  "change": "Fixed network connection failures being reported as crashes during requests and uploads."
+}
