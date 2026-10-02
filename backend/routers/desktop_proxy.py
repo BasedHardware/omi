@@ -26,10 +26,10 @@ from utils.http_client import (
     get_desktop_gemini_stream_client,
 )
 from utils.llm import vertex_pt_routing as ptr
-from config.vertex_reservations import State, RESERVATIONS, ENFORCEMENT_ENV
+from config.vertex_reservations import State, RESERVATIONS
 from utils.llm.vertex_reservation_state import reservation_state, effective_states
 from utils.llm.vertex_reservation_probe import probe_reservation
-from utils.llm.desktop_reservation_policy import desktop_lane, admission, refusal_body
+from utils.llm.desktop_reservation_policy import should_refuse, refusal_response
 from utils.llm import vertex_direct_attempt as direct_attempt
 from utils.llm import desktop_gemini_gateway
 from utils.llm.managed_spend_ledger import DESKTOP_PROXY_CALLER, ManagedAttempt, schedule_managed_attempt
@@ -59,9 +59,7 @@ _VERTEX_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedC
 # updating the matching tests and backend/docs/vertex-pt-flash.md is the
 # 2026-08-04 AI Studio double-pay regression.
 VERTEX_PT_MODEL = ptr.PT_MODEL_CURRENT
-# Migration target. A PT order for gemini-3.1-flash-lite provisions in ~10
-# business days; the proxy promotes itself the first time `dedicated` answers
-# on it, with no deploy. See backend/docs/vertex-pt-flash.md.
+# The declared migration target; see backend/docs/vertex-pt-flash.md.
 VERTEX_PT_TARGET_MODEL = ptr.PT_MODEL_TARGET
 # Emergency operator pins. Both beat auto-detection so a bad promotion or a
 # bad overflow target can be corrected without shipping code. The env names
@@ -415,7 +413,6 @@ _reservation_snapshot: ContextVar[dict[str, State]] = ContextVar('vertex_reserva
 # the TTL, so seeding an observation with 0.0 would mark a model dead for the
 # first _PT_PROBE_TTL_SECONDS of every new instance's life.
 _model_unavailable_at: dict[str, float] = {}
-# None means "never probed", same sentinel rule as above.
 _pt_probed_at: dict[str, float] = {}
 
 
@@ -478,20 +475,12 @@ async def _refresh_reservations() -> dict[str, State]:
 
 
 async def _observe_dedicated_response(model: str, capacity: str, response: httpx.Response) -> None:
-    if get_byok_key('gemini') or capacity != 'dedicated':
-        return
-    try:
-        payload = response.json()
-        traffic = payload.get('usageMetadata', {}).get('trafficType')
-    except (ValueError, AttributeError):
-        return
-    await reservation_state.record(model, capacity, response.status_code, traffic)
-    if 200 <= response.status_code < 300 and traffic == 'PROVISIONED_THROUGHPUT':
+    if not get_byok_key('gemini') and await reservation_state.record_response(model, capacity, response):
         _reservation_snapshot.set({**_reservation_snapshot.get(), model: State.ACTIVE})
 
 
 def _protected_models() -> frozenset[str]:
-    """The model that currently owns prepaid capacity."""
+    """Every model currently protected from degraded fallback traffic."""
     try:
         return ptr.resolve_pt_models(
             _reservation_states(),
@@ -1430,29 +1419,15 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
                 media_type='application/json',
                 headers=_response_headers(telemetry),
             )
-        if (
-            not get_byok_key('gemini')
-            and model in RESERVATIONS
-            and action in {'generateContent', 'streamGenerateContent'}
+        if await should_refuse(
+            model, action, body, request.headers, byok=bool(get_byok_key('gemini')), refresh=_refresh_reservations
         ):
-            states = await _refresh_reservations()
-            body = _sanitize(body, action, max_output_tokens=_output_token_cap())
-            lane = desktop_lane(request.headers, json.loads(body))
-            decision = admission(model, states.get(model, State.UNKNOWN), lane, os.getenv(ENFORCEMENT_ENV, 'enforce'))
-            if decision == 'refuse':
-                telemetry.provider = 'reservation_policy'
-                telemetry.complete(outcome='reservation_refused', status_code=200, retryable=False, phase='routing')
-                return Response(
-                    refusal_body(streaming=streaming or action == 'streamGenerateContent'),
-                    media_type=(
-                        'text/event-stream' if streaming or action == 'streamGenerateContent' else 'application/json'
-                    ),
-                    headers={
-                        **_response_headers(telemetry, retryable=False),
-                        'X-Omi-Reservation-State': 'inactive',
-                        'X-Omi-Error-Class': 'legacy_task_reservation_inactive',
-                    },
-                )
+            telemetry.provider = 'reservation_policy'
+            telemetry.complete(outcome='reservation_refused', status_code=200, retryable=False, phase='routing')
+            return refusal_response(
+                streaming=streaming or action == 'streamGenerateContent',
+                headers=_response_headers(telemetry, retryable=False),
+            )
         telemetry.phase = 'metering'
         path = await _meter_server_request(uid, path, model, action)
         if _company_paid_via_gateway(model, action):

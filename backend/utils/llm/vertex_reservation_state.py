@@ -14,6 +14,8 @@ from dataclasses import asdict
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
+import httpx
+
 from redis.asyncio import Redis
 from redis.exceptions import WatchError
 
@@ -145,6 +147,17 @@ class ReservationState:
         ):
             self._positive[model] = time.monotonic()
             await self.transact(model, 'dedicated_success')
+
+    async def record_response(self, model: str, capacity: str, response: httpx.Response) -> bool:
+        """Only positive metadata on a dedicated response updates shared evidence."""
+        if capacity != 'dedicated':
+            return False
+        try:
+            traffic = response.json().get('usageMetadata', {}).get('trafficType')
+        except (ValueError, AttributeError):
+            return False
+        await self.record(model, capacity, response.status_code, traffic)
+        return 200 <= response.status_code < 300 and traffic == 'PROVISIONED_THROUGHPUT'
 
 
 def effective_states(observed: Mapping[str, State], env: Mapping[str, str]) -> dict[str, State]:

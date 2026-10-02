@@ -2,11 +2,15 @@
 
 import json
 import logging
-from collections.abc import Mapping
+import os
+from collections.abc import Mapping, Callable, Awaitable
+
+from fastapi import Response
 
 from prometheus_client import Counter
 
-from config.vertex_reservations import State, policy
+from config.vertex_reservations import State, policy, RESERVATIONS, ENFORCEMENT_ENV
+from utils.llm.desktop_gemini_gateway import _sanitize  # pyright: ignore[reportPrivateUsage]
 
 logger = logging.getLogger(__name__)
 POLICY_ACTIONS = Counter(
@@ -109,3 +113,32 @@ def refusal_body(*, streaming: bool) -> bytes:
     }
     raw = json.dumps(payload, separators=(',', ':'))
     return (f'data: {raw}\n\n' if streaming else raw).encode()
+
+
+async def should_refuse(
+    model: str,
+    action: str,
+    body: bytes,
+    headers: Mapping[str, str],
+    *,
+    byok: bool,
+    refresh: Callable[[], Awaitable[dict[str, State]]],
+) -> bool:
+    if byok or model not in RESERVATIONS or action not in {'generateContent', 'streamGenerateContent'}:
+        return False
+    payload = json.loads(_sanitize(body, action))
+    states = await refresh()
+    lane = desktop_lane(headers, payload)
+    return admission(model, states.get(model, State.UNKNOWN), lane, os.getenv(ENFORCEMENT_ENV, 'enforce')) == 'refuse'
+
+
+def refusal_response(*, streaming: bool, headers: Mapping[str, str]) -> Response:
+    return Response(
+        refusal_body(streaming=streaming),
+        media_type='text/event-stream' if streaming else 'application/json',
+        headers={
+            **headers,
+            'X-Omi-Reservation-State': 'inactive',
+            'X-Omi-Error-Class': 'legacy_task_reservation_inactive',
+        },
+    )
