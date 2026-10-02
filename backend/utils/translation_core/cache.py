@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 from collections import OrderedDict
 from dataclasses import dataclass
 from threading import Lock
@@ -235,3 +236,23 @@ def _negative_key(fingerprint: str, target_language: str) -> str:
 
 def _memory_key(fingerprint: str, target_language: str) -> str:
     return f'{fingerprint}:{target_language}'
+
+
+def viewed_cache_fingerprint(
+    text_fingerprint: str, source_language: str, target_language: str, mode: str, policy_version: str
+) -> str:
+    """Partition both LRU and Redis without changing legacy key construction."""
+    identity = json.dumps(
+        [
+            'viewed',
+            policy_version,
+            'gemini-2.5-flash-lite',
+            'prompt-v1',
+            source_language.strip().lower() or 'detect-v1',
+            target_language.strip().lower(),
+            mode,
+            text_fingerprint,
+        ],
+        separators=(',', ':'),
+    )
+    return 'viewed-v1-' + hashlib.sha256(identity.encode('utf-8')).hexdigest()

@@ -12,6 +12,28 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+        SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+        TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
+        TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
+        TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
+        TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
+        TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+        TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
+        TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+        TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
+        TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
+        TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
+        TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS: {value: '4096', category: rollout}
+        TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
+        TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
+        TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
+        FREE_TIER_LOCAL_PROCESSING:
+          category: rollout
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          category: rollout
+        FREE_TIER_EMERGENCY_STOP:
+          category: rollout
         OMI_LLM_GATEWAY_URL:
           value: http://{env}-omi-llm-gateway.{env}-omi-backend.svc.cluster.local:8080
           category: service_discovery
@@ -25,6 +47,17 @@ environment_shared:
             key: TWILIO_TWIML_APP_SID
         USE_VERTEX_AI:
           value: 'true'
+        TTS_PROVIDER:
+          value: gemini
+          category: rollout
+        GEMINI_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: GEMINI_API_KEY
+        ELEVENLABS_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: ELEVENLABS_API_KEY
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
@@ -58,6 +91,87 @@ environment_shared:
         OMI_ENV_STAGE:
           value: '{env}'
           category: runtime_identity
+        STT_CONNECT_ORDER_FROM_CONFIG:
+          value: 'false'
+          category: rollout
+        STT_RESILIENT_RECONNECT:
+          value: 'false'
+          category: rollout
+        STT_ROUTING_MODE:
+          value: 'off'
+          category: rollout
+        STT_ROUTING_REDIS_TIMEOUT_SECONDS:
+          value: '0.075'
+          category: rollout
+        STT_ROUTING_ON_PERCENT:
+          value: '0'
+          category: rollout
+        STT_ROUTING_TARGETS_JSON:
+          value: ''
+          category: rollout
+        STT_ROUTING_DISRUPTION_GATE:
+          value: '0.08'
+          category: reliability
+        STT_NO_TEXT_SECONDS:
+          value: '30'
+          category: rollout
+        SONIOX_MONTHLY_CEILING_USD:
+          value: '0'
+          category: rollout
+        SONIOX_ESTIMATED_USD_PER_HOUR:
+          value: '0.07537'
+          category: rollout
+        STT_MULTI_LANGUAGE_HINTS:
+          value: 'true'
+          category: rollout
+        SONIOX_CONTEXT_TERMS:
+          value: 'false'
+          category: rollout
+        STT_LEARNED_LANGUAGE_PROFILE:
+          value: 'false'
+          category: rollout
+        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+          value: '0'
+          category: rollout
+        PARAKEET_WINDOW_ALLOCATION_PERCENT:
+          value: '0'
+          category: rollout
+        PARAKEET_WINDOW_MAX_SESSIONS:
+          value: '1'
+          category: rollout
+        PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
+          value: '8'
+          category: rollout
+        PARAKEET_WINDOW_DIARIZATION:
+          value: 'false'
+          category: rollout
+        PARAKEET_WINDOW_PACE_SECONDS:
+          value: '6'
+          category: rollout
+        PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
+          value: '24'
+          category: rollout
+        PARAKEET_BATCH_PRESSURE_POOL_HOST:
+          value: '{env}-omi-parakeet-headless.{env}-omi-backend.svc.cluster.local'
+          category: service_discovery
+        PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+          value: '1'
+          category: rollout
+        STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
+          value: '1800'
+          category: rollout
+        STT_CIRCUIT_HALF_OPEN_PROBES:
+          value: '1'
+          category: rollout
+        STT_SHED_CONNECT_FAILURES:
+          value: '3'
+          category: rollout
+        SONIOX_CIRCUIT_FAILURE_THRESHOLD:
+          value: '3'
+          category: rollout
+        SONIOX_CIRCUIT_COOLDOWN_SECONDS:
+          value: '30'
+          category: rollout
         STT_SERVICE_MODELS:
           value: modulate-velma-2,soniox,dg-nova-3,parakeet
           category: stt_policy
@@ -81,6 +195,18 @@ environment_shared:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
           category: rollout
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
+        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
+        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+          value: '0'
+          category: rollout
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
         WAKE_WORD_ADJUDICATION_ENABLED:
@@ -88,8 +214,13 @@ environment_shared:
           category: rollout
         HOSTED_PARAKEET_API_URL:
           category: service_discovery
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          category: service_discovery
         LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
           value: '900'
+          category: reliability
+        LISTEN_RECONNECT_BUDGET_PER_MIN:
+          value: '6'
           category: reliability
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
           value: 'off'
@@ -190,6 +321,13 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+        FREE_TIER_LOCAL_PROCESSING:
+          category: rollout
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          category: rollout
+        FREE_TIER_EMERGENCY_STOP:
+          category: rollout
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
           category: rollout
@@ -205,8 +343,22 @@ environment_shared:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
           category: rollout
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
+        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
+        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+          value: '0'
+          category: rollout
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          category: service_discovery
     config_map:
       name: '{env}-omi-backend-config'
       entries:
@@ -251,6 +403,24 @@ environment_shared:
   region: us-central1
   desktop_backend:
     env:
+      OMI_VERTEX_RESERVATION_STATES:
+        env_var: OMI_VERTEX_RESERVATION_STATES
+        provisional: true
+        category: rollout
+      OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+        env_var: OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD
+        provisional: true
+        category: rollout
+      OMI_VERTEX_LEGACY_TASK_MODE:
+        env_var: OMI_VERTEX_LEGACY_TASK_MODE
+        provisional: true
+        category: rollout
+      FREE_TIER_LOCAL_PROCESSING:
+        category: rollout
+      FREE_TIER_LOCAL_PROCESSING_COHORT:
+        category: rollout
+      FREE_TIER_EMERGENCY_STOP:
+        category: rollout
       MEMORY_BELIEF_MODEL_ENABLED:
         category: rollout
       BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
@@ -262,6 +432,9 @@ environment_shared:
         category: rollout
       USE_VERTEX_AI:
         value: 'true'
+      TTS_PROVIDER:
+        value: gemini
+        category: rollout
       GOOGLE_CLOUD_PROJECT:
         value: '{compute_project}'
       GCP_LOCATION:
@@ -273,6 +446,9 @@ environment_shared:
         value: 'true'
         category: rollout
     secrets:
+      GEMINI_API_KEY:
+        secret: GEMINI_API_KEY
+        version: latest
       METRICS_SECRET:
         secret: METRICS_SECRET
         version: latest
@@ -316,6 +492,28 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
+          TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
+          TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
+          TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
+          TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS: {value: '4096', category: rollout}
+          TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
+          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
+          FREE_TIER_LOCAL_PROCESSING:
+            category: rollout
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            category: rollout
+          FREE_TIER_EMERGENCY_STOP:
+            category: rollout
           PROMETHEUS_SIDECAR_PORT:
             value: '9090'
             category: telemetry
@@ -331,6 +529,18 @@ environment_shared:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            category: rollout
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '0'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -375,6 +585,8 @@ environment_shared:
             value: '{env}'
             category: runtime_identity
           HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
@@ -435,6 +647,14 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          FREE_TIER_LOCAL_PROCESSING:
+            category: rollout
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            category: rollout
+          FREE_TIER_EMERGENCY_STOP:
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9
@@ -442,6 +662,16 @@ environment_shared:
           SYNC_BACKFILL_ENABLED:
             provisional: true
             value: 'true'
+            category: rollout
+          # 9e6b55b re-armed a one-job-per-uid backfill slot that 429s uploads
+          # (37% of sync uploads refused). Worker sequencing paces per UID.
+          SYNC_BACKFILL_INFLIGHT_LIMIT:
+            provisional: true
+            value: 'false'
+            category: rollout
+          SYNC_BACKFILL_UID_SEQUENCER:
+            provisional: true
+            value: 'on'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
@@ -468,6 +698,8 @@ environment_shared:
             value: '{env}'
             category: runtime_identity
           HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
@@ -517,6 +749,18 @@ environment_shared:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '0'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
@@ -541,6 +785,14 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          FREE_TIER_LOCAL_PROCESSING:
+            category: rollout
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            category: rollout
+          FREE_TIER_EMERGENCY_STOP:
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
           OMI_LLM_GATEWAY_URL:
@@ -550,6 +802,16 @@ environment_shared:
           SYNC_BACKFILL_ENABLED:
             provisional: true
             value: 'true'
+            category: rollout
+          # 9e6b55b re-armed a one-job-per-uid backfill slot that 429s uploads
+          # (37% of sync uploads refused). Worker sequencing paces per UID.
+          SYNC_BACKFILL_INFLIGHT_LIMIT:
+            provisional: true
+            value: 'false'
+            category: rollout
+          SYNC_BACKFILL_UID_SEQUENCER:
+            provisional: true
+            value: 'on'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
@@ -576,6 +838,8 @@ environment_shared:
             value: '{env}'
             category: runtime_identity
           HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
@@ -637,10 +901,21 @@ environment_shared:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
             version: latest
+          POSTHOG_EVENTS_API_KEY:
+            secret: POSTHOG_EVENTS_API_KEY
+            version: latest
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
+          FREE_TIER_LOCAL_PROCESSING:
+            category: rollout
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            category: rollout
+          FREE_TIER_EMERGENCY_STOP:
+            category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -669,6 +944,8 @@ environment_shared:
             value: parakeet,modulate-velma-2
             category: stt_policy
           HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
@@ -717,9 +994,6 @@ environment_shared:
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
             version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
             version: latest
@@ -734,9 +1008,6 @@ environment_shared:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
             category: memory_rollout
-          DAILY_SUMMARY_SELECTION_MODE:
-            value: indexed
-            category: rollout
           PINECONE_INDEX_NAME:
             category: integrations
           OMI_ENV_STAGE:
@@ -755,9 +1026,6 @@ environment_shared:
             version: latest
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -832,9 +1100,6 @@ environment_shared:
             category: memory_rollout
       frame-request-retention-job:
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
@@ -865,9 +1130,6 @@ environment_shared:
             version: latest
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -907,6 +1169,9 @@ environment_shared:
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS:
+            value: '0'
+            category: memory_rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
       knowledge-ledger-drain-job:
@@ -916,9 +1181,6 @@ environment_shared:
         secrets:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -942,9 +1204,6 @@ environment_shared:
         secrets:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY

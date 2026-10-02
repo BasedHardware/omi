@@ -17,12 +17,16 @@ concurrency:
 jobs:
   rollback:
     environment: prod
+    permissions:
+      id-token: write
     runs-on: ubuntu-latest
     steps:
       - name: Use the existing production Google identity
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod GitHub WIF (credential-hygiene WS-C); no JSON key, no Owner.
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-desktop-release-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Atomically audit, pause, and roll back only macOS Beta
         env:

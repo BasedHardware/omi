@@ -113,7 +113,35 @@ actor TranscriptionStorage {
       }
 
       let now = Date()
-      record.finishedAt = max(now, record.startedAt.addingTimeInterval(1.0))
+      if reason == .crashRecovery {
+        // Restart time is not capture evidence. Resolve the end in the same
+        // transaction as the transition so retries cannot extend the recording.
+        let persistedEnd = record.finishedAt.flatMap { end -> Date? in
+          end.timeIntervalSince1970.isFinite && end > record.startedAt && end <= now ? end : nil
+        }
+        let segments =
+          try TranscriptionSegmentRecord
+          .filter(Column("sessionId") == id)
+          .fetchAll(database)
+        let segmentEnd = segments.compactMap { segment -> Date? in
+          guard segment.startTime.isFinite, segment.endTime.isFinite,
+            segment.startTime >= 0, segment.endTime > segment.startTime
+          else { return nil }
+          let end = record.startedAt.addingTimeInterval(segment.endTime)
+          return end.timeIntervalSince1970.isFinite && end > record.startedAt && end <= now ? end : nil
+        }.max()
+        guard let captureEnd = persistedEnd ?? segmentEnd else {
+          // Keep legacy evidence intact, but out of the upload queue until a
+          // trustworthy capture boundary is available. Do not fabricate one.
+          log("TranscriptionStorage: Skipping crash recovery for session \(id): no valid capture end")
+          return false
+        }
+        // The upload format has whole-second precision. Retain the existing
+        // one-second minimum so a subsecond segment does not encode an empty interval.
+        record.finishedAt = max(captureEnd, record.startedAt.addingTimeInterval(1.0))
+      } else {
+        record.finishedAt = max(now, record.startedAt.addingTimeInterval(1.0))
+      }
       record.status = .pendingUpload
       if let strategy {
         record.finalizationStrategy = strategy
@@ -248,6 +276,8 @@ actor TranscriptionStorage {
 
     if result.accepted {
       log("TranscriptionStorage: Completed session \(id) (backendId: \(backendId))")
+      LocalEmbeddingIndexer.scheduleFinalizedSessionIndex(sessionId: id)
+      SiriIndexHooks.conversationChanged(backendId)
     }
     if let telemetry = result.telemetry {
       await AnalyticsManager.shared.conversationCreated(
@@ -321,6 +351,8 @@ actor TranscriptionStorage {
   func deleteSession(id: Int64) async throws {
     let db = try await ensureInitialized()
 
+    let backendId = try await getSession(id: id)?.backendId
+
     try await db.write { database in
       try database.execute(
         sql: "DELETE FROM transcription_sessions WHERE id = ?",
@@ -329,6 +361,7 @@ actor TranscriptionStorage {
     }
 
     log("TranscriptionStorage: Deleted session \(id)")
+    if let backendId { await SiriIndexHooks.conversationDeleted(backendId) }
   }
 
   /// Update session status helper
@@ -377,6 +410,7 @@ actor TranscriptionStorage {
         arguments: [title, Date(), backendId]
       )
     }
+    SiriIndexHooks.conversationChanged(backendId)
   }
 
   /// Soft-delete by backend conversation ID
@@ -395,6 +429,7 @@ actor TranscriptionStorage {
         )
       }
     }
+    await SiriIndexHooks.conversationDeleted(backendId)
   }
 
   /// Update folder by backend conversation ID
@@ -407,6 +442,7 @@ actor TranscriptionStorage {
         arguments: [folderId, Date(), backendId]
       )
     }
+    SiriIndexHooks.conversationChanged(backendId)
   }
 
   // MARK: - Segment Operations
@@ -620,6 +656,28 @@ actor TranscriptionStorage {
       return updatedRows
     }
   }
+
+  @discardableResult
+  func updateLiveSpeakerAssignment(
+    sessionId: Int64,
+    speakerId: Int,
+    personId: String
+  ) async throws -> Int {
+    let db = try await ensureInitialized()
+
+    return try await db.write { database -> Int in
+      try database.execute(
+        sql: """
+          UPDATE transcription_segments
+          SET isUser = ?, personId = ?
+          WHERE sessionId = ? AND speaker = ?
+          """,
+        arguments: [false, personId, sessionId, speakerId]
+      )
+      return database.changesCount
+    }
+  }
+
   /// Get all segments for a session ordered by segmentOrder
   func getSegments(sessionId: Int64) async throws -> [TranscriptionSegmentRecord] {
     let db = try await ensureInitialized()
@@ -696,6 +754,8 @@ actor TranscriptionStorage {
   }
 
   /// Get all unfinished sessions that should be finalized or retried by the canonical finalizer.
+  /// Failed local-segment sessions never exhaust (see `FinalizationRetryPolicy`), including rows an
+  /// older build stranded at `retryCount >= maxRetries`.
   func getSessionsNeedingFinalization(maxRetries: Int = 5, uploadingStaleAfter seconds: TimeInterval = 300) async throws
     -> [TranscriptionSessionRecord]
   {
@@ -706,10 +766,31 @@ actor TranscriptionStorage {
       try TranscriptionSessionRecord
         .filter(Column("backendSynced") == false)
         .filter(
-          Column("status") == TranscriptionSessionStatus.pendingUpload.rawValue
-            || (Column("status") == TranscriptionSessionStatus.uploading.rawValue
-              && Column("updatedAt") < uploadingCutoff)
-            || (Column("status") == TranscriptionSessionStatus.failed.rawValue && Column("retryCount") < maxRetries)
+          sql: """
+            status = ?
+            OR (status = ? AND updatedAt < ?)
+            OR (
+                status = ?
+                AND (
+                    retryCount < ?
+                    OR finalizationStrategy = ?
+                    OR (
+                        finalizationStrategy IS NULL
+                        AND (backendId IS NULL OR backendId = '')
+                        AND source = ?
+                    )
+                )
+            )
+            """,
+          arguments: [
+            TranscriptionSessionStatus.pendingUpload.rawValue,
+            TranscriptionSessionStatus.uploading.rawValue,
+            uploadingCutoff,
+            TranscriptionSessionStatus.failed.rawValue,
+            maxRetries,
+            TranscriptionFinalizationStrategy.localSegments.rawValue,
+            ConversationSource.desktop.rawValue,
+          ]
         )
         .order(Column("createdAt").asc)
         .fetchAll(database)
@@ -979,6 +1060,9 @@ actor TranscriptionStorage {
         log("TranscriptionStorage: Upserted \(conversation.transcriptSegments.count) segments for session \(sessionId)")
       }
     }
+    if let session = try await getSession(id: sessionId), session.status == .completed {
+      LocalEmbeddingIndexer.scheduleFinalizedSessionIndex(sessionId: sessionId)
+    }
   }
 
   /// Sync a full ServerConversation (session + segments) to local storage
@@ -986,7 +1070,8 @@ actor TranscriptionStorage {
   func syncServerConversation(
     _ conversation: ServerConversation,
     cacheScope: ConversationCacheWriteScope? = nil,
-    cacheGeneration: Int? = nil
+    cacheGeneration: Int? = nil,
+    notifySiri: Bool = true
   ) async throws -> Int64 {
     // First upsert the session
     let (sessionId, changed) = try await upsertFromServerConversation(
@@ -1006,6 +1091,7 @@ actor TranscriptionStorage {
       )
     }
 
+    if notifySiri { SiriIndexHooks.conversationChanged(conversation.id) }
     return sessionId
   }
 
@@ -1020,6 +1106,23 @@ actor TranscriptionStorage {
         .filter(Column("discarded") == false)
         .order(Column("startedAt").desc)
         .limit(limit, offset: offset)
+        .fetchAll(database)
+    }
+  }
+
+  /// Newest completed, in-scope backend conversations for the bounded Siri snapshot.
+  func getSiriEligibleSessions(limit: Int, since: Date) async throws -> [TranscriptionSessionRecord] {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      try TranscriptionSessionRecord
+        .filter(Column("backendSynced") == true && Column("backendId") != nil && Column("backendId") != "")
+        .filter(Column("deleted") == false && Column("discarded") == false)
+        .filter(Column("isLocked") == false)
+        .filter(Column("visibility") == nil || ["private", "shared", "public"].contains(Column("visibility")))
+        .filter(Column("conversationStatus") == LocalConversationStatus.completed.rawValue)
+        .filter(Column("startedAt") > since)
+        .order(Column("startedAt").desc)
+        .limit(limit)
         .fetchAll(database)
     }
   }

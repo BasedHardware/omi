@@ -4,6 +4,14 @@ import XCTest
 @testable import Omi_Computer
 
 final class TranscriptionSessionRecordTests: XCTestCase {
+  func testSiriVisibilitySurvivesCacheProjection() throws {
+    let record = TranscriptionSessionRecord(
+      source: "desktop", backendId: "hidden", backendSynced: true,
+      conversationStatus: .completed, visibility: "hidden")
+    let projected = try XCTUnwrap(record.toServerConversation(segments: []))
+    XCTAssertEqual(projected.visibility, "hidden")
+  }
+
   func testConversationRoleDefaultsToAmbientForBackwardCompatibility() {
     let record = TranscriptionSessionRecord(source: "desktop")
 

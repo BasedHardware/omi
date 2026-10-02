@@ -15,6 +15,7 @@ from models.daily_summary_payload import DailySummaryDayStatsPayload, DailySumma
 from models.structured import Structured
 from models.structured_extraction import StructuredExtraction
 from models.other import Person
+from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm, parser
@@ -195,6 +196,17 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
         return _content_str(get_llm('daily_summary_simple').invoke(prompt))
 
 
+def _total_duration_minutes(conversations: List[Any]) -> float:
+    """Per-conversation duration from the transcript span, not the capture-session window.
+
+    `started_at` is the live-socket streaming-session origin, so `finished_at - started_at`
+    inflated a short dictation inside a long socket to the socket's whole wall window (#4056).
+    `conversation_duration_seconds` (utils/conversations/duration.py) is the single authority;
+    it degrades to the wall window only for transcript-free captures.
+    """
+    return sum((conversation_duration_seconds(c) or 0.0) / 60 for c in conversations)
+
+
 def generate_comprehensive_daily_summary(
     uid: str,
     conversations: List[Conversation],
@@ -241,9 +253,7 @@ def generate_comprehensive_daily_summary(
     # Calculate stats - exclude discarded conversations
     non_discarded = [c for c in conversations if not c.discarded]
     total_conversations = len(non_discarded)
-    total_duration_minutes = sum(
-        (c.finished_at - c.started_at).total_seconds() / 60 for c in non_discarded if c.finished_at and c.started_at
-    )
+    total_duration_minutes = _total_duration_minutes(non_discarded)
 
     stats_start_date_utc = start_date_utc
     stats_end_date_utc = end_date_utc

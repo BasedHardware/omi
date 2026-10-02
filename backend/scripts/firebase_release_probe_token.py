@@ -33,8 +33,12 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Sequence
 
-FIREBASE_API_KEY_SECRET = 'FIREBASE_API_KEY'
+# This script runs standalone (`python3 backend/scripts/...` from the repo
+# root), so it cannot import the backend package. Keep the probe uid in
+# exact lockstep with backend/utils/release_probe.py:RELEASE_PROBE_UID —
+# tests/unit/test_release_probe_exemption.py asserts the two literals match.
 PROBE_UID = 'omi-release-probe'
+FIREBASE_API_KEY_SECRET = 'FIREBASE_API_KEY'
 CUSTOM_TOKEN_AUDIENCE = 'https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit'
 IAM_CREDENTIALS_URL = 'https://iamcredentials.googleapis.com/v1'
 IDENTITY_TOOLKIT_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken'
@@ -444,6 +448,46 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _print_signing_permission_remediation(signer: str, firebase_project: str) -> None:
+    """Name the active identity and both denial causes for a 403 signJwt (stderr only).
+
+    The machine-readable FAIL report on stdout stays exactly as it was; this
+    guidance goes to stderr and never includes a credential or upstream body.
+    A rotated credential for the wrong service account produces the same 403
+    as a missing grant, so the remediation must name the resolved caller and
+    not prescribe a grant unconditionally.
+    """
+    if not signer:
+        print(
+            'IAM denied custom-token signing for the active deploy identity.',
+            file=sys.stderr,
+        )
+        return
+    try:
+        caller = _active_service_account()
+    except (ProbeTokenError, OSError):
+        caller = ''
+    caller_label = caller if caller else '<unresolved deploy identity>'
+    print(
+        'IAM denied custom-token signing as the Firebase project signer '
+        f'{signer} (active identity: {caller_label}).',
+        file=sys.stderr,
+    )
+    print(
+        'Either the active credential is not this lane\'s deploy identity (a rotated'
+        ' GCP_CREDENTIALS key for another service account produces this same denial),'
+        ' or the identity lacks the one-time token-creator grant:',
+        file=sys.stderr,
+    )
+    member = f'serviceAccount:{caller}' if caller else 'serviceAccount:<this deploy identity>'
+    print(
+        '  gcloud iam service-accounts add-iam-policy-binding '
+        f'{signer} --member=\'{member}\' '
+        f'--role=\'roles/iam.serviceAccountTokenCreator\' --project={firebase_project}',
+        file=sys.stderr,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     token = ''
@@ -460,6 +504,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         write_token(args.token_output, token)
     except ProbeTokenError as error:
+        if error.stage == 'custom_token_signing' and error.error_class == 'permission_denied':
+            _print_signing_permission_remediation(args.signer_service_account or '', args.firebase_project)
         print(
             json.dumps(
                 {

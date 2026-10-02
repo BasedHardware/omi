@@ -1,7 +1,6 @@
-import ast
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +10,7 @@ import database.firestore_index_registry as firestore_index_registry
 import database.action_items as action_items_db
 import database.chat as chat_db
 import database.conversations as conversations_db
+import database.folders as folders_db
 import database.memories as memories_db
 import database.task_recommendations as task_recommendations_db
 import routers.task_recommendations as task_recommendations_router
@@ -50,7 +50,7 @@ from database.firestore_index_registry import (
     _index_fields_need_composite_manifest,
     firebase_index_manifest,
 )
-from scripts import firestore_query_coverage, generate_firestore_indexes
+from scripts import generate_firestore_indexes
 from utils.memory import canonical_graph as canonical_graph_service
 
 
@@ -443,63 +443,6 @@ def test_canonical_atlas_read_serving_query_requires_declared_composite():
     assert signature in _declared_index_signatures()
 
 
-@pytest.mark.slow
-def test_query_inventory_registers_the_migrated_query_shapes():
-    report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
-
-    for spec in (
-        DUE_MEMORY_OUTBOX_QUERY,
-        EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
-        REVIEW_QUEUE_BY_FACT_QUERY,
-        REVIEW_QUEUE_BY_CONFLICT_QUERY,
-        REVIEW_QUEUE_BY_STATUS_QUERY,
-        REVIEW_QUEUE_ORDERED_QUERY,
-        REVIEW_QUEUE_BY_STATUS_ID_QUERY,
-        REQUIRED_MEMORY_PROCESSING_QUERY,
-        CANONICAL_CONSOLIDATION_QUERY,
-        CONVERSATION_SOURCE_MEMORY_QUERY,
-        SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
-        SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
-        EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
-        POLICY_EXPIRED_SHORT_TERM_QUERY,
-        ACTIVE_ATTENTION_OVERRIDE_QUERY,
-        STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
-        UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
-        UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
-        UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
-    ):
-        matching = [query for query in report['queries'] if query['registered_spec'] == spec.identifier]
-        assert len(matching) == 1
-        assert matching[0]['classification'] == 'registered'
-        assert matching[0]['collection_group'] == spec.collection_group
-    assert report['counts']['serving']['registered'] >= 14
-
-
-def test_inventory_finds_a_direct_compound_chain_wrapped_by_list():
-    tree = ast.parse(
-        "def read(client):\n"
-        "    return list(client.collection('items').where('status', '==', 'open').where('expires_at', '>', 0).stream())\n"
-    )
-    function = tree.body[0]
-    analyzer = firestore_query_coverage.FunctionQueryAnalyzer(
-        source='backend/database/example.py',
-        symbol='read',
-        constants={},
-        non_serving_scope=None,
-        registered_signatures={},
-        waiver_ids=set(),
-    )
-
-    shapes = analyzer.analyze(function.body)
-
-    assert len(shapes) == 1
-    assert shapes[0].classification == 'raw_unregistered'
-    assert [(field.field_path, field.operator) for field in shapes[0].components] == [
-        ('status', '=='),
-        ('expires_at', '>'),
-    ]
-
-
 class _StreamRecordingQuery:
     """One Firestore query chain that records itself when production code streams it."""
 
@@ -528,6 +471,36 @@ class _StreamRecordingQuery:
     def stream(self):
         self._recorder.append((self._filters, self._orders))
         return []
+
+
+class _CountRecordingQuery(_StreamRecordingQuery):
+    """Also records count aggregations, which never stream."""
+
+    def where(self, *, filter):
+        return _CountRecordingQuery(
+            self._recorder,
+            (*self._filters, (filter.field_path, filter.op_string)),
+            self._orders,
+        )
+
+    def order_by(self, field_path, direction):
+        return _CountRecordingQuery(
+            self._recorder,
+            self._filters,
+            (*self._orders, (field_path, direction)),
+        )
+
+    def count(self):
+        recorder, filters, orders = self._recorder, self._filters, self._orders
+        return SimpleNamespace(get=lambda: recorder.append(('count', filters, orders)) or [[SimpleNamespace(value=0)]])
+
+
+def _count_recording_firestore(recorder):
+    return SimpleNamespace(
+        collection=lambda _name: SimpleNamespace(
+            document=lambda _uid: SimpleNamespace(collection=lambda _collection: _CountRecordingQuery(recorder))
+        )
+    )
 
 
 class _StreamRecordingUserRef:
@@ -705,6 +678,125 @@ def test_conversations_active_ordered_query_is_registered_for_the_conversations_
     assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
 
 
+@pytest.mark.parametrize(
+    ('kwargs', 'expected_filters', 'signature'),
+    [
+        (
+            {
+                'starred': True,
+                'statuses': ['completed', 'processing'],
+                'start_date': datetime(2026, 9, 1, tzinfo=timezone.utc),
+            },
+            (('discarded', '=='), ('status', 'in'), ('starred', '=='), ('created_at', '>=')),
+            (
+                'conversations',
+                'COLLECTION',
+                (
+                    ('discarded', 'ASCENDING'),
+                    ('starred', 'ASCENDING'),
+                    ('status', 'ASCENDING'),
+                    ('created_at', 'DESCENDING'),
+                    ('__name__', 'DESCENDING'),
+                ),
+            ),
+        ),
+        (
+            {
+                'sources': ['omi', 'friend'],
+                'statuses': ['completed', 'processing'],
+                'end_date': datetime(2026, 9, 29, tzinfo=timezone.utc),
+            },
+            (('discarded', '=='), ('source', 'in'), ('status', 'in'), ('created_at', '<=')),
+            (
+                'conversations',
+                'COLLECTION',
+                (
+                    ('source', 'ASCENDING'),
+                    ('status', 'ASCENDING'),
+                    ('created_at', 'DESCENDING'),
+                    ('__name__', 'DESCENDING'),
+                ),
+            ),
+        ),
+    ],
+)
+def test_conversations_count_filtered_date_ranges_have_declared_descending_composites(
+    monkeypatch, kwargs, expected_filters, signature
+):
+    """Bounded counts now order `created_at` DESC so they share the list-side DESC composites."""
+    recorder = []
+    monkeypatch.setattr(conversations_db, 'db', _count_recording_firestore(recorder))
+    monkeypatch.setattr(conversations_db, '_count_matching_tombstones', lambda *args, **kw: 0)
+
+    conversations_db.get_conversations_count('index-contract-user', **kwargs)
+
+    counts = [(entry[1], entry[2]) for entry in recorder if entry[0] == 'count']
+    assert counts == [(expected_filters, (('created_at', 'DESCENDING'),))]
+    assert signature in _declared_index_signatures()
+
+
+def test_conversations_in_folder_has_the_prod_observed_composite(monkeypatch):
+    """Prod FailedPrecondition on 2026-09-23 came from this folder list query."""
+    recorder = []
+    monkeypatch.setattr(folders_db, 'db', _StreamRecordingFirestore(recorder, collection_name='conversations'))
+
+    folders_db.get_conversations_in_folder('index-contract-user', 'folder-123')
+
+    assert recorder == [((('folder_id', '=='), ('discarded', '==')), (('created_at', 'DESCENDING'),))]
+    signature = (
+        'conversations',
+        'COLLECTION',
+        (
+            ('discarded', 'ASCENDING'),
+            ('folder_id', 'ASCENDING'),
+            ('created_at', 'DESCENDING'),
+            ('__name__', 'DESCENDING'),
+        ),
+    )
+    assert signature in _declared_index_signatures()
+
+
+def test_conversations_count_date_range_has_a_descending_range_composite(monkeypatch):
+    """`GET /v1/conversations/count` with a date range orders `created_at` DESC.
+
+    The count aggregation filters `discarded == False` plus a `created_at` range and
+    now orders the range field DESCENDING so it is served by the same
+    (discarded ASC, created_at DESC, __name__ DESC) composite as the list read.
+    Unbounded counts keep no ordering so documents missing `created_at` stay counted.
+    """
+    recorder = []
+    monkeypatch.setattr(conversations_db, 'db', _count_recording_firestore(recorder))
+
+    start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 9, 29, tzinfo=timezone.utc)
+    conversations_db.get_conversations_count(
+        'index-contract-user', include_discarded=False, start_date=start, end_date=end
+    )
+    conversations_db.get_conversations_count('index-contract-user', include_discarded=False)
+
+    counts = [(entry[1], entry[2]) for entry in recorder if entry[0] == 'count']
+    bounded, unbounded = counts
+    assert bounded == (
+        (('discarded', '=='), ('created_at', '>='), ('created_at', '<=')),
+        (('created_at', 'DESCENDING'),),
+    )
+    assert unbounded == ((('discarded', '=='),), ())
+    equalities = [path for path, op in bounded[0] if op == '==']
+    signature = (
+        'conversations',
+        'COLLECTION',
+        tuple(
+            [(path, 'ASCENDING') for path in equalities] + [('created_at', 'DESCENDING'), ('__name__', 'DESCENDING')]
+        ),
+    )
+    assert signature in _declared_index_signatures()
+    assert signature == (
+        'conversations',
+        'COLLECTION',
+        (('discarded', 'ASCENDING'), ('created_at', 'DESCENDING'), ('__name__', 'DESCENDING')),
+    )
+
+
 def test_default_memories_list_read_has_a_declared_composite_index():
     """The bare scoring+created_at sort (no filters at all) still needs a composite.
 
@@ -734,16 +826,6 @@ def test_conversations_and_memories_index_only_requirements_are_registered():
     ):
         assert identifier in identifiers
         assert identifiers[identifier].to_manifest() in firebase_index_manifest()['indexes']
-
-
-def test_query_source_paths_are_posix_canonical_on_every_host_platform():
-    windows_path = PureWindowsPath('backend\\database\\conversations.py')
-    posix_path = PurePosixPath('backend/database/conversations.py')
-
-    assert firestore_query_coverage.canonical_source_path(windows_path) == 'backend/database/conversations.py'
-    assert firestore_query_coverage.canonical_source_path(
-        windows_path
-    ) == firestore_query_coverage.canonical_source_path(posix_path)
 
 
 def _asc(field_path: str) -> FirestoreIndexField:

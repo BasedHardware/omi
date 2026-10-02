@@ -86,7 +86,17 @@ protocol LocalInferenceFallbackRecording: Sendable {
   )
 }
 
+/// Uses the shared health-event path, which emits one fallback_triggered event
+/// to PostHog on prod/beta as well as the local diagnostic ring. Keep identities
+/// bounded: a mistyped force-engine setting is arbitrary text, not an engine.
 struct DesktopLocalInferenceFallbackRecorder: LocalInferenceFallbackRecording {
+  private static func boundedEngineLabel(_ value: String) -> String {
+    switch value {
+    case "afm", "local-server", "deterministic_minimum", "none": return value
+    default: return "other"
+    }
+  }
+
   func recordLocalInferenceFallback(
     from: String,
     to: String,
@@ -95,8 +105,8 @@ struct DesktopLocalInferenceFallbackRecorder: LocalInferenceFallbackRecording {
   ) {
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "local_llm",
-      from: from,
-      to: to,
+      from: Self.boundedEngineLabel(from),
+      to: Self.boundedEngineLabel(to),
       reason: reason,
       outcome: outcome
     )

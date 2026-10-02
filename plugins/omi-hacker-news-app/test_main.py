@@ -225,5 +225,41 @@ class DiscussionHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response_discussion.error, "Missing required field: item_id")
 
 
+class NonStringQueryTests(unittest.IsolatedAsyncioTestCase):
+    """A string-typed tool argument can still arrive as any JSON type."""
+
+    async def test_non_string_query_returns_a_tool_error(self):
+        # (payload.get("query") or "").strip() ran outside the handler's try
+        # block, so a non-string query raised AttributeError and surfaced as
+        # HTTP 500 instead of the documented tool error.
+        for value in (2026, 3.5, ["ai"], {"q": "ai"}, True):
+            with self.subTest(query=value):
+                response = await app.search_stories({"query": value})
+                self.assertEqual(response.error, "Missing required field: query")
+
+    async def test_non_string_query_never_reaches_the_network(self):
+        request = AsyncMock(return_value={"hits": []})
+        with patch.object(app, "_request_json", request):
+            await app.search_stories({"query": 2026})
+        request.assert_not_awaited()
+
+    async def test_whitespace_only_query_is_still_rejected(self):
+        response = await app.search_stories({"query": "   "})
+        self.assertEqual(response.error, "Missing required field: query")
+
+    async def test_valid_query_still_searches(self):
+        request = AsyncMock(return_value={"hits": []})
+        with patch.object(app, "_request_json", request):
+            response = await app.search_stories({"query": "  rust  "})
+        self.assertIn("rust", response.result)
+        self.assertEqual(request.await_args.args[1]["query"], "rust")
+
+    def test_safe_text_helper(self):
+        self.assertEqual(app._safe_text("  hi  "), "hi")
+        for value in (1, 1.5, True, None, [], {}, b"hi"):
+            with self.subTest(value=value):
+                self.assertEqual(app._safe_text(value), "")
+
+
 if __name__ == "__main__":
     unittest.main()

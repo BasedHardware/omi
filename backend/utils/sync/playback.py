@@ -507,6 +507,11 @@ def build_conversation_playback_artifact(
     gaps are collapsed by concatenation. Each part becomes one span with
     wall_offset relative to started_at_ts (TranscriptSegment.start basis).
 
+    Audio-timeline v2 parts are one contiguous run by construction — grouping
+    splits at any real gap or overlap larger than 1 ms — so one span per part
+    stays truthful; wall_offset and len keep the same projected chunk wall key
+    the released clients' strict seek already uses.
+
     Parts whose chunks are all gone are skipped; raises FileNotFoundError only
     if nothing is buildable. Parts are processed sequentially to bound memory.
     """

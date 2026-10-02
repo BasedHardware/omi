@@ -2,7 +2,8 @@
 
 The DB layer already accepted limit/offset; the HTTP route hard-coded limit=100
 and omitted offset. This pins the query params through to chat_db and ensures
-empty later pages do not synthesize a greeting.
+empty later pages do not synthesize a greeting. The route now validates rows into
+`Message` (skipping malformed ones), so fixtures must be valid stored rows.
 """
 
 from datetime import datetime, timezone
@@ -34,7 +35,15 @@ def test_get_messages_forwards_limit_and_offset(monkeypatch):
                 'chat_session_id': chat_session_id,
             }
         )
-        return [{'id': 'm1', 'created_at': datetime(2026, 8, 20, tzinfo=timezone.utc)}]
+        return [
+            {
+                'id': 'm1',
+                'text': 'hello',
+                'sender': 'human',
+                'type': 'text',
+                'created_at': datetime(2026, 8, 20, tzinfo=timezone.utc),
+            }
+        ]
 
     monkeypatch.setattr(chat_router.chat_db, 'get_messages', _get_messages)
 
@@ -47,7 +56,10 @@ def test_get_messages_forwards_limit_and_offset(monkeypatch):
         uid='uid-1',
     )
 
-    assert result == [{'id': 'm1', 'created_at': datetime(2026, 8, 20, tzinfo=timezone.utc)}]
+    # The route validates stored rows into Message objects (skipping malformed ones), so the
+    # fixture above is a valid stored row and the result is a Message.
+    assert [m.id for m in result] == ['m1']
+    assert result[0].created_at == datetime(2026, 8, 20, tzinfo=timezone.utc)
     assert recorded == {
         'uid': 'uid-1',
         'limit': 25,

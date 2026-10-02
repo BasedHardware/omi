@@ -36,6 +36,16 @@ class BatteryWidgetService {
     }
   }
 
+  /// Whether the device is on its charger, for the Home Screen widget's "Omi · charging".
+  Future<void> updateChargingState(bool isCharging) async {
+    if (!Platform.isIOS) return;
+    try {
+      await _channel.invokeMethod('updateChargingState', {'isCharging': isCharging});
+    } catch (e) {
+      Logger.debug('BatteryWidgetService.updateChargingState failed: $e');
+    }
+  }
+
   /// Update only the mute state without changing other widget data.
   Future<void> updateMuteState(bool isMuted) async {
     if (!Platform.isIOS) return;

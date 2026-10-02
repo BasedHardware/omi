@@ -10,14 +10,22 @@ extension RealtimeHubController {
   /// Open the WS now if it isn't already (no-op if already warm). BYOK → connect
   /// client-direct with the user's key. Otherwise, if signed in → mint a server-side
   /// ephemeral token and connect with it.
-  /// `userInitiated: true` = direct user intent (PTT, launch, input-return);
+  /// `userInitiated: true` = direct user intent (PTT, automation, waitUntilActive);
   /// see `admitWarmRequest` — passive callers cannot clear an away deferral.
+  /// Automatic keep-warm (idle remint, reconnect, presence return, launch) must
+  /// not mint a managed session when the entitlement decision is `.planGated`.
   func ensureWarm(userInitiated: Bool = false) {
     guard !AppBuild.shouldDisableJITQARealtime else {
       log("RealtimeHub: JIT QA realtime disabled by OMI_JIT_QA_DISABLE_REALTIME")
       return
     }
     guard admitWarmRequest(userInitiated: userInitiated) else { return }
+    let skipAutomatic = shouldSkipAutomaticManagedWarm()
+    if !userInitiated, skipAutomatic {
+      log("RealtimeHub: skipping automatic managed warm — plan gated")
+      return
+    }
+    warmAdmissionProbe?(userInitiated)
     #if DEBUG
       // The local-profile action owns an already-installed hermetic transport.
       // Re-entering normal warm-up here would replace it and mint a real provider
@@ -69,40 +77,42 @@ extension RealtimeHubController {
 
     // Offered for a provider the user picked themselves, withheld from one reached by
     // failover or by `.auto` resolving there — see RealtimeHubSettings.isVoiceModelChoice.
-    if let key = APIKeyService.selectedRealtimeBYOKKey(
-      for: provider.byokProvider,
-      chosenForVoice: RealtimeHubSettings.shared.isVoiceModelChoice(provider))
-    {
-      let fingerprint = APIKeyService.byokFingerprint(key)
-      guard
-        CredentialHealthManager.shared.canUseBYOK(
-          provider: provider.byokProvider, fingerprint: fingerprint)
-      else {
-        log("RealtimeHub: skipping known-bad \(provider.displayName) BYOK key fingerprint")
-        if failoverToAlternateProvider(reason: "auth") {
-          return
-        } else if AuthService.shared.isSignedIn {
-          guard case .authenticated = ownerScope else { return }
-          mintAndConnect(provider: provider, ownerScope: ownerScope)
-        } else {
-          CredentialHealthManager.shared.recordProviderFailure(
-            .providerAuthFailed(provider: provider, mode: .byok),
-            provider: provider,
-            authMode: .byok,
-            fingerprint: fingerprint,
-            context: "realtime_byok_blocked")
-        }
-        return
-      }
+    // Shared with `shouldSkipAutomaticManagedWarm`. `.failoverToClientDirect`
+    // is a known-bad current key with a healthy alternate: run the existing
+    // failover, never mint.
+    switch resolvedRealtimeWarmCredential() {
+    case .clientDirect(let key):
       startSession(provider: provider, auth: .byokKey(key), ownerScope: ownerScope)
-    } else if AuthService.shared.isSignedIn {
-      guard case .authenticated = ownerScope else {
-        log("RealtimeHub: signed-in state has no stable owner identity — hub unavailable")
+    case .failoverToClientDirect:
+      log("RealtimeHub: skipping known-bad \(provider.displayName) BYOK key fingerprint")
+      if failoverToAlternateProvider(reason: "auth") {
         return
       }
-      mintAndConnect(provider: provider, ownerScope: ownerScope)
-    } else {
-      log("RealtimeHub: no BYOK key and not signed in — hub unavailable (cascade).")
+    case .unusableBYOK(_, let fingerprint):
+      log("RealtimeHub: skipping known-bad \(provider.displayName) BYOK key fingerprint")
+      if failoverToAlternateProvider(reason: "auth") {
+        return
+      } else if AuthService.shared.isSignedIn {
+        guard case .authenticated = ownerScope else { return }
+        mintAndConnect(provider: provider, ownerScope: ownerScope)
+      } else {
+        CredentialHealthManager.shared.recordProviderFailure(
+          .providerAuthFailed(provider: provider, mode: .byok),
+          provider: provider,
+          authMode: .byok,
+          fingerprint: fingerprint,
+          context: "realtime_byok_blocked")
+      }
+    case .none:
+      if AuthService.shared.isSignedIn {
+        guard case .authenticated = ownerScope else {
+          log("RealtimeHub: signed-in state has no stable owner identity — hub unavailable")
+          return
+        }
+        mintAndConnect(provider: provider, ownerScope: ownerScope)
+      } else {
+        log("RealtimeHub: no BYOK key and not signed in — hub unavailable (cascade).")
+      }
     }
   }
 
@@ -428,6 +438,7 @@ extension RealtimeHubController {
     provider: RealtimeHubProvider,
     ownerScope: RealtimeHubOwnerScope
   ) {
+    managedMintProbe?()
     guard case .authenticated(let ownerID) = ownerScope,
       isOwnerScopeCurrent(ownerScope),
       let mintGeneration = beginMint(ownerScope: ownerScope)
@@ -448,6 +459,7 @@ extension RealtimeHubController {
             ownerScope: ownerScope)
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
+        self.noteManagedPlanGateFromWarmFailure(error)
         let fallbackStarted =
           !error.healthError.failureClass.isAccountWide
           && self.failoverToAlternateProvider(
@@ -470,6 +482,7 @@ extension RealtimeHubController {
             ownerScope: ownerScope)
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
+        self.noteManagedPlanGateFromWarmFailure(error)
         CredentialHealthManager.shared.record(error, context: "realtime_mint")
         let fallbackStarted =
           !error.failureClass.isAccountWide
@@ -496,6 +509,7 @@ extension RealtimeHubController {
             ownerScope: ownerScope)
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
+        self.noteManagedPlanGateFromWarmFailure(error)
         let typed = CredentialHealthError.backendTransient(
           statusCode: nil, message: error.localizedDescription)
         CredentialHealthManager.shared.record(typed, context: "realtime_mint")
@@ -1462,6 +1476,7 @@ extension RealtimeHubController {
           return
         }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
+        self.noteManagedPlanGateFromWarmFailure(error)
         let fallbackStarted =
           self.shouldFailoverToAlternate(for: error.healthError.failureClass)
           && self.failoverBargeInReplacement(

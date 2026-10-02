@@ -1,7 +1,6 @@
 import { toolManifestEntry, type OmiToolSurface } from "./omi-tool-manifest.js";
 
 export const DEFAULT_MODEL_TOOL_RESULT_BUDGET_BYTES = 8 * 1024;
-export const PURPOSE_RANKING_FLAG = "OMI_TOOL_RESULT_PURPOSE_RANKING_ENABLED";
 
 export interface ProjectedToolPayload {
   text: string;
@@ -36,12 +35,8 @@ export function projectToolResultPayload(input: {
   result: string;
   purpose?: string;
   maxBytes: number;
-  purposeRankingEnabled?: boolean;
 }): ProjectedToolPayload {
   const contract = toolManifestEntry(input.toolName)?.resultContract;
-  const rankingEnabled = input.purposeRankingEnabled
-    ?? process.env[PURPOSE_RANKING_FLAG] === "1";
-  const rankByPurpose = rankingEnabled && contract?.ranking === "purpose_then_recency";
   const sectionPriority = new Map((contract?.sections ?? []).map((name, index) => [name, index]));
   const maxItems = contract?.maxItemsPerSection ?? Number.MAX_SAFE_INTEGER;
   const sections = extractSections(input.result, input.toolName)
@@ -49,8 +44,7 @@ export function projectToolResultPayload(input: {
       - (sectionPriority.get(b.name) ?? Number.MAX_SAFE_INTEGER))
     .map((section) => ({
       ...section,
-      items: (rankByPurpose && input.purpose ? rankItems(section.items, input.purpose) : section.items)
-        .slice(0, maxItems),
+      items: section.items.slice(0, maxItems),
     }));
   const populated = sections.filter((section) => section.items.length > 0).length;
   const fairItemBytes = Math.min(1_024, Math.max(64, Math.floor(input.maxBytes / Math.max(1, populated * 3))));
@@ -244,20 +238,6 @@ export function utf8Excerpt(value: string, maxBytes: number): string {
     bytes += size;
   }
   return `${result}${ellipsis}`;
-}
-
-function rankItems(items: unknown[], purpose: string): unknown[] {
-  const terms = new Set(purpose.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []);
-  return items.map((item, index) => ({ item, index, score: lexicalScore(renderItem(item), terms) }))
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .map(({ item }) => item);
-}
-
-function lexicalScore(value: string, terms: Set<string>): number {
-  const haystack = value.toLowerCase();
-  let score = 0;
-  for (const term of terms) if (haystack.includes(term)) score += 1;
-  return score;
 }
 
 function fits(value: ProjectedToolPayload, maxBytes: number): boolean {

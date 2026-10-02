@@ -81,6 +81,19 @@ void main() {
       expect(provider.lastDeletedMemory, isNull);
     });
 
+    test('a stale toast cannot restore a newer delete', () async {
+      final provider = MemoriesProvider(fetchMemoriesRequest: emptyFetcher(), deleteMemoryRequest: (_) async => true);
+      memoryProviders.add(provider);
+
+      provider.deleteMemory(_mem('mem-a'));
+      provider.deleteMemory(_mem('mem-b'));
+
+      expect(await provider.restoreLastDeletedMemory(id: 'mem-a'), isFalse);
+      expect(provider.memories, isEmpty);
+      expect(await provider.restoreLastDeletedMemory(id: 'mem-b'), isTrue);
+      expect(provider.memories.single.id, 'mem-b');
+    });
+
     test('consecutive deletions replace pending state correctly', () {
       final provider = MemoriesProvider(fetchMemoriesRequest: emptyFetcher(), deleteMemoryRequest: (_) async => true);
       memoryProviders.add(provider);

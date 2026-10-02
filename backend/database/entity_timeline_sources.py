@@ -14,7 +14,7 @@ from utils import encryption
 
 from .conversations import conversations_collection
 from .conversations import (
-    _document_data_with_revision as document_data_with_revision,  # pyright: ignore[reportPrivateUsage]
+    document_data_with_revision,
 )
 from .firestore_index_registry import (
     ENTITY_TIMELINE_CONVERSATIONS_QUERY,

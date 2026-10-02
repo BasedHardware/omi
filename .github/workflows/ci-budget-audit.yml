@@ -1,0 +1,28 @@
+name: Weekly CI Budget Audit
+
+on:
+  schedule:
+    - cron: "13 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Measure PR job budgets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/measure_ci_budget.py
+      - name: Upload CI budget report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: weekly-ci-budget-report
+          path: ci-budget-report/

@@ -268,14 +268,22 @@ class AccountLevelLeakTests(unittest.TestCase):
 
 
 class ReleasePanelTests(unittest.TestCase):
-    def test_all_board_has_the_two_line_release_chart(self) -> None:
+    def test_all_board_has_the_three_series_release_chart(self) -> None:
         panel = next(p for p in load("omi-tv")["panels"]
                      if build_dashboards.base_title(p) == build_dashboards.RELEASES_CHART_TITLE)
         target = panel["targets"][0]
         self.assertIn("/api/omi/stats/releases", target["url"])
         self.assertIn("_tzdates=date", target["url"])
         names = [c["text"] for c in target["columns"]]
-        self.assertEqual(names, ["time", "macOS releases", "iOS releases"])
+        self.assertEqual(names, ["time", "macOS releases", "iOS releases", "Android releases"])
+        self.assertEqual([c["selector"] for c in target["columns"]],
+                         ["date", "macos", "ios", "android"])
+        self.assertIn("TestFlight/Play builds included", panel["description"])
+        colors = {o["matcher"]["options"]: o["properties"][0]["value"]["fixedColor"]
+                  for o in panel["fieldConfig"]["overrides"]}
+        self.assertEqual(set(colors), {"macOS releases", "iOS releases", "Android releases"})
+        self.assertEqual(len(set(colors.values())), 3)
+        self.assertNotIn(colors["Android releases"].lower(), {"#a855f7", "#9333ea"})
 
     def test_platform_boards_show_their_latest_release_stat(self) -> None:
         for uid, root, absent in [("omi-tv-macos", "latest.macos", "latest.ios"),
@@ -433,6 +441,32 @@ class ApplyPreservesLayoutTests(unittest.TestCase):
         incoming = [{"id": 1, "gridPos": {"h": 6, "w": 4, "x": 0, "y": 0}}]
         apply_mod.preserve_live_layout(incoming, [])
         self.assertEqual(incoming[0]["gridPos"], {"h": 6, "w": 4, "x": 0, "y": 0})
+
+
+class CanonicalProfitabilityKeyTests(unittest.TestCase):
+    """Boards must read the profitability key the precompute cron writes.
+
+    The cache key embeds desktop_cost/mobile_cost and the cron precomputes
+    only the default (0.2/0.2) params, so a URL carrying its own cost params
+    reads a legacy doc no writer maintains. That doc was served frozen for
+    ~4 weeks (Aug 25) while a fresh one sat under the default key — this
+    static tripwire keeps every board surface on the canonical key.
+    """
+
+    def test_profit_path_carries_no_cost_params(self) -> None:
+        parsed = urllib.parse.urlparse(build_dashboards.PROFIT_PATH)
+        params = urllib.parse.parse_qs(parsed.query)
+        self.assertNotIn("desktop_cost", params)
+        self.assertNotIn("mobile_cost", params)
+
+    def test_no_board_profitability_url_carries_cost_params(self) -> None:
+        for uid in BOARDS:
+            for where, url in all_urls(load(uid)):
+                haystack = urllib.parse.unquote(url)
+                if "profitability" not in haystack:
+                    continue
+                self.assertNotIn("desktop_cost", haystack, f"{uid} {where}")
+                self.assertNotIn("mobile_cost", haystack, f"{uid} {where}")
 
 
 if __name__ == "__main__":

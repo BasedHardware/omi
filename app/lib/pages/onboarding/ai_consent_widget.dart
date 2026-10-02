@@ -1,15 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// The data-and-AI consent step. Agree continues; "Use a Different Account" signs out and goes
+/// back to sign-in, so someone on the wrong account (or who does not consent) is never stuck here.
 class AiConsentWidget extends StatefulWidget {
   final VoidCallback onAgree;
+  final FutureOr<void> Function() onUseDifferentAccount;
 
-  const AiConsentWidget({super.key, required this.onAgree});
+  const AiConsentWidget({super.key, required this.onAgree, required this.onUseDifferentAccount});
 
   @override
   State<AiConsentWidget> createState() => _AiConsentWidgetState();
@@ -36,104 +43,48 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    return Column(
-      children: [
-        Expanded(child: Container()),
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: mediaQuery.size.height - mediaQuery.padding.top - 16,
-          ),
-          child: Container(
-            width: double.infinity,
-            // The SafeArea below adds the system inset; adding it here as well left
-            // twice the inset of dead space under the content on inset devices.
-            padding: const EdgeInsets.fromLTRB(32, 26, 32, 8),
-            decoration: const BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
-            ),
-            child: SafeArea(
-              top: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Flexible(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.l10n.dataAndPrivacy,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              height: 1.2,
-                              fontFamily: 'Manrope',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            context.l10n.consentDataMessage,
-                            style:
-                                const TextStyle(color: Colors.white, fontSize: 15, height: 1.5, fontFamily: 'Manrope'),
-                          ),
-                          const SizedBox(height: 16),
-                          RichText(
-                            text: TextSpan(
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                fontSize: 13,
-                                height: 1.4,
-                                fontFamily: 'Manrope',
-                              ),
-                              children: [
-                                TextSpan(text: context.l10n.yourDataIsProtected),
-                                TextSpan(
-                                  text: context.l10n.privacyPolicy,
-                                  style: const TextStyle(color: Colors.white, decoration: TextDecoration.underline),
-                                  recognizer: _privacyRecognizer,
-                                ),
-                                TextSpan(text: context.l10n.and),
-                                TextSpan(
-                                  text: context.l10n.termsOfService,
-                                  style: const TextStyle(color: Colors.white, decoration: TextDecoration.underline),
-                                  recognizer: _termsRecognizer,
-                                ),
-                                const TextSpan(text: '.'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: widget.onAgree,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        context.l10n.agreeAndContinue,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+    final linkStyle = OmiType.footnote.copyWith(color: OmiColors.textPrimary, decoration: TextDecoration.underline);
+    return OnboardingStep(
+      card: OnboardingCard(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        content: [
+          Semantics(header: true, child: Text(context.l10n.dataAndPrivacy, style: OmiType.title1)),
+          const SizedBox(height: OmiSpacing.md),
+          Text(context.l10n.consentDataMessage, style: OmiType.subhead.copyWith(height: 1.5)),
+          const SizedBox(height: OmiSpacing.md),
+          RichText(
+            text: TextSpan(
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4),
+              children: [
+                TextSpan(text: context.l10n.yourDataIsProtected),
+                TextSpan(text: context.l10n.privacyPolicy, style: linkStyle, recognizer: _privacyRecognizer),
+                TextSpan(text: context.l10n.and),
+                TextSpan(text: context.l10n.termsOfService, style: linkStyle, recognizer: _termsRecognizer),
+                const TextSpan(text: '.'),
+              ],
             ),
           ),
-        ),
-      ],
+        ],
+        footer: [
+          const SizedBox(height: OmiSpacing.xl),
+          OmiButton(
+            key: const Key('ai_consent_agree'),
+            label: context.l10n.agreeAndContinue,
+            expand: true,
+            onPressed: () {
+              OmiHaptics.selection();
+              widget.onAgree();
+            },
+          ),
+          const SizedBox(height: OmiSpacing.xxs),
+          OmiButton.tertiary(
+            key: const Key('ai_consent_use_different_account'),
+            label: context.l10n.useDifferentAccount,
+            expand: true,
+            onPressed: widget.onUseDifferentAccount,
+          ),
+        ],
+      ),
     );
   }
 }

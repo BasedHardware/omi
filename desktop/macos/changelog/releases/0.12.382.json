@@ -1,0 +1,7 @@
+{
+  "version": "0.12.382",
+  "date": "2026-09-23",
+  "changes": [
+    "Fixed a bug that could stop and restart ambient recording every few minutes, splitting one conversation into many"
+  ]
+}

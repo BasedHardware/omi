@@ -1,3 +1,6 @@
+from utils.sync import pipeline
+from routers.listen import transcripts
+
 """Speaker-sample verification must not silently default to English (#12899).
 
 extract_speaker_samples() runs while the conversation is still live, before
@@ -10,6 +13,7 @@ language preference, the same source chat/memories/process_conversation use.
 """
 
 import os
+import pytest
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
@@ -35,11 +39,18 @@ def _conversation(language):
 
 
 def _wire_common_stubs(monkeypatch, conversation, captured):
+    monkeypatch.setattr(
+        speaker_identification_mod.voice_profiles_db,
+        "get_voice_profile_settings",
+        lambda uid: {"speaker_tag_prompts_enabled": True, "save_other_voice_profiles": True},
+    )
     monkeypatch.setattr(speaker_identification_mod.users_db, "get_person", lambda uid, pid: {"id": pid})
     monkeypatch.setattr(speaker_identification_mod.users_db, "get_person_speech_samples_count", lambda uid, pid: 0)
     monkeypatch.setattr(speaker_identification_mod.conversations_db, "get_conversation", lambda uid, cid: conversation)
     monkeypatch.setattr(
-        speaker_identification_mod, "download_audio_chunks_and_merge", lambda *a, **k: b"\x00" * (SAMPLE_RATE * 12 * 2)
+        speaker_identification_mod,
+        "legacy_speaker_clip_pcm",
+        lambda uid, cid, start, end, rate, **kwargs: b"\x00" * round((end - start) * rate * 2),
     )
     monkeypatch.setattr(
         speaker_identification_mod, "_trim_pcm_audio", lambda pcm, sr, s, e: b"\x00" * (SAMPLE_RATE * 10 * 2)
@@ -57,6 +68,15 @@ def _wire_common_stubs(monkeypatch, conversation, captured):
         return "hello there friend", True, "ok"
 
     monkeypatch.setattr(speaker_identification_mod, "verify_and_transcribe_sample", fake_verify)
+
+
+async def _paid_named_speakers():
+    return True
+
+
+async def _no_owner_name():
+    """The listen coordinator's owner-name veto, resolved to "no owner name known"."""
+    return None
 
 
 def test_falls_back_to_user_language_preference_when_conversation_language_is_empty(monkeypatch):
@@ -89,3 +109,78 @@ def test_uses_conversation_language_without_consulting_user_preference(monkeypat
     )
 
     assert captured['language'] == "de"
+
+
+def test_sync_name_detection_receives_selected_language(monkeypatch, paid_sync_entitlement):
+    from utils.sync import pipeline
+    from models.transcript_segment import TranscriptSegment
+
+    seen = []
+    monkeypatch.setattr(pipeline, 'detect_speaker_from_text', lambda text, language=None: seen.append(language))
+    pipeline.identify_speakers_for_segments(
+        [TranscriptSegment(id='s', text='Texto sintético', is_user=False, start=0, end=5)],
+        None,
+        {},
+        'synthetic',
+        language='pt',
+    )
+    assert seen == ['pt']
+
+
+def test_sync_name_detection_log_omits_transcript_identity(monkeypatch, caplog, paid_sync_entitlement):
+    import logging
+    from models.transcript_segment import TranscriptSegment
+    from utils.sync import pipeline
+
+    monkeypatch.setattr(pipeline, 'detect_speaker_from_text', lambda *_args, **_kwargs: 'Sensitive Name')
+    monkeypatch.setattr(
+        pipeline.users_db,
+        'get_person_by_name',
+        lambda *_args: {'id': 'sensitive-person-id', 'name': 'Sensitive Name'},
+    )
+    segment = TranscriptSegment(
+        id='synthetic', text='my name is Sensitive Name', start=0, end=2, speaker_id=1, is_user=False
+    )
+    with caplog.at_level(logging.INFO, logger='utils.sync.pipeline'):
+        pipeline.identify_speakers_for_segments([segment], None, {}, 'sensitive-uid')
+    assert segment.person_id == 'sensitive-person-id'
+    assert 'source=text accepted=True' in caplog.text
+    for private_value in ('Sensitive Name', 'sensitive-person-id', 'sensitive-uid'):
+        assert private_value not in caplog.text
+
+
+def test_live_name_detection_receives_session_language(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from routers.listen import transcripts
+    from models.transcript_segment import TranscriptSegment
+
+    seen = []
+    processor = object.__new__(transcripts.TranscriptProcessor)
+    processor.suggested_segments = set()
+    processor.host = SimpleNamespace(
+        language='ja',
+        state=SimpleNamespace(speaker_id_enabled=False),
+        speakers=SimpleNamespace(
+            speaker_to_person={},
+            person_embeddings={},
+            resolve_owner_name=_no_owner_name,
+            named_speakers_allowed=_paid_named_speakers,
+        ),
+    )
+    monkeypatch.setattr(transcripts, 'detect_speaker_introduction', lambda text, language=None: seen.append(language))
+    asyncio.run(
+        processor._speaker_detection([TranscriptSegment(id='s', text='合成テキスト', is_user=False, start=0, end=5)], 0)
+    )
+    assert seen == ['ja']
+
+
+# Only the sync name-detection tests need the paid entitlement; the sample-
+# extraction tests never consult the gate, and the live test carries its own
+# named_speakers_allowed stub. Keeping them off the fixture preserves their
+# default/free-plan context.
+@pytest.fixture
+def paid_sync_entitlement(monkeypatch):
+    from utils.sync import speaker_identity
+
+    monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: True)

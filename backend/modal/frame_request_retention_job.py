@@ -9,6 +9,7 @@ import os
 import firebase_admin
 
 from services.frame_request_retention import run_frame_request_retention_maintenance
+from utils.env_loader import firebase_admin_options
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,9 +19,9 @@ def _init_firebase() -> None:
     service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
     if service_account_json:
         credentials = firebase_admin.credentials.Certificate(json.loads(service_account_json))
-        firebase_admin.initialize_app(credentials)  # type: ignore[reportUnknownMemberType]
+        firebase_admin.initialize_app(credentials, options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]
     else:
-        firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]
+        firebase_admin.initialize_app(options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]
 
 
 def main() -> None:

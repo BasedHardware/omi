@@ -12,19 +12,22 @@ from unittest.mock import AsyncMock
 import numpy as np
 import pytest
 
+from database import speaker_learning as speaker_learning_db
 from database import users
 from routers.listen import speakers
 from utils.audio import AudioRingBuffer
 from models.transcript_segment import TranscriptSegment
 from utils.sync import pipeline
+from utils.sync import speaker_identity
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from models.conversation import Conversation
 from routers import conversations
 from datetime import datetime, timezone
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils import speaker_assignment_teaching as teaching_tasks
 from utils import speaker_identification as teaching
-from utils import speaker_sample
+from utils import speaker_sample, speaker_audio
 
 
 @pytest.fixture
@@ -47,6 +50,7 @@ def world(monkeypatch):
     store.rows[person_path] = person
     store.rows[conversation_path] = conversation
     monkeypatch.setattr(users, 'db', store)
+    monkeypatch.setattr(speaker_learning_db, 'get_firestore_client', lambda *a, **k: store)
     monkeypatch.setattr(users, 'get_person', lambda uid, pid: deepcopy(store.rows.get(('users', uid, 'people', pid))))
     monkeypatch.setattr(
         users,
@@ -54,13 +58,27 @@ def world(monkeypatch):
         lambda uid: [deepcopy(v) for k, v in store.rows.items() if k[:3] == ('users', uid, 'people')],
     )
     monkeypatch.setattr(users, 'get_user_speaker_embedding', lambda uid: None)
+    voice_settings = {'speaker_tag_prompts_enabled': True, 'save_other_voice_profiles': True}
+    monkeypatch.setattr(teaching.voice_profiles_db, 'get_voice_profile_settings', lambda uid: dict(voice_settings))
     monkeypatch.setattr(
         teaching.conversations_db,
         'get_conversation',
         lambda uid, cid: deepcopy(store.rows.get(('users', uid, 'conversations', cid))),
     )
     pcm = np.full(16000 * 10, 1000, dtype=np.int16).tobytes()
-    monkeypatch.setattr(teaching, 'download_audio_chunks_and_merge', lambda *a, **k: pcm)
+    monkeypatch.setattr(speaker_audio.storage, 'download_audio_chunks_and_merge', lambda *a, **k: pcm)
+    monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', lambda *a, **k: iter([(1700000000.0, pcm)]))
+    monkeypatch.setattr(
+        speaker_audio.storage,
+        'list_audio_chunks',
+        lambda *a, **kwargs: [
+            {
+                'timestamp': 1700000000.0,
+                'path': 'fake.bin',
+                'span': {'start': 1700000000.0, 'samples': len(pcm) // 2, 'sample_rate': 16000},
+            }
+        ],
+    )
     vector = np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
     monkeypatch.setattr(teaching, 'extract_embedding_from_bytes', lambda *a: vector)
     uploads = []
@@ -85,11 +103,39 @@ def world(monkeypatch):
         uploads=uploads,
         deleted=deleted,
         vector=vector,
+        voice_settings=voice_settings,
     )
 
 
 def teach():
     asyncio.run(teaching.extract_speaker_samples('account-a', 'person-1', 'teach-1', ['s1', 's2']))
+
+
+def test_user_opt_out_skips_saving_other_voices(world):
+    world.voice_settings['save_other_voice_profiles'] = False
+    teach()
+    saved = world.store.rows[world.person_path]
+    assert not saved.get('speech_samples'), 'opting out must stop new voice samples for other people'
+    assert not saved.get('speaker_embedding')
+    assert world.uploads == []
+
+
+def test_opt_out_during_inflight_teaching_discards_the_upload(world, monkeypatch):
+    def embed(*args):
+        world.store.rows[('users', 'account-a')] = {'save_other_voice_profiles': False}
+        return world.vector
+
+    monkeypatch.setattr(teaching, 'extract_embedding_from_bytes', embed)
+    teach()
+    saved = world.store.rows[world.person_path]
+    assert not saved.get('speaker_embedding')
+    assert not saved.get('speech_samples'), 'the publish transaction must re-check the opt-out atomically'
+    assert world.uploads[-1] in world.deleted
+    assert all(
+        'speech_samples' not in patch
+        for transaction in world.store.transactions
+        for _path, patch in transaction.updates
+    ), 'no transaction may publish a voice sample once the opt-out lands'
 
 
 def test_expanded_audio_is_verified_against_all_contributing_text(world):
@@ -116,6 +162,8 @@ async def fresh_live_match(monkeypatch, uid, vector):
     suggestions = []
 
     async def call(fn, *args, **kwargs):
+        if fn is speakers.conversations_db.get_manual_speaker_receipt:
+            return {}
         return fn(*args, **kwargs)
 
     host = SimpleNamespace(
@@ -148,6 +196,7 @@ def test_teach_once_new_sessions_and_offline_sync_recognize_same_person(world, m
     assert not other.person_embeddings and not suggestions
     cache = pipeline.build_person_embeddings_cache('account-a')
     assert not pipeline.build_person_embeddings_cache('account-b')
+    monkeypatch.setattr(pipeline, 'speaker_embedding_configured', lambda: True)
     monkeypatch.setattr(pipeline, 'extract_embedding_from_bytes', lambda *a: world.vector)
     segment = TranscriptSegment(
         id='offline-1', text='Synthetic speech about a trip', speaker='SPEAKER_07', is_user=False, start=0, end=10
@@ -174,7 +223,13 @@ def test_reteaching_replaces_legacy_profile_and_failed_embedding_preserves_it(wo
 
     monkeypatch.setattr(teaching, 'extract_embedding_from_bytes', fail)
     teach()
-    assert world.store.rows[world.person_path] == saved
+    learning_keys = {'voice_learning_state', 'voice_learning_outcome', 'voice_speech_seconds', 'voice_needed_seconds'}
+    current = world.store.rows[world.person_path]
+    assert {k: v for k, v in current.items() if k not in learning_keys} == {
+        k: v for k, v in saved.items() if k not in learning_keys
+    }
+    assert current['voice_learning_outcome'] == 'embedding_failed'
+    assert current['voice_learning_state'] == 'learned', 'a still-usable profile keeps learned across a failed retry'
 
 
 def test_same_person_id_in_two_accounts_never_shares_a_profile(world, monkeypatch):
@@ -269,26 +324,22 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
 
     now = datetime(2026, 9, 19, tzinfo=timezone.utc)
 
-    def load(uid, cid):
-        raw = deepcopy(world.store.rows[('users', uid, 'conversations', cid)])
-        # The audio manifest is consumed by extraction, not needed in the
-        # endpoint's response-model fixture.
-        raw.pop('audio_files')
+    def deserialize(raw):
+        raw = deepcopy(raw)
+        raw.pop('audio_files', None)
         for segment in raw['transcript_segments']:
             segment.setdefault('is_user', False)
-        return Conversation(id=cid, created_at=now, finished_at=now, structured={}, **raw)
+        return Conversation(created_at=now, finished_at=now, structured={}, **raw)
 
-    monkeypatch.setattr(conversations, '_get_valid_conversation_by_id', load)
-    monkeypatch.setattr(conversations, 'deserialize_conversation', lambda value: value)
+    monkeypatch.setattr(conversations.conversations_db, 'get_firestore_client', lambda: world.store)
+    # The fixture intentionally keeps its synthetic manifest minimal; exercise
+    # the real command/transaction while leaving storage encryption out of scope.
+    monkeypatch.setattr(conversations.conversations_db, '_prepare_conversation_for_write', lambda data, *args: data)
+    monkeypatch.setattr(conversations, 'deserialize_conversation', deserialize)
+    # Free plan: naming a person in your own transcript must still work and teach.
+    monkeypatch.setattr('utils.speaker_permissions.users_db.get_user_valid_subscription', lambda uid, **kwargs: None)
     monkeypatch.setattr(conversations, '_emit_speaker_identity_confirmed', lambda **kwargs: None)
-    monkeypatch.setattr(
-        conversations.conversations_db,
-        'update_conversation_segments',
-        lambda uid, cid, segments: world.store.rows[('users', uid, 'conversations', cid)].update(
-            transcript_segments=segments
-        ),
-    )
-    monkeypatch.setattr(conversations, 'delete_speech_profile_blob', lambda path: world.deleted.append(path))
+    monkeypatch.setattr(teaching_tasks, 'delete_speech_profile_blob', lambda path: world.deleted.append(path))
     app = FastAPI()
     app.include_router(conversations.router)
     app.dependency_overrides[conversations.auth.get_current_user_uid] = lambda: 'account-a'
@@ -306,6 +357,41 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
         corrected = world.store.rows[('users', 'account-a', 'people', 'person-2')]
         assert corrected['speaker_embedding'] == [1.0, 0.0, 0.0]
         assert world.store.rows[world.conversation_path]['transcript_segments'][0]['person_id'] == 'person-2'
+        # Free plan end-to-end: manual assignment and teaching above still worked,
+        # but a later live session must not auto-identify the non-owner voice, and
+        # the sync cache stays owner-only (this fixture has no owner embedding).
+        monkeypatch.setattr(speakers, 'named_speaker_prompts_allowed', lambda uid: False)
+        monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: False)
         matcher, suggestions = asyncio.run(fresh_live_match(monkeypatch, 'account-a', world.vector))
-        assert matcher.speaker_to_person[7] == ('person-2', 'Synthetic Sam')
-        assert set(pipeline.build_person_embeddings_cache('account-a')) == {'person-2'}
+        assert 7 not in matcher.speaker_to_person
+        assert suggestions == []
+        assert set(pipeline.build_person_embeddings_cache('account-a')) == set()
+
+
+def test_next_conversation_refreshes_profiles_but_same_conversation_keeps_locked_matches(world, monkeypatch):
+    async def exercise():
+        matcher, _ = await fresh_live_match(monkeypatch, 'account-a', world.vector)
+        await matcher.refresh_for_conversation('first')
+        assert not matcher.person_embeddings
+        await teaching.extract_speaker_samples('account-a', 'person-1', 'teach-1', ['s1', 's2'])
+        matcher.speaker_to_person[7] = ('locked', 'Locked')
+        await matcher.refresh_for_conversation('first')
+        assert matcher.speaker_to_person[7][0] == 'locked'
+        assert not matcher.person_embeddings
+        await matcher.refresh_for_conversation('second')
+        assert 'person-1' in matcher.person_embeddings
+        assert not matcher.speaker_to_person
+        await matcher.match(7, {'id': 'old', 'conversation_id': 'first', 'duration': 10, 'abs_start': 0, 'abs_end': 10})
+        assert not matcher.speaker_to_person
+        await matcher.match(
+            7, {'id': 'new', 'conversation_id': 'second', 'duration': 10, 'abs_start': 0, 'abs_end': 10}
+        )
+        assert matcher.speaker_to_person[7][0] == 'person-1'
+
+    asyncio.run(exercise())
+
+
+@pytest.fixture(autouse=True)
+def paid_named_speaker_entitlement(monkeypatch):
+    monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: True)
+    monkeypatch.setattr(speakers, 'named_speaker_prompts_allowed', lambda uid: True)

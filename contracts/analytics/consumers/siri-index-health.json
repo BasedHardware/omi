@@ -1,0 +1,15 @@
+{
+  "id": "siri-index-health",
+  "kind": "question",
+  "owner": "Siri integration",
+  "question": "Did the Siri index rebuild in each app namespace and build?",
+  "query": "contracts/analytics/consumers/siri-index-health.sql",
+  "events": [
+    "siriIndexRebuilt"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "build_number"
+  ],
+  "zero_policy": "Zero may mean the user did not invoke Siri or indexing had no new work; inspect local build and index evidence before interpreting adoption."
+}

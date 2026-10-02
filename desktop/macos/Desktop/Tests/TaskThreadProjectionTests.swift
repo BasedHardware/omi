@@ -284,15 +284,15 @@ import XCTest
 
   @MainActor
   final class TaskThreadProjectionTests: XCTestCase {
-    private var previousOwnerID: String?
+    private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
 
     override func setUp() async throws {
-      previousOwnerID = RuntimeOwnerIdentity.currentOwnerId()
-      await transitionOwner(to: "owner-a")
+      ownerFixture = RuntimeOwnerAuthorityTestFixture()
+      await ownerFixture?.establish(authOwnerID: "owner-a")
     }
 
     override func tearDown() async throws {
-      await transitionOwner(to: previousOwnerID)
+      await ownerFixture?.restore()
     }
 
     func testTwoTaskScopesKeepOneWorkstreamAndArtifactIdentity() {
@@ -699,15 +699,16 @@ import XCTest
             await MainActor.run {
               NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
             }
+          },
+          { defaults in
+            defaults.removeObject(forKey: .automationOwnerOverride)
+            if let ownerID {
+              defaults.set(ownerID, forKey: .authUserId)
+            } else {
+              defaults.removeObject(forKey: .authUserId)
+            }
           }
-        ) { defaults in
-          defaults.removeObject(forKey: .automationOwnerOverride)
-          if let ownerID {
-            defaults.set(ownerID, forKey: .authUserId)
-          } else {
-            defaults.removeObject(forKey: .authUserId)
-          }
-        }
+        )
       } catch {
         XCTFail("owner transition failed: \(error)")
       }

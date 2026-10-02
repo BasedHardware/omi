@@ -110,23 +110,49 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future<List<int>> _getStorageList(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return [];
     }
     return connection.getStorageList();
   }
 
+  /// Delete a device recording. The wal leaves [_wals] only after the device
+  /// confirmed the delete (command accepted AND storage readback shows the
+  /// bytes gone); an unconfirmed delete — including when the owning device is
+  /// absent or a different device is active — keeps the wal so the recording
+  /// cannot resurrect as "new" on the next sync (fail-closed).
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
-    _wals.removeWhere((w) => w.id == wal.id);
 
-    if (_device != null && wal.device == _device!.id) {
-      await _writeToStorage(_device!.id, wal.fileNum, 1, 0);
+    if (_device == null || wal.device != _device!.id) {
+      Logger.debug("SDCardWalSync.deleteWal: owning device of ${wal.id} not connected, keeping WAL");
+      return;
     }
 
+    final confirmed = await _deleteOnDevice(wal);
+    if (!confirmed) {
+      Logger.debug("SDCardWalSync.deleteWal: device did not confirm deletion of ${wal.id}, keeping WAL");
+      return;
+    }
+
+    _wals.removeWhere((w) => w.id == wal.id);
     listener.onWalUpdated();
+  }
+
+  /// Send the delete command for [wal] and verify it took effect: read the
+  /// storage list back and require totalBytes to have dropped below the
+  /// wal's discovered size. `writeToStorage` returning true only means the
+  /// BLE write was accepted — the readback is what proves the audio is gone.
+  /// An empty readback is ambiguous (no connection vs. empty card) and
+  /// counts as unconfirmed.
+  Future<bool> _deleteOnDevice(Wal wal) async {
+    final ok = await _writeToStorage(_device!.id, wal.fileNum, 1, 0);
+    if (!ok) return false;
+    final storageFiles = await _getStorageList(_device!.id);
+    if (storageFiles.isEmpty) return false;
+    return storageFiles[0] < wal.storageTotalBytes;
   }
 
   Future<List<Wal>> _getMissingWals() async {

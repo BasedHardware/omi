@@ -6,6 +6,8 @@ on:
     paths:
       - 'backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml'
       - 'backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml'
+      - 'backend/charts/monitoring/alerts/live-stt.json'
+      - 'backend/charts/monitoring/live-alert-gate.json'
       - '.github/workflows/gcp_cloud_run_metrics_egress.yml'
   workflow_dispatch:
     inputs:
@@ -72,10 +74,26 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v5
 
-      - name: Google Auth
+      # Prod: GitHub WIF as omi-ci-monitoring-prod@ (credential-hygiene WS-C, plan v2 Phase E).
+      # Development keeps its JSON lane.
+      - name: Google Auth (prod WIF)
+        id: auth-wif
+        if: github.event.inputs.environment == 'prod'
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-monitoring-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth
+        if: github.event.inputs.environment != 'prod'
+        uses: google-github-actions/auth@v3
+        with:
+          # Development: GitHub WIF as omi-ci-monitoring-dev@, mirroring prod. The chart's
+          # admission hooks create and delete ClusterRoles, which omi-ci-deployer-dev
+          # (container.developer) cannot do; this identity holds container.admin and is
+          # impersonable only from this workflow on main.
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-monitoring-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
@@ -134,3 +152,62 @@ jobs:
             --timeout=5m
           kubectl get service "$EXPORTER_RELEASE" \
             --namespace "$MONITORING_NAMESPACE"
+
+  provision-live-alerts:
+    # Grafana alert provisioning is independent of Helm deploy health: a
+    # Helm failure must not suppress live-STT alert updates.
+    if: github.ref == 'refs/heads/main'
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed monitoring configuration
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Import allowlisted live-STT Grafana alerts
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          case "${{ vars.ENV }}" in
+            dev|development) grafana_url=https://monitor.omiapi.com ;;
+            prod) grafana_url=https://monitor.omi.me ;;
+            *) echo "Unsupported Grafana environment." >&2; exit 1 ;;
+          esac
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url "$grafana_url" \
+            --token-file "$token_file" \
+            --mode import
+
+      - name: Verify imported live-STT Grafana alert coverage
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          case "${{ vars.ENV }}" in
+            dev|development) grafana_url=https://monitor.omiapi.com ;;
+            prod) grafana_url=https://monitor.omi.me ;;
+            *) echo "Unsupported Grafana environment." >&2; exit 1 ;;
+          esac
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url "$grafana_url" \
+            --token-file "$token_file" \
+            --mode fleet \
+            --alert-set live-stt \
+            --fail-on gated

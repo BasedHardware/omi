@@ -249,6 +249,47 @@ describe("PiMonoAdapter prompt correlation", () => {
     }
   });
 
+  it("EXP-002 memory_v1 never routes a turn onto the public web", () => {
+    const previous = process.env.OMI_EXPERIMENT_VARIANT;
+    process.env.OMI_EXPERIMENT_VARIANT = "memory_v1";
+    try {
+      for (const message of [
+        "Search the web for the latest SwiftUI changes.",
+        "What is the current weather in NYC?",
+        "google it",
+      ]) {
+        expect(routePromptForPublicWeb(message)).toBe(message);
+      }
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OMI_EXPERIMENT_VARIANT;
+      } else {
+        process.env.OMI_EXPERIMENT_VARIANT = previous;
+      }
+    }
+  });
+
+  it("EXP-002 control and un-armed turns keep the routing contract", () => {
+    const previous = process.env.OMI_EXPERIMENT_VARIANT;
+    process.env.OMI_EXPERIMENT_VARIANT = "control";
+    try {
+      // Main removed the phrase-gate prefix injection: public-web lookup is a
+      // real `web_search` tool, and the manufactured prefix made a capability
+      // claim without a tool call. Control and un-armed turns now pass the
+      // prompt through untouched — the arm must not resurrect it.
+      expect(routePromptForPublicWeb("Search the web for the latest SwiftUI changes.")).toBe(
+        "Search the web for the latest SwiftUI changes."
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OMI_EXPERIMENT_VARIANT;
+      } else {
+        process.env.OMI_EXPERIMENT_VARIANT = previous;
+      }
+    }
+    expect(routePromptForPublicWeb("What did I do today?")).toBe("What did I do today?");
+  });
+
   it("keeps the trusted query separate from appended untrusted tool context", () => {
     const privateQueryWithToolContext = [
       "[Kernel Context Snapshot version=1 generation=2]",
@@ -1309,7 +1350,7 @@ describe("PiMonoAdapter served-model attribution", () => {
         role: "assistant",
         content: [{ type: "text", text: "done" }],
         model: "omi-sonnet",
-        responseModel: "gpt-5.6-luna",
+        responseModel: "gpt-6-luna",
         provider: "openai-codex",
       },
     }));
@@ -1318,7 +1359,7 @@ describe("PiMonoAdapter served-model attribution", () => {
     await expect(execution).resolves.toMatchObject({
       terminalStatus: "succeeded",
       providerTargets: ["openai-codex"],
-      modelsUsed: ["gpt-5.6-luna"],
+      modelsUsed: ["gpt-6-luna"],
     });
   });
 
@@ -1345,7 +1386,7 @@ describe("PiMonoAdapter served-model attribution", () => {
           role: "assistant",
           content: [{ type: "text", text: "…" }],
           model: "omi-sonnet",
-          responseModel: "gpt-5.6-luna",
+          responseModel: "gpt-6-luna",
         },
       }));
     }
@@ -1356,7 +1397,7 @@ describe("PiMonoAdapter served-model attribution", () => {
     const modelEvents = events.filter((e: any) => e.type === "model_used");
     expect(modelEvents).toEqual([{
       type: "model_used",
-      model: "gpt-5.6-luna",
+      model: "gpt-6-luna",
       requestedModel: "omi-sonnet",
       provider: undefined,
     }]);
@@ -1395,7 +1436,7 @@ describe("PiMonoAdapter served-model attribution", () => {
     );
     const turnEnd2 = makeTurnEndEvent("a2");
     (turnEnd2.message as any).model = "omi-sonnet";
-    (turnEnd2.message as any).responseModel = "gpt-5.6-luna";
+    (turnEnd2.message as any).responseModel = "gpt-6-luna";
     (adapter as any).handleTurnEnd(turnEnd2);
     await second;
 
@@ -1409,13 +1450,13 @@ describe("PiMonoAdapter served-model attribution", () => {
     );
     const turnEnd3 = makeTurnEndEvent("a3");
     (turnEnd3.message as any).model = "omi-sonnet";
-    (turnEnd3.message as any).responseModel = "gpt-5.6-luna";
+    (turnEnd3.message as any).responseModel = "gpt-6-luna";
     (adapter as any).handleTurnEnd(turnEnd3);
     await third;
 
     const modelEvents = events.filter((e: any) => e.type === "model_used");
     expect(modelEvents).toHaveLength(2);
-    expect(modelEvents.every((e: any) => e.model === "gpt-5.6-luna")).toBe(true);
+    expect(modelEvents.every((e: any) => e.model === "gpt-6-luna")).toBe(true);
   });
 });
 

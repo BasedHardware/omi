@@ -87,6 +87,16 @@ def _event(
     }
 
 
+def _all_day_event(start_date: str, end_date: str, *, event_id: str) -> dict:
+    return {
+        'id': event_id,
+        'summary': 'Out of office',
+        'status': 'confirmed',
+        'start': {'date': start_date},
+        'end': {'date': end_date},
+    }
+
+
 class TestAttendanceExclusion:
     def test_cancelled_event_is_excluded(self):
         assert cl.event_attendance_excluded(
@@ -201,6 +211,28 @@ class TestSelectOverlappingCalendarEvent:
                 [shorter, longer], conversation_start, conversation_end, require_accepted=True
             )
             is longer
+        )
+
+    def test_all_day_event_does_not_keep_a_short_clip(self):
+        conversation_start = WINDOW_START + timedelta(minutes=5)
+        conversation_end = conversation_start + timedelta(seconds=25)
+        out_of_office = _all_day_event('2026-08-18', '2026-08-25', event_id='evt-ooo')
+
+        assert (
+            cl.select_overlapping_calendar_event(
+                [out_of_office], conversation_start, conversation_end, require_accepted=True
+            )
+            is None
+        )
+
+    def test_meeting_wins_over_an_all_day_event_listed_first(self):
+        conversation_start = WINDOW_START + timedelta(minutes=5)
+        conversation_end = conversation_start + timedelta(minutes=20)
+        birthday = _all_day_event('2026-08-18', '2026-08-19', event_id='evt-birthday')
+        meeting = _event(WINDOW_START, WINDOW_START + timedelta(minutes=30), event_id='evt-meeting')
+
+        assert (
+            cl.select_overlapping_calendar_event([birthday, meeting], conversation_start, conversation_end) is meeting
         )
 
 

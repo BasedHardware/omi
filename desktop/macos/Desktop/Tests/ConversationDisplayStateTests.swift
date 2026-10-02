@@ -208,4 +208,37 @@ final class ConversationDisplayStateTests: XCTestCase {
     XCTAssertEqual(conv.displayState, .untitledRecoverable)
     XCTAssertTrue(conv.canReprocess)
   }
+
+  func test_untitledRecoverable_neverShowsSettlingDerivedLine() {
+    let conv = makeConversation(
+      status: .completed,
+      segments: [segment("hello this is a longer transcript please title me")]
+    )
+    XCTAssertEqual(conv.displayState, .untitledRecoverable)
+    XCTAssertFalse(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: conv.displayState, isSettling: true),
+      "A first-run untitled row must not claim memories and tasks are landing"
+    )
+  }
+
+  func test_titled_showsSettlingDerivedLineDuringGrace() {
+    let conv = makeConversation(title: "Morning standup")
+    XCTAssertTrue(
+      ConversationProcessingProgress.showsSettlingDerived(displayState: conv.displayState, isSettling: true)
+    )
+  }
+
+  func test_untitledRecoverableBadgeCopy_isTrueOnFirstRun() {
+    XCTAssertEqual(ConversationProcessingProgress.untitledRecoverableBadgeText, "Title didn't generate")
+    XCTAssertEqual(
+      ConversationProcessingProgress.untitledRecoverableBadgeHelp,
+      "The transcript was captured but the title pass didn't produce one. Try Reprocess."
+    )
+    XCTAssertFalse(
+      ConversationProcessingProgress.untitledRecoverableBadgeText.localizedCaseInsensitiveContains("needs reprocess")
+    )
+    XCTAssertFalse(
+      ConversationProcessingProgress.untitledRecoverableBadgeHelp.localizedCaseInsensitiveContains("needs reprocess")
+    )
+  }
 }

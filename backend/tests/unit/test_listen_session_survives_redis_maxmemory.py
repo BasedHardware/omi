@@ -41,6 +41,7 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import pytest
@@ -162,6 +163,7 @@ class _Host:
         self.storage_calls: List[str] = []
         self.transcripts = SimpleNamespace(flush_speaker_assignments=self._flush_speakers)
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
 
     async def wait(self, seconds: float) -> bool:
         index = min(self._wait_index, len(self._wait_returns) - 1)
@@ -425,6 +427,7 @@ async def test_prepare_stale_pointer_rolls_over_under_maxmemory():
     stale = {
         'id': 'conv-old',
         'source': 'omi',
+        'client_device_id': 'dev-1',
         'finished_at': datetime.now(timezone.utc) - timedelta(seconds=600),
     }
     host = _Host(_MaxMemorySocket(), retrieve_in_progress=stale)
@@ -442,6 +445,7 @@ async def test_prepare_attach_existing_never_writes_pointer():
     fresh = {
         'id': 'conv-1',
         'source': 'omi',
+        'client_device_id': 'dev-1',
         'finished_at': datetime.now(timezone.utc),
     }
     host = _Host(_MaxMemorySocket(), retrieve_in_progress=fresh)
@@ -503,6 +507,41 @@ async def test_create_new_survives_maxmemory_on_desktop_meeting_write():
     await asyncio.wait_for(controller.create_new_in_progress_conversation(), timeout=5)
 
     assert 'set_conversation_meeting_id' in host.storage_calls
+
+
+async def test_create_new_skips_malformed_meetings_without_crashing():
+    """A meeting record with a naive datetime, an ISO string, a ``None``
+    ``start_time``, or a missing ``id`` must not raise (#19153) — the
+    previous ``meeting['start_time'] - now`` subtraction crashed on the first
+    three and ``closest['id']`` crashed on the fourth. A valid meeting among
+    them is still linked."""
+    malformed = [
+        {'id': 'meeting-naive', 'start_time': datetime.now() - timedelta(minutes=1)},
+        {'id': 'meeting-string', 'start_time': (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()},
+        {'id': 'meeting-none', 'start_time': None},
+        {'start_time': datetime.now(timezone.utc)},
+    ]
+    host = _Host(_MaxMemorySocket(), meetings=malformed + [_overlapping_meeting()], source='desktop')
+    controller = LiveConversationController(host)
+
+    await asyncio.wait_for(controller.create_new_in_progress_conversation(), timeout=5)
+
+    assert 'set_conversation_meeting_id' in host.storage_calls
+
+
+async def test_create_new_skips_meeting_write_when_all_meetings_malformed():
+    """No meeting qualifies (unparseable ``start_time`` or missing ``id``) ->
+    the pointer write is skipped entirely, not crashed into with a bogus id."""
+    malformed = [
+        {'id': 'meeting-unparseable', 'start_time': 'not-a-date'},
+        {'start_time': datetime.now(timezone.utc)},
+    ]
+    host = _Host(_MaxMemorySocket(), meetings=malformed, source='desktop')
+    controller = LiveConversationController(host)
+
+    await asyncio.wait_for(controller.create_new_in_progress_conversation(), timeout=5)
+
+    assert 'set_conversation_meeting_id' not in host.storage_calls
 
 
 async def test_create_new_healthy_control_writes_both_pointers():

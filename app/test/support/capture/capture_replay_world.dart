@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart' show SyncLocalFilesResponse;
@@ -28,6 +30,8 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/wal_service.dart';
 
+import 'scripted_device_connection.dart';
+
 import 'virtual_capture_time.dart';
 
 class FakePhoneMicHostApi extends PhoneMicHostApi {
@@ -39,6 +43,8 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
   final List<String> startStacks = [];
   bool nativeRecording = false;
   Object Function()? nextStartError;
+  Completer<void>? holdNextStart;
+  Completer<void>? nextStartEntered;
 
   @override
   Future<void> start(PhoneMicCaptureMode mode, int sessionId) async {
@@ -47,6 +53,12 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
     lastStartMode = mode;
     lastStartSessionId = sessionId;
     startSessionIds.add(sessionId);
+    final entered = nextStartEntered;
+    nextStartEntered = null;
+    entered?.complete();
+    final held = holdNextStart;
+    holdNextStart = null;
+    if (held != null) await held.future;
     nativeRecording = true;
     final error = nextStartError;
     nextStartError = null;
@@ -199,7 +211,15 @@ class ScriptedUploads {
   SyncUploadGate buildGate() {
     return SyncUploadGate(
       limiter: SyncRateLimiter.instance,
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
         attempts.add(
           UploadAttempt(
             at: clock.now(),
@@ -237,6 +257,7 @@ class CaptureReplayWorld {
   final Directory tempDir;
   final VirtualClock clock;
   final ScriptedUploads uploads;
+  final BleAudioCodec pendantCodec;
 
   late ManualScheduler scheduler;
   late FakePhoneMicHostApi hostApi;
@@ -246,10 +267,24 @@ class CaptureReplayWorld {
   late RecordingTransferCoordinator coordinator;
   ScriptedPureSocket? socket;
   int socketCreates = 0;
+
+  /// Every transcription socket the controller opened, in order, with the source it declared.
+  final List<({String? source, ScriptedPureSocket transport})> sockets = [];
+
+  /// The pendant's BLE link, when a scenario connects one.
+  ScriptedDeviceConnection? deviceConnection;
+
+  /// The Omi phone-call state capture observes (PhoneCallProvider.callStateListenable in the app).
+  final ValueNotifier<PhoneCallState> omiCall = ValueNotifier(PhoneCallState.idle);
   bool nextConnectFailsOnce = false;
 
   bool connected = true;
   bool signedIn = true;
+  bool allowMic = true;
+  int processCalls = 0;
+
+  /// Runs when the controller asks the server to process the in-progress conversation.
+  void Function()? onProcessInProgress;
   int tokenRefreshCalls = 0;
   final List<String> timeline = [];
 
@@ -259,7 +294,7 @@ class CaptureReplayWorld {
 
   _ReplayCaptureController? _controller;
 
-  CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads});
+  CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
 
   bool _disposed = false;
   bool _controllerDisposed = false;
@@ -271,6 +306,7 @@ class CaptureReplayWorld {
     Map<String, Object> initialPrefs = const {},
     bool initiallyConnected = true,
     bool supportsBatch = true,
+    BleAudioCodec pendantCodec = BleAudioCodec.pcm16,
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
     final start = startTime ?? defaultStart;
@@ -278,6 +314,7 @@ class CaptureReplayWorld {
       tempDir: tempDir,
       clock: VirtualClock(start),
       uploads: ScriptedUploads(VirtualClock(start)),
+      pendantCodec: pendantCodec,
     );
     world.connected = initiallyConnected;
     await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
@@ -347,8 +384,15 @@ class CaptureReplayWorld {
       now: clock.now,
       scheduling: scheduler,
       inProgressConversationLoader: () async {},
-      audioCodecLoader: (deviceId) async => BleAudioCodec.pcm16,
-      microphonePermissionRequester: () async => true,
+      deviceConnectionLoader: (deviceId) async => deviceConnection,
+      omiCallState: omiCall,
+      processInProgressConversation: () async {
+        processCalls++;
+        onProcessInProgress?.call();
+        return null;
+      },
+      audioCodecLoader: (deviceId) async => pendantCodec,
+      microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
         isLocationServiceEnabled: () async => false,
         checkPermission: () async => LocationPermission.denied,
@@ -534,6 +578,9 @@ class _ReplayCaptureController extends CaptureController {
     super.audioCodecLoader,
     super.microphonePermissionRequester,
     super.conversationLocationCapture,
+    super.deviceConnectionLoader,
+    super.processInProgressConversation,
+    super.omiCallState,
   });
 
   @override
@@ -555,6 +602,7 @@ class _ReplayCaptureController extends CaptureController {
     }
     world.socket = transport;
     world.socketCreates++;
+    world.sockets.add((source: source, transport: transport));
     final service = TranscriptSegmentSocketService.withSocket(
       sampleRate,
       codec,

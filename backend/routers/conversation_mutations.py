@@ -1,6 +1,6 @@
 """Authenticated HTTP contract for durable conversation mutations."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 import database.conversation_mutations as mutations_db
@@ -10,6 +10,7 @@ from models.conversation import (
     ConversationSyncMutationResponse,
 )
 from utils.other import endpoints as auth
+from utils.product_metrics import record_product_event
 
 router = APIRouter()
 
@@ -24,10 +25,11 @@ def apply_conversation_sync_mutation(
     conversation_id: str,
     request: ConversationSyncMutationRequest,
     uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Apply or exactly replay one durable optimistic conversation mutation."""
     try:
-        response = mutations_db.apply_conversation_sync_mutation(
+        response, replayed = mutations_db.apply_conversation_sync_mutation(
             uid,
             conversation_id,
             client_mutation_id=request.client_mutation_id,
@@ -39,8 +41,15 @@ def apply_conversation_sync_mutation(
     except mutations_db.ConversationMutationLockedError as error:
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
     except mutations_db.ConversationMutationConflictError as error:
+        record_product_event('conversation_sync_mutation', request=http_request, outcome='conflict')
         conflict = ConversationSyncConflictResponse.model_validate(error.response)
         return JSONResponse(status_code=409, content=conflict.model_dump(mode='json'))
     except mutations_db.ConversationMutationReceiptUnavailableError as error:
+        record_product_event('conversation_sync_mutation', request=http_request, outcome='error')
         raise HTTPException(status_code=503, detail='Conversation mutation acknowledgement unavailable') from error
+    record_product_event(
+        'conversation_sync_mutation',
+        request=http_request,
+        outcome='replayed' if replayed else 'applied',
+    )
     return ConversationSyncMutationResponse.model_validate(response)

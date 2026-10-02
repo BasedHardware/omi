@@ -20,6 +20,9 @@ class FakeVoiceIO implements GuidedVoiceIO {
   int stopCount = 0;
   Completer<void>? preparing;
   Completer<bool>? pendingUpload;
+  // Holds the memory save open so a test can observe the review screen while the
+  // voice profile is already saved and the answers are still uploading.
+  Completer<void>? pendingMemory;
   @override
   bool get livePreview => false;
   @override
@@ -54,6 +57,7 @@ class FakeVoiceIO implements GuidedVoiceIO {
 
   @override
   Future<bool> remember(String text) async {
+    await pendingMemory?.future;
     if (!memorySuccess) return false;
     remembered.add(text);
     return true;

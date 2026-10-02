@@ -1,0 +1,50 @@
+version: 2
+name: screen-task-jev-gate
+tier: manual
+description: Synthetic screen fixtures verify default-off extraction, OCR admission, canonical suggestions and owner-bound dispatch.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/PostHogManager.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/StagedTaskStorage.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
+  - desktop/macos/Desktop/Sources/DesktopLogPrivacy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/TaskTestRunnerWindow.swift
+  - desktop/macos/Desktop/Sources/Logger.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskDelivery.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskPolicy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskPrompt.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskResponse.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskTransport.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant+ScreenTask.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskAuthority.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskErrors.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskFrameMailbox.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskPipeline.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenTaskTelemetry.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskModels.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant+Delivery.swift
+preconditions:
+  - signed_in
+  - onboarding_completed
+
+steps:
+  - id: S1
+    name: Default-off preserves the existing extractor
+    do: "Use an isolated named bundle and synthetic local backend fixtures only. With screen_task_jev_gate absent or false, analyze a synthetic request screenshot and verify the existing 2.5 Flash tool loop runs without a screen-task gate request. Do not enable the flag on real screen data before privacy approval."
+
+  - id: S2
+    name: Content admission avoids duplicate requests and rejected pixel uploads
+    do: "Enable the flag only in the synthetic fixture profile. Replay a Telegram request frame, then the same main-pane text with changed unread count and OCR punctuation. Verify only the first sends gate/extractor traffic. Scroll, reorder main-pane lines, replace an earlier ok with a new ok at the bottom, add a novel request or change a deadline and verify another gate request; only an identical ordered normalized list skips. Stub rejection and verify no image upload; stub audited rejection and verify one image call with bounded audit metadata. Its real extracted task must stage and sync, with the true staged count, audit_sample=true and gate_outcome=rejected, without a duplicate ordinary extraction event."
+
+  - id: S3
+    name: Structured results remain pending suggestions
+    do: "Stub new, duplicate, refinement and completion JSON with active canonical IDs and a bounded related-task list. Verify capture policy and Suggested staging handle each independently, and no automatic acceptance or new action-item writer is invoked. Verify an empty tasks array retains context/activity observation. Unknown IDs and malformed items must drop only that item; valid siblings survive. A MAX_TOKENS response retains complete items. Root schema errors are terminal for the frame."
+
+  - id: S4
+    name: Fail-open and account revocation preserve authority
+    do: "Stub gate timeout and verify one screenshot extraction with fail_open telemetry. Stub genuine extraction timeout/5xx and verify provider_outage with no legacy request, observation, staging or content dedupe; retry the next trigger; stub 401/402/429 or an explicitly non-retryable refusal and verify no recovery. Cap typed gate-budget Retry-After at 60 seconds with gate_budget_cooldown telemetry; retain screenshot quota Retry-After for that owner/session. Revoke that owner before gate completion and during legacy inference and embedding auth acquisition; verify no subsequent request with another account's token and no late suggestion/event. Confirm flag-on local logs, including the normal result handler, ordinary legacy and inherited observation tasks, contain only capped counts/outcomes and no context, task/window titles, queries or free-form errors. Repeat through TaskTestRunnerWindow and verify its legacy extractor obeys the flag-on privacy scope. Disable the flag and verify the existing log lines are retained. Confirm fallback telemetry contains bounded fields and no screen text."
+
+  - id: S5
+    name: Focused behavioral evidence
+    do: "Run ScreenTaskLoggingTests, ScreenTaskPipelineTests, ScreenTaskRampBoundaryTests, StagedTaskSyncIntegrityTests, TaskAssistantContextPromptTests, TaskAssistantPromptTests and TaskIntelligenceContractFixtureTests. Verify capture followed by suppressed distribution and departure retains the original authority; swap owner (including same UID/new generation) or exclusions at each suspended boundary. Expire a 55-second admission lease and verify queued frames select owner-bound legacy, with no feature dispatch or mutation. Run the explicit backend gate and reservation-transition test files through backend/test.sh. Defer a canonical outbox delivery, reload its row, and retry: verify original extractor/audit provenance and one Screen Task Delivery Completed event on the first receipt, zero additional events on repeated/coalesced receipts. Event properties must contain only bounded provenance/status/count fields. Retain command results separately from live app acceptance."

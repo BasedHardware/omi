@@ -18,6 +18,7 @@ import firebase_admin
 
 from database._client import db as default_db_client
 from database.auth import get_user_from_uid
+from utils.env_loader import firebase_admin_options
 from utils.email.day3_reengagement import (
     authority_from_environment,
     collect_day3_candidates,
@@ -31,9 +32,11 @@ logger = logging.getLogger(__name__)
 def _init_firebase() -> None:
     service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
     if service_account_json:
-        firebase_admin.initialize_app(firebase_admin.credentials.Certificate(json.loads(service_account_json)))
+        firebase_admin.initialize_app(
+            firebase_admin.credentials.Certificate(json.loads(service_account_json)), options=firebase_admin_options()
+        )
     else:
-        firebase_admin.initialize_app()
+        firebase_admin.initialize_app(options=firebase_admin_options())
 
 
 def _display_name_for(uid: str) -> str | None:

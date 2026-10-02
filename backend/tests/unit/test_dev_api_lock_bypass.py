@@ -369,6 +369,20 @@ class TestDevApiActionItemLockEnforcement:
         assert result == {"success": True}
         action_items_db.delete_action_item.assert_called_once_with('test-uid', 'ai-1')
 
+    def test_delete_action_item_cancels_scheduled_reminder(self):
+        import database.action_items as action_items_db
+
+        action_items_db.get_action_item = MagicMock(return_value=_make_action_item(locked=False))
+        action_items_db.delete_action_item = MagicMock(return_value=True)
+
+        import routers.developer as developer
+
+        with patch.object(developer, 'sync_action_item_reminder') as sync:
+            developer.delete_action_item(action_item_id='ai-1', uid='test-uid')
+        sync.assert_called_once()
+        assert sync.call_args.kwargs['action_item_id'] == 'ai-1'
+        assert sync.call_args.kwargs['completed'] is True
+
     def test_delete_action_item_returns_404_when_not_found(self):
         """D6: DELETE should return 404 when action item doesn't exist."""
         import database.action_items as action_items_db
