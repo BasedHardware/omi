@@ -12164,17 +12164,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Vorbitori: $count',
-      one: '1 vorbitor',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Activați Omi în Comenzi rapide → Siri. Spuneți „$askPhrase” sau „$questionPhrase”, apoi puneți-vă întrebarea.';
   }
@@ -12196,6 +12185,20 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Această versiune de Omi nu mai este acceptată. Actualizați pentru a continua înregistrarea și sincronizarea.';
+
+  @override
+  String get exportingAllData => 'Se exportă datele tale… Ține Omi deschis; conturile mari pot dura câteva minute.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vorbitori: $count',
+      one: '1 vorbitor',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Eliminare automată a copiilor sincronizate';

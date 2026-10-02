@@ -271,6 +271,23 @@ extension SettingsContentView {
           ) { newValue in
             updatePrivateCloudSync(newValue)
           }
+
+          GlassSeparator()
+
+          settingRow(
+            title: "Export All Data",
+            subtitle: "Download a JSON copy of your account data",
+            settingId: "privacy.exportdata"
+          ) {
+            Button("Export All Data…") {
+              dataExportModel.startExport()
+            }
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            .disabled(dataExportModel.isExporting)
+            .accessibilityIdentifier("privacy.exportdata")
+          }
+
+          AccountDataExportView(model: dataExportModel)
         }
       }
 

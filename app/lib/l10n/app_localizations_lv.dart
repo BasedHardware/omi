@@ -12135,17 +12135,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String transcriptSpeakerCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Runātāji: $count',
-      one: '1 runātājs',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String siriShortcutsSetupHint(String askPhrase, String questionPhrase) {
     return 'Ieslēdziet Omi sadaļā Saīsnes → Siri. Sakiet „$askPhrase“ vai „$questionPhrase“ un pēc tam uzdodiet savu jautājumu.';
   }
@@ -12167,6 +12156,21 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get updateRequiredMessage =>
       'Šī Omi versija vairs netiek atbalstīta. Atjauniniet, lai turpinātu ierakstīt un sinhronizēt.';
+
+  @override
+  String get exportingAllData =>
+      'Notiek jūsu datu eksports… Turiet Omi atvērtu; lieliem kontiem tas var ilgt vairākas minūtes.';
+
+  @override
+  String transcriptSpeakerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Runātāji: $count',
+      one: '1 runātājs',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get autoRemoveSyncedCopiesTitle => 'Automātiski noņemt sinhronizētās kopijas';
