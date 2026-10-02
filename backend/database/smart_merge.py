@@ -25,6 +25,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations as conversations_db
+from database import smart_merge_audit as audit_db
 from database._client import get_firestore_client, run_transactional
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
 
@@ -72,6 +73,7 @@ Plan = Callable[
 class AbsorbResult:
     outcome: str  # 'absorbed' | 'already_absorbed' | 'rejected'
     reason: str
+    audit: str = 'none'  # audit sibling outcome of a committed absorb (database/smart_merge_audit.py)
 
 
 def _collection(client: Any, uid: str) -> Any:
@@ -177,13 +179,25 @@ def absorb_conversation(
         reason, survivor_update, donor_update = plan(survivor, survivor_segments, donor, donor_segments)
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
+        # Last read, only on the absorbing path: the gate fence for the audit sibling.
+        audit = audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         # The survivor transcript changed: a stored client projection described the old one.
         conversations_db._invalidate_client_processing(payload)  # pyright: ignore[reportPrivateUsage]
         transaction.update(survivor_ref, payload)
         transaction.update(donor_ref, donor_update)
-        return AbsorbResult('absorbed', 'absorbed')
+        audit = audit or audit_db.stage_audit(
+            transaction,
+            client,
+            uid,
+            donor_id=donor_id,
+            survivor_id=survivor_id,
+            survivor_state=survivor_update[SMART_MERGE_FIELD],
+            donor_update=donor_update,
+            source=donor.get('source'),
+        )
+        return AbsorbResult('absorbed', 'absorbed', audit)
 
     result = run_transactional(client, absorb)
     if result.outcome == 'absorbed':
