@@ -52,6 +52,9 @@ class HomeWarmBlend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The palette is a static, so the theme is what rebuilds this when the app turns dark on a Home
+    // already on screen. Dark has no blend.
+    if (Theme.brightnessOf(context) == Brightness.dark) return const SizedBox.shrink();
     final blend = OmiColors.canvasBlend;
     if (blend.a == 0) return const SizedBox.shrink();
     return Positioned.fill(
@@ -82,6 +85,9 @@ class HomeChatBarBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Fade through transparent page-coloured pixels: a zero-alpha black stop greys the light page.
+    // Read after the theme, so the fade follows a switch between light and dark (the palette is a
+    // static).
+    Theme.brightnessOf(context);
     final page = OmiCanvas.pageOf(context);
     return Positioned(
       left: 0,
