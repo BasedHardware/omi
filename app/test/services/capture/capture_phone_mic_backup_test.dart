@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/utils/wal_file_manager.dart';
 
 import '../../support/capture/capture_replay_world.dart';
 
@@ -46,16 +47,22 @@ void main() {
     }
   }
 
-  /// Waits, in real time, until [done] holds for the phone's WALs. Writing, stamping and releasing
-  /// copies touch real files outside the virtual scheduler, so a quiet moment does not prove they are done.
-  Future<List<Wal>> walsReach(bool Function(List<Wal> wals) done) async {
+  /// Waits, in real time, until the phone's WALs satisfy [done] in memory and in the saved index, and
+  /// fails with their state if they never do. Writing, stamping and releasing copies touch real files
+  /// outside the virtual scheduler, so a quiet moment does not prove they are done; and a change only
+  /// counts once it is saved, because an app kill reloads the index.
+  Future<List<Wal>> walsReach(String expectation, bool Function(List<Wal> wals) done) async {
     for (var i = 0; i < 200; i++) {
       final wals = await world.wal.syncs.phone.getAllWals();
-      if (done(wals)) return wals;
+      if (done(wals) && done(await WalFileManager.loadWals())) return wals;
       await world.settle();
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
-    return world.wal.syncs.phone.getAllWals();
+    final wals = await world.wal.syncs.phone.getAllWals();
+    final state = [
+      for (final wal in wals) '${wal.timerStart}+${wal.seconds}s ${wal.status.name} conv=${wal.conversationId}'
+    ];
+    fail('WALs never reached "$expectation": ${state.join('; ')}');
   }
 
   int totalSeconds(List<Wal> wals) => wals.fold<int>(0, (total, wal) => total + wal.seconds);
@@ -111,12 +118,12 @@ void main() {
   test('phone mic: a recording the server never transcribed stays on the phone and is uploaded', () async {
     await recordOnline(130);
 
-    final kept = await walsReach((wals) => totalSeconds(wals) >= 120);
-    expect(totalSeconds(kept), greaterThanOrEqualTo(120), reason: 'sent audio is kept until a transcript confirms it');
+    // Sent audio is kept until a transcript confirms it.
+    await walsReach('at least 120 s kept', (wals) => totalSeconds(wals) >= 120);
     await recoveryPass();
     expect(world.uploads.attempts, isNotEmpty, reason: 'the recovery pass sends the audio for repair');
-    await walsReach((wals) => wals.every((wal) => wal.status != WalStatus.miss));
-    expect((await world.walCounts())[WalStatus.miss] ?? 0, 0, reason: 'nothing is left waiting after the upload');
+    await walsReach(
+        'nothing left waiting after the upload', (wals) => wals.every((wal) => wal.status != WalStatus.miss));
   });
 
   test('phone mic: a conversation with no saved text uploads the recording for repair', () async {
@@ -124,9 +131,8 @@ void main() {
     await recordOnline(130);
 
     await serverCloses(conversation('c1', origin, const []));
-    final stamped = await walsReach((wals) => wals.isNotEmpty && wals.every((wal) => wal.conversationId == 'c1'));
-    expect(stamped.map((wal) => wal.conversationId).toSet(), {'c1'},
-        reason: 'the copy is stamped with its conversation');
+    await walsReach(
+        'every copy stamped c1', (wals) => wals.isNotEmpty && wals.every((wal) => wal.conversationId == 'c1'));
     await recoveryPass();
 
     expect(world.uploads.attempts, isNotEmpty);
@@ -138,9 +144,35 @@ void main() {
     await recordOnline(130);
 
     await serverCloses(conversation('c1', origin, [for (var t = 1.0; t < 125; t += 20) (t, t + 15)]));
-    expect(await walsReach((wals) => wals.isEmpty), isEmpty);
+    await walsReach('every copy released', (wals) => wals.isEmpty);
 
     await recoveryPass();
     expect(world.uploads.attempts, isEmpty, reason: 'transcribed audio is not uploaded again');
+  });
+
+  test('phone mic: the capture screen counts only audio the socket did not take', () async {
+    await world.startLiveCapture();
+    final session = world.hostApi.lastStartSessionId!;
+    world.emitNativeState(PhoneMicCaptureState.running);
+    Future<void> record(int from, int to) async {
+      for (var s = from; s < to; s++) {
+        world.injectAudioFrames(100, sessionId: session, firstFrameIndex: s * 100);
+        await world.elapse(const Duration(seconds: 1));
+      }
+    }
+
+    // 110 s online: the first minute is chunked at 75 s and written to disk at 105 s.
+    await record(0, 110);
+    await walsReach('a streamed copy saved to disk', (wals) => wals.any((wal) => wal.storage == WalStorage.disk));
+    expect(world.wal.syncs.phone.getSessionUnsyncedWals(0), isEmpty,
+        reason: 'the copy is kept, but nothing is at risk');
+    expect(world.controller.unsyncedSessionWals, isEmpty);
+    expect(world.controller.inFlightAudioSeconds, 0, reason: 'every frame in memory reached the socket');
+
+    world.setConnected(false);
+    world.socket!.emitClose();
+    await world.settle();
+    await record(110, 130);
+    expect(world.controller.inFlightAudioSeconds, 20, reason: 'the 20 s no socket took are at risk until saved');
   });
 }

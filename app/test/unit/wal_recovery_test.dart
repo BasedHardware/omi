@@ -238,21 +238,21 @@ void main() {
       expect(sync.getInFlightSeconds(), 5); // 500 frames / 100 fps = 5s
     });
 
-    test('returns 0 when all frames are synced', () {
+    test('returns 0 when every frame was streamed', () {
       for (int i = 0; i < 500; i++) {
         final key = FrameSyncKey([i & 0xFF]);
         sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: key));
-        sync.markFrameSynced(key);
+        sync.markFrameStreamed(key);
       }
       expect(sync.getInFlightSeconds(), 0);
     });
 
-    test('counts only unsynced frames', () {
-      // 300 synced + 200 unsynced = 200 unsynced / 100 fps = 2s
+    test('counts only frames no socket took', () {
+      // 300 streamed + 200 not = 200 / 100 fps = 2s
       for (int i = 0; i < 300; i++) {
         final key = FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF]);
         sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: key));
-        sync.markFrameSynced(key);
+        sync.markFrameStreamed(key);
       }
       for (int i = 300; i < 500; i++) {
         sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF])));
@@ -309,19 +309,21 @@ void main() {
       expect(sync.testWals[0].seconds, 11);
     });
 
-    test('skips storage when all frames were synced via WebSocket', () async {
-      // Add 200 frames (2s), all synced — should NOT create a WAL
+    test('keeps a fully streamed session until a transcript confirms it', () async {
+      // A socket send is not a save: 200 streamed frames (2s) still become an unconfirmed copy.
       for (int i = 0; i < 200; i++) {
         final key = FrameSyncKey([i & 0xFF]);
         sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: key));
-        sync.markFrameSynced(key);
+        sync.markFrameStreamed(key);
       }
 
       await sync.finalizeCurrentSession();
 
       expect(sync.testFrames, isEmpty);
-      // No WAL created because all frames were synced (shouldStored = false)
-      expect(sync.testWals, isEmpty);
+      expect(sync.testWals, hasLength(1));
+      expect(sync.testWals.single.status, WalStatus.miss);
+      expect(sync.testWals.single.totalFrames, 200);
+      expect(sync.testWals.single.syncedFrameOffset, 200, reason: 'the copy records that the socket took all of it');
     });
 
     test('no-op when no frames in memory', () async {
@@ -342,10 +344,10 @@ void main() {
       expect(sync.testWals[0].totalFrames, 1);
     });
 
-    test('one unconfirmed frame among confirmed frames keeps the complete session', () async {
+    test('a frame the socket did not take ends the streamed run', () async {
       final first = FrameSyncKey([1]);
       sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: first));
-      sync.markFrameSynced(first);
+      sync.markFrameStreamed(first);
       sync.onFrameCaptured(WalFrame(payload: [3, 4, 5], syncKey: FrameSyncKey([2])));
 
       await sync.finalizeCurrentSession();
@@ -356,19 +358,32 @@ void main() {
       expect(sync.testWals.single.syncedFrameOffset, 1);
     });
 
-    test('marks WAL synced when all frames are synced in tail buffer', () async {
-      // Add 1100 frames, all synced — WAL should be created with status synced
+    test('a fully streamed copy is not shown as audio at risk', () async {
       for (int i = 0; i < 1100; i++) {
-        final key = FrameSyncKey([i & 0xFF]);
+        final key = FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF]);
         sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: key));
-        sync.markFrameSynced(key);
+        sync.markFrameStreamed(key);
       }
 
       await sync.finalizeCurrentSession();
 
-      expect(sync.testFrames, isEmpty);
-      // shouldStored is false because every frame has delivery confirmation.
-      expect(sync.testWals, isEmpty);
+      expect(sync.testWals.single.storage, WalStorage.disk);
+      expect(sync.getSessionUnsyncedWals(0), isEmpty,
+          reason: 'the copy waits for its transcript, but nothing is at risk');
+      expect(sync.getSessionWals(0), isEmpty, reason: 'nor is it part of the transcription backlog');
+    });
+
+    test('a copy with audio the socket did not take is shown as audio at risk', () async {
+      for (int i = 0; i < 1100; i++) {
+        final key = FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF]);
+        sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: key));
+        if (i < 1000) sync.markFrameStreamed(key);
+      }
+
+      await sync.finalizeCurrentSession();
+
+      expect(sync.getSessionUnsyncedWals(0).map((wal) => wal.id), [sync.testWals.single.id]);
+      expect(sync.getSessionWals(0), hasLength(1));
     });
   });
 

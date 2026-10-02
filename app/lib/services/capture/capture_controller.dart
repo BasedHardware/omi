@@ -384,7 +384,7 @@ class CaptureController extends ChangeNotifier
               _socket?.send(frame.payload);
             }
             _recordingTelemetry.observeSent(frame.payload.length);
-            // Keep the frame until transcript confirmation, as for the pendant: a send is not a save.
+            _wal.getSyncs().phone.markFrameStreamed(frame.syncKey);
           }
         }
       },
@@ -2416,7 +2416,7 @@ class CaptureController extends ChangeNotifier
                 _socket?.send(frame.payload);
               }
               _recordingTelemetry.observeSent(frame.payload.length);
-              // Keep the frame until transcript confirmation, as for the pendant: a send is not a save.
+              _wal.getSyncs().phone.markFrameStreamed(frame.syncKey);
             }
           }
         },
@@ -3629,7 +3629,7 @@ class CaptureController extends ChangeNotifier
           _socket?.send(frame.payload);
         }
         _recordingTelemetry.observeSent(frame.payload.length);
-        // Keep the frame until transcript confirmation, as for the pendant: a send is not a save.
+        _wal.getSyncs().phone.markFrameStreamed(frame.syncKey);
       }
     }
   }

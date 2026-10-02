@@ -39,7 +39,7 @@ class PhoneMicSource implements AudioSource {
         syncKey: FrameSyncKey.fromIndex(_frameIndex),
       ));
       // 1-byte index wraps at 256. This mirrors BLE firmware behavior where
-      // packet IDs also repeat. markFrameSynced reverse-scans so the most
+      // packet IDs also repeat. markFrameStreamed reverse-scans so the most
       // recent frame is always matched first. Safe because _chunk drains
       // frames every ~75s, well within the 256-frame window at 100 fps.
       _frameIndex = (_frameIndex + 1) & 0xFF;

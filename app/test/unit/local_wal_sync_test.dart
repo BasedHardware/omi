@@ -53,15 +53,15 @@ void main() {
   });
 
   group('onFrameCaptured', () {
-    test('adds frame with synced=false', () {
+    test('adds frame with streamed=false', () {
       final frame = WalFrame(payload: [0xAA, 0xBB], syncKey: FrameSyncKey([1]));
 
       sync.onFrameCaptured(frame);
 
       expect(sync.testFrames.length, 1);
       expect(sync.testFrames[0].payload, [0xAA, 0xBB]);
-      expect(sync.testFrameSynced.length, 1);
-      expect(sync.testFrameSynced[0], false);
+      expect(sync.testFrameStreamed.length, 1);
+      expect(sync.testFrameStreamed[0], false);
     });
 
     test('capture root and ordinal survive WAL serialization', () async {
@@ -133,22 +133,22 @@ void main() {
       }
 
       expect(sync.testFrames.length, 5);
-      expect(sync.testFrameSynced.length, 5);
+      expect(sync.testFrameStreamed.length, 5);
       for (int i = 0; i < 5; i++) {
         expect(sync.testFrames[i].payload, [i]);
-        expect(sync.testFrameSynced[i], false);
+        expect(sync.testFrameStreamed[i], false);
       }
     });
   });
 
-  group('markFrameSynced', () {
-    test('marks matching frame as synced', () {
+  group('markFrameStreamed', () {
+    test('marks matching frame as streamed', () {
       final key = FrameSyncKey([0x10, 0x20, 0x30]);
       sync.onFrameCaptured(WalFrame(payload: [1], syncKey: key));
 
-      sync.markFrameSynced(key);
+      sync.markFrameStreamed(key);
 
-      expect(sync.testFrameSynced[0], true);
+      expect(sync.testFrameStreamed[0], true);
     });
 
     test('marks only the last matching frame when duplicate keys exist', () {
@@ -159,12 +159,12 @@ void main() {
       sync.onFrameCaptured(WalFrame(payload: [2], syncKey: key));
       sync.onFrameCaptured(WalFrame(payload: [3], syncKey: key));
 
-      sync.markFrameSynced(key);
+      sync.markFrameStreamed(key);
 
       // Only the last (index 2) should be marked
-      expect(sync.testFrameSynced[0], false);
-      expect(sync.testFrameSynced[1], false);
-      expect(sync.testFrameSynced[2], true);
+      expect(sync.testFrameStreamed[0], false);
+      expect(sync.testFrameStreamed[1], false);
+      expect(sync.testFrameStreamed[2], true);
     });
 
     test('calling twice with same key marks two frames (reverse scan)', () {
@@ -174,17 +174,17 @@ void main() {
       sync.onFrameCaptured(WalFrame(payload: [2], syncKey: key));
       sync.onFrameCaptured(WalFrame(payload: [3], syncKey: key));
 
-      sync.markFrameSynced(key); // marks index 2
-      sync.markFrameSynced(
+      sync.markFrameStreamed(key); // marks index 2
+      sync.markFrameStreamed(
         key,
-      ); // marks index 1 (2 is already true, but reverse scan finds 2 first and breaks — so second call marks 2 again? No — it checks syncKey equality, not synced status)
+      ); // marks index 1 (2 is already true, but reverse scan finds 2 first and breaks — so second call marks 2 again? No — it checks syncKey equality, not streamed status)
 
-      // Actually: markFrameSynced scans backward and breaks on FIRST syncKey match,
-      // regardless of synced status. So second call marks index 2 again (already true).
+      // Actually: markFrameStreamed scans backward and breaks on FIRST syncKey match,
+      // regardless of streamed status. So second call marks index 2 again (already true).
       // Index 1 remains false.
-      expect(sync.testFrameSynced[0], false);
-      expect(sync.testFrameSynced[1], false);
-      expect(sync.testFrameSynced[2], true);
+      expect(sync.testFrameStreamed[0], false);
+      expect(sync.testFrameStreamed[1], false);
+      expect(sync.testFrameStreamed[2], true);
     });
 
     test('no-op when key does not match any frame', () {
@@ -194,14 +194,14 @@ void main() {
       sync.onFrameCaptured(WalFrame(payload: [1], syncKey: key1));
 
       // Mark with non-matching key — should not crash or change anything
-      sync.markFrameSynced(key2);
+      sync.markFrameStreamed(key2);
 
-      expect(sync.testFrameSynced[0], false);
+      expect(sync.testFrameStreamed[0], false);
     });
 
     test('no-op when frames list is empty', () {
       // Should not crash
-      sync.markFrameSynced(FrameSyncKey([0x10]));
+      sync.markFrameStreamed(FrameSyncKey([0x10]));
       expect(sync.testFrames, isEmpty);
     });
 
@@ -212,11 +212,11 @@ void main() {
       sync.onFrameCaptured(WalFrame(payload: [2], syncKey: bleKey));
       sync.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([0x05, 0x00, 0x03])));
 
-      sync.markFrameSynced(FrameSyncKey([0x05, 0x00, 0x02]));
+      sync.markFrameStreamed(FrameSyncKey([0x05, 0x00, 0x02]));
 
-      expect(sync.testFrameSynced[0], false);
-      expect(sync.testFrameSynced[1], true);
-      expect(sync.testFrameSynced[2], false);
+      expect(sync.testFrameStreamed[0], false);
+      expect(sync.testFrameStreamed[1], true);
+      expect(sync.testFrameStreamed[2], false);
     });
 
     test('correctly matches phone-mic-style 1-byte index keys', () {
@@ -224,10 +224,10 @@ void main() {
         sync.onFrameCaptured(WalFrame(payload: List.filled(320, i), syncKey: FrameSyncKey.fromIndex(i)));
       }
 
-      sync.markFrameSynced(FrameSyncKey.fromIndex(3));
+      sync.markFrameStreamed(FrameSyncKey.fromIndex(3));
 
       for (int i = 0; i < 5; i++) {
-        expect(sync.testFrameSynced[i], i == 3);
+        expect(sync.testFrameStreamed[i], i == 3);
       }
     });
   });
@@ -573,19 +573,18 @@ void main() {
       expect(sync.testWals, [fiveDaysOld]);
     });
 
-    test('streamed WALs born synced (all frames acked) carry syncedAt == 0', () async {
+    test('a fully streamed WAL stays unconfirmed and starts no retention clock', () async {
       SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
       final key = FrameSyncKey([0x77]);
       sync.onFrameCaptured(WalFrame(payload: [1], syncKey: key));
-      sync.markFrameSynced(key);
+      sync.markFrameStreamed(key);
       await sync.finalizeCurrentSession();
 
       final wal = sync.testWals.single;
-      expect(wal.status, WalStatus.synced);
-      // Socket-send bookkeeping is transport, not server confirmation, so the
-      // retention clock must NOT start: only server-confirmed transitions
-      // (upload fast-path / reconciler) stamp syncedAt. The transcript
-      // acknowledgement flow owns this copy's lifecycle instead.
+      // A socket send is transport, not server confirmation: the copy stays a miss
+      // until the transcript acknowledgement flow releases it, and only
+      // server-confirmed transitions (upload fast-path / reconciler) stamp syncedAt.
+      expect(wal.status, WalStatus.miss);
       expect(wal.syncedAt, 0);
     });
   });
@@ -651,14 +650,14 @@ void main() {
       sync.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([2])));
 
       // Mark middle frame synced
-      sync.markFrameSynced(FrameSyncKey([1]));
+      sync.markFrameStreamed(FrameSyncKey([1]));
 
       // Verify parallel arrays stay consistent
       expect(sync.testFrames.length, 3);
-      expect(sync.testFrameSynced.length, 3);
-      expect(sync.testFrameSynced[0], false);
-      expect(sync.testFrameSynced[1], true);
-      expect(sync.testFrameSynced[2], false);
+      expect(sync.testFrameStreamed.length, 3);
+      expect(sync.testFrameStreamed[0], false);
+      expect(sync.testFrameStreamed[1], true);
+      expect(sync.testFrameStreamed[2], false);
     });
 
     test('phone mic frames with wrapping index keys', () {
@@ -671,9 +670,9 @@ void main() {
 
       // Mark frame index 3 (appears at position 3 and 259 due to wrapping)
       // Reverse scan finds position 259 first
-      sync.markFrameSynced(FrameSyncKey.fromIndex(3));
-      expect(sync.testFrameSynced[3], false); // Not this one
-      expect(sync.testFrameSynced[259], true); // This one (last match)
+      sync.markFrameStreamed(FrameSyncKey.fromIndex(3));
+      expect(sync.testFrameStreamed[3], false); // Not this one
+      expect(sync.testFrameStreamed[259], true); // This one (last match)
     });
 
     test('each finalized WAL owns an independent location snapshot', () async {
