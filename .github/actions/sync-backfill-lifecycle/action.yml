@@ -208,7 +208,7 @@ runs:
           gcloud tasks queues update sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=30 \
+            --max-concurrent-dispatches=36 \
             --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s
@@ -216,7 +216,7 @@ runs:
           gcloud tasks queues create sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=30 \
+            --max-concurrent-dispatches=36 \
             --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s
