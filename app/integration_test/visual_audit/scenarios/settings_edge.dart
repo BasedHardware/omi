@@ -21,7 +21,7 @@ import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
-import 'package:omi/pages/settings/integrations_page.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/permissions_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/pages/settings/developer.dart';
@@ -123,8 +123,18 @@ class _SyncData extends InertSyncProvider {
                 w.syncDisplayState != WalSyncDisplayState.synced)
             .toList(),
       };
+  // Mirrors SyncProvider's corrupted partition: every terminal state, not only `corrupted`.
+  List<Wal> get _terminal => wals
+      .where((w) =>
+          w.status == WalStatus.corrupted ||
+          w.status == WalStatus.outsideRecoveryWindow ||
+          w.status == WalStatus.unsupportedAudio ||
+          w.status == WalStatus.uploadRejected)
+      .toList();
   @override
-  int get clearableWalsCount => wals.length;
+  List<Wal> get corruptedWals => _terminal;
+  @override
+  int get clearableWalsCount => syncedWals.length + pendingDeletableWals.length + _terminal.length;
   @override
   int get needsAttentionWalsCount =>
       wals.where((w) => w.syncDisplayState.index >= WalSyncDisplayState.failed.index).length;
@@ -170,12 +180,12 @@ class _SyncData extends InertSyncProvider {
   @override
   int get syncedStatusCount => syncedWals.length;
   @override
-  int get corruptedStatusCount => wals.where((w) => w.status == WalStatus.corrupted).length;
+  int get corruptedStatusCount => _terminal.length;
   @override
   List<Wal> get filteredByStatusWals => switch (_statusFilter) {
         WalStatusFilter.pending => wals.where(_pending).toList(),
         WalStatusFilter.synced => syncedWals,
-        WalStatusFilter.corrupted => wals.where((w) => w.status == WalStatus.corrupted).toList(),
+        WalStatusFilter.corrupted => _terminal,
       };
   @override
   Wal? getWalById(String id) => wals.where((w) => w.id == id).firstOrNull;
@@ -321,7 +331,6 @@ class _NumbersPhoneCallProvider extends PhoneCallProvider {
         VerifiedPhoneNumber.fromJson(const {
           'id': 'n1',
           'phone_number': '+1 (415) 555-0137',
-          'friendly_name': "Maximiliana's work phone (shared with the whole support team)",
           'is_primary': true,
           'verified_at': '2026-09-01T10:00:00Z',
         }),
@@ -543,8 +552,8 @@ final _moreEdgeScenarios = <AuditScenario>[
   ),
   AuditScenario(
     id: 'edge-integrations-connected',
-    title: 'Integrations with three task apps connected',
-    page: 'lib/pages/settings/integrations_page.dart (IntegrationsPage)',
+    title: 'Task Integrations with three task apps connected',
+    page: 'lib/pages/settings/task_integrations_page.dart (TaskIntegrationsPage)',
     state: 'Todoist (default), Asana and ClickUp connected through the fixture backend',
     run: (a) async {
       a.server.stubs['GET /v1/task-integrations'] = {
@@ -563,11 +572,12 @@ final _moreEdgeScenarios = <AuditScenario>[
         AsanaService().setAuthenticated(false);
         ClickUpService().setAuthenticated(false);
       });
-      await a.pump(const IntegrationsPage(), scaffold: false, providers: [
+      // The page that renders the task apps' connected state.
+      await a.pump(const TaskIntegrationsPage(), scaffold: false, providers: [
         ChangeNotifierProvider<TaskIntegrationProvider>.value(value: tasks),
         ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider()),
       ]);
-      await a.scrollSeries('Open Integrations with three apps connected');
+      await a.scrollSeries('Open Task Integrations with three apps connected');
     },
   ),
   AuditScenario(
@@ -665,7 +675,7 @@ final _moreEdgeScenarios = <AuditScenario>[
     id: 'edge-phone-calls-numbers',
     title: 'Phone Call settings with two verified numbers',
     page: 'lib/pages/settings/phone_call_settings_page.dart (PhoneCallSettingsPage)',
-    state: 'A primary number with a long name and an international one without a name',
+    state: 'A primary number and an international one',
     run: (a) async {
       _silencePhoneCallEvents();
       await a.pump(const PhoneCallSettingsPage(),
@@ -781,7 +791,7 @@ final settingsEdgeScenarios = <AuditScenario>[
     id: 'edge-offline-sync-ready',
     title: 'Offline Sync with recordings ready to back up',
     page: _autoSync,
-    state: 'Three recordings waiting to sync and nothing failed',
+    state: 'Two recordings waiting to sync and nothing failed',
     run: (a) async {
       final wals = _everyWalState().where((w) => w.status == WalStatus.miss && w.retryCount == 0 && !w.isSyncing);
       await a.pump(const AutoSyncPage(),

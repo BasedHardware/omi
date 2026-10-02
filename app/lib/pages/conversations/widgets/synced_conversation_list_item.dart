@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 
 import 'package:provider/provider.dart';
 
@@ -81,24 +82,20 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
           trailing: widget.showReprocess || conversation.discarded
               ? (isReprocessing
                   ? const Padding(padding: EdgeInsets.all(OmiSpacing.sm), child: OmiSpinner(size: OmiSpinnerSize.small))
-                  : OmiIconButton(
-                      icon: const OmiLineIcon(OmiLineGlyph.refresh),
-                      label: context.l10n.reprocessConversation,
-                      color: OmiColors.textSecondary,
-                      onPressed: () async {
-                        setReprocessing(true);
-                        // A failed request says so and the row returns to idle; it never keeps spinning.
-                        try {
-                          final mem = await reProcessConversationServer(conversation.id);
-                          if (!context.mounted || mem == null) return;
-                          setState(() => conversation = mem);
-                          context.read<ConversationProvider>().updateSyncedConversation(mem);
-                        } catch (_) {
-                          if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
-                        } finally {
-                          setReprocessing(false);
-                        }
+                  // The row merges into one button that opens the conversation, so a screen reader
+                  // reaches Reprocess as an action on that button, not as a second tap target.
+                  : Semantics(
+                      customSemanticsActions: {
+                        CustomSemanticsAction(label: context.l10n.reprocessConversation): _reprocess,
                       },
+                      child: ExcludeSemantics(
+                        child: OmiIconButton(
+                          icon: const OmiLineIcon(OmiLineGlyph.refresh),
+                          label: context.l10n.reprocessConversation,
+                          color: OmiColors.textSecondary,
+                          onPressed: _reprocess,
+                        ),
+                      ),
                     ))
               : null,
           onTap: () async {
@@ -109,6 +106,21 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
         ),
       ],
     );
+  }
+
+  Future<void> _reprocess() async {
+    setReprocessing(true);
+    // A failed request says so and the row returns to idle; it never keeps spinning.
+    try {
+      final mem = await reProcessConversationServer(conversation.id);
+      if (!mounted || mem == null) return;
+      setState(() => conversation = mem);
+      context.read<ConversationProvider>().updateSyncedConversation(mem);
+    } catch (_) {
+      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    } finally {
+      setReprocessing(false);
+    }
   }
 
   String _getConversationDuration(BuildContext context) {

@@ -60,6 +60,9 @@ const _iPhoneSE1 = Size(320, 568);
 const _iPhoneSE = Size(375, 667);
 const _iPhoneProMax = Size(430, 932);
 
+/// The iPhone cases run as iOS, so they get its typography, scroll physics and page transitions.
+final _iOS = TargetPlatformVariant.only(TargetPlatform.iOS);
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({
@@ -139,7 +142,7 @@ void main() {
       testWidgets('$name at ${scale}x text: Settings and its group pages lay out', (tester) async {
         await pumpSettings(tester, size: size, textScale: scale);
         await walkSettings(tester);
-      });
+      }, variant: _iOS);
     }
   }
 
@@ -147,7 +150,7 @@ void main() {
     testWidgets('$locale on an iPhone SE at 1.5x text: Settings and its group pages lay out', (tester) async {
       await pumpSettings(tester, size: _iPhoneSE, textScale: 1.5, locale: locale);
       await walkSettings(tester);
-    });
+    }, variant: _iOS);
   }
 
   testWidgets('Settings text is set in Instrument Sans', (tester) async {
