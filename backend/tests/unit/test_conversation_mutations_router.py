@@ -1,6 +1,4 @@
 from datetime import datetime, timezone
-import logging
-from unittest.mock import MagicMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -90,15 +88,18 @@ def test_apply_mutation_replayed_success(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("invalid_id", ["", "   ", "%20"])
-def test_apply_mutation_rejects_empty_or_whitespace_conversation_id(monkeypatch, invalid_id):
+@pytest.mark.parametrize("whitespace_id", ["   ", "%20"])
+def test_apply_mutation_rejects_whitespace_conversation_id(monkeypatch, whitespace_id):
     client = _client(monkeypatch)
-    response = client.post(f"/v1/conversations/{invalid_id}/mutations", json=_valid_request_payload())
-    # Should either match route and return 400 'Valid conversation_id is required' or 404 for empty path
-    if response.status_code == 400:
-        assert response.json()["detail"] == "Valid conversation_id is required"
-    else:
-        assert response.status_code in (404, 405)
+    response = client.post(f"/v1/conversations/{whitespace_id}/mutations", json=_valid_request_payload())
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Valid conversation_id is required"
+
+
+def test_apply_mutation_rejects_empty_conversation_id(monkeypatch):
+    client = _client(monkeypatch)
+    response = client.post("/v1/conversations//mutations", json=_valid_request_payload())
+    assert response.status_code in (404, 405)
 
 
 def test_apply_mutation_not_found(monkeypatch):
