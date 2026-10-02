@@ -134,7 +134,12 @@ bounded per-user voting windows, while healthy small cohorts can promote.
 The v5 reason vocabulary is shared by health and source-leg fallback telemetry;
 socket-owned causes precede send symptoms, and free-text transport deaths become
 bounded provider errors. Observations expose target/outcome/reason for rollout
-reconciliation. Window deadline/empty/capacity and session/account causes stay
+reconciliation. Accepted provider deaths count without a speech/audio minimum,
+and actual text counts with VAD disabled. Only plain no-text needs a one-second
+VAD speech sample. An accepted leg rejected by the connect serving check is
+counted once, and transport symptoms after intentional owner close do not count
+as serving deaths. The v5 state meaning and prefix are retained. Window
+deadline/empty/capacity and session/account causes stay
 censored, even when a following send fails. Never-refreshed snapshots are NaN.
 Each user has one majority-outcome vote and at most three sequential-evidence
 outcomes per trial window. Health stages cannot empty an eligible chain;
