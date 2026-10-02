@@ -38,6 +38,14 @@ void main() {
     if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 
+  Future<void> expectNoPartialFiles() async {
+    final partials = await tempDir
+        .list()
+        .where((entity) => entity.path.startsWith('$filePath.') && entity.path.endsWith('.part'))
+        .toList();
+    expect(partials, isEmpty);
+  }
+
   test('writes a complete export and reports cumulative progress', () async {
     const body = '{\n  "chat_messages": [\n\n  ]\n$_suffix';
 
@@ -65,7 +73,7 @@ void main() {
     );
 
     expect(result, isNull);
-    expect(await File(filePath).exists(), isFalse);
+    await expectNoPartialFiles();
   });
 
   test('returns null on a non-JSON content type', () async {
@@ -78,6 +86,7 @@ void main() {
     );
 
     expect(result, isNull);
+    await expectNoPartialFiles();
   });
 
   test('returns null when Content-Length does not match received bytes', () async {
@@ -88,7 +97,7 @@ void main() {
     );
 
     expect(result, isNull);
-    expect(await File(filePath).exists(), isFalse);
+    await expectNoPartialFiles();
   });
 
   test('returns null on a silently truncated 200 without the marker', () async {
@@ -98,7 +107,7 @@ void main() {
     );
 
     expect(result, isNull);
-    expect(await File(filePath).exists(), isFalse);
+    await expectNoPartialFiles();
   });
 
   test('returns null when the stream fails mid-body', () async {
@@ -108,7 +117,7 @@ void main() {
     );
 
     expect(result, isNull);
-    expect(await File(filePath).exists(), isFalse);
+    await expectNoPartialFiles();
   });
 
   test('returns null on an empty body', () async {
@@ -118,7 +127,7 @@ void main() {
     );
 
     expect(result, isNull);
-    expect(await File(filePath).exists(), isFalse);
+    await expectNoPartialFiles();
   });
 
   test('returns null when the stream stalls past the idle timeout', () async {
@@ -133,6 +142,7 @@ void main() {
     );
 
     expect(result, isNull);
+    await expectNoPartialFiles();
     await controller.close();
   });
 
@@ -152,7 +162,7 @@ void main() {
     abort.complete();
 
     expect(await pending, isNull);
-    expect(await File(filePath).exists(), isFalse);
+    await expectNoPartialFiles();
     await controller.close();
   });
 

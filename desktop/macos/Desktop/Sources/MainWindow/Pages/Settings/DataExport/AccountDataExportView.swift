@@ -29,5 +29,6 @@ struct AccountDataExportView: View {
       }
     }
     .onAppear { model.registerAutomationActions() }
+    .onDisappear { model.unregisterAutomationActions() }
   }
 }

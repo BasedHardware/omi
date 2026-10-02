@@ -320,6 +320,7 @@ void main() {
     expect(harness.exportedCalls, 0);
     expect(find.text(l10n.exportFailedTryAgain), findsNothing);
     expect(find.byType(SnackBar), findsNothing);
+    expect(harness.deletedDirs, [harness.exportDir.path]);
   });
 
   testWidgets('cancel aborts the download and never shares even if a path returns', (tester) async {
@@ -601,7 +602,8 @@ void main() {
     final pathB = harness.lastPath!;
     expect(pathB, isNot(pathA));
     expect(find.text(l10n.exportFailedTryAgain), findsOneWidget);
-    expect(harness.protectedPathsSeen, contains(dirA.path));
+    expect(harness.protectedPathsSeen, isNot(contains(dirA.path)));
+    expect(harness.deletedDirs, contains(dirA.path));
 
     final sharesB = harness.sharedPaths.where((p) => p.startsWith(dirB.path)).length;
     await tester.runAsync(() async {

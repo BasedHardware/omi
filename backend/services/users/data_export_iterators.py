@@ -77,10 +77,16 @@ class PortabilityScopedIterator:
                 close()
 
 
-def iter_user_subcollection(uid: str, collection_name: str) -> Iterator[Mapping[str, Any]]:
+def iter_user_subcollection(
+    uid: str,
+    collection_name: str,
+    *,
+    firestore_client: Any | None = None,
+) -> Iterator[Mapping[str, Any]]:
     """Stream one user-owned primary collection without loading it in memory."""
 
-    collection = database_client.db.collection('users').document(uid).collection(collection_name)
+    client = firestore_client if firestore_client is not None else database_client.get_firestore_client()
+    collection = client.collection('users').document(uid).collection(collection_name)
     stream = iter_portability_guarded(collection.stream())
     try:
         for snapshot in stream:
@@ -98,10 +104,13 @@ def iter_user_nested_subcollection(
     uid: str,
     parent_collection_name: str,
     child_collection_name: str,
+    *,
+    firestore_client: Any | None = None,
 ) -> Iterator[Mapping[str, Any]]:
     """Stream user-visible records nested below one user-owned collection."""
 
-    parents = database_client.db.collection('users').document(uid).collection(parent_collection_name)
+    client = firestore_client if firestore_client is not None else database_client.get_firestore_client()
+    parents = client.collection('users').document(uid).collection(parent_collection_name)
     parent_stream = iter_portability_guarded(parents.stream())
     try:
         for parent_snapshot in parent_stream:

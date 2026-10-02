@@ -22,7 +22,10 @@ extension APIClient {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onProgress: @escaping @Sendable (Int64) -> Void
   ) async throws {
-    let authPolicy = RequestAuthPolicy.ownerBound(authorizationSnapshot)
+    var authPolicy = RequestAuthPolicy.ownerBound(authorizationSnapshot)
+    // An export is an interactive, session-bound request. If the forced refresh
+    // still receives 401, invalidate only while this captured owner is current.
+    authPolicy.signOutOn401 = true
     try validateExpectedOwner(authPolicy)
     guard let url = URL(string: baseURL + "v1/users/export?stream=true") else {
       throw APIError.invalidResponse
@@ -100,11 +103,25 @@ extension APIClient {
         }
         throw APIError.unauthorized
       }
-      return try await performExportDownload(
-        retryRequest,
-        authPolicy: authPolicy,
-        retriedAuth: true,
-        onProgress: onProgress)
+      do {
+        let result = try await performExportDownload(
+          retryRequest,
+          authPolicy: authPolicy,
+          retriedAuth: true,
+          onProgress: onProgress)
+        let outcome = (200...299).contains(result.response.statusCode) ? "succeeded" : "failed"
+        if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
+        }
+        return result
+      } catch {
+        if authPolicy.recordsAuthRetryTelemetry, case APIError.unauthorized = error {
+          throw error
+        } else if authPolicy.recordsAuthRetryTelemetry {
+          DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        }
+        throw error
+      }
     }
 
     if let stagingError = delegate.stagingError { throw stagingError }

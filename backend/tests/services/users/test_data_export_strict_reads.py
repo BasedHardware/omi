@@ -200,6 +200,7 @@ def _install_memory_history(monkeypatch, raw_memories: List[Dict[str, Any]]):
 def fake_db(monkeypatch):
     db = _FakeDb()
     monkeypatch.setattr(database_client, 'db', db)
+    monkeypatch.setattr(database_client, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(conversations_db, 'db', db)
     monkeypatch.setattr(chat_db, 'db', db)
     monkeypatch.setattr(data_export, 'get_user_profile', MagicMock(return_value={'name': 'u'}))

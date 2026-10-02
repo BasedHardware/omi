@@ -221,6 +221,7 @@ import XCTest
 
     func testExportRetriesOnceAfter401() async throws {
       let client = await makeClient()
+      DesktopDiagnosticsManager.shared.resetForTests()
       try configureRefreshableSession(userId: "export-owner")
       setEnv("FIREBASE_API_KEY", "test-key")
       let snapshot = try await ownerSnapshot()
@@ -232,6 +233,73 @@ import XCTest
       XCTAssertEqual(
         ExportStubProtocol.requests.last?.value(forHTTPHeaderField: "Authorization"),
         "Bearer \(Self.makeJWT(payload: ["user_id": "export-owner"]))")
+      XCTAssertEqual(try latestHealthSnapshot()["retry_outcome"] as? String, "succeeded")
+    }
+
+    func testPersistentExport401InvalidatesTheCapturedSession() async throws {
+      let client = await makeClient()
+      DesktopDiagnosticsManager.shared.resetForTests()
+      try configureRefreshableSession(userId: "export-owner")
+      setEnv("FIREBASE_API_KEY", "test-key")
+      let snapshot = try await ownerSnapshot()
+      ExportStubProtocol.enqueue(status: 401, body: "{\"detail\":\"expired\"}")
+      ExportStubProtocol.enqueue(status: 401, body: "{\"detail\":\"still expired\"}")
+
+      await xctAssertThrowsErrorAsync(
+        try await client.exportUserData(to: destinationURL(), authorizationSnapshot: snapshot) { _ in }
+      ) { error in
+        guard case APIError.unauthorized = error else {
+          return XCTFail("expected unauthorized, got \(error)")
+        }
+      }
+
+      XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), "export-owner")
+      XCTAssertNil(UserDefaults.standard.string(forKey: .authIdToken))
+      XCTAssertEqual(AuthState.shared.sessionPhase, .needsReauth)
+      XCTAssertEqual(try latestHealthSnapshot()["retry_outcome"] as? String, "unauthorized")
+    }
+
+    func testFailedExportRetryIsRecordedAsFailed() async throws {
+      let client = await makeClient()
+      DesktopDiagnosticsManager.shared.resetForTests()
+      try configureRefreshableSession(userId: "export-owner")
+      setEnv("FIREBASE_API_KEY", "test-key")
+      let snapshot = try await ownerSnapshot()
+      ExportStubProtocol.enqueue(status: 401, body: "{\"detail\":\"expired\"}")
+      ExportStubProtocol.enqueue(status: 500, body: "{\"detail\":\"failed\"}")
+
+      await xctAssertThrowsErrorAsync(
+        try await client.exportUserData(to: destinationURL(), authorizationSnapshot: snapshot) { _ in }
+      ) { error in
+        guard case APIError.httpError(let statusCode, _) = error else {
+          return XCTFail("expected HTTP 500, got \(error)")
+        }
+        XCTAssertEqual(statusCode, 500)
+      }
+      XCTAssertEqual(try latestHealthSnapshot()["retry_outcome"] as? String, "failed")
+    }
+
+    func testExportUnauthorizedFromOldOwnerDoesNotInvalidateNewOwner() async throws {
+      let client = await makeClient(suspended: true)
+      try configureRefreshableSession(userId: "export-owner")
+      let snapshot = try await ownerSnapshot("export-owner")
+      let task = Task {
+        try await client.exportUserData(to: destinationURL(), authorizationSnapshot: snapshot) { _ in }
+      }
+      await SuspendedExportStub.waitUntilStarted()
+      await transitionOwnerForExportTest(to: "new-owner")
+      try configureRefreshableSession(userId: "new-owner")
+      SuspendedExportStub.release(status: 401)
+
+      await xctAssertThrowsErrorAsync(try await task.value) { error in
+        guard case AuthError.userChangedDuringRequest = error else {
+          return XCTFail("expected owner-change rejection, got \(error)")
+        }
+      }
+      XCTAssertEqual(
+        RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "new-owner")?.ownerID,
+        "new-owner")
+      XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "id-token")
     }
 
     func testTruncated200PreservesExistingDestination() async throws {
@@ -559,6 +627,37 @@ import XCTest
         XCTAssertTrue(detail.contains("loopback backend"))
       }
       XCTAssertEqual(downloadCalls, 0)
+    }
+
+    func testAutomationActionCanBeUnregisteredWithItsViewLifecycle() async throws {
+      let registry = DesktopAutomationActionRegistry.shared
+      let model = AccountDataExportModel(
+        ownerSnapshot: { nil },
+        download: { _, _, _ in },
+        confirm: { _ in },
+        allowsAutomation: { true })
+      model.registerAutomationActions()
+      XCTAssertTrue(registry.descriptors().contains { $0.name == "settings_export_data_fixture" })
+
+      model.unregisterAutomationActions()
+
+      XCTAssertFalse(registry.descriptors().contains { $0.name == "settings_export_data_fixture" })
+      do {
+        _ = try await registry.perform("settings_export_data_fixture", params: [:])
+        XCTFail("expected the removed action to be unavailable")
+      } catch let error as DesktopAutomationActionError {
+        guard case .unknownAction("settings_export_data_fixture") = error else {
+          return XCTFail("expected unknownAction, got \(error)")
+        }
+      }
+    }
+
+    private func latestHealthSnapshot() throws -> [String: Any] {
+      let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+      defer { try? FileManager.default.removeItem(at: url) }
+      let data = try Data(contentsOf: url)
+      let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      return try XCTUnwrap((root["snapshots"] as? [[String: Any]])?.last)
     }
 
     private func transitionOwnerForExportTest(to ownerID: String?) async {

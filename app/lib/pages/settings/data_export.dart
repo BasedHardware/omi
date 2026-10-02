@@ -182,6 +182,7 @@ class DataExport {
     Future<void> cleanup() async {
       final dir = exportDir;
       exportDir = null;
+      if (dir != null && _lastSharedDirectory?.path == dir.path) _lastSharedDirectory = null;
       await (cleanupDirectory ?? _deleteQuietly)(dir);
     }
 
@@ -193,11 +194,28 @@ class DataExport {
         await cleanup();
         return;
       }
+      final retainedShare = _retainedShare;
+      var retainedShareNeedsSweepProtection = false;
+      if (retainedShare != null) {
+        final retainedSessionIsCurrent =
+            readOwner() == retainedShare.snapshot.ownerUid && service.isSessionSnapshotCurrent(retainedShare.snapshot);
+        if (retainedSessionIsCurrent) {
+          retainedShareNeedsSweepProtection = true;
+        } else {
+          if (identical(_retainedShare, retainedShare)) _retainedShare = null;
+          if (_shareInFlight) {
+            // An Android receiver may still be reading the file after share() returns.
+            retainedShareNeedsSweepProtection = true;
+          } else {
+            await (cleanupDirectory ?? _deleteQuietly)(retainedShare.directory);
+          }
+        }
+      }
       await sweepStaleExportDirectories(
         sweepStaleExports,
         protectedPaths: {
           if (_lastSharedDirectory != null) _lastSharedDirectory!.path,
-          if (_retainedShare != null) _retainedShare!.directory.path,
+          if (retainedShareNeedsSweepProtection) retainedShare!.directory.path,
         },
       );
       exportDir =
@@ -296,10 +314,12 @@ class DataExport {
 
       if (result.status == ShareResultStatus.success) {
         (onExported ?? () => PlatformManager.instance.analytics.exportMemories())();
+        _lastSharedDirectory = exportDir;
+        exportDir = null;
+      } else {
+        // A dismissed sheet did not hand the file to a receiver, so it can be removed.
+        await cleanup();
       }
-      _lastSharedDirectory = exportDir;
-      exportDir = null;
-      await cleanup();
     } catch (e) {
       Logger.error('Export failed: ${e.runtimeType}');
       await cleanup();

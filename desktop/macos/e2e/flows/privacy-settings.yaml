@@ -6,7 +6,6 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/DataExport/AccountDataExportModel.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/DataExport/AccountDataExportView.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+DataExport.swift
 preconditions:
   - automation_bridge_ready

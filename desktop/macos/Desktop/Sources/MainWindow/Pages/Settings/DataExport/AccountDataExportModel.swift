@@ -155,6 +155,10 @@ final class AccountDataExportModel: ObservableObject {
     }
   }
 
+  func unregisterAutomationActions() {
+    DesktopAutomationActionRegistry.shared.unregister("settings_export_data_fixture")
+  }
+
   private static func presentSavePanel() async -> URL? {
     let panel = NSSavePanel()
     panel.nameFieldStringValue = "omi-export.json"

@@ -571,7 +571,7 @@ def test_nested_task_export_carries_owning_parent_id(monkeypatch):
     users_collection.document.return_value = user_document
     mock_db = MagicMock()
     mock_db.collection.return_value = users_collection
-    monkeypatch.setattr(data_export.database_client, 'db', mock_db)
+    monkeypatch.setattr(data_export.database_client, 'get_firestore_client', lambda: mock_db)
 
     records = list(_REAL_ITER_USER_NESTED_SUBCOLLECTION('uid1', 'workstreams', 'events'))
 
