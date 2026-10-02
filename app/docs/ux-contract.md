@@ -220,7 +220,7 @@ participant lists, the speaker filter and every copied, shared or exported trans
 - **Colour** `OmiColors`: `surface0` (black in dark mode, grouped #F2F2F7 in light mode), `surface1/2/3` (card / elevated / pressed),
   `border`, `textPrimary` / `textSecondary` / `textTertiary` (tertiary no darker than ~#8E8E93, ≥ 4.5:1
   on surface1), `accent` (white in dark mode, black in light mode — INV-UI-1) / `onAccent`, `success`, `warning`, `danger`,
-  `dangerSurface`. `AppStyles` and `ResponsiveHelper` palettes are legacy.
+  `dangerSurface`. `AppStyles` palettes are legacy.
 - **Type** `OmiType`: an iOS-like ramp (11 / 13 / 15 / 17 / 20 / 24 / 28 / 34) as `TextStyle`s.
 - **Radius** `OmiRadius`: sm 8 · md 12 · lg 16 · xl 24 · pill. **Spacing** `OmiSpacing`: 4 · 8 · 12 · 16 · 20 · 24 · 32.
 - **Motion** `OmiMotion`: quick 150 ms (a control answering a press), standard 250 ms (content

@@ -11,7 +11,7 @@ import 'package:flutter/services.dart';
 /// Accents and primary actions are neutral: white on black in dark mode, black on white in light mode.
 /// Status colours use the corresponding iOS light and dark system variants.
 ///
-/// `AppStyles` and `ResponsiveHelper` predate these tokens. Do not add new uses of them.
+/// `AppStyles` predates these tokens. Do not add new uses of it.
 ///
 /// Resolved values for one appearance. The dark values are the original Omi tokens.
 @immutable
