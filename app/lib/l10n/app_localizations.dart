@@ -21861,10 +21861,10 @@ abstract class AppLocalizations {
   /// **'{duration} of this voice'**
   String speakerLabelTalkTime(String duration);
 
-  /// Home button that opens AI chat, shown without an icon
+  /// Home button that opens AI chat, beside a speech-bubble icon
   ///
   /// In en, this message translates to:
-  /// **'Ask Anything'**
+  /// **'Ask anything'**
   String get askAnythingButton;
 
   /// Disconnected sheet: first line, what happened when the pendant dropped

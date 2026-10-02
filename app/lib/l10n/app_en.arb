@@ -14560,9 +14560,9 @@
             }
         }
     },
-    "askAnythingButton": "Ask Anything",
+    "askAnythingButton": "Ask anything",
     "@askAnythingButton": {
-        "description": "Home button that opens AI chat, shown without an icon"
+        "description": "Home button that opens AI chat, beside a speech-bubble icon"
     },
     "pendantLostConnection": "Your pendant lost its connection to this phone.",
     "@pendantLostConnection": {

@@ -76,7 +76,7 @@ class HomeChatBarBackdrop extends StatelessWidget {
   }
 }
 
-/// Home's text-only Ask Anything button, left of the record button in the floating row. The same
+/// Home's text-only "Ask anything" button, left of the record button in the floating row. The same
 /// height and glass as the record button, so the pair reads as one set. Voice lives in the chat
 /// composer.
 class HomeAskOmiButton extends StatelessWidget {
@@ -106,7 +106,7 @@ class HomeAskOmiButton extends StatelessWidget {
             child: ExcludeSemantics(
               child: Text(
                 label,
-                style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600),
+                style: OmiType.title3.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w400),
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

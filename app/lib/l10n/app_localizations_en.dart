@@ -12199,7 +12199,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get askAnythingButton => 'Ask Anything';
+  String get askAnythingButton => 'Ask anything';
 
   @override
   String get pendantLostConnection => 'Your pendant lost its connection to this phone.';

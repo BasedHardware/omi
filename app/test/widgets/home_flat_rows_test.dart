@@ -20,6 +20,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/device_tile.dart';
+import 'package:omi/widgets/home_bottom_bar.dart';
 
 void main() {
   late ConversationProvider provider;
@@ -135,5 +136,19 @@ void main() {
     expect(await dot(paused: true), OmiColors.textTertiary);
     expect(await dot(explanation: 'The pendant disconnected.'), isNull, reason: 'no dot on the tile');
     expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget, reason: 'the warning sits beside the word');
+  });
+
+  testWidgets('Ask anything is plain text in sentence case on the glass, no icon', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: OmiCanvas(child: Center(child: HomeAskOmiButton(onTap: () {})))),
+    ));
+    final label = tester.widget<Text>(find.text('Ask anything'));
+    expect(label.style!.fontSize, OmiType.title3.fontSize);
+    expect(label.style!.fontWeight, FontWeight.w400, reason: 'regular, like the reference');
+    expect(label.maxLines, 1);
+    expect(find.descendant(of: find.byType(HomeAskOmiButton), matching: find.byType(Icon)), findsNothing);
+    expect(find.descendant(of: find.byType(HomeAskOmiButton), matching: find.byType(OmiGlass)), findsOneWidget);
   });
 }

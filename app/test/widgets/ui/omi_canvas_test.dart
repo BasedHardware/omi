@@ -67,19 +67,22 @@ void main() {
       await pumpIn(tester, const OmiGlass(shape: StadiumBorder(), blur: true, child: SizedBox(width: 120, height: 40)));
       expect(find.byType(BackdropFilter), findsOneWidget);
       expect(find.byType(ClipPath), findsOneWidget, reason: 'the blur stays inside the shape');
+      final shadow = tester
+          .widget<DecoratedBox>(find.ancestor(of: find.byType(ClipPath), matching: find.byType(DecoratedBox)).first);
+      expect((shadow.decoration as ShapeDecoration).shadows, OmiGlass.shadows,
+          reason: 'painted outside the clip, so the blur does not cut it off');
     });
 
-    test('light glass is dark glass in light grey: as see-through, no shadow', () {
-      final light = OmiColors.glass;
-      expect(light, const Color(0x80E5E5EF));
-      expect(Color.alphaBlend(light, OmiColors.canvas), isSameColorAs(OmiColors.canvasCard, threshold: 0.01),
-          reason: 'over the white page, the card grey');
-      expect(OmiGlass.fill(const CircleBorder()).shadows, isNull);
+    test('light glass is a light grey pill with a white rim and a wide soft shadow; dark is as it was', () {
+      expect(OmiColors.glass, const Color(0xF0F5F5F5));
+      expect(OmiColors.glassEdge, const Color(0xFFFFFFFF));
+      expect(OmiGlass.shadows, hasLength(1));
+      expect(OmiGlass.fill(const CircleBorder()).shadows, OmiGlass.shadows);
 
       OmiColors.active = OmiPalette.dark;
       expect(OmiColors.glass, const Color(0x803A3A3C));
       expect(OmiColors.glassEdge, const Color(0x29FFFFFF));
-      expect(light.a, OmiColors.glass.a, reason: 'the same translucency in both themes');
+      expect(OmiGlass.shadows, isEmpty, reason: 'the lit rim lifts it on black');
     });
 
     test('a tint replaces the glass fill; the rim follows the palette', () {
