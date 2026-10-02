@@ -323,7 +323,8 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
     # the real command/transaction while leaving storage encryption out of scope.
     monkeypatch.setattr(conversations.conversations_db, '_prepare_conversation_for_write', lambda data, *args: data)
     monkeypatch.setattr(conversations, 'deserialize_conversation', deserialize)
-    monkeypatch.setattr(conversations, 'named_speaker_prompts_allowed', lambda uid: True)
+    # Free plan: naming a person in your own transcript must still work and teach.
+    monkeypatch.setattr('utils.speaker_permissions.users_db.get_user_valid_subscription', lambda uid, **kwargs: None)
     monkeypatch.setattr(conversations, '_emit_speaker_identity_confirmed', lambda **kwargs: None)
     monkeypatch.setattr(teaching_tasks, 'delete_speech_profile_blob', lambda path: world.deleted.append(path))
     app = FastAPI()

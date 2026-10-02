@@ -328,7 +328,6 @@ def manual_command_seam(router, monkeypatch):
         return raw, resolved, [], selected_before
 
     monkeypatch.setattr(router.conv.conversations_db, 'assign_conversation_speaker', assign)
-    monkeypatch.setattr(router.conv, 'named_speaker_prompts_allowed', lambda uid: True)
 
 
 def test_segment_assign_out_of_range_returns_404(router):

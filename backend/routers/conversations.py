@@ -91,7 +91,6 @@ from utils.conversations.search import (
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
 from utils.speaker_assignment_teaching import commit_manual_assignment
-from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -1533,8 +1532,6 @@ def _assign_manual_speaker(
     value = None if value == 'null' else value
     is_user = assign_type == 'is_user' and str(value).lower() in {'true', '1'}
     person_id = value if assign_type == 'person_id' else None
-    if person_id and not named_speaker_prompts_allowed(uid):
-        raise HTTPException(status_code=403, detail='Naming other people needs a paid plan')
     try:
         raw, resolved, removed, before = commit_manual_assignment(
             uid,
