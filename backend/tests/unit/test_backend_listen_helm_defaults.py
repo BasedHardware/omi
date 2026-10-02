@@ -34,8 +34,9 @@ ENV_IDENTITY_DEFAULTS = {
 # serving order changes there.
 SAFE_STREAMING_ROUTE = ','.join(DEFAULT_MODELS_BY_SURFACE[STTServingSurface.STREAMING])
 DEV_CANARY_STREAMING_ROUTE = 'parakeet-window,' + SAFE_STREAMING_ROUTE.removesuffix(',parakeet')
-# Production explicitly prefers healthy Soniox during cost-router shadow/rollback.
-CANARY_STREAMING_ROUTE = 'parakeet-window,soniox,modulate-velma-2,dg-nova-3'
+# Soniox-first was rolled back on 2026-10-02: a Parakeet failover replays its
+# ring into Soniox's bounded send queue, which overflowed and ended the session.
+CANARY_STREAMING_ROUTE = 'parakeet-window,modulate-velma-2,soniox,dg-nova-3'
 SAFE_PRERECORDED_ROUTE = ','.join(DEFAULT_MODELS_BY_SURFACE[STTServingSurface.PRERECORDED])
 
 
