@@ -67,18 +67,23 @@ void main() {
       await pumpIn(tester, const OmiGlass(shape: StadiumBorder(), blur: true, child: SizedBox(width: 120, height: 40)));
       expect(find.byType(BackdropFilter), findsOneWidget);
       expect(find.byType(ClipPath), findsOneWidget, reason: 'the blur stays inside the shape');
+      final shadow = tester
+          .widget<DecoratedBox>(find.ancestor(of: find.byType(ClipPath), matching: find.byType(DecoratedBox)).first);
+      expect((shadow.decoration as ShapeDecoration).shadows, OmiGlass.shadows,
+          reason: 'painted outside the clip, so the blur does not cut it off');
     });
 
-    test('light glass is dark glass with its colours inverted, and neither has a shadow', () {
-      Color invert(Color c) => Color.from(alpha: c.a, red: 1 - c.r, green: 1 - c.g, blue: 1 - c.b);
-      final light = [OmiColors.glass, OmiColors.glassEdge, OmiColors.glassRim];
-      expect(OmiGlass.fill(const CircleBorder()).shadows, isNull);
+    test('light glass: dark\'s fill inverted, lit along the top like dark, with a small shadow', () {
+      expect(OmiColors.glass, const Color(0x80C5C5C3), reason: 'the locked colour');
+      expect(OmiColors.glassEdge, const Color(0xE6FFFFFF), reason: 'light catches the top edge, as in dark');
+      expect(OmiGlass.shadows, hasLength(1));
+      expect(OmiGlass.shadows.single.blurRadius, lessThanOrEqualTo(12), reason: 'close under it, no haze');
+      expect(OmiGlass.fill(const CircleBorder()).shadows, OmiGlass.shadows);
+
       OmiColors.active = OmiPalette.dark;
-      final dark = [OmiColors.glass, OmiColors.glassEdge, OmiColors.glassRim];
-      expect(dark, [const Color(0x803A3A3C), const Color(0x29FFFFFF), const Color(0x12FFFFFF)], reason: 'unchanged');
-      for (var i = 0; i < 3; i++) {
-        expect(light[i], isSameColorAs(invert(dark[i])));
-      }
+      expect(OmiColors.glass, const Color(0x803A3A3C));
+      expect(OmiColors.glassEdge, const Color(0x29FFFFFF));
+      expect(OmiGlass.shadows, isEmpty, reason: 'dark is unchanged');
     });
 
     test('a tint replaces the glass fill; the rim follows the palette', () {
