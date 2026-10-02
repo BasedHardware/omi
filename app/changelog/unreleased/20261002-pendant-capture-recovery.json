@@ -1,3 +1,3 @@
 {
-  "change": "Omi on iPhone now checks that pendant audio is arriving, repairs stalled connections, and only shows Listening after audio arrives."
+  "change": "Omi on iPhone now checks that pendant audio is arriving, tries to restore it when it stalls, and only shows Listening after audio arrives."
 }

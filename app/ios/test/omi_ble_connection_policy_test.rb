@@ -3,8 +3,6 @@
 require 'minitest/autorun'
 require 'open3'
 require 'tmpdir'
-require_relative 'omi_capture_health_test'
-
 class OmiBleConnectionPolicyTest < Minitest::Test
   IOS_ROOT = File.expand_path('..', __dir__)
   POLICY_SOURCE = File.join(IOS_ROOT, 'Runner', 'Ble', 'OmiBleConnectionPolicy.swift')

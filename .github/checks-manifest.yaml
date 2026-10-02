@@ -629,6 +629,18 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "pairing recovery must fire only for ATT authentication/encryption failures so ordinary Omi notification noise never tears down a healthy GATT link"
+  - id: ios-capture-transaction
+    command: ["ruby", "app/ios/test/omi_capture_transaction_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiCaptureHealth.swift", "app/ios/Runner/Ble/OmiBleCaptureSession.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/test/omi_capture_transaction_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "native pendant capture recovery must preserve its transaction trace across health, session, manager, and connection policy changes"
+  - id: ios-capture-health
+    command: ["ruby", "app/ios/test/omi_capture_health_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiCaptureHealth.swift", "app/ios/Runner/Ble/OmiBleCaptureSession.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/test/omi_capture_health_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "native pendant audio health must remain bounded across quiet, repair, reconnect, and relaunch transitions"
   - id: ios-dev-build-configuration
     command: ["ruby", "app/ios/test/omi_dev_build_configuration_test.rb"]
     triggers: ["app/ios/Flutter/devProfile.xcconfig", "app/ios/Flutter/devRelease.xcconfig", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/omi_dev_build_configuration_test.rb", ".github/checks-manifest.yaml"]

@@ -24,6 +24,7 @@ WHERE event IN (
     , 'Recording Started'
     , 'Recording Completed'
     , 'Recording Start Failed'
+    , 'Recording Subscription Failed'
     , 'Phone Mic Recording Started'
     , 'Phone Mic Recording Stopped'
     , 'Transcribe Later Recording Processed'

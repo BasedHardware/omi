@@ -131,19 +131,17 @@ void main() {
     expect(service.connections.length, 1);
   });
 
-  for (final exit in ['cancel before disconnect', 'cancel during reconnect', 'failed reconnect']) {
-    test('$exit: Resume checks native link and reconnects the existing source', () async {
-      final connection = await service.ensureConnection(audioId, force: true);
-      final transport = built[audioId]!.transport;
-      transport.physicallyConnected = false;
-      BleBridge.instance.onPeripheralDisconnected(audioId, 'capture_recovery');
-      expect(await service.ensureConnection(audioId), isNull);
-      expect(await service.ensureConnection(audioId, force: true), same(connection));
-      expect(transport.connects, 1);
-      expect(transport.disposed, isFalse);
-      expect(built[audioId]!.disconnectCalled, isFalse);
-    });
-  }
+  test('resume checks native link and reconnects the existing source', () async {
+    final connection = await service.ensureConnection(audioId, force: true);
+    final transport = built[audioId]!.transport;
+    transport.physicallyConnected = false;
+    BleBridge.instance.onPeripheralDisconnected(audioId, 'capture_recovery');
+    expect(await service.ensureConnection(audioId), isNull);
+    expect(await service.ensureConnection(audioId, force: true), same(connection));
+    expect(transport.connects, 1);
+    expect(transport.disposed, isFalse);
+    expect(built[audioId]!.disconnectCalled, isFalse);
+  });
 
   test('disconnecting one device leaves the other alone', () async {
     await service.ensureConnection(audioId, force: true);

@@ -60,7 +60,7 @@ void main() {
           phase: phase,
           generation: 'epoch-1',
           reason: phase,
-          validUntilMs: 0,
+          validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
           subscriptionConfirmed: phase == 'quiet',
           unverifiedSinceMs: 1234,
         );

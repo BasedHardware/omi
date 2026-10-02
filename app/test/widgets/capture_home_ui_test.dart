@@ -424,6 +424,8 @@ void main() {
     capture.notifyListeners();
     await tester.pump();
     expect(find.byType(LiveCaptureCard), findsOneWidget);
+    expect(find.text(en.listening), findsOneWidget);
+    expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, isNotNull);
     capture.verified = false;
     capture.notifyListeners();
     await tester.pump();

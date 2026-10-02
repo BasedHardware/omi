@@ -155,6 +155,7 @@ void main() {
     );
     addTearDown(provider.dispose);
     provider.pairedDevice = _device('AA:AA:AA:AA:AA:10');
+    provider.connectedDevice = provider.pairedDevice;
 
     // The provider fires tracking unawaited; drain its microtask chain before flushing.
     provider.onDeviceDisconnected();
