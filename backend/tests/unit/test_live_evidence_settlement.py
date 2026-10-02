@@ -88,8 +88,9 @@ async def test_cancelled_failover_settles_source_and_never_blames_cancelled_succ
     before = observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error')
     with pytest.raises(asyncio.CancelledError):
         await receiver._failover_stt_socket()
-    leg.finish()
+    assert leg.leg_outcome.settled
     assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
+    leg.finish()
 
 
 @pytest.mark.asyncio
@@ -133,8 +134,9 @@ async def test_send_exhaustion_is_settled_even_before_first_audio():
         platform='ios',
         attempt_failover=AsyncMock(return_value=False),
     )
-    leg.finish()
+    assert leg.leg_outcome.settled
     assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
+    leg.finish()
 
 
 @pytest.mark.asyncio
@@ -266,8 +268,8 @@ async def test_same_provider_reconnect_settles_rejected_successor(monkeypatch, f
     )
     before = observed('soniox', 'provider_failure', 'provider_5xx')
     assert not await resilient_stream.reconnect_live_stt_socket(listener)
-    new.finish()
     assert new.leg_outcome.settled
+    new.finish()
     assert observed('soniox', 'provider_failure', 'provider_5xx') == before + 1
 
 
@@ -361,3 +363,124 @@ async def test_monitor_survives_retiring_a_claimed_leg_during_reconnect(monkeypa
     listener.host.wait.assert_awaited_once()  # The monitor followed the replacement.
     listener._settle_pending_live_failover_failure()
     new.finish()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('observer', ['monitor', 'send'])
+async def test_teardown_winning_during_recovery_cannot_terminate_or_bench(monkeypatch, observer):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
+    leg = managed_leg(receiver, ServingSocket(), family='soniox')
+    leg.raw.die('connection_lost')
+    receiver.stt_socket = leg
+    client = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    receiver.host.request.websocket = client
+    opened = []
+    monkeypatch.setattr(live_failure, '_open_serving_provider_circuit', lambda *args: opened.append(args))
+
+    async def lose_to_teardown():
+        leg.leg_outcome.owner_closing = True
+        return False
+
+    receiver._failover_stt_socket = lose_to_teardown
+    if observer == 'monitor':
+        await receiver._monitor_stt_death()
+    else:
+        await live_failure.send_live_stt_audio(
+            client,
+            receiver.host.state,
+            stt_socket=leg,
+            audio=b'\x00\x00',
+            provider='soniox',
+            platform='ios',
+            attempt_failover=lose_to_teardown,
+        )
+    client.close.assert_not_awaited()
+    assert not opened and not receiver.host.state.stt_terminal_failure
+    leg.finish()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_retry_settles_the_already_rejected_replacement(monkeypatch):
+    from utils.stt.resilient_stream import retry_failed_replacement
+
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
+    raw = managed_leg(receiver, ServingSocket(), family='soniox')
+    raw.raw.die('provider_5xx')
+    receiver._rebuild_stt_socket_locked = AsyncMock(side_effect=asyncio.CancelledError())
+    before = observed('soniox', 'provider_failure', 'provider_5xx')
+    with pytest.raises(asyncio.CancelledError):
+        await retry_failed_replacement(receiver, raw, None, None, None)
+    assert raw.leg_outcome.settled
+    assert observed('soniox', 'provider_failure', 'provider_5xx') == before + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'reason',
+    [
+        'soniox_request_timeout',
+        'soniox_idle_timeout',
+        'soniox_rotation',
+        'soniox_invalid_hint',
+        'vad_failed',
+        'other',
+        'allocation_rejected',
+        'capability_mismatch',
+    ],
+)
+async def test_censored_connect_rejections_never_accumulate_provider_circuit_failures(monkeypatch, reason):
+    monkeypatch.setattr(
+        live_chain, 'fallback_socket_is_serving', AsyncMock(side_effect=lambda raw: not raw.is_connection_dead)
+    )
+    for _ in range(4):
+        leg = serving_leg(family='soniox')
+        leg.raw.die(reason)
+        _, service = await live_chain.connect_configured_chain(
+            primary_service=st.STTService.soniox,
+            connect_primary=AsyncMock(return_value=leg),
+            callbacks={st.STTService.modulate: AsyncMock(return_value=FakeSocket())},
+            failed=set(),
+            models=['soniox', 'modulate-velma-2'],
+            routing_uid='synthetic',
+            routing_language='en',
+        )
+        assert service == st.STTService.modulate
+        assert leg.leg_outcome.settled
+    assert st._soniox_circuit.state == 'closed' and st._soniox_circuit._failures == 0
+    assert not live_chain.health._cost_local
+
+
+@pytest.mark.asyncio
+async def test_engine_mismatch_cannot_abandon_an_earlier_rejected_leg(monkeypatch):
+    from config.live_stt_registry import DEFAULT_TARGETS
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
+    monkeypatch.setattr(live_chain, 'propose', lambda *args: list(DEFAULT_TARGETS[1:]))
+    monkeypatch.setattr(
+        live_chain, 'fallback_socket_is_serving', AsyncMock(side_effect=lambda raw: not raw.is_connection_dead)
+    )
+    source = serving_leg()
+    source.routing_model = 'velma-2'
+    source.raw.die('modulate_serve_error')
+    mismatch = SimpleNamespace(
+        is_connection_dead=False,
+        finish=lambda: None,
+        routing_target='soniox',
+        routing_model='wrong',
+        routing_endpoint=None,
+    )
+    before = observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error')
+    _, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=AsyncMock(side_effect=[source, FakeSocket()]),
+        callbacks={st.STTService.soniox: AsyncMock(side_effect=[mismatch, FakeSocket()])},
+        failed=set(),
+        models=['modulate-velma-2', 'soniox'],
+        routing_uid='synthetic',
+        routing_language='en',
+        routing_models={'modulate': 'velma-2', 'soniox': 'soniox'},
+    )
+    assert service == st.STTService.soniox
+    assert source.leg_outcome.settled
+    assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1

@@ -250,7 +250,7 @@ def test_modulate_publishes_typed_cause_before_the_dead_latch(observe_at):
 
 def test_vocabulary_is_closed_and_classifier_cannot_accept_free_text():
     assert LIVE_STT_REASONS <= ALLOWED_REASONS
-    assert len(LIVE_STT_REASONS) == 28
+    assert len(LIVE_STT_REASONS) == 30
     assert normalize_live_stt_reason('send ConnectionError: private') == 'connection_lost'
     assert normalize_live_stt_reason('first_text_deadline', 'send_failed') == 'first_text_deadline'
     with pytest.raises(ValueError, match='bounded'):
@@ -349,7 +349,7 @@ def test_local_vad_failure_is_censored_rather_than_transport_failure(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_vad_attribution_preserves_legacy_terminal_local_protection(monkeypatch):
+async def test_vad_failure_never_opens_a_provider_circuit(monkeypatch):
     opened = []
     monkeypatch.setattr(
         live_failure, '_open_serving_provider_circuit', lambda reason, provider: opened.append((reason, provider))
@@ -359,6 +359,6 @@ async def test_vad_attribution_preserves_legacy_terminal_local_protection(monkey
     await live_failure.terminate_live_stt_session(
         client, state, failure=live_failure.live_stt_upstream_failure('parakeet'), reason='vad_failed', platform='ios'
     )
-    assert opened == [('vad_failed', 'parakeet')]
+    assert opened == []
     assert provider_observation('failover', 'vad_failed') is None
     client.close.assert_awaited_once_with(code=1011, reason='transcription_service_unavailable')

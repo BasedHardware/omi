@@ -7,6 +7,7 @@ Run from backend: .venv/bin/python scripts/stt/calibrate_live_gate.py
 from __future__ import annotations
 
 import json
+import os
 import random
 import statistics
 import sys
@@ -64,6 +65,7 @@ def detection(seed: int, rate: float, *, churn: bool = False) -> tuple[int, int,
 
 
 def main() -> None:
+    os.environ['STT_ROUTING_DISRUPTION_GATE'] = '0.08'
     report: dict = {'state_prefix': 'cost-v6', 'baselines': [], 'detection': []}
     for rate, floor in ((0, 0.05), (0, 0.07), (0, 0.10), (0.003, 0.10), (0.01, 0.10), (0.03, 0.10)):
         runs = [baseline(seed, rate, floor) for seed in range(20)]

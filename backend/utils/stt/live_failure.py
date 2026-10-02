@@ -104,8 +104,8 @@ _CIRCUIT_OPENING_REASONS = frozenset(
 # audio. ``initialization_failed`` happens at connect time, where the selection
 # helper's threshold logic already sees it, and ``socket_unavailable`` is local
 # state (no socket exists), not provider behavior.
-# Preserve legacy terminal VAD circuit protection; fleet evidence censors it.
-_SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed', 'vad_failed'})
+# Local VAD/input failures are not evidence against a provider circuit either.
+_SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed'})
 
 
 def fallback_metric_reason(reason: str | None) -> str:
@@ -553,6 +553,8 @@ async def send_live_stt_audio(
             return
         if attempt_failover is not None and await attempt_failover():
             return
+        if outcome is not None and outcome.owner_closing:
+            return  # Client teardown can win while replacement admission awaits.
         if session.active and not session.stt_terminal_failure:
             settle_terminal_socket(stt_socket, provider, reason)
         await terminate_live_stt_session(

@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from routers.listen.runtime import ListenSessionRuntime
 from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME, COST_CANARY_OUTCOME
 
@@ -282,3 +284,16 @@ def test_ineligible_session_has_no_router_canary_vote():
     before = [counter._value.get() for counter in counters]
     assert _outcome(runtime) == 'transcribed'
     assert [counter._value.get() for counter in counters] == before
+
+
+@pytest.mark.parametrize('percent', ['broken', 'NaN', '101'])
+def test_invalid_router_percent_cannot_abort_session_telemetry(monkeypatch, percent):
+    from routers.listen import runtime as runtime_module
+
+    runtime = _runtime(delivered=True)
+    monkeypatch.setattr(runtime_module, 'managed_chain_enabled', lambda host: True)
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', percent)
+    runtime._capture_cost_routing_arm()
+    assert runtime._cost_routing_arm == 'control'
+    assert _outcome(runtime) == 'transcribed'

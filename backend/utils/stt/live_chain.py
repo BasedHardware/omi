@@ -19,6 +19,7 @@ from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_s
 from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
 from utils.stt.live_outcome import LiveLegOutcome
 from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.live_signal import provider_observation
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
 from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
@@ -310,6 +311,14 @@ async def connect_configured_chain(
                 on_close()
                 raise
             if isinstance(error, TargetEngineMismatch):
+                if prior_outcome is not None:
+                    PendingLiveFailover(
+                        component='stt_selection',
+                        from_mode=origin,
+                        to_mode=service.value,
+                        reason=prior_reason,
+                        source_outcome=prior_outcome,
+                    ).note_failure(None, continuing=True)
                 if socket is not None:
                     close_rejected_socket(socket)
                 on_close()
@@ -330,7 +339,9 @@ async def connect_configured_chain(
                     failed_targets=failed_targets,
                     routing_models=routing_models,
                 )
-            reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
+            reason = normalize_live_stt_reason(
+                error.reason if isinstance(error, RejectedStream) else failure_reason(error), default='other'
+            )
             if prior_outcome is not None:
                 PendingLiveFailover(
                     component='stt_selection',
@@ -357,9 +368,10 @@ async def connect_configured_chain(
             rejected_outcome.claim(reason, connect=True)
             if socket is not None:
                 close_rejected_socket(socket)
-            if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
-                _note_connect_result(failed_provider=service.value)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
+            provider_failure = provider_observation('connect_failure', reason) is True
+            if provider_failure or account_rejection or reason == 'auth':
+                _note_connect_result(failed_provider=service.value)
             # Preserve legacy omi_fallback_total quota/auth labels while the
             # health observation and connect counter retain precise tokens.
             fallback_reason = fallback_metric_reason(reason)
@@ -376,7 +388,7 @@ async def connect_configured_chain(
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
-            elif reason in EXPECTED_REJECTIONS:
+            elif not provider_failure:
                 on_close()
                 if canary and reason == 'capacity_full':
                     identity = (

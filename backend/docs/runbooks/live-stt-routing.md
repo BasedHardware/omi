@@ -18,7 +18,9 @@ when the serving owner replaces/rejects it or exhausts recovery. A pending hop
 without successor text settles as degraded after 30 seconds, with no socket or
 audio change. Established fallback reasons stay stable, including quota/auth;
 health retains the corresponding typed account reasons. Soniox 408 uses censored `soniox_request_timeout`; 400 no-audio uses
-`soniox_idle_timeout`. Neither opens a provider circuit for all users.
+`soniox_idle_timeout`. Neither opens a provider circuit for all users, including connect rejection.
+Local VAD and other explicitly censored input/configuration failures also release
+circuit admission without accumulating provider failures.
 
 `omi_stt_cost_routing_settlements_total{target,outcome,reason,path}` is the
 expected observation count from that seam (`path=close|failover|connect`). Its
@@ -107,7 +109,7 @@ sum by (from_mode, reason, outcome) (increase(omi_fallback_total{job="backend-li
 ```
 
 The last query includes legacy/PTT traffic and uses provider-family labels;
-endpoint-specific equality is checked by the first query. For managed failure
+endpoint-specific equality is checked by the paired-counter difference. For managed failure
 settlements, account labels map budget→quota and rejected-auth→auth. Connect
 settlements belong to `stt_selection`, terminal deaths to `stt_live_session`.
 

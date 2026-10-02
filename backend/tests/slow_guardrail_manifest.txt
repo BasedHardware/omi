@@ -50,3 +50,7 @@ tests/unit/test_subscription_import_cycle.py
 tests/unit/test_sync_ordered_assignment.py
 tests/unit/test_thread_join_elimination.py
 tests/unit/test_vad_gate.py
+
+# Full STT gate calibration retains its CI owner outside the per-test CPU lane.
+tests/unit/test_live_gate_replay.py
+tests/unit/test_live_shadow_replay.py

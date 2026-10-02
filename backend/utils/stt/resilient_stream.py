@@ -391,6 +391,9 @@ async def retry_failed_replacement(receiver: Any, raw: Any, epoch: Any, hop: Any
         if not rebuilt:
             settle_terminal_socket(raw, receiver.host.stt_service.value, 'connection_lost')
         return rebuilt
+    except asyncio.CancelledError:
+        settle_terminal_socket(raw, receiver.host.stt_service.value, 'connection_lost')
+        raise
     finally:
         if previous is not None:
             try:

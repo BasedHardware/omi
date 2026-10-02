@@ -1296,6 +1296,8 @@ class ListenReceiver(ReplayFilterMixin):
             if socket is not None and live_stt_socket_is_dead(socket):
                 if await self._failover_stt_socket():
                     continue
+                if outcome is not None and outcome.owner_closing:
+                    return
                 if self.host.state.active and not self.host.state.stt_terminal_failure:
                     settle_terminal_socket(socket, self._serving_provider(), 'connection_lost')
                 await terminate_live_stt_session(

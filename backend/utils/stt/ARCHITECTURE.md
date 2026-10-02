@@ -272,7 +272,9 @@ deaths before the first audio byte.
 
 Owner teardown is marked before receiver tail sends and before drain. It cannot
 claim a provider failure from a transport symptom. A source already claimed by
-a serving decision keeps its cause through cleanup. Ordinary finish/drain emits
+a serving decision keeps its cause through cleanup. Connect-time censored
+causes release circuit admission without adding provider failures; local VAD
+failure cannot open a provider circuit at terminal settlement either. Ordinary finish/drain emits
 success if text was observed, otherwise censored no-text; neither reads socket
 liveness to determine blame. PTT/custom/BYOK/multichannel remain outside the
 managed cost-evidence population. Their legacy fallback telemetry is not a
@@ -286,7 +288,7 @@ cost-router observation and must not be joined as though it were one.
 | Connect transport/server failure | provider/path | provider_5xx or timeout | provider_failure, same cause, path=connect |
 | Quota / authentication | account/us | quota / auth | censored/provider_budget_exhausted or provider_auth_rejected (connect auth remains auth) |
 | Window first-text deadline / empty streak | unresolved audio/recognizer | first_text_deadline / empty_streak | censored, same cause |
-| Admission, PCM/replay/send-queue capacity | us/capacity | capacity_full | censored/capacity_full |
+| Admission, capability/allocation, PCM/replay/send-queue capacity | us/capacity | capacity_full / allocation_rejected / capability_mismatch | censored, same cause |
 | VAD / invalid request or audio / loop misuse | us/audio | vad_failed / other | censored, same cause |
 | Soniox 400 no-audio / 408 request timeout | client/input timing | soniox_idle_timeout / soniox_request_timeout | censored, same cause |
 | Soniox duration rotation | protocol lifecycle | soniox_rotation | censored/soniox_rotation |

@@ -352,6 +352,16 @@ class ListenSessionRuntime:
             return 'too_short'
         return 'no_transcript'
 
+    def _capture_cost_routing_arm(self) -> None:
+        self._cost_routing_arm: str | None = None
+        if managed_chain_enabled(self):
+            try:
+                self._cost_routing_arm = 'on' if routing_on(self.request.uid) else 'control'
+            except (ValueError, TypeError):
+                # Selection owns invalid-config diagnostics and static fallback.
+                # A cohort metric must never prevent that serving path running.
+                self._cost_routing_arm = 'control'
+
     def _record_session_transcript_outcome(self) -> None:
         """Emit omi_live_session_transcript_outcome_total exactly once per session.
 
@@ -917,9 +927,7 @@ class ListenSessionRuntime:
             )
             # Intent-to-treat cohort: snapshot before selection, including
             # initialization failures and fail-open sessions in the on arm.
-            self._cost_routing_arm = (
-                ('on' if routing_on(self.request.uid) else 'control') if managed_chain_enabled(self) else None
-            )
+            self._capture_cost_routing_arm()
             if not await self.receiver.initialize_stt():
                 return
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
