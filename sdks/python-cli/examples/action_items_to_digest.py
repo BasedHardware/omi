@@ -16,11 +16,9 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-import io
 import json
 import os
 from pathlib import Path
-import re
 import sys
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
@@ -71,7 +69,9 @@ def clean_markdown_cell(value: Any) -> str:
     if value is None:
         return ""
     text = str(value).replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
-    text = text.replace("|", "\\|")
+    text = text.replace("\\", "\\\\")
+    for char in ("|", "*", "_", "`", "[", "]", "<", ">", "#"):
+        text = text.replace(char, f"\\{char}")
     return " ".join(text.split())
 
 
@@ -212,11 +212,16 @@ def build_digest(
         ]
         for due_dt, desc, item_id in overdue:
             due_local = due_dt + offset
-            days_ago = max(1, (now - due_dt).days)
-            day_word = "day" if days_ago == 1 else "days"
+            delta = now - due_dt
+            if delta.days == 0:
+                duration_str = "less than a day"
+            elif delta.days == 1:
+                duration_str = "1 day"
+            else:
+                duration_str = f"{delta.days} days"
             lines.append(
                 f"- **{desc}** · Due: {due_local.strftime('%Y-%m-%d')} "
-                f"(_overdue by {days_ago} {day_word}_) · `{item_id}`"
+                f"(_overdue by {duration_str}_) · `{item_id}`"
             )
 
     if upcoming:
@@ -362,6 +367,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.output and args.output != "-":
             print(f"Digest written to {args.output} ({count} action items)")
         return 0
+    except BrokenPipeError:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        sys.exit(1)
     except (OSError, ValueError) as exc:
         sys.exit(f"Digest failed: {exc}")
 

@@ -2,7 +2,6 @@
 
 from datetime import datetime, timedelta, timezone
 import importlib.util
-import io
 import json
 from pathlib import Path
 import shutil
@@ -84,6 +83,10 @@ class TestActionItemsToDigest(unittest.TestCase):
         self.assertEqual(ai2digest.clean_markdown_cell("Pipe | inside"), "Pipe \\| inside")
         self.assertEqual(ai2digest.clean_markdown_cell("Line\nBreak"), "Line Break")
         self.assertEqual(ai2digest.clean_markdown_cell(None), "")
+        self.assertEqual(
+            ai2digest.clean_markdown_cell("Review *budget* & [link] `#1`"),
+            "Review \\*budget\\* & \\[link\\] \\`\\#1\\`",
+        )
 
     def test_load_and_envelope_unwrapping(self):
         for key in ("action_items", "items", "data", "results"):
@@ -119,6 +122,7 @@ class TestActionItemsToDigest(unittest.TestCase):
         # Check Overdue section
         self.assertIn("## ⚠️ Overdue Tasks", md)
         self.assertIn("Fix memory leak in background worker", md)
+        self.assertIn("(_overdue by 1 day_)", md)
         self.assertIn("act_02_overdue", md)
 
         # Check Upcoming section
@@ -131,6 +135,16 @@ class TestActionItemsToDigest(unittest.TestCase):
         self.assertIn("| 2026-09-30 | 0 | 1 | 1 |", md)
         self.assertIn("| 2026-10-01 | 1 | 0 | 1 |", md)
         self.assertIn("| 2026-10-05 | 1 | 0 | 1 |", md)
+
+    def test_overdue_partial_day_duration(self):
+        item = {
+            "id": "act_hours",
+            "description": "Urgent task due 2h ago",
+            "completed": False,
+            "due_at": "2026-10-02T10:00:00Z",
+        }
+        md = ai2digest.build_digest({"act_hours": item}, now=self.now)
+        self.assertIn("(_overdue by less than a day_)", md)
 
     def test_empty_export_handling(self):
         md = ai2digest.build_digest({})
@@ -170,7 +184,16 @@ class TestActionItemsToDigest(unittest.TestCase):
         dest = self.tmp / "digest_err.md"
         src.write_text(json.dumps(self.sample_items), encoding="utf-8")
 
-        with patch("pathlib.Path.open", side_effect=OSError("Disk full")):
+        real_open = Path.open
+
+        def failing_open(self_path, *args, **kwargs):
+            handle = real_open(self_path, *args, **kwargs)
+            mode = kwargs.get("mode", args[0] if args else "r")
+            if "xb" in mode and str(self_path) == str(dest):
+                handle.write = unittest.mock.Mock(side_effect=OSError("Disk full"))
+            return handle
+
+        with patch.object(Path, "open", autospec=True, side_effect=failing_open):
             with self.assertRaises(OSError):
                 ai2digest.convert([str(src)], destination=str(dest), overwrite=False)
         self.assertFalse(dest.exists())
