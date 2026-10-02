@@ -396,7 +396,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                         borderRadius: OmiRadius.pillAll,
                         child: LinearProgressIndicator(
                           value: job.progress,
-                          backgroundColor: OmiColors.iconTile,
+                          backgroundColor: OmiColors.surface3,
                           color: OmiColors.textPrimary,
                           minHeight: 6,
                         ),

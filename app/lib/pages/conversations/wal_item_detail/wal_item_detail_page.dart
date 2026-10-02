@@ -218,7 +218,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           borderRadius: OmiRadius.pillAll,
                           child: LinearProgressIndicator(
                             value: transferProgress > 0 ? transferProgress : null,
-                            backgroundColor: OmiColors.iconTile,
+                            backgroundColor: OmiColors.surface3,
                             color: OmiColors.textPrimary,
                             minHeight: 6,
                           ),

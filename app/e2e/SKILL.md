@@ -211,7 +211,7 @@ Scaffold key (`settings_page_<page>`); rows on group/Account pages are `settings
 └── Developer Settings [settings_group_developer] (developer.dart)
 (Settings search finds every row above and opens the page that holds it.)
 
-Transcription Settings (transcription_settings_page.dart) — not in settings drawer; reached from
+Transcription Settings (transcription_settings_page.dart) — not a row on the Settings page; reached from
 Plan & Usage, Developer Settings, or the Plans sheet
 ├── Source toggle: Omi Cloud vs Custom STT
 ├── Provider selector, API key, model config
@@ -257,7 +257,7 @@ Voice Profile — guided introduction (onboarding/speech_profile_widget.dart, #1
 
 **Settings gear:**
 - Android: rightmost `button` widget in the top bar; detect by sorting buttons by `bounds.x` descending, take first
-- iOS (verified 2026-07-11): single top-right icon on home at ~x=362, y=58 → Settings sheet (Account,
+- iOS (verified 2026-07-11): single top-right icon on home at ~x=362, y=58 → the Settings page (Account,
   Plan & Usage, Referral Program, Device, Recording & Transcription, Notifications & Display,
   Integrations, Data & Privacy, Help & About, Feedback, Developer Settings)
 
@@ -310,7 +310,7 @@ Every flow lists `prerequisites:` — conditions that MUST be true before runnin
 | `ble_on` | Bluetooth enabled on device | Enable Bluetooth in device Settings → Connected Devices. **Emulators/simulators do not support BLE** — requires physical device | Enable Bluetooth in device Settings. **iOS Simulator has no BLE** — requires physical iPhone |
 | `omi_device_connected` | Omi hardware paired and connected via BLE | Power on Omi device within BLE range → app auto-discovers on home screen → tap Connect. **Physical device only** | Same — power on Omi, app discovers it. **Physical iPhone only** |
 | `phone_number_verified` | Phone number added and verified in settings | Settings → Phone Calls → add phone number → receive SMS → enter code. Requires real phone number | Same flow — requires real phone number that receives SMS |
-| `developer_settings_enabled` | Developer Settings screen is open | Settings drawer → scroll down → tap "Developer Settings" (visible to all users) | Same navigation path |
+| `developer_settings_enabled` | Developer Settings screen is open | Settings page → scroll down to Developer → tap "Developer Settings" (visible to all users) | Same navigation path |
 | `adb_access` | Shell access for locale/prefs manipulation (Android only) | Debug build + `adb` in PATH. Verify: `adb shell run-as com.friend.ios.dev ls shared_prefs/` | Not applicable — iOS equivalent uses `xcrun simctl` for simulator or Xcode for device |
 
 ### Prerequisite dependency chain

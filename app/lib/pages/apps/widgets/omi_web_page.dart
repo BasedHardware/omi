@@ -89,11 +89,12 @@ class _OmiWebPageState extends State<OmiWebPage> {
             WebViewWidget(controller: _controller),
             if (_failed)
               ColoredBox(
-                color: OmiColors.surface0,
+                // The grouped page's own colour, so no seam shows under the header.
+                color: OmiColors.groupedPage,
                 child: OmiErrorState(message: context.l10n.couldNotLoadPage, onRetry: _retry),
               )
             else if (_loading)
-              ColoredBox(color: OmiColors.surface0, child: const OmiLoadingState()),
+              ColoredBox(color: OmiColors.groupedPage, child: const OmiLoadingState()),
           ],
         ),
       ),

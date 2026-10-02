@@ -387,12 +387,13 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     return OmiGroupedPage(
       title: context.l10n.deviceDiagnostics,
       actions: [
-        OmiIconButton(
+        // Circles, like every other grouped page's header controls.
+        OmiIconButton.filled(
           icon: const Icon(Icons.support_agent),
           label: context.l10n.sendToSupport,
           onPressed: _isSending ? null : _sendToSupport,
         ),
-        OmiIconButton(
+        OmiIconButton.filled(
           key: _shareButtonKey,
           icon: const Icon(Icons.ios_share),
           label: context.l10n.share,

@@ -167,41 +167,46 @@ class WalListItem extends StatelessWidget {
                     onTap: () => routeToPage(context, WalItemDetailPage(wal: wal)),
                   ),
                   if (showBar)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: OmiRadius.pillAll,
-                                  child: LinearProgressIndicator(
-                                    value: _calcProgress(wal),
-                                    backgroundColor: OmiColors.iconTile,
-                                    color: OmiColors.textPrimary,
-                                    minHeight: 3,
+                    // The progress belongs to the row: tapping it opens the recording too.
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => routeToPage(context, WalItemDetailPage(wal: wal)),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: OmiRadius.pillAll,
+                                    child: LinearProgressIndicator(
+                                      value: _calcProgress(wal),
+                                      backgroundColor: OmiColors.surface3,
+                                      color: OmiColors.textPrimary,
+                                      minHeight: 3,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              if (wal.syncSpeedKBps != null && wal.syncSpeedKBps! > 0) ...[
-                                const SizedBox(width: OmiSpacing.sm),
-                                Text(
-                                  '${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
-                                  style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                                ),
+                                if (wal.syncSpeedKBps != null && wal.syncSpeedKBps! > 0) ...[
+                                  const SizedBox(width: OmiSpacing.sm),
+                                  Text(
+                                    '${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
+                                    style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                                  ),
+                                ],
                               ],
-                            ],
-                          ),
-                          if (wal.syncEtaSeconds != null && wal.syncEtaSeconds! > 0) ...[
-                            const SizedBox(height: OmiSpacing.xxs),
-                            Text(
-                              context.l10n.etaLabel(OmiDuration.compact(wal.syncEtaSeconds!, context.l10n)),
-                              style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                             ),
+                            if (wal.syncEtaSeconds != null && wal.syncEtaSeconds! > 0) ...[
+                              const SizedBox(height: OmiSpacing.xxs),
+                              Text(
+                                context.l10n.etaLabel(OmiDuration.compact(wal.syncEtaSeconds!, context.l10n)),
+                                style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                 ],
