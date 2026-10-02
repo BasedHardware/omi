@@ -246,6 +246,7 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE` | Refuse stale action-items list clients | backend | env | open | — | — | 1 | — | keep | — | unowned |
 | `ADMIN_KEY_AUTH_ENABLED` | Allow administrator-key authentication | backend | env | open | — | — | — | — | keep | — | unowned |
+| `CONVERSATION_SMART_MERGE_AUDIT_ENABLED` | Write the content-free smart-merge audit sibling inside the absorb transaction (unset = on; off or any unrecognized value = no gate read, no audit write) | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` | Incident stop for conversation-wide speaker resolution | backend | env | open | — | — | — | — | keep | — | unowned |
 | `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` | Incident stop for stored meeting context lookup | backend | env | open | — | — | — | — | keep | — | unowned |
 | `DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH` | Stop day-three re-engagement email | backend | env | inverted | false | false | false | — | keep | — | unowned |
@@ -328,6 +329,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CAPTURE_JEV_SHADOW_EXPIRY` — Shorten the Jev capture shadow hard deadline (fail: closed)
 - `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` — Global daily Jev capture shadow call budget (fail: closed)
 - `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` — Per-user daily Jev capture shadow call budget (fail: closed)
+- `CONVERSATION_SMART_MERGE_AUDIT_ENABLED` — Write the content-free smart-merge audit sibling inside the absorb transaction (unset = on; off or any unrecognized value = no gate read, no audit write) (fail: open)
 - `CONVERSATION_SMART_MERGE_MODE` — Fold a finished pendant conversation into its predecessor when Jev says same occasion (default merge; off|shadow|merge) (fail: open)
 - `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` — Limit smart merge to listed UIDs; empty admits every user (fail: closed)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
