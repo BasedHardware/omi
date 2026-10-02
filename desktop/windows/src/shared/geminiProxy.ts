@@ -8,11 +8,13 @@ export const GEMINI_PROXY_ACTIONS = [
 ] as const
 export type GeminiProxyAction = (typeof GEMINI_PROXY_ACTIONS)[number]
 
-// Wire values come from the generated attribution contract
-// (backend/config/desktop_gemini_attribution.json). `other` — not `linux` —
-// is the shared non-mac/non-Windows platform value so Python, Swift, and
-// TypeScript emit the identical bounded set.
-export type GeminiClientPlatform = 'windows' | 'macos' | 'other' | 'unknown'
+// Wire values for X-App-Platform. These are client identities the backend
+// resolver (journey_metrics_contract._PLATFORM_CLIENT_KIND) normalizes: the
+// terminal event's client_platform enum — {macos, windows, other, unknown} —
+// is the generated server-side contract, and 'linux' on the wire maps to
+// 'other' there via desktop_linux. Do not send 'other' from a client; the
+// resolver does not recognize it and would record client_platform: unknown.
+export type GeminiClientPlatform = 'windows' | 'macos' | 'linux' | 'unknown'
 
 export function geminiClientPlatform(platform: string | undefined | null): GeminiClientPlatform {
   switch (platform) {
@@ -21,7 +23,7 @@ export function geminiClientPlatform(platform: string | undefined | null): Gemin
     case 'darwin':
       return 'macos'
     case 'linux':
-      return 'other'
+      return 'linux'
     default:
       return 'unknown'
   }

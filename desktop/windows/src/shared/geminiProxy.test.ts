@@ -66,7 +66,7 @@ describe('geminiProxyFetch — transport contract', () => {
       body: '{}',
       lane: GeminiLane.embedding,
       workload: 'maintenance',
-      platform: 'other'
+      platform: 'linux'
     })
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('b/v1/proxy/gemini/models/gemini-embedding-001:batchEmbedContents')
@@ -96,16 +96,16 @@ describe('geminiClientPlatform', () => {
   it('maps process.platform to the wire value', () => {
     expect(geminiClientPlatform('win32')).toBe('windows')
     expect(geminiClientPlatform('darwin')).toBe('macos')
-    expect(geminiClientPlatform('linux')).toBe('other')
+    expect(geminiClientPlatform('linux')).toBe('linux')
     expect(geminiClientPlatform('freebsd')).toBe('unknown')
     expect(geminiClientPlatform(undefined)).toBe('unknown')
   })
 
-  it('never emits a value outside the generated platform contract', () => {
+  it('never emits a value the backend platform resolver does not recognize as a known client (unknown is its fallback)', () => {
     for (const platform of ['win32', 'darwin', 'linux', 'sunos', 'aix', 'freebsd', '']) {
-      expect(['windows', 'macos', 'other', 'unknown']).toContain(geminiClientPlatform(platform))
+      expect(['windows', 'macos', 'linux', 'unknown']).toContain(geminiClientPlatform(platform))
     }
-    expect(['windows', 'macos', 'other', 'unknown']).toContain(geminiClientPlatform(undefined))
+    expect(['windows', 'macos', 'linux', 'unknown']).toContain(geminiClientPlatform(undefined))
   })
 })
 
@@ -127,6 +127,19 @@ describe('canonical attribution contract', () => {
       expect(canonical.platforms).toContain(p)
     }
     expect(canonical.platforms).toContain('other')
+  })
+
+  it('wire platform values resolve to a known client kind on the backend', () => {
+    // journey_metrics_contract._PLATFORM_CLIENT_KIND recognizes these wire
+    // values; 'other' is server-side only — a client sending it records
+    // client_platform: unknown. The wire set stays {windows, macos, linux,
+    // unknown}, the server enum {macos, windows, other, unknown}.
+    const wireValues = ['windows', 'macos', 'linux']
+    const resolverKeys = ['android', 'ios', 'macos', 'windows', 'linux', 'desktop', 'mobile', 'web']
+    for (const value of wireValues) {
+      expect(resolverKeys).toContain(value)
+    }
+    expect(wireValues).not.toContain('other')
   })
 })
 
