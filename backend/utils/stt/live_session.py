@@ -9,9 +9,10 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
-from utils.stt.live_failure import PendingLiveFailover
+from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
+from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
+from utils.stt.live_metrics import MANAGED_LEGS_OPEN
 from utils.stt.live_reason import normalize_live_stt_reason
-from utils.stt.live_cost_health import CostObservation
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, bounded_language
@@ -331,6 +332,7 @@ class LiveChainSession:
             token = connecting_target.set(target)
             try:
                 socket, actual = await primary(), host.stt_service
+                record_managed_leg_handoff(socket)
             finally:
                 connecting_target.reset(token)
         else:
@@ -413,13 +415,16 @@ class LiveLegSocket(STTSocket):
         self.routing_endpoint = getattr(raw, 'routing_endpoint', None)
         self._health_language = bounded_language(session.receiver.host.language)
         self._cost_generations = health.cost_generations(self.routing_target, self._health_language)
-        self._cost_recorded = False
-        self._cost_observation: CostObservation | None = None
+        self.leg_outcome = LiveLegOutcome(
+            self.routing_target,
+            self._health_language,
+            getattr(getattr(session.receiver.host, 'request', None), 'uid', None),
+            self._cost_generations,
+            health.record_session,
+        )
         self._cost_text_seen = False
-        self._cost_censored_no_text = False
         self._target_death_recorded = False
         self._closing_for_health = False
-        self._closed_for_sends = False
         try:
             self._routing_active = target is not None and routing_on(
                 getattr(getattr(session.receiver.host, 'request', None), 'uid', None)
@@ -514,7 +519,7 @@ class LiveLegSocket(STTSocket):
             self._replay_failure_reason = reason
             self._replay_capacity_subtype = capacity_subtype
         self._dead = True
-        self.finish()
+        self._finish_transport()
 
     def retire_for_replay(self) -> None:
         # A failed epoch's accepted audio is being replayed elsewhere. Fence
@@ -526,12 +531,9 @@ class LiveLegSocket(STTSocket):
 
     @property
     def is_connection_dead(self) -> bool:
-        dead = self._dead or self.raw.is_connection_dead
-        if dead and not self._closing_for_health:
-            self._record_cost_outcome(True)
-        if dead and self._pending_selection is not None:
-            self._pending_selection.note_failure(self.typed_death_reason)
-        return dead
+        # Observing liveness never settles evidence. Only the serving owner
+        # knows whether this death caused failover or was found during teardown.
+        return self._dead or self.raw.is_connection_dead
 
     def record_target_death(self, reason: str) -> bool:
         target = self._routing_target_entry
@@ -557,6 +559,9 @@ class LiveLegSocket(STTSocket):
         if not self._open_gauge_released:
             self._open_gauge_released = True
             record_live_stt_socket_closed(self.service.value)
+            if self.leg_outcome.handed_off and not self.leg_outcome.transport_released:
+                self.leg_outcome.transport_released = True
+                MANAGED_LEGS_OPEN.labels(target=self.routing_target).dec()
 
     @property
     def death_reason(self) -> str | None:
@@ -573,16 +578,12 @@ class LiveLegSocket(STTSocket):
 
     @property
     def normalized_death_reason(self) -> str:
-        # First observation owns the immutable cause used by both telemetry paths.
-        return self._terminal_reason or normalize_live_stt_reason(self.typed_death_reason, self.death_reason)
-
-    @property
-    def cost_observation_recorded(self) -> bool:
-        return self._cost_observation is not None and self._cost_observation.recorded
-
-    @property
-    def cost_observation(self) -> CostObservation | None:
-        return self._cost_observation
+        # The serving decision owns the cause; observing raw liveness is pure.
+        return (
+            self.leg_outcome.reason
+            or self._terminal_reason
+            or normalize_live_stt_reason(self.typed_death_reason, self.death_reason)
+        )
 
     def set_selection_outcome(self, pending: PendingLiveFailover) -> None:
         self._pending_selection = pending
@@ -686,7 +687,7 @@ class LiveLegSocket(STTSocket):
         setattr(gate, 'process_audio', process_replay_capture)
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
-        if self._closed_for_sends:
+        if self._closing_for_health:
             return False
         if self.is_connection_dead:
             return False
@@ -713,7 +714,7 @@ class LiveLegSocket(STTSocket):
                     try:
                         self.raw.finish()
                     finally:
-                        self._record_cost_outcome(True)
+                        self._latch_failure()
                         self._release_open_gauge()
                     record_fallback(
                         component='vad',
@@ -751,9 +752,9 @@ class LiveLegSocket(STTSocket):
                 except Exception:
                     # A raised send is transport evidence unless the socket
                     # already owns a more specific bounded cause.
-                    self._record_cost_outcome(True, reason='connection_lost')
+                    self._latch_failure(reason='connection_lost')
                     self._dead = True
-                    self.finish()
+                    self._finish_transport()
                     return False
                 if sent is not True:
                     # False is a send symptom only while the raw socket still
@@ -763,8 +764,8 @@ class LiveLegSocket(STTSocket):
                         raw_dead = bool(self.raw.is_connection_dead)
                     except Exception:
                         raw_dead = True
-                    self._record_cost_outcome(True, reason='connection_lost' if raw_dead else 'send_failed')
-                    self.finish()
+                    self._latch_failure(reason='connection_lost' if raw_dead else 'send_failed')
+                    self._finish_transport()
                     self._dead = True
                     return False
             if output is not None and output.should_finalize:
@@ -775,7 +776,7 @@ class LiveLegSocket(STTSocket):
         except Exception:
             self._local_death_reason = 'send_failed'
             self._dead = True
-            self.finish()
+            self._finish_transport()
             return False
         if sent_spans and self._send_tracker is not None:
             self._send_tracker.send_path = 'managed_chain'
@@ -819,14 +820,13 @@ class LiveLegSocket(STTSocket):
     def finalize(self) -> None:
         self.raw.finalize()
 
-    def finish(self) -> None:
-        dead = self.is_connection_dead
-        self._censor_early_teardown(dead)
+    def _latch_failure(self, *, reason: str | None = None) -> None:
+        if self._terminal_reason is None:
+            self._terminal_reason = normalize_live_stt_reason(self.typed_death_reason, self.death_reason, reason)
+
+    def _finish_transport(self) -> None:
         self._closing_for_health = True
-        self._closed_for_sends = True
         try:
-            if self.is_connection_dead and self._pending_selection is not None:
-                self._pending_selection.note_failure(self.typed_death_reason)
             self.raw.finish()
         finally:
             self._check_no_text_deadline()
@@ -838,70 +838,34 @@ class LiveLegSocket(STTSocket):
                 self._record_transcript_outcome('no_text')
             elif self._transcript_outcome is None and self._routing_active:
                 self._health_close()
-            self._record_cost_outcome(dead)
             self._release_open_gauge()
 
-    def _record_cost_outcome(self, dead: bool, *, reason: str | None = None) -> None:
-        # A transport symptom created by owner-initiated teardown is not a
-        # serving death. Real pre-close deaths already have their latched cause.
-        if dead and self._closing_for_health and self._terminal_reason is None:
-            return
-        if dead and self._terminal_reason is None:
-            try:
-                self._terminal_reason = normalize_live_stt_reason(self.typed_death_reason, self.death_reason, reason)
-            except Exception:
-                self._terminal_reason = normalize_live_stt_reason(reason)
-        # Provider availability and actual text do not depend on VAD. Only
-        # audio/no-text evidence needs a minimum speech sample.
-        eligible = (
-            dead or self._cost_text_seen or (self._first_speech_at is not None and self._speech_ms_for_health >= 1000)
-        )
-        if not self._cost_recorded and eligible:
-            self._cost_recorded = True
-            outcome = 'failover' if dead else 'text' if self._cost_text_seen else 'no_text'
-            if not dead and self._cost_censored_no_text and not self._cost_text_seen:
-                return
-            try:
-                self._cost_observation = health.record_session(
-                    self.routing_target,
-                    self._health_language,
-                    outcome,
-                    self._cost_generations,
-                    getattr(getattr(self.session.receiver.host, 'request', None), 'uid', None),
-                    self._terminal_reason if dead else 'text' if self._cost_text_seen else 'no_text',
-                )
-            except Exception:
-                record_fallback(
-                    component='stt_selection',
-                    from_mode=self.service.value,
-                    to_mode=self.service.value,
-                    reason='config_incomplete',
-                    outcome='degraded',
-                )
-
-    def _censor_early_teardown(self, dead: bool) -> None:
-        if (
-            not self._closing_for_health
-            and not dead
-            and self._transcript_outcome is None
-            and self._first_speech_at is not None
-            and time.monotonic() - self._first_speech_at < max(1.0, float(os.getenv('STT_NO_TEXT_SECONDS', '30')))
-        ):
-            self._cost_censored_no_text = True
-
     def mark_owner_teardown(self) -> None:
-        """Fence later transport symptoms while preserving final audio sends."""
-        dead = self.is_connection_dead
-        self._censor_early_teardown(dead)
-        self._closing_for_health = True
+        if self.leg_outcome.owner_closing:
+            return
+        # Snapshot the already-published death latch before the owner fence or
+        # any close/await. Provider callbacks run on this same serving loop.
+        # A pre-existing death stays evidence even if the 1s monitor lost the race.
+        if not self.leg_outcome.claimed and self.is_connection_dead:
+            self._latch_failure()
+            settle_terminal_socket(self, self.service.value, self.normalized_death_reason)
+        self.leg_outcome.owner_closing = True
+
+    def finish(self) -> None:
+        if not self.leg_outcome.claimed:
+            self.mark_owner_teardown()
+        try:
+            self._finish_transport()
+        finally:
+            if self._pending_selection is not None:
+                self._pending_selection.note_failure(None)
+            self.leg_outcome.close(self._cost_text_seen)
 
     async def drain_and_close(self) -> None:
-        dead = self.is_connection_dead
-        self._censor_early_teardown(dead)
+        if not self.leg_outcome.claimed:
+            self.mark_owner_teardown()
         self._closing_for_health = True
-        self._closed_for_sends = True
         try:
             await st.drain_stt_socket(self.raw)
         finally:
-            self._record_cost_outcome(dead)
             self.finish()

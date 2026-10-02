@@ -10,7 +10,7 @@ from functools import lru_cache
 import pytest
 
 from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
-from utils.stt import live_chain, live_health, live_router, streaming as st
+from utils.stt import live_failure, live_chain, live_health, live_router, streaming as st
 from utils.stt.live_cost_health import PREFIX
 from utils.stt.live_gate import GateState, begin_trial, transition, gate_rate
 from utils.stt.live_signal import provider_observation
@@ -18,17 +18,18 @@ from utils.stt.live_metrics import COST_STAGE, COST_STATE_KNOWN, COST_EVENTS, CO
 from tests.unit.test_live_cost_router import MemoryRedis, controls
 
 
+@pytest.mark.parametrize('sessions', [2000, pytest.param(20000, marks=pytest.mark.slow)])
 @pytest.mark.parametrize('floor', [0.05, 0.07, 0.10])
 @pytest.mark.parametrize('seed', range(20))
-def test_audio_noise_floor_cannot_bench_provider(floor, seed):
+def test_audio_noise_floor_cannot_bench_provider(floor, seed, sessions):
     rng, state = random.Random(seed), GateState()
-    for n in range(20000):
+    for n in range(sessions):
         outcome = 'no_text' if rng.random() < floor else 'text'
         failed = provider_observation(outcome)
         if failed is not None:
             state = transition(state, failed, n, witness=f'{n:016x}')
         assert state.stage == 100
-    assert state.failures == 0 and 17000 < state.n <= 20000
+    assert state.failures == 0 and 0.85 * sessions < state.n <= sessions
 
 
 @pytest.mark.parametrize(
@@ -135,9 +136,10 @@ def test_no_text_does_not_fill_trial_or_mask_later_provider_failure(monkeypatch)
     leg.send(b'\x01\x00' * 16000)
     leg._first_speech_at -= 60
     leg._check_no_text_deadline()
-    assert not leg._cost_recorded
+    assert not leg.leg_outcome.settled
     leg._replay_failure_reason = 'modulate_serve_error'
     leg._dead = True
+    live_failure.settle_terminal_socket(leg, 'modulate', 'connection_lost')
     leg.finish()
     leg.finish()
     assert health._cost_local[('modulate-velma-2', 'all')].failures == 1
@@ -150,6 +152,7 @@ def test_deadline_only_failover_is_censored_even_with_vad_speech():
     leg.send(b'\x01\x00' * 16000)
     leg._replay_failure_reason = 'first_text_deadline'
     leg._dead = True
+    live_failure.settle_terminal_socket(leg, 'modulate', 'connection_lost')
     leg.finish()
     assert not live_chain.health._cost_local
 

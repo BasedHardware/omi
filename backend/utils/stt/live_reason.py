@@ -18,6 +18,8 @@ LIVE_STT_FAILURE_REASONS = frozenset(
         'soniox_no_audio_teardown',
         'soniox_rotation',
         'capacity_full',
+        'allocation_rejected',
+        'capability_mismatch',
         'first_text_deadline',
         'empty_streak',
         'soniox_invalid_hint',

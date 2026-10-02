@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -13,10 +12,8 @@ from tests.unit.test_live_health_reason_reconciliation import ServingSocket, obs
 from tests.unit.test_live_routing_health import SpeechGate
 from tests.unit.test_stt_session_failover import FakeSocket, _receiver_with_dead_socket
 from utils.metrics import OMI_FALLBACK_TOTAL
-from utils.stt import live_chain, live_session, streaming as st
+from utils.stt import live_failure, live_chain, live_session, streaming as st
 from utils.stt.soniox import SafeSonioxSocket
-from utils.stt import live_failure
-from utils.stt.live_failure import _SERVE_FAILURE_REASONS
 from config.live_stt_registry import assigned
 from utils.stt.live_gate import GateState
 from utils.stt.live_cost_health import PREFIX
@@ -44,8 +41,8 @@ class ProviderWebSocket:
         return frames()
 
 
-def managed_leg(receiver, raw, *, family='modulate', gate=None):
-    receiver.host.request.uid = 'synthetic-health-witness'
+def managed_leg(receiver, raw, *, family='modulate', gate=None, uid='synthetic-health-witness'):
+    receiver.host.request.uid = uid
     receiver.host.stt_service = st.STTService(family)
     receiver.host.stt_model = 'velma-2' if family == 'modulate' else family
     return live_session.LiveLegSocket(
@@ -82,12 +79,12 @@ async def test_n_real_provider_deaths_reconcile_through_managed_leg_and_receiver
     fallbacks_before = fallback_value(reason, settlement)
     other_reason = 'connection_lost' if reason == 'modulate_serve_error' else 'modulate_serve_error'
     other_before = observed('modulate-velma-2', 'provider_failure', other_reason)
-    for _ in range(count):
+    for index in range(count):
         receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket())
         ws = ProviderWebSocket()
         raw = st.SafeModulateSocket(ws, lambda _segments: None, asyncio.get_running_loop())
         gate = None if speech is None else SpeechGate(is_speech=speech)
-        leg = managed_leg(receiver, raw, gate=gate)
+        leg = managed_leg(receiver, raw, gate=gate, uid=f'synthetic-{index}')
         receiver.stt_socket = leg
         try:
             if samples:
@@ -132,7 +129,7 @@ def test_short_or_unscored_normal_close_is_never_a_provider_failure(monkeypatch,
     leg.finish()
     leg.finish()
     assert observed('modulate-velma-2', 'success', 'text') - before == int(text)
-    assert not leg._cost_recorded or text
+    assert leg.leg_outcome.settled
     assert all(state.failures == 0 for state in live_chain.health._cost_local.values())
 
 
@@ -152,7 +149,7 @@ async def test_soniox_close_transport_symptom_after_owner_teardown_is_not_a_fail
 
 
 @pytest.mark.asyncio
-async def test_last_soniox_death_has_health_evidence_without_a_failover_hop(monkeypatch):
+async def test_last_soniox_death_settles_health_and_exhausted_fallback_together(monkeypatch):
     receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
     raw = ServingSocket()
     leg = managed_leg(receiver, raw, family='soniox')
@@ -163,6 +160,7 @@ async def test_last_soniox_death_has_health_evidence_without_a_failover_hop(monk
     assert leg.is_connection_dead
     assert not await receiver._failover_stt_socket()
     assert receiver._pending_live_failover is None
+    live_failure.settle_terminal_socket(leg, 'soniox', 'connection_lost')
     leg.finish()
     assert observed('soniox', 'provider_failure', 'connection_lost') == before + 1
 
@@ -190,7 +188,7 @@ async def test_accepted_dead_leg_and_connect_rejection_are_one_health_observatio
     assert service == st.STTService.soniox
     assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
     assert observed('modulate-velma-2', 'provider_failure', 'provider_5xx') == connect_before
-    assert leg.cost_observation_recorded
+    assert leg.leg_outcome.settled
     socket.finish()
 
 
@@ -216,6 +214,7 @@ async def test_unaccepted_connect_failure_still_counts(monkeypatch):
     [
         ({'error_code': 413, 'error_type': 'max_duration_reached'}, 'soniox_rotation'),
         ({'error_code': 400, 'error_message': 'No audio received'}, 'soniox_idle_timeout'),
+        ({'error_code': 408, 'error_type': 'request_timeout'}, 'soniox_request_timeout'),
         ({'finished': True}, None),
     ],
 )
@@ -242,55 +241,60 @@ async def test_real_soniox_rotation_idle_and_finished_never_become_transport_fai
         await raw.drain_and_close()
 
 
-@pytest.mark.asyncio
-async def test_real_soniox_408_is_censored_but_keeps_serving_circuit_classification(monkeypatch):
+@pytest.mark.parametrize('early_signal', ['text', 'no_text_deadline'])
+def test_early_transcript_or_deadline_does_not_consume_the_death_observation(monkeypatch, early_signal):
     receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
-    receiver.host.language = 'ko'
-    ws = ProviderWebSocket()
-    raw = SafeSonioxSocket(ws, lambda _segments: None, asyncio.get_running_loop())
-    leg = managed_leg(receiver, raw, family='soniox', gate=SpeechGate())
-    await ws.inbound.put(
-        {
-            'error_code': 408,
-            'error_type': 'request_timeout',
-            'error_message': 'Request timeout.',
-        }
-    )
-    before_failures = observed('soniox', 'provider_failure', 'connection_lost')
-    before_censored = observed('soniox', 'censored', 'soniox_request_timeout')
-    try:
-        await raw._recv_task
-        assert raw.typed_death_reason == 'soniox_request_timeout'
-        assert leg.is_connection_dead
-        assert leg.normalized_death_reason == 'soniox_request_timeout'
-        await leg.drain_and_close()
-        assert observed('soniox', 'provider_failure', 'connection_lost') == before_failures
-        assert observed('soniox', 'censored', 'soniox_request_timeout') == before_censored + 1
-        # Before this typed reason, it normalized to connection_lost, which is
-        # in the same terminal serving set that opens the circuit on exhaustion.
-        assert 'soniox_request_timeout' in _SERVE_FAILURE_REASONS
-    finally:
-        await raw.drain_and_close()
+    raw = ServingSocket()
+    leg = managed_leg(receiver, raw, gate=SpeechGate())
+    assert leg.send(b'\x01\x00' * 8000)
+    if early_signal == 'text':
+        leg.note_selection_transcript([{'text': 'synthetic'}])
+    else:
+        leg._first_speech_at -= 60
+        leg._check_no_text_deadline()
+    assert not leg.leg_outcome.settled
+    before = observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error')
+    raw.die('modulate_serve_error', 'synthetic serve error')
+    assert leg.is_connection_dead
+    live_failure.settle_terminal_socket(leg, 'modulate', 'connection_lost')
+    leg.finish()
+    assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
+    assert leg.leg_outcome.settled
 
 
 @pytest.mark.asyncio
-async def test_terminal_soniox_408_still_opens_the_serving_circuit(monkeypatch):
-    opened = []
+@pytest.mark.parametrize('changed', [('all',), ('en',), ('all', 'en')])
+@pytest.mark.parametrize('in_trial', [True, False])
+async def test_connect_death_counts_once_and_reaches_new_gate_generation(monkeypatch, changed, in_trial):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
+    raw = ServingSocket()
+    leg = managed_leg(receiver, raw)
+    uid = next(str(i) for i in range(1000) if assigned(str(i), 'stt-reentry:modulate-velma-2', 5) == in_trial)
+    receiver.host.request.uid = uid
+    leg.leg_outcome.uid = uid
+    for language in changed:
+        live_chain.health._cost_cached[('modulate-velma-2', language)] = GateState(stage=5, generation=1)
+    raw.die('modulate_serve_error', 'synthetic serve error')
+    before = observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error')
     monkeypatch.setattr(
-        live_failure, '_open_serving_provider_circuit', lambda reason, provider: opened.append((reason, provider))
+        live_chain, 'fallback_socket_is_serving', AsyncMock(side_effect=lambda socket: not socket.is_connection_dead)
     )
-    session = SimpleNamespace(stt_terminal_failure=False, active=True, close_code=1000)
-    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
-    await live_failure.terminate_live_stt_session(
-        websocket,
-        session,
-        failure=live_failure.live_stt_upstream_failure('soniox'),
-        reason='soniox_request_timeout',
-        platform='ios',
+    _, service = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.modulate,
+        connect_primary=AsyncMock(return_value=leg),
+        callbacks={st.STTService.soniox: AsyncMock(return_value=FakeSocket())},
+        failed=set(),
+        models=['modulate-velma-2', 'soniox'],
+        routing_uid=uid,
+        routing_language='en',
     )
-    assert opened == [('soniox_request_timeout', 'soniox')]
-    assert session.close_code == 1011
-    websocket.close.assert_awaited_once_with(code=1011, reason='transcription_service_unavailable')
+    assert service == st.STTService.soniox
+    assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
+    for language in ('all', 'en'):
+        state = live_chain.health._cost_local.get(('modulate-velma-2', language), GateState())
+        expected = int(language not in changed or in_trial)
+        assert state.n == state.failures == expected
+    assert leg.leg_outcome.generations is None  # No supplementary session writer exists.
 
 
 class _ClientFrames:
@@ -398,13 +402,16 @@ async def test_soniox_korean_no_frame_disconnect_reconnect_loop_is_censored(monk
 
 
 @pytest.mark.asyncio
-async def test_soniox_transport_death_observed_before_client_disconnect_counts_once(monkeypatch):
+@pytest.mark.parametrize('serving_decision', [False, True])
+async def test_latched_death_before_client_disconnect_counts_without_monitor_claim(monkeypatch, serving_decision):
     raw = _ReceiverRawSocket()
     observed_while_connected = []
 
     def provider_died():
         raw.die(raw='synthetic provider transport close')
         observed_while_connected.append(receiver.stt_socket.is_connection_dead)
+        if serving_decision:
+            live_failure.settle_terminal_socket(receiver.stt_socket, 'soniox', 'connection_lost')
 
     receiver = _receiver_for_close(
         monkeypatch,
@@ -416,117 +423,3 @@ async def test_soniox_transport_death_observed_before_client_disconnect_counts_o
     await receiver.receive_data()
     assert observed_while_connected == [True]
     assert observed('soniox', 'provider_failure', 'connection_lost') == before + 1
-
-
-@pytest.mark.parametrize('early_signal', ['text', 'no_text_deadline'])
-def test_early_transcript_or_deadline_does_not_consume_the_death_observation(monkeypatch, early_signal):
-    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
-    raw = ServingSocket()
-    leg = managed_leg(receiver, raw, gate=SpeechGate())
-    assert leg.send(b'\x01\x00' * 8000)
-    if early_signal == 'text':
-        leg.note_selection_transcript([{'text': 'synthetic'}])
-    else:
-        leg._first_speech_at -= 60
-        leg._check_no_text_deadline()
-    assert not leg.cost_observation_recorded
-    before = observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error')
-    raw.die('modulate_serve_error', 'synthetic serve error')
-    assert leg.is_connection_dead
-    leg.finish()
-    assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
-    assert leg.cost_observation_recorded
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('changed', [('all',), ('en',), ('all', 'en')])
-@pytest.mark.parametrize('in_trial', [True, False])
-async def test_connect_death_counts_once_and_reaches_new_gate_generation(monkeypatch, changed, in_trial):
-    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
-    raw = ServingSocket()
-    leg = managed_leg(receiver, raw)
-    uid = next(str(i) for i in range(1000) if assigned(str(i), 'stt-reentry:modulate-velma-2', 5) == in_trial)
-    receiver.host.request.uid = uid
-    for language in changed:
-        live_chain.health._cost_cached[('modulate-velma-2', language)] = GateState(stage=5, generation=1)
-    raw.die('modulate_serve_error', 'synthetic serve error')
-    before = observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error')
-    monkeypatch.setattr(
-        live_chain, 'fallback_socket_is_serving', AsyncMock(side_effect=lambda socket: not socket.is_connection_dead)
-    )
-    _, service = await live_chain.connect_configured_chain(
-        primary_service=st.STTService.modulate,
-        connect_primary=AsyncMock(return_value=leg),
-        callbacks={st.STTService.soniox: AsyncMock(return_value=FakeSocket())},
-        failed=set(),
-        models=['modulate-velma-2', 'soniox'],
-        routing_uid=uid,
-        routing_language='en',
-    )
-    assert service == st.STTService.soniox
-    assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
-    for language in ('all', 'en'):
-        state = live_chain.health._cost_local.get(('modulate-velma-2', language), GateState())
-        expected = int(language not in changed or in_trial)
-        assert state.n == state.failures == expected
-    assert leg.cost_observation.generations == {'all': 0, 'en': 0}
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('remote_generation', [0, 1])
-@pytest.mark.parametrize('write_order', ['forward', 'reverse', 'concurrent'])
-@pytest.mark.parametrize('promote', [False, True])
-async def test_session_and_supplementary_connect_writes_count_once_in_redis(
-    monkeypatch, remote_generation, write_order, promote
-):
-    class YieldingRedis(MemoryRedis):
-        async def get(self, key):
-            await asyncio.sleep(0)
-            return await super().get(key)
-
-        async def eval(self, *args):
-            await asyncio.sleep(0)
-            return await super().eval(*args)
-
-    redis = YieldingRedis()
-    pod = live_chain.health
-    monkeypatch.setattr(pod, '_client', redis)
-    # Use the real bounded Redis writer with a controlled session/connect task
-    # order: the newer epoch may be visible only remotely, not yet in this pod.
-    tasks = []
-    monkeypatch.setattr(pod, 'schedule', tasks.append)
-    uid = next(str(i) for i in range(1000) if assigned(str(i), 'stt-reentry:modulate-velma-2', 5))
-    for language in ('all', 'en'):
-        state = GateState(
-            stage=5 if promote else 100,
-            n=29 if promote else 0,
-            generation=remote_generation,
-            trial_users=tuple((f'{i:016x}', 1, 0) for i in range(29)) if promote else (),
-        )
-        redis.data[f'{PREFIX}:modulate-velma-2:{language}'] = json.dumps(state.encode())
-        if promote:
-            pod._cost_local[('modulate-velma-2', language)] = state
-    before = observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error')
-    receipt = pod.record_session('modulate-velma-2', 'en', 'failover', {'all': 0, 'en': 0}, uid, 'modulate_serve_error')
-    pod.record_connect_failure('modulate-velma-2', 'en', uid, 'modulate_serve_error', observed=receipt)
-    assert len(tasks) == 2
-    if promote:
-        assert all(state.stage == 25 and state.n == 0 for state in pod._cost_local.values())
-    assert observed('modulate-velma-2', 'provider_failure', 'modulate_serve_error') == before + 1
-    if write_order == 'reverse':
-        tasks.reverse()
-    try:
-        if write_order == 'concurrent':
-            await asyncio.gather(*tasks)
-        else:
-            for task in tasks:
-                await task
-    finally:
-        for task in tasks:
-            task.close()
-    for language in ('all', 'en'):
-        state = GateState.decode(json.loads(redis.data[f'{PREFIX}:modulate-velma-2:{language}']))
-        if promote:
-            assert state.stage == 25 and state.n == 0
-        else:
-            assert state.n == state.failures == 1
