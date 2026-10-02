@@ -23,6 +23,8 @@ import sys
 import tempfile
 from typing import Any, Dict, List
 import unittest
+from unittest import mock
+
 
 # Dynamically import goals_digest from examples
 script_path = Path(__file__).resolve().parent.parent / "examples" / "goals_digest.py"
@@ -249,7 +251,10 @@ class TestGoalsDigest(unittest.TestCase):
         target_file = self.dir_path / "actual.md"
         target_file.write_text("# Target", encoding="utf-8")
         link_file = self.dir_path / "symlink.md"
-        os.symlink(target_file, link_file)
+        try:
+            os.symlink(target_file, link_file)
+        except (OSError, NotImplementedError):
+            self.skipTest("Symlink creation is not permitted on this environment/platform.")
 
         with self.assertRaises(ValueError) as ctx:
             gd.write_digest("# New Content", link_file, force=True)
@@ -271,6 +276,16 @@ class TestGoalsDigest(unittest.TestCase):
         gd.write_digest("# Brand New Content", target, force=True)
         self.assertEqual(target.read_text(encoding="utf-8"), "# Brand New Content")
 
+    def test_atomic_write_leaves_existing_file_unchanged_on_failure(self) -> None:
+        target = self.dir_path / "critical.md"
+        target.write_text("unmodified original content", encoding="utf-8")
+
+        with mock.patch("os.replace", side_effect=OSError("Disk write failure")):
+            with self.assertRaises(OSError):
+                gd.write_digest("# corrupted content", target, force=True)
+
+        self.assertEqual(target.read_text(encoding="utf-8"), "unmodified original content")
+
     def test_type_breakdown_aggregation(self) -> None:
         goals = [
             {"id": "1", "goal_type": "scale", "current_value": 5, "target_value": 10},
@@ -288,7 +303,9 @@ class TestGoalsDigest(unittest.TestCase):
         p.write_text(json.dumps(SAMPLE_GOALS_PAGE1), encoding="utf-8")
 
         saved_argv = sys.argv
+        saved_stderr = sys.stderr
         try:
+            sys.stderr = io.StringIO()
             sys.argv = [
                 "goals_digest.py",
                 str(p),
@@ -302,9 +319,12 @@ class TestGoalsDigest(unittest.TestCase):
                 "Custom Test Digest",
             ]
             gd.main()
+            stderr_msg = sys.stderr.getvalue()
         finally:
+            sys.stderr = saved_stderr
             sys.argv = saved_argv
 
+        self.assertIn("Exported digest for 3 goal(s)", stderr_msg)
         self.assertTrue(out.exists())
         content = out.read_text(encoding="utf-8")
         self.assertIn("# Custom Test Digest", content)
@@ -412,6 +432,94 @@ class TestGoalsDigest(unittest.TestCase):
         }
         prog = gd.calculate_progress(goal)
         self.assertAlmostEqual(prog, 50.0, places=1)
+
+    def test_paused_status_treated_as_inactive(self) -> None:
+        goal = {
+            "id": "paused_1",
+            "title": "Paused Guitar Lessons",
+            "status": "paused",
+            "is_active": True,
+            "current_value": 100,
+            "target_value": 100,
+        }
+        prog = gd.calculate_progress(goal)
+        cat, label = gd.determine_status(goal, prog)
+        self.assertEqual(cat, "inactive")
+        self.assertEqual(label, "⚪ Inactive")
+
+    def test_qualitative_goals_detection_and_formatting(self) -> None:
+        # Compatibility aliases: metric is None, but backend filled goal_type='scale', current=0, target=0
+        qual_goal = {
+            "id": "qual_1",
+            "title": "Build deeper relationships",
+            "metric": None,
+            "goal_type": "scale",
+            "current_value": 0,
+            "target_value": 0,
+            "min_value": 0,
+            "max_value": 10,
+            "is_active": True,
+            "status": "in_progress",
+        }
+        self.assertTrue(gd.is_qualitative_goal(qual_goal))
+        self.assertEqual(gd.resolve_goal_type(qual_goal), "qualitative")
+        prog = gd.calculate_progress(qual_goal)
+        self.assertEqual(prog, 0.0)
+        cat, label = gd.determine_status(qual_goal, prog)
+        self.assertEqual(cat, "active")
+        self.assertEqual(label, "🟢 Active")
+
+        digest = gd.generate_markdown_digest([qual_goal])
+        self.assertIn("| `qualitative` | 1 | 0 (0.0%) |", digest)
+        self.assertIn("| 🟢 Active | Build deeper relationships | `qualitative` | [........] 0.0% | - |", digest)
+
+        # When qualitative goal is completed
+        completed_qual = dict(qual_goal, status="completed")
+        self.assertEqual(gd.calculate_progress(completed_qual), 100.0)
+        cat_c, label_c = gd.determine_status(completed_qual, 100.0)
+        self.assertEqual(cat_c, "achieved")
+        self.assertEqual(label_c, "✅ Achieved")
+
+    def test_numeric_goal_with_target_above_default_max_value(self) -> None:
+        goal = {
+            "id": "marathon",
+            "title": "Marathon training distance",
+            "goal_type": "numeric",
+            "current_value": 57.0,
+            "target_value": 100.0,
+            "min_value": 0.0,
+            "max_value": 10.0,  # CLI default max_value
+        }
+        prog = gd.calculate_progress(goal)
+        # Must be 57.0%, NOT capped at (10 / 100) * 100 = 10.0%
+        self.assertAlmostEqual(prog, 57.0, places=1)
+
+    def test_target_cell_pipe_and_newline_sanitization(self) -> None:
+        malformed_goal = {
+            "id": "dirty_vals",
+            "title": "Piped Values Goal",
+            "goal_type": "numeric",
+            "current_value": "50 | evil\nnewline",
+            "target_value": "100 | hack\r\nline",
+            "unit": "km | extra",
+        }
+        digest = gd.generate_markdown_digest([malformed_goal])
+        for line in digest.splitlines():
+            if "Piped Values Goal" in line:
+                # Should not have raw unescaped pipes beyond the standard markdown table columns
+                raw_pipes = [c for i, c in enumerate(line) if c == "|" and (i == 0 or line[i - 1] != "\\")]
+                self.assertEqual(len(raw_pipes), 7)
+                self.assertIn("50 \\| evil newline / 100 \\| hack line km \\| extra", line)
+
+    def test_umask_permissions_applied_to_output_file(self) -> None:
+        out = self.dir_path / "umask_test.md"
+        gd.write_digest("# Umask Test", out, force=True)
+        self.assertTrue(out.exists())
+        current_umask = os.umask(0)
+        os.umask(current_umask)
+        expected_mode = 0o666 & ~current_umask
+        actual_mode = out.stat().st_mode & 0o777
+        self.assertEqual(actual_mode, expected_mode)
 
 
 if __name__ == "__main__":
