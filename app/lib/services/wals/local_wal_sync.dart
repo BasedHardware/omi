@@ -195,6 +195,9 @@ class LocalWalSyncImpl implements LocalWalSync {
   String? _activeRecordingSessionId;
   String? _conversationStampRecordingId;
 
+  /// The recording id copied onto new WALs; it outlives the recording until the next one binds.
+  String? get activeRecordingSessionId => _activeRecordingSessionId;
+
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
     _activeRecordingSessionId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
