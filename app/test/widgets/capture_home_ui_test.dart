@@ -340,6 +340,7 @@ void main() {
 
   group('pendant disconnect', () {
     testWidgets('a pendant that drops mid-capture shows Disconnected, not nothing', (tester) async {
+      final semantics = tester.ensureSemantics();
       final device = _Device();
       await pump(tester, const ConversationCaptureWidget(showsCall: true),
           capture: _Capture(_Live.pendant), device: device);
@@ -375,14 +376,16 @@ void main() {
       device.reconnect();
       await tester.pump();
       expect(find.byType(OmiSpinner), findsNothing);
-      expect(
-          find.descendant(
-              of: find.byKey(const ValueKey('pendant_dropped_status')), matching: find.textContaining(en.connected)),
-          findsOneWidget);
+      final connected = find.descendant(
+          of: find.byKey(const ValueKey('pendant_dropped_status')), matching: find.textContaining(en.connected));
+      expect(connected, findsOneWidget);
+      // The line is a live region, so a screen reader announces the change.
+      expect(tester.getSemantics(connected), containsSemantics(isLiveRegion: true));
       await tester.tap(find.text(en.gotIt));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.text(en.pendantLostConnection), findsNothing);
+      semantics.dispose();
     });
 
     testWidgets('a paired pendant that was never capturing stays hidden', (tester) async {
