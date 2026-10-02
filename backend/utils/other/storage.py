@@ -935,7 +935,14 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
                 deleted_batch_paths.add(blob.name)
 
 
-def list_audio_chunks(uid: str, conversation_id: str, *, timeout: Optional[float] = None) -> List[Dict[str, Any]]:
+def list_audio_chunks(
+    uid: str,
+    conversation_id: str,
+    *,
+    timeout: Optional[float] = None,
+    retry: Any = None,
+    deadline: Optional[float] = None,
+) -> List[Dict[str, Any]]:
     """
     List all audio chunks for a conversation.
 
@@ -947,11 +954,13 @@ def list_audio_chunks(uid: str, conversation_id: str, *, timeout: Optional[float
     blobs = (
         bucket.list_blobs(prefix=prefix)
         if timeout is None
-        else bucket.list_blobs(prefix=prefix, timeout=timeout, retry=None)
+        else bucket.list_blobs(prefix=prefix, timeout=timeout, retry=retry, page_size=1000)
     )
 
     chunks: List[Dict[str, Any]] = []
-    for blob in blobs:
+    for index, blob in enumerate(blobs):
+        if deadline is not None and (time.monotonic() >= deadline or index >= 10000):
+            raise TimeoutError('speaker audio listing budget exhausted')
         # Extract timestamp from filename
         # Supports single-chunk: '1234567890.123.opus', '1234567890.123.opus.enc', etc.
         # Supports batch: '1234567890.123-1234567900.123.batch.bin', '1234567890.123.batch.enc'
@@ -1081,35 +1090,18 @@ def download_audio_chunks_and_merge(
     listed_chunks: Optional[List[Dict[str, Any]]] = None,
     chunk_loader: Optional[Callable[[str], bytes | None]] = None,
 ) -> bytes:
-    """
-    Download and merge audio chunks on-demand, handling mixed encryption states.
-    Downloads chunks in parallel.
-    Normalizes all chunks to unencrypted PCM format for consistent merging.
-    Supports both single-chunk blobs and batch blobs (from upload_audio_chunks_batch).
+    """Merge selected timestamps with main's format priority and gap semantics.
 
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
-        timestamps: List of chunk timestamps to merge
-        fill_gaps: If True, insert silence (zero bytes) between chunks to maintain
-                   continuous time-aligned audio. Default True.
-        sample_rate: Audio sample rate in Hz (default 16000)
-
-    Returns:
-        Merged audio bytes (PCM16)
+    Batch ranges resolve selected timestamps. A supplied listing avoids repeated
+    I/O; a supplied loader owns the shared semaphore and invocation budget.
     """
 
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
 
-    # Resolve actual GCS paths — needed to find batch blobs whose filenames
-    # contain timestamp ranges instead of single timestamps
     actual_chunks = list_audio_chunks(uid, conversation_id) if listed_chunks is None else listed_chunks
-    ts_set = {round(ts, 3) for ts in timestamps}
 
-    # Build batch blob map: for batch blobs, track which timestamps they cover
-    batch_paths: Dict[str, Dict[str, Any]] = {}  # path -> chunk_info (deduplicate downloads)
-    ts_to_batch_path: Dict[float, str] = {}  # timestamp -> batch_path (for timestamps inside batch range)
-    single_chunk_timestamps: List[float] = []  # timestamps that have individual blobs
+    batch_paths: Dict[str, Dict[str, Any]] = {}
+    ts_to_batch_path: Dict[float, str] = {}
 
     for chunk in actual_chunks:
         if chunk.get('is_batch'):
@@ -1130,8 +1122,6 @@ def download_audio_chunks_and_merge(
             for ts in timestamps:
                 if batch_start <= round(ts, 3) <= batch_end:
                     ts_to_batch_path[round(ts, 3)] = path
-        elif round(chunk['timestamp'], 3) in ts_set:
-            single_chunk_timestamps.append(chunk['timestamp'])
 
     def _download_and_decode_blob(path: str) -> bytes | None:
         if chunk_loader is not None:
@@ -1183,7 +1173,6 @@ def download_audio_chunks_and_merge(
         logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
         return (timestamp, None)
 
-    # Download data with bounded concurrency (sliding window + global semaphore, #7387)
     chunk_results: Dict[float, bytes] = {}
 
     individual_timestamps = [ts for ts in timestamps if round(ts, 3) not in ts_to_batch_path]

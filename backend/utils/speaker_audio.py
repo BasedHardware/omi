@@ -9,7 +9,12 @@ from typing import Optional
 
 from utils.metrics import OMI_SPEAKER_CLIP_COVERAGE_TOTAL
 from utils.other import storage
-from utils.other.audio_chunks import AudioChunkReadSession, MAX_SPEAKER_DOWNLOADS, iter_audio_chunk_pcm
+from utils.other.audio_chunks import (
+    AudioChunkReadSession,
+    MAX_SPEAKER_DOWNLOADS,
+    iter_audio_chunk_pcm,
+    chunk_start,
+)
 
 MAX_SPEAKER_CLIP_SECONDS = 12.0
 MAX_SPEAKER_CLIP_BLOBS = MAX_SPEAKER_DOWNLOADS
@@ -27,11 +32,9 @@ def legacy_speaker_clip_pcm(
     timestamps: Optional[list[float]] = None,
     caller: str = 'unknown',
 ) -> Optional[bytes]:
-    """Return real PCM for a short absolute window, without inventing samples.
+    """Strict spans prove coverage; uncertain timestamps retain main's exact merger.
 
-    Filename-only starts have +/-0.5ms uncertainty; uncovered boundary samples
-    within that tolerance are trimmed, never padded. Span metadata is exact.
-    Unverified batches use the existing merger, not a claim of strict coverage.
+    Both policies share one bounded session. Exhaustion never changes policy.
     """
     caller = caller if caller in CLIP_CALLERS else 'unknown'
 
@@ -77,31 +80,38 @@ def legacy_speaker_clip_pcm(
         offset = round((start - min(relevant)) * sample_rate)
         return merged[max(0, offset) * 2 : max(0, offset + needed) * 2] or None
 
-    if ordered:
-        unverified = False
-        for chunk in session.chunks:
-            if not chunk.get('is_batch') or chunk.get('span'):
-                continue
-            key = chunk['path'].split('/')[-1].split('.batch.', 1)[0]
+    # Any selected uncertain object requires main's policy for this window.
+    # Include batches by their requested timestamp range, as the merger does.
+    selected = []
+    relevant_set = {round(ts, 3) for ts in relevant}
+    for chunk in session.chunks:
+        if chunk.get('is_batch'):
+            key = storage._strip_extension(chunk['path'].split('/')[-1])
             bounds = [float(value) for value in key.split('-', 1)]
-            if any(bounds[0] <= round(ts, 3) <= bounds[-1] for ts in relevant):
-                unverified = True
-                break
-        if unverified:
-            pcm = main_clip(session.fetch)
-            if session.limit_hit:
-                pcm = main_clip(session.compatibility_fetch)
-            reason = 'download_limit' if session.compatibility_escape else 'unverified_batch' if pcm else session.reason
-            record('compatibility' if pcm else 'missing', reason)
-            return pcm or None
+            matches = any(bounds[0] <= round(ts, 3) <= bounds[-1] for ts in relevant)
+        else:
+            matches = round(chunk['timestamp'], 3) in relevant_set
+        if matches:
+            selected.append(chunk)
+    if any(not chunk.get('span') for chunk in selected):
+        pcm = main_clip(session.fetch)
+        if session.limit_hit or not session.in_budget():
+            record('missing', 'download_limit')
+            return None
+        record('compatibility' if pcm else 'missing', 'uncertain_timing' if pcm else session.reason)
+        return pcm
+
+    # Main must have selected audio before strict placement can improve it.
+    # In particular, do not recover an outlasting predecessor main skipped.
+    if not relevant:
+        record('missing', 'missing_blob')
+        return None
 
     def wanted(blob_start: float, next_start: Optional[float]) -> bool:
-        return blob_start < end + 0.000501
+        return blob_start < end and any(chunk_start(c) == blob_start for c in selected)
 
     uncovered = [(0, needed)]
     result = bytearray(needed * 2)
-    tolerance = round(0.0005 * sample_rate)
-    uncertain = []
     for blob_start, pcm in iter_audio_chunk_pcm(
         uid,
         conversation_id,
@@ -113,22 +123,18 @@ def legacy_speaker_clip_pcm(
         window_start=start,
     ):
         chunk = session.last_chunk
+        if chunk is None:
+            chunk = next((c for c in selected if chunk_start(c) == blob_start), None)
         span = chunk.get('span') if chunk is not None else None
-        authoritative = bool(span)
-        if span is not None:
-            if span['sample_rate'] != sample_rate:
-                session.reason = 'decode_failed'
-                continue
-            pcm = pcm[: span['samples'] * 2]
+        if span is None:
+            # No metadata means no authoritative coverage, even in mixed stores.
+            continue
+        if span['sample_rate'] != sample_rate:
+            session.reason = 'decode_failed'
+            continue
+        pcm = pcm[: span['samples'] * 2]
         first = round((blob_start - start) * sample_rate)
-        if not authoritative and abs(first) <= tolerance and len(pcm) // 2 >= needed:
-            # A complete boundary-aligned filename-only chunk can have either
-            # sign of rounding error. Move its uncertain origin within the
-            # known +/-0.5ms interval; keep every real sample and the 10s floor.
-            first = 0
         last = first + len(pcm) // 2
-        if not authoritative:
-            uncertain.append((first, last))
         remaining = []
         for left, right in uncovered:
             begin, finish = max(left, first), min(right, last)
@@ -142,44 +148,12 @@ def legacy_speaker_clip_pcm(
                 remaining.append((finish, right))
         uncovered = remaining
         if not uncovered:
+            if not session.in_budget():
+                record('missing', 'download_limit')
+                return None
             record('covered', 'complete')
             return bytes(result)
-    if session.limit_hit and ordered and relevant:
-        # A resource cap does not prove main's clip was wrong. Preserve its
-        # selected-window behavior, and expose the cost exception explicitly.
-        pcm = main_clip(session.compatibility_fetch)
-        record('compatibility' if pcm else 'missing', 'download_limit')
-        return pcm
-    # Only timestamp-rounding boundary uncertainty may shorten a window.
-    # Only joins bounded by two uncertain starts may shed rounding samples;
-    # authoritative truncation and larger gaps remain unavailable.
-    left, right = 0, needed
-    rounded_holes = []
-    for begin, finish in uncovered:
-        if begin == 0 and finish <= tolerance and any(abs(first - finish) <= 1 for first, _ in uncertain):
-            left = finish
-        elif finish == needed and needed - begin <= tolerance and any(abs(last - begin) <= 1 for _, last in uncertain):
-            right = begin
-        elif (
-            finish - begin <= tolerance * 2
-            and any(last == begin for _, last in uncertain)
-            and any(first == finish for first, _ in uncertain)
-        ):
-            rounded_holes.append((begin, finish))
-        else:
-            outcome = 'gap' if uncovered[0][0] > 0 and uncovered[-1][1] < needed else 'missing'
-            record(
-                outcome,
-                session.reason if session.reason != 'missing_blob' else ('gap' if outcome == 'gap' else 'missing_blob'),
-            )
-            return None
-    if right > left:
-        record('covered', 'timestamp_rounding')
-        pieces = []
-        for begin, finish in rounded_holes:
-            pieces.append(result[left * 2 : begin * 2])
-            left = finish
-        pieces.append(result[left * 2 : right * 2])
-        return b''.join(pieces)
-    record('missing', session.reason)
+    outcome = 'gap' if uncovered[0][0] > 0 and uncovered[-1][1] < needed else 'missing'
+    reason = session.reason if session.reason != 'missing_blob' else ('gap' if outcome == 'gap' else 'missing_blob')
+    record(outcome, reason)
     return None

@@ -23,7 +23,20 @@ def pcm(start, end):
 def blobs(monkeypatch):
     entries = []
     reads = []
-    monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: object()))
+
+    class Blob:
+        def __init__(self, path):
+            self.path = path
+
+        def download_as_bytes(self, **kwargs):
+            data = next(entry['pcm'] for entry in entries if entry['path'] == self.path)
+            if data is None:
+                raise storage.NotFound('synthetic missing blob')
+            return data
+
+    monkeypatch.setattr(
+        storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: SimpleNamespace(blob=Blob))
+    )
     monkeypatch.setattr(storage, 'list_audio_chunks', lambda *a, **kwargs: entries)
 
     def decode(bucket, path, uid, rate, **kwargs):
@@ -37,7 +50,7 @@ def blobs(monkeypatch):
         path = (
             f'chunks/synthetic-user/synthetic/{ORIGIN + start:.3f}-{ORIGIN + end:.3f}.batch.bin'
             if batch
-            else f'synthetic/{start}.bin'
+            else f'chunks/synthetic-user/synthetic-conversation/{ORIGIN + start:.3f}.bin'
         )
         entries.append(
             {
@@ -46,6 +59,11 @@ def blobs(monkeypatch):
                 'pcm': None if missing else pcm(start, end),
                 'is_batch': batch,
                 'size': len(pcm(start, end)),
+                **(
+                    {'span': {'start': ORIGIN + start, 'samples': round((end - start) * RATE), 'sample_rate': RATE}}
+                    if not batch
+                    else {}
+                ),
             }
         )
 
@@ -108,7 +126,7 @@ def test_far_windows_skip_unrelated_blobs_and_stop_after_complete_coverage(blobs
     for start in [0, 100, 200, 300, 305, 400]:
         add(start, start + 20)
     assert extract(302, 312) == pcm(302, 312)
-    assert reads == ['synthetic/305.bin', 'synthetic/300.bin']
+    assert reads == [f'chunks/synthetic-user/synthetic-conversation/{ORIGIN + offset:.3f}.bin' for offset in (305, 300)]
 
 
 def test_overlap_is_trimmed_on_integer_sample_grid(blobs):
@@ -156,8 +174,8 @@ def test_earlier_long_blob_fills_coverage_after_shorter_newer_blob(blobs):
     add, reads = blobs
     add(0, 15)
     add(5, 8)
-    assert extract(7, 12) == pcm(7, 12)
-    assert reads == ['synthetic/5.bin', 'synthetic/0.bin']
+    assert extract(7, 12) is None  # main selected only the shorter newer blob
+    assert reads == [f'chunks/synthetic-user/synthetic-conversation/{ORIGIN + 5:.3f}.bin']
 
 
 def test_missing_downloads_are_bounded(blobs):
@@ -213,7 +231,7 @@ def test_missing_window_download_count_base_vs_head(memory_bucket):
     memory_bucket.reads.clear()
     assert speaker_audio.legacy_speaker_clip_pcm('synthetic-user', 'synthetic', ORIGIN + 800, ORIGIN + 810) is None
     head_count = len(memory_bucket.reads)
-    assert (base_count, head_count) == (4, 0)  # main probes opus.enc, enc, opus, bin
+    assert (base_count, head_count) == (4, 1)  # main probes opus.enc, enc, opus, bin
 
 
 def test_failure_reason_and_caller_labels(memory_bucket):
@@ -245,7 +263,7 @@ def test_shared_listing_cache_and_download_semaphore(memory_bucket, monkeypatch)
 
     def download(**kwargs):
         assert held == [True]
-        assert kwargs['retry'] is None
+        assert kwargs['retry'] is None  # outer SDK retry refreshes the leaf budget
         assert 0 < kwargs['timeout'] <= audio_chunks.MAX_SPEAKER_READ_SECONDS
         return real_download(**kwargs)
 
@@ -262,7 +280,7 @@ def test_shared_listing_cache_and_download_semaphore(memory_bucket, monkeypatch)
 
 
 @pytest.mark.parametrize('limit', ['downloads', 'bytes', 'time'])
-def test_search_limits_do_not_remove_main_clips(memory_bucket, monkeypatch, limit):
+def test_resource_limits_return_no_clip(memory_bucket, monkeypatch, limit):
     data = memory_bucket.add(ORIGIN, 10)
     session = audio_chunks.AudioChunkReadSession('synthetic-user', 'synthetic')
     if limit == 'downloads':
@@ -286,8 +304,9 @@ def test_search_limits_do_not_remove_main_clips(memory_bucket, monkeypatch, limi
         timestamps=[ORIGIN],
         caller='teaching',
     )
-    assert result == data
-    assert len(memory_bucket.reads) == 1 and session.compatibility_escape
+    assert result is None
+    assert not memory_bucket.reads
+    assert session.limit_hit
 
 
 def test_decode_failure_distinguished_from_missing_and_unverified_batch(memory_bucket):
@@ -298,7 +317,7 @@ def test_decode_failure_distinguished_from_missing_and_unverified_batch(memory_b
     assert session.fetch(blob.name) is None
     assert session.reason == 'decode_failed'
     counter = speaker_audio.OMI_SPEAKER_CLIP_COVERAGE_TOTAL
-    label = counter.labels(outcome='compatibility', reason='unverified_batch', caller='owner_confirmation')
+    label = counter.labels(outcome='compatibility', reason='uncertain_timing', caller='owner_confirmation')
     before = label._value.get()
     parts = [{'timestamp': ORIGIN, 'data': b'\x01\x00' * 160000}]
     storage.upload_audio_chunks_batch(parts, 'synthetic-user', 'synthetic', data_protection_level='standard')
@@ -322,11 +341,118 @@ def test_authoritative_truncation_is_not_timestamp_uncertainty(memory_bucket):
     assert speaker_audio.legacy_speaker_clip_pcm('synthetic-user', 'synthetic', start, start + 10) is None
 
 
-def test_16khz_adjacent_rounded_chunks_do_not_insert_silence(memory_bucket):
+def test_16khz_adjacent_rounded_chunks_equal_main(memory_bucket):
     start = ORIGIN + 0.1234
     first = memory_bucket.add(start, 4.0002)
     second = memory_bucket.add(start + 4.0002, 6)
     result = speaker_audio.legacy_speaker_clip_pcm('synthetic-user', 'synthetic', start, start + 10.0002)
     assert result is not None
     assert len(first + second) - 32 <= len(result) <= len(first + second)
-    assert b'\x00\x00' not in [result[i : i + 2] for i in range(0, len(result), 2)]
+    timestamps = [round(start, 3), round(start + 4.0002, 3)]
+    merged = storage.download_audio_chunks_and_merge('synthetic-user', 'synthetic', timestamps)
+    offset = max(0, round((start - timestamps[0]) * 16000))
+    assert result == merged[offset * 2 : (offset + round(10.0002 * 16000)) * 2]
+
+
+@pytest.mark.parametrize('enhanced', [False, True])
+def test_exact_ten_second_rounded_multi_chunk_equals_main(memory_bucket, enhanced):
+    start = ORIGIN + 0.1234
+    first = memory_bucket.add(start, 64003 / 16000, enhanced=enhanced)
+    second_start = start + 64003 / 16000
+    second = memory_bucket.add(second_start, 95997 / 16000, enhanced=enhanced)
+    timestamps = [start, second_start]
+    main = storage.download_audio_chunks_and_merge('synthetic-user', 'synthetic', timestamps)
+    result = speaker_audio.legacy_speaker_clip_pcm(
+        'synthetic-user',
+        'synthetic',
+        start,
+        start + 10,
+        timestamps=timestamps,
+    )
+    assert result == main == first + second
+    assert len(result) // 2 == 160000
+
+
+@pytest.mark.parametrize('authoritative', [False, True])
+def test_real_one_ms_gap_is_never_reported_covered(memory_bucket, authoritative):
+    memory_bucket.add(ORIGIN, 4, span=authoritative)
+    memory_bucket.add(ORIGIN + 4.001, 6, span=authoritative)
+    counter = speaker_audio.OMI_SPEAKER_CLIP_COVERAGE_TOTAL
+    covered = counter.labels(outcome='covered', reason='complete', caller='unknown')
+    compatibility = counter.labels(outcome='compatibility', reason='uncertain_timing', caller='unknown')
+    before = covered._value.get(), compatibility._value.get()
+    result = speaker_audio.legacy_speaker_clip_pcm('synthetic-user', 'synthetic', ORIGIN, ORIGIN + 10)
+    assert covered._value.get() == before[0]
+    if authoritative:
+        assert result is None
+    else:
+        main = storage.download_audio_chunks_and_merge('synthetic-user', 'synthetic', [ORIGIN, ORIGIN + 4.001])
+        assert result == main[:320000]
+        assert compatibility._value.get() == before[1] + 1
+
+
+@pytest.mark.parametrize('exhausted', [False, True])
+def test_authoritative_gap_never_uses_budget_escape(memory_bucket, exhausted):
+    memory_bucket.add(ORIGIN, 4, span=True)
+    memory_bucket.add(ORIGIN + 5, 5, span=True)
+    session = audio_chunks.AudioChunkReadSession('synthetic-user', 'synthetic')
+    if exhausted:
+        session.downloads = audio_chunks.MAX_SPEAKER_DOWNLOADS
+    assert (
+        speaker_audio.legacy_speaker_clip_pcm(
+            'synthetic-user',
+            'synthetic',
+            ORIGIN,
+            ORIGIN + 10,
+            session=session,
+        )
+        is None
+    )
+    if exhausted:
+        assert session.limit_hit
+        assert not memory_bucket.reads
+
+
+def test_transient_503_retries_and_yields_clip(memory_bucket, monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    data = memory_bucket.add(ORIGIN, 10)
+    blob = next(iter(memory_bucket.objects.values()))
+    download = blob.download_as_bytes
+    attempts = []
+
+    def transient(**kwargs):
+        attempts.append(kwargs)
+        if len(attempts) == 1:
+            raise ServiceUnavailable('synthetic transient 503')
+        return download(**kwargs)
+
+    monkeypatch.setattr(blob, 'download_as_bytes', transient)
+    session = audio_chunks.AudioChunkReadSession('synthetic-user', 'synthetic')
+    assert (
+        speaker_audio.legacy_speaker_clip_pcm(
+            'synthetic-user',
+            'synthetic',
+            ORIGIN,
+            ORIGIN + 10,
+            session=session,
+        )
+        == data
+    )
+    assert len(attempts) == session.downloads == 2
+    assert session.bytes == len(data) * 2
+    assert session.cache[blob.name][0] == data
+
+
+def test_transient_failure_is_not_negative_cached(memory_bucket, monkeypatch):
+    data = memory_bucket.add(ORIGIN, 10)
+    blob = next(iter(memory_bucket.objects.values()))
+    download = blob.download_as_bytes
+    monkeypatch.setattr(
+        blob, 'download_as_bytes', lambda **kwargs: (_ for _ in ()).throw(RuntimeError('transient transport'))
+    )
+    session = audio_chunks.AudioChunkReadSession('synthetic-user', 'synthetic')
+    assert session.fetch(blob.name) is None
+    assert blob.name not in session.cache
+    monkeypatch.setattr(blob, 'download_as_bytes', download)
+    assert session.fetch(blob.name) == data

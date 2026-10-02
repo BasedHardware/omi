@@ -1345,47 +1345,39 @@ schedules a bounded retry for receipt-named people lacking a usable voiceprint
 (≤5 people, 45 s, fail-open, no durable lease). MANUAL receipts only authorize.
 
 Legacy person teaching, owner confirmations and speaker-tag preview clips use
-`utils/speaker_audio.py` to position individual blobs by their starts. Existing
-span metadata supplies the authoritative start and sample count; filename-only
-starts retain their ±0.5 ms rounding uncertainty. Newer blobs fill each position
-first, and earlier overlapping blobs fill remaining holes. Complete
-boundary-aligned chunks retain all real samples. Small uncertain boundary cuts
-or joins trim actual samples rather than invent silence. Proven gaps or
-truncation return no clip. Pooled teaching skips unavailable windows, includes
-only the contributing transcript text, and retains the unchanged 10 s floor.
-An unsuccessful attempt preserves an existing voiceprint.
+`utils/speaker_audio.py`. Main's manifest timestamp selection is retained.
+Authoritative spans use strict sample placement: newest selected blobs fill
+positions first, earlier overlaps fill holes, and gaps/truncation always reject.
+No padding or rounding tolerance is permitted in this policy. Filename-only
+chunks and unverified legacy/live batches use main's exact merger and trim for
+the selected window, preserving its samples and format priority. These clips
+are labelled `compatibility/uncertain_timing`, never proven `covered`.
+Pooled teaching skips unavailable windows and includes only their contributors.
+The 10 s floor, text-containment (0.9), dominant-speaker (0.7), embedding and
+voiceprint publication gates are unchanged. Existing voiceprints survive
+rejected attempts. No producer, entitlement or feature-flag change is included.
 
-Unverified legacy/live batch recordings keep main's existing merger and timing
-behavior, including its limitations. They are never classified as proven
-`covered` audio. No producer or feature flag changes here: the live uploader
-still writes `.batch.bin` / `.batch.enc`. Text-containment (0.9) and
-dominant-speaker (0.7) verification still guard teaching. Batch continuity,
-legacy transcript-clock alignment, and recognition accuracy remain unverified.
-V2 conversation span validation is unchanged.
-
-One invocation-scoped storage session shares its listing and decoded cache
-across pooled legacy windows. Trustworthy span ends or conservative raw-PCM
-size bounds skip non-intersecting objects. Every download uses the existing
-32-slot global storage semaphore. The improved search admits at most 32
-uncached downloads and 64 MiB of listed object bytes under a 30 s admission
-and I/O deadline, with retries disabled on those reads. Unknown sizes use a
-capped range; failed reads are cached. These are search/I/O bounds, not a
-hard deadline around CPU decoding or all listing pagination.
-
-The governing compatibility rule takes priority over resource rejection:
-when the search exhausts a limit, main's selected paths may still be read,
-reusing the listing/cache and semaphore. That measured compatibility escape
-can exceed the search's count/byte/deadline limits; the full invocation is
-therefore not unconditionally bounded. A cap alone never removes a clip that
-main could supply. Per-window output remains at most 12 s; person teaching
-retains 30 s / 12 windows, one STT verification and one embedding request.
+One session shares listing and decoded cache across all legacy pooled windows.
+Both policies have identical limits: 32 actual download attempts including SDK
+transient retries, 64 MiB reserved transfer bytes including failed attempts,
+and a 30 s admission deadline. There is no budget escape. Exhaustion returns
+no clip with `download_limit`. The SDK default transient predicate/backoff
+retries each leaf with the remaining timeout; transient errors are never
+negative-cached. Only missing objects and decode failures are negative-cached.
+Downloads use the existing 32-slot semaphore and bounded byte ranges; unknown
+sizes that reach the byte allowance reject rather than decode a partial object.
+Listing is capped at 10,000 objects, 1,000 per page; each page has a 1 s request
+and retry timeout. The deadline is checked while iterating and after decoding.
+The 30 s value bounds admission, not preemption of a running SDK request or
+native decode. A final listing request/retry can overrun it by up to 2 s;
+CPU decode and transport scheduling cannot be assigned a strict wall-time
+upper bound by this synchronous API. No elapsed-time latency was measured.
+Person teaching retains 30 s / 12 windows, one verification and one embedding.
 
 `omi_speaker_clip_coverage_total` uses bounded `outcome`, `reason` and `caller`
-labels. Reasons distinguish `complete`, `timestamp_rounding`, `gap`,
-`unverified_batch`, `download_limit`, `decode_failed`, `download_failed`,
-`missing_blob` and `invalid_window`. Callers are `teaching`,
-`owner_confirmation`, `preview` and `unknown`. Compatibility success is
-reported separately from proven coverage; no user content enters labels.
+labels: `complete`, `gap`, `uncertain_timing`, `download_limit`, `decode_failed`,
+`download_failed`, `missing_blob`, `invalid_window`; callers are `teaching`,
+`owner_confirmation`, `preview`, `unknown`. No user content enters labels.
 
 Owner display names share `database.auth.get_user_name`: Firebase display name,
 Firestore `name`, then an explicit identity bullet on the first line of

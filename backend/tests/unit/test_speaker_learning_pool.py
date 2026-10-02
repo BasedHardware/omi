@@ -122,7 +122,24 @@ def world(monkeypatch):
 
     monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', fake_chunks)
     real_listing = storage.list_audio_chunks
-    monkeypatch.setattr(storage, 'list_audio_chunks', lambda *a, **kwargs: [])
+
+    def fake_listing(*args, **kwargs):
+        conv = store.rows.get(CONV_PATH) or {}
+        timestamps = {ts for af in conv.get('audio_files', []) for ts in af.get('chunk_timestamps', [])}
+        return [
+            {
+                'timestamp': ts,
+                'path': f'fake/{ts}.bin',
+                'span': {
+                    'start': ts,
+                    'samples': round(pcm_seconds[0] * RATE),
+                    'sample_rate': RATE,
+                },
+            }
+            for ts in sorted(timestamps)
+        ]
+
+    monkeypatch.setattr(storage, 'list_audio_chunks', fake_listing)
     vector = np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
     monkeypatch.setattr(teaching, 'extract_embedding_from_bytes', lambda *a: vector)
     uploads = []
@@ -275,7 +292,9 @@ def test_decoded_truncation_is_uncovered(world):
 
 
 def test_teaching_verifies_the_exact_positioned_overlap_clip(world, monkeypatch):
-    set_conversation(world, conversation([seg('a', 0.0, 10.0)]))
+    set_conversation(
+        world, conversation([seg('a', 0.0, 10.0)], audio_files=[{'chunk_timestamps': [STARTED_AT, STARTED_AT + 4]}])
+    )
 
     pattern = (np.arange(RATE * 6) % 997 + 1).astype(np.int16)
 
@@ -289,14 +308,20 @@ def test_teaching_verifies_the_exact_positioned_overlap_clip(world, monkeypatch)
     assert world.captured['pcm'] == pcm_for(4) + pattern.tobytes()
 
 
-def test_pools_three_complete_rounded_16khz_short_chunks(world, monkeypatch):
+def test_pools_three_authoritative_short_chunks(world, monkeypatch):
     offsets = [0.1234, 10.1234, 20.1234]
-    set_conversation(world, conversation([seg(str(i), offset, offset + 3.5) for i, offset in enumerate(offsets)]))
+    set_conversation(
+        world,
+        conversation(
+            [seg(str(i), offset, offset + 3.5) for i, offset in enumerate(offsets)],
+            audio_files=[{'chunk_timestamps': [STARTED_AT + offset for offset in offsets]}],
+        ),
+    )
 
     def rounded_chunks(*args, **kwargs):
         wanted = args[2]
         for offset in reversed(offsets):
-            timestamp = round(STARTED_AT + offset, 3)
+            timestamp = STARTED_AT + offset
             if wanted(timestamp, None):
                 yield timestamp, pcm_for(3.5)
 
@@ -311,7 +336,13 @@ def test_real_reader_pools_rounded_short_chunks_once(world, memory_bucket, monke
     offsets = [0.1234, 10.1234, 20.1234]
     for offset in offsets:
         memory_bucket.add(STARTED_AT + offset, 3.5, uid=UID, conversation_id=CONV)
-    set_conversation(world, conversation([seg(str(i), offset, offset + 3.5) for i, offset in enumerate(offsets)]))
+    set_conversation(
+        world,
+        conversation(
+            [seg(str(i), offset, offset + 3.5) for i, offset in enumerate(offsets)],
+            audio_files=[{'chunk_timestamps': [STARTED_AT + offset for offset in offsets]}],
+        ),
+    )
     assert teach(('0', '1', '2')) == 'stored'
     assert world.captured['wav_seconds'] == pytest.approx(10.5, abs=0.002)
     assert len(memory_bucket.listings) == 1
@@ -324,7 +355,9 @@ def test_rounded_complete_ten_seconds_keeps_teaching_floor(world, memory_bucket,
     monkeypatch.setattr(storage, 'list_audio_chunks', world.real_listing)
     monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', audio_chunks.iter_audio_chunk_pcm)
     data = memory_bucket.add(STARTED_AT + offset, chunk_seconds, uid=UID, conversation_id=CONV)
-    set_conversation(world, conversation([seg('a', offset, offset + 10)]))
+    set_conversation(
+        world, conversation([seg('a', offset, offset + 10)], audio_files=[{'chunk_timestamps': [STARTED_AT + offset]}])
+    )
     assert teach(('a',)) == 'stored'
     assert world.captured['pcm'] == data[: 16000 * 10 * 2]
 
@@ -349,7 +382,8 @@ def test_missing_first_window_keeps_later_sufficient_speech_and_only_its_text(wo
                 seg('missing', 0, 3, text='missing text is excluded'),
                 seg('b', 10, 15, text='bravo speech is included here'),
                 seg('c', 20, 25, text='charlie speech is also included'),
-            ]
+            ],
+            audio_files=[{'chunk_timestamps': [STARTED_AT, STARTED_AT + 10, STARTED_AT + 20]}],
         ),
     )
 
@@ -768,3 +802,20 @@ def test_model_derives_learning_state_from_readiness():
         == 'pending'
     ), 'a learned claim with no usable print but a recorded outcome stays pending'
     assert Person(id='p1', name='Alex', voice_learning_state='learned').voice_learning_state == 'unknown'
+
+
+@pytest.mark.parametrize('enhanced', [False, True])
+def test_rounded_two_chunk_exact_floor_teaches_main_samples(world, memory_bucket, monkeypatch, enhanced):
+    monkeypatch.setattr(storage, 'list_audio_chunks', world.real_listing)
+    monkeypatch.setattr(speaker_audio, 'iter_audio_chunk_pcm', audio_chunks.iter_audio_chunk_pcm)
+    offset = 0.1234
+    start = STARTED_AT + offset
+    second_start = start + 64003 / RATE
+    first = memory_bucket.add(start, 64003 / RATE, enhanced=enhanced, uid=UID, conversation_id=CONV)
+    second = memory_bucket.add(second_start, 95997 / RATE, enhanced=enhanced, uid=UID, conversation_id=CONV)
+    set_conversation(
+        world, conversation([seg('a', offset, offset + 10)], audio_files=[{'chunk_timestamps': [start, second_start]}])
+    )
+    assert teach(('a',)) == 'stored'
+    assert world.captured['pcm'] == first + second
+    assert world.captured['wav_seconds'] == 10

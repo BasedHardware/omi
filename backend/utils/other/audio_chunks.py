@@ -4,6 +4,8 @@ import threading
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
+from google.cloud.storage.retry import DEFAULT_RETRY
+
 from utils.other import storage
 
 MAX_SPEAKER_DOWNLOADS = 32
@@ -25,32 +27,40 @@ class AudioChunkReadSession:
         self.deadline = time.monotonic() + MAX_SPEAKER_READ_SECONDS
         self.lock = threading.Lock()
         self.limit_hit = False
-        self.compatibility_escape = False
+
+    def in_budget(self):
+        if self.limit_hit or time.monotonic() >= self.deadline:
+            self.reason = 'download_limit'
+            self.limit_hit = True
+            return False
+        return True
 
     @property
     def chunks(self):
         if self._chunks is None:
-            self._chunks = storage.list_audio_chunks(
-                self.uid, self.conversation_id, timeout=max(0.001, self.deadline - time.monotonic())
-            )
+            if not self.in_budget():
+                return []
+            remaining = self.deadline - time.monotonic()
+            try:
+                self._chunks = storage.list_audio_chunks(
+                    self.uid,
+                    self.conversation_id,
+                    timeout=min(1.0, remaining),
+                    retry=DEFAULT_RETRY.with_timeout(min(1.0, remaining)),
+                    deadline=self.deadline,
+                )
+            except TimeoutError:
+                self.reason = 'download_limit'
+                self.limit_hit = True
+                self._chunks = []
         return self._chunks
 
     def fetch(self, path: str) -> Optional[bytes]:
-        return self._fetch(path, limited=True)
-
-    def compatibility_fetch(self, path: str) -> Optional[bytes]:
-        """Preserve main's clips after the improved search spends its budget.
-
-        Only main's selected paths may call this. Count and byte/time caps bound
-        the new search, not this explicitly measured compatibility exception.
-        """
-        self.compatibility_escape = True
-        return self._fetch(path, limited=False)
-
-    def _fetch(self, path: str, *, limited: bool) -> Optional[bytes]:
-        # The compatibility merger fans out; cache and budget are shared there,
-        # too. Serializing these short reads avoids duplicate pooled downloads.
+        # Main's merger fans out. One lock serializes actual I/O and budget
+        # reservations; retries consume the same count and byte allowance.
         with self.lock:
+            if not self.in_budget():
+                return None
             if path in self.cache:
                 pcm, reason = self.cache[path]
                 if pcm is None:
@@ -58,65 +68,86 @@ class AudioChunkReadSession:
                 return pcm
             chunk = next((c for c in self.chunks if c['path'] == path), None)
             if chunk is None:
+                self.reason = 'missing_blob'
+                self.cache[path] = (None, self.reason)
                 return None
             size = chunk.get('size')
             remaining = self.deadline - time.monotonic()
-            if limited and (
-                self.downloads >= MAX_SPEAKER_DOWNLOADS
-                or remaining <= 0
-                or (size is not None and self.bytes + size > MAX_SPEAKER_BYTES)
-            ):
-                self.reason = 'download_limit'
-                self.limit_hit = True
-                return None
-            acquired = (
-                storage.get_storage_chunk_semaphore().acquire(timeout=max(0, remaining))
-                if limited
-                else storage.get_storage_chunk_semaphore().acquire()
-            )
-            if not acquired:
-                self.reason = 'download_limit'
-                self.limit_hit = True
+            semaphore = storage.get_storage_chunk_semaphore()
+            if not semaphore.acquire(timeout=max(0, remaining)):
+                self.reason, self.limit_hit = 'download_limit', True
                 return None
             try:
-                remaining = self.deadline - time.monotonic()
-                if limited and remaining <= 0:
-                    self.reason = 'download_limit'
-                    self.limit_hit = True
-                    return None
-                self.downloads += 1
-                # Listing sizes are authoritative GCS object lengths. Unknown
-                # sizes use a capped range so they cannot evade the byte budget.
-                maximum = MAX_SPEAKER_BYTES - self.bytes
-                kwargs = {'timeout': remaining, 'retry': None} if limited else {}
-                if limited and size is None:
-                    kwargs['end'] = maximum - 1
-                self.bytes += size if size is not None else (maximum if limited else 0)
+                # Wrap the leaf with the SDK default transient predicate/backoff,
+                # refreshing timeout and charging every attempt, including 503s.
+                session = self
+                bucket = storage.get_private_cloud_sync_bucket()
+
+                class BudgetedBlob:
+                    def download_as_bytes(self, **kwargs):
+                        maximum = MAX_SPEAKER_BYTES - session.bytes
+                        if (
+                            not session.in_budget()
+                            or session.downloads >= MAX_SPEAKER_DOWNLOADS
+                            or maximum <= 0
+                            or (size is not None and size > maximum)
+                        ):
+                            session.reason, session.limit_hit = 'download_limit', True
+                            raise TimeoutError('speaker audio budget exhausted')
+                        session.downloads += 1
+                        # Reserve the maximum transferable bytes on each attempt,
+                        # including failed attempts. Unknown sizes read a bounded
+                        # range to detect budget truncation, never decode it.
+                        allowance = size if size is not None else maximum
+                        session.bytes += allowance
+                        data = bucket.blob(path).download_as_bytes(
+                            timeout=max(0.001, session.deadline - time.monotonic()),
+                            retry=None,
+                            end=allowance - 1,
+                        )
+                        if size is None and len(data) >= allowance:
+                            session.reason, session.limit_hit = 'download_limit', True
+                            raise TimeoutError('unknown object exceeds speaker byte allowance')
+                        return data
+
+                retry = DEFAULT_RETRY.with_timeout(max(0.001, self.deadline - time.monotonic()))
+                # Retry the download, not decode/decrypt failures.
+                proxy = BudgetedBlob()
+                downloaded = retry(proxy.download_as_bytes)()
+
+                class DownloadedBlob:
+                    def download_as_bytes(self, **kwargs):
+                        return downloaded
+
+                class DownloadedBucket:
+                    def blob(self, name):
+                        return DownloadedBlob()
+
+                self.reason = 'missing_blob'
                 pcm = storage.download_and_decode_chunk_blob(
-                    storage.get_private_cloud_sync_bucket(),
+                    DownloadedBucket(),
                     path,
                     self.uid,
                     self.sample_rate,
-                    download_kwargs=kwargs,
                     on_failure=self._failure,
                 )
-                if limited and size is None and pcm is not None and len(pcm) >= maximum:
-                    self.reason = 'download_limit'
-                    self.limit_hit = True
-                    pcm = None
-                # Budget/time failures can retry only through main's compatibility
-                # path. Real missing/decode failures remain cached across windows.
-                if pcm is not None or self.reason != 'download_limit':
-                    self.cache[path] = (pcm, self.reason)
+                if not self.in_budget():
+                    return None
+                self.cache[path] = (pcm, self.reason)
                 return pcm
+            except storage.NotFound:
+                self.reason = 'missing_blob'
+                self.cache[path] = (None, self.reason)
+                return None
             except Exception:
-                self.reason = 'download_limit' if limited and time.monotonic() >= self.deadline else 'download_failed'
-                self.limit_hit = self.limit_hit or self.reason == 'download_limit'
-                if self.reason != 'download_limit':
-                    self.cache[path] = (None, self.reason)
+                if not self.in_budget():
+                    self.reason = 'download_limit'
+                else:
+                    self.reason = 'download_failed'
+                # Transient failures never become permanent missing-audio cache entries.
                 return None
             finally:
-                storage.get_storage_chunk_semaphore().release()
+                semaphore.release()
 
     def _failure(self, reason: str):
         self.reason = reason
