@@ -98,8 +98,6 @@ class ApiKeyManagementErrorSanitizationTests(unittest.TestCase):
             "database.mcp_api_key",
             "database.api_key_metadata",
             "dependencies",
-            "models.dev_api_key",
-            "models.mcp_api_key",
             "utils.dev_cache",
             "utils.observability.api_keys",
             "utils.scopes",
@@ -114,8 +112,6 @@ class ApiKeyManagementErrorSanitizationTests(unittest.TestCase):
         sys.modules["database.api_key_metadata"].ApiKeyRevocationUnavailableError = (
             StubApiKeyRevocationUnavailableError
         )
-        sys.modules["models.dev_api_key"].DevApiKeyCreate = StubDevApiKeyCreate
-        sys.modules["models.mcp_api_key"].McpApiKeyCreate = StubMcpApiKeyCreate
         sys.modules["utils.scopes"].AVAILABLE_SCOPES = ["conversations:read", "memories:read"]
         sys.modules["utils.scopes"].validate_scopes = lambda s: True
 
